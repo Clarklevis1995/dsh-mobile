@@ -2,6 +2,9 @@ import SwiftUI
 
 struct WorkspaceView: View {
     @EnvironmentObject private var store: AppStore
+    let onOpenSession: (SessionSummary) -> Void
+    let onNewSession: () -> Void
+    let onSettings: () -> Void
     @State private var searchQuery = ""
 
     var body: some View {
@@ -26,7 +29,7 @@ struct WorkspaceView: View {
                         emptySessions.id("workspace-sessions-empty")
                     } else {
                         ForEach(displayedSessions.prefix(12)) { session in
-                            Button { store.open(session) } label: { sessionRow(session) }
+                            Button { onOpenSession(session) } label: { sessionRow(session) }
                                 .buttonStyle(.plain)
                                 .id("workspace-session-\(session.id)")
                         }
@@ -57,12 +60,12 @@ struct WorkspaceView: View {
     @ViewBuilder
     private var settingsButton: some View {
         if #available(iOS 26.0, *) {
-            Button(action: store.showSettings) { settingsButtonLabel }
+            Button(action: onSettings) { settingsButtonLabel }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .accessibilityLabel("设置")
         } else {
-            Button(action: store.showSettings) { settingsButtonLabel }
+            Button(action: onSettings) { settingsButtonLabel }
                 .buttonStyle(.plain)
                 .background(.ultraThinMaterial, in: Circle())
                 .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 0.8))
@@ -146,13 +149,14 @@ struct WorkspaceView: View {
     @ViewBuilder
     private var newSessionButton: some View {
         if #available(iOS 26.0, *) {
-            Button(action: store.startNewSession) {
+            Button(action: onNewSession) {
                 newSessionButtonLabel
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.glass(.clear.tint(DSHColor.navy.opacity(0.22))))
             .buttonBorderShape(.roundedRectangle(radius: 18))
+            .buttonSizing(.flexible)
         } else {
-            Button(action: store.startNewSession) {
+            Button(action: onNewSession) {
                 newSessionButtonLabel
             }
             .buttonStyle(.plain)
@@ -167,7 +171,7 @@ struct WorkspaceView: View {
                 .background(.white.opacity(0.1), in: Circle())
             Text("新建会话").font(.headline)
         }
-        .frame(maxWidth: .infinity).frame(height: 54)
+        .frame(maxWidth: .infinity).frame(height: 38)
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }

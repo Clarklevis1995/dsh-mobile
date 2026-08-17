@@ -3,10 +3,23 @@ import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var navigationPath: [AppRoute] = []
 
     var body: some View {
-        NavigationStack(path: navigationPath) {
-            WorkspaceView()
+        NavigationStack(path: $navigationPath) {
+            WorkspaceView(
+                onOpenSession: { session in
+                    store.open(session)
+                    navigate(to: .conversation)
+                },
+                onNewSession: {
+                    store.startNewSession()
+                    navigate(to: .conversation)
+                },
+                onSettings: {
+                    navigate(to: .settings)
+                }
+            )
                 .navigationDestination(for: AppRoute.self) { route in
                     destination(for: route)
                 }
@@ -15,6 +28,9 @@ struct RootView: View {
         .task {
             if case .disconnected = store.gateway.state { store.connect() }
         }
+        .onChange(of: navigationPath) { _, path in
+            if path.isEmpty { store.resumeWorkspace() }
+        }
         .alert("DeepSeek Harness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
             Button("好", role: .cancel) { store.lastError = nil }
         } message: { Text(store.lastError ?? "") }
@@ -22,41 +38,30 @@ struct RootView: View {
 
     @ViewBuilder
     private func destination(for route: AppRoute) -> some View {
-        Group {
-            switch route {
-            case .conversation:
-                ConversationView(
-                    initialScrollAnchor: store.selectedSessionId.flatMap { store.conversationScrollAnchor(for: $0) },
-                    initiallyManual: store.selectedSessionId.map { store.hasManualConversationPosition(for: $0) } ?? false
-                )
-            case .settings:
-                SettingsView()
+        switch route {
+        case .conversation:
+            ConversationView(
+                initialScrollAnchor: store.selectedSessionId.flatMap { store.conversationScrollAnchor(for: $0) },
+                initiallyManual: store.selectedSessionId.map { store.hasManualConversationPosition(for: $0) } ?? false,
+                onBack: popToRoot
+            )
+            .toolbar(.hidden, for: .navigationBar)
+            .background(NavigationSwipeBackEnabler())
+        case .settings:
+            SettingsView { session in
+                store.open(session)
+                navigationPath = [.conversation]
             }
         }
-        .toolbar(.hidden, for: .navigationBar)
-        .background(NavigationSwipeBackEnabler())
     }
 
-    private var navigationPath: Binding<[AppRoute]> {
-        Binding(
-            get: {
-                switch store.selectedTab {
-                case 1: [.conversation]
-                case 2: [.settings]
-                default: []
-                }
-            },
-            set: { path in
-                guard let route = path.last else {
-                    if store.selectedTab != 0 { store.showWorkspace() }
-                    return
-                }
-                switch route {
-                case .conversation: store.selectedTab = 1
-                case .settings: store.selectedTab = 2
-                }
-            }
-        )
+    private func navigate(to route: AppRoute) {
+        guard navigationPath.last != route else { return }
+        navigationPath.append(route)
+    }
+
+    private func popToRoot() {
+        navigationPath.removeAll()
     }
 
     private enum AppRoute: Hashable {

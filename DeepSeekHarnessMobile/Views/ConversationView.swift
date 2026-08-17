@@ -3,6 +3,7 @@ import MarkdownUI
 
 struct ConversationView: View {
     @EnvironmentObject private var store: AppStore
+    private let onBack: () -> Void
     @State private var activeView = 0
     @State private var draft = ""
     @State private var showsContextUsage = false
@@ -13,7 +14,8 @@ struct ConversationView: View {
     @State private var visibleConversationRows: [String: CGRect] = [:]
     @State private var isRestoringManualScrollPosition: Bool
 
-    init(initialScrollAnchor: String? = nil, initiallyManual: Bool = false) {
+    init(initialScrollAnchor: String? = nil, initiallyManual: Bool = false, onBack: @escaping () -> Void) {
+        self.onBack = onBack
         _conversationScrollAnchor = State(initialValue: initialScrollAnchor)
         _userHasManuallyPositioned = State(initialValue: initiallyManual)
         _isRestoringManualScrollPosition = State(initialValue: initiallyManual)
@@ -40,7 +42,7 @@ struct ConversationView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            Button { store.showWorkspace() } label: {
+            Button(action: onBack) {
                 Image(systemName: "chevron.left").frame(width: 38, height: 38).glassSurface(radius: 19)
             }
             .buttonStyle(.plain)

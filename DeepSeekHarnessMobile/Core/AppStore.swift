@@ -14,7 +14,6 @@ struct HistoryLoadProgress: Equatable {
 
 @MainActor
 final class AppStore: ObservableObject {
-    @Published var selectedTab = 0
     @Published var selectedSessionId: String?
     @Published var sessions: [SessionSummary] = [] { didSet { persistSessions() } }
     @Published var workspaces: [GatewayWorkspace] = []
@@ -109,12 +108,10 @@ final class AppStore: ObservableObject {
     func startNewSession() {
         selectedSessionId = nil
         waitingForNewSession = false
-        selectedTab = 1
         gateway.subscribe(sessionId: nil)
     }
     func open(_ session: SessionSummary) {
         selectedSessionId = session.id
-        selectedTab = 1
         markRead(session.id)
         gateway.subscribe(sessionId: session.id)
         loadHistory(for: session.id)
@@ -145,13 +142,9 @@ final class AppStore: ObservableObject {
             self.lastError = "历史记录加载超时，请重试"
         }
     }
-    func showWorkspace() {
-        selectedTab = 0
+    func resumeWorkspace() {
         gateway.subscribe(sessionId: nil)
         refreshRemoteState()
-    }
-    func showSettings() {
-        selectedTab = 2
     }
     func addKnownSession(_ id: String) {
         let normalized = id.trimmingCharacters(in: .whitespacesAndNewlines)

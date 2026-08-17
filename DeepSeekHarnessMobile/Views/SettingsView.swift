@@ -2,12 +2,12 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
+    let onOpenSession: (SessionSummary) -> Void
     @State private var knownSession = ""
     @State private var directoryInput = ""
 
     var body: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section("Mobile Gateway") {
                     TextField("ws://host:3080/ws/mobile", text: $store.endpoint)
                         .textInputAutocapitalization(.never).keyboardType(.URL).autocorrectionDisabled()
@@ -35,7 +35,9 @@ struct SettingsView: View {
                     TextField("Session ID", text: $knownSession).textInputAutocapitalization(.never).autocorrectionDisabled()
                     Button("保存并打开") {
                         store.addKnownSession(knownSession)
-                        if let session = store.sessions.first(where: { $0.id == knownSession.trimmingCharacters(in: .whitespacesAndNewlines) }) { store.open(session) }
+                        if let session = store.sessions.first(where: { $0.id == knownSession.trimmingCharacters(in: .whitespacesAndNewlines) }) {
+                            onOpenSession(session)
+                        }
                         knownSession = ""
                     }
                     .disabled(knownSession.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -67,13 +69,7 @@ struct SettingsView: View {
                     Text("客户端连接后自动同步 workspaces、sessions 与 host；进入会话自动拉取 history。queue 启动下一轮，steer 在 Agent 运行时注入当前轮。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-            }
-            .navigationTitle("设置")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("返回", systemImage: "chevron.left") { store.showWorkspace() }
-                }
-            }
         }
+        .navigationTitle("设置")
     }
 }
