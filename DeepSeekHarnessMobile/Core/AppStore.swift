@@ -89,7 +89,11 @@ final class AppStore: ObservableObject {
     func rememberConversationScrollAnchor(_ anchor: String?, for sessionId: String, manual: Bool) {
         if let anchor { conversationScrollAnchors[sessionId] = anchor }
         else { conversationScrollAnchors.removeValue(forKey: sessionId) }
-        if manual { manuallyPositionedSessionIds.insert(sessionId) }
+        if manual {
+            manuallyPositionedSessionIds.insert(sessionId)
+        } else {
+            manuallyPositionedSessionIds.remove(sessionId)
+        }
         persistConversationScrollPositions()
     }
     var activeWorkspace: GatewayWorkspace? {

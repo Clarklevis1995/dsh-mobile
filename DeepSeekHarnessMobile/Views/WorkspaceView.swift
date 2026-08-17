@@ -11,7 +11,7 @@ struct WorkspaceView: View {
         ZStack {
             DeepOceanBackground()
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 22) {
+                LazyVStack(alignment: .leading, spacing: 18) {
                     header.id("workspace-header")
                     Spacer(minLength: 108)
                     VStack(alignment: .leading, spacing: 7) {
@@ -28,11 +28,7 @@ struct WorkspaceView: View {
                     if displayedSessions.isEmpty {
                         emptySessions.id("workspace-sessions-empty")
                     } else {
-                        ForEach(displayedSessions.prefix(12)) { session in
-                            Button { onOpenSession(session) } label: { sessionRow(session) }
-                                .buttonStyle(.plain)
-                                .id("workspace-session-\(session.id)")
-                        }
+                        sessionsList
                     }
                     Spacer(minLength: 24)
                 }
@@ -100,7 +96,38 @@ struct WorkspaceView: View {
         HStack {
             Text("最近会话").font(.headline)
             Spacer()
-            Text(store.gateway.state.label).font(.caption).foregroundStyle(.white.opacity(0.55))
+            Text(store.gateway.state.label)
+                .font(.caption.weight(statusEmphasized ? .semibold : .regular))
+                .foregroundStyle(statusTextColor)
+                .shadow(
+                    color: statusTextColor.opacity(statusGlowOpacity),
+                    radius: 6
+                )
+        }
+    }
+
+    private var statusTextColor: Color {
+        switch store.gateway.state {
+        case .connected:
+            DSHColor.success
+        case .disconnected, .failed:
+            DSHColor.amber
+        case .connecting:
+            DSHColor.amber.opacity(0.8)
+        }
+    }
+
+    private var statusGlowOpacity: Double {
+        switch store.gateway.state {
+        case .connected, .disconnected, .failed: 0.9
+        case .connecting: 0.35
+        }
+    }
+
+    private var statusEmphasized: Bool {
+        switch store.gateway.state {
+        case .connected, .disconnected, .failed: true
+        case .connecting: false
         }
     }
 
@@ -127,6 +154,20 @@ struct WorkspaceView: View {
         return store.sessions.filter { ids.contains($0.id) || $0.title.localizedCaseInsensitiveContains(searchQuery) }
     }
 
+    private var sessionsList: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(displayedSessions.prefix(12)) { session in
+                Button { onOpenSession(session) } label: { sessionRow(session) }
+                    .buttonStyle(.plain)
+                    .id("workspace-session-\(session.id)")
+
+                Divider()
+                    .overlay(.white.opacity(0.1))
+                    .padding(.leading, 18)
+            }
+        }
+    }
+
     private func sessionRow(_ session: SessionSummary) -> some View {
         HStack(spacing: 11) {
             Circle()
@@ -141,9 +182,9 @@ struct WorkspaceView: View {
             Text(session.isRunning ? "运行中" : session.lastActivity.formatted(.relative(presentation: .named)))
                 .font(.caption).foregroundStyle(session.isRunning ? .blue : .white.opacity(0.48))
         }
-        .padding(15)
-        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 15))
-        .overlay(RoundedRectangle(cornerRadius: 15).stroke(.white.opacity(0.11)))
+        .padding(.horizontal, 4)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder

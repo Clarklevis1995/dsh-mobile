@@ -768,7 +768,29 @@ private struct EventDetailSheet: View {
         ScrollView {
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(22)
+                .padding(.horizontal, 22)
+                .padding(.top, 22)
+                .padding(.bottom, 52)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .mask {
+            VStack(spacing: 0) {
+                LinearGradient(
+                    colors: [.clear, .black],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 12)
+
+                Rectangle().fill(.black)
+
+                LinearGradient(
+                    colors: [.black, .clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 36)
+            }
         }
     }
 

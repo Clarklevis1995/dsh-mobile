@@ -9,6 +9,7 @@ enum DSHColor {
     static let paper = Color(red: 0.975, green: 0.98, blue: 0.99)
     static let purple = Color(red: 0.48, green: 0.33, blue: 0.78)
     static let orange = Color(red: 0.94, green: 0.49, blue: 0.08)
+    static let amber = Color(red: 1.0, green: 0.68, blue: 0.12)
     static let success = Color(red: 0.18, green: 0.72, blue: 0.36)
 }
 

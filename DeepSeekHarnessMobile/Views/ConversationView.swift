@@ -11,8 +11,11 @@ struct ConversationView: View {
     @State private var conversationScrollAnchor: String?
     @State private var userHasManuallyPositioned: Bool
     @State private var isUserDragging = false
-    @State private var visibleConversationRows: [String: CGRect] = [:]
+    @State private var conversationScrollPosition: String?
     @State private var isRestoringManualScrollPosition: Bool
+    @State private var composerHeight: CGFloat = 124
+    @State private var scrollToBottomRequest = 0
+    @FocusState private var composerIsFocused: Bool
 
     init(initialScrollAnchor: String? = nil, initiallyManual: Bool = false, onBack: @escaping () -> Void) {
         self.onBack = onBack
@@ -66,47 +69,38 @@ struct ConversationView: View {
     }
 
     private var chat: some View {
-        VStack(spacing: 0) {
+        ZStack(alignment: .bottom) {
             GeometryReader { geometry in
                 ScrollViewReader { scrollProxy in
                     ZStack {
                         ScrollView(.vertical) {
                             LazyVStack(alignment: .leading, spacing: 0) {
-                            if conversationItems.isEmpty && isLoadingSelectedHistory {
-                                historyLoadingState
-                            } else if !conversationItems.isEmpty {
-                                if isLoadingSelectedHistory { historyLoadingBanner }
-                                if let id = store.selectedSessionId, store.historyHasMore[id] == true {
-                                    Button("加载更早记录") { store.loadHistory(for: id, older: true) }
-                                        .font(.caption).frame(maxWidth: .infinity)
-                                }
-                                ForEach(displayEntries) { entry in
-                                    Group {
-                                        switch entry.content {
-                                        case .message(let item):
-                                            ConversationRow(item: item)
-                                        case .process(let group):
-                                            ConversationProcessRow(group: group)
-                                        }
+                                if conversationItems.isEmpty && isLoadingSelectedHistory {
+                                    historyLoadingState
+                                } else if !conversationItems.isEmpty {
+                                    if isLoadingSelectedHistory { historyLoadingBanner }
+                                    if let id = store.selectedSessionId, store.historyHasMore[id] == true {
+                                        Button("加载更早记录") { store.loadHistory(for: id, older: true) }
+                                            .font(.caption).frame(maxWidth: .infinity)
                                     }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background {
-                                        GeometryReader { rowGeometry in
-                                            Color.clear.preference(
-                                                key: ConversationRowBoundsKey.self,
-                                                value: [
-                                                    entry.id: rowGeometry.frame(in: .named("conversation-scroll"))
-                                                ]
-                                            )
+                                    ForEach(displayEntries) { entry in
+                                        Group {
+                                            switch entry.content {
+                                            case .message(let item):
+                                                ConversationRow(item: item)
+                                            case .process(let group):
+                                                ConversationProcessRow(group: group)
+                                            }
                                         }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .id(entry.id)
                                     }
-                                    .id(entry.id)
                                 }
+                                Color.clear
+                                    .frame(height: composerHeight)
+                                    .id(conversationBottomAnchorID)
                             }
-                            }
-                            Color.clear
-                                .frame(height: 1)
-                                .id(conversationBottomAnchorID)
+                            .scrollTargetLayout()
                         }
                             .frame(width: max(0, geometry.size.width - 40), alignment: .leading)
                             .padding(.horizontal, 20)
@@ -117,10 +111,8 @@ struct ConversationView: View {
                         .clipped()
                         .opacity(isRestoringManualScrollPosition ? 0 : 1)
                         .defaultScrollAnchor(.bottom)
+                        .scrollPosition(id: $conversationScrollPosition, anchor: .bottom)
                         .id("conversation-scroll-\(store.selectedSessionId ?? "new-session")-\(historyLayoutGeneration)")
-                        .onPreferenceChange(ConversationRowBoundsKey.self) { rows in
-                            visibleConversationRows = rows
-                        }
                         .simultaneousGesture(
                             DragGesture(minimumDistance: 2)
                                 .onChanged { _ in
@@ -130,12 +122,15 @@ struct ConversationView: View {
                                 }
                                 .onEnded { _ in
                                     isUserDragging = false
-                                    captureManualConversationAnchor(viewportHeight: geometry.size.height)
+                                    captureManualConversationAnchor()
                                 }
                         )
                         .onChange(of: bottomEntryID) { _, _ in
                             guard !userHasManuallyPositioned, !isLoadingSelectedHistory else { return }
                             scrollWithoutAnimation(scrollProxy, to: conversationBottomAnchorID)
+                        }
+                        .onChange(of: scrollToBottomRequest) { _, _ in
+                            scrollToConversationBottom(scrollProxy)
                         }
                         .onChange(of: isLoadingSelectedHistory) { wasLoading, isLoading in
                             guard wasLoading, !isLoading, !conversationItems.isEmpty else { return }
@@ -166,6 +161,7 @@ struct ConversationView: View {
                         .task(id: store.selectedSessionId) {
                             guard let sessionId = store.selectedSessionId else {
                                 conversationScrollAnchor = nil
+                                conversationScrollPosition = nil
                                 userHasManuallyPositioned = false
                                 isRestoringManualScrollPosition = false
                                 return
@@ -174,6 +170,7 @@ struct ConversationView: View {
                             conversationScrollAnchor = userHasManuallyPositioned
                                 ? store.conversationScrollAnchor(for: sessionId)
                                 : nil
+                            conversationScrollPosition = conversationScrollAnchor ?? conversationBottomAnchorID
                             guard userHasManuallyPositioned else {
                                 isRestoringManualScrollPosition = false
                                 return
@@ -193,10 +190,45 @@ struct ConversationView: View {
                         if conversationItems.isEmpty && !isLoadingSelectedHistory {
                             emptyState
                         }
+
+                        if shouldShowScrollToBottom {
+                            VStack {
+                                Spacer()
+                                scrollToBottomButton {
+                                    scrollToBottomRequest &+= 1
+                                }
+                            }
+                            .padding(.bottom, composerHeight + 8)
+                            .transition(.scale(scale: 0.85).combined(with: .opacity))
+                            .zIndex(2)
+                        }
                     }
+                    .animation(
+                        .easeOut(duration: 0.16),
+                        value: shouldShowScrollToBottom
+                    )
                 }
             }
             composer
+                .background {
+                    GeometryReader { composerGeometry in
+                        Color.clear.preference(
+                            key: ComposerHeightPreferenceKey.self,
+                            value: composerGeometry.size.height
+                        )
+                    }
+                }
+        }
+        .onPreferenceChange(ComposerHeightPreferenceKey.self) { height in
+            guard height > 0, abs(height - composerHeight) > 0.5 else { return }
+            composerHeight = height
+        }
+        .onChange(of: composerIsFocused) { _, isFocused in
+            guard isFocused else { return }
+            Task { @MainActor in
+                await Task.yield()
+                scrollToBottomRequest &+= 1
+            }
         }
     }
 
@@ -229,6 +261,23 @@ struct ConversationView: View {
         }
     }
 
+    private func scrollToConversationBottom(_ proxy: ScrollViewProxy) {
+        userHasManuallyPositioned = false
+        conversationScrollAnchor = nil
+        if let sessionId = store.selectedSessionId {
+            store.rememberConversationScrollAnchor(nil, for: sessionId, manual: false)
+        }
+        withAnimation(.easeOut(duration: 0.22)) {
+            proxy.scrollTo(conversationBottomAnchorID, anchor: .bottom)
+        }
+    }
+
+    private var shouldShowScrollToBottom: Bool {
+        guard !conversationItems.isEmpty,
+              let conversationScrollPosition else { return false }
+        return conversationScrollPosition != conversationBottomAnchorID
+    }
+
     private func validRememberedConversationAnchor() -> String? {
         guard let sessionId = store.selectedSessionId,
               let saved = store.conversationScrollAnchor(for: sessionId),
@@ -238,13 +287,17 @@ struct ConversationView: View {
         return saved
     }
 
-    private func captureManualConversationAnchor(viewportHeight: CGFloat) {
-        guard let nearest = visibleConversationRows
-            .filter({ $0.value.maxY > 0 && $0.value.minY < viewportHeight })
-            .min(by: {
-                abs($0.value.maxY - viewportHeight) < abs($1.value.maxY - viewportHeight)
-            })?.key else { return }
-        conversationScrollAnchor = nearest
+    private func captureManualConversationAnchor() {
+        guard let position = conversationScrollPosition,
+              position != conversationBottomAnchorID else {
+            userHasManuallyPositioned = false
+            conversationScrollAnchor = nil
+            if let sessionId = store.selectedSessionId {
+                store.rememberConversationScrollAnchor(nil, for: sessionId, manual: false)
+            }
+            return
+        }
+        conversationScrollAnchor = position
         persistConversationAnchor(manual: true)
     }
 
@@ -289,12 +342,36 @@ struct ConversationView: View {
         return "正在加载历史记录 · \(progress.loaded)/\(total)"
     }
 
+    @ViewBuilder
+    private func scrollToBottomButton(action: @escaping () -> Void) -> some View {
+        if #available(iOS 26.0, *) {
+            Button(action: action) {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("滚动到最新消息")
+        } else {
+            Button(action: action) {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 36, height: 36)
+                    .glassSurface(radius: 18)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("滚动到最新消息")
+        }
+    }
+
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {
             TextField("描述你想要构建的内容", text: $draft, axis: .vertical)
                 .lineLimit(1...5)
                 .font(.body)
                 .textFieldStyle(.plain)
+                .focused($composerIsFocused)
                 .padding(.horizontal, 3)
                 .frame(minHeight: 38, alignment: .top)
             HStack(spacing: 7) {
@@ -338,10 +415,10 @@ struct ConversationView: View {
         .padding(.horizontal, 14)
         .padding(.top, 14)
         .padding(.bottom, 12)
-        .glassSurface(radius: 24)
+        .glassSurface(radius: 24, tint: DSHColor.paper.opacity(0.48))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.white.opacity(0.72), lineWidth: 0.7)
+                .stroke(.white.opacity(0.56), lineWidth: 0.7)
         }
         .shadow(color: DSHColor.navy.opacity(0.11), radius: 18, y: 8)
         .padding(.horizontal, 14).padding(.bottom, 10)
@@ -525,11 +602,11 @@ struct ConversationView: View {
     }
 }
 
-private struct ConversationRowBoundsKey: PreferenceKey {
-    static var defaultValue: [String: CGRect] = [:]
+private struct ComposerHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 124
 
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

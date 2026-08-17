@@ -4,13 +4,28 @@ struct GlassSurface: ViewModifier {
     let radius: CGFloat
     let dark: Bool
     let tint: Color?
+    let clear: Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            content
-                .background(tint ?? .clear, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-                .glassEffect(.regular, in: .rect(cornerRadius: radius))
+            if clear {
+                if let tint {
+                    content
+                        .glassEffect(.clear.tint(tint), in: .rect(cornerRadius: radius))
+                } else {
+                    content
+                        .glassEffect(.clear, in: .rect(cornerRadius: radius))
+                }
+            } else {
+                if let tint {
+                    content
+                        .glassEffect(.regular.tint(tint), in: .rect(cornerRadius: radius))
+                } else {
+                    content
+                        .glassEffect(.regular, in: .rect(cornerRadius: radius))
+                }
+            }
         } else {
             content
                 .background {
@@ -28,8 +43,8 @@ struct GlassSurface: ViewModifier {
 }
 
 extension View {
-    func glassSurface(radius: CGFloat = 22, dark: Bool = false, tint: Color? = nil) -> some View {
-        modifier(GlassSurface(radius: radius, dark: dark, tint: tint))
+    func glassSurface(radius: CGFloat = 22, dark: Bool = false, tint: Color? = nil, clear: Bool = false) -> some View {
+        modifier(GlassSurface(radius: radius, dark: dark, tint: tint, clear: clear))
     }
 }
 
@@ -51,7 +66,10 @@ struct HarnessMark: View {
             Text("HARNESS")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .padding(.horizontal, 5).padding(.vertical, 3)
-                .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.primary, lineWidth: 1))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .stroke(Color.white, lineWidth: 1)
+                }
         }
     }
 }
