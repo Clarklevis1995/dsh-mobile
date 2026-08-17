@@ -1,0 +1,1377 @@
+import SwiftUI
+import MarkdownUI
+
+struct ConversationView: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var activeView = 0
+    @State private var draft = ""
+    @State private var showsContextUsage = false
+    @State private var historyLayoutGeneration = 0
+    @State private var conversationScrollAnchor: String?
+    @State private var userHasManuallyPositioned: Bool
+    @State private var isUserDragging = false
+    @State private var visibleConversationRows: [String: CGRect] = [:]
+    @State private var isRestoringManualScrollPosition: Bool
+
+    init(initialScrollAnchor: String? = nil, initiallyManual: Bool = false) {
+        _conversationScrollAnchor = State(initialValue: initialScrollAnchor)
+        _userHasManuallyPositioned = State(initialValue: initiallyManual)
+        _isRestoringManualScrollPosition = State(initialValue: initiallyManual)
+    }
+
+    var body: some View {
+        ZStack {
+            DSHColor.paper.ignoresSafeArea()
+            VStack(spacing: 0) {
+                topBar
+                Picker("视图", selection: $activeView) {
+                    Text("对话").tag(0)
+                    Text("轨迹").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 66).padding(.vertical, 12)
+
+                if activeView == 0 { chat }
+                else { TrajectoryView(sessionId: store.selectedSessionId, events: store.selectedEvents) }
+            }
+        }
+        .foregroundStyle(DSHColor.ink)
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            Button { store.showWorkspace() } label: {
+                Image(systemName: "chevron.left").frame(width: 38, height: 38).glassSurface(radius: 19)
+            }
+            .buttonStyle(.plain)
+            Text(store.selectedSession.map(\.title) ?? "新建 DeepSeek Harness")
+                .font(.subheadline.weight(.semibold)).lineLimit(1)
+            Spacer()
+            ConnectionDot(state: store.gateway.state)
+            Text(store.selectedSession?.isRunning == true ? "运行中" : store.gateway.state.label)
+                .font(.caption).foregroundStyle(.secondary)
+            Menu {
+                Button("重新加载历史", systemImage: "clock.arrow.circlepath") {
+                    if let id = store.selectedSessionId { store.loadHistory(for: id) }
+                }
+                Button("发送 Ping", systemImage: "wave.3.right") { store.gateway.ping() }
+            } label: {
+                Image(systemName: "ellipsis").frame(width: 38, height: 38).glassSurface(radius: 19)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16).padding(.top, 8)
+    }
+
+    private var chat: some View {
+        VStack(spacing: 0) {
+            GeometryReader { geometry in
+                ScrollViewReader { scrollProxy in
+                    ZStack {
+                        ScrollView(.vertical) {
+                            LazyVStack(alignment: .leading, spacing: 0) {
+                            if conversationItems.isEmpty && isLoadingSelectedHistory {
+                                historyLoadingState
+                            } else if !conversationItems.isEmpty {
+                                if isLoadingSelectedHistory { historyLoadingBanner }
+                                if let id = store.selectedSessionId, store.historyHasMore[id] == true {
+                                    Button("加载更早记录") { store.loadHistory(for: id, older: true) }
+                                        .font(.caption).frame(maxWidth: .infinity)
+                                }
+                                ForEach(displayEntries) { entry in
+                                    Group {
+                                        switch entry.content {
+                                        case .message(let item):
+                                            ConversationRow(item: item)
+                                        case .process(let group):
+                                            ConversationProcessRow(group: group)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background {
+                                        GeometryReader { rowGeometry in
+                                            Color.clear.preference(
+                                                key: ConversationRowBoundsKey.self,
+                                                value: [
+                                                    entry.id: rowGeometry.frame(in: .named("conversation-scroll"))
+                                                ]
+                                            )
+                                        }
+                                    }
+                                    .id(entry.id)
+                                }
+                            }
+                            }
+                            Color.clear
+                                .frame(height: 1)
+                                .id(conversationBottomAnchorID)
+                        }
+                            .frame(width: max(0, geometry.size.width - 40), alignment: .leading)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 8)
+                            .id("history-layout-\(store.selectedSessionId ?? "new-session")-\(historyLayoutGeneration)")
+                        .coordinateSpace(name: "conversation-scroll")
+                        .frame(width: geometry.size.width)
+                        .clipped()
+                        .opacity(isRestoringManualScrollPosition ? 0 : 1)
+                        .defaultScrollAnchor(.bottom)
+                        .id("conversation-scroll-\(store.selectedSessionId ?? "new-session")-\(historyLayoutGeneration)")
+                        .onPreferenceChange(ConversationRowBoundsKey.self) { rows in
+                            visibleConversationRows = rows
+                        }
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 2)
+                                .onChanged { _ in
+                                    guard !isUserDragging else { return }
+                                    isUserDragging = true
+                                    userHasManuallyPositioned = true
+                                }
+                                .onEnded { _ in
+                                    isUserDragging = false
+                                    captureManualConversationAnchor(viewportHeight: geometry.size.height)
+                                }
+                        )
+                        .onChange(of: bottomEntryID) { _, _ in
+                            guard !userHasManuallyPositioned, !isLoadingSelectedHistory else { return }
+                            scrollWithoutAnimation(scrollProxy, to: conversationBottomAnchorID)
+                        }
+                        .onChange(of: isLoadingSelectedHistory) { wasLoading, isLoading in
+                            guard wasLoading, !isLoading, !conversationItems.isEmpty else { return }
+                            if userHasManuallyPositioned {
+                                isRestoringManualScrollPosition = true
+                            }
+                            var transaction = Transaction()
+                            transaction.animation = nil
+                            withTransaction(transaction) {
+                                historyLayoutGeneration &+= 1
+                            }
+                            if userHasManuallyPositioned {
+                                Task { @MainActor in
+                                    await Task.yield()
+                                    if let saved = validRememberedConversationAnchor() {
+                                        scrollWithoutAnimation(scrollProxy, to: saved)
+                                    } else {
+                                        userHasManuallyPositioned = false
+                                        conversationScrollAnchor = nil
+                                    }
+                                    await Task.yield()
+                                    isRestoringManualScrollPosition = false
+                                }
+                            } else {
+                                isRestoringManualScrollPosition = false
+                            }
+                        }
+                        .task(id: store.selectedSessionId) {
+                            guard let sessionId = store.selectedSessionId else {
+                                conversationScrollAnchor = nil
+                                userHasManuallyPositioned = false
+                                isRestoringManualScrollPosition = false
+                                return
+                            }
+                            userHasManuallyPositioned = store.hasManualConversationPosition(for: sessionId)
+                            conversationScrollAnchor = userHasManuallyPositioned
+                                ? store.conversationScrollAnchor(for: sessionId)
+                                : nil
+                            guard userHasManuallyPositioned else {
+                                isRestoringManualScrollPosition = false
+                                return
+                            }
+                            isRestoringManualScrollPosition = true
+                            await Task.yield()
+                            if let target = validRememberedConversationAnchor() {
+                                scrollWithoutAnimation(scrollProxy, to: target)
+                            } else {
+                                userHasManuallyPositioned = false
+                                conversationScrollAnchor = nil
+                            }
+                            await Task.yield()
+                            isRestoringManualScrollPosition = false
+                        }
+
+                        if conversationItems.isEmpty && !isLoadingSelectedHistory {
+                            emptyState
+                        }
+                    }
+                }
+            }
+            composer
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            DeepSeekWhaleIcon(size: 52).foregroundStyle(DSHColor.ocean)
+            Text("操作远端 DSH Agent").font(.title3.weight(.semibold))
+            Text("发送任务后，工具调用、推理进度和最终回复会通过 Mobile Gateway 实时返回。")
+                .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 28)
+    }
+
+    private var isLoadingSelectedHistory: Bool {
+        guard let id = store.selectedSessionId else { return false }
+        return store.historyLoadingSessionIds.contains(id)
+    }
+
+    private var bottomEntryID: String? { displayEntries.last?.id }
+    private var conversationBottomAnchorID: String {
+        "conversation-bottom-\(store.selectedSessionId ?? "new-session")"
+    }
+
+    private func scrollWithoutAnimation(_ proxy: ScrollViewProxy, to target: String) {
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            proxy.scrollTo(target, anchor: .bottom)
+        }
+    }
+
+    private func validRememberedConversationAnchor() -> String? {
+        guard let sessionId = store.selectedSessionId,
+              let saved = store.conversationScrollAnchor(for: sessionId),
+              displayEntries.contains(where: { $0.id == saved }) else {
+            return nil
+        }
+        return saved
+    }
+
+    private func captureManualConversationAnchor(viewportHeight: CGFloat) {
+        guard let nearest = visibleConversationRows
+            .filter({ $0.value.maxY > 0 && $0.value.minY < viewportHeight })
+            .min(by: {
+                abs($0.value.maxY - viewportHeight) < abs($1.value.maxY - viewportHeight)
+            })?.key else { return }
+        conversationScrollAnchor = nearest
+        persistConversationAnchor(manual: true)
+    }
+
+    private func persistConversationAnchor(manual: Bool) {
+        guard let sessionId = store.selectedSessionId,
+              let conversationScrollAnchor else { return }
+        store.rememberConversationScrollAnchor(conversationScrollAnchor, for: sessionId, manual: manual)
+    }
+
+    private var historyLoadingState: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+                .controlSize(.large)
+                .tint(DSHColor.ocean)
+            Text("正在加载历史记录").font(.title3.weight(.semibold))
+            Text(historyProgressText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 120)
+    }
+
+    private var historyLoadingBanner: some View {
+        HStack(spacing: 9) {
+            ProgressView().tint(DSHColor.ocean)
+            Text(historyProgressText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+
+    private var historyProgressText: String {
+        guard let id = store.selectedSessionId,
+              let progress = store.historyLoadProgress[id],
+              let total = progress.total else {
+            return "正在从 Mobile Gateway 同步会话内容…"
+        }
+        return "正在加载历史记录 · \(progress.loaded)/\(total)"
+    }
+
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TextField("描述你想要构建的内容", text: $draft, axis: .vertical)
+                .lineLimit(1...5)
+                .font(.body)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 3)
+                .frame(minHeight: 38, alignment: .top)
+            HStack(spacing: 7) {
+                permissionMenu
+
+                Spacer(minLength: 2)
+
+                modelMenu
+
+                Button { showsContextUsage = true } label: {
+                    if contextIsLoading && store.selectedContextSnapshot == nil {
+                        ProgressView().controlSize(.small).frame(width: 26, height: 26)
+                    } else {
+                        ContextUsageRing(progress: contextProgress)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(store.selectedContextSnapshot == nil)
+                .accessibilityLabel("上下文已用 \(Int(contextProgress * 100))%")
+                .popover(isPresented: $showsContextUsage, arrowEdge: .bottom) {
+                    ContextUsagePopover(snapshot: store.selectedContextSnapshot)
+                        .presentationCompactAdaptation(.popover)
+                }
+
+                Button {
+                    let content = draft
+                    draft = ""
+                    store.send(content)
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 42, height: 42)
+                        .background(DSHColor.ocean, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.waitingForNewSession)
+                .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.48 : 1)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
+        .glassSurface(radius: 24)
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.72), lineWidth: 0.7)
+        }
+        .shadow(color: DSHColor.navy.opacity(0.11), radius: 18, y: 8)
+        .padding(.horizontal, 14).padding(.bottom, 10)
+    }
+
+    private var permissionMenu: some View {
+        Menu {
+            if permissionOptions.isEmpty {
+                Text(store.selectedSessionId == nil ? "创建会话后可调整权限" : "正在读取权限…")
+            } else {
+                ForEach(permissionOptions) { option in
+                    Button {
+                        store.setPermission(option.value)
+                    } label: {
+                        Label(
+                            permissionTitle(option.value),
+                            systemImage: option.value == currentPermission ? "checkmark" : permissionIcon(option.value)
+                        )
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                if permissionIsLoading {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: permissionIcon(currentPermission))
+                }
+                Text(permissionTitle(currentPermission)).lineLimit(1)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .frame(width: 78, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .disabled(store.selectedSessionId == nil || permissionOptions.isEmpty)
+    }
+
+    private var modelMenu: some View {
+        Menu {
+            if modelGroups.isEmpty {
+                Text(store.selectedSessionId == nil ? "创建会话后可选择模型" : "正在读取模型…")
+            } else {
+                Menu("模型") {
+                    ForEach(modelGroups) { group in
+                        Section(group.name) {
+                            ForEach(group.models) { model in
+                                Button {
+                                    select(group: group, model: model)
+                                } label: {
+                                    Label(
+                                        model.name,
+                                        systemImage: isCurrent(group: group, model: model) ? "checkmark" : "circle"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                if !currentEfforts.isEmpty {
+                    Menu("推理等级") {
+                        ForEach(currentEfforts) { effort in
+                            Button {
+                                select(effort: effort)
+                            } label: {
+                                Label(
+                                    effort.name,
+                                    systemImage: effort.id == currentModelSelection?.reasoningEffort ? "checkmark" : "circle"
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                if modelIsLoading {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Text(currentModelTitle)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .allowsTightening(true)
+                        .layoutPriority(1)
+                    if let effort = currentEffortTitle {
+                        Text(effort)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .layoutPriority(2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(DSHColor.purple.opacity(0.16), in: Capsule())
+                    }
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .contentShape(Rectangle())
+        }
+        .disabled(store.selectedSessionId == nil || modelGroups.isEmpty || store.selectedModelCatalog?.routable == false)
+    }
+
+    private var permissionOptions: [GatewayPermissionOption] { store.selectedPermissions?.options ?? [] }
+    private var currentPermission: String {
+        store.selectedPermissions?.currentValue ?? store.selectedPermissions?.preset ?? "workspace-write"
+    }
+    private var permissionIsLoading: Bool {
+        store.sessionControlLoadingKinds.contains("permission-options") || store.sessionControlLoadingKinds.contains("permission")
+    }
+    private var modelIsLoading: Bool {
+        store.sessionControlLoadingKinds.contains("models") || store.sessionControlLoadingKinds.contains("select-model")
+    }
+    private var contextIsLoading: Bool { store.sessionControlLoadingKinds.contains("context-usage") }
+    private var modelGroups: [GatewayModelGroup] { store.selectedModelCatalog?.groups ?? [] }
+    private var currentModelSelection: GatewayModelSelection? { store.selectedModelCatalog?.current }
+    private var currentModelItem: GatewayModelItem? {
+        guard let selection = currentModelSelection else { return nil }
+        return modelGroups.first(where: { $0.id == selection.provider })?.models.first(where: { $0.id == selection.model })
+    }
+    private var currentModelTitle: String { currentModelItem?.name ?? currentModelSelection?.model ?? "DeepSeek Agent" }
+    private var currentEfforts: [GatewayReasoningEffort] { currentModelItem?.reasoning?.efforts ?? [] }
+    private var currentEffortTitle: String? {
+        guard let id = currentModelSelection?.reasoningEffort else { return nil }
+        return currentEfforts.first(where: { $0.id == id })?.name ?? id.capitalized
+    }
+    private var contextProgress: Double {
+        guard let pressure = store.selectedContextSnapshot?.pressure,
+              let used = pressure.pressureTokens,
+              let window = pressure.contextWindow,
+              window > 0 else { return 0 }
+        return min(1, max(0, Double(used) / Double(window)))
+    }
+
+    private func permissionTitle(_ value: String) -> String {
+        switch value {
+        case "read-only": "只读"
+        case "workspace-write": "工作区写入"
+        case "danger-full-access": "完全访问"
+        default: value
+        }
+    }
+    private func permissionIcon(_ value: String) -> String {
+        switch value {
+        case "read-only": "checkmark.shield"
+        case "workspace-write": "pencil.and.outline"
+        case "danger-full-access": "exclamationmark.shield"
+        default: "shield"
+        }
+    }
+    private func isCurrent(group: GatewayModelGroup, model: GatewayModelItem) -> Bool {
+        currentModelSelection?.provider == group.id && currentModelSelection?.model == model.id
+    }
+    private func select(group: GatewayModelGroup, model: GatewayModelItem) {
+        let efforts = model.reasoning?.efforts ?? []
+        let retainedEffort = currentModelSelection?.reasoningEffort.flatMap { current in
+            efforts.contains(where: { $0.id == current }) ? current : nil
+        }
+        store.selectModel(
+            provider: group.id,
+            model: model.id,
+            reasoningEffort: retainedEffort ?? model.reasoning?.defaultEffort
+        )
+    }
+    private func select(effort: GatewayReasoningEffort) {
+        guard let current = currentModelSelection else { return }
+        store.selectModel(provider: current.provider, model: current.model, reasoningEffort: effort.id)
+    }
+
+    private var conversationItems: [ConversationItem] {
+        store.selectedConversationItems
+    }
+
+    private var displayEntries: [ConversationDisplayEntry] {
+        ConversationDisplayEntry.make(from: conversationItems)
+    }
+}
+
+private struct ConversationRowBoundsKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+private struct ContextUsageRing: View {
+    let progress: Double
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.secondary.opacity(0.22), lineWidth: 3)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(DSHColor.ocean, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: 18, height: 18)
+        .padding(2)
+        .contentShape(Circle())
+    }
+}
+
+private struct ContextUsagePopover: View {
+    let snapshot: GatewayContextSnapshot?
+
+    private var pressureTokens: Int { snapshot?.pressure?.pressureTokens ?? 0 }
+    private var contextWindow: Int { snapshot?.pressure?.contextWindow ?? 0 }
+    private var progress: Double {
+        guard contextWindow > 0 else { return 0 }
+        return min(1, max(0, Double(pressureTokens) / Double(contextWindow)))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("上下文已用")
+                    .foregroundStyle(.secondary)
+                Text("\(Int((progress * 100).rounded()))%")
+                    .fontWeight(.semibold)
+                Spacer()
+                Text("~\(compact(pressureTokens)) / \(compact(contextWindow))")
+                    .font(.subheadline.monospacedDigit())
+            }
+
+            ProgressView(value: progress)
+                .tint(DSHColor.ocean)
+
+            if let breakdown = snapshot?.breakdown {
+                usageRow("系统提示词", value: breakdown.systemTokens, color: .gray)
+                usageRow("工具", value: breakdown.toolsTokens, color: DSHColor.purple)
+                usageRow("对话消息", value: breakdown.messageTokens, color: DSHColor.ocean)
+            } else if let usage = snapshot?.tokenUsage {
+                usageRow("未缓存输入", value: usage.uncachedInputTokens, color: DSHColor.ocean)
+                usageRow("缓存读取", value: usage.cacheReadTokens, color: DSHColor.purple)
+                usageRow("模型输出", value: usage.outputTokens, color: DSHColor.orange)
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("正在读取上下文用量…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(18)
+        .frame(width: 300)
+        .presentationBackground(.ultraThinMaterial)
+    }
+
+    private func usageRow(_ title: String, value: Int?, color: Color) -> some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(color)
+                .frame(width: 12, height: 12)
+            Text(title).foregroundStyle(.secondary)
+            Spacer()
+            Text(value.map { "~\(compact($0))" } ?? "—")
+                .monospacedDigit()
+        }
+        .font(.subheadline)
+    }
+
+    private func compact(_ value: Int) -> String {
+        switch value {
+        case 1_000_000...:
+            return String(format: value.isMultiple(of: 1_000_000) ? "%.0fM" : "%.1fM", Double(value) / 1_000_000)
+        case 1_000...:
+            return String(format: "%.1fK", Double(value) / 1_000)
+        default:
+            return "\(value)"
+        }
+    }
+}
+
+struct ConversationItem: Identifiable, Sendable {
+    enum Kind: Equatable, Sendable { case user, assistant, reasoning, tool, jsonTool, toolResult, status, system }
+    let id: String
+    let kind: Kind
+    let title: String
+    let text: String
+    let isError: Bool
+    let date: Date
+
+    static func make(from events: [SessionEvent]) -> [ConversationItem] {
+        var result: [ConversationItem] = []
+        var streamIndexes: [String: Int] = [:]
+        let completed = Set(events.filter { $0.event.type == "assistant/message" }.map { "\($0.event.turn ?? -1)-\($0.event.step ?? -1)" })
+        for record in events {
+            let event = record.event
+            let key = "\(event.turn ?? -1)-\(event.step ?? -1)"
+            switch event.type {
+            case "user/message" where event.source == nil || event.source == "user":
+                if let text = event.text, !text.isEmpty {
+                    result.append(.init(id: record.id, kind: .user, title: "你", text: text, isError: false, date: record.date))
+                }
+            case "assistant/chunk" where event.chunkType == "text-delta" && !completed.contains(key):
+                appendStream(id: "stream-text-\(key)", key: "text-\(key)", kind: .assistant, title: "DeepSeek · 正在生成", delta: event.text ?? "", date: record.date, result: &result, indexes: &streamIndexes)
+            case "assistant/chunk" where event.chunkType == "reasoning-delta" && !completed.contains(key):
+                appendStream(id: "stream-reason-\(key)", key: "reason-\(key)", kind: .reasoning, title: "Think · 正在推理", delta: event.text ?? "", date: record.date, result: &result, indexes: &streamIndexes)
+            case "assistant/chunk" where event.chunkType == "tool-call-delta" && !completed.contains(key):
+                let toolKey = event.tool?.id ?? key
+                let name = event.tool?.name ?? "Tool Call · 正在组装"
+                let kind: Kind = name.caseInsensitiveCompare("run_code") == .orderedSame ? .jsonTool : .tool
+                appendStream(id: "stream-tool-\(toolKey)", key: "tool-\(toolKey)", kind: kind, title: name, delta: event.tool?.argumentsDelta ?? "", date: record.date, result: &result, indexes: &streamIndexes)
+            case "assistant/message":
+                if let reasoning = event.reasoning, !reasoning.isEmpty { result.append(.init(id: record.id + "-reason", kind: .reasoning, title: "Think", text: reasoning, isError: false, date: record.date)) }
+                if let text = event.text, !text.isEmpty { result.append(.init(id: record.id, kind: .assistant, title: "DeepSeek", text: text, isError: false, date: record.date)) }
+            case "tool/call":
+                let name = event.name ?? "Tool Call"
+                let kind: Kind = name.caseInsensitiveCompare("run_code") == .orderedSame ? .jsonTool : .tool
+                result.append(.init(id: record.id, kind: kind, title: name, text: event.arguments?.jsonDisplayText ?? "", isError: false, date: record.date))
+            case "tool/result": result.append(.init(id: record.id, kind: .toolResult, title: event.isError == true ? "工具失败" : "工具完成", text: event.preview ?? "", isError: event.isError == true, date: record.date))
+            default: continue
+            }
+        }
+        return result
+    }
+
+    private static func appendStream(id: String, key: String, kind: Kind, title: String, delta: String, date: Date, result: inout [ConversationItem], indexes: inout [String: Int]) {
+        guard !delta.isEmpty else { return }
+        if let index = indexes[key] {
+            let old = result[index]
+            result[index] = .init(id: old.id, kind: old.kind, title: old.title, text: old.text + delta, isError: old.isError, date: date)
+        } else {
+            indexes[key] = result.count
+            result.append(.init(id: id, kind: kind, title: title, text: delta, isError: false, date: date))
+        }
+    }
+}
+
+private struct ConversationProcessGroup: Identifiable {
+    let id: String
+    let items: [ConversationItem]
+
+    var duration: TimeInterval {
+        guard let first = items.first?.date, let last = items.last?.date else { return 0 }
+        return max(0, last.timeIntervalSince(first))
+    }
+}
+
+private struct ConversationDisplayEntry: Identifiable {
+    enum Content {
+        case message(ConversationItem)
+        case process(ConversationProcessGroup)
+    }
+
+    let id: String
+    let content: Content
+
+    static func make(from items: [ConversationItem]) -> [ConversationDisplayEntry] {
+        var result: [ConversationDisplayEntry] = []
+        var processItems: [ConversationItem] = []
+
+        func flushProcess() {
+            guard let first = processItems.first else { return }
+            let group = ConversationProcessGroup(
+                id: "process-\(first.id)",
+                items: processItems
+            )
+            result.append(.init(id: group.id, content: .process(group)))
+            processItems.removeAll(keepingCapacity: true)
+        }
+
+        for item in items {
+            switch item.kind {
+            case .reasoning, .tool, .jsonTool, .toolResult:
+                processItems.append(item)
+            case .user, .assistant, .status, .system:
+                flushProcess()
+                result.append(.init(id: "message-\(item.id)", content: .message(item)))
+            }
+        }
+        flushProcess()
+        return result
+    }
+}
+
+private struct ConversationProcessTool: Identifiable {
+    let id: String
+    let call: ConversationItem?
+    let result: ConversationItem?
+}
+
+private enum ConversationProcessContent: Identifiable {
+    case reasoning(ConversationItem)
+    case tool(ConversationProcessTool)
+
+    var id: String {
+        switch self {
+        case .reasoning(let item): "reason-\(item.id)"
+        case .tool(let tool): "tool-\(tool.id)"
+        }
+    }
+}
+
+private extension ConversationProcessGroup {
+    var contents: [ConversationProcessContent] {
+        var contents: [ConversationProcessContent] = []
+        var tools: [ConversationProcessTool] = []
+
+        for item in items {
+            switch item.kind {
+            case .reasoning:
+                contents.append(.reasoning(item))
+            case .tool, .jsonTool:
+                tools.append(.init(id: item.id, call: item, result: nil))
+            case .toolResult:
+                if let index = tools.firstIndex(where: { $0.result == nil }) {
+                    let existing = tools[index]
+                    tools[index] = .init(id: existing.id, call: existing.call, result: item)
+                } else {
+                    tools.append(.init(id: item.id, call: nil, result: item))
+                }
+            case .user, .assistant, .status, .system:
+                break
+            }
+        }
+        contents.append(contentsOf: tools.map(ConversationProcessContent.tool))
+        return contents
+    }
+
+    var toolCount: Int {
+        contents.reduce(0) { count, content in
+            if case .tool = content { count + 1 } else { count }
+        }
+    }
+}
+
+private struct ConversationProcessRow: View {
+    let group: ConversationProcessGroup
+    @State private var expanded = false
+
+    private var reasoningText: String {
+        group.contents.compactMap { content in
+            if case .reasoning(let item) = content { item.text } else { nil }
+        }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+    }
+
+    private var tools: [ConversationProcessTool] {
+        group.contents.compactMap { content in
+            if case .tool(let tool) = content { tool } else { nil }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button { toggleWithoutAnimation($expanded) } label: {
+                HStack(spacing: 7) {
+                    Text(processTitle)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !reasoningText.isEmpty {
+                        ConversationReasoningDisclosure(text: reasoningText)
+                    }
+                    if !tools.isEmpty {
+                        ConversationToolBundle(tools: tools)
+                    }
+                }
+                .padding(.leading, 2)
+            }
+        }
+        .padding(.vertical, 7)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(.gray.opacity(0.16)).frame(height: 1)
+        }
+    }
+
+    private var processTitle: String {
+        let duration = group.duration
+        let base: String
+        if duration >= 60 {
+            base = "耗时 \(Int(duration) / 60) 分钟 \(Int(duration) % 60) 秒"
+        } else if duration >= 1 {
+            base = "耗时 \(Int(duration.rounded())) 秒"
+        } else {
+            base = "思考过程"
+        }
+        return group.toolCount > 0 ? "\(base) · \(group.toolCount) 次工具调用" : base
+    }
+}
+
+private struct ConversationReasoningDisclosure: View {
+    let text: String
+    @State private var expanded = false
+
+    private var preview: String {
+        text.replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var needsViewport: Bool {
+        text.count > 4_000 || text.components(separatedBy: .newlines).count > 60
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Button { toggleWithoutAnimation($expanded) } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(DSHColor.purple)
+                        .frame(width: 18)
+                    Text("Think")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(DSHColor.purple)
+                    if !preview.isEmpty {
+                        Text("·").foregroundStyle(.tertiary)
+                        Text(preview)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                Group {
+                    if needsViewport {
+                        ScrollView(.vertical, showsIndicators: true) {
+                            MarkdownContent(text, compact: true)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                        }
+                        .frame(height: 320)
+                        .background(Color(uiColor: .secondarySystemFill), in: RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        MarkdownContent(text, compact: true)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.leading, 26)
+            }
+        }
+    }
+}
+
+private struct ConversationToolBundle: View {
+    let tools: [ConversationProcessTool]
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button { toggleWithoutAnimation($expanded) } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "wrench.and.screwdriver")
+                        .foregroundStyle(DSHColor.orange)
+                        .frame(width: 18)
+                    Text(bundleTitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(tools) { tool in
+                        ConversationProcessToolRow(tool: tool)
+                    }
+                }
+                .padding(.leading, 14)
+            }
+        }
+    }
+
+    private var bundleTitle: String {
+        let names = tools.compactMap { $0.call?.title }.prefix(2).joined(separator: "、")
+        return names.isEmpty ? "查看 \(tools.count) 个工具结果" : "使用了 \(names)\(tools.count > 2 ? " 等工具" : "")"
+    }
+}
+
+private struct ConversationProcessToolRow: View {
+    let tool: ConversationProcessTool
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Button { toggleWithoutAnimation($expanded) } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: tool.result?.isError == true ? "exclamationmark.triangle" : "terminal")
+                        .foregroundStyle(tool.result?.isError == true ? .red : DSHColor.orange)
+                        .frame(width: 17)
+                    Text(tool.call?.title ?? tool.result?.title ?? "工具")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if let result = tool.result {
+                        Text(result.isError ? "失败" : "完成")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(result.isError ? .red : .secondary)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                VStack(alignment: .leading, spacing: 9) {
+                    if let call = tool.call, !call.text.isEmpty {
+                        Text("调用参数")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ToolArgumentsView(text: call.text)
+                    }
+                    if let result = tool.result, !result.text.isEmpty {
+                        Text(result.isError ? "错误" : "结果")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(result.isError ? .red : .secondary)
+                        ToolOutputView(text: result.text)
+                    }
+                }
+                .padding(.leading, 24)
+                .padding(.bottom, 5)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+private struct ToolArgumentsView: View {
+    let text: String
+
+    var body: some View {
+        Group {
+            if text.count > 3_000 {
+                ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                    MarkdownContent("```json\n\(text)\n```", compact: true)
+                        .padding(8)
+                }
+                .frame(height: 220)
+            } else {
+                MarkdownContent("```json\n\(text)\n```", compact: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+    }
+}
+
+private func toggleWithoutAnimation(_ value: Binding<Bool>) {
+    var transaction = Transaction()
+    transaction.disablesAnimations = true
+    withTransaction(transaction) { value.wrappedValue.toggle() }
+}
+
+private struct ConversationRow: View {
+    let item: ConversationItem
+    @State private var expanded = false
+
+    var body: some View {
+        switch item.kind {
+        case .user:
+            Text(item.text)
+                .font(.body).padding(.horizontal, 14).padding(.vertical, 10)
+                .background(DSHColor.ocean.opacity(0.11), in: RoundedRectangle(cornerRadius: 15))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        case .assistant:
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 9) {
+                    DeepSeekWhaleIcon(size: 26).foregroundStyle(DSHColor.ink)
+                    Text(item.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 5)
+                MarkdownContent(item.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 9)
+        case .reasoning:
+            CompactEventDisclosure(
+                expanded: $expanded,
+                title: "Think",
+                text: item.text,
+                icon: "sparkles",
+                tint: DSHColor.purple
+            )
+        case .tool, .toolResult:
+            CompactEventDisclosure(
+                expanded: $expanded,
+                title: item.title,
+                text: item.text,
+                icon: item.isError ? "exclamationmark.triangle" : "wrench.and.screwdriver",
+                tint: item.isError ? .red : DSHColor.orange,
+                rendersOutput: item.title == "工具完成" || item.title == "工具失败"
+            )
+        case .jsonTool:
+            CompactEventDisclosure(
+                expanded: $expanded,
+                title: item.title,
+                text: item.text,
+                icon: "curlybraces.square",
+                tint: DSHColor.orange,
+                rendersJSON: true
+            )
+        case .status:
+            HStack { Rectangle().fill(.gray.opacity(0.25)).frame(height: 1); Text([item.title, item.text].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary); Rectangle().fill(.gray.opacity(0.25)).frame(height: 1) }
+        case .system:
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: item.isError ? "exclamationmark.circle.fill" : "antenna.radiowaves.left.and.right")
+                    .foregroundStyle(item.isError ? .red : DSHColor.ocean)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.title).font(.caption.weight(.semibold))
+                    if !item.text.isEmpty { Text(item.text).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+                }
+            }
+            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+            .background((item.isError ? Color.red : DSHColor.ocean).opacity(0.06), in: RoundedRectangle(cornerRadius: 11))
+        }
+    }
+}
+
+private struct CompactEventDisclosure: View {
+    @Binding var expanded: Bool
+    let title: String
+    let text: String
+    let icon: String
+    let tint: Color
+    var rendersJSON = false
+    var rendersOutput = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                // DisclosureGroup animates its cached height inside LazyVStack.
+                // Large tool payloads can therefore temporarily overlap the
+                // following message. Toggle without a transition so SwiftUI
+                // measures the expanded payload before drawing sibling rows.
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: icon).foregroundStyle(tint).frame(width: 18)
+                    Text(title).foregroundStyle(tint).lineLimit(1)
+                    if !preview.isEmpty {
+                        Text("·").foregroundStyle(.tertiary)
+                        Text(preview).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .font(.subheadline)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded && !text.isEmpty {
+                HStack(alignment: .top, spacing: 10) {
+                    Rectangle().fill(.gray.opacity(0.24)).frame(width: 1)
+                    if rendersOutput {
+                        ToolOutputView(text: text)
+                    } else if shouldRenderJSON {
+                        MarkdownContent("```json\n\(text)\n```", compact: true)
+                    } else {
+                        MarkdownContent(text, compact: true).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.leading, 5).padding(.top, 5).padding(.bottom, 3)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+    }
+
+    private var preview: String {
+        text.replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var shouldRenderJSON: Bool {
+        if rendersJSON { return true }
+        guard let data = text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else { return false }
+        return JSONSerialization.isValidJSONObject(object)
+    }
+}
+
+private struct ToolOutputView: View {
+    let text: String
+
+    private var lines: [String] {
+        text.components(separatedBy: .newlines)
+    }
+
+    private var needsViewport: Bool {
+        text.count > 1_500 || lines.count > 24
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("OUT")
+                .font(.caption2.monospaced())
+                .foregroundStyle(.secondary)
+
+            if needsViewport {
+                ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                            Text(line.isEmpty ? " " : line)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.primary)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                }
+                .defaultScrollAnchor(.topLeading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: 280)
+            } else {
+                Text(text)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding(10)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemFill), in: RoundedRectangle(cornerRadius: 10))
+        .clipped()
+    }
+}
+
+struct MarkdownContent: View {
+    let text: String
+    var compact = false
+
+    init(_ text: String, compact: Bool = false) { self.text = text; self.compact = compact }
+
+    var body: some View {
+        Markdown(markdownSource)
+            .markdownTheme(.deepSeek(compact: compact))
+            .markdownCodeSyntaxHighlighter(DSHCodeSyntaxHighlighter())
+    }
+
+    private var markdownSource: String {
+        // The thin spaces participate in text layout, keeping adjacent
+        // punctuation outside the chip. MarkdownUI's renderer merges their
+        // separate font runs into one rounded background on modern iOS.
+        InlineCodePadding.apply(to: text)
+    }
+}
+
+private extension Theme {
+    static func deepSeek(compact: Bool) -> Theme {
+        let inlineCodeFallback: Color? = if #available(iOS 18.0, *) {
+            nil
+        } else {
+            DSHInlineCodeStyle.fallbackBackground
+        }
+        return Theme.gitHub
+            .text {
+                ForegroundColor(.primary)
+                BackgroundColor(nil)
+                FontSize(compact ? 13 : 17)
+            }
+            .code {
+                FontFamilyVariant(.monospaced)
+                FontSize(.em(0.86))
+                ForegroundColor(.primary)
+                // AttributedString backgrounds are rectangular, so only use
+                // this compatibility path on systems without TextRenderer.
+                BackgroundColor(inlineCodeFallback)
+            }
+            .paragraph { configuration in
+                configuration.label
+                    .fixedSize(horizontal: false, vertical: true)
+                    .relativeLineSpacing(.em(0.22))
+                    .markdownMargin(top: 0, bottom: compact ? 6 : 10)
+            }
+            .listItem { configuration in
+                configuration.label.markdownMargin(top: .em(0.18))
+            }
+            .codeBlock { configuration in
+                VStack(alignment: .leading, spacing: 6) {
+                    if let language = configuration.language, !language.isEmpty {
+                        Text(language.uppercased())
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        configuration.label
+                            .fixedSize(horizontal: true, vertical: false)
+                            .markdownTextStyle {
+                                FontFamilyVariant(.monospaced)
+                                FontSize(compact ? 11 : 13)
+                            }
+                    }
+                }
+                .padding(compact ? 10 : 12)
+                .background(Color(uiColor: .secondarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .markdownMargin(top: 2, bottom: compact ? 6 : 10)
+            }
+    }
+}
+
+private enum DSHInlineCodeStyle {
+    // Close to the neutral blue-gray chip used by Harness WebUI, but adaptive
+    // enough to remain legible when the app later gains a dark conversation UI.
+    static let fallbackBackground = Color(uiColor: .systemGray5).opacity(0.68)
+}
+
+private enum InlineCodePadding {
+    private static let expression = try! NSRegularExpression(pattern: #"(?<!`)`([^`\n]+)`(?!`)"#)
+
+    static func apply(to markdown: String) -> String {
+        var insideFence = false
+        return markdown.components(separatedBy: .newlines).map { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                insideFence.toggle()
+                return line
+            }
+            guard !insideFence else { return line }
+            let range = NSRange(location: 0, length: (line as NSString).length)
+            return expression.stringByReplacingMatches(
+                in: line,
+                range: range,
+                withTemplate: "`\u{2009}$1\u{2009}`"
+            )
+        }.joined(separator: "\n")
+    }
+}
+
+private struct DSHCodeSyntaxHighlighter: CodeSyntaxHighlighter {
+    func highlightCode(_ code: String, language: String?) -> Text {
+        if isJSON(code, language: language) {
+            return Text(JSONSyntaxHighlighter.highlight(code))
+        }
+        return Text(code)
+    }
+
+    private func isJSON(_ code: String, language: String?) -> Bool {
+        if let language, ["json", "jsonc"].contains(language.lowercased()) { return true }
+        guard let data = code.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else { return false }
+        return JSONSerialization.isValidJSONObject(object)
+    }
+}
+
+enum JSONSyntaxHighlighter {
+    private static let expression = try! NSRegularExpression(
+        pattern: #"\"(?:\\.|[^\"\\])*\"|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b|\b(?:true|false|null)\b"#
+    )
+
+    static func highlight(_ source: String) -> AttributedString {
+        let string = source as NSString
+        let fullRange = NSRange(location: 0, length: string.length)
+        let matches = expression.matches(in: source, range: fullRange)
+        var result = AttributedString()
+        var cursor = 0
+
+        for match in matches {
+            if match.range.location > cursor {
+                result += styled(string.substring(with: NSRange(location: cursor, length: match.range.location - cursor)), color: .primary)
+            }
+            let token = string.substring(with: match.range)
+            result += styled(token, color: color(for: token, in: string, after: NSMaxRange(match.range)))
+            cursor = NSMaxRange(match.range)
+        }
+        if cursor < string.length {
+            result += styled(string.substring(from: cursor), color: .primary)
+        }
+        return result
+    }
+
+    private static func color(for token: String, in source: NSString, after location: Int) -> Color {
+        if token.hasPrefix("\"") {
+            let remainder = source.substring(from: location)
+            let isKey = remainder.range(of: #"^\s*:"#, options: .regularExpression) != nil
+            return isKey ? DSHColor.ocean : Color(red: 0.10, green: 0.55, blue: 0.38)
+        }
+        if token == "true" || token == "false" { return DSHColor.purple }
+        if token == "null" { return .red.opacity(0.8) }
+        return DSHColor.orange
+    }
+
+    private static func styled(_ value: String, color: Color) -> AttributedString {
+        var result = AttributedString(value)
+        result.foregroundColor = color
+        return result
+    }
+}
