@@ -40,11 +40,7 @@ struct RootView: View {
     private func destination(for route: AppRoute) -> some View {
         switch route {
         case .conversation:
-            ConversationView(
-                initialScrollAnchor: store.selectedSessionId.flatMap { store.conversationScrollAnchor(for: $0) },
-                initiallyManual: store.selectedSessionId.map { store.hasManualConversationPosition(for: $0) } ?? false,
-                onBack: popToRoot
-            )
+            ConversationView(onBack: popToRoot)
             .toolbar(.hidden, for: .navigationBar)
             .background(NavigationSwipeBackEnabler())
         case .settings:

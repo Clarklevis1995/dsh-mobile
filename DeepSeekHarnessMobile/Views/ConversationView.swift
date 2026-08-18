@@ -4,32 +4,28 @@ import UIKit
 
 struct ConversationView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.colorScheme) private var colorScheme
     private let onBack: () -> Void
     @State private var activeView = 0
     @State private var draft = ""
     @State private var showsContextUsage = false
     @State private var showsSessionStats = false
     @State private var showsSessionStatsPopover = false
-    @State private var conversationScrollAnchor: String?
-    @State private var userHasManuallyPositioned: Bool
-    @State private var isUserDragging = false
-    @State private var conversationScrollPosition: String?
-    @State private var isRestoringManualScrollPosition: Bool
+    @State private var isPinnedToBottom = true
     @State private var composerHeight: CGFloat = 124
-    @State private var scrollToBottomRequest = 0
+    @State private var viewportScrollToBottomToken = 0
+    @State private var isPreparingHistoryPresentation = false
+    @State private var historyPresentationSessionID: String?
     @FocusState private var composerIsFocused: Bool
     private let conversationBottomClearance: CGFloat = 22
 
-    init(initialScrollAnchor: String? = nil, initiallyManual: Bool = false, onBack: @escaping () -> Void) {
+    init(onBack: @escaping () -> Void) {
         self.onBack = onBack
-        _conversationScrollAnchor = State(initialValue: initialScrollAnchor)
-        _userHasManuallyPositioned = State(initialValue: initiallyManual)
-        _isRestoringManualScrollPosition = State(initialValue: initiallyManual)
     }
 
     var body: some View {
         ZStack {
-            DSHColor.paper.ignoresSafeArea()
+            conversationBackground.ignoresSafeArea()
             VStack(spacing: 0) {
                 topBar
                 Picker("视图", selection: $activeView) {
@@ -43,13 +39,32 @@ struct ConversationView: View {
                 else { TrajectoryView(sessionId: store.selectedSessionId, events: store.selectedEvents) }
             }
         }
-        .foregroundStyle(DSHColor.ink)
+        .foregroundStyle(.primary)
         .sheet(isPresented: $showsSessionStats) {
             SessionStatsSheet(
                 snapshot: store.selectedSessionStatsSnapshot,
                 sessionTitle: store.selectedSession?.title ?? "新建 DeepSeek Harness"
             )
         }
+    }
+
+    private var conversationBackground: Color {
+        Color(uiColor: .systemBackground)
+    }
+
+    private var glassTint: Color {
+        Color(uiColor: .secondarySystemBackground)
+            .opacity(colorScheme == .dark ? 0.52 : 0.48)
+    }
+
+    private var glassEdge: Color {
+        colorScheme == .dark
+            ? .white.opacity(0.13)
+            : .white.opacity(0.56)
+    }
+
+    private var glassShadow: Color {
+        .black.opacity(colorScheme == .dark ? 0.34 : 0.10)
     }
 
     private var topBar: some View {
@@ -94,139 +109,46 @@ struct ConversationView: View {
 
     private var chat: some View {
         ZStack(alignment: .bottom) {
-            GeometryReader { geometry in
-                ScrollViewReader { scrollProxy in
-                    ZStack {
-                        ScrollView(.vertical) {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                if !conversationItems.isEmpty {
-                                    if isLoadingSelectedHistory { historyLoadingBanner }
-                                    if !isLoadingSelectedHistory,
-                                       let id = store.selectedSessionId,
-                                       store.historyHasMore[id] == true {
-                                        Button("加载更早记录") { store.loadHistory(for: id, older: true) }
-                                            .font(.caption).frame(maxWidth: .infinity)
-                                    }
-                                    ForEach(displayEntries) { entry in
-                                        Group {
-                                            switch entry.content {
-                                            case .message(let item):
-                                                ConversationRow(item: item, showsCopyButton: entry.showsCopyButton)
-                                            case .process(let group):
-                                                ConversationProcessRow(group: group)
-                                            }
-                                        }
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .id(entry.id)
-                                    }
-                                }
-                                Color.clear
-                                    .frame(height: composerHeight + conversationBottomClearance)
-                                    .id(conversationBottomAnchorID)
-                            }
-                            .scrollTargetLayout()
-                            .environment(\.conversationDisclosureWillToggle) {
-                                // A non-nil scrollPosition with a bottom anchor makes
-                                // SwiftUI compensate for an expanding row by moving the
-                                // whole viewport upward. Release that programmatic anchor
-                                // before the row changes height so it expands downward from
-                                // its current on-screen position.
-                                var transaction = Transaction()
-                                transaction.disablesAnimations = true
-                                withTransaction(transaction) {
-                                    conversationScrollPosition = nil
-                                }
-                            }
-                        }
-                            .frame(width: max(0, geometry.size.width - 40), alignment: .leading)
-                            .padding(.horizontal, 20)
-                            .padding(.top, 8)
-                        .coordinateSpace(name: "conversation-scroll")
-                        .frame(width: geometry.size.width)
-                        .clipped()
-                        .opacity(isRestoringManualScrollPosition ? 0 : 1)
-                        .defaultScrollAnchor(.bottom)
-                        .scrollPosition(id: $conversationScrollPosition, anchor: .bottom)
-                        .simultaneousGesture(
-                            DragGesture(minimumDistance: 2)
-                                .onChanged { _ in
-                                    guard !isUserDragging else { return }
-                                    isUserDragging = true
-                                    userHasManuallyPositioned = true
-                                }
-                                .onEnded { _ in
-                                    isUserDragging = false
-                                    captureManualConversationAnchor()
-                                }
-                        )
-                        .onChange(of: bottomEntryID) { _, _ in
-                            guard !userHasManuallyPositioned, !isLoadingSelectedHistory else { return }
-                            scrollWithoutAnimation(scrollProxy, to: conversationBottomAnchorID)
-                        }
-                        .onChange(of: scrollToBottomRequest) { _, _ in
-                            scrollToConversationBottom(scrollProxy)
-                        }
-                        .onChange(of: isLoadingSelectedHistory) { wasLoading, isLoading in
-                            guard wasLoading, !isLoading, !conversationItems.isEmpty else { return }
-                            // History arrives progressively. Rebuilding the entire ScrollView here
-                            // discards its actual offset and can restore a row behind the floating
-                            // composer. Keep the existing scroll container alive. Only sessions that
-                            // are still following the latest content are aligned with the dedicated
-                            // bottom spacer; a user's manual position is left completely untouched.
-                            guard !userHasManuallyPositioned else { return }
-                            Task { @MainActor in
-                                await Task.yield()
-                                await Task.yield()
-                                scrollWithoutAnimation(scrollProxy, to: conversationBottomAnchorID)
-                            }
-                        }
-                        .task(id: store.selectedSessionId) {
-                            guard let sessionId = store.selectedSessionId else {
-                                conversationScrollAnchor = nil
-                                conversationScrollPosition = nil
-                                userHasManuallyPositioned = false
-                                isRestoringManualScrollPosition = false
-                                return
-                            }
-                            userHasManuallyPositioned = store.hasManualConversationPosition(for: sessionId)
-                            conversationScrollAnchor = userHasManuallyPositioned
-                                ? store.conversationScrollAnchor(for: sessionId)
-                                : nil
-                            conversationScrollPosition = conversationScrollAnchor ?? conversationBottomAnchorID
-                            guard userHasManuallyPositioned else {
-                                isRestoringManualScrollPosition = false
-                                return
-                            }
-                            isRestoringManualScrollPosition = true
-                            await Task.yield()
-                            if let target = validRememberedConversationAnchor() {
-                                // A remembered row represents the user's reading position. Center it
-                                // in the unobscured viewport instead of aligning it with the physical
-                                // bottom edge behind the floating composer.
-                                scrollWithoutAnimation(scrollProxy, to: target, anchor: .center)
-                            } else {
-                                userHasManuallyPositioned = false
-                                conversationScrollAnchor = nil
-                            }
-                            await Task.yield()
-                            isRestoringManualScrollPosition = false
-                        }
-
-                        if conversationItems.isEmpty {
-                            Group {
-                                if isLoadingSelectedHistory {
-                                    historyLoadingState
-                                } else {
-                                    emptyState
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding(.bottom, composerHeight)
-                        }
-
-                    }
+            ConversationViewport(
+                sessionID: store.selectedSessionId,
+                entries: viewportEntries,
+                bottomInset: composerHeight + conversationBottomClearance,
+                revision: store.conversationRevision(for: store.selectedSessionId ?? ""),
+                scrollToBottomToken: viewportScrollToBottomToken,
+                onPinnedToBottomChanged: { pinned in
+                    isPinnedToBottom = pinned
+                },
+                onBottomAlignmentCompleted: {
+                    guard isPreparingHistoryPresentation,
+                          historyPresentationSessionID == store.selectedSessionId,
+                          !isLoadingSelectedHistory else { return }
+                    isPreparingHistoryPresentation = false
+                },
+                onApproachingTop: {
+                    guard let sessionID = store.selectedSessionId,
+                          store.historyHasMore[sessionID] == true,
+                          !store.historyLoadingSessionIds.contains(sessionID) else { return }
+                    store.loadHistory(for: sessionID, older: true)
                 }
+            )
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .opacity(isPreparingHistoryPresentation ? 0 : 1)
+
+            if isPreparingHistoryPresentation {
+                historyPresentationMask
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.bottom, composerHeight)
+                    .zIndex(1)
+            } else if conversationItems.isEmpty {
+                Group {
+                    if isLoadingSelectedHistory { historyLoadingState }
+                    else { emptyState }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.bottom, composerHeight)
             }
+
             VStack(alignment: .leading, spacing: 0) {
                 if let snapshot = store.selectedSessionStatsSnapshot {
                     sessionStatsBanner(snapshot)
@@ -241,28 +163,49 @@ struct ConversationView: View {
                     )
                 }
             }
+
             if shouldShowScrollToBottom {
                 scrollToBottomButton {
-                    scrollToBottomRequest &+= 1
+                    viewportScrollToBottomToken &+= 1
                 }
                 .padding(.bottom, composerHeight + 8)
                 .transition(.scale(scale: 0.85).combined(with: .opacity))
                 .zIndex(2)
             }
         }
-        .animation(
-            .easeOut(duration: 0.16),
-            value: shouldShowScrollToBottom
-        )
+        .animation(.easeOut(duration: 0.16), value: shouldShowScrollToBottom)
         .onPreferenceChange(ComposerHeightPreferenceKey.self) { height in
             guard height > 0, abs(height - composerHeight) > 0.5 else { return }
             composerHeight = height
         }
         .onChange(of: composerIsFocused) { _, isFocused in
             guard isFocused else { return }
-            Task { @MainActor in
-                await Task.yield()
-                scrollToBottomRequest &+= 1
+            viewportScrollToBottomToken &+= 1
+        }
+        .onChange(of: isLoadingSelectedHistory) { wasLoading, isLoading in
+            guard historyPresentationSessionID == store.selectedSessionId,
+                  isPreparingHistoryPresentation,
+                  wasLoading,
+                  !isLoading else { return }
+            guard !conversationItems.isEmpty else {
+                isPreparingHistoryPresentation = false
+                return
+            }
+            // History has finished publishing. Ask UIKit to commit the final
+            // self-sized layout at the bottom; the mask is removed only from
+            // `onBottomAlignmentCompleted` above.
+            viewportScrollToBottomToken &+= 1
+        }
+        .task(id: store.selectedSessionId) {
+            guard let sessionID = store.selectedSessionId else {
+                historyPresentationSessionID = nil
+                isPreparingHistoryPresentation = false
+                return
+            }
+            historyPresentationSessionID = sessionID
+            isPreparingHistoryPresentation = isLoadingSelectedHistory || !conversationItems.isEmpty
+            if !isLoadingSelectedHistory, !conversationItems.isEmpty {
+                viewportScrollToBottomToken &+= 1
             }
         }
     }
@@ -283,66 +226,13 @@ struct ConversationView: View {
         return store.historyLoadingSessionIds.contains(id)
     }
 
-    private var bottomEntryID: String? { displayEntries.last?.id }
-    private var conversationBottomAnchorID: String {
-        "conversation-bottom-\(store.selectedSessionId ?? "new-session")"
-    }
-    private func scrollWithoutAnimation(
-        _ proxy: ScrollViewProxy,
-        to target: String,
-        anchor: UnitPoint = .bottom
-    ) {
-        var transaction = Transaction()
-        transaction.animation = nil
-        withTransaction(transaction) {
-            proxy.scrollTo(target, anchor: anchor)
-        }
-    }
-
-    private func scrollToConversationBottom(_ proxy: ScrollViewProxy) {
-        userHasManuallyPositioned = false
-        conversationScrollAnchor = nil
-        if let sessionId = store.selectedSessionId {
-            store.rememberConversationScrollAnchor(nil, for: sessionId, manual: false)
-        }
-        withAnimation(.easeOut(duration: 0.22)) {
-            proxy.scrollTo(conversationBottomAnchorID, anchor: .bottom)
-        }
+    private var isLoadingOlderSelectedHistory: Bool {
+        guard let id = store.selectedSessionId else { return false }
+        return store.historyLoadingOlderSessionIds.contains(id)
     }
 
     private var shouldShowScrollToBottom: Bool {
-        guard !conversationItems.isEmpty,
-              let conversationScrollPosition else { return false }
-        return conversationScrollPosition != conversationBottomAnchorID
-    }
-
-    private func validRememberedConversationAnchor() -> String? {
-        guard let sessionId = store.selectedSessionId,
-              let saved = store.conversationScrollAnchor(for: sessionId),
-              displayEntries.contains(where: { $0.id == saved }) else {
-            return nil
-        }
-        return saved
-    }
-
-    private func captureManualConversationAnchor() {
-        guard let position = conversationScrollPosition,
-              position != conversationBottomAnchorID else {
-            userHasManuallyPositioned = false
-            conversationScrollAnchor = nil
-            if let sessionId = store.selectedSessionId {
-                store.rememberConversationScrollAnchor(nil, for: sessionId, manual: false)
-            }
-            return
-        }
-        conversationScrollAnchor = position
-        persistConversationAnchor(manual: true)
-    }
-
-    private func persistConversationAnchor(manual: Bool) {
-        guard let sessionId = store.selectedSessionId,
-              let conversationScrollAnchor else { return }
-        store.rememberConversationScrollAnchor(conversationScrollAnchor, for: sessionId, manual: manual)
+        !isPreparingHistoryPresentation && !conversationItems.isEmpty && !isPinnedToBottom
     }
 
     private var historyLoadingState: some View {
@@ -357,6 +247,25 @@ struct ConversationView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 28)
+    }
+
+    private var historyPresentationMask: some View {
+        ZStack {
+            conversationBackground
+            VStack(spacing: 14) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(DSHColor.ocean)
+                Text(isLoadingSelectedHistory ? "正在加载历史记录" : "正在准备会话")
+                    .font(.title3.weight(.semibold))
+                Text(isLoadingSelectedHistory ? historyProgressText : "正在定位到最新消息…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 28)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var historyLoadingBanner: some View {
@@ -376,6 +285,11 @@ struct ConversationView: View {
               let progress = store.historyLoadProgress[id] else {
             return "正在从 Mobile Gateway 同步会话内容…"
         }
+        if isLoadingOlderSelectedHistory {
+            return progress.loaded > 0
+                ? "正在加载更早记录 · 已同步 \(progress.loaded) 个事件"
+                : "正在加载更早记录…"
+        }
         guard let total = progress.total else {
             return progress.loaded > 0
                 ? "正在自动加载更早记录 · 已同步 \(progress.loaded) 个事件"
@@ -386,25 +300,37 @@ struct ConversationView: View {
 
     @ViewBuilder
     private func scrollToBottomButton(action: @escaping () -> Void) -> some View {
+        let isGenerating = store.selectedSession?.isRunning == true
         if #available(iOS 26.0, *) {
             Button(action: action) {
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 36, height: 36)
+                scrollToBottomButtonIcon(isGenerating: isGenerating)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
-            .accessibilityLabel("滚动到最新消息")
+            .accessibilityLabel(isGenerating ? "正在生成，滚动到最新消息" : "滚动到最新消息")
         } else {
             Button(action: action) {
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 36, height: 36)
+                scrollToBottomButtonIcon(isGenerating: isGenerating)
                     .glassSurface(radius: 18)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("滚动到最新消息")
+            .accessibilityLabel(isGenerating ? "正在生成，滚动到最新消息" : "滚动到最新消息")
         }
+    }
+
+    @ViewBuilder
+    private func scrollToBottomButtonIcon(isGenerating: Bool) -> some View {
+        Group {
+            if isGenerating {
+                ProgressView()
+                    .controlSize(.regular)
+                    .tint(DSHColor.ocean)
+            } else {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 15, weight: .semibold))
+            }
+        }
+        .frame(width: 36, height: 36)
     }
 
     private var composer: some View {
@@ -457,12 +383,12 @@ struct ConversationView: View {
         .padding(.horizontal, 14)
         .padding(.top, 14)
         .padding(.bottom, 12)
-        .glassSurface(radius: 24, tint: DSHColor.paper.opacity(0.48))
+        .glassSurface(radius: 24, tint: glassTint)
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.white.opacity(0.56), lineWidth: 0.7)
+                .stroke(glassEdge, lineWidth: 0.7)
         }
-        .shadow(color: DSHColor.navy.opacity(0.11), radius: 18, y: 8)
+        .shadow(color: glassShadow, radius: 18, y: 8)
         .padding(.horizontal, 14).padding(.bottom, 10)
     }
 
@@ -487,11 +413,11 @@ struct ConversationView: View {
                 .padding(.vertical, 9)
             }
             .buttonStyle(.plain)
-            .glassSurface(radius: 16, tint: DSHColor.paper.opacity(0.42))
+            .glassSurface(radius: 16, tint: glassTint.opacity(0.88))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(.white.opacity(0.5), lineWidth: 0.6)
+                    .stroke(glassEdge.opacity(0.9), lineWidth: 0.6)
             }
             .accessibilityLabel("查看会话执行状态")
             .accessibilityValue(SessionStatsFormatter.compactLine(snapshot))
@@ -791,6 +717,63 @@ struct ConversationView: View {
 
     private var displayEntries: [ConversationDisplayEntry] {
         ConversationDisplayEntry.make(from: conversationItems)
+    }
+
+    private var viewportEntries: [ConversationViewportEntry] {
+        let revision = store.conversationRevision(for: store.selectedSessionId ?? "")
+        var entries: [ConversationViewportEntry] = []
+        if !conversationItems.isEmpty, isLoadingSelectedHistory {
+            entries.append(.init(id: "history-loading", revision: revision, content: AnyView(historyLoadingBanner)))
+        }
+        if !isLoadingSelectedHistory,
+           let sessionID = store.selectedSessionId,
+           store.historyHasMore[sessionID] == true {
+            entries.append(.init(
+                id: "history-more",
+                revision: revision,
+                content: AnyView(
+                    Button("加载更早记录") { store.loadHistory(for: sessionID, older: true) }
+                        .font(.caption)
+                        .frame(maxWidth: .infinity)
+                )
+            ))
+        }
+        entries += displayEntries.map { entry in
+            let content: AnyView
+            switch entry.content {
+            case .message(let item):
+                content = AnyView(ConversationRow(item: item, showsCopyButton: entry.showsCopyButton))
+            case .process(let group):
+                content = AnyView(ConversationProcessRow(group: group))
+            }
+            return ConversationViewportEntry(
+                id: entry.id,
+                revision: viewportEntryRevision(entry),
+                content: content
+            )
+        }
+        return entries
+    }
+
+    private func viewportEntryRevision(_ entry: ConversationDisplayEntry) -> Int {
+        var hasher = Hasher()
+        hasher.combine(entry.id)
+        hasher.combine(entry.showsCopyButton)
+        switch entry.content {
+        case .message(let item):
+            hasher.combine(item.id)
+            hasher.combine(item.title)
+            hasher.combine(item.text)
+            hasher.combine(item.isError)
+        case .process(let group):
+            for item in group.items {
+                hasher.combine(item.id)
+                hasher.combine(item.title)
+                hasher.combine(item.text)
+                hasher.combine(item.isError)
+            }
+        }
+        return hasher.finalize()
     }
 }
 
@@ -1111,80 +1094,6 @@ private struct ContextUsagePopover: View {
             return String(format: "%.1fK", Double(value) / 1_000)
         default:
             return "\(value)"
-        }
-    }
-}
-
-struct ConversationItem: Identifiable, Sendable {
-    enum Kind: Equatable, Sendable { case user, context, assistant, reasoning, tool, jsonTool, toolResult, status, system }
-    let id: String
-    let kind: Kind
-    let title: String
-    let text: String
-    let isError: Bool
-    let date: Date
-
-    static func make(from events: [SessionEvent]) -> [ConversationItem] {
-        var result: [ConversationItem] = []
-        var streamIndexes: [String: Int] = [:]
-        let completed = Set(events.filter { $0.event.type == "assistant/message" }.map { "\($0.event.turn ?? -1)-\($0.event.step ?? -1)" })
-        for record in events {
-            let event = record.event
-            let key = "\(event.turn ?? -1)-\(event.step ?? -1)"
-            switch event.type {
-            case "user/message" where event.source == nil || event.source == "user":
-                if let text = event.text, !text.isEmpty {
-                    result.append(.init(id: record.id, kind: .user, title: "你", text: text, isError: false, date: record.date))
-                }
-            case "user/message":
-                if let text = event.text, !text.isEmpty {
-                    result.append(.init(
-                        id: record.id,
-                        kind: .context,
-                        title: "上下文注入 · \(contextSourceName(event))",
-                        text: text,
-                        isError: false,
-                        date: record.date
-                    ))
-                }
-            case "assistant/chunk" where event.chunkType == "text-delta" && !completed.contains(key):
-                appendStream(id: "stream-text-\(key)", key: "text-\(key)", kind: .assistant, title: "DeepSeek · 正在生成", delta: event.text ?? "", date: record.date, result: &result, indexes: &streamIndexes)
-            case "assistant/chunk" where event.chunkType == "reasoning-delta" && !completed.contains(key):
-                appendStream(id: "stream-reason-\(key)", key: "reason-\(key)", kind: .reasoning, title: "Think · 正在推理", delta: event.text ?? "", date: record.date, result: &result, indexes: &streamIndexes)
-            case "assistant/chunk" where event.chunkType == "tool-call-delta" && !completed.contains(key):
-                let toolKey = event.tool?.id ?? key
-                let name = event.tool?.name ?? "Tool Call · 正在组装"
-                let kind: Kind = name.caseInsensitiveCompare("run_code") == .orderedSame ? .jsonTool : .tool
-                appendStream(id: "stream-tool-\(toolKey)", key: "tool-\(toolKey)", kind: kind, title: name, delta: event.tool?.argumentsDelta ?? "", date: record.date, result: &result, indexes: &streamIndexes)
-            case "assistant/message":
-                if let reasoning = event.reasoning, !reasoning.isEmpty { result.append(.init(id: record.id + "-reason", kind: .reasoning, title: "Think", text: reasoning, isError: false, date: record.date)) }
-                if let text = event.text, !text.isEmpty { result.append(.init(id: record.id, kind: .assistant, title: "DeepSeek", text: text, isError: false, date: record.date)) }
-            case "tool/call":
-                let name = event.name ?? "Tool Call"
-                let kind: Kind = name.caseInsensitiveCompare("run_code") == .orderedSame ? .jsonTool : .tool
-                result.append(.init(id: record.id, kind: kind, title: name, text: event.arguments?.jsonDisplayText ?? "", isError: false, date: record.date))
-            case "tool/result": result.append(.init(id: record.id, kind: .toolResult, title: event.isError == true ? "工具失败" : "工具完成", text: event.preview ?? "", isError: event.isError == true, date: record.date))
-            default: continue
-            }
-        }
-        return result
-    }
-
-    private static func contextSourceName(_ event: GatewayEvent) -> String {
-        if let plugin = event.raw?["source"]?["plugin"]?.stringValue, !plugin.isEmpty {
-            return plugin
-        }
-        return event.source ?? "context"
-    }
-
-    private static func appendStream(id: String, key: String, kind: Kind, title: String, delta: String, date: Date, result: inout [ConversationItem], indexes: inout [String: Int]) {
-        guard !delta.isEmpty else { return }
-        if let index = indexes[key] {
-            let old = result[index]
-            result[index] = .init(id: old.id, kind: old.kind, title: old.title, text: old.text + delta, isError: old.isError, date: date)
-        } else {
-            indexes[key] = result.count
-            result.append(.init(id: id, kind: kind, title: title, text: delta, isError: false, date: date))
         }
     }
 }
@@ -1617,6 +1526,7 @@ private struct ConversationRow: View {
     let item: ConversationItem
     let showsCopyButton: Bool
     @State private var expanded = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         switch item.kind {
@@ -1624,7 +1534,11 @@ private struct ConversationRow: View {
             VStack(alignment: .trailing, spacing: 5) {
                 Text(item.text)
                     .font(.body).padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(DSHColor.ocean.opacity(0.11), in: RoundedRectangle(cornerRadius: 15))
+                    .background(userBubbleFill, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .stroke(userBubbleEdge, lineWidth: 0.7)
+                    }
                 if showsCopyButton { CopyMessageButton(text: item.text) }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -1640,7 +1554,7 @@ private struct ConversationRow: View {
         case .assistant:
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 9) {
-                    DeepSeekWhaleIcon(size: 26).foregroundStyle(DSHColor.ink)
+                    DeepSeekWhaleIcon(size: 26).foregroundStyle(.primary)
                     Text(item.title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -1694,6 +1608,14 @@ private struct ConversationRow: View {
             .padding(10).frame(maxWidth: .infinity, alignment: .leading)
             .background((item.isError ? Color.red : DSHColor.ocean).opacity(0.06), in: RoundedRectangle(cornerRadius: 11))
         }
+    }
+
+    private var userBubbleFill: Color {
+        DSHColor.ocean.opacity(colorScheme == .dark ? 0.24 : 0.11)
+    }
+
+    private var userBubbleEdge: Color {
+        DSHColor.ocean.opacity(colorScheme == .dark ? 0.34 : 0.08)
     }
 }
 

@@ -331,11 +331,11 @@ private struct DirectoryBrowserSheet: View {
                 .foregroundStyle(DSHColor.ocean)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).foregroundStyle(.black)
+                Text(title).foregroundStyle(Color(uiColor: .label))
                 if let subtitle {
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(.black.opacity(0.52))
+                        .foregroundStyle(Color(uiColor: .secondaryLabel))
                 }
             }
             Spacer()

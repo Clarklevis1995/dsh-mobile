@@ -3,6 +3,7 @@ import SwiftUI
 struct TrajectoryView: View {
     let sessionId: String?
     let events: [SessionEvent]
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selected: TrajectoryNode?
     @State private var highlightedID: String?
     @State private var nodes: [TrajectoryNode] = []
@@ -68,7 +69,8 @@ struct TrajectoryView: View {
                 Spacer()
                 Text(durationText).monospacedDigit()
             }
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.caption)
+            .foregroundStyle(.primary)
 
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 7) {
@@ -85,7 +87,16 @@ struct TrajectoryView: View {
                 .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 20).padding(.vertical, 12)
-        .background(.white.opacity(0.7))
+        .background(Color(uiColor: .secondarySystemBackground))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(overviewSeparator)
+                .frame(height: 0.7)
+        }
+    }
+
+    private var overviewSeparator: Color {
+        colorScheme == .dark ? .white.opacity(0.14) : .black.opacity(0.10)
     }
 
     private var durationText: String { String(format: "%.2f s", duration) }
@@ -189,10 +200,15 @@ struct TrajectoryView: View {
 private struct TimelineOverviewCanvas: View {
     let nodes: [TrajectoryNode]
     let onSelect: (TrajectoryNode) -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         GeometryReader { geometry in
             Canvas { context, size in
+                for laneY in [CGFloat(6), 25, 44] {
+                    let guide = CGRect(x: 0, y: laneY, width: size.width, height: 0.7)
+                    context.fill(Path(guide), with: .color(laneGuideColor))
+                }
                 for entry in layoutEntries {
                     let node = entry.node
                     let height: CGFloat = node.kind == .assistant ? 9 : 7
@@ -238,6 +254,10 @@ private struct TimelineOverviewCanvas: View {
                 }
             )
         }
+    }
+
+    private var laneGuideColor: Color {
+        colorScheme == .dark ? .white.opacity(0.10) : .black.opacity(0.07)
     }
 
     private struct LayoutEntry {
@@ -656,6 +676,7 @@ private struct TrajectoryRow: View {
     let highlighted: Bool
     let onSelect: () -> Void
     let onRequest: (TrajectoryNode) -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
@@ -676,7 +697,9 @@ private struct TrajectoryRow: View {
                         .frame(width: 7, height: 7)
                         .frame(width: 10, height: 20)
                 }
-                Rectangle().fill(.gray.opacity(0.23)).frame(width: 1, height: 22)
+                Rectangle()
+                    .fill(timelineLineColor)
+                    .frame(width: colorScheme == .dark ? 1.5 : 1, height: 22)
             }
             Button(action: onSelect) {
                 HStack(spacing: 8) {
@@ -684,7 +707,11 @@ private struct TrajectoryRow: View {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(node.kind.color)
                         .padding(.horizontal, 6).padding(.vertical, 3)
-                        .background(node.kind.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                        .background(tagFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(tagEdge, lineWidth: 0.7)
+                        }
                     if node.kind != .input && node.kind != .assistant {
                         Text(node.title)
                             .font(.subheadline.weight(.medium))
@@ -711,10 +738,23 @@ private struct TrajectoryRow: View {
         .background(highlighted ? DSHColor.ocean.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10))
         .animation(.easeInOut(duration: 0.18), value: highlighted)
     }
+
+    private var tagFill: Color {
+        node.kind.color.opacity(colorScheme == .dark ? 0.24 : 0.10)
+    }
+
+    private var tagEdge: Color {
+        node.kind.color.opacity(colorScheme == .dark ? 0.38 : 0.14)
+    }
+
+    private var timelineLineColor: Color {
+        colorScheme == .dark ? .white.opacity(0.22) : .black.opacity(0.14)
+    }
 }
 
 private struct TrajectoryTurnHeader: View {
     let turn: Int
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 8) {
@@ -722,11 +762,15 @@ private struct TrajectoryTurnHeader: View {
                 .font(.caption2.monospaced())
                 .foregroundStyle(.secondary)
             Rectangle()
-                .fill(.gray.opacity(0.16))
+                .fill(turnDividerColor)
                 .frame(height: 1)
         }
         .padding(.horizontal, 8)
         .frame(height: 18)
+    }
+
+    private var turnDividerColor: Color {
+        colorScheme == .dark ? .white.opacity(0.16) : .black.opacity(0.10)
     }
 }
 

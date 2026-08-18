@@ -15,30 +15,6 @@ enum DSHColor {
 
 struct DeepOceanBackground: View {
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [Color.black, DSHColor.navy, Color(red: 0.02, green: 0.12, blue: 0.23)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            Canvas { context, size in
-                let spacing: CGFloat = 34
-                for x in stride(from: 0, through: size.width, by: spacing) {
-                    context.stroke(Path { $0.move(to: CGPoint(x: x, y: 0)); $0.addLine(to: CGPoint(x: x, y: size.height)) }, with: .color(.white.opacity(0.035)))
-                }
-                for y in stride(from: 0, through: size.height, by: spacing) {
-                    context.stroke(Path { $0.move(to: CGPoint(x: 0, y: y)); $0.addLine(to: CGPoint(x: size.width, y: y)) }, with: .color(.white.opacity(0.035)))
-                }
-                for index in 0..<54 {
-                    let x = size.width * CGFloat((index * 37) % 101) / 101
-                    let y = size.height * (0.35 + 0.6 * CGFloat((index * 19) % 97) / 97)
-                    context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: index % 3 == 0 ? 2 : 1, height: index % 3 == 0 ? 2 : 1)), with: .color(.white.opacity(0.16)))
-                }
-            }
-            Ellipse()
-                .stroke(AngularGradient(colors: [.clear, .cyan.opacity(0.8), .white, .clear], center: .center), lineWidth: 7)
-                .frame(width: 132, height: 72)
-                .blur(radius: 4)
-                .rotationEffect(.degrees(-18))
-                .offset(x: 55, y: -210)
-                .shadow(color: .blue.opacity(0.75), radius: 36)
-        }
-        .ignoresSafeArea()
+        HarnessAnimatedBackground()
     }
 }

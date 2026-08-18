@@ -31,6 +31,11 @@ app_group = project.main_group.new_group('DeepSeekHarnessMobile', 'DeepSeekHarne
     app.source_build_phase.add_file_reference(ref)
   end
 end
+shaders = app_group.new_group('Shaders', 'Shaders')
+Dir[File.join(root, 'DeepSeekHarnessMobile', 'Shaders', '*.metal')].sort.each do |file|
+  ref = shaders.new_file(File.basename(file))
+  app.source_build_phase.add_file_reference(ref)
+end
 resources = app_group.new_group('Resources', 'Resources')
 resources.new_file('Info.plist')
 assets = resources.new_file('Assets.xcassets')

@@ -25,8 +25,15 @@ final class AppStore: ObservableObject {
     @Published var archivedSessionIds: Set<String> = []
     @Published var events: [String: [SessionEvent]] = [:]
     @Published var renderedConversationItems: [String: [ConversationItem]] = [:]
+    /// Bumped every time `renderedConversationItems[sessionId]` changes, even
+    /// when the item *count* doesn't (e.g. a streaming bubble's text grows).
+    /// Views use this as a cheap `Equatable` signal to drive auto-scroll,
+    /// since diffing `[ConversationItem]` itself would be as expensive as
+    /// the projection it's meant to be a lightweight proxy for.
+    @Published private(set) var conversationRevisions: [String: Int] = [:]
     @Published var historyHasMore: [String: Bool] = [:]
     @Published var historyLoadingSessionIds: Set<String> = []
+    @Published var historyLoadingOlderSessionIds: Set<String> = []
     @Published var historyLoadProgress: [String: HistoryLoadProgress] = [:]
     @Published var searchResults: [GatewaySearchItem] = []
     @Published var hostSnapshot: GatewayHostSnapshot?
@@ -56,13 +63,14 @@ final class AppStore: ObservableObject {
     @Published var defaultModelSelection: GatewayModelSelection?
     @Published var defaultConfigurationLoadingKinds: Set<String> = []
     @Published var workspaceScrollAnchor: String?
-    @Published private(set) var conversationScrollAnchors: [String: String] = [:]
-    @Published private(set) var manuallyPositionedSessionIds: Set<String> = []
 
     let gateway = GatewayClient()
     private var pendingHistorySessionId: String?
     private var historyRequestTokens: [String: UUID] = [:]
     private var historyPaginationCursors: [String: Set<Int>] = [:]
+    private var historyNextBeforeSeq: [String: Int] = [:]
+    private var historyBatchPageCounts: [String: Int] = [:]
+    private var historyBatchKinds: [String: HistoryBatchKind] = [:]
     private var historyLoadedEventCounts: [String: Int] = [:]
     private var historyLoadedByteCounts: [String: Int] = [:]
     /// The remote session activity timestamp covered by a completed history load.
@@ -70,6 +78,11 @@ final class AppStore: ObservableObject {
     /// across launches, so a fresh process must fetch history again.
     private var historySyncedActivityDates: [String: Date] = [:]
     private var conversationProjectionTasks: [String: Task<Void, Never>] = [:]
+    /// Incremental per-session projector state. Kept alive across live
+    /// updates so most projection ticks only fold the handful of events that
+    /// arrived since the previous tick, instead of replaying the whole
+    /// session; see `projectIncrementally(for:)`.
+    private var conversationProjectors: [String: ConversationProjector] = [:]
     private var pendingModelsSessionId: String?
     private var isPendingGlobalModelsRequest = false
     private var pendingModelSelectionSessionId: String?
@@ -79,6 +92,12 @@ final class AppStore: ObservableObject {
     private static let permissionPresets: Set<String> = ["read-only", "workspace-write", "danger-full-access"]
     private static let defaultPermissionPresets: Set<String> = ["ask", "read-only", "workspace-write", "danger-full-access"]
     private static let historyPageByteBudget = 4 * 1024 * 1024
+    private static let historyPagesPerBatch = 2
+
+    private enum HistoryBatchKind {
+        case latest
+        case older
+    }
 
     init() {
         selectedWorkspaceId = UserDefaults.standard.string(forKey: "gateway.selectedWorkspaceId")
@@ -86,14 +105,8 @@ final class AppStore: ObservableObject {
         workspaceScrollAnchor = nil
         if let data = UserDefaults.standard.data(forKey: "gateway.sessions"),
            let decoded = try? JSONDecoder().decode([SessionSummary].self, from: data) { sessions = decoded }
-        if let data = UserDefaults.standard.data(forKey: "gateway.conversationScrollAnchors"),
-           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
-            conversationScrollAnchors = decoded
-        }
-        if let data = UserDefaults.standard.data(forKey: "gateway.manuallyPositionedSessionIds"),
-           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data) {
-            manuallyPositionedSessionIds = decoded
-        }
+        UserDefaults.standard.removeObject(forKey: "gateway.conversationScrollAnchors")
+        UserDefaults.standard.removeObject(forKey: "gateway.manuallyPositionedSessionIds")
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
     }
 
@@ -113,18 +126,7 @@ final class AppStore: ObservableObject {
     var selectedPermissions: GatewaySessionPermissions? { selectedSessionId.flatMap { sessionPermissions[$0] } }
     var selectedContextSnapshot: GatewayContextSnapshot? { selectedSessionId.flatMap { contextSnapshots[$0] } }
     var selectedSessionStatsSnapshot: GatewaySessionStatsSnapshot? { selectedSessionId.flatMap { sessionStatsSnapshots[$0] } }
-    func conversationScrollAnchor(for sessionId: String) -> String? { conversationScrollAnchors[sessionId] }
-    func hasManualConversationPosition(for sessionId: String) -> Bool { manuallyPositionedSessionIds.contains(sessionId) }
-    func rememberConversationScrollAnchor(_ anchor: String?, for sessionId: String, manual: Bool) {
-        if let anchor { conversationScrollAnchors[sessionId] = anchor }
-        else { conversationScrollAnchors.removeValue(forKey: sessionId) }
-        if manual {
-            manuallyPositionedSessionIds.insert(sessionId)
-        } else {
-            manuallyPositionedSessionIds.remove(sessionId)
-        }
-        persistConversationScrollPositions()
-    }
+    func conversationRevision(for sessionId: String) -> Int { conversationRevisions[sessionId] ?? 0 }
     var activeWorkspace: GatewayWorkspace? {
         guard !isUngroupedWorkspaceSelected else { return nil }
         if let selectedWorkspaceId,
@@ -235,17 +237,37 @@ final class AppStore: ObservableObject {
             lastError = "WebSocket 尚未连接，无法加载历史记录"
             return
         }
+        guard !historyLoadingSessionIds.contains(sessionId) else { return }
+        if older, historyHasMore[sessionId] != true { return }
         pendingHistorySessionId = sessionId
         historyLoadingSessionIds.insert(sessionId)
+        if older { historyLoadingOlderSessionIds.insert(sessionId) }
         historyLoadProgress[sessionId] = HistoryLoadProgress(loaded: 0, total: nil)
         historyPaginationCursors[sessionId] = []
+        historyBatchPageCounts[sessionId] = 0
+        historyBatchKinds[sessionId] = older ? .older : .latest
         historyLoadedEventCounts[sessionId] = 0
         historyLoadedByteCounts[sessionId] = 0
-        historyHasMore[sessionId] = false
+        if !older, events[sessionId, default: []].isEmpty {
+            historyHasMore[sessionId] = false
+            historyNextBeforeSeq[sessionId] = nil
+        }
+        // A history (re)load can prepend or rewrite events with seq values
+        // the incremental projector has already folded in; invalidate it so
+        // the next projection tick does a clean, complete rebuild instead of
+        // risking a stale or duplicated timeline.
+        conversationProjectors[sessionId] = nil
         // Keep any in-memory projection visible while the gateway refreshes.
         // The response is merged by sequence and replaces this cache only after
         // a usable projected batch is ready.
-        let before = older ? events[sessionId]?.map(\.seq).min() : nil
+        let before = older
+            ? historyNextBeforeSeq[sessionId] ?? events[sessionId]?.map(\.seq).min()
+            : nil
+        if older, before == nil {
+            finishHistoryLoading(sessionId)
+            historyHasMore[sessionId] = false
+            return
+        }
         if let before {
             historyPaginationCursors[sessionId] = [before]
         }
@@ -576,9 +598,9 @@ final class AppStore: ObservableObject {
             let publishesProgressively = currentRenderedCount == 0
             var visibleItemStart = max(0, projectedItems.count - max(12, currentRenderedCount))
             if projectedItems.isEmpty && publishesProgressively {
-                self.renderedConversationItems[id] = []
+                self.publishConversationItems([], for: id)
             } else if publishesProgressively {
-                self.renderedConversationItems[id] = Array(projectedItems[visibleItemStart..<projectedItems.count])
+                self.publishConversationItems(Array(projectedItems[visibleItemStart..<projectedItems.count]), for: id)
             }
 
             var recordsBySequence = Dictionary(uniqueKeysWithValues: existing.map { ($0.seq, $0) })
@@ -611,7 +633,7 @@ final class AppStore: ObservableObject {
 
                 if publishesProgressively && visibleItemStart > 0 {
                     visibleItemStart = max(0, visibleItemStart - 24)
-                    self.renderedConversationItems[id] = Array(projectedItems[visibleItemStart..<projectedItems.count])
+                    self.publishConversationItems(Array(projectedItems[visibleItemStart..<projectedItems.count]), for: id)
                 }
                 // Give SwiftUI a rendering opportunity between history batches.
                 try? await Task.sleep(for: .milliseconds(10))
@@ -620,24 +642,40 @@ final class AppStore: ObservableObject {
             while publishesProgressively && visibleItemStart > 0 {
                 guard self.historyRequestTokens[id] == processingToken else { return }
                 visibleItemStart = max(0, visibleItemStart - 24)
-                self.renderedConversationItems[id] = Array(projectedItems[visibleItemStart..<projectedItems.count])
+                self.publishConversationItems(Array(projectedItems[visibleItemStart..<projectedItems.count]), for: id)
                 try? await Task.sleep(for: .milliseconds(10))
             }
 
             // Commit the complete projection before ending the loading phase.
             // Yielding here lets LazyVStack measure the new Markdown rows while
             // automatic live-message scrolling is still suppressed.
-            self.renderedConversationItems[id] = projectedItems
+            self.publishConversationItems(projectedItems, for: id)
             await Task.yield()
             try? await Task.sleep(for: .milliseconds(24))
 
             self.historyLoadedEventCounts[id] = pageEventOffset + normalized.count
             self.historyLoadedByteCounts[id, default: 0] += frame.bytes ?? 0
             self.historyHasMore[id] = frame.hasMore ?? false
+            self.historyBatchPageCounts[id, default: 0] += 1
 
-            if frame.hasMore == true {
+            if frame.hasMore == true, let earliestLocalSeq = self.events[id]?.first?.seq {
+                // A latest-tail refresh can run while many older pages are
+                // already cached. Continue from the oldest local event rather
+                // than rewinding to page three and downloading cached pages
+                // again on the next upward pagination request.
+                self.historyNextBeforeSeq[id] = earliestLocalSeq
+            } else if let cursor = frame.nextBeforeSeq {
+                self.historyNextBeforeSeq[id] = cursor
+            } else if frame.hasMore != true {
+                self.historyNextBeforeSeq[id] = nil
+            }
+
+            if frame.hasMore == true,
+               self.historyBatchPageCounts[id, default: 0] < Self.historyPagesPerBatch {
                 guard let cursor = frame.nextBeforeSeq else {
                     let message = "网关返回 hasMore:true，但缺少 nextBeforeSeq，已停止自动续页。"
+                    self.historyHasMore[id] = false
+                    self.historyNextBeforeSeq[id] = nil
                     self.finishHistoryLoading(id)
                     self.scheduleConversationProjection(for: id)
                     self.lastError = message
@@ -647,6 +685,8 @@ final class AppStore: ObservableObject {
                 var seenCursors = self.historyPaginationCursors[id, default: []]
                 guard !seenCursors.contains(cursor) else {
                     let message = "网关重复返回历史游标 \(cursor)，已停止自动续页以避免循环。"
+                    self.historyHasMore[id] = false
+                    self.historyNextBeforeSeq[id] = nil
                     self.finishHistoryLoading(id)
                     self.scheduleConversationProjection(for: id)
                     self.lastError = message
@@ -661,21 +701,30 @@ final class AppStore: ObservableObject {
 
             let totalEvents = self.historyLoadedEventCounts[id, default: 0]
             let totalBytes = self.historyLoadedByteCounts[id, default: 0]
-            if let activity = self.sessions.first(where: { $0.id == id })?.lastActivity {
+            // Loading the newest batch establishes a tail watermark even when
+            // older pages still exist. Reopening the session can therefore use
+            // the in-memory pages immediately and only refresh when the remote
+            // session has genuinely changed.
+            if self.historyBatchKinds[id] == .latest,
+               let activity = self.sessions.first(where: { $0.id == id })?.lastActivity {
                 self.historySyncedActivityDates[id] = activity
             }
             self.finishHistoryLoading(id)
             self.scheduleConversationProjection(for: id)
             let byteDetail = totalBytes > 0 ? " · \(ByteCountFormatter.string(fromByteCount: Int64(totalBytes), countStyle: .file))" : ""
-            self.notice("历史记录已加载", "\(totalEvents) 个事件\(byteDetail)", sessionId: id)
+            let moreDetail = self.historyHasMore[id] == true ? " · 向上滑动加载更早记录" : ""
+            self.notice("历史记录已加载", "\(totalEvents) 个事件\(byteDetail)\(moreDetail)", sessionId: id)
         }
     }
     private func finishHistoryLoading(_ sessionId: String) {
         historyRequestTokens[sessionId] = nil
         historyPaginationCursors[sessionId] = nil
+        historyBatchPageCounts[sessionId] = nil
+        historyBatchKinds[sessionId] = nil
         historyLoadedEventCounts[sessionId] = nil
         historyLoadedByteCounts[sessionId] = nil
         historyLoadingSessionIds.remove(sessionId)
+        historyLoadingOlderSessionIds.remove(sessionId)
         historyLoadProgress[sessionId] = nil
         if pendingHistorySessionId == sessionId { pendingHistorySessionId = nil }
     }
@@ -692,32 +741,89 @@ final class AppStore: ObservableObject {
         }
     }
     private func merge(_ record: SessionEvent) {
-        var list = events[record.sessionId, default: []]
-        if let index = list.firstIndex(where: { $0.seq == record.seq }) { list[index] = record } else { list.append(record) }
-        events[record.sessionId] = list.sorted { $0.seq < $1.seq }
+        let sessionId = record.sessionId
+        if let lastSeq = events[sessionId]?.last?.seq, record.seq > lastSeq {
+            // Live gateway traffic is normally strictly seq-ascending. Keep
+            // that hot path O(1): the previous implementation copied and
+            // sorted the complete event log for every token delta.
+            events[sessionId, default: []].append(record)
+        } else {
+            var list = events[sessionId, default: []]
+            var low = 0
+            var high = list.count
+            while low < high {
+                let middle = (low + high) / 2
+                if list[middle].seq < record.seq { low = middle + 1 } else { high = middle }
+            }
+            if low < list.count, list[low].seq == record.seq {
+                list[low] = record
+            } else {
+                list.insert(record, at: low)
+            }
+            events[sessionId] = list
+            // A duplicate or out-of-order frame may fall behind lastSeq and
+            // therefore cannot be folded safely into the append-only cache.
+            conversationProjectors[sessionId] = nil
+        }
         applyEvent(record)
         // Once the cache has been fully established, subscribed live events are
         // already the newest local content. Advance the watermark so reopening
         // the session does not download the same history again.
-        if let syncedActivity = historySyncedActivityDates[record.sessionId] {
-            historySyncedActivityDates[record.sessionId] = max(syncedActivity, record.date)
+        if let syncedActivity = historySyncedActivityDates[sessionId] {
+            historySyncedActivityDates[sessionId] = max(syncedActivity, record.date)
         }
-        scheduleConversationProjection(for: record.sessionId)
+        scheduleConversationProjection(for: sessionId)
     }
     private func scheduleConversationProjection(for sessionId: String) {
         guard !historyLoadingSessionIds.contains(sessionId) else { return }
-        conversationProjectionTasks[sessionId]?.cancel()
-        let snapshot = events[sessionId, default: []]
+        // Throttle, not debounce: while a token stream is actively arriving,
+        // new chunks can land well under 40ms apart. Cancelling and
+        // restarting the timer on every single delta (the old debounce
+        // behaviour) means the projection would never actually fire until
+        // the stream paused for 40ms straight — visually this looked like
+        // the whole assistant reply "popping in" only once the turn ended,
+        // instead of the WebUI's smooth per-token streaming. Instead, if a
+        // projection is already pending we simply let it run: it re-reads
+        // `events[sessionId]` at fire time, so it always reflects the latest
+        // state regardless of how many merges happened while it waited.
+        guard conversationProjectionTasks[sessionId] == nil else { return }
         conversationProjectionTasks[sessionId] = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(40))
-            guard !Task.isCancelled else { return }
-            let items = await Task.detached(priority: .userInitiated) {
-                ConversationItem.make(from: snapshot)
-            }.value
             guard let self, !Task.isCancelled else { return }
-            self.renderedConversationItems[sessionId] = items
+            await self.projectIncrementally(for: sessionId)
             self.conversationProjectionTasks[sessionId] = nil
         }
+    }
+    /// Projects the compact conversation timeline for `sessionId`. Reuses
+    /// the session's `ConversationProjector` across ticks: once it has been
+    /// seeded (cold rebuild, paid at most once per session per process), a
+    /// tick during active streaming only folds the events that arrived since
+    /// the previous tick — a handful of chunks — instead of replaying the
+    /// entire event log. This is what keeps rendering from falling further
+    /// and further behind the WebSocket as a session grows, which is what
+    /// happened with the previous "rebuild everything every tick" approach.
+    private func projectIncrementally(for sessionId: String) async {
+        let all = events[sessionId, default: []]
+        let projector = conversationProjectors[sessionId] ?? ConversationProjector()
+        if projector.lastSeq < 0 {
+            let items = await Task.detached(priority: .userInitiated) {
+                projector.rebuild(from: all)
+                return projector.items
+            }.value
+            guard !Task.isCancelled else { return }
+            conversationProjectors[sessionId] = projector
+            publishConversationItems(items, for: sessionId)
+            return
+        }
+        let startIndex = ConversationProjector.firstIndexAfter(projector.lastSeq, in: all)
+        guard startIndex < all.count else { return }
+        projector.fold(Array(all[startIndex...]))
+        conversationProjectors[sessionId] = projector
+        publishConversationItems(projector.items, for: sessionId)
+    }
+    private func publishConversationItems(_ items: [ConversationItem], for sessionId: String) {
+        renderedConversationItems[sessionId] = items
+        conversationRevisions[sessionId, default: 0] += 1
     }
     private func applyRemoteSessions(_ remote: [GatewaySessionSummary]) {
         for item in remote where !archivedSessionIds.contains(item.sessionId) {
@@ -868,14 +974,6 @@ final class AppStore: ObservableObject {
         }
     }
 
-    private func persistConversationScrollPositions() {
-        if let data = try? JSONEncoder().encode(conversationScrollAnchors) {
-            UserDefaults.standard.set(data, forKey: "gateway.conversationScrollAnchors")
-        }
-        if let data = try? JSONEncoder().encode(manuallyPositionedSessionIds) {
-            UserDefaults.standard.set(data, forKey: "gateway.manuallyPositionedSessionIds")
-        }
-    }
     private func markRead(_ id: String) {
         guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[index].hasUnread = false
