@@ -682,15 +682,13 @@ private struct TrajectoryRow: View {
         HStack(alignment: .top, spacing: 9) {
             VStack(spacing: 0) {
                 if let requestNode {
-                    Button { onRequest(requestNode) } label: {
-                        Circle()
-                            .fill(Color(uiColor: .secondaryLabel))
-                            .frame(width: 10, height: 10)
-                            .frame(width: 10, height: 20)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("打开 Request #\(requestNode.request?.number ?? 0)")
+                    Circle()
+                        .fill(Color(uiColor: .secondaryLabel))
+                        .frame(width: 10, height: 10)
+                        .frame(width: 10, height: 20)
+                        .contentShape(Rectangle())
+                        .movementQualifiedTap { onRequest(requestNode) }
+                        .accessibilityLabel("打开 Request #\(requestNode.request?.number ?? 0)")
                 } else {
                     Circle()
                         .fill(node.kind.color)
@@ -701,37 +699,36 @@ private struct TrajectoryRow: View {
                     .fill(timelineLineColor)
                     .frame(width: colorScheme == .dark ? 1.5 : 1, height: 22)
             }
-            Button(action: onSelect) {
-                HStack(spacing: 8) {
-                    Text(node.kind.label)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(node.kind.color)
-                        .padding(.horizontal, 6).padding(.vertical, 3)
-                        .background(tagFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(tagEdge, lineWidth: 0.7)
-                        }
-                    if node.kind != .input && node.kind != .assistant {
-                        Text(node.title)
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
-                            .layoutPriority(1)
+            HStack(spacing: 8) {
+                Text(node.kind.label)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(node.kind.color)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(tagFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(tagEdge, lineWidth: 0.7)
                     }
-                    if !node.subtitle.isEmpty {
-                        Text(node.subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                    Text("#\(node.startSeq)").font(.caption2.monospaced()).foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                if node.kind != .input && node.kind != .assistant {
+                    Text(node.title)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                        .layoutPriority(1)
                 }
-                .frame(height: 20)
-                .contentShape(Rectangle())
+                if !node.subtitle.isEmpty {
+                    Text(node.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text("#\(node.startSeq)").font(.caption2.monospaced()).foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
             }
-            .buttonStyle(.plain)
+            .frame(height: 20)
+            .contentShape(Rectangle())
+            .movementQualifiedTap(action: onSelect)
+            .accessibilityLabel("打开 \(node.kind.label) #\(node.startSeq)")
         }
         .padding(.horizontal, 8)
         .frame(height: 42)
@@ -749,6 +746,38 @@ private struct TrajectoryRow: View {
 
     private var timelineLineColor: Color {
         colorScheme == .dark ? .white.opacity(0.22) : .black.opacity(0.14)
+    }
+}
+
+/// A row tap that is rejected whenever the finger actually travelled. Using
+/// global coordinates keeps the measurement independent of the page moving
+/// underneath the touch during a horizontal swipe.
+private struct MovementQualifiedTapModifier: ViewModifier {
+    let action: () -> Void
+    private let tapTolerance: CGFloat = 10
+
+    func body(content: Content) -> some View {
+        content
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onEnded { value in
+                        let travelled = hypot(value.translation.width, value.translation.height)
+                        let predicted = hypot(
+                            value.predictedEndTranslation.width,
+                            value.predictedEndTranslation.height
+                        )
+                        guard max(travelled, predicted) <= tapTolerance else { return }
+                        action()
+                    }
+            )
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: Text("打开"), action)
+    }
+}
+
+private extension View {
+    func movementQualifiedTap(action: @escaping () -> Void) -> some View {
+        modifier(MovementQualifiedTapModifier(action: action))
     }
 }
 

@@ -35,8 +35,14 @@ struct ConversationView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 66).padding(.vertical, 12)
 
-                if activeView == 0 { chat }
-                else { TrajectoryView(sessionId: store.selectedSessionId, events: store.selectedEvents) }
+                PersistentSessionPager(selection: $activeView) {
+                    chat
+                } trajectory: {
+                    TrajectoryView(
+                        sessionId: store.selectedSessionId,
+                        events: store.selectedEvents
+                    )
+                }
             }
         }
         .foregroundStyle(.primary)
@@ -775,6 +781,105 @@ struct ConversationView: View {
         }
         return hasher.finalize()
     }
+}
+
+/// Keeps both session pages mounted and only changes their horizontal offset.
+/// Unlike a page-styled `TabView`, this container does not virtualize the
+/// off-screen page, so UIKit viewport state and trajectory projection state
+/// survive every tab switch.
+private struct PersistentSessionPager<ConversationPage: View, TrajectoryPage: View>: View {
+    @Binding var selection: Int
+    private let conversationPage: ConversationPage
+    private let trajectoryPage: TrajectoryPage
+    @State private var dragTranslation: CGFloat = 0
+    @State private var isPageSwipeActive = false
+    @State private var dragAxis: SessionPageDragAxis?
+
+    init(
+        selection: Binding<Int>,
+        @ViewBuilder conversation: () -> ConversationPage,
+        @ViewBuilder trajectory: () -> TrajectoryPage
+    ) {
+        _selection = selection
+        conversationPage = conversation()
+        trajectoryPage = trajectory()
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let pageWidth = max(geometry.size.width, 1)
+
+            HStack(spacing: 0) {
+                conversationPage
+                    .frame(width: pageWidth, height: geometry.size.height)
+                    .allowsHitTesting(!isPageSwipeActive)
+
+                trajectoryPage
+                    .frame(width: pageWidth, height: geometry.size.height)
+                    .allowsHitTesting(!isPageSwipeActive)
+            }
+            .frame(width: pageWidth * 2, alignment: .leading)
+            .offset(x: -CGFloat(selection) * pageWidth + constrainedDrag)
+            .contentShape(Rectangle())
+            .simultaneousGesture(pageGesture(pageWidth: pageWidth))
+        }
+        .clipped()
+    }
+
+    private var constrainedDrag: CGFloat {
+        let isPastLeadingEdge = selection == 0 && dragTranslation > 0
+        let isPastTrailingEdge = selection == 1 && dragTranslation < 0
+        return isPastLeadingEdge || isPastTrailingEdge
+            ? dragTranslation * 0.18
+            : dragTranslation
+    }
+
+    private func pageGesture(pageWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .onChanged { value in
+                if dragAxis == nil {
+                    dragAxis = abs(value.translation.width) > abs(value.translation.height)
+                        ? .horizontal
+                        : .vertical
+                }
+                guard dragAxis == .horizontal else { return }
+                dragTranslation = value.translation.width
+                isPageSwipeActive = true
+            }
+            .onEnded { value in
+                let predicted = value.predictedEndTranslation
+                let isHorizontal = isPageSwipeActive
+                    && abs(predicted.width) > abs(predicted.height)
+                let threshold = min(90, pageWidth * 0.18)
+                let target: Int
+
+                if isHorizontal, predicted.width < -threshold {
+                    target = 1
+                } else if isHorizontal, predicted.width > threshold {
+                    target = 0
+                } else {
+                    target = selection
+                }
+
+                withAnimation(.snappy(duration: 0.28)) {
+                    selection = target
+                    dragTranslation = 0
+                }
+
+                // Keep descendant controls disabled until the touch-up event
+                // has finished propagating. Otherwise a trajectory row's
+                // Button can interpret the end of the page swipe as a tap.
+                DispatchQueue.main.async {
+                    isPageSwipeActive = false
+                    dragAxis = nil
+                }
+            }
+    }
+}
+
+private enum SessionPageDragAxis {
+    case horizontal
+    case vertical
 }
 
 private struct ComposerHeightPreferenceKey: PreferenceKey {
