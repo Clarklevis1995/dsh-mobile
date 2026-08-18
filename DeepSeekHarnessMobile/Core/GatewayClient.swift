@@ -102,9 +102,12 @@ final class GatewayClient: ObservableObject {
         }
     }
 
-    func sendMessage(text: String, sessionId: String?) {
+    func sendMessage(text: String, sessionId: String?, workspaceId: String? = nil) {
         var payload: [String: Any] = ["type": "message", "text": text]
         if let sessionId, !sessionId.isEmpty { payload["sessionId"] = sessionId }
+        if sessionId == nil, let workspaceId, !workspaceId.isEmpty {
+            payload["workspaceId"] = workspaceId
+        }
         send(payload)
     }
 

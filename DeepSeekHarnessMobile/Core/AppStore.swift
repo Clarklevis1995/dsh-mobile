@@ -17,6 +17,9 @@ final class AppStore: ObservableObject {
     @Published var selectedSessionId: String?
     @Published var sessions: [SessionSummary] = [] { didSet { persistSessions() } }
     @Published var workspaces: [GatewayWorkspace] = []
+    @Published var selectedWorkspaceId: String? {
+        didSet { UserDefaults.standard.set(selectedWorkspaceId, forKey: "gateway.selectedWorkspaceId") }
+    }
     @Published var archivedSessionIds: Set<String> = []
     @Published var events: [String: [SessionEvent]] = [:]
     @Published var renderedConversationItems: [String: [ConversationItem]] = [:]
@@ -29,6 +32,8 @@ final class AppStore: ObservableObject {
     @Published var directoryHome: String?
     @Published var directoryCrumbs: [GatewayDirectoryItem] = []
     @Published var directoryEntries: [GatewayDirectoryItem] = []
+    @Published var directoryIsLoading = false
+    @Published var workspaceCreationIsLoading = false
     @Published var protocolNotices: [GatewayNotice] = []
     @Published var endpoint: String { didSet { UserDefaults.standard.set(endpoint, forKey: "gateway.endpoint") } }
     @Published var interfaceStyle: InterfaceStyle = .system
@@ -54,6 +59,7 @@ final class AppStore: ObservableObject {
     private static let permissionPresets: Set<String> = ["read-only", "workspace-write", "danger-full-access"]
 
     init() {
+        selectedWorkspaceId = UserDefaults.standard.string(forKey: "gateway.selectedWorkspaceId")
         endpoint = UserDefaults.standard.string(forKey: "gateway.endpoint") ?? "ws://127.0.0.1:3080/ws/mobile"
         workspaceScrollAnchor = nil
         if let data = UserDefaults.standard.data(forKey: "gateway.sessions"),
@@ -97,8 +103,15 @@ final class AppStore: ObservableObject {
         persistConversationScrollPositions()
     }
     var activeWorkspace: GatewayWorkspace? {
-        if let id = selectedSessionId, let workspace = workspaces.first(where: { $0.sessionIds.contains(id) }) { return workspace }
+        if let selectedWorkspaceId,
+           let workspace = workspaces.first(where: { $0.id == selectedWorkspaceId }) {
+            return workspace
+        }
         return workspaces.first
+    }
+
+    func selectWorkspace(_ workspace: GatewayWorkspace) {
+        selectedWorkspaceId = workspace.id
     }
 
     func connect() { gateway.connect(to: endpoint) }
@@ -159,8 +172,22 @@ final class AppStore: ObservableObject {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if normalized.isEmpty { searchResults = [] } else { gateway.searchSessions(normalized) }
     }
-    func browseDirectories(path: String? = nil) { gateway.requestDirectories(path: path) }
-    func createWorkspace(path: String) { gateway.createWorkspace(path: path) }
+    func browseDirectories(path: String? = nil) {
+        guard gateway.state.isConnected else {
+            lastError = "请先连接 DeepSeek Harness"
+            return
+        }
+        directoryIsLoading = true
+        gateway.requestDirectories(path: path)
+    }
+    func createWorkspace(path: String) {
+        guard gateway.state.isConnected else {
+            lastError = "请先连接 DeepSeek Harness"
+            return
+        }
+        workspaceCreationIsLoading = true
+        gateway.createWorkspace(path: path)
+    }
     func refreshSessionControls(for sessionId: String) {
         guard gateway.state.isConnected else { return }
         pendingModelsSessionId = sessionId
@@ -197,7 +224,11 @@ final class AppStore: ObservableObject {
         guard !trimmed.isEmpty else { return }
         guard gateway.state.isConnected else { lastError = "请先在设置中连接 DeepSeek Harness"; return }
         waitingForNewSession = selectedSessionId == nil
-        gateway.sendMessage(text: trimmed, sessionId: selectedSessionId)
+        gateway.sendMessage(
+            text: trimmed,
+            sessionId: selectedSessionId,
+            workspaceId: selectedSessionId == nil ? activeWorkspace?.id : nil
+        )
     }
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
@@ -215,6 +246,9 @@ final class AppStore: ObservableObject {
         case "event": handleLiveEvent(frame)
         case "workspaces":
             workspaces = decodeItems(frame.items, as: GatewayWorkspace.self)
+            if selectedWorkspaceId == nil || !workspaces.contains(where: { $0.id == selectedWorkspaceId }) {
+                selectedWorkspaceId = workspaces.first?.id
+            }
             archivedSessionIds = Set(frame.archivedSessionIds ?? [])
             notice("工作区已同步", "\(workspaces.count) 个工作区")
         case "sessions":
@@ -278,19 +312,24 @@ final class AppStore: ObservableObject {
             }
             finishSessionControlRequest("context-usage")
         case "directories":
+            directoryIsLoading = false
             directoryPath = frame.path
             directoryHome = frame.home
             directoryCrumbs = frame.crumbs ?? []
             directoryEntries = frame.entries ?? []
             notice("目录已加载", "\(frame.path ?? "") · \(directoryEntries.count) 项")
         case "workspace-create":
+            workspaceCreationIsLoading = false
             if let workspace = frame.workspace {
                 if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) { workspaces[index] = workspace } else { workspaces.append(workspace) }
+                selectedWorkspaceId = workspace.id
                 notice(frame.created == true ? "工作区已创建" : "工作区已存在", workspace.path)
                 refreshRemoteState()
             }
         case "error":
             waitingForNewSession = false
+            if frame.requestType == "directories" { directoryIsLoading = false }
+            if frame.requestType == "workspace-create" { workspaceCreationIsLoading = false }
             if frame.requestType == "history", let id = frame.sessionId ?? pendingHistorySessionId {
                 finishHistoryLoading(id)
             }

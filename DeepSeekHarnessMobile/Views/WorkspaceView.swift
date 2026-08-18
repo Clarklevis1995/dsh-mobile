@@ -6,6 +6,7 @@ struct WorkspaceView: View {
     let onNewSession: () -> Void
     let onSettings: () -> Void
     @State private var searchQuery = ""
+    @State private var showsDirectoryBrowser = false
 
     var body: some View {
         ZStack {
@@ -43,6 +44,10 @@ struct WorkspaceView: View {
             store.refreshRemoteState()
         }
         .onChange(of: searchQuery) { _, value in store.search(value) }
+        .sheet(isPresented: $showsDirectoryBrowser) {
+            DirectoryBrowserSheet()
+                .environmentObject(store)
+        }
     }
 
     private var header: some View {
@@ -77,6 +82,34 @@ struct WorkspaceView: View {
     }
 
     private var workspaceCard: some View {
+        Menu {
+            ForEach(store.workspaces) { workspace in
+                Button {
+                    store.selectWorkspace(workspace)
+                } label: {
+                    Label {
+                        Text(workspace.title)
+                    } icon: {
+                        Image(systemName: workspace.id == store.activeWorkspace?.id ? "checkmark.circle.fill" : "folder")
+                    }
+                }
+            }
+
+            if !store.workspaces.isEmpty { Divider() }
+
+            Button {
+                showsDirectoryBrowser = true
+            } label: {
+                Label("添加工作区", systemImage: "plus")
+            }
+        } label: {
+            workspaceCardLabel
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("选择工作区")
+    }
+
+    private var workspaceCardLabel: some View {
         HStack(spacing: 12) {
             Image(systemName: "folder").foregroundStyle(.blue).font(.title3)
             VStack(alignment: .leading, spacing: 2) {
@@ -90,6 +123,7 @@ struct WorkspaceView: View {
         .padding(16)
         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 15))
         .overlay(RoundedRectangle(cornerRadius: 15).stroke(.white.opacity(0.14)))
+        .contentShape(RoundedRectangle(cornerRadius: 15))
     }
 
     private var sessionsHeader: some View {
@@ -149,9 +183,18 @@ struct WorkspaceView: View {
     }
 
     private var displayedSessions: [SessionSummary] {
-        guard !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return store.sessions }
+        let workspaceSessions: [SessionSummary]
+        if let workspace = store.activeWorkspace {
+            let ids = Set(workspace.sessionIds)
+            workspaceSessions = store.sessions.filter { ids.contains($0.id) }
+        } else {
+            workspaceSessions = store.sessions
+        }
+        guard !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return workspaceSessions
+        }
         let ids = Set(store.searchResults.map(\.sessionId))
-        return store.sessions.filter { ids.contains($0.id) || $0.title.localizedCaseInsensitiveContains(searchQuery) }
+        return workspaceSessions.filter { ids.contains($0.id) || $0.title.localizedCaseInsensitiveContains(searchQuery) }
     }
 
     private var sessionsList: some View {
@@ -214,5 +257,131 @@ struct WorkspaceView: View {
         }
         .frame(maxWidth: .infinity).frame(height: 38)
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private struct DirectoryBrowserSheet: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var creatingPath: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Button {
+                        if let parentPath { store.browseDirectories(path: parentPath) }
+                    } label: {
+                        directoryRow(icon: "arrowshape.turn.up.left", title: "..", subtitle: "返回上一级")
+                    }
+                    .disabled(parentPath == nil || store.directoryIsLoading)
+
+                    ForEach(store.directoryEntries) { entry in
+                        Button {
+                            store.browseDirectories(path: entry.path)
+                        } label: {
+                            directoryRow(
+                                icon: entry.hidden ? "folder.badge.questionmark" : "folder",
+                                title: entry.name,
+                                subtitle: entry.hidden ? "隐藏目录" : nil
+                            )
+                        }
+                        .disabled(store.directoryIsLoading)
+                    }
+                } header: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("当前目录")
+                        Text(store.directoryPath ?? "正在读取…")
+                            .font(.caption.monospaced())
+                            .textCase(nil)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .overlay {
+                if store.directoryIsLoading && store.directoryEntries.isEmpty {
+                    ProgressView("正在读取远程目录…")
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                createWorkspaceBar
+            }
+            .navigationTitle("选择工作区目录")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("取消") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationBackground(.ultraThinMaterial)
+        .onAppear {
+            store.directoryEntries = []
+            store.browseDirectories()
+        }
+        .onChange(of: store.selectedWorkspaceId) { _, _ in
+            guard let creatingPath,
+                  store.activeWorkspace?.path == creatingPath else { return }
+            dismiss()
+        }
+    }
+
+    private var parentPath: String? {
+        guard store.directoryCrumbs.count > 1 else { return nil }
+        return store.directoryCrumbs.dropLast().last?.path
+    }
+
+    private func directoryRow(icon: String, title: String, subtitle: String?) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(DSHColor.ocean)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).foregroundStyle(.primary)
+                if let subtitle {
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var createWorkspaceBar: some View {
+        VStack(spacing: 8) {
+            if let path = store.directoryPath {
+                Text(path)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Button {
+                guard let path = store.directoryPath else { return }
+                creatingPath = path
+                store.createWorkspace(path: path)
+            } label: {
+                HStack(spacing: 9) {
+                    if store.workspaceCreationIsLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Image(systemName: "plus")
+                    }
+                    Text("在当前目录创建工作区")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: 16))
+            .disabled(store.directoryPath == nil || store.directoryIsLoading || store.workspaceCreationIsLoading)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
     }
 }

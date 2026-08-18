@@ -48,10 +48,7 @@ struct RootView: View {
             .toolbar(.hidden, for: .navigationBar)
             .background(NavigationSwipeBackEnabler())
         case .settings:
-            SettingsView { session in
-                store.open(session)
-                navigationPath = [.conversation]
-            }
+            SettingsView()
         }
     }
 
