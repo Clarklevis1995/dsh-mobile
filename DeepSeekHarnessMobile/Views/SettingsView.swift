@@ -18,6 +18,39 @@ struct SettingsView: View {
         !store.defaultConfigurationLoadingKinds.isDisjoint(with: ["defaults", "agent-presets"])
     }
 
+    private var defaultModelIsLoading: Bool {
+        store.defaultConfigurationLoadingKinds.contains("default-model")
+            || store.defaultConfigurationLoadingKinds.contains("save-default-model")
+    }
+
+    private var defaultModelValueText: String {
+        guard let selection = store.defaultModelSelection else { return "未读取" }
+        let item = store.anyModelCatalog?.groups
+            .first(where: { $0.id == selection.provider })?
+            .models.first(where: { $0.id == selection.model })
+        let name = item?.name ?? Self.modelDisplayName(selection.model)
+        guard let effort = selection.reasoningEffort else { return name }
+        let effortName = item?.reasoning?.efforts.first(where: { $0.id == effort })?.name ?? Self.reasoningEffortDisplayName(effort)
+        return "\(name) · \(effortName)"
+    }
+
+    static func modelDisplayName(_ id: String) -> String {
+        switch id {
+        case "deepseek-chat": return "DeepSeek Chat"
+        case "deepseek-reasoner": return "DeepSeek Reasoner"
+        default: return id
+        }
+    }
+
+    static func reasoningEffortDisplayName(_ id: String) -> String {
+        switch id.lowercased() {
+        case "low": return "低"
+        case "medium": return "中"
+        case "high": return "高"
+        default: return id.capitalized
+        }
+    }
+
     var body: some View {
         Form {
             Section {
@@ -26,9 +59,19 @@ struct SettingsView: View {
                 } label: {
                     DefaultConfigurationRow(
                         title: "Agent 预设",
-                        detail: "对之后新建的会话生效",
                         value: selectedPresetName,
                         isLoading: defaultsAreLoading
+                    )
+                }
+                .disabled(!store.gateway.state.isConnected)
+
+                NavigationLink {
+                    DefaultModelSelectionView()
+                } label: {
+                    DefaultConfigurationRow(
+                        title: "默认模型",
+                        value: defaultModelValueText,
+                        isLoading: defaultModelIsLoading
                     )
                 }
                 .disabled(!store.gateway.state.isConnected)
@@ -48,7 +91,6 @@ struct SettingsView: View {
                 } label: {
                     DefaultConfigurationRow(
                         title: "权限",
-                        detail: "选择新会话的默认权限模式",
                         value: selectedPermissionName,
                         isLoading: defaultsAreLoading
                     )
@@ -138,19 +180,13 @@ struct SettingsView: View {
 
 private struct DefaultConfigurationRow: View {
     let title: String
-    let detail: String
     let value: String
     let isLoading: Bool
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .foregroundStyle(.primary)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Text(title)
+                .foregroundStyle(.primary)
             Spacer(minLength: 12)
             if isLoading {
                 ProgressView()
@@ -162,7 +198,6 @@ private struct DefaultConfigurationRow: View {
                     .lineLimit(1)
             }
         }
-        .padding(.vertical, 3)
     }
 }
 
@@ -326,5 +361,205 @@ private struct AgentPresetCard: View {
         .buttonStyle(.plain)
         .allowsHitTesting(!isSelected && !isBusy && preset.broken != true)
         .opacity(preset.broken == true ? 0.68 : 1)
+    }
+}
+
+private struct DefaultModelSelectionView: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var pendingChange: PendingDefaultModelChange?
+
+    private var isBusy: Bool {
+        store.defaultConfigurationLoadingKinds.contains("save-default-model")
+    }
+    private var modelGroups: [GatewayModelGroup] {
+        store.anyModelCatalog?.groups ?? []
+    }
+    private var isLoadingCatalog: Bool {
+        store.sessionControlLoadingKinds.contains("models") && modelGroups.isEmpty
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("默认模型")
+                        .font(.title2.bold())
+                    Text("为之后新建的会话设置默认模型与思考等级。这会更新部署级设置，同步影响 WebUI，运行中的会话保持启动时的配置。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 4)
+
+                if isLoadingCatalog {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("正在读取模型列表…")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 48)
+                } else if modelGroups.isEmpty {
+                    ContentUnavailableView(
+                        "暂无可用模型",
+                        systemImage: "cpu",
+                        description: Text("未能读取到模型列表，请检查网关连接后下拉重试。")
+                    )
+                    .padding(.vertical, 24)
+                } else {
+                    ForEach(modelGroups) { group in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(group.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            ForEach(group.models) { model in
+                                DefaultModelCard(
+                                    group: group,
+                                    model: model,
+                                    isSelected: isDefault(group: group, model: model),
+                                    currentEffort: store.defaultModelSelection?.reasoningEffort,
+                                    isBusy: isBusy,
+                                    onSelectModel: { select(group: group, model: model) },
+                                    onSelectEffort: { effort in selectEffort(effort, group: group, model: model) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
+        .navigationTitle("默认模型")
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable {
+            store.ensureModelCatalogForDefaults()
+        }
+        .task {
+            store.ensureModelCatalogForDefaults()
+        }
+        .alert(item: $pendingChange) { change in
+            Alert(
+                title: Text("修改默认模型？"),
+                message: Text("将新会话的默认模型改为“\(change.summary)”。这会更新部署级设置，并同步影响 WebUI。"),
+                primaryButton: .cancel(Text("取消")),
+                secondaryButton: .default(Text("确认修改")) {
+                    store.saveDefaultModel(provider: change.provider, model: change.model, reasoningEffort: change.reasoningEffort)
+                }
+            )
+        }
+    }
+
+    private func isDefault(group: GatewayModelGroup, model: GatewayModelItem) -> Bool {
+        store.defaultModelSelection?.provider == group.id && store.defaultModelSelection?.model == model.id
+    }
+
+    private func select(group: GatewayModelGroup, model: GatewayModelItem) {
+        let efforts = model.reasoning?.efforts ?? []
+        let retainedEffort = store.defaultModelSelection?.reasoningEffort.flatMap { current in
+            efforts.contains(where: { $0.id == current }) ? current : nil
+        }
+        let effortId = retainedEffort ?? model.reasoning?.defaultEffort
+        pendingChange = PendingDefaultModelChange(
+            provider: group.id,
+            providerName: group.name,
+            model: model.id,
+            modelName: model.name,
+            reasoningEffort: effortId,
+            effortName: effortId.flatMap { id in efforts.first(where: { $0.id == id })?.name }
+        )
+    }
+
+    private func selectEffort(_ effort: GatewayReasoningEffort, group: GatewayModelGroup, model: GatewayModelItem) {
+        pendingChange = PendingDefaultModelChange(
+            provider: group.id,
+            providerName: group.name,
+            model: model.id,
+            modelName: model.name,
+            reasoningEffort: effort.id,
+            effortName: effort.name
+        )
+    }
+}
+
+private struct PendingDefaultModelChange: Identifiable {
+    let id = UUID()
+    let provider: String
+    let providerName: String
+    let model: String
+    let modelName: String
+    let reasoningEffort: String?
+    let effortName: String?
+
+    var summary: String {
+        var text = "\(providerName) · \(modelName)"
+        if let effortName { text += " · \(effortName)" }
+        return text
+    }
+}
+
+private struct DefaultModelCard: View {
+    let group: GatewayModelGroup
+    let model: GatewayModelItem
+    let isSelected: Bool
+    let currentEffort: String?
+    let isBusy: Bool
+    let onSelectModel: () -> Void
+    let onSelectEffort: (GatewayReasoningEffort) -> Void
+
+    private var efforts: [GatewayReasoningEffort] { model.reasoning?.efforts ?? [] }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(model.name)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if isSelected {
+                    Text("当前使用")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.black, in: Capsule())
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { if !isBusy { onSelectModel() } }
+
+            if !efforts.isEmpty {
+                HStack(spacing: 8) {
+                    Text("思考等级")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(efforts) { effort in
+                        let isCurrentEffort = isSelected && effort.id == currentEffort
+                        Button {
+                            onSelectEffort(effort)
+                        } label: {
+                            Text(effort.name)
+                                .font(.caption.weight(.medium))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(isCurrentEffort ? Color.primary : Color.secondary.opacity(0.12), in: Capsule())
+                                .foregroundStyle(isCurrentEffort ? Color(uiColor: .systemBackground) : .primary)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isBusy)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(isSelected ? Color.primary : Color.secondary.opacity(0.18), lineWidth: isSelected ? 1.5 : 1)
+        }
+        .opacity(isBusy ? 0.7 : 1)
     }
 }

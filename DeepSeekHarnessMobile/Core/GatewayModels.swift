@@ -99,6 +99,7 @@ struct GatewayFrame: Codable, Sendable {
     var failures: [JSONValue]?
     var selected: GatewayModelSelection?
     var selection: GatewayModelSelection?
+    var saved: GatewayModelSelection?
     var namespace: JSONValue?
     var sessionPermissions: GatewaySessionPermissions?
     var set: String?

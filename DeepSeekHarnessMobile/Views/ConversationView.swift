@@ -54,7 +54,17 @@ struct ConversationView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            Button(action: onBack) {
+            Button {
+                // Resign the composer's focus first and let SwiftUI commit
+                // that state change before triggering the navigation pop.
+                // Doing both in the same transaction is what produces the
+                // "NavigationRequestObserver tried to update multiple times
+                // per frame" warning when the keyboard is still up.
+                composerIsFocused = false
+                DispatchQueue.main.async {
+                    onBack()
+                }
+            } label: {
                 Image(systemName: "chevron.left").frame(width: 38, height: 38).glassSurface(radius: 19)
             }
             .buttonStyle(.plain)

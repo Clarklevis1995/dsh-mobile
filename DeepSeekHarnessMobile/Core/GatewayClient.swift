@@ -65,8 +65,13 @@ final class GatewayClient: ObservableObject {
         send(payload)
     }
     func createWorkspace(path: String) { send(["type": "workspace-create", "path": path]) }
-    func requestModels(sessionId: String) {
-        send(["type": "models", "sessionId": sessionId])
+    func requestModels(sessionId: String? = nil) {
+        var payload: [String: Any] = ["type": "models"]
+        if let sessionId, !sessionId.isEmpty { payload["sessionId"] = sessionId }
+        send(payload)
+    }
+    func requestProviders() {
+        send(["type": "providers"])
     }
     func selectModel(sessionId: String, provider: String, model: String, reasoningEffort: String?) {
         var payload: [String: Any] = [
@@ -100,6 +105,11 @@ final class GatewayClient: ObservableObject {
     }
     func requestDefaultModel() {
         send(["type": "default-model"])
+    }
+    func saveDefaultModel(provider: String, model: String, reasoningEffort: String?) {
+        var payload: [String: Any] = ["type": "save-default-model", "provider": provider, "model": model]
+        if let reasoningEffort, !reasoningEffort.isEmpty { payload["reasoningEffort"] = reasoningEffort }
+        send(payload)
     }
     func setDefault(target: String, value: String) {
         send(["type": "set-default", "target": target, "value": value])

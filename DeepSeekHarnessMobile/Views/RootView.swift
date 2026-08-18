@@ -92,7 +92,17 @@ private struct NavigationSwipeBackEnabler: UIViewControllerRepresentable {
         }
 
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            (navigationController?.viewControllers.count ?? 0) > 1
+            let canBegin = (navigationController?.viewControllers.count ?? 0) > 1
+            if canBegin {
+                // Resign any active first responder (e.g. the composer text
+                // field) before the interactive pop starts, otherwise the
+                // keyboard dismissal and the navigation transition can land
+                // in the same frame and trigger SwiftUI's
+                // "NavigationRequestObserver tried to update multiple times
+                // per frame" warning.
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+            return canBegin
         }
     }
 }

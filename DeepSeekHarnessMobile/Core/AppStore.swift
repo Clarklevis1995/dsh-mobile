@@ -43,6 +43,7 @@ final class AppStore: ObservableObject {
     @Published var waitingForNewSession = false
     @Published var isRefreshing = false
     @Published var modelCatalogs: [String: GatewayModelCatalog] = [:]
+    @Published var globalModelCatalog: GatewayModelCatalog?
     @Published var sessionPermissions: [String: GatewaySessionPermissions] = [:]
     @Published var contextSnapshots: [String: GatewayContextSnapshot] = [:]
     @Published var sessionStatsSnapshots: [String: GatewaySessionStatsSnapshot] = [:]
@@ -70,6 +71,7 @@ final class AppStore: ObservableObject {
     private var historySyncedActivityDates: [String: Date] = [:]
     private var conversationProjectionTasks: [String: Task<Void, Never>] = [:]
     private var pendingModelsSessionId: String?
+    private var isPendingGlobalModelsRequest = false
     private var pendingModelSelectionSessionId: String?
     private var pendingPermissionOptionsSessionId: String?
     private var sessionControlRequestTokens: [String: UUID] = [:]
@@ -176,6 +178,29 @@ final class AppStore: ObservableObject {
             return
         }
         setGlobalDefault(target: "permission", value: value)
+    }
+    /// The default-model picker in Settings is not tied to any session, so it
+    /// uses the session-independent `{"type":"models"}` variant to fetch the
+    /// global provider/model catalog (falling back to any already-cached
+    /// per-session catalog if the global one hasn't loaded yet).
+    var anyModelCatalog: GatewayModelCatalog? {
+        globalModelCatalog ?? modelCatalogs.values.first(where: { !$0.groups.isEmpty })
+    }
+    func ensureModelCatalogForDefaults() {
+        guard gateway.state.isConnected else { return }
+        guard anyModelCatalog == nil else { return }
+        guard !sessionControlLoadingKinds.contains("models") else { return }
+        isPendingGlobalModelsRequest = true
+        beginSessionControlRequest("models")
+        gateway.requestModels()
+    }
+    func saveDefaultModel(provider: String, model: String, reasoningEffort: String?) {
+        guard gateway.state.isConnected else {
+            lastError = "请先连接 DeepSeek Harness"
+            return
+        }
+        beginDefaultConfigurationRequest("save-default-model")
+        gateway.saveDefaultModel(provider: provider, model: model, reasoningEffort: reasoningEffort)
     }
     func startNewSession() {
         selectedSessionId = nil
@@ -367,6 +392,14 @@ final class AppStore: ObservableObject {
         case "default-model":
             defaultModelSelection = frame.selection
             finishDefaultConfigurationRequest("default-model")
+        case "save-default-model":
+            if let saved = frame.saved {
+                defaultModelSelection = saved
+                notice("默认模型已更新", [saved.model, saved.reasoningEffort].compactMap { $0 }.joined(separator: " · "))
+            } else {
+                lastError = "服务端未确认默认模型更新。"
+            }
+            finishDefaultConfigurationRequest("save-default-model")
         case "set-default":
             if frame.applied == true, let target = frame.target, let value = frame.value {
                 if target == "agent-preset" { agentPresetDefault = value }
@@ -386,8 +419,13 @@ final class AppStore: ObservableObject {
                     routable: frame.routable ?? false,
                     groups: frame.groups ?? []
                 )
+            } else if isPendingGlobalModelsRequest {
+                globalModelCatalog = GatewayModelCatalog(
+                    current: nil,
+                    routable: false,
+                    groups: frame.groups ?? []
+                )
             }
-            pendingModelsSessionId = nil
             finishSessionControlRequest("models")
         case "select-model":
             if let id = frame.sessionId ?? pendingModelSelectionSessionId,
@@ -462,7 +500,7 @@ final class AppStore: ObservableObject {
             if frame.requestType == "directories" { directoryIsLoading = false }
             if frame.requestType == "workspace-create" { workspaceCreationIsLoading = false }
             if let requestType = frame.requestType,
-               ["agent-presets", "defaults", "default-model", "set-default"].contains(requestType) {
+               ["agent-presets", "defaults", "default-model", "set-default", "save-default-model"].contains(requestType) {
                 finishDefaultConfigurationRequest(requestType)
             }
             if frame.requestType == "history", let id = frame.sessionId ?? pendingHistorySessionId {
@@ -767,6 +805,10 @@ final class AppStore: ObservableObject {
     private func finishSessionControlRequest(_ kind: String) {
         sessionControlRequestTokens[kind] = nil
         sessionControlLoadingKinds.remove(kind)
+        if kind == "models" {
+            pendingModelsSessionId = nil
+            isPendingGlobalModelsRequest = false
+        }
     }
 
     private func setGlobalDefault(target: String, value: String) {
