@@ -9,6 +9,7 @@ struct ConversationView: View {
     @State private var draft = ""
     @State private var showsContextUsage = false
     @State private var showsSessionStats = false
+    @State private var showsSessionStatsPopover = false
     @State private var conversationScrollAnchor: String?
     @State private var userHasManuallyPositioned: Bool
     @State private var isUserDragging = false
@@ -107,12 +108,6 @@ struct ConversationView: View {
                                         }
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .id(entry.id)
-                                    }
-                                    if let snapshot = store.selectedSessionStatsSnapshot {
-                                        sessionStatsBar(snapshot)
-                                            .padding(.top, 10)
-                                            .padding(.bottom, 4)
-                                            .id(sessionStatsAnchorID)
                                     }
                                 }
                                 Color.clear
@@ -219,34 +214,36 @@ struct ConversationView: View {
                             .padding(.bottom, composerHeight)
                         }
 
-                        if shouldShowScrollToBottom {
-                            VStack {
-                                Spacer()
-                                scrollToBottomButton {
-                                    scrollToBottomRequest &+= 1
-                                }
-                            }
-                            .padding(.bottom, composerHeight + 8)
-                            .transition(.scale(scale: 0.85).combined(with: .opacity))
-                            .zIndex(2)
-                        }
                     }
-                    .animation(
-                        .easeOut(duration: 0.16),
-                        value: shouldShowScrollToBottom
+                }
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                if let snapshot = store.selectedSessionStatsSnapshot {
+                    sessionStatsBanner(snapshot)
+                }
+                composer
+            }
+            .background {
+                GeometryReader { composerGeometry in
+                    Color.clear.preference(
+                        key: ComposerHeightPreferenceKey.self,
+                        value: composerGeometry.size.height
                     )
                 }
             }
-            composer
-                .background {
-                    GeometryReader { composerGeometry in
-                        Color.clear.preference(
-                            key: ComposerHeightPreferenceKey.self,
-                            value: composerGeometry.size.height
-                        )
-                    }
+            if shouldShowScrollToBottom {
+                scrollToBottomButton {
+                    scrollToBottomRequest &+= 1
                 }
+                .padding(.bottom, composerHeight + 8)
+                .transition(.scale(scale: 0.85).combined(with: .opacity))
+                .zIndex(2)
+            }
         }
+        .animation(
+            .easeOut(duration: 0.16),
+            value: shouldShowScrollToBottom
+        )
         .onPreferenceChange(ComposerHeightPreferenceKey.self) { height in
             guard height > 0, abs(height - composerHeight) > 0.5 else { return }
             composerHeight = height
@@ -280,10 +277,6 @@ struct ConversationView: View {
     private var conversationBottomAnchorID: String {
         "conversation-bottom-\(store.selectedSessionId ?? "new-session")"
     }
-    private var sessionStatsAnchorID: String {
-        "session-stats-\(store.selectedSessionId ?? "new-session")"
-    }
-
     private func scrollWithoutAnimation(
         _ proxy: ScrollViewProxy,
         to target: String,
@@ -463,29 +456,45 @@ struct ConversationView: View {
         .padding(.horizontal, 14).padding(.bottom, 10)
     }
 
-    private func sessionStatsBar(_ snapshot: GatewaySessionStatsSnapshot) -> some View {
-        Button { showsSessionStats = true } label: {
-            HStack(spacing: 7) {
-                Image(systemName: "chart.bar.xaxis")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(DSHColor.ocean)
-                Text(SessionStatsFormatter.compactLine(snapshot))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.up")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+    private func sessionStatsBanner(_ snapshot: GatewaySessionStatsSnapshot) -> some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Button {
+                showsSessionStatsPopover = true
+            } label: {
+                HStack(spacing: 7) {
+                    Text(SessionStatsFormatter.turnsStepsLine(snapshot.stats) ?? "正在读取会话统计…")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Image(systemName: "chevron.up")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
             }
-            .contentShape(Rectangle())
-            .padding(.horizontal, 2)
-            .padding(.vertical, 5)
+            .buttonStyle(.plain)
+            .glassSurface(radius: 16, tint: DSHColor.paper.opacity(0.42))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(.white.opacity(0.5), lineWidth: 0.6)
+            }
+            .accessibilityLabel("查看会话执行状态")
+            .accessibilityValue(SessionStatsFormatter.compactLine(snapshot))
+            .popover(isPresented: $showsSessionStatsPopover, arrowEdge: .bottom) {
+                SessionStatsPopover(snapshot: snapshot) {
+                    showsSessionStatsPopover = false
+                    showsSessionStats = true
+                }
+                .presentationCompactAdaptation(.popover)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("查看会话执行状态")
-        .accessibilityValue(SessionStatsFormatter.compactLine(snapshot))
+        .padding(.horizontal, 14)
+        .padding(.bottom, 6)
     }
 
     @ViewBuilder
@@ -805,8 +814,8 @@ private enum SessionStatsFormatter {
     static func compactLine(_ snapshot: GatewaySessionStatsSnapshot) -> String {
         let stats = snapshot.stats
         var sections: [String] = []
-        if stats?.turns != nil || stats?.steps != nil {
-            sections.append("\(stats?.turns ?? 0) 轮 · \(stats?.steps ?? 0) 步")
+        if let turnsStepsLine = turnsStepsLine(stats) {
+            sections.append(turnsStepsLine)
         }
         let timings = [
             stats?.llmMs.map { "LLM \(duration($0))" },
@@ -827,6 +836,11 @@ private enum SessionStatsFormatter {
             sections.append("输入 \(compact(input)) tok")
         }
         return sections.isEmpty ? "正在读取会话统计…" : sections.joined(separator: "  |  ")
+    }
+
+    static func turnsStepsLine(_ stats: GatewaySessionStats?) -> String? {
+        guard stats?.turns != nil || stats?.steps != nil else { return nil }
+        return "\(stats?.turns ?? 0) 轮 · \(stats?.steps ?? 0) 步"
     }
 
     static func duration(_ milliseconds: Double) -> String {
@@ -957,6 +971,65 @@ private struct SessionStatsSheet: View {
 
     private func token(_ value: Int?) -> String {
         value.map { "\(SessionStatsFormatter.compact($0)) tok" } ?? "—"
+    }
+}
+
+private struct SessionStatsPopover: View {
+    let snapshot: GatewaySessionStatsSnapshot
+    let onViewFullStats: () -> Void
+
+    private var stats: GatewaySessionStats? { snapshot.stats }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let turnsSteps = SessionStatsFormatter.turnsStepsLine(stats) {
+                row("轮次 · 步骤", turnsSteps)
+            }
+            if let llm = stats?.llmMs {
+                row("LLM", SessionStatsFormatter.duration(llm))
+            }
+            if let tool = stats?.toolMs {
+                row("工具调用", SessionStatsFormatter.duration(tool))
+            }
+            if let ttft = SessionStatsFormatter.averageTTFT(stats) {
+                row("首 token 平均", SessionStatsFormatter.duration(ttft))
+            }
+            if let throughput = SessionStatsFormatter.throughput(stats) {
+                row("解码吞吐", "\(SessionStatsFormatter.compactDecimal(throughput)) tok/s")
+            }
+            if let cacheRate = SessionStatsFormatter.cacheHitRate(snapshot.tokenUsage?.totals) {
+                row("缓存命中", "\(Int((cacheRate * 100).rounded()))%")
+            }
+            if let input = snapshot.tokenUsage?.totals?.inputTokens {
+                row("输入", "\(SessionStatsFormatter.compact(input)) tok")
+            }
+
+            Divider()
+
+            Button(action: onViewFullStats) {
+                HStack(spacing: 6) {
+                    Text("查看完整统计")
+                    Spacer()
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 16)
+        .frame(width: 300)
+        .presentationBackground(.ultraThinMaterial)
+    }
+
+    private func row(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title).foregroundStyle(.secondary)
+            Spacer()
+            Text(value).monospacedDigit().fontWeight(.medium)
+        }
+        .font(.subheadline)
     }
 }
 
@@ -1640,7 +1713,7 @@ private struct CopyMessageButton: View {
                 }
             }
                 .foregroundStyle(copied ? DSHColor.ocean : Color.secondary)
-                .frame(width: 30, height: 26)
+                .frame(width: 16, height: 26)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
