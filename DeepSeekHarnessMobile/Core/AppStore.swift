@@ -14,6 +14,8 @@ struct HistoryLoadProgress: Equatable {
 
 @MainActor
 final class AppStore: ObservableObject {
+    static let ungroupedWorkspaceID = "__ungrouped__"
+
     @Published var selectedSessionId: String?
     @Published var sessions: [SessionSummary] = [] { didSet { persistSessions() } }
     @Published var workspaces: [GatewayWorkspace] = []
@@ -43,7 +45,15 @@ final class AppStore: ObservableObject {
     @Published var modelCatalogs: [String: GatewayModelCatalog] = [:]
     @Published var sessionPermissions: [String: GatewaySessionPermissions] = [:]
     @Published var contextSnapshots: [String: GatewayContextSnapshot] = [:]
+    @Published var sessionStatsSnapshots: [String: GatewaySessionStatsSnapshot] = [:]
     @Published var sessionControlLoadingKinds: Set<String> = []
+    @Published var agentPresets: [GatewayAgentPreset] = []
+    @Published var agentPresetsAuthorable = false
+    @Published var agentPresetsHasDocument = false
+    @Published var agentPresetDefault: String?
+    @Published var permissionDefault: String?
+    @Published var defaultModelSelection: GatewayModelSelection?
+    @Published var defaultConfigurationLoadingKinds: Set<String> = []
     @Published var workspaceScrollAnchor: String?
     @Published private(set) var conversationScrollAnchors: [String: String] = [:]
     @Published private(set) var manuallyPositionedSessionIds: Set<String> = []
@@ -51,12 +61,22 @@ final class AppStore: ObservableObject {
     let gateway = GatewayClient()
     private var pendingHistorySessionId: String?
     private var historyRequestTokens: [String: UUID] = [:]
+    private var historyPaginationCursors: [String: Set<Int>] = [:]
+    private var historyLoadedEventCounts: [String: Int] = [:]
+    private var historyLoadedByteCounts: [String: Int] = [:]
+    /// The remote session activity timestamp covered by a completed history load.
+    /// This intentionally remains an in-memory cache: events are not persisted
+    /// across launches, so a fresh process must fetch history again.
+    private var historySyncedActivityDates: [String: Date] = [:]
     private var conversationProjectionTasks: [String: Task<Void, Never>] = [:]
     private var pendingModelsSessionId: String?
     private var pendingModelSelectionSessionId: String?
     private var pendingPermissionOptionsSessionId: String?
     private var sessionControlRequestTokens: [String: UUID] = [:]
+    private var defaultConfigurationRequestTokens: [String: UUID] = [:]
     private static let permissionPresets: Set<String> = ["read-only", "workspace-write", "danger-full-access"]
+    private static let defaultPermissionPresets: Set<String> = ["ask", "read-only", "workspace-write", "danger-full-access"]
+    private static let historyPageByteBudget = 4 * 1024 * 1024
 
     init() {
         selectedWorkspaceId = UserDefaults.standard.string(forKey: "gateway.selectedWorkspaceId")
@@ -90,6 +110,7 @@ final class AppStore: ObservableObject {
     var selectedModelCatalog: GatewayModelCatalog? { selectedSessionId.flatMap { modelCatalogs[$0] } }
     var selectedPermissions: GatewaySessionPermissions? { selectedSessionId.flatMap { sessionPermissions[$0] } }
     var selectedContextSnapshot: GatewayContextSnapshot? { selectedSessionId.flatMap { contextSnapshots[$0] } }
+    var selectedSessionStatsSnapshot: GatewaySessionStatsSnapshot? { selectedSessionId.flatMap { sessionStatsSnapshots[$0] } }
     func conversationScrollAnchor(for sessionId: String) -> String? { conversationScrollAnchors[sessionId] }
     func hasManualConversationPosition(for sessionId: String) -> Bool { manuallyPositionedSessionIds.contains(sessionId) }
     func rememberConversationScrollAnchor(_ anchor: String?, for sessionId: String, manual: Bool) {
@@ -103,6 +124,7 @@ final class AppStore: ObservableObject {
         persistConversationScrollPositions()
     }
     var activeWorkspace: GatewayWorkspace? {
+        guard !isUngroupedWorkspaceSelected else { return nil }
         if let selectedWorkspaceId,
            let workspace = workspaces.first(where: { $0.id == selectedWorkspaceId }) {
             return workspace
@@ -113,6 +135,16 @@ final class AppStore: ObservableObject {
     func selectWorkspace(_ workspace: GatewayWorkspace) {
         selectedWorkspaceId = workspace.id
     }
+    func selectUngroupedWorkspace() {
+        selectedWorkspaceId = Self.ungroupedWorkspaceID
+    }
+    var isUngroupedWorkspaceSelected: Bool {
+        selectedWorkspaceId == Self.ungroupedWorkspaceID
+    }
+    var ungroupedSessions: [SessionSummary] {
+        let groupedSessionIds = Set(workspaces.flatMap(\.sessionIds))
+        return sessions.filter { !groupedSessionIds.contains($0.id) }
+    }
 
     func connect() { gateway.connect(to: endpoint) }
     func refreshRemoteState() {
@@ -122,17 +154,56 @@ final class AppStore: ObservableObject {
         gateway.requestSessions()
         gateway.requestHost()
     }
+    func refreshDefaultConfiguration() {
+        guard gateway.state.isConnected else { return }
+        beginDefaultConfigurationRequest("agent-presets")
+        beginDefaultConfigurationRequest("defaults")
+        beginDefaultConfigurationRequest("default-model")
+        gateway.requestAgentPresets()
+        gateway.requestDefaults()
+        gateway.requestDefaultModel()
+    }
+    func setDefaultAgentPreset(_ id: String) {
+        guard agentPresets.contains(where: { $0.id == id && $0.broken != true }) else {
+            lastError = "无法将未知或已损坏的 Agent 预设设为默认值：\(id)"
+            return
+        }
+        setGlobalDefault(target: "agent-preset", value: id)
+    }
+    func setDefaultPermission(_ value: String) {
+        guard Self.defaultPermissionPresets.contains(value) else {
+            lastError = "不支持的默认权限：\(value)"
+            return
+        }
+        setGlobalDefault(target: "permission", value: value)
+    }
     func startNewSession() {
         selectedSessionId = nil
         waitingForNewSession = false
         gateway.subscribe(sessionId: nil)
+        // The composer for an unsaved session mirrors the deployment defaults.
+        // Refresh here so changes made by WebUI or another client are visible
+        // before the user sends the first message.
+        refreshDefaultConfiguration()
     }
     func open(_ session: SessionSummary) {
         selectedSessionId = session.id
         markRead(session.id)
         gateway.subscribe(sessionId: session.id)
-        loadHistory(for: session.id)
+        if agentPresets.isEmpty {
+            beginDefaultConfigurationRequest("agent-presets")
+            gateway.requestAgentPresets()
+        }
+        if shouldRefreshHistory(for: session) {
+            loadHistory(for: session.id)
+        }
         refreshSessionControls(for: session.id)
+    }
+
+    private func shouldRefreshHistory(for session: SessionSummary) -> Bool {
+        guard !historyLoadingSessionIds.contains(session.id) else { return false }
+        guard let syncedActivity = historySyncedActivityDates[session.id] else { return true }
+        return session.lastActivity > syncedActivity
     }
     func loadHistory(for sessionId: String, older: Bool = false) {
         guard gateway.state.isConnected else {
@@ -140,22 +211,36 @@ final class AppStore: ObservableObject {
             return
         }
         pendingHistorySessionId = sessionId
-        let token = UUID()
-        historyRequestTokens[sessionId] = token
         historyLoadingSessionIds.insert(sessionId)
         historyLoadProgress[sessionId] = HistoryLoadProgress(loaded: 0, total: nil)
+        historyPaginationCursors[sessionId] = []
+        historyLoadedEventCounts[sessionId] = 0
+        historyLoadedByteCounts[sessionId] = 0
+        historyHasMore[sessionId] = false
         // Keep any in-memory projection visible while the gateway refreshes.
         // The response is merged by sequence and replaces this cache only after
         // a usable projected batch is ready.
         let before = older ? events[sessionId]?.map(\.seq).min() : nil
-        gateway.requestHistory(sessionId: sessionId, beforeSeq: before, maxMessages: 60)
+        if let before {
+            historyPaginationCursors[sessionId] = [before]
+        }
+        requestHistoryPage(for: sessionId, beforeSeq: before)
+    }
+
+    private func requestHistoryPage(for sessionId: String, beforeSeq: Int?) {
+        let token = UUID()
+        historyRequestTokens[sessionId] = token
+        gateway.requestHistory(
+            sessionId: sessionId,
+            beforeSeq: beforeSeq,
+            maxMessages: 60,
+            maxBytes: Self.historyPageByteBudget,
+            view: "conversation"
+        )
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(20))
             guard let self, self.historyRequestTokens[sessionId] == token else { return }
-            self.historyRequestTokens[sessionId] = nil
-            self.historyLoadingSessionIds.remove(sessionId)
-            self.historyLoadProgress[sessionId] = nil
-            if self.pendingHistorySessionId == sessionId { self.pendingHistorySessionId = nil }
+            self.finishHistoryLoading(sessionId)
             self.lastError = "历史记录加载超时，请重试"
         }
     }
@@ -195,9 +280,11 @@ final class AppStore: ObservableObject {
         beginSessionControlRequest("models")
         beginSessionControlRequest("permission-options")
         beginSessionControlRequest("context-usage")
+        beginSessionControlRequest("session-stats")
         gateway.requestModels(sessionId: sessionId)
         gateway.requestPermissionOptions(sessionId: sessionId)
         gateway.requestContextUsage(sessionId: sessionId)
+        gateway.requestSessionStats(sessionId: sessionId)
     }
     func selectModel(provider: String, model: String, reasoningEffort: String?) {
         guard let sessionId = selectedSessionId else { return }
@@ -246,8 +333,11 @@ final class AppStore: ObservableObject {
         case "event": handleLiveEvent(frame)
         case "workspaces":
             workspaces = decodeItems(frame.items, as: GatewayWorkspace.self)
-            if selectedWorkspaceId == nil || !workspaces.contains(where: { $0.id == selectedWorkspaceId }) {
-                selectedWorkspaceId = workspaces.first?.id
+            if selectedWorkspaceId == nil || (
+                selectedWorkspaceId != Self.ungroupedWorkspaceID &&
+                !workspaces.contains(where: { $0.id == selectedWorkspaceId })
+            ) {
+                selectedWorkspaceId = workspaces.first?.id ?? Self.ungroupedWorkspaceID
             }
             archivedSessionIds = Set(frame.archivedSessionIds ?? [])
             notice("工作区已同步", "\(workspaces.count) 个工作区")
@@ -262,6 +352,33 @@ final class AppStore: ObservableObject {
         case "host":
             hostSnapshot = GatewayHostSnapshot(version: frame.version, cwd: frame.cwd, provider: frame.provider, model: frame.model, attachedSessions: frame.attachedSessions, canOpenPath: frame.canOpenPath)
             notice("宿主信息", [frame.version, frame.provider, frame.model].compactMap { $0 }.joined(separator: " · "))
+        case "agent-presets":
+            agentPresets = frame.presets ?? []
+            agentPresetsAuthorable = frame.authorable ?? false
+            agentPresetsHasDocument = frame.hasDocument ?? false
+            if agentPresetDefault == nil {
+                agentPresetDefault = agentPresets.first(where: \.isDefault)?.id
+            }
+            finishDefaultConfigurationRequest("agent-presets")
+        case "defaults":
+            agentPresetDefault = frame.agentPresetDefault
+            permissionDefault = frame.permissionDefault
+            finishDefaultConfigurationRequest("defaults")
+        case "default-model":
+            defaultModelSelection = frame.selection
+            finishDefaultConfigurationRequest("default-model")
+        case "set-default":
+            if frame.applied == true, let target = frame.target, let value = frame.value {
+                if target == "agent-preset" { agentPresetDefault = value }
+                if target == "permission" { permissionDefault = value }
+                notice("默认配置已更新", "\(target) · \(value)")
+                finishDefaultConfigurationRequest("set-default")
+                beginDefaultConfigurationRequest("defaults")
+                gateway.requestDefaults()
+            } else {
+                finishDefaultConfigurationRequest("set-default")
+                lastError = "服务端未确认默认配置更新。"
+            }
         case "models":
             if let id = frame.sessionId ?? pendingModelsSessionId {
                 modelCatalogs[id] = GatewayModelCatalog(
@@ -311,6 +428,20 @@ final class AppStore: ObservableObject {
                 contextSnapshots[id] = snapshot
             }
             finishSessionControlRequest("context-usage")
+        case "session-stats":
+            if let id = frame.sessionId ?? selectedSessionId {
+                var snapshot = sessionStatsSnapshots[id] ?? GatewaySessionStatsSnapshot()
+                snapshot.asOfSeq = frame.asOfSeq ?? snapshot.asOfSeq
+                snapshot.stats = frame.sessionStats ?? snapshot.stats
+                // The statistics endpoint uses a nested `tokenUsage.totals`
+                // object, while context-usage returns the older flat shape.
+                if let totals = frame.tokenUsage?.totals {
+                    snapshot.tokenUsage = GatewaySessionTokenUsage(totals: totals)
+                }
+                snapshot.contextPressure = frame.contextPressure ?? snapshot.contextPressure
+                sessionStatsSnapshots[id] = snapshot
+            }
+            finishSessionControlRequest("session-stats")
         case "directories":
             directoryIsLoading = false
             directoryPath = frame.path
@@ -330,6 +461,10 @@ final class AppStore: ObservableObject {
             waitingForNewSession = false
             if frame.requestType == "directories" { directoryIsLoading = false }
             if frame.requestType == "workspace-create" { workspaceCreationIsLoading = false }
+            if let requestType = frame.requestType,
+               ["agent-presets", "defaults", "default-model", "set-default"].contains(requestType) {
+                finishDefaultConfigurationRequest(requestType)
+            }
             if frame.requestType == "history", let id = frame.sessionId ?? pendingHistorySessionId {
                 finishHistoryLoading(id)
             }
@@ -352,6 +487,9 @@ final class AppStore: ObservableObject {
         if selectedSessionId == nil { selectedSessionId = id }
         waitingForNewSession = false
         upsertSession(id: id, title: "新建 Harness 会话")
+        if let index = sessions.firstIndex(where: { $0.id == id }) {
+            sessions[index].agentPreset = agentPresetDefault
+        }
         notice(frame.command == nil ? "消息已发送" : "命令已执行", frame.command?.displayText ?? "\(id.prefix(12))…", sessionId: id)
         gateway.subscribe(sessionId: id)
         gateway.requestSessions()
@@ -365,10 +503,14 @@ final class AppStore: ObservableObject {
         guard let id = frame.sessionId ?? pendingHistorySessionId ?? selectedSessionId else { return }
         applyHistoryProjections(frame.projections, sessionId: id)
         let rawEvents = frame.events ?? []
+        let pageEventOffset = historyLoadedEventCounts[id, default: 0]
         // Invalidate the network timeout; processing now has its own token.
         let processingToken = UUID()
         historyRequestTokens[id] = processingToken
-        historyLoadProgress[id] = HistoryLoadProgress(loaded: 0, total: rawEvents.count)
+        historyLoadProgress[id] = HistoryLoadProgress(
+            loaded: pageEventOffset,
+            total: frame.hasMore == true ? nil : pageEventOffset + rawEvents.count
+        )
 
         Task { [weak self] in
             let normalized = await Task.detached(priority: .userInitiated) {
@@ -424,7 +566,10 @@ final class AppStore: ObservableObject {
                     recordsToSort.values.sorted { $0.seq < $1.seq }
                 }.value
                 self.events[id] = sortedRecords
-                self.historyLoadProgress[id] = HistoryLoadProgress(loaded: loaded, total: normalized.count)
+                self.historyLoadProgress[id] = HistoryLoadProgress(
+                    loaded: pageEventOffset + loaded,
+                    total: frame.hasMore == true ? nil : pageEventOffset + normalized.count
+                )
 
                 if publishesProgressively && visibleItemStart > 0 {
                     visibleItemStart = max(0, visibleItemStart - 24)
@@ -447,14 +592,51 @@ final class AppStore: ObservableObject {
             self.renderedConversationItems[id] = projectedItems
             await Task.yield()
             try? await Task.sleep(for: .milliseconds(24))
+
+            self.historyLoadedEventCounts[id] = pageEventOffset + normalized.count
+            self.historyLoadedByteCounts[id, default: 0] += frame.bytes ?? 0
             self.historyHasMore[id] = frame.hasMore ?? false
+
+            if frame.hasMore == true {
+                guard let cursor = frame.nextBeforeSeq else {
+                    let message = "网关返回 hasMore:true，但缺少 nextBeforeSeq，已停止自动续页。"
+                    self.finishHistoryLoading(id)
+                    self.scheduleConversationProjection(for: id)
+                    self.lastError = message
+                    self.notice("历史记录分页失败", message, sessionId: id, isError: true)
+                    return
+                }
+                var seenCursors = self.historyPaginationCursors[id, default: []]
+                guard !seenCursors.contains(cursor) else {
+                    let message = "网关重复返回历史游标 \(cursor)，已停止自动续页以避免循环。"
+                    self.finishHistoryLoading(id)
+                    self.scheduleConversationProjection(for: id)
+                    self.lastError = message
+                    self.notice("历史记录分页失败", message, sessionId: id, isError: true)
+                    return
+                }
+                seenCursors.insert(cursor)
+                self.historyPaginationCursors[id] = seenCursors
+                self.requestHistoryPage(for: id, beforeSeq: cursor)
+                return
+            }
+
+            let totalEvents = self.historyLoadedEventCounts[id, default: 0]
+            let totalBytes = self.historyLoadedByteCounts[id, default: 0]
+            if let activity = self.sessions.first(where: { $0.id == id })?.lastActivity {
+                self.historySyncedActivityDates[id] = activity
+            }
             self.finishHistoryLoading(id)
             self.scheduleConversationProjection(for: id)
-            self.notice("历史记录已加载", "\(normalized.count) 个事件\(frame.hasMore == true ? " · 可加载更早记录" : "")", sessionId: id)
+            let byteDetail = totalBytes > 0 ? " · \(ByteCountFormatter.string(fromByteCount: Int64(totalBytes), countStyle: .file))" : ""
+            self.notice("历史记录已加载", "\(totalEvents) 个事件\(byteDetail)", sessionId: id)
         }
     }
     private func finishHistoryLoading(_ sessionId: String) {
         historyRequestTokens[sessionId] = nil
+        historyPaginationCursors[sessionId] = nil
+        historyLoadedEventCounts[sessionId] = nil
+        historyLoadedByteCounts[sessionId] = nil
         historyLoadingSessionIds.remove(sessionId)
         historyLoadProgress[sessionId] = nil
         if pendingHistorySessionId == sessionId { pendingHistorySessionId = nil }
@@ -476,6 +658,12 @@ final class AppStore: ObservableObject {
         if let index = list.firstIndex(where: { $0.seq == record.seq }) { list[index] = record } else { list.append(record) }
         events[record.sessionId] = list.sorted { $0.seq < $1.seq }
         applyEvent(record)
+        // Once the cache has been fully established, subscribed live events are
+        // already the newest local content. Advance the watermark so reopening
+        // the session does not download the same history again.
+        if let syncedActivity = historySyncedActivityDates[record.sessionId] {
+            historySyncedActivityDates[record.sessionId] = max(syncedActivity, record.date)
+        }
         scheduleConversationProjection(for: record.sessionId)
     }
     private func scheduleConversationProjection(for sessionId: String) {
@@ -502,8 +690,16 @@ final class AppStore: ObservableObject {
                 sessions[index].title = title
                 sessions[index].lastActivity = date
                 sessions[index].isRunning = item.running
+                sessions[index].agentPreset = item.agentPreset ?? sessions[index].agentPreset
             } else {
-                sessions.append(SessionSummary(id: item.sessionId, title: item.blank ? "空白会话 \(item.sessionId.prefix(8))" : title, lastActivity: date, isRunning: item.running, hasUnread: false))
+                sessions.append(SessionSummary(
+                    id: item.sessionId,
+                    title: item.blank ? "空白会话 \(item.sessionId.prefix(8))" : title,
+                    lastActivity: date,
+                    isRunning: item.running,
+                    hasUnread: false,
+                    agentPreset: item.agentPreset
+                ))
             }
         }
         sessions.removeAll { archivedSessionIds.contains($0.id) }
@@ -513,7 +709,9 @@ final class AppStore: ObservableObject {
         let event = record.event
         if event.type == "turn/end", record.sessionId == selectedSessionId {
             beginSessionControlRequest("context-usage")
+            beginSessionControlRequest("session-stats")
             gateway.requestContextUsage(sessionId: record.sessionId)
+            gateway.requestSessionStats(sessionId: record.sessionId)
         }
         if event.type == "permission/preset",
            let preset = event.raw?["preset"]?.stringValue ?? event.raw?["name"]?.stringValue {
@@ -571,6 +769,32 @@ final class AppStore: ObservableObject {
         sessionControlLoadingKinds.remove(kind)
     }
 
+    private func setGlobalDefault(target: String, value: String) {
+        guard gateway.state.isConnected else {
+            lastError = "请先连接 DeepSeek Harness"
+            return
+        }
+        beginDefaultConfigurationRequest("set-default")
+        gateway.setDefault(target: target, value: value)
+    }
+
+    private func beginDefaultConfigurationRequest(_ kind: String) {
+        let token = UUID()
+        defaultConfigurationRequestTokens[kind] = token
+        defaultConfigurationLoadingKinds.insert(kind)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(12))
+            guard let self, self.defaultConfigurationRequestTokens[kind] == token else { return }
+            self.finishDefaultConfigurationRequest(kind)
+            self.lastError = "\(kind) 请求超时，请检查 Mobile Gateway v0.1.11。"
+        }
+    }
+
+    private func finishDefaultConfigurationRequest(_ kind: String) {
+        defaultConfigurationRequestTokens[kind] = nil
+        defaultConfigurationLoadingKinds.remove(kind)
+    }
+
     private func applyPermissions(_ incoming: GatewaySessionPermissions, sessionId: String, source: String) {
         let current = incoming.currentValue ?? incoming.preset
         if let current, !Self.permissionPresets.contains(current) {
@@ -591,7 +815,7 @@ final class AppStore: ObservableObject {
     }
 
     private func sessionControlKind(from value: String) -> String? {
-        ["permission-options", "select-model", "context-usage", "permission", "models"]
+        ["permission-options", "select-model", "context-usage", "session-stats", "permission", "models"]
             .first { value.localizedCaseInsensitiveContains($0) }
     }
     private func upsertSession(id: String, title: String?) {

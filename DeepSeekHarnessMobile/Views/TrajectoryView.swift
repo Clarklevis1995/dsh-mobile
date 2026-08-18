@@ -223,7 +223,12 @@ private struct TimelineOverviewCanvas: View {
                     } else {
                         .tool
                     }
-                    let laneEntries = layoutEntries.filter { $0.node.kind == targetKind }
+                    let laneEntries = layoutEntries.filter { entry in
+                        if targetKind == .assistant {
+                            return entry.node.kind == .assistant || entry.node.kind == .context
+                        }
+                        return entry.node.kind == targetKind
+                    }
                     let candidates = laneEntries.isEmpty ? layoutEntries : laneEntries
                     if let nearest = candidates.min(by: {
                         layoutDistance(from: fraction, to: $0) < layoutDistance(from: fraction, to: $1)
@@ -287,21 +292,22 @@ private struct TrajectoryDisplayRow: Identifiable {
 
 struct TrajectoryNode: Identifiable, Sendable {
     enum Kind: Hashable, Sendable {
-        case input, request, assistant, tool, subtool
+        case input, context, request, assistant, tool, subtool
 
         var color: Color {
             switch self {
             case .input: DSHColor.ocean
+            case .context: .green
             case .request: Color(uiColor: .secondaryLabel)
             case .assistant: DSHColor.purple
             case .tool, .subtool: DSHColor.orange
             }
         }
         var laneY: CGFloat {
-            switch self { case .input: 6; case .request, .assistant: 25; case .tool, .subtool: 44 }
+            switch self { case .input: 6; case .context, .request, .assistant: 25; case .tool, .subtool: 44 }
         }
         var label: String {
-            switch self { case .input: "USER"; case .request: "REQUEST"; case .assistant: "ASSISTANT"; case .tool: "TOOL"; case .subtool: "SUBTOOL" }
+            switch self { case .input: "USER"; case .context: "CONTEXT"; case .request: "REQUEST"; case .assistant: "ASSISTANT"; case .tool: "TOOL"; case .subtool: "SUBTOOL" }
         }
     }
 
@@ -383,6 +389,16 @@ enum TrajectoryProjection {
             case "user/message" where event.source == nil || event.source == "user":
                 guard let text = event.text, !text.isEmpty else { continue }
                 nodes.append(node(id: "input-\(record.id)", kind: .input, title: "User", subtitle: text, record: record))
+
+            case "user/message":
+                guard let text = event.text, !text.isEmpty else { continue }
+                nodes.append(node(
+                    id: "context-\(record.id)",
+                    kind: .context,
+                    title: contextSourceName(event),
+                    subtitle: text,
+                    record: record
+                ))
 
             case "assistant/chunk" where !completedSteps.contains(key):
                 guard ["reasoning-delta", "text-delta"].contains(event.chunkType), let text = event.text, !text.isEmpty else { continue }
@@ -615,11 +631,18 @@ enum TrajectoryProjection {
     private static func sortPriority(_ kind: TrajectoryNode.Kind) -> Int {
         switch kind {
         case .input: 0
-        case .request: 1
-        case .assistant: 2
-        case .tool: 3
-        case .subtool: 4
+        case .context: 1
+        case .request: 2
+        case .assistant: 3
+        case .tool: 4
+        case .subtool: 5
         }
+    }
+    private static func contextSourceName(_ event: GatewayEvent) -> String {
+        if let plugin = event.raw?["source"]?["plugin"]?.stringValue, !plugin.isEmpty {
+            return plugin
+        }
+        return event.source ?? "context"
     }
     private static func nonEmpty(_ value: String?) -> String? {
         guard let value, !value.isEmpty else { return nil }
@@ -1097,6 +1120,8 @@ private struct EventDetailSheet: View {
             switch node.kind {
             case .input:
                 previewSection("Message", text: node.subtitle)
+            case .context:
+                previewSection("Context", text: node.subtitle)
             case .request:
                 requestSummaryView
             case .assistant:
@@ -1129,6 +1154,12 @@ private struct EventDetailSheet: View {
                 }
             case .input:
                 rawBlock(index: 1, type: "text", text: node.subtitle)
+            case .context:
+                rawBlock(
+                    index: 1,
+                    type: "context-event",
+                    text: node.records.first?.event.raw?.jsonDisplayText ?? node.subtitle
+                )
             case .request:
                 if let options = requestInfo?.options { rawBlock(index: 1, type: "options", text: options.jsonDisplayText) }
             case .tool, .subtool:
@@ -1163,6 +1194,7 @@ private struct EventDetailSheet: View {
     private var isCompleted: Bool {
         switch node.kind {
         case .input: true
+        case .context: true
         case .request: node.records.contains { $0.event.type == "assistant/message" }
         case .assistant: node.records.contains { $0.event.type == "assistant/message" }
         case .tool: node.records.contains { $0.event.type == "tool/result" }

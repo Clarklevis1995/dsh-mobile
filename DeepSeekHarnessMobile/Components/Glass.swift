@@ -50,11 +50,23 @@ extension View {
 
 struct ConnectionDot: View {
     let state: ConnectionState
+
+    private var color: Color {
+        switch state {
+        case .connected:
+            DSHColor.success
+        case .failed:
+            .red
+        case .disconnected, .connecting:
+            DSHColor.amber
+        }
+    }
+
     var body: some View {
         Circle()
-            .fill(state.isConnected ? DSHColor.success : (state == .connecting ? .orange : .gray))
+            .fill(color)
             .frame(width: 8, height: 8)
-            .shadow(color: state.isConnected ? DSHColor.success.opacity(0.65) : .clear, radius: 5)
+            .shadow(color: color.opacity(0.65), radius: 5)
     }
 }
 

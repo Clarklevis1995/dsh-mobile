@@ -4,9 +4,10 @@ import Foundation
 final class GatewayClient: ObservableObject {
     /// History responses contain raw trajectory events (including request
     /// context) and can exceed URLSessionWebSocketTask's 1 MiB default.
-    /// Keep a bounded but practical ceiling so a valid history frame does not
-    /// tear down the socket before AppStore can decode it.
-    private static let maximumIncomingMessageSize = 16 * 1024 * 1024
+    /// Gateway v0.1.12 normally keeps history pages below 4 MiB. Retain a much
+    /// larger transport ceiling for the documented case where one indivisible
+    /// event is itself larger than the page budget.
+    private static let maximumIncomingMessageSize = 64 * 1024 * 1024
 
     @Published private(set) var state: ConnectionState = .disconnected
     @Published private(set) var serverPort: Int?
@@ -88,9 +89,32 @@ final class GatewayClient: ObservableObject {
     func requestContextUsage(sessionId: String) {
         send(["type": "context-usage", "sessionId": sessionId])
     }
-    func requestHistory(sessionId: String, beforeSeq: Int? = nil, maxMessages: Int = 50) {
+    func requestSessionStats(sessionId: String) {
+        send(["type": "session-stats", "sessionId": sessionId])
+    }
+    func requestAgentPresets() {
+        send(["type": "agent-presets"])
+    }
+    func requestDefaults() {
+        send(["type": "defaults"])
+    }
+    func requestDefaultModel() {
+        send(["type": "default-model"])
+    }
+    func setDefault(target: String, value: String) {
+        send(["type": "set-default", "target": target, "value": value])
+    }
+    func requestHistory(
+        sessionId: String,
+        beforeSeq: Int? = nil,
+        maxMessages: Int = 50,
+        maxBytes: Int? = nil,
+        view: String? = nil
+    ) {
         var payload: [String: Any] = ["type": "history", "sessionId": sessionId, "maxMessages": maxMessages]
         if let beforeSeq { payload["beforeSeq"] = beforeSeq }
+        if let maxBytes { payload["maxBytes"] = maxBytes }
+        if let view { payload["view"] = view }
         send(payload)
     }
 

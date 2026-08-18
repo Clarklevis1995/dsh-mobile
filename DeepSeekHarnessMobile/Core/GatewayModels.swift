@@ -75,6 +75,9 @@ struct GatewayFrame: Codable, Sendable {
     var items: [JSONValue]?
     var events: [RawSessionEvent]?
     var hasMore: Bool?
+    var nextBeforeSeq: Int?
+    var bytes: Int?
+    var view: String?
     var query: String?
     var archivedSessionIds: [String]?
     var workspace: GatewayWorkspace?
@@ -95,13 +98,23 @@ struct GatewayFrame: Codable, Sendable {
     var groups: [GatewayModelGroup]?
     var failures: [JSONValue]?
     var selected: GatewayModelSelection?
+    var selection: GatewayModelSelection?
     var namespace: JSONValue?
     var sessionPermissions: GatewaySessionPermissions?
     var set: String?
     var asOfSeq: Int?
+    var sessionStats: GatewaySessionStats?
     var tokenUsage: GatewayTokenUsage?
     var contextPressure: GatewayContextPressure?
     var projections: JSONValue?
+    var presets: [GatewayAgentPreset]?
+    var authorable: Bool?
+    var hasDocument: Bool?
+    var agentPresetDefault: String?
+    var permissionDefault: String?
+    var target: String?
+    var value: String?
+    var applied: Bool?
 }
 
 /// The gateway's v0.1.6 live-event broadcaster currently omits `kind: "event"`
@@ -211,6 +224,37 @@ struct GatewayPermissionOption: Codable, Hashable, Sendable, Identifiable {
     var id: String { value }
 }
 
+struct GatewayAgentPreset: Codable, Hashable, Sendable, Identifiable {
+    var id: String
+    var trust: JSONValue?
+    var isDefault: Bool
+    var name: String?
+    var description: String?
+    var broken: Bool?
+
+    var displayName: String {
+        if let name, !name.isEmpty { return name }
+        switch id {
+        case "standard": return "标准模式"
+        case "code": return "PTC 模式"
+        case "minimal": return "极简模式"
+        case "cordis": return "创造模式"
+        default: return id
+        }
+    }
+
+    var displayDescription: String {
+        if let description, !description.isEmpty { return description }
+        switch id {
+        case "standard": return "功能完整的编码 Agent，支持文件编辑、Shell、检索、Skills、计划与工作流。"
+        case "code": return "通过 Code Mode SDK 组合多步工具操作。"
+        case "minimal": return "精简工具集合，适合轻量、直接的编码任务。"
+        case "cordis": return "用于创建和维护自定义 Agent 预设。"
+        default: return "由 DeepSeek Harness 提供的 Agent 预设。"
+        }
+    }
+}
+
 struct GatewaySessionPermissions: Codable, Hashable, Sendable {
     var options: [GatewayPermissionOption]? = nil
     var currentValue: String? = nil
@@ -224,6 +268,7 @@ struct GatewayTokenUsage: Codable, Hashable, Sendable {
     var outputTokens: Int?
     var cacheReadTokens: Int?
     var cacheWriteTokens: Int?
+    var totals: GatewaySessionTokenUsageTotals?
 }
 
 struct GatewayContextPressure: Codable, Hashable, Sendable {
@@ -243,6 +288,42 @@ struct GatewayContextSnapshot: Hashable, Sendable {
     var tokenUsage: GatewayTokenUsage? = nil
     var pressure: GatewayContextPressure? = nil
     var breakdown: GatewayContextBreakdown? = nil
+}
+
+/// Lightweight session projection returned by `session-stats`.  It is kept
+/// separate from context-usage because the gateway exposes a nested token
+/// totals object for this endpoint.
+struct GatewaySessionStats: Codable, Hashable, Sendable {
+    var turns: Int?
+    var steps: Int?
+    var llmMs: Double?
+    var toolMs: Double?
+    var ttftMs: Double?
+    var ttftSteps: Int?
+    var decodeMs: Double?
+    var decodeTokens: Int?
+    var lastTurn: Int?
+    var openStep: Int?
+    var pendingCalls: JSONValue?
+}
+
+struct GatewaySessionTokenUsage: Codable, Hashable, Sendable {
+    var totals: GatewaySessionTokenUsageTotals?
+}
+
+struct GatewaySessionTokenUsageTotals: Codable, Hashable, Sendable {
+    var inputTokens: Int?
+    var outputTokens: Int?
+    var cacheReadTokens: Int?
+    var cacheWriteTokens: Int?
+    var reasoningTokens: Int?
+}
+
+struct GatewaySessionStatsSnapshot: Hashable, Sendable {
+    var asOfSeq: Int? = nil
+    var stats: GatewaySessionStats? = nil
+    var tokenUsage: GatewaySessionTokenUsage? = nil
+    var contextPressure: GatewayContextPressure? = nil
 }
 
 struct RawSessionEvent: Codable, Hashable, Sendable {
@@ -391,6 +472,7 @@ struct SessionSummary: Codable, Hashable, Identifiable {
     var lastActivity: Date
     var isRunning: Bool
     var hasUnread: Bool
+    var agentPreset: String? = nil
 }
 
 struct GatewayNotice: Identifiable, Hashable {

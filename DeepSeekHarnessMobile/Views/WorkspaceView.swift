@@ -83,6 +83,18 @@ struct WorkspaceView: View {
 
     private var workspaceCard: some View {
         Menu {
+            Button {
+                store.selectUngroupedWorkspace()
+            } label: {
+                Label {
+                    Text("未分组")
+                } icon: {
+                    Image(systemName: store.isUngroupedWorkspaceSelected ? "checkmark.circle.fill" : "tray")
+                }
+            }
+
+            if !store.workspaces.isEmpty { Divider() }
+
             ForEach(store.workspaces) { workspace in
                 Button {
                     store.selectWorkspace(workspace)
@@ -95,7 +107,7 @@ struct WorkspaceView: View {
                 }
             }
 
-            if !store.workspaces.isEmpty { Divider() }
+            Divider()
 
             Button {
                 showsDirectoryBrowser = true
@@ -113,8 +125,8 @@ struct WorkspaceView: View {
         HStack(spacing: 12) {
             Image(systemName: "folder").foregroundStyle(.blue).font(.title3)
             VStack(alignment: .leading, spacing: 2) {
-                Text(store.activeWorkspace?.title ?? "DeepseekHarnessProject").font(.subheadline.weight(.semibold))
-                Text(store.activeWorkspace?.path ?? "通过 Mobile Gateway 连接").font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+                Text(workspaceDisplayTitle).font(.subheadline.weight(.semibold))
+                Text(workspaceDisplayPath).font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
             }
             Spacer()
             ConnectionDot(state: store.gateway.state)
@@ -130,38 +142,6 @@ struct WorkspaceView: View {
         HStack {
             Text("最近会话").font(.headline)
             Spacer()
-            Text(store.gateway.state.label)
-                .font(.caption.weight(statusEmphasized ? .semibold : .regular))
-                .foregroundStyle(statusTextColor)
-                .shadow(
-                    color: statusTextColor.opacity(statusGlowOpacity),
-                    radius: 6
-                )
-        }
-    }
-
-    private var statusTextColor: Color {
-        switch store.gateway.state {
-        case .connected:
-            DSHColor.success
-        case .disconnected, .failed:
-            DSHColor.amber
-        case .connecting:
-            DSHColor.amber.opacity(0.8)
-        }
-    }
-
-    private var statusGlowOpacity: Double {
-        switch store.gateway.state {
-        case .connected, .disconnected, .failed: 0.9
-        case .connecting: 0.35
-        }
-    }
-
-    private var statusEmphasized: Bool {
-        switch store.gateway.state {
-        case .connected, .disconnected, .failed: true
-        case .connecting: false
         }
     }
 
@@ -184,7 +164,9 @@ struct WorkspaceView: View {
 
     private var displayedSessions: [SessionSummary] {
         let workspaceSessions: [SessionSummary]
-        if let workspace = store.activeWorkspace {
+        if store.isUngroupedWorkspaceSelected {
+            workspaceSessions = store.ungroupedSessions
+        } else if let workspace = store.activeWorkspace {
             let ids = Set(workspace.sessionIds)
             workspaceSessions = store.sessions.filter { ids.contains($0.id) }
         } else {
@@ -195,6 +177,17 @@ struct WorkspaceView: View {
         }
         let ids = Set(store.searchResults.map(\.sessionId))
         return workspaceSessions.filter { ids.contains($0.id) || $0.title.localizedCaseInsensitiveContains(searchQuery) }
+    }
+
+    private var workspaceDisplayTitle: String {
+        store.isUngroupedWorkspaceSelected ? "未分组" : (store.activeWorkspace?.title ?? "DeepseekHarnessProject")
+    }
+
+    private var workspaceDisplayPath: String {
+        if store.isUngroupedWorkspaceSelected {
+            return "\(store.ungroupedSessions.count) 个未归属会话"
+        }
+        return store.activeWorkspace?.path ?? "通过 Mobile Gateway 连接"
     }
 
     private var sessionsList: some View {
@@ -274,7 +267,7 @@ private struct DirectoryBrowserSheet: View {
                     } label: {
                         directoryRow(icon: "arrowshape.turn.up.left", title: "..", subtitle: "返回上一级")
                     }
-                    .disabled(parentPath == nil || store.directoryIsLoading)
+                    .disabled(parentPath == nil)
 
                     ForEach(store.directoryEntries) { entry in
                         Button {
@@ -286,7 +279,6 @@ private struct DirectoryBrowserSheet: View {
                                 subtitle: entry.hidden ? "隐藏目录" : nil
                             )
                         }
-                        .disabled(store.directoryIsLoading)
                     }
                 } header: {
                     VStack(alignment: .leading, spacing: 5) {
@@ -298,6 +290,7 @@ private struct DirectoryBrowserSheet: View {
                     }
                 }
             }
+            .allowsHitTesting(!store.directoryIsLoading)
             .overlay {
                 if store.directoryIsLoading && store.directoryEntries.isEmpty {
                     ProgressView("正在读取远程目录…")
@@ -338,9 +331,11 @@ private struct DirectoryBrowserSheet: View {
                 .foregroundStyle(DSHColor.ocean)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).foregroundStyle(.primary)
+                Text(title).foregroundStyle(.black)
                 if let subtitle {
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.black.opacity(0.52))
                 }
             }
             Spacer()
@@ -374,14 +369,24 @@ private struct DirectoryBrowserSheet: View {
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 48)
+                .frame(height: 44)
+                .foregroundStyle(.white)
+                .background {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.black)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 0.8)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.roundedRectangle(radius: 16))
-            .disabled(store.directoryPath == nil || store.directoryIsLoading || store.workspaceCreationIsLoading)
+            .buttonStyle(.plain)
+            .disabled(store.directoryPath == nil || store.workspaceCreationIsLoading)
+            .allowsHitTesting(!store.directoryIsLoading)
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 12)
+        .padding(.vertical, 9)
         .background(.ultraThinMaterial)
     }
 }

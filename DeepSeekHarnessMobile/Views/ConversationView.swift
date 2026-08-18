@@ -1,5 +1,6 @@
 import SwiftUI
 import MarkdownUI
+import UIKit
 
 struct ConversationView: View {
     @EnvironmentObject private var store: AppStore
@@ -7,7 +8,7 @@ struct ConversationView: View {
     @State private var activeView = 0
     @State private var draft = ""
     @State private var showsContextUsage = false
-    @State private var historyLayoutGeneration = 0
+    @State private var showsSessionStats = false
     @State private var conversationScrollAnchor: String?
     @State private var userHasManuallyPositioned: Bool
     @State private var isUserDragging = false
@@ -16,6 +17,7 @@ struct ConversationView: View {
     @State private var composerHeight: CGFloat = 124
     @State private var scrollToBottomRequest = 0
     @FocusState private var composerIsFocused: Bool
+    private let conversationBottomClearance: CGFloat = 22
 
     init(initialScrollAnchor: String? = nil, initiallyManual: Bool = false, onBack: @escaping () -> Void) {
         self.onBack = onBack
@@ -41,6 +43,12 @@ struct ConversationView: View {
             }
         }
         .foregroundStyle(DSHColor.ink)
+        .sheet(isPresented: $showsSessionStats) {
+            SessionStatsSheet(
+                snapshot: store.selectedSessionStatsSnapshot,
+                sessionTitle: store.selectedSession?.title ?? "新建 DeepSeek Harness"
+            )
+        }
     }
 
     private var topBar: some View {
@@ -50,11 +58,16 @@ struct ConversationView: View {
             }
             .buttonStyle(.plain)
             Text(store.selectedSession.map(\.title) ?? "新建 DeepSeek Harness")
-                .font(.subheadline.weight(.semibold)).lineLimit(1)
+                .font(.system(size: 18, weight: .semibold))
+                .lineLimit(1)
+                .layoutPriority(1)
             Spacer()
             ConnectionDot(state: store.gateway.state)
-            Text(store.selectedSession?.isRunning == true ? "运行中" : store.gateway.state.label)
-                .font(.caption).foregroundStyle(.secondary)
+            Text(topBarAgentPresetTitle)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             Menu {
                 Button("重新加载历史", systemImage: "clock.arrow.circlepath") {
                     if let id = store.selectedSessionId { store.loadHistory(for: id) }
@@ -75,11 +88,11 @@ struct ConversationView: View {
                     ZStack {
                         ScrollView(.vertical) {
                             LazyVStack(alignment: .leading, spacing: 0) {
-                                if conversationItems.isEmpty && isLoadingSelectedHistory {
-                                    historyLoadingState
-                                } else if !conversationItems.isEmpty {
+                                if !conversationItems.isEmpty {
                                     if isLoadingSelectedHistory { historyLoadingBanner }
-                                    if let id = store.selectedSessionId, store.historyHasMore[id] == true {
+                                    if !isLoadingSelectedHistory,
+                                       let id = store.selectedSessionId,
+                                       store.historyHasMore[id] == true {
                                         Button("加载更早记录") { store.loadHistory(for: id, older: true) }
                                             .font(.caption).frame(maxWidth: .infinity)
                                     }
@@ -87,7 +100,7 @@ struct ConversationView: View {
                                         Group {
                                             switch entry.content {
                                             case .message(let item):
-                                                ConversationRow(item: item)
+                                                ConversationRow(item: item, showsCopyButton: entry.showsCopyButton)
                                             case .process(let group):
                                                 ConversationProcessRow(group: group)
                                             }
@@ -95,24 +108,40 @@ struct ConversationView: View {
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .id(entry.id)
                                     }
+                                    if let snapshot = store.selectedSessionStatsSnapshot {
+                                        sessionStatsBar(snapshot)
+                                            .padding(.top, 10)
+                                            .padding(.bottom, 4)
+                                            .id(sessionStatsAnchorID)
+                                    }
                                 }
                                 Color.clear
-                                    .frame(height: composerHeight)
+                                    .frame(height: composerHeight + conversationBottomClearance)
                                     .id(conversationBottomAnchorID)
                             }
                             .scrollTargetLayout()
+                            .environment(\.conversationDisclosureWillToggle) {
+                                // A non-nil scrollPosition with a bottom anchor makes
+                                // SwiftUI compensate for an expanding row by moving the
+                                // whole viewport upward. Release that programmatic anchor
+                                // before the row changes height so it expands downward from
+                                // its current on-screen position.
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    conversationScrollPosition = nil
+                                }
+                            }
                         }
                             .frame(width: max(0, geometry.size.width - 40), alignment: .leading)
                             .padding(.horizontal, 20)
                             .padding(.top, 8)
-                            .id("history-layout-\(store.selectedSessionId ?? "new-session")-\(historyLayoutGeneration)")
                         .coordinateSpace(name: "conversation-scroll")
                         .frame(width: geometry.size.width)
                         .clipped()
                         .opacity(isRestoringManualScrollPosition ? 0 : 1)
                         .defaultScrollAnchor(.bottom)
                         .scrollPosition(id: $conversationScrollPosition, anchor: .bottom)
-                        .id("conversation-scroll-\(store.selectedSessionId ?? "new-session")-\(historyLayoutGeneration)")
                         .simultaneousGesture(
                             DragGesture(minimumDistance: 2)
                                 .onChanged { _ in
@@ -134,28 +163,16 @@ struct ConversationView: View {
                         }
                         .onChange(of: isLoadingSelectedHistory) { wasLoading, isLoading in
                             guard wasLoading, !isLoading, !conversationItems.isEmpty else { return }
-                            if userHasManuallyPositioned {
-                                isRestoringManualScrollPosition = true
-                            }
-                            var transaction = Transaction()
-                            transaction.animation = nil
-                            withTransaction(transaction) {
-                                historyLayoutGeneration &+= 1
-                            }
-                            if userHasManuallyPositioned {
-                                Task { @MainActor in
-                                    await Task.yield()
-                                    if let saved = validRememberedConversationAnchor() {
-                                        scrollWithoutAnimation(scrollProxy, to: saved)
-                                    } else {
-                                        userHasManuallyPositioned = false
-                                        conversationScrollAnchor = nil
-                                    }
-                                    await Task.yield()
-                                    isRestoringManualScrollPosition = false
-                                }
-                            } else {
-                                isRestoringManualScrollPosition = false
+                            // History arrives progressively. Rebuilding the entire ScrollView here
+                            // discards its actual offset and can restore a row behind the floating
+                            // composer. Keep the existing scroll container alive. Only sessions that
+                            // are still following the latest content are aligned with the dedicated
+                            // bottom spacer; a user's manual position is left completely untouched.
+                            guard !userHasManuallyPositioned else { return }
+                            Task { @MainActor in
+                                await Task.yield()
+                                await Task.yield()
+                                scrollWithoutAnimation(scrollProxy, to: conversationBottomAnchorID)
                             }
                         }
                         .task(id: store.selectedSessionId) {
@@ -178,7 +195,10 @@ struct ConversationView: View {
                             isRestoringManualScrollPosition = true
                             await Task.yield()
                             if let target = validRememberedConversationAnchor() {
-                                scrollWithoutAnimation(scrollProxy, to: target)
+                                // A remembered row represents the user's reading position. Center it
+                                // in the unobscured viewport instead of aligning it with the physical
+                                // bottom edge behind the floating composer.
+                                scrollWithoutAnimation(scrollProxy, to: target, anchor: .center)
                             } else {
                                 userHasManuallyPositioned = false
                                 conversationScrollAnchor = nil
@@ -187,8 +207,16 @@ struct ConversationView: View {
                             isRestoringManualScrollPosition = false
                         }
 
-                        if conversationItems.isEmpty && !isLoadingSelectedHistory {
-                            emptyState
+                        if conversationItems.isEmpty {
+                            Group {
+                                if isLoadingSelectedHistory {
+                                    historyLoadingState
+                                } else {
+                                    emptyState
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(.bottom, composerHeight)
                         }
 
                         if shouldShowScrollToBottom {
@@ -252,12 +280,19 @@ struct ConversationView: View {
     private var conversationBottomAnchorID: String {
         "conversation-bottom-\(store.selectedSessionId ?? "new-session")"
     }
+    private var sessionStatsAnchorID: String {
+        "session-stats-\(store.selectedSessionId ?? "new-session")"
+    }
 
-    private func scrollWithoutAnimation(_ proxy: ScrollViewProxy, to target: String) {
+    private func scrollWithoutAnimation(
+        _ proxy: ScrollViewProxy,
+        to target: String,
+        anchor: UnitPoint = .bottom
+    ) {
         var transaction = Transaction()
         transaction.animation = nil
         withTransaction(transaction) {
-            proxy.scrollTo(target, anchor: .bottom)
+            proxy.scrollTo(target, anchor: anchor)
         }
     }
 
@@ -318,7 +353,7 @@ struct ConversationView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 120)
+        .padding(.horizontal, 28)
     }
 
     private var historyLoadingBanner: some View {
@@ -335,9 +370,13 @@ struct ConversationView: View {
 
     private var historyProgressText: String {
         guard let id = store.selectedSessionId,
-              let progress = store.historyLoadProgress[id],
-              let total = progress.total else {
+              let progress = store.historyLoadProgress[id] else {
             return "正在从 Mobile Gateway 同步会话内容…"
+        }
+        guard let total = progress.total else {
+            return progress.loaded > 0
+                ? "正在自动加载更早记录 · 已同步 \(progress.loaded) 个事件"
+                : "正在从 Mobile Gateway 同步会话内容…"
         }
         return "正在加载历史记录 · \(progress.loaded)/\(total)"
     }
@@ -375,11 +414,11 @@ struct ConversationView: View {
                 .padding(.horizontal, 3)
                 .frame(minHeight: 38, alignment: .top)
             HStack(spacing: 7) {
-                permissionMenu
+                permissionControl
 
                 Spacer(minLength: 2)
 
-                modelMenu
+                modelControl
 
                 Button { showsContextUsage = true } label: {
                     if contextIsLoading && store.selectedContextSnapshot == nil {
@@ -424,10 +463,93 @@ struct ConversationView: View {
         .padding(.horizontal, 14).padding(.bottom, 10)
     }
 
+    private func sessionStatsBar(_ snapshot: GatewaySessionStatsSnapshot) -> some View {
+        Button { showsSessionStats = true } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(DSHColor.ocean)
+                Text(SessionStatsFormatter.compactLine(snapshot))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+            .padding(.horizontal, 2)
+            .padding(.vertical, 5)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("查看会话执行状态")
+        .accessibilityValue(SessionStatsFormatter.compactLine(snapshot))
+    }
+
+    @ViewBuilder
+    private var permissionControl: some View {
+        if store.selectedSessionId == nil {
+            HStack(spacing: 5) {
+                if defaultConfigurationIsLoading && store.permissionDefault == nil {
+                    ProgressView().controlSize(.mini)
+                    Text("读取默认权限…")
+                } else if let permission = store.permissionDefault {
+                    Image(systemName: permissionIcon(permission))
+                    Text(permissionTitle(permission))
+                } else {
+                    Image(systemName: "shield")
+                    Text("默认权限")
+                }
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .frame(width: 92, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("新会话默认权限：\(store.permissionDefault.map(permissionTitle) ?? "未读取")")
+        } else {
+            permissionMenu
+        }
+    }
+
+    @ViewBuilder
+    private var modelControl: some View {
+        if store.selectedSessionId == nil {
+            HStack(spacing: 5) {
+                if defaultModelIsLoading && store.defaultModelSelection == nil {
+                    ProgressView().controlSize(.mini)
+                    Text("读取默认模型…")
+                } else {
+                    Text(defaultModelTitle)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .allowsTightening(true)
+                    if let effort = defaultModelEffortTitle {
+                        Text(effort)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(DSHColor.purple.opacity(0.14), in: Capsule())
+                    }
+                }
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("新会话默认模型：\(defaultModelTitle)\(defaultModelEffortTitle.map { "，推理等级 \($0)" } ?? "")")
+        } else {
+            modelMenu
+        }
+    }
+
     private var permissionMenu: some View {
         Menu {
             if permissionOptions.isEmpty {
-                Text(store.selectedSessionId == nil ? "创建会话后可调整权限" : "正在读取权限…")
+                Text("正在读取权限…")
             } else {
                 ForEach(permissionOptions) { option in
                     Button {
@@ -454,13 +576,13 @@ struct ConversationView: View {
             .frame(width: 78, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .disabled(store.selectedSessionId == nil || permissionOptions.isEmpty)
+        .disabled(permissionOptions.isEmpty)
     }
 
     private var modelMenu: some View {
         Menu {
             if modelGroups.isEmpty {
-                Text(store.selectedSessionId == nil ? "创建会话后可选择模型" : "正在读取模型…")
+                Text("正在读取模型…")
             } else {
                 Menu("模型") {
                     ForEach(modelGroups) { group in
@@ -524,12 +646,46 @@ struct ConversationView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             .contentShape(Rectangle())
         }
-        .disabled(store.selectedSessionId == nil || modelGroups.isEmpty || store.selectedModelCatalog?.routable == false)
+        .disabled(modelGroups.isEmpty || store.selectedModelCatalog?.routable == false)
     }
 
     private var permissionOptions: [GatewayPermissionOption] { store.selectedPermissions?.options ?? [] }
     private var currentPermission: String {
         store.selectedPermissions?.currentValue ?? store.selectedPermissions?.preset ?? "workspace-write"
+    }
+    private var defaultConfigurationIsLoading: Bool {
+        !store.defaultConfigurationLoadingKinds.isDisjoint(with: ["defaults", "agent-presets"])
+    }
+    private var defaultModelIsLoading: Bool {
+        store.defaultConfigurationLoadingKinds.contains("default-model")
+    }
+    private var defaultModelTitle: String {
+        guard let selection = store.defaultModelSelection else { return "默认模型" }
+        return modelTitle(for: selection.model)
+    }
+    private var defaultModelEffortTitle: String? {
+        store.defaultModelSelection?.reasoningEffort.map(reasoningEffortTitle)
+    }
+    private var defaultAgentPresetTitle: String {
+        guard let id = store.agentPresetDefault else { return "默认 Agent" }
+        return agentPresetTitle(id)
+    }
+    private var topBarAgentPresetTitle: String {
+        let id = store.selectedSession?.agentPreset ?? store.agentPresetDefault
+        guard let id else { return "Agent" }
+        return agentPresetTitle(id)
+    }
+    private func agentPresetTitle(_ id: String) -> String {
+        if let preset = store.agentPresets.first(where: { $0.id == id }) {
+            return preset.displayName
+        }
+        switch id {
+        case "standard": return "标准模式"
+        case "code": return "PTC 模式"
+        case "minimal": return "极简模式"
+        case "cordis": return "创造模式"
+        default: return id
+        }
     }
     private var permissionIsLoading: Bool {
         store.sessionControlLoadingKinds.contains("permission-options") || store.sessionControlLoadingKinds.contains("permission")
@@ -550,6 +706,21 @@ struct ConversationView: View {
         guard let id = currentModelSelection?.reasoningEffort else { return nil }
         return currentEfforts.first(where: { $0.id == id })?.name ?? id.capitalized
     }
+    private func modelTitle(for id: String) -> String {
+        switch id {
+        case "deepseek-chat": return "DeepSeek Chat"
+        case "deepseek-reasoner": return "DeepSeek Reasoner"
+        default: return id
+        }
+    }
+    private func reasoningEffortTitle(_ id: String) -> String {
+        switch id.lowercased() {
+        case "low": return "Low"
+        case "medium": return "Medium"
+        case "high": return "High"
+        default: return id.capitalized
+        }
+    }
     private var contextProgress: Double {
         guard let pressure = store.selectedContextSnapshot?.pressure,
               let used = pressure.pressureTokens,
@@ -560,6 +731,7 @@ struct ConversationView: View {
 
     private func permissionTitle(_ value: String) -> String {
         switch value {
+        case "ask": "每次询问"
         case "read-only": "只读"
         case "workspace-write": "工作区写入"
         case "danger-full-access": "完全访问"
@@ -568,6 +740,7 @@ struct ConversationView: View {
     }
     private func permissionIcon(_ value: String) -> String {
         switch value {
+        case "ask": "questionmark.shield"
         case "read-only": "checkmark.shield"
         case "workspace-write": "pencil.and.outline"
         case "danger-full-access": "exclamationmark.shield"
@@ -625,6 +798,165 @@ private struct ContextUsageRing: View {
         .frame(width: 18, height: 18)
         .padding(2)
         .contentShape(Circle())
+    }
+}
+
+private enum SessionStatsFormatter {
+    static func compactLine(_ snapshot: GatewaySessionStatsSnapshot) -> String {
+        let stats = snapshot.stats
+        var sections: [String] = []
+        if stats?.turns != nil || stats?.steps != nil {
+            sections.append("\(stats?.turns ?? 0) 轮 · \(stats?.steps ?? 0) 步")
+        }
+        let timings = [
+            stats?.llmMs.map { "LLM \(duration($0))" },
+            stats?.toolMs.map { "工具调用 \(duration($0))" }
+        ].compactMap { $0 }.joined(separator: " · ")
+        if !timings.isEmpty { sections.append(timings) }
+        let averageTTFT = averageTTFT(stats)
+        let throughput = throughput(stats)
+        let performance = [
+            averageTTFT.map { "首 token 平均 \(duration($0))" },
+            throughput.map { "\(compactDecimal($0)) tok/s" }
+        ].compactMap { $0 }.joined(separator: " · ")
+        if !performance.isEmpty { sections.append(performance) }
+        if let cacheRate = cacheHitRate(snapshot.tokenUsage?.totals) {
+            sections.append("缓存命中 \(Int((cacheRate * 100).rounded()))%")
+        }
+        if let input = snapshot.tokenUsage?.totals?.inputTokens {
+            sections.append("输入 \(compact(input)) tok")
+        }
+        return sections.isEmpty ? "正在读取会话统计…" : sections.joined(separator: "  |  ")
+    }
+
+    static func duration(_ milliseconds: Double) -> String {
+        let seconds = max(0, milliseconds) / 1_000
+        if seconds >= 60 {
+            let total = Int(seconds.rounded())
+            return "\(total / 60)m\(total % 60)s"
+        }
+        if seconds >= 1 { return "\(compactDecimal(seconds))s" }
+        return "\(Int(milliseconds.rounded()))ms"
+    }
+
+    static func averageTTFT(_ stats: GatewaySessionStats?) -> Double? {
+        guard let total = stats?.ttftMs, let count = stats?.ttftSteps, count > 0 else { return nil }
+        return total / Double(count)
+    }
+
+    static func throughput(_ stats: GatewaySessionStats?) -> Double? {
+        guard let milliseconds = stats?.decodeMs, let tokens = stats?.decodeTokens, milliseconds > 0 else { return nil }
+        return Double(tokens) / (milliseconds / 1_000)
+    }
+
+    static func cacheHitRate(_ totals: GatewaySessionTokenUsageTotals?) -> Double? {
+        guard let totals else { return nil }
+        let values = [totals.inputTokens, totals.outputTokens, totals.cacheReadTokens, totals.cacheWriteTokens]
+            .compactMap { $0 }
+        let total = values.reduce(0, +)
+        guard total > 0, let cacheRead = totals.cacheReadTokens else { return nil }
+        return min(1, max(0, Double(cacheRead) / Double(total)))
+    }
+
+    static func compact(_ value: Int) -> String {
+        switch value {
+        case 1_000_000...:
+            return String(format: value.isMultiple(of: 1_000_000) ? "%.0fM" : "%.1fM", Double(value) / 1_000_000)
+        case 1_000...:
+            return String(format: "%.1fK", Double(value) / 1_000)
+        default:
+            return "\(value)"
+        }
+    }
+
+    static func compactDecimal(_ value: Double) -> String {
+        value.rounded() == value ? "\(Int(value))" : String(format: "%.1f", value)
+    }
+}
+
+private struct SessionStatsSheet: View {
+    let snapshot: GatewaySessionStatsSnapshot?
+    let sessionTitle: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    if let snapshot, let stats = snapshot.stats {
+                        metricsSection("执行") {
+                            metric("轮次", "\(stats.turns ?? 0) 轮")
+                            metric("步骤", "\(stats.steps ?? 0) 步")
+                            metric("LLM", stats.llmMs.map(SessionStatsFormatter.duration) ?? "—")
+                            metric("工具调用", stats.toolMs.map(SessionStatsFormatter.duration) ?? "—")
+                            metric("首 token 平均", SessionStatsFormatter.averageTTFT(stats).map(SessionStatsFormatter.duration) ?? "—")
+                            metric("解码吞吐", SessionStatsFormatter.throughput(stats).map { "\(SessionStatsFormatter.compactDecimal($0)) tok/s" } ?? "—")
+                        }
+
+                        if let totals = snapshot.tokenUsage?.totals {
+                            metricsSection("Token 用量") {
+                                metric("输入", token(totals.inputTokens))
+                                metric("输出", token(totals.outputTokens))
+                                metric("缓存读取", token(totals.cacheReadTokens))
+                                metric("缓存写入", token(totals.cacheWriteTokens))
+                                metric("推理", token(totals.reasoningTokens))
+                                metric("缓存命中", SessionStatsFormatter.cacheHitRate(totals).map { "\(Int(($0 * 100).rounded()))%" } ?? "—")
+                            }
+                        }
+
+                        if let pressure = snapshot.contextPressure {
+                            metricsSection("上下文") {
+                                metric("当前压力", token(pressure.pressureTokens))
+                                metric("预计用量", token(pressure.projectedTokens))
+                                metric("上下文窗口", token(pressure.contextWindow))
+                            }
+                        }
+
+                        if let asOfSeq = snapshot.asOfSeq {
+                            Text("数据截至事件 #\(asOfSeq)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                        }
+                    } else {
+                        ContentUnavailableView("正在读取会话统计", systemImage: "chart.bar.xaxis", description: Text("统计会在本轮结束后自动更新。"))
+                            .frame(maxWidth: .infinity, minHeight: 220)
+                    }
+                }
+                .padding(20)
+            }
+            .navigationTitle("会话状态")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationBackground(.regularMaterial)
+    }
+
+    @ViewBuilder
+    private func metricsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.headline)
+            VStack(spacing: 0) { content() }
+                .padding(.horizontal, 14)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+
+    private func metric(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title).foregroundStyle(.secondary)
+            Spacer()
+            Text(value).font(.body.monospacedDigit()).fontWeight(.medium)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func token(_ value: Int?) -> String {
+        value.map { "\(SessionStatsFormatter.compact($0)) tok" } ?? "—"
     }
 }
 
@@ -701,7 +1033,7 @@ private struct ContextUsagePopover: View {
 }
 
 struct ConversationItem: Identifiable, Sendable {
-    enum Kind: Equatable, Sendable { case user, assistant, reasoning, tool, jsonTool, toolResult, status, system }
+    enum Kind: Equatable, Sendable { case user, context, assistant, reasoning, tool, jsonTool, toolResult, status, system }
     let id: String
     let kind: Kind
     let title: String
@@ -720,6 +1052,17 @@ struct ConversationItem: Identifiable, Sendable {
             case "user/message" where event.source == nil || event.source == "user":
                 if let text = event.text, !text.isEmpty {
                     result.append(.init(id: record.id, kind: .user, title: "你", text: text, isError: false, date: record.date))
+                }
+            case "user/message":
+                if let text = event.text, !text.isEmpty {
+                    result.append(.init(
+                        id: record.id,
+                        kind: .context,
+                        title: "上下文注入 · \(contextSourceName(event))",
+                        text: text,
+                        isError: false,
+                        date: record.date
+                    ))
                 }
             case "assistant/chunk" where event.chunkType == "text-delta" && !completed.contains(key):
                 appendStream(id: "stream-text-\(key)", key: "text-\(key)", kind: .assistant, title: "DeepSeek · 正在生成", delta: event.text ?? "", date: record.date, result: &result, indexes: &streamIndexes)
@@ -742,6 +1085,13 @@ struct ConversationItem: Identifiable, Sendable {
             }
         }
         return result
+    }
+
+    private static func contextSourceName(_ event: GatewayEvent) -> String {
+        if let plugin = event.raw?["source"]?["plugin"]?.stringValue, !plugin.isEmpty {
+            return plugin
+        }
+        return event.source ?? "context"
     }
 
     private static func appendStream(id: String, key: String, kind: Kind, title: String, delta: String, date: Date, result: inout [ConversationItem], indexes: inout [String: Int]) {
@@ -774,6 +1124,7 @@ private struct ConversationDisplayEntry: Identifiable {
 
     let id: String
     let content: Content
+    var showsCopyButton: Bool
 
     static func make(from items: [ConversationItem]) -> [ConversationDisplayEntry] {
         var result: [ConversationDisplayEntry] = []
@@ -785,20 +1136,39 @@ private struct ConversationDisplayEntry: Identifiable {
                 id: "process-\(first.id)",
                 items: processItems
             )
-            result.append(.init(id: group.id, content: .process(group)))
+            result.append(.init(id: group.id, content: .process(group), showsCopyButton: false))
             processItems.removeAll(keepingCapacity: true)
         }
 
         for item in items {
             switch item.kind {
-            case .reasoning, .tool, .jsonTool, .toolResult:
+            case .context, .reasoning, .tool, .jsonTool, .toolResult:
                 processItems.append(item)
             case .user, .assistant, .status, .system:
                 flushProcess()
-                result.append(.init(id: "message-\(item.id)", content: .message(item)))
+                result.append(.init(id: "message-\(item.id)", content: .message(item), showsCopyButton: false))
             }
         }
         flushProcess()
+
+        // User messages are always copyable.  Agent messages are copyable only
+        // when they are the last formal response before the next user message;
+        // intermediate narration followed by another assistant response stays
+        // visually quiet, matching WebUI's final-answer action placement.
+        for index in result.indices {
+            guard case .message(let item) = result[index].content else { continue }
+            if item.kind == .user {
+                result[index].showsCopyButton = true
+                continue
+            }
+            guard item.kind == .assistant else { continue }
+            let nextConversationalMessage = result[(index + 1)...].lazy.compactMap { entry -> ConversationItem.Kind? in
+                guard case .message(let following) = entry.content,
+                      following.kind == .user || following.kind == .assistant else { return nil }
+                return following.kind
+            }.first
+            result[index].showsCopyButton = nextConversationalMessage != .assistant
+        }
         return result
     }
 }
@@ -810,11 +1180,13 @@ private struct ConversationProcessTool: Identifiable {
 }
 
 private enum ConversationProcessContent: Identifiable {
+    case context(ConversationItem)
     case reasoning(ConversationItem)
     case tool(ConversationProcessTool)
 
     var id: String {
         switch self {
+        case .context(let item): "context-\(item.id)"
         case .reasoning(let item): "reason-\(item.id)"
         case .tool(let tool): "tool-\(tool.id)"
         }
@@ -828,6 +1200,8 @@ private extension ConversationProcessGroup {
 
         for item in items {
             switch item.kind {
+            case .context:
+                contents.append(.context(item))
             case .reasoning:
                 contents.append(.reasoning(item))
             case .tool, .jsonTool:
@@ -852,16 +1226,29 @@ private extension ConversationProcessGroup {
             if case .tool = content { count + 1 } else { count }
         }
     }
+
+    var contextCount: Int {
+        contents.reduce(0) { count, content in
+            if case .context = content { count + 1 } else { count }
+        }
+    }
 }
 
 private struct ConversationProcessRow: View {
     let group: ConversationProcessGroup
     @State private var expanded = false
+    @Environment(\.conversationDisclosureWillToggle) private var disclosureWillToggle
 
     private var reasoningText: String {
         group.contents.compactMap { content in
             if case .reasoning(let item) = content { item.text } else { nil }
         }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+    }
+
+    private var contexts: [ConversationItem] {
+        group.contents.compactMap { content in
+            if case .context(let item) = content { item } else { nil }
+        }
     }
 
     private var tools: [ConversationProcessTool] {
@@ -872,7 +1259,7 @@ private struct ConversationProcessRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Button { toggleWithoutAnimation($expanded) } label: {
+            Button { toggleWithoutAnimation($expanded, before: disclosureWillToggle) } label: {
                 HStack(spacing: 7) {
                     Text(processTitle)
                         .font(.subheadline.weight(.medium))
@@ -889,6 +1276,9 @@ private struct ConversationProcessRow: View {
 
             if expanded {
                 VStack(alignment: .leading, spacing: 8) {
+                    ForEach(contexts) { item in
+                        ConversationContextDisclosure(item: item)
+                    }
                     if !reasoningText.isEmpty {
                         ConversationReasoningDisclosure(text: reasoningText)
                     }
@@ -906,6 +1296,9 @@ private struct ConversationProcessRow: View {
     }
 
     private var processTitle: String {
+        if group.contextCount > 0, group.toolCount == 0, reasoningText.isEmpty {
+            return group.contextCount == 1 ? "上下文" : "\(group.contextCount) 项上下文"
+        }
         let duration = group.duration
         let base: String
         if duration >= 60 {
@@ -915,13 +1308,32 @@ private struct ConversationProcessRow: View {
         } else {
             base = "思考过程"
         }
-        return group.toolCount > 0 ? "\(base) · \(group.toolCount) 次工具调用" : base
+        var details: [String] = []
+        if group.contextCount > 0 { details.append("\(group.contextCount) 项上下文") }
+        if group.toolCount > 0 { details.append("\(group.toolCount) 次工具调用") }
+        return details.isEmpty ? base : "\(base) · \(details.joined(separator: " · "))"
+    }
+}
+
+private struct ConversationContextDisclosure: View {
+    let item: ConversationItem
+    @State private var expanded = false
+
+    var body: some View {
+        CompactEventDisclosure(
+            expanded: $expanded,
+            title: item.title,
+            text: item.text,
+            icon: "doc.text",
+            tint: .green
+        )
     }
 }
 
 private struct ConversationReasoningDisclosure: View {
     let text: String
     @State private var expanded = false
+    @Environment(\.conversationDisclosureWillToggle) private var disclosureWillToggle
 
     private var preview: String {
         text.replacingOccurrences(of: "\n", with: " ")
@@ -935,7 +1347,7 @@ private struct ConversationReasoningDisclosure: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Button { toggleWithoutAnimation($expanded) } label: {
+            Button { toggleWithoutAnimation($expanded, before: disclosureWillToggle) } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
                         .foregroundStyle(DSHColor.purple)
@@ -986,10 +1398,11 @@ private struct ConversationReasoningDisclosure: View {
 private struct ConversationToolBundle: View {
     let tools: [ConversationProcessTool]
     @State private var expanded = false
+    @Environment(\.conversationDisclosureWillToggle) private var disclosureWillToggle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Button { toggleWithoutAnimation($expanded) } label: {
+            Button { toggleWithoutAnimation($expanded, before: disclosureWillToggle) } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "wrench.and.screwdriver")
                         .foregroundStyle(DSHColor.orange)
@@ -1028,10 +1441,11 @@ private struct ConversationToolBundle: View {
 private struct ConversationProcessToolRow: View {
     let tool: ConversationProcessTool
     @State private var expanded = false
+    @Environment(\.conversationDisclosureWillToggle) private var disclosureWillToggle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Button { toggleWithoutAnimation($expanded) } label: {
+            Button { toggleWithoutAnimation($expanded, before: disclosureWillToggle) } label: {
                 HStack(spacing: 7) {
                     Image(systemName: tool.result?.isError == true ? "exclamationmark.triangle" : "terminal")
                         .foregroundStyle(tool.result?.isError == true ? .red : DSHColor.orange)
@@ -1098,7 +1512,19 @@ private struct ToolArgumentsView: View {
     }
 }
 
-private func toggleWithoutAnimation(_ value: Binding<Bool>) {
+private struct ConversationDisclosureWillToggleKey: EnvironmentKey {
+    static let defaultValue: () -> Void = {}
+}
+
+private extension EnvironmentValues {
+    var conversationDisclosureWillToggle: () -> Void {
+        get { self[ConversationDisclosureWillToggleKey.self] }
+        set { self[ConversationDisclosureWillToggleKey.self] = newValue }
+    }
+}
+
+private func toggleWithoutAnimation(_ value: Binding<Bool>, before: () -> Void = {}) {
+    before()
     var transaction = Transaction()
     transaction.disablesAnimations = true
     withTransaction(transaction) { value.wrappedValue.toggle() }
@@ -1106,15 +1532,28 @@ private func toggleWithoutAnimation(_ value: Binding<Bool>) {
 
 private struct ConversationRow: View {
     let item: ConversationItem
+    let showsCopyButton: Bool
     @State private var expanded = false
 
     var body: some View {
         switch item.kind {
         case .user:
-            Text(item.text)
-                .font(.body).padding(.horizontal, 14).padding(.vertical, 10)
-                .background(DSHColor.ocean.opacity(0.11), in: RoundedRectangle(cornerRadius: 15))
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 5) {
+                Text(item.text)
+                    .font(.body).padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(DSHColor.ocean.opacity(0.11), in: RoundedRectangle(cornerRadius: 15))
+                if showsCopyButton { CopyMessageButton(text: item.text) }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.vertical, 12)
+        case .context:
+            CompactEventDisclosure(
+                expanded: $expanded,
+                title: item.title,
+                text: item.text,
+                icon: "doc.text",
+                tint: .green
+            )
         case .assistant:
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 9) {
@@ -1127,10 +1566,11 @@ private struct ConversationRow: View {
                 .padding(.vertical, 5)
                 MarkdownContent(item.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if showsCopyButton { CopyMessageButton(text: item.text) }
             }
             .padding(.vertical, 3)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 9)
+            .padding(.vertical, 12)
         case .reasoning:
             CompactEventDisclosure(
                 expanded: $expanded,
@@ -1174,6 +1614,40 @@ private struct ConversationRow: View {
     }
 }
 
+private struct CopyMessageButton: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            UIPasteboard.general.string = text
+            copied = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.4))
+                copied = false
+            }
+        } label: {
+            Group {
+                if copied {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .semibold))
+                } else {
+                    Image("CopyMessage")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 16, height: 16)
+                }
+            }
+                .foregroundStyle(copied ? DSHColor.ocean : Color.secondary)
+                .frame(width: 30, height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(copied ? "已复制" : "复制正文")
+    }
+}
+
 private struct CompactEventDisclosure: View {
     @Binding var expanded: Bool
     let title: String
@@ -1182,6 +1656,7 @@ private struct CompactEventDisclosure: View {
     let tint: Color
     var rendersJSON = false
     var rendersOutput = false
+    @Environment(\.conversationDisclosureWillToggle) private var disclosureWillToggle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1190,9 +1665,7 @@ private struct CompactEventDisclosure: View {
                 // Large tool payloads can therefore temporarily overlap the
                 // following message. Toggle without a transition so SwiftUI
                 // measures the expanded payload before drawing sibling rows.
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) { expanded.toggle() }
+                toggleWithoutAnimation($expanded, before: disclosureWillToggle)
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: icon).foregroundStyle(tint).frame(width: 18)
