@@ -258,14 +258,14 @@ final class GatewayClient: ObservableObject {
             detail = "鉴权失败（HTTP 401）：设备 token 无效、已被吊销，或配对码已过期/使用过，请重新扫码配对。"
             shouldReconnect = false
         case (503, _):
-            detail = "移动网关未开启（HTTP 503）。请先在 DeepSeek Harness WebUI 中开启移动网关。"
-            shouldReconnect = false
+            detail = "移动网关暂未开启（HTTP 503）。已保留设备凭据，开启网关后会自动重连。"
+            shouldReconnect = true
         case (_, 4003):
             detail = "服务端已重新开启设备鉴权（WebSocket 4003），请使用已保存的设备凭据重连或重新扫码。"
             shouldReconnect = false
         case (_, 4004):
-            detail = "移动网关已关闭（WebSocket 4004）。请在 WebUI 中重新开启后再连接。"
-            shouldReconnect = false
+            detail = "移动网关已关闭（WebSocket 4004）。已保留设备凭据，重新开启后会自动重连。"
+            shouldReconnect = true
         default:
             let reasonSuffix = closeReason.flatMap { $0.isEmpty ? nil : "；服务端原因：\($0)" } ?? ""
             detail = "WebSocket 连接失败：\(nsError.localizedDescription)（\(nsError.domain) \(nsError.code)）\(reasonSuffix)"
