@@ -12,10 +12,11 @@ struct ConversationView: View {
     @State private var showsSessionStats = false
     @State private var showsSessionStatsPopover = false
     @State private var isPinnedToBottom = true
-    @State private var composerHeight: CGFloat = 124
+    @State private var composerHeight: CGFloat = 168
     @State private var viewportScrollToBottomToken = 0
     @State private var isPreparingHistoryPresentation = false
     @State private var historyPresentationSessionID: String?
+    @State private var bottomSafeAreaInset: CGFloat = 0
     @FocusState private var composerIsFocused: Bool
     private let conversationBottomClearance: CGFloat = 22
 
@@ -46,7 +47,15 @@ struct ConversationView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.container, edges: .bottom)
+        .background {
+            WindowBottomSafeAreaReader(bottomInset: $bottomSafeAreaInset)
+        }
         .foregroundStyle(.primary)
+        .onChange(of: activeView) { _, view in
+            if view != 0 { composerIsFocused = false }
+        }
         .sheet(isPresented: $showsSessionStats) {
             SessionStatsSheet(
                 snapshot: store.selectedSessionStatsSnapshot,
@@ -159,29 +168,35 @@ struct ConversationView: View {
                 .padding(.bottom, composerHeight)
             }
 
-            VStack(alignment: .leading, spacing: 0) {
-                if let snapshot = store.selectedSessionStatsSnapshot {
-                    sessionStatsBanner(snapshot)
-                }
-                composer
-            }
-            .background {
-                GeometryReader { composerGeometry in
-                    Color.clear.preference(
-                        key: ComposerHeightPreferenceKey.self,
-                        value: composerGeometry.size.height
-                    )
-                }
-            }
+            composerBackdrop
+                .frame(height: composerHeight + 28)
+                .allowsHitTesting(false)
 
-            if shouldShowScrollToBottom {
-                scrollToBottomButton {
-                    viewportScrollToBottomToken &+= 1
+            VStack(spacing: 0) {
+                if shouldShowScrollToBottom {
+                    scrollToBottomButton {
+                        viewportScrollToBottomToken &+= 1
+                    }
+                    .padding(.bottom, 8)
+                    .transition(.scale(scale: 0.85).combined(with: .opacity))
                 }
-                .padding(.bottom, composerHeight + 8)
-                .transition(.scale(scale: 0.85).combined(with: .opacity))
-                .zIndex(2)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    if let snapshot = store.selectedSessionStatsSnapshot {
+                        sessionStatsBanner(snapshot)
+                    }
+                    composer
+                }
+                .background {
+                    GeometryReader { composerGeometry in
+                        Color.clear.preference(
+                            key: ComposerHeightPreferenceKey.self,
+                            value: composerGeometry.size.height
+                        )
+                    }
+                }
             }
+            .zIndex(2)
         }
         .animation(.easeOut(duration: 0.16), value: shouldShowScrollToBottom)
         .onPreferenceChange(ComposerHeightPreferenceKey.self) { height in
@@ -404,7 +419,43 @@ struct ConversationView: View {
                 .stroke(glassEdge, lineWidth: 0.7)
         }
         .shadow(color: glassShadow, radius: 18, y: 8)
-        .padding(.horizontal, 14).padding(.bottom, 10)
+        .padding(.horizontal, 14)
+        .padding(.bottom, composerBottomPadding)
+    }
+
+    private var composerBottomPadding: CGFloat {
+        // Keep the overlay's measured height stable across focus changes.
+        // SwiftUI already avoids the keyboard because only the container safe
+        // area is ignored; this inset preserves a comfortable visual gap both
+        // above the Home Indicator and above the keyboard.
+        bottomSafeAreaInset + 10
+    }
+
+    private var composerBackdrop: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+            LinearGradient(
+                colors: [
+                    conversationBackground.opacity(0.02),
+                    conversationBackground.opacity(0.78),
+                    conversationBackground
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .mask {
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black.opacity(0.58), location: 0.34),
+                    .init(color: .black, location: 0.68)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
     }
 
     private func sessionStatsBanner(_ snapshot: GatewaySessionStatsSnapshot) -> some View {
@@ -907,10 +958,55 @@ private enum SessionPageDragAxis {
 }
 
 private struct ComposerHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 124
+    static var defaultValue: CGFloat = 168
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+/// Reads the physical window inset even when the SwiftUI conversation surface
+/// deliberately draws through the container safe area. This keeps glass and
+/// shadows continuous while the interactive composer still avoids the Home
+/// Indicator on every device shape.
+private struct WindowBottomSafeAreaReader: UIViewRepresentable {
+    @Binding var bottomInset: CGFloat
+
+    func makeUIView(context: Context) -> SafeAreaReportingView {
+        let view = SafeAreaReportingView()
+        view.onBottomInsetChange = publish
+        return view
+    }
+
+    func updateUIView(_ view: SafeAreaReportingView, context: Context) {
+        view.onBottomInsetChange = publish
+        view.publishBottomInset()
+    }
+
+    private func publish(_ inset: CGFloat) {
+        guard abs(bottomInset - inset) > 0.5 else { return }
+        DispatchQueue.main.async {
+            bottomInset = inset
+        }
+    }
+
+    final class SafeAreaReportingView: UIView {
+        var onBottomInsetChange: ((CGFloat) -> Void)?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            publishBottomInset()
+        }
+
+        override func safeAreaInsetsDidChange() {
+            super.safeAreaInsetsDidChange()
+            publishBottomInset()
+        }
+
+        func publishBottomInset() {
+            let inset = window?.safeAreaInsets.bottom ?? safeAreaInsets.bottom
+            onBottomInsetChange?(inset)
+        }
     }
 }
 
@@ -1970,6 +2066,15 @@ private extension Theme {
                 .background(Color(uiColor: .secondarySystemFill))
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .markdownMargin(top: 2, bottom: compact ? 6 : 10)
+            }
+            .thematicBreak {
+                Rectangle()
+                    .fill(Color(uiColor: .separator).opacity(0.55))
+                    .frame(height: 0.5)
+                    .markdownMargin(
+                        top: compact ? 10 : 18,
+                        bottom: compact ? 10 : 18
+                    )
             }
     }
 }

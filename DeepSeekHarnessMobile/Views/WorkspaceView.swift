@@ -39,6 +39,7 @@ struct WorkspaceView: View {
                 .scrollTargetLayout()
                 .padding(.horizontal, 22).padding(.top, 18)
             }
+            .scrollIndicators(.hidden)
             .defaultScrollAnchor(.top)
             .scrollPosition(id: $store.workspaceScrollAnchor, anchor: .top)
         }

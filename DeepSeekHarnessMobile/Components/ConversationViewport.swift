@@ -184,6 +184,14 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         collectionView.backgroundColor = .clear
         collectionView.delegate = self
         collectionView.contentInsetAdjustmentBehavior = .never
+        let dismissKeyboardTap = UITapGestureRecognizer(
+            target: self,
+            action: #selector(dismissKeyboardFromConversation)
+        )
+        // Dismissing focus must not consume the original tap: links, copy
+        // buttons and expandable process rows still receive their action.
+        dismissKeyboardTap.cancelsTouchesInView = false
+        collectionView.addGestureRecognizer(dismissKeyboardTap)
         collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "ConversationCell")
         collectionView.register(
             StreamingAssistantCell.self,
@@ -217,6 +225,10 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             }.margins(.all, 0)
             return cell
         }
+    }
+
+    @objc private func dismissKeyboardFromConversation() {
+        view.window?.endEditing(true)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -417,8 +429,12 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        let atBottom = scrollView.contentOffset.y + scrollView.bounds.height + scrollView.adjustedContentInset.bottom >= scrollView.contentSize.height - 28
-        setPinned((scrollView.isTracking || scrollView.isDragging) ? false : atBottom)
+        // A drag is not the same thing as leaving the tail. In particular,
+        // dragging upward again while already at the bottom only produces the
+        // rubber-band overscroll (`contentOffset.y > maximumOffsetY`). Keep the
+        // viewport pinned through that bounce and reveal the jump button only
+        // after the user has actually moved away from the tail.
+        setPinned(isAtBottom(scrollView))
         if !isProgrammaticScroll,
            (scrollView.isDragging || scrollView.isDecelerating),
            scrollView.contentOffset.y + scrollView.adjustedContentInset.top < 420 {
@@ -431,7 +447,6 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         needsBottomAlignment = false
         bottomAlignmentGeneration &+= 1
         userInteractionGeneration &+= 1
-        setPinned(false)
     }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
@@ -444,11 +459,18 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     }
 
     private func updatePinnedState(for scrollView: UIScrollView) {
-        let atBottom = scrollView.contentOffset.y
-            + scrollView.bounds.height
-            + scrollView.adjustedContentInset.bottom
-            >= scrollView.contentSize.height - 28
-        setPinned(atBottom)
+        setPinned(isAtBottom(scrollView))
+    }
+
+    private func isAtBottom(_ scrollView: UIScrollView) -> Bool {
+        let minimumOffsetY = -scrollView.adjustedContentInset.top
+        let maximumOffsetY = max(
+            minimumOffsetY,
+            scrollView.contentSize.height
+                - scrollView.bounds.height
+                + scrollView.adjustedContentInset.bottom
+        )
+        return maximumOffsetY - scrollView.contentOffset.y <= 28
     }
 
     private struct VisibleAnchor {

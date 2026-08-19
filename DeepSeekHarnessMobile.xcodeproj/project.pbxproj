@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 46;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -11,18 +11,17 @@
 		48857E4314868A4DD9F695EA /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BE407E6C6512836EB108990D /* Foundation.framework */; };
 		5ED39F22065A71FC54D755AC /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61A1F439244BA594BF547C92 /* AppStore.swift */; };
 		605DCE79952E970820A95606 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEABECFD00017A6E10B1F4A2 /* ConversationView.swift */; };
-		A0C0FFEE0000000000000001 /* ConversationViewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000002 /* ConversationViewport.swift */; };
-		A0C0FFEE0000000000000003 /* ConversationProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000004 /* ConversationProjection.swift */; };
-		B0C0FFEE0000000000000001 /* HarnessAnimatedBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C0FFEE0000000000000002 /* HarnessAnimatedBackground.swift */; };
-		B0C0FFEE0000000000000003 /* HarnessBackground.metal in Sources */ = {isa = PBXBuildFile; fileRef = B0C0FFEE0000000000000004 /* HarnessBackground.metal */; };
 		6FED6D958ABD07A258CC53F0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 152A3874C0D169644C9C7B6D /* Assets.xcassets */; };
+		A1A0C0000000000000000001 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A1A0C0000000000000000002 /* LaunchScreen.storyboard */; };
 		7B8DAA4E77DE3665B7E1C087 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98111628697EC1C4FF9878B /* SettingsView.swift */; };
 		80E777AC0855635BC3D12EA7 /* GatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61E231D0CD3E07857F861B0 /* GatewayClient.swift */; };
 		8891D9FBE23CCC096061416E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A37B43613D712F252BA91D7 /* RootView.swift */; };
 		991D4FD90B81F84A0B8B79AD /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12863E736F832D8F502B94A0 /* Theme.swift */; };
+		A0C0FFEE0000000000000001 /* ConversationViewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000002 /* ConversationViewport.swift */; };
+		A0C0FFEE0000000000000003 /* ConversationProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000004 /* ConversationProjection.swift */; };
 		AFAE90EEB4462AD84169D356 /* GatewayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */; };
-		A0C0FFEE0000000000000002 /* ConversationViewport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationViewport.swift; sourceTree = "<group>"; };
-		A0C0FFEE0000000000000004 /* ConversationProjection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationProjection.swift; sourceTree = "<group>"; };
+		B0C0FFEE0000000000000001 /* HarnessAnimatedBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C0FFEE0000000000000002 /* HarnessAnimatedBackground.swift */; };
+		B0C0FFEE0000000000000003 /* HarnessBackground.metal in Sources */ = {isa = PBXBuildFile; fileRef = B0C0FFEE0000000000000004 /* HarnessBackground.metal */; };
 		C5F737EBF5077A9BF35E9F64 /* TrajectoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65009160A0642089906B54DF /* TrajectoryView.swift */; };
 		D3A40BFC0B9C8D4B1C8FAA95 /* DeepSeekHarnessMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 430CA64DF207C7EF58574336 /* DeepSeekHarnessMobileApp.swift */; };
 		E20191A4C7B1C0A8FF57CAC1 /* Glass.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF581253EBCFEB43865AB51 /* Glass.swift */; };
@@ -48,14 +47,17 @@
 		38457CD5C46830D1CA7E6D73 /* DeepSeekHarnessMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeepSeekHarnessMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		430CA64DF207C7EF58574336 /* DeepSeekHarnessMobileApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeepSeekHarnessMobileApp.swift; sourceTree = "<group>"; };
 		59B069578BB7F31AD35F601A /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1A0C0000000000000000002 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		5A37B43613D712F252BA91D7 /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		61A1F439244BA594BF547C92 /* AppStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		65009160A0642089906B54DF /* TrajectoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrajectoryView.swift; sourceTree = "<group>"; };
 		954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayModels.swift; sourceTree = "<group>"; };
-		B64F29E9B8346B9A678CA487 /* DeepSeekHarnessMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeepSeekHarnessMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		BE407E6C6512836EB108990D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		A0C0FFEE0000000000000002 /* ConversationViewport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationViewport.swift; sourceTree = "<group>"; };
+		A0C0FFEE0000000000000004 /* ConversationProjection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationProjection.swift; sourceTree = "<group>"; };
 		B0C0FFEE0000000000000002 /* HarnessAnimatedBackground.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HarnessAnimatedBackground.swift; sourceTree = "<group>"; };
 		B0C0FFEE0000000000000004 /* HarnessBackground.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; path = HarnessBackground.metal; sourceTree = "<group>"; };
+		B64F29E9B8346B9A678CA487 /* DeepSeekHarnessMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeepSeekHarnessMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BE407E6C6512836EB108990D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		D610757C1FF81FD953A9D000 /* WorkspaceView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
 		D98111628697EC1C4FF9878B /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E61E231D0CD3E07857F861B0 /* GatewayClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayClient.swift; sourceTree = "<group>"; };
@@ -93,7 +95,6 @@
 				954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */,
 				12863E736F832D8F502B94A0 /* Theme.swift */,
 			);
-			name = Core;
 			path = Core;
 			sourceTree = "<group>";
 		};
@@ -102,7 +103,6 @@
 			children = (
 				0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */,
 			);
-			name = DeepSeekHarnessMobileTests;
 			path = DeepSeekHarnessMobileTests;
 			sourceTree = "<group>";
 		};
@@ -124,7 +124,6 @@
 				C0FFC63B1CD5F1F40418350B /* Views */,
 				7CECE0900CF815A6EB3A938D /* Resources */,
 			);
-			name = DeepSeekHarnessMobile;
 			path = DeepSeekHarnessMobile;
 			sourceTree = "<group>";
 		};
@@ -143,7 +142,6 @@
 			children = (
 				430CA64DF207C7EF58574336 /* DeepSeekHarnessMobileApp.swift */,
 			);
-			name = App;
 			path = App;
 			sourceTree = "<group>";
 		};
@@ -151,10 +149,18 @@
 			isa = PBXGroup;
 			children = (
 				59B069578BB7F31AD35F601A /* Info.plist */,
+				A1A0C0000000000000000002 /* LaunchScreen.storyboard */,
 				152A3874C0D169644C9C7B6D /* Assets.xcassets */,
 			);
-			name = Resources;
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		B0C0FFEE0000000000000005 /* Shaders */ = {
+			isa = PBXGroup;
+			children = (
+				B0C0FFEE0000000000000004 /* HarnessBackground.metal */,
+			);
+			path = Shaders;
 			sourceTree = "<group>";
 		};
 		BB3B325B846637A6ED66C228 /* Components */ = {
@@ -164,17 +170,7 @@
 				A0C0FFEE0000000000000002 /* ConversationViewport.swift */,
 				B0C0FFEE0000000000000002 /* HarnessAnimatedBackground.swift */,
 			);
-			name = Components;
 			path = Components;
-			sourceTree = "<group>";
-		};
-		B0C0FFEE0000000000000005 /* Shaders */ = {
-			isa = PBXGroup;
-			children = (
-				B0C0FFEE0000000000000004 /* HarnessBackground.metal */,
-			);
-			name = Shaders;
-			path = Shaders;
 			sourceTree = "<group>";
 		};
 		C0FFC63B1CD5F1F40418350B /* Views */ = {
@@ -186,7 +182,6 @@
 				65009160A0642089906B54DF /* TrajectoryView.swift */,
 				D610757C1FF81FD953A9D000 /* WorkspaceView.swift */,
 			);
-			name = Views;
 			path = Views;
 			sourceTree = "<group>";
 		};
@@ -266,11 +261,9 @@
 				Base,
 			);
 			mainGroup = 40772A4CC858771C52FF6406;
-			minimizedProjectReferenceProxies = 0;
 			packageReferences = (
-				A5BC89015C15661603FC0C4B /* XCLocalSwiftPackageReference "swift-markdown-ui" */,
+				A5BC89015C15661603FC0C4B /* XCLocalSwiftPackageReference "Vendor/swift-markdown-ui" */,
 			);
-			preferredProjectObjectVersion = 77;
 			productRefGroup = D7854C843240E809A949A26E /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -286,6 +279,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1A0C0000000000000000001 /* LaunchScreen.storyboard in Resources */,
 				6FED6D958ABD07A258CC53F0 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -363,10 +357,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = SHVN6YQNQF;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DeepSeekHarnessMobile/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = ai.deepseek.harness.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
@@ -511,10 +509,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = SHVN6YQNQF;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DeepSeekHarnessMobile/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = ai.deepseek.harness.mobile;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
@@ -556,7 +558,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		A5BC89015C15661603FC0C4B /* XCLocalSwiftPackageReference "swift-markdown-ui" */ = {
+		A5BC89015C15661603FC0C4B /* XCLocalSwiftPackageReference "Vendor/swift-markdown-ui" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "Vendor/swift-markdown-ui";
 		};
@@ -565,7 +567,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		4CE3D78565179C422C796509 /* MarkdownUI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A5BC89015C15661603FC0C4B /* XCLocalSwiftPackageReference "swift-markdown-ui" */;
+			package = A5BC89015C15661603FC0C4B /* XCLocalSwiftPackageReference "Vendor/swift-markdown-ui" */;
 			productName = MarkdownUI;
 		};
 /* End XCSwiftPackageProductDependency section */
