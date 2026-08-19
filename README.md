@@ -11,8 +11,6 @@
 ![WebSocket](https://img.shields.io/badge/WebSocket-Realtime-2563EB)
 ![Appearance](https://img.shields.io/badge/Appearance-Light%20%2F%20Dark-6B7280)
 
-<img src="Design/deepseek-harness-ios-ui.png" alt="DeepSeek Harness Mobile 界面总览" width="100%">
-
 </div>
 
 ## 项目简介
@@ -119,10 +117,6 @@ DeepSeek Harness Mobile 是一个面向 DeepSeek Harness 的原生 iOS 客户端
 ### 配对与可信设备
 
 移动端可扫描 WebUI 生成的一次性二维码完成配对。公网地址必须使用 `wss://`，配对码仅可使用一次并会在短时间后过期；已配对设备可在网关管理界面中查看和管理。
-
-<p align="center">
-  <img src="Docs/images/gateway-trusted-devices.png" alt="可信设备管理" width="680">
-</p>
 
 ## 技术实现
 
