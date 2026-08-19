@@ -89,6 +89,11 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private var needsInitialBottomPlacement = false
     private var needsBottomAlignment = false
     private var bottomAlignmentGeneration = 0
+    /// Advanced only by an actual user drag. Layout invalidation can briefly
+    /// move the collection view away from its old bottom while a new user or
+    /// reasoning row is inserted; that transient offset must not cancel the
+    /// tail-follow intent captured before the insertion began.
+    private var userInteractionGeneration = 0
     private var lastAppliedRevision = -1
     private weak var timeline: ConversationTimeline?
     private var timelineObserverID: UUID?
@@ -249,6 +254,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         }
         let configuredChanged = changed.filter { !streamingChanged.contains($0) }
         let keepTail = isPinnedToBottom && revision != lastAppliedRevision
+        let interactionGeneration = userInteractionGeneration
         lastAppliedRevision = revision
         previousRevisions = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.revision) })
         updateVisibleStreamingCells(streamingChanged)
@@ -258,7 +264,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         // height is invalidated. Completed rows are untouched.
         if !hasStructureChange, configuredChanged.isEmpty {
             if keepTail,
-               isPinnedToBottom,
+               userInteractionGeneration == interactionGeneration,
                !collectionView.isTracking,
                !collectionView.isDragging,
                !collectionView.isDecelerating {
@@ -285,7 +291,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             if self.needsInitialBottomPlacement {
                 self.placeInitialPositionIfNeeded()
             } else if keepTail,
-                      self.isPinnedToBottom,
+                      self.userInteractionGeneration == interactionGeneration,
                       !self.collectionView.isTracking,
                       !self.collectionView.isDragging,
                       !self.collectionView.isDecelerating {
@@ -331,6 +337,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         isProgrammaticScroll = true
         collectionView.setContentOffset(CGPoint(x: 0, y: bottomOffset), animated: false)
         isProgrammaticScroll = false
+        setPinned(true)
     }
 
     func scrollToBottom() {
@@ -423,6 +430,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         // User interaction wins immediately over automatic tail following.
         needsBottomAlignment = false
         bottomAlignmentGeneration &+= 1
+        userInteractionGeneration &+= 1
         setPinned(false)
     }
 

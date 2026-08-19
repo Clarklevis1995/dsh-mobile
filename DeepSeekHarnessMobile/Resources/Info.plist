@@ -12,6 +12,7 @@
   <key>LSRequiresIPhoneOS</key><true/>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
   <key>NSLocalNetworkUsageDescription</key><string>连接局域网中的 DeepSeek Harness Mobile Gateway。</string>
+  <key>NSCameraUsageDescription</key><string>扫描 DeepSeek Harness WebUI 生成的设备配对二维码。</string>
   <key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
   <key>UILaunchScreen</key><dict><key>UIColorName</key><string>AccentColor</string></dict>
   <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>

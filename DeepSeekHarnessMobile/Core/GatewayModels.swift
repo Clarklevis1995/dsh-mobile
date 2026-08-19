@@ -60,6 +60,9 @@ enum JSONValue: Codable, Hashable, Sendable {
 struct GatewayFrame: Codable, Sendable {
     var kind: String
     var `protocol`: Int?
+    var authenticated: Bool?
+    var token: String?
+    var device: GatewayDevice?
     var port: Int?
     var clients: Int?
     var at: Double?
@@ -116,6 +119,22 @@ struct GatewayFrame: Codable, Sendable {
     var target: String?
     var value: String?
     var applied: Bool?
+}
+
+struct GatewayDevice: Codable, Hashable, Sendable {
+    var id: String
+    var name: String?
+    var createdAt: Double?
+}
+
+struct GatewayPairingPayload: Codable, Hashable, Sendable {
+    var version: Int
+    var publicUrl: String
+    var pairingCode: String
+    var expiresAt: Double
+
+    var endpoint: URL? { URL(string: publicUrl) }
+    var expirationDate: Date { Date(timeIntervalSince1970: expiresAt / 1_000) }
 }
 
 /// The gateway's v0.1.6 live-event broadcaster currently omits `kind: "event"`

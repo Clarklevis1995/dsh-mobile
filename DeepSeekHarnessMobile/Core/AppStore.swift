@@ -94,6 +94,7 @@ final class AppStore: ObservableObject {
     private var pendingPermissionOptionsSessionId: String?
     private var sessionControlRequestTokens: [String: UUID] = [:]
     private var defaultConfigurationRequestTokens: [String: UUID] = [:]
+    private var presentsNextConnectionFailureAsAlert = true
     private static let permissionPresets: Set<String> = ["read-only", "workspace-write", "danger-full-access"]
     private static let defaultPermissionPresets: Set<String> = ["ask", "read-only", "workspace-write", "danger-full-access"]
     private static let historyPageByteBudget = 4 * 1024 * 1024
@@ -113,6 +114,9 @@ final class AppStore: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "gateway.conversationScrollAnchors")
         UserDefaults.standard.removeObject(forKey: "gateway.manuallyPositionedSessionIds")
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
+        gateway.onConnectionFailure = { [weak self] detail in
+            self?.handleConnectionFailure(detail)
+        }
     }
 
     var selectedEvents: [SessionEvent] {
@@ -163,7 +167,62 @@ final class AppStore: ObservableObject {
         return sessions.filter { !groupedSessionIds.contains($0.id) }
     }
 
-    func connect() { gateway.connect(to: endpoint) }
+    func connect() {
+        resetOutstandingRequests()
+        presentsNextConnectionFailureAsAlert = true
+        lastError = nil
+        gateway.connect(to: endpoint)
+    }
+
+    func pair(usingQRCode rawValue: String, presentsFailureAlert: Bool = true) throws {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = Self.decodeStrictBase64URL(trimmed) else {
+            throw PairingPayloadError.invalidBase64URL
+        }
+        let payload: GatewayPairingPayload
+        do {
+            payload = try JSONDecoder().decode(GatewayPairingPayload.self, from: data)
+        } catch {
+            throw PairingPayloadError.invalidJSON
+        }
+        guard payload.version == 2 else {
+            throw PairingPayloadError.unsupportedVersion(payload.version)
+        }
+        guard let url = payload.endpoint,
+              ["ws", "wss"].contains(url.scheme?.lowercased() ?? ""),
+              url.host != nil else {
+            throw PairingPayloadError.invalidEndpoint
+        }
+        guard !payload.pairingCode.isEmpty,
+              !payload.pairingCode.contains(","),
+              payload.pairingCode.unicodeScalars.allSatisfy({
+                  !CharacterSet.whitespacesAndNewlines.contains($0) &&
+                  !CharacterSet.controlCharacters.contains($0)
+              }) else {
+            throw PairingPayloadError.invalidCode
+        }
+        guard payload.expirationDate > .now else {
+            throw PairingPayloadError.expired
+        }
+        resetOutstandingRequests()
+        presentsNextConnectionFailureAsAlert = presentsFailureAlert
+        lastError = nil
+        endpoint = payload.publicUrl
+        gateway.connectForPairing(payload)
+    }
+
+    private static func decodeStrictBase64URL(_ value: String) -> Data? {
+        guard !value.isEmpty,
+              !value.contains("="),
+              value.unicodeScalars.allSatisfy({ scalar in
+                  CharacterSet.alphanumerics.contains(scalar) || scalar == "-" || scalar == "_"
+              }),
+              value.count % 4 != 1 else { return nil }
+        var base64 = value.replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
+        return Data(base64Encoded: base64, options: [])
+    }
     func refreshRemoteState() {
         guard gateway.state.isConnected else { return }
         isRefreshing = true
@@ -386,9 +445,14 @@ final class AppStore: ObservableObject {
 
     private func handle(_ frame: GatewayFrame) {
         switch frame.kind {
+        case "paired":
+            notice("设备配对成功", frame.device?.name ?? "长期凭据已安全保存到 Keychain")
         case "hello":
-            notice("网关已连接", "Mobile protocol v\(frame.protocol ?? 1) · \(frame.clients ?? 1) 个客户端")
+            presentsNextConnectionFailureAsAlert = true
+            let authentication = frame.authenticated == false ? "Debug 未鉴权" : "设备鉴权成功"
+            notice("网关已连接", "\(authentication) · Mobile protocol v\(frame.protocol ?? 1) · \(frame.clients ?? 1) 个客户端")
             refreshRemoteState()
+            refreshDefaultConfiguration()
             if let selectedSessionId { refreshSessionControls(for: selectedSessionId) }
         case "pong":
             notice("心跳正常", frame.at.map { Date(timeIntervalSince1970: $0 / 1000).formatted(date: .omitted, time: .standard) } ?? "pong")
@@ -906,6 +970,27 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func handleConnectionFailure(_ detail: String) {
+        // A transport/authentication failure invalidates every outstanding
+        // business request. Cancel their timeout tokens first so an unrelated
+        // "agent-presets 请求超时" cannot replace the real WebSocket cause.
+        resetOutstandingRequests()
+        if presentsNextConnectionFailureAsAlert {
+            lastError = detail
+        }
+        presentsNextConnectionFailureAsAlert = true
+    }
+
+    private func resetOutstandingRequests() {
+        for kind in Array(sessionControlLoadingKinds) { finishSessionControlRequest(kind) }
+        for kind in Array(defaultConfigurationLoadingKinds) { finishDefaultConfigurationRequest(kind) }
+        for id in Array(historyLoadingSessionIds) { finishHistoryLoading(id) }
+        directoryIsLoading = false
+        workspaceCreationIsLoading = false
+        isRefreshing = false
+        waitingForNewSession = false
+    }
+
     private func finishSessionControlRequest(_ kind: String) {
         sessionControlRequestTokens[kind] = nil
         sessionControlLoadingKinds.remove(kind)
@@ -978,5 +1063,31 @@ final class AppStore: ObservableObject {
     }
     private func persistSessions() {
         if let data = try? JSONEncoder().encode(sessions) { UserDefaults.standard.set(data, forKey: "gateway.sessions") }
+    }
+}
+
+private enum PairingPayloadError: LocalizedError {
+    case invalidBase64URL
+    case invalidJSON
+    case unsupportedVersion(Int)
+    case invalidEndpoint
+    case invalidCode
+    case expired
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidBase64URL:
+            "配对内容不是有效的 Base64URL 字符串。"
+        case .invalidJSON:
+            "Base64URL 解码后的内容不是有效的 DeepSeek Harness 配对 JSON。"
+        case .unsupportedVersion(let version):
+            "不支持的配对协议版本 \(version)，当前客户端需要 version 2。"
+        case .invalidEndpoint:
+            "二维码中的 publicUrl 不是有效的 WebSocket 地址。"
+        case .invalidCode:
+            "二维码中的一次性 pairingCode 无效。"
+        case .expired:
+            "二维码配对码已经过期，请在 WebUI 中重新生成。"
+        }
     }
 }

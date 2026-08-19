@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 struct WorkspaceView: View {
     @EnvironmentObject private var store: AppStore
@@ -7,6 +8,8 @@ struct WorkspaceView: View {
     let onSettings: () -> Void
     @State private var searchQuery = ""
     @State private var showsDirectoryBrowser = false
+    @State private var showsQRScanner = false
+    @State private var showsManualPairing = false
 
     var body: some View {
         ZStack {
@@ -48,34 +51,70 @@ struct WorkspaceView: View {
             DirectoryBrowserSheet()
                 .environmentObject(store)
         }
+        .fullScreenCover(isPresented: $showsQRScanner) {
+            GatewayQRScannerView(
+                onCode: handleScannedCode,
+                onCancel: { showsQRScanner = false },
+                onFailure: { message in
+                    showsQRScanner = false
+                    store.lastError = message
+                }
+            )
+        }
+        .sheet(isPresented: $showsManualPairing) {
+            ManualGatewayPairingSheet(gateway: store.gateway)
+                .environmentObject(store)
+        }
     }
 
     private var header: some View {
         HStack {
             HarnessMark()
             Spacer()
+            authenticationMenu
             settingsButton
         }
     }
 
     @ViewBuilder
+    private var authenticationMenu: some View {
+        GatewayAuthenticationMenu(
+            gateway: store.gateway,
+            onScan: {
+                store.lastError = nil
+                showsQRScanner = true
+            },
+            onManualEntry: {
+                store.lastError = nil
+                showsManualPairing = true
+            }
+        )
+    }
+
+    @ViewBuilder
     private var settingsButton: some View {
+        headerButton(systemName: "gearshape.fill", accessibilityLabel: "设置", action: onSettings)
+    }
+
+    @ViewBuilder
+    private func headerButton(systemName: String, accessibilityLabel: String, action: @escaping () -> Void) -> some View {
+        let label = headerButtonLabel(systemName: systemName)
         if #available(iOS 26.0, *) {
-            Button(action: onSettings) { settingsButtonLabel }
+            Button(action: action) { label }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
-                .accessibilityLabel("设置")
+                .accessibilityLabel(accessibilityLabel)
         } else {
-            Button(action: onSettings) { settingsButtonLabel }
+            Button(action: action) { label }
                 .buttonStyle(.plain)
                 .background(.ultraThinMaterial, in: Circle())
                 .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 0.8))
-                .accessibilityLabel("设置")
+                .accessibilityLabel(accessibilityLabel)
         }
     }
 
-    private var settingsButtonLabel: some View {
-        Image(systemName: "gearshape.fill")
+    private func headerButtonLabel(systemName: String) -> some View {
+        Image(systemName: systemName)
             .font(.system(size: 17, weight: .semibold))
             .frame(width: 40, height: 40)
             .contentShape(Circle())
@@ -129,7 +168,7 @@ struct WorkspaceView: View {
                 Text(workspaceDisplayPath).font(.caption).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
             }
             Spacer()
-            ConnectionDot(state: store.gateway.state)
+            GatewayConnectionIndicator(gateway: store.gateway)
             Image(systemName: "chevron.down").font(.caption).foregroundStyle(.white.opacity(0.55))
         }
         .padding(16)
@@ -142,6 +181,17 @@ struct WorkspaceView: View {
         HStack {
             Text("最近会话").font(.headline)
             Spacer()
+            GatewayConnectionStatusText(gateway: store.gateway)
+        }
+    }
+
+    private func handleScannedCode(_ rawValue: String) {
+        do {
+            try store.pair(usingQRCode: rawValue)
+            showsQRScanner = false
+        } catch {
+            showsQRScanner = false
+            store.lastError = error.localizedDescription
         }
     }
 
@@ -388,5 +438,442 @@ private struct DirectoryBrowserSheet: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 9)
         .background(.ultraThinMaterial)
+    }
+}
+
+private struct GatewayConnectionIndicator: View {
+    @ObservedObject var gateway: GatewayClient
+
+    var body: some View {
+        ConnectionDot(state: gateway.state)
+    }
+}
+
+private struct GatewayAuthenticationMenu: View {
+    @ObservedObject var gateway: GatewayClient
+    let onScan: () -> Void
+    let onManualEntry: () -> Void
+
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            menu
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .background(surfaceTint, in: Circle())
+                .animation(.easeInOut(duration: 0.22), value: gateway.state)
+        } else {
+            menu
+                .buttonStyle(.plain)
+                .background(surfaceTint, in: Circle())
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().stroke(borderTint, lineWidth: 0.8))
+                .animation(.easeInOut(duration: 0.22), value: gateway.state)
+        }
+    }
+
+    private var menu: some View {
+        Menu {
+            Button(action: onScan) {
+                Label("扫描二维码", systemImage: "qrcode.viewfinder")
+            }
+            Button(action: onManualEntry) {
+                Label("手动输入配对信息", systemImage: "keyboard")
+            }
+        } label: {
+            Image(systemName: "person.badge.key.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 40, height: 40)
+                .contentShape(Circle())
+        }
+        .accessibilityLabel("设备认证，\(gateway.state.label)")
+    }
+
+    private var surfaceTint: Color {
+        switch gateway.state {
+        case .connected: DSHColor.success.opacity(0.3)
+        case .connecting: DSHColor.amber.opacity(0.22)
+        case .failed: Color.red.opacity(0.24)
+        case .disconnected: Color.white.opacity(0.025)
+        }
+    }
+
+    private var borderTint: Color {
+        switch gateway.state {
+        case .connected: DSHColor.success.opacity(0.45)
+        case .connecting: DSHColor.amber.opacity(0.38)
+        case .failed: Color.red.opacity(0.42)
+        case .disconnected: Color.white.opacity(0.25)
+        }
+    }
+}
+
+private struct GatewayConnectionStatusText: View {
+    @ObservedObject var gateway: GatewayClient
+
+    var body: some View {
+        Text(gateway.state.label)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(color)
+            .animation(.easeInOut(duration: 0.18), value: gateway.state)
+    }
+
+    private var color: Color {
+        switch gateway.state {
+        case .connected: DSHColor.success
+        case .connecting: DSHColor.amber
+        case .failed: .red.opacity(0.9)
+        case .disconnected: .white.opacity(0.5)
+        }
+    }
+}
+
+private struct ManualGatewayPairingSheet: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var gateway: GatewayClient
+
+    @State private var pairingText = ""
+    @State private var validationError: String?
+    @State private var didAttemptConnection = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("手动输入配对信息")
+                            .font(.title2.bold())
+                        Text("粘贴 Harness WebUI 提供的 Base64URL 配对字符串。长期设备 token 仍只会保存到 Keychain。")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ZStack(alignment: .topLeading) {
+                        if pairingText.isEmpty {
+                            Text(Self.placeholder)
+                                .font(.system(.footnote, design: .monospaced))
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 18)
+                                .allowsHitTesting(false)
+                        }
+                        TextEditor(text: $pairingText)
+                            .font(.system(.footnote, design: .monospaced))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .scrollContentBackground(.hidden)
+                            .padding(10)
+                    }
+                    .frame(minHeight: 210)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(.primary.opacity(0.1), lineWidth: 0.8)
+                    }
+
+                    connectionResult
+
+                    Button(action: connect) {
+                        HStack(spacing: 9) {
+                            if case .connecting = gateway.state {
+                                ProgressView().tint(.white)
+                            } else {
+                                Image(systemName: "link")
+                            }
+                            Text(gateway.state.isConnected ? "重新配对并连接" : "连接")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .foregroundStyle(.white)
+                        .background(DSHColor.ocean, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(pairingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || gateway.state == .connecting)
+                    .opacity(pairingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+                }
+                .padding(22)
+            }
+            .background(Color(uiColor: .systemGroupedBackground))
+            .navigationTitle("设备认证")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationBackground(.regularMaterial)
+    }
+
+    @ViewBuilder
+    private var connectionResult: some View {
+        if let validationError {
+            resultCard(
+                title: "配对信息无效",
+                detail: validationError,
+                color: .red,
+                symbol: "exclamationmark.triangle.fill"
+            )
+        } else if didAttemptConnection {
+            switch gateway.state {
+            case .connecting:
+                resultCard(
+                    title: "正在连接",
+                    detail: "正在提交一次性配对码并等待 Mobile Gateway 完成设备鉴权…",
+                    color: DSHColor.amber,
+                    symbol: "arrow.triangle.2.circlepath"
+                )
+            case .connected:
+                resultCard(
+                    title: "连接成功",
+                    detail: "设备鉴权已完成，长期 token 已安全保存到 Keychain。",
+                    color: DSHColor.success,
+                    symbol: "checkmark.circle.fill"
+                )
+            case .failed(let reason):
+                resultCard(
+                    title: "连接失败",
+                    detail: reason,
+                    color: .red,
+                    symbol: "xmark.octagon.fill"
+                )
+            case .disconnected:
+                resultCard(
+                    title: "未连接",
+                    detail: "请检查配对信息后重新连接。",
+                    color: .secondary,
+                    symbol: "network.slash"
+                )
+            }
+        } else {
+            resultCard(
+                title: gateway.state.label,
+                detail: "输入 Base64URL 配对字符串后点击连接，结果会显示在这里。",
+                color: .secondary,
+                symbol: "person.badge.key.fill"
+            )
+        }
+    }
+
+    private func resultCard(title: String, detail: String, color: Color, symbol: String) -> some View {
+        HStack(alignment: .top, spacing: 13) {
+            Image(systemName: symbol)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(color)
+                .frame(width: 26)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.headline)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(color.opacity(0.18), lineWidth: 0.8)
+        }
+    }
+
+    private func connect() {
+        validationError = nil
+        didAttemptConnection = true
+        do {
+            try store.pair(usingQRCode: pairingText, presentsFailureAlert: false)
+        } catch {
+            validationError = error.localizedDescription
+        }
+    }
+
+    private static let placeholder = "eyJ2ZXJzaW9uIjoyLCJwdWJsaWNVcmwiOiJ3c3M6Ly9nYXRld2F5LmV4YW1wbGUuY29tL3dzL21vYmlsZSIsLi4ufQ"
+}
+
+private struct GatewayQRScannerView: View {
+    let onCode: (String) -> Void
+    let onCancel: () -> Void
+    let onFailure: (String) -> Void
+
+    var body: some View {
+        ZStack {
+            GatewayCameraPreview(onCode: onCode, onFailure: onFailure)
+                .ignoresSafeArea()
+
+            LinearGradient(
+                colors: [.black.opacity(0.58), .clear, .black.opacity(0.72)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+
+            VStack(spacing: 0) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("扫描设备配对码")
+                            .font(.title2.bold())
+                        Text("请扫描 Harness WebUI 生成的二维码")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.72))
+                    }
+                    Spacer()
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .accessibilityLabel("取消扫描")
+                }
+                .padding(.horizontal, 22)
+                .padding(.top, 18)
+
+                Spacer()
+
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(.white, lineWidth: 3)
+                    .frame(width: 272, height: 272)
+                    .overlay(alignment: .bottom) {
+                        Text("将二维码完整放入框内")
+                            .font(.subheadline.weight(.medium))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 9)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .offset(y: 58)
+                    }
+
+                Spacer()
+            }
+            .foregroundStyle(.white)
+        }
+    }
+}
+
+private struct GatewayCameraPreview: UIViewControllerRepresentable {
+    let onCode: (String) -> Void
+    let onFailure: (String) -> Void
+
+    func makeUIViewController(context: Context) -> GatewayScannerController {
+        let controller = GatewayScannerController()
+        controller.onCode = onCode
+        controller.onFailure = onFailure
+        controller.start()
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: GatewayScannerController, context: Context) {}
+
+    static func dismantleUIViewController(_ uiViewController: GatewayScannerController, coordinator: Void) {
+        uiViewController.stop()
+    }
+}
+
+private final class GatewayScannerController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
+    var onCode: ((String) -> Void)?
+    var onFailure: ((String) -> Void)?
+
+    private let captureSession = AVCaptureSession()
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+    private var didFinish = false
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.bounds
+    }
+
+    func start() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            configureAndRun()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if granted {
+                        self.configureAndRun()
+                    } else {
+                        self.finish(with: "未获得相机权限。请在系统设置中允许 DeepSeek Harness 使用相机后重试。")
+                    }
+                }
+            }
+        case .denied, .restricted:
+            finish(with: "相机权限不可用。请在系统设置中允许 DeepSeek Harness 使用相机后重试。")
+        @unknown default:
+            finish(with: "无法确定当前相机权限状态。")
+        }
+    }
+
+    func stop() {
+        guard captureSession.isRunning else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [captureSession] in
+            captureSession.stopRunning()
+        }
+    }
+
+    private func configureAndRun() {
+        guard !captureSession.isRunning, captureSession.inputs.isEmpty else { return }
+        guard let camera = AVCaptureDevice.default(for: .video) else {
+            finish(with: "此设备没有可用的相机。")
+            return
+        }
+        do {
+            let input = try AVCaptureDeviceInput(device: camera)
+            guard captureSession.canAddInput(input) else {
+                finish(with: "无法把相机接入扫码会话。")
+                return
+            }
+            captureSession.addInput(input)
+
+            let output = AVCaptureMetadataOutput()
+            guard captureSession.canAddOutput(output) else {
+                finish(with: "当前设备不支持二维码识别。")
+                return
+            }
+            captureSession.addOutput(output)
+            output.setMetadataObjectsDelegate(self, queue: .main)
+            guard output.availableMetadataObjectTypes.contains(.qr) else {
+                finish(with: "当前相机不支持二维码元数据识别。")
+                return
+            }
+            output.metadataObjectTypes = [.qr]
+
+            let preview = AVCaptureVideoPreviewLayer(session: captureSession)
+            preview.videoGravity = .resizeAspectFill
+            preview.frame = view.bounds
+            view.layer.insertSublayer(preview, at: 0)
+            previewLayer = preview
+
+            DispatchQueue.global(qos: .userInitiated).async { [captureSession] in
+                captureSession.startRunning()
+            }
+        } catch {
+            finish(with: "相机启动失败：\(error.localizedDescription)")
+        }
+    }
+
+    func metadataOutput(
+        _ output: AVCaptureMetadataOutput,
+        didOutput metadataObjects: [AVMetadataObject],
+        from connection: AVCaptureConnection
+    ) {
+        guard !didFinish,
+              let code = metadataObjects.compactMap({ ($0 as? AVMetadataMachineReadableCodeObject)?.stringValue }).first else { return }
+        didFinish = true
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        stop()
+        onCode?(code)
+    }
+
+    private func finish(with message: String) {
+        guard !didFinish else { return }
+        didFinish = true
+        stop()
+        onFailure?(message)
     }
 }

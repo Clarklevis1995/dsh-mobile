@@ -378,6 +378,11 @@ struct ConversationView: View {
                     let content = draft
                     draft = ""
                     store.send(content)
+                    // Sending establishes a new tail-following intent before
+                    // the gateway echoes the user event. The subsequent user
+                    // bubble and first reasoning block can therefore grow
+                    // above the composer without ever being hidden behind it.
+                    viewportScrollToBottomToken &+= 1
                 } label: {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 17, weight: .bold))
