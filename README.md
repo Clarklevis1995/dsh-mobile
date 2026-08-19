@@ -19,6 +19,12 @@ DeepSeek Harness Mobile 是一个面向 DeepSeek Harness 的原生 iOS 客户端
 
 界面提供浅色与深色模式，并在支持的系统上使用 Liquid Glass 导航与交互控件；深色首页则以深海蓝、水波纹、网格和点阵鲸鱼构成与 Harness 官网一致的视觉氛围。
 
+## 项目海报
+
+<p align="center">
+  <img src="Design/deepseek-harness-xiaohongshu-poster.png" alt="DeepSeek Harness Mobile 项目海报" width="620">
+</p>
+
 ## 功能亮点
 
 - **原生实时对话**：接收 WebSocket 增量事件，逐步展示正文、思考过程、工具调用和工具结果。
