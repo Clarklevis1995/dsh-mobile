@@ -40,7 +40,8 @@ struct ConversationView: View {
                 } trajectory: {
                     TrajectoryView(
                         sessionId: store.selectedSessionId,
-                        events: store.selectedEvents
+                        events: store.selectedEvents,
+                        isActive: activeView == 1
                     )
                 }
             }
@@ -117,9 +118,12 @@ struct ConversationView: View {
         ZStack(alignment: .bottom) {
             ConversationViewport(
                 sessionID: store.selectedSessionId,
-                entries: viewportEntries,
+                timeline: store.conversationTimeline(for: store.selectedSessionId ?? "__empty__"),
+                supplementalEntries: supplementalViewportEntries,
+                makeEntries: { items in
+                    makeConversationViewportEntries(from: items)
+                },
                 bottomInset: composerHeight + conversationBottomClearance,
-                revision: store.conversationRevision(for: store.selectedSessionId ?? ""),
                 scrollToBottomToken: viewportScrollToBottomToken,
                 onPinnedToBottomChanged: { pinned in
                     isPinnedToBottom = pinned
@@ -721,12 +725,15 @@ struct ConversationView: View {
         store.selectedConversationItems
     }
 
-    private var displayEntries: [ConversationDisplayEntry] {
-        ConversationDisplayEntry.make(from: conversationItems)
-    }
-
-    private var viewportEntries: [ConversationViewportEntry] {
-        let revision = store.conversationRevision(for: store.selectedSessionId ?? "")
+    private var supplementalViewportEntries: [ConversationViewportEntry] {
+        var hasher = Hasher()
+        hasher.combine(isLoadingSelectedHistory)
+        if let sessionID = store.selectedSessionId {
+            hasher.combine(store.historyHasMore[sessionID])
+            hasher.combine(store.historyLoadProgress[sessionID]?.loaded)
+            hasher.combine(store.historyLoadProgress[sessionID]?.total)
+        }
+        let revision = hasher.finalize()
         var entries: [ConversationViewportEntry] = []
         if !conversationItems.isEmpty, isLoadingSelectedHistory {
             entries.append(.init(id: "history-loading", revision: revision, content: AnyView(historyLoadingBanner)))
@@ -744,7 +751,20 @@ struct ConversationView: View {
                 )
             ))
         }
-        entries += displayEntries.map { entry in
+        return entries
+    }
+
+    private func makeConversationViewportEntries(from items: [ConversationItem]) -> [ConversationViewportEntry] {
+        ConversationDisplayEntry.make(from: items).map { entry in
+            if case .message(let item) = entry.content,
+               item.kind == .assistant,
+               item.title.contains("正在生成") {
+                return ConversationViewportEntry(
+                    id: entry.id,
+                    revision: viewportEntryRevision(entry),
+                    streamingAssistant: .init(title: item.title, text: item.text)
+                )
+            }
             let content: AnyView
             switch entry.content {
             case .message(let item):
@@ -758,7 +778,6 @@ struct ConversationView: View {
                 content: content
             )
         }
-        return entries
     }
 
     private func viewportEntryRevision(_ entry: ConversationDisplayEntry) -> Int {

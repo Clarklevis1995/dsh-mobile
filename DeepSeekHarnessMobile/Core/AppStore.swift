@@ -23,14 +23,15 @@ final class AppStore: ObservableObject {
         didSet { UserDefaults.standard.set(selectedWorkspaceId, forKey: "gateway.selectedWorkspaceId") }
     }
     @Published var archivedSessionIds: Set<String> = []
-    @Published var events: [String: [SessionEvent]] = [:]
-    @Published var renderedConversationItems: [String: [ConversationItem]] = [:]
-    /// Bumped every time `renderedConversationItems[sessionId]` changes, even
-    /// when the item *count* doesn't (e.g. a streaming bubble's text grows).
-    /// Views use this as a cheap `Equatable` signal to drive auto-scroll,
-    /// since diffing `[ConversationItem]` itself would be as expensive as
-    /// the projection it's meant to be a lightweight proxy for.
-    @Published private(set) var conversationRevisions: [String: Int] = [:]
+    /// Raw protocol storage. UI updates are driven by the throttled compact
+    /// conversation projection instead of invalidating every view for every
+    /// token frame.
+    var events: [String: [SessionEvent]] = [:]
+    /// Compact presentation snapshots are intentionally not published through
+    /// AppStore. Token deltas go straight to a session-scoped timeline so they
+    /// cannot invalidate the header, pager, composer, or trajectory page.
+    private(set) var renderedConversationItems: [String: [ConversationItem]] = [:]
+    @Published private(set) var conversationContentSessionIds: Set<String> = []
     @Published var historyHasMore: [String: Bool] = [:]
     @Published var historyLoadingSessionIds: Set<String> = []
     @Published var historyLoadingOlderSessionIds: Set<String> = []
@@ -77,7 +78,11 @@ final class AppStore: ObservableObject {
     /// This intentionally remains an in-memory cache: events are not persisted
     /// across launches, so a fresh process must fetch history again.
     private var historySyncedActivityDates: [String: Date] = [:]
-    private var conversationProjectionTasks: [String: Task<Void, Never>] = [:]
+    private var conversationProjectionDrivers: [String: ConversationProjectionDriver] = [:]
+    private var conversationTimelines: [String: ConversationTimeline] = [:]
+    /// Invalidates an in-flight cold projection when a completed history
+    /// baseline is atomically installed for the same session.
+    private var conversationProjectionEpochs: [String: Int] = [:]
     /// Incremental per-session projector state. Kept alive across live
     /// updates so most projection ticks only fold the handful of events that
     /// arrived since the previous tick, instead of replaying the whole
@@ -126,7 +131,15 @@ final class AppStore: ObservableObject {
     var selectedPermissions: GatewaySessionPermissions? { selectedSessionId.flatMap { sessionPermissions[$0] } }
     var selectedContextSnapshot: GatewayContextSnapshot? { selectedSessionId.flatMap { contextSnapshots[$0] } }
     var selectedSessionStatsSnapshot: GatewaySessionStatsSnapshot? { selectedSessionId.flatMap { sessionStatsSnapshots[$0] } }
-    func conversationRevision(for sessionId: String) -> Int { conversationRevisions[sessionId] ?? 0 }
+    func conversationTimeline(for sessionId: String) -> ConversationTimeline {
+        if let timeline = conversationTimelines[sessionId] { return timeline }
+        let timeline = ConversationTimeline()
+        conversationTimelines[sessionId] = timeline
+        if let items = renderedConversationItems[sessionId], !items.isEmpty {
+            timeline.publish(items)
+        }
+        return timeline
+    }
     var activeWorkspace: GatewayWorkspace? {
         guard !isUngroupedWorkspaceSelected else { return nil }
         if let selectedWorkspaceId,
@@ -252,14 +265,8 @@ final class AppStore: ObservableObject {
             historyHasMore[sessionId] = false
             historyNextBeforeSeq[sessionId] = nil
         }
-        // A history (re)load can prepend or rewrite events with seq values
-        // the incremental projector has already folded in; invalidate it so
-        // the next projection tick does a clean, complete rebuild instead of
-        // risking a stale or duplicated timeline.
-        conversationProjectors[sessionId] = nil
-        // Keep any in-memory projection visible while the gateway refreshes.
-        // The response is merged by sequence and replaces this cache only after
-        // a usable projected batch is ready.
+        // Keep the installed projector alive. History is built as a separate
+        // baseline and atomically rebased under the still-advancing live tail.
         let before = older
             ? historyNextBeforeSeq[sessionId] ?? events[sessionId]?.map(\.seq).min()
             : nil
@@ -287,8 +294,19 @@ final class AppStore: ObservableObject {
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(20))
             guard let self, self.historyRequestTokens[sessionId] == token else { return }
+            let hasUsableLocalContent = !self.events[sessionId, default: []].isEmpty
+                || !self.renderedConversationItems[sessionId, default: []].isEmpty
             self.finishHistoryLoading(sessionId)
-            self.lastError = "历史记录加载超时，请重试"
+            self.scheduleConversationProjection(for: sessionId)
+            if hasUsableLocalContent {
+                self.notice(
+                    "历史记录刷新超时",
+                    "已保留本地内容并继续接收实时事件",
+                    sessionId: sessionId
+                )
+            } else {
+                self.lastError = "历史记录加载超时，请重试"
+            }
         }
     }
     func resumeWorkspace() {
@@ -392,7 +410,7 @@ final class AppStore: ObservableObject {
             applyRemoteSessions(decodeItems(frame.items, as: GatewaySessionSummary.self))
             isRefreshing = false
             notice("会话列表已同步", "\(sessions.count) 个会话")
-        case "history": applyHistoryProgressively(frame)
+        case "history": applyHistoryRebased(frame)
         case "search":
             searchResults = decodeItems(frame.items, as: GatewaySearchItem.self)
             notice("搜索完成", "\(searchResults.count) 条结果\(frame.hasMore == true ? "，还有更多" : "")")
@@ -559,8 +577,12 @@ final class AppStore: ObservableObject {
         guard let id = frame.sessionId, let seq = frame.seq, let time = frame.time, let event = frame.event else { return }
         merge(SessionEvent(sessionId: id, seq: seq, time: time, event: event))
     }
-    private func applyHistoryProgressively(_ frame: GatewayFrame) {
+    private func applyHistoryRebased(_ frame: GatewayFrame) {
         guard let id = frame.sessionId ?? pendingHistorySessionId ?? selectedSessionId else { return }
+        // A timed-out request may still produce a late response. It must not
+        // overwrite newer live content after the app has already fallen back
+        // to subscription-driven incremental rendering.
+        guard historyLoadingSessionIds.contains(id), historyRequestTokens[id] != nil else { return }
         applyHistoryProjections(frame.projections, sessionId: id)
         let rawEvents = frame.events ?? []
         let pageEventOffset = historyLoadedEventCounts[id, default: 0]
@@ -578,80 +600,46 @@ final class AppStore: ObservableObject {
             }.value
             guard let self, self.historyRequestTokens[id] == processingToken else { return }
 
-            let existing = self.events[id, default: []]
-            let projectionSource = await Task.detached(priority: .userInitiated) {
-                var records = Dictionary(uniqueKeysWithValues: existing.map { ($0.seq, $0) })
-                for record in normalized { records[record.seq] = record }
-                return records.values.sorted { $0.seq < $1.seq }
-            }.value
-            let projectedItems = await Task.detached(priority: .userInitiated) {
-                ConversationItem.make(from: projectionSource)
-            }.value
-            guard self.historyRequestTokens[id] == processingToken else { return }
-
-            // Show the newest messages immediately. Older rows are prepended in
-            // small batches so Markdown layout never monopolizes the main thread.
-            // If a cached projection exists, keep it untouched until the complete
-            // replacement is ready. Replacing a measured LazyVStack piecemeal can
-            // leave SwiftUI holding an offset outside the new content bounds.
-            let currentRenderedCount = self.renderedConversationItems[id, default: []].count
-            let publishesProgressively = currentRenderedCount == 0
-            var visibleItemStart = max(0, projectedItems.count - max(12, currentRenderedCount))
-            if projectedItems.isEmpty && publishesProgressively {
-                self.publishConversationItems([], for: id)
-            } else if publishesProgressively {
-                self.publishConversationItems(Array(projectedItems[visibleItemStart..<projectedItems.count]), for: id)
-            }
-
-            var recordsBySequence = Dictionary(uniqueKeysWithValues: existing.map { ($0.seq, $0) })
-            let batchSize = 800
-            var loaded = 0
-            while loaded < normalized.count {
+            // Build history beside the installed live projector. If a rare
+            // out-of-order live event lands below the candidate watermark while
+            // this background work runs, rebuild against the newer snapshot.
+            // Normal strictly ascending chunks take the fast path: they are
+            // folded into the candidate once, immediately before commit.
+            var sourceEpoch = self.conversationProjectionEpochs[id, default: 0]
+            var sourceEvents = self.events[id, default: []]
+            while true {
+                let rebaseSource = sourceEvents
+                var rebase = await Task.detached(priority: .userInitiated) {
+                    ConversationHistoryRebase.build(history: normalized, current: rebaseSource)
+                }.value
                 guard self.historyRequestTokens[id] == processingToken else { return }
-                let end = min(loaded + batchSize, normalized.count)
-                let batch = Array(normalized[loaded..<end])
-                loaded = end
-                // Preserve live events that may arrive while history is being
-                // normalized and progressively published.
-                let liveSnapshot = self.events[id, default: []]
-                let recordsSnapshot = recordsBySequence
-                recordsBySequence = await Task.detached(priority: .userInitiated) {
-                    var records = recordsSnapshot
-                    for record in batch { records[record.seq] = record }
-                    for record in liveSnapshot { records[record.seq] = record }
-                    return records
-                }.value
-                let recordsToSort = recordsBySequence
-                let sortedRecords = await Task.detached(priority: .userInitiated) {
-                    recordsToSort.values.sorted { $0.seq < $1.seq }
-                }.value
-                self.events[id] = sortedRecords
-                self.historyLoadProgress[id] = HistoryLoadProgress(
-                    loaded: pageEventOffset + loaded,
-                    total: frame.hasMore == true ? nil : pageEventOffset + normalized.count
-                )
 
-                if publishesProgressively && visibleItemStart > 0 {
-                    visibleItemStart = max(0, visibleItemStart - 24)
-                    self.publishConversationItems(Array(projectedItems[visibleItemStart..<projectedItems.count]), for: id)
+                // Only duplicate/out-of-order live mutations advance this
+                // epoch. Normal chunks append concurrently without invalidating
+                // the history build and are picked up below by binary-searching
+                // the candidate watermark.
+                if self.conversationProjectionEpochs[id, default: 0] != sourceEpoch {
+                    sourceEpoch = self.conversationProjectionEpochs[id, default: 0]
+                    sourceEvents = self.events[id, default: []]
+                    continue
                 }
-                // Give SwiftUI a rendering opportunity between history batches.
-                try? await Task.sleep(for: .milliseconds(10))
+
+                rebase.appendLiveTail(from: self.events[id, default: []])
+
+                // The commit is one main-actor transaction. Invalidate any
+                // cold projection that started from the pre-history snapshot,
+                // then publish the rebased baseline with the caught-up tail.
+                self.conversationProjectionEpochs[id, default: 0] &+= 1
+                self.events[id] = rebase.events
+                self.conversationProjectors[id] = rebase.projector
+                self.publishConversationItems(rebase.projector.items, for: id)
+                break
             }
 
-            while publishesProgressively && visibleItemStart > 0 {
-                guard self.historyRequestTokens[id] == processingToken else { return }
-                visibleItemStart = max(0, visibleItemStart - 24)
-                self.publishConversationItems(Array(projectedItems[visibleItemStart..<projectedItems.count]), for: id)
-                try? await Task.sleep(for: .milliseconds(10))
-            }
-
-            // Commit the complete projection before ending the loading phase.
-            // Yielding here lets LazyVStack measure the new Markdown rows while
-            // automatic live-message scrolling is still suppressed.
-            self.publishConversationItems(projectedItems, for: id)
-            await Task.yield()
-            try? await Task.sleep(for: .milliseconds(24))
+            self.historyLoadProgress[id] = HistoryLoadProgress(
+                loaded: pageEventOffset + normalized.count,
+                total: frame.hasMore == true ? nil : pageEventOffset + normalized.count
+            )
 
             self.historyLoadedEventCounts[id] = pageEventOffset + normalized.count
             self.historyLoadedByteCounts[id, default: 0] += frame.bytes ?? 0
@@ -677,7 +665,6 @@ final class AppStore: ObservableObject {
                     self.historyHasMore[id] = false
                     self.historyNextBeforeSeq[id] = nil
                     self.finishHistoryLoading(id)
-                    self.scheduleConversationProjection(for: id)
                     self.lastError = message
                     self.notice("历史记录分页失败", message, sessionId: id, isError: true)
                     return
@@ -688,7 +675,6 @@ final class AppStore: ObservableObject {
                     self.historyHasMore[id] = false
                     self.historyNextBeforeSeq[id] = nil
                     self.finishHistoryLoading(id)
-                    self.scheduleConversationProjection(for: id)
                     self.lastError = message
                     self.notice("历史记录分页失败", message, sessionId: id, isError: true)
                     return
@@ -710,7 +696,6 @@ final class AppStore: ObservableObject {
                 self.historySyncedActivityDates[id] = activity
             }
             self.finishHistoryLoading(id)
-            self.scheduleConversationProjection(for: id)
             let byteDetail = totalBytes > 0 ? " · \(ByteCountFormatter.string(fromByteCount: Int64(totalBytes), countStyle: .file))" : ""
             let moreDetail = self.historyHasMore[id] == true ? " · 向上滑动加载更早记录" : ""
             self.notice("历史记录已加载", "\(totalEvents) 个事件\(byteDetail)\(moreDetail)", sessionId: id)
@@ -764,6 +749,7 @@ final class AppStore: ObservableObject {
             // A duplicate or out-of-order frame may fall behind lastSeq and
             // therefore cannot be folded safely into the append-only cache.
             conversationProjectors[sessionId] = nil
+            conversationProjectionEpochs[sessionId, default: 0] &+= 1
         }
         applyEvent(record)
         // Once the cache has been fully established, subscribed live events are
@@ -774,25 +760,19 @@ final class AppStore: ObservableObject {
         }
         scheduleConversationProjection(for: sessionId)
     }
+
     private func scheduleConversationProjection(for sessionId: String) {
-        guard !historyLoadingSessionIds.contains(sessionId) else { return }
-        // Throttle, not debounce: while a token stream is actively arriving,
-        // new chunks can land well under 40ms apart. Cancelling and
-        // restarting the timer on every single delta (the old debounce
-        // behaviour) means the projection would never actually fire until
-        // the stream paused for 40ms straight — visually this looked like
-        // the whole assistant reply "popping in" only once the turn ended,
-        // instead of the WebUI's smooth per-token streaming. Instead, if a
-        // projection is already pending we simply let it run: it re-reads
-        // `events[sessionId]` at fire time, so it always reflects the latest
-        // state regardless of how many merges happened while it waited.
-        guard conversationProjectionTasks[sessionId] == nil else { return }
-        conversationProjectionTasks[sessionId] = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(40))
-            guard let self, !Task.isCancelled else { return }
-            await self.projectIncrementally(for: sessionId)
-            self.conversationProjectionTasks[sessionId] = nil
+        let driver: ConversationProjectionDriver
+        if let existing = conversationProjectionDrivers[sessionId] {
+            driver = existing
+        } else {
+            driver = ConversationProjectionDriver { [weak self] in
+                guard let self else { return }
+                await self.projectIncrementally(for: sessionId)
+            }
+            conversationProjectionDrivers[sessionId] = driver
         }
+        driver.invalidate()
     }
     /// Projects the compact conversation timeline for `sessionId`. Reuses
     /// the session's `ConversationProjector` across ticks: once it has been
@@ -803,6 +783,7 @@ final class AppStore: ObservableObject {
     /// and further behind the WebSocket as a session grows, which is what
     /// happened with the previous "rebuild everything every tick" approach.
     private func projectIncrementally(for sessionId: String) async {
+        let epoch = conversationProjectionEpochs[sessionId, default: 0]
         let all = events[sessionId, default: []]
         let projector = conversationProjectors[sessionId] ?? ConversationProjector()
         if projector.lastSeq < 0 {
@@ -810,7 +791,8 @@ final class AppStore: ObservableObject {
                 projector.rebuild(from: all)
                 return projector.items
             }.value
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled,
+                  conversationProjectionEpochs[sessionId, default: 0] == epoch else { return }
             conversationProjectors[sessionId] = projector
             publishConversationItems(items, for: sessionId)
             return
@@ -822,8 +804,14 @@ final class AppStore: ObservableObject {
         publishConversationItems(projector.items, for: sessionId)
     }
     private func publishConversationItems(_ items: [ConversationItem], for sessionId: String) {
+        let previouslyHadContent = conversationContentSessionIds.contains(sessionId)
         renderedConversationItems[sessionId] = items
-        conversationRevisions[sessionId, default: 0] += 1
+        conversationTimeline(for: sessionId).publish(items)
+        if items.isEmpty {
+            if previouslyHadContent { conversationContentSessionIds.remove(sessionId) }
+        } else if !previouslyHadContent {
+            conversationContentSessionIds.insert(sessionId)
+        }
     }
     private func applyRemoteSessions(_ remote: [GatewaySessionSummary]) {
         for item in remote where !archivedSessionIds.contains(item.sessionId) {
@@ -883,6 +871,16 @@ final class AppStore: ObservableObject {
         }
         let title: String? = event.type == "user/message" ? event.text.map { String($0.prefix(28)) } : (event.type == "session/title" ? event.text : nil)
         upsertSession(id: record.sessionId, title: title)
+        // Token, reasoning and tool deltas belong exclusively to the session
+        // timeline. Updating this @Published array for every packet used to
+        // invalidate the complete app hierarchy, re-sort the sidebar, encode
+        // it and write UserDefaults while the user was trying to scroll.
+        let updatesSessionMetadata = event.type == "user/message"
+            || event.type == "session/title"
+            || event.type == "turn/start"
+            || event.type == "turn/end"
+            || event.type == "assistant/message"
+        guard updatesSessionMetadata else { return }
         guard let index = sessions.firstIndex(where: { $0.id == record.sessionId }) else { return }
         sessions[index].lastActivity = record.date
         if event.type == "turn/start" { sessions[index].isRunning = true }

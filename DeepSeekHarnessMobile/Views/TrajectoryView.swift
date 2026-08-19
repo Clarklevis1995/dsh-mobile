@@ -3,6 +3,7 @@ import SwiftUI
 struct TrajectoryView: View {
     let sessionId: String?
     let events: [SessionEvent]
+    let isActive: Bool
     @Environment(\.colorScheme) private var colorScheme
     @State private var selected: TrajectoryNode?
     @State private var highlightedID: String?
@@ -57,7 +58,10 @@ struct TrajectoryView: View {
             }
         }
         .sheet(item: $selected) { EventDetailSheet(node: $0) }
-        .task(id: projectionVersion) { await projectTrajectory() }
+        .task(id: projectionVersion) {
+            guard isActive else { return }
+            await projectTrajectory()
+        }
     }
 
     private func overview(onSelect: @escaping (TrajectoryNode) -> Void) -> some View {
@@ -137,7 +141,8 @@ struct TrajectoryView: View {
         }
     }
     private var projectionVersion: String {
-        "\(sessionId ?? "none")-\(events.count)-\(events.last?.seq ?? -1)"
+        guard isActive else { return "inactive-\(sessionId ?? "none")" }
+        return "\(sessionId ?? "none")-\(events.count)-\(events.last?.seq ?? -1)"
     }
 
     @MainActor

@@ -37,6 +37,44 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(items.map(\.title), ["你", "Think", "DeepSeek", "Read"])
     }
 
+    func testHistoryRebaseKeepsLiveTailAndDeduplicatesOverlap() throws {
+        let history = [
+            SessionEvent(sessionId: "s1", seq: 1, time: 1, event: GatewayEvent(type: "user/message", text: "开始", source: "user")),
+            SessionEvent(sessionId: "s1", seq: 2, time: 2, event: GatewayEvent(type: "assistant/chunk", turn: 1, step: 1, text: "旧", chunkType: "text-delta"))
+        ]
+        let liveAtBuildStart = [
+            SessionEvent(sessionId: "s1", seq: 2, time: 2, event: GatewayEvent(type: "assistant/chunk", turn: 1, step: 1, text: "A", chunkType: "text-delta")),
+            SessionEvent(sessionId: "s1", seq: 3, time: 3, event: GatewayEvent(type: "assistant/chunk", turn: 1, step: 1, text: "B", chunkType: "text-delta"))
+        ]
+
+        var rebase = ConversationHistoryRebase.build(history: history, current: liveAtBuildStart)
+        XCTAssertEqual(rebase.events.map(\.seq), [1, 2, 3])
+        XCTAssertEqual(try XCTUnwrap(rebase.projector.items.last).text, "AB")
+
+        let liveAfterBuild = liveAtBuildStart + [
+            SessionEvent(sessionId: "s1", seq: 4, time: 4, event: GatewayEvent(type: "assistant/chunk", turn: 1, step: 1, text: "C", chunkType: "text-delta"))
+        ]
+        rebase.appendLiveTail(from: liveAfterBuild)
+
+        XCTAssertEqual(rebase.events.map(\.seq), [1, 2, 3, 4])
+        XCTAssertEqual(try XCTUnwrap(rebase.projector.items.last).text, "ABC")
+    }
+
+    func testHistoryRebaseLetsCompletedLiveMessageSupersedePartialHistory() throws {
+        let history = [
+            SessionEvent(sessionId: "s1", seq: 1, time: 1, event: GatewayEvent(type: "assistant/chunk", turn: 2, step: 1, text: "partial", chunkType: "text-delta"))
+        ]
+        let live = [
+            SessionEvent(sessionId: "s1", seq: 2, time: 2, event: GatewayEvent(type: "assistant/message", turn: 2, step: 1, text: "final"))
+        ]
+
+        let rebase = ConversationHistoryRebase.build(history: history, current: live)
+
+        XCTAssertEqual(rebase.projector.items.count, 1)
+        XCTAssertEqual(try XCTUnwrap(rebase.projector.items.first).title, "DeepSeek")
+        XCTAssertEqual(try XCTUnwrap(rebase.projector.items.first).text, "final")
+    }
+
     func testRunCodeUsesJSONToolRendering() {
         let payload: JSONValue = .string(#"{"language":"python","code":"print(1)"}"#)
         let record = SessionEvent(
