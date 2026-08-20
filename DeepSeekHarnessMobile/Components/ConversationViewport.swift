@@ -7,16 +7,25 @@ struct ConversationViewportEntry: Identifiable {
         let text: String
     }
 
+    struct UserMessage {
+        let text: String
+        let showsCopyButton: Bool
+    }
+
     let id: String
     let revision: Int
     let content: AnyView
     let streamingAssistant: StreamingAssistant?
+    let userMessage: UserMessage?
+    let allowsHeightCaching: Bool
 
-    init(id: String, revision: Int, content: AnyView) {
+    init(id: String, revision: Int, content: AnyView, allowsHeightCaching: Bool = true) {
         self.id = id
         self.revision = revision
         self.content = content
+        self.allowsHeightCaching = allowsHeightCaching
         streamingAssistant = nil
+        userMessage = nil
     }
 
     init(id: String, revision: Int, streamingAssistant: StreamingAssistant) {
@@ -24,11 +33,23 @@ struct ConversationViewportEntry: Identifiable {
         self.revision = revision
         content = AnyView(EmptyView())
         self.streamingAssistant = streamingAssistant
+        userMessage = nil
+        allowsHeightCaching = false
+    }
+
+    init(id: String, revision: Int, userMessage: UserMessage) {
+        self.id = id
+        self.revision = revision
+        content = AnyView(EmptyView())
+        streamingAssistant = nil
+        self.userMessage = userMessage
+        allowsHeightCaching = true
     }
 }
 
 /// UIKit-backed viewport for streaming conversation timelines.
 struct ConversationViewport: UIViewControllerRepresentable {
+    let proxy: ConversationViewportProxy
     let sessionID: String?
     let timeline: ConversationTimeline
     let supplementalEntries: [ConversationViewportEntry]
@@ -40,11 +61,13 @@ struct ConversationViewport: UIViewControllerRepresentable {
     let onApproachingTop: () -> Void
 
     func makeUIViewController(context: Context) -> ConversationViewportController {
-        ConversationViewportController(
+        let controller = ConversationViewportController(
             onPinnedToBottomChanged: onPinnedToBottomChanged,
             onBottomAlignmentCompleted: onBottomAlignmentCompleted,
             onApproachingTop: onApproachingTop
         )
+        proxy.controller = controller
+        return controller
     }
 
     func updateUIViewController(_ controller: ConversationViewportController, context: Context) {
@@ -66,12 +89,38 @@ struct ConversationViewport: UIViewControllerRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    static func dismantleUIViewController(
+        _ controller: ConversationViewportController,
+        coordinator: Coordinator
+    ) {
+        // Do not clear a proxy that has already been rebound to a replacement
+        // controller during a SwiftUI identity transition.
+        if controller === controller.proxyOwner?.controller {
+            controller.proxyOwner?.controller = nil
+        }
+    }
+
     final class Coordinator {
         var lastScrollToBottomToken = 0
     }
 }
 
+@MainActor
+final class ConversationViewportProxy {
+    weak var controller: ConversationViewportController? {
+        didSet {
+            oldValue?.proxyOwner = nil
+            controller?.proxyOwner = self
+        }
+    }
+
+    func prepareForOverlayPresentation() {
+        controller?.stopInertialScrolling()
+    }
+}
+
 final class ConversationViewportController: UIViewController, UICollectionViewDelegate {
+    weak var proxyOwner: ConversationViewportProxy?
     var onPinnedToBottomChanged: (Bool) -> Void
     var onBottomAlignmentCompleted: () -> Void
     var onApproachingTop: () -> Void
@@ -101,6 +150,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private var makeEntries: (([ConversationItem]) -> [ConversationViewportEntry])?
     private var bottomInset: CGFloat = 0
     private var pendingApply: (entries: [ConversationViewportEntry], revision: Int, bottomInset: CGFloat)?
+    private var cellHeightCache: [CellMeasurementKey: CGFloat] = [:]
 
     init(
         onPinnedToBottomChanged: @escaping (Bool) -> Void,
@@ -173,6 +223,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         previousRevisions = [:]
         lastAppliedRevision = -1
         pendingApply = nil
+        cellHeightCache.removeAll(keepingCapacity: true)
     }
 
     override func viewDidLoad() {
@@ -192,10 +243,17 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         // buttons and expandable process rows still receive their action.
         dismissKeyboardTap.cancelsTouchesInView = false
         collectionView.addGestureRecognizer(dismissKeyboardTap)
-        collectionView.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "ConversationCell")
+        collectionView.register(
+            StableSelfSizingCollectionViewCell.self,
+            forCellWithReuseIdentifier: "ConversationCell"
+        )
         collectionView.register(
             StreamingAssistantCell.self,
             forCellWithReuseIdentifier: StreamingAssistantCell.reuseIdentifier
+        )
+        collectionView.register(
+            UserMessageCell.self,
+            forCellWithReuseIdentifier: UserMessageCell.reuseIdentifier
         )
         view.addSubview(collectionView)
         collectionView.translatesAutoresizingMaskIntoConstraints = false
@@ -217,11 +275,58 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                 cell.apply(streamingAssistant)
                 return cell
             }
-            let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "ConversationCell", for: indexPath)
+            if let userMessage = entry.userMessage {
+                let cell = collectionView.dequeueReusableCell(
+                    withReuseIdentifier: UserMessageCell.reuseIdentifier,
+                    for: indexPath
+                ) as! UserMessageCell
+                cell.configureMeasurement(
+                    id: entry.id,
+                    revision: entry.revision,
+                    cachedHeight: { [weak self] width in
+                        self?.cellHeightCache[
+                            CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+                        ]
+                    },
+                    storeHeight: { [weak self] width, height in
+                        self?.cellHeightCache[
+                            CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+                        ] = height
+                    }
+                )
+                cell.apply(userMessage)
+                return cell
+            }
+            guard let cell = collectionView.dequeueReusableCell(
+                withReuseIdentifier: "ConversationCell",
+                for: indexPath
+            ) as? StableSelfSizingCollectionViewCell else {
+                return UICollectionViewCell()
+            }
+            if entry.allowsHeightCaching {
+                cell.configureMeasurement(
+                    id: entry.id,
+                    revision: entry.revision,
+                    cachedHeight: { [weak self] width in
+                        self?.cellHeightCache[
+                            CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+                        ]
+                    },
+                    storeHeight: { [weak self] width, height in
+                        self?.cellHeightCache[
+                            CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+                        ] = height
+                    }
+                )
+            } else {
+                cell.disableMeasurementCaching()
+            }
             cell.backgroundColor = .clear
             cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
             cell.contentConfiguration = UIHostingConfiguration {
-                entry.content.frame(maxWidth: .infinity, alignment: .leading)
+                entry.content
+                    .id(entry.id)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }.margins(.all, 0)
             return cell
         }
@@ -229,6 +334,21 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 
     @objc private func dismissKeyboardFromConversation() {
         view.window?.endEditing(true)
+    }
+
+    /// Presenting a popover while a self-sizing collection view is still
+    /// decelerating makes UIKit update the content offset and preferred cell
+    /// sizes in the same layout pass. Freeze the viewport at its current
+    /// visual position before presentation begins.
+    func stopInertialScrolling() {
+        needsBottomAlignment = false
+        bottomAlignmentGeneration &+= 1
+        guard collectionView.isDecelerating || collectionView.isDragging else { return }
+        isProgrammaticScroll = true
+        collectionView.setContentOffset(collectionView.contentOffset, animated: false)
+        collectionView.layer.removeAllAnimations()
+        isProgrammaticScroll = false
+        setPinned(isAtBottom(collectionView))
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -249,6 +369,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         let ids = entries.map(\.id)
         let prependAnchor = capturePrependAnchor(for: ids)
         entriesByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        prewarmUserMessageHeights(in: entries)
         let changed = entries.compactMap { previousRevisions[$0.id] == $0.revision ? nil : $0.id }
         let hasStructureChange = dataSource.snapshot().itemIdentifiers != ids
         guard hasStructureChange || !changed.isEmpty else { return }
@@ -333,6 +454,25 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         let context = UICollectionViewLayoutInvalidationContext()
         context.invalidateItems(at: invalidatedIndexPaths)
         collectionView.collectionViewLayout.invalidateLayout(with: context)
+    }
+
+    /// User rows are sparse, so their first appearance used to be the moment
+    /// the collection view discovered that the real bubble was much taller
+    /// than the section's 44pt estimate. Measure those inexpensive plain-text
+    /// rows before applying the snapshot; scrolling never has to perform the
+    /// correction and Auto Layout pass on the first visible frame.
+    private func prewarmUserMessageHeights(in entries: [ConversationViewportEntry]) {
+        let width = collectionView.bounds.width
+        guard width > 0 else { return }
+        for entry in entries {
+            guard let userMessage = entry.userMessage else { continue }
+            let key = CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+            guard cellHeightCache[key] == nil else { continue }
+            cellHeightCache[key] = UserMessageCell.estimatedHeight(
+                for: userMessage.text,
+                width: width
+            )
+        }
     }
 
     /// Streaming updates only need one lightweight tail adjustment. The
@@ -524,9 +664,16 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     }
 
     private static func makeLayout() -> UICollectionViewCompositionalLayout {
+        // `UserMessageCell` has a required 75pt minimum vertical chain:
+        // outer top + bubble padding + copy gap/button + outer bottom. Giving
+        // every item a 44pt provisional frame made UIKit lay that cell out in
+        // an impossible height before its cached/self-sized height was read,
+        // producing two constraint failures for every historical user row.
+        // This remains only an estimate; short hosted rows still self-size
+        // down and cached rows immediately replace it with their exact height.
         let itemSize = NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(1),
-            heightDimension: .estimated(44)
+            heightDimension: .estimated(80)
         )
         let item = NSCollectionLayoutItem(layoutSize: itemSize)
         let group = NSCollectionLayoutGroup.vertical(layoutSize: itemSize, subitems: [item])
@@ -536,11 +683,215 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     }
 }
 
+private struct CellMeasurementKey: Hashable {
+    let id: String
+    let revision: Int
+    let widthInPixels: Int
+
+    init(id: String, revision: Int, width: CGFloat) {
+        self.id = id
+        self.revision = revision
+        widthInPixels = Int((width * UIScreen.main.scale).rounded())
+    }
+}
+
+/// `UIHostingConfiguration` can report two adjacent fractional heights while
+/// the collection view is moving (for example 34⅓pt and 34⅔pt). A
+/// compositional layout treats each value as a new preferred size and can
+/// repeatedly invalidate the same cells until UIKit terminates the app for a
+/// recursive layout loop. Keep dynamic heights, but quantize the final result
+/// to whole points so repeated measurements are deterministic.
+private class StableSelfSizingCollectionViewCell: UICollectionViewCell {
+    private var measurementID: String?
+    private var cachedHeight: ((CGFloat) -> CGFloat?)?
+    private var storeHeight: ((CGFloat, CGFloat) -> Void)?
+
+    func configureMeasurement(
+        id: String,
+        revision: Int,
+        cachedHeight: @escaping (CGFloat) -> CGFloat?,
+        storeHeight: @escaping (CGFloat, CGFloat) -> Void
+    ) {
+        measurementID = "\(id)#\(revision)"
+        self.cachedHeight = cachedHeight
+        self.storeHeight = storeHeight
+    }
+
+    func disableMeasurementCaching() {
+        measurementID = nil
+        cachedHeight = nil
+        storeHeight = nil
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        disableMeasurementCaching()
+    }
+
+    override func preferredLayoutAttributesFitting(
+        _ layoutAttributes: UICollectionViewLayoutAttributes
+    ) -> UICollectionViewLayoutAttributes {
+        let width = layoutAttributes.size.width
+        if measurementID != nil,
+           let height = cachedHeight?(width),
+           let stable = layoutAttributes.copy() as? UICollectionViewLayoutAttributes {
+            stable.size.height = height
+            return stable
+        }
+
+        let fitted = super.preferredLayoutAttributesFitting(layoutAttributes)
+        guard let stable = fitted.copy() as? UICollectionViewLayoutAttributes else {
+            return fitted
+        }
+        stable.size.width = width
+        stable.size.height = ceil(fitted.size.height)
+        if measurementID != nil {
+            storeHeight?(width, stable.size.height)
+        }
+        return stable
+    }
+}
+
+/// User messages are intentionally rendered without `UIHostingConfiguration`.
+/// They are sparse in the timeline, so creating a new SwiftUI host exactly as
+/// one enters the viewport produced a visible hitch. This lightweight UIKit
+/// cell keeps the same bubble appearance while making reuse and measurement
+/// inexpensive.
+private final class UserMessageCell: StableSelfSizingCollectionViewCell {
+    static let reuseIdentifier = "UserMessageCell"
+
+    private let bubbleView = UIView()
+    private let messageLabel = UILabel()
+    private let copyButton = UIButton(type: .system)
+    private var copyResetWorkItem: DispatchWorkItem?
+
+    static func estimatedHeight(for text: String, width: CGFloat) -> CGFloat {
+        let horizontalBubbleInset: CGFloat = 34
+        let horizontalTextPadding: CGFloat = 28
+        let maximumTextWidth = max(1, width - horizontalBubbleInset - horizontalTextPadding)
+        let textBounds = (text as NSString).boundingRect(
+            with: CGSize(width: maximumTextWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: UIFont.preferredFont(forTextStyle: .body)],
+            context: nil
+        )
+        // 12 top + 20 bubble vertical padding + 5 copy gap + 26 copy button
+        // + 12 bottom. Whole points keep the compositional layout stable.
+        return ceil(75 + textBounds.height)
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        backgroundConfiguration = UIBackgroundConfiguration.clear()
+
+        bubbleView.layer.cornerRadius = 15
+        bubbleView.layer.cornerCurve = .continuous
+        bubbleView.layer.borderWidth = 0.7
+        bubbleView.translatesAutoresizingMaskIntoConstraints = false
+
+        messageLabel.font = .preferredFont(forTextStyle: .body)
+        messageLabel.adjustsFontForContentSizeCategory = true
+        messageLabel.textColor = .label
+        messageLabel.numberOfLines = 0
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        copyButton.setImage(UIImage(named: "CopyMessage")?.withRenderingMode(.alwaysTemplate), for: .normal)
+        copyButton.tintColor = .secondaryLabel
+        copyButton.imageView?.contentMode = .scaleAspectFit
+        copyButton.accessibilityLabel = "复制正文"
+        copyButton.addTarget(self, action: #selector(copyMessage), for: .touchUpInside)
+        copyButton.translatesAutoresizingMaskIntoConstraints = false
+
+        contentView.addSubview(bubbleView)
+        bubbleView.addSubview(messageLabel)
+        contentView.addSubview(copyButton)
+
+        NSLayoutConstraint.activate([
+            bubbleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            bubbleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            bubbleView.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 34),
+
+            messageLabel.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10),
+            messageLabel.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10),
+            messageLabel.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
+            messageLabel.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
+
+            copyButton.topAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: 5),
+            copyButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            copyButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            copyButton.widthAnchor.constraint(equalToConstant: 16),
+            copyButton.heightAnchor.constraint(equalToConstant: 26)
+        ])
+        updateBubbleColors()
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        copyResetWorkItem?.cancel()
+        copyResetWorkItem = nil
+        messageLabel.text = nil
+        showCopied(false)
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle else { return }
+        updateBubbleColors()
+    }
+
+    func apply(_ payload: ConversationViewportEntry.UserMessage) {
+        if messageLabel.text != payload.text {
+            messageLabel.text = payload.text
+        }
+        copyButton.isHidden = !payload.showsCopyButton
+    }
+
+    @objc private func copyMessage() {
+        guard let text = messageLabel.text else { return }
+        UIPasteboard.general.string = text
+        showCopied(true)
+        copyResetWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in self?.showCopied(false) }
+        copyResetWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: workItem)
+    }
+
+    private func showCopied(_ copied: Bool) {
+        let image = copied
+            ? UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(weight: .semibold))
+            : UIImage(named: "CopyMessage")?.withRenderingMode(.alwaysTemplate)
+        copyButton.setImage(image, for: .normal)
+        copyButton.tintColor = copied
+            ? UIColor(red: 0.18, green: 0.42, blue: 0.9, alpha: 1)
+            : .secondaryLabel
+        copyButton.accessibilityLabel = copied ? "已复制" : "复制正文"
+    }
+
+    private func updateBubbleColors() {
+        let dark = traitCollection.userInterfaceStyle == .dark
+        bubbleView.backgroundColor = UIColor(
+            red: 0.18,
+            green: 0.42,
+            blue: 0.9,
+            alpha: dark ? 0.24 : 0.11
+        )
+        bubbleView.layer.borderColor = UIColor(
+            red: 0.18,
+            green: 0.42,
+            blue: 0.9,
+            alpha: dark ? 0.34 : 0.08
+        ).cgColor
+    }
+}
+
 /// The active assistant response is the only row that changes for text
 /// deltas. TextKit appends the suffix directly to `NSTextStorage`, preserving
 /// all previously laid-out cells and avoiding a full SwiftUI/Markdown rebuild
 /// for every WebSocket packet.
-private final class StreamingAssistantCell: UICollectionViewCell {
+private final class StreamingAssistantCell: StableSelfSizingCollectionViewCell {
     static let reuseIdentifier = "StreamingAssistantCell"
 
     private let whaleView: UIImageView = {

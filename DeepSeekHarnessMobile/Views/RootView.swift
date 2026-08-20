@@ -1,20 +1,40 @@
 import SwiftUI
-import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        RootNavigationHost(store: store)
+            .equatable()
+            .alert("DeepSeek Harness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
+                Button("好", role: .cancel) { store.lastError = nil }
+            } message: { Text(store.lastError ?? "") }
+    }
+}
+
+/// The navigation tree deliberately holds `AppStore` as an unobserved
+/// reference. `RootView` can still present global errors, while session/history
+/// publications no longer invalidate the `NavigationStack` that owns the bar.
+private struct RootNavigationHost: View, Equatable {
+    let store: AppStore
     @State private var navigationPath: [AppRoute] = []
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.store === rhs.store
+    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
             WorkspaceView(
                 onOpenSession: { session in
-                    store.open(session)
-                    navigate(to: .conversation)
+                    let header = conversationHeader(for: session)
+                    store.prepareConversation(for: session)
+                    navigate(to: .conversation(header))
                 },
                 onNewSession: {
-                    store.startNewSession()
-                    navigate(to: .conversation)
+                    let header = conversationHeader(for: nil)
+                    store.prepareNewConversation()
+                    navigate(to: .conversation(header))
                 },
                 onSettings: {
                     navigate(to: .settings)
@@ -31,20 +51,57 @@ struct RootView: View {
         .onChange(of: navigationPath) { _, path in
             if path.isEmpty { store.resumeWorkspace() }
         }
-        .alert("DeepSeek Harness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
-            Button("好", role: .cancel) { store.lastError = nil }
-        } message: { Text(store.lastError ?? "") }
     }
 
     @ViewBuilder
     private func destination(for route: AppRoute) -> some View {
         switch route {
-        case .conversation:
-            ConversationView(onBack: popToRoot)
-            .toolbar(.hidden, for: .navigationBar)
-            .background(NavigationSwipeBackEnabler())
+        case .conversation(let header):
+            ConversationNavigationShell(
+                header: header,
+                gateway: store.gateway,
+                onReloadHistory: {
+                    if let id = header.sessionID ?? store.selectedSessionId {
+                        store.loadHistory(for: id)
+                    }
+                },
+                onPing: {
+                    store.gateway.ping()
+                },
+                onActivate: {
+                    await store.activatePreparedConversation(sessionID: header.sessionID)
+                }
+            ) {
+                ConversationView()
+            }
         case .settings:
             SettingsView()
+        }
+    }
+
+    /// Resolves the small amount of route chrome before the push begins.
+    /// Conversation content can then load and stream independently without
+    /// participating in navigation-bar preference resolution.
+    private func conversationHeader(for session: SessionSummary?) -> ConversationNavigationHeader {
+        let presetID = session?.agentPreset ?? store.agentPresetDefault
+        return ConversationNavigationHeader(
+            sessionID: session?.id,
+            title: session?.title ?? "新建 DeepSeek Harness",
+            agentPresetTitle: agentPresetDisplayName(for: presetID)
+        )
+    }
+
+    private func agentPresetDisplayName(for id: String?) -> String {
+        guard let id else { return "Agent" }
+        if let preset = store.agentPresets.first(where: { $0.id == id }) {
+            return preset.displayName
+        }
+        switch id {
+        case "standard": return "标准模式"
+        case "code": return "PTC 模式"
+        case "minimal": return "极简模式"
+        case "cordis": return "创造模式"
+        default: return id
         }
     }
 
@@ -53,52 +110,90 @@ struct RootView: View {
         navigationPath.append(route)
     }
 
-    private func popToRoot() {
-        navigationPath.removeAll()
-    }
-
     private enum AppRoute: Hashable {
-        case conversation
+        case conversation(ConversationNavigationHeader)
         case settings
     }
 }
 
-/// SwiftUI disables the navigation controller's edge-pop gesture when its
-/// navigation bar/back item is hidden. The app draws its own header, so restore
-/// that system gesture without replacing it with a custom full-screen drag.
-private struct NavigationSwipeBackEnabler: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> Controller {
-        Controller()
-    }
+/// Immutable route chrome. Keeping this separate from `AppStore` is what makes
+/// the title and trailing items enter in the same navigation transition as the
+/// system back button.
+private struct ConversationNavigationHeader: Hashable {
+    let sessionID: String?
+    let title: String
+    let agentPresetTitle: String
+}
 
-    func updateUIViewController(_ controller: Controller, context: Context) {
-        controller.enableSwipeBack()
-    }
+/// Owns only navigation chrome. The content below it may observe the complete
+/// app store and update at WebSocket frequency without invalidating the toolbar.
+private struct ConversationNavigationShell<Content: View>: View {
+    let header: ConversationNavigationHeader
+    let gateway: GatewayClient
+    let onReloadHistory: () -> Void
+    let onPing: () -> Void
+    let onActivate: () async -> Void
+    @ViewBuilder let content: () -> Content
 
-    final class Controller: UIViewController, UIGestureRecognizerDelegate {
-        override func viewDidAppear(_ animated: Bool) {
-            super.viewDidAppear(animated)
-            enableSwipeBack()
-        }
+    var body: some View {
+        content()
+            .navigationTitle(header.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarRole(.editor)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        ConversationNavigationStatus(
+                            gateway: gateway,
+                            agentPresetTitle: header.agentPresetTitle
+                        )
+                    }
+                    .sharedBackgroundVisibility(.hidden)
 
-        func enableSwipeBack() {
-            guard let gesture = navigationController?.interactivePopGestureRecognizer else { return }
-            gesture.isEnabled = true
-            gesture.delegate = self
-        }
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                } else {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        ConversationNavigationStatus(
+                            gateway: gateway,
+                            agentPresetTitle: header.agentPresetTitle
+                        )
+                    }
+                }
 
-        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            let canBegin = (navigationController?.viewControllers.count ?? 0) > 1
-            if canBegin {
-                // Resign any active first responder (e.g. the composer text
-                // field) before the interactive pop starts, otherwise the
-                // keyboard dismissal and the navigation transition can land
-                // in the same frame and trigger SwiftUI's
-                // "NavigationRequestObserver tried to update multiple times
-                // per frame" warning.
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("重新加载历史", systemImage: "clock.arrow.circlepath", action: onReloadHistory)
+                        Button("发送 Ping", systemImage: "wave.3.right", action: onPing)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                }
             }
-            return canBegin
+            .task(id: header.sessionID ?? "__new-conversation__") {
+                // Finish the NavigationStack transaction before beginning any
+                // subscription, history, or session-control work.
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                await onActivate()
+            }
+    }
+}
+
+/// Connection changes are scoped to this tiny view instead of rebuilding the
+/// navigation shell (or the toolbar declaration containing it).
+private struct ConversationNavigationStatus: View {
+    @ObservedObject var gateway: GatewayClient
+    let agentPresetTitle: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ConnectionDot(state: gateway.state)
+            Text(agentPresetTitle)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 }

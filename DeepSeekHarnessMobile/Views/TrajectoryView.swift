@@ -9,6 +9,7 @@ struct TrajectoryView: View {
     @State private var highlightedID: String?
     @State private var nodes: [TrajectoryNode] = []
     @State private var projectedSessionId: String?
+    @State private var projectedDataVersion: String?
     @State private var isProjecting = false
     @State private var duration: TimeInterval = 0
     @State private var turnCount = 0
@@ -58,9 +59,14 @@ struct TrajectoryView: View {
             }
         }
         .sheet(item: $selected) { EventDetailSheet(node: $0) }
-        .task(id: projectionVersion) {
+        .task(id: projectionTaskVersion) {
             guard isActive else { return }
-            await projectTrajectory()
+            let version = dataVersion
+            // The pager keeps this view mounted. Returning to the trajectory
+            // tab must reveal the already projected rows immediately instead
+            // of replaying the staged projection for identical source data.
+            guard projectedDataVersion != version else { return }
+            await projectTrajectory(version: version)
         }
     }
 
@@ -140,16 +146,22 @@ struct TrajectoryView: View {
             )
         }
     }
-    private var projectionVersion: String {
-        guard isActive else { return "inactive-\(sessionId ?? "none")" }
+    private var dataVersion: String {
         return "\(sessionId ?? "none")-\(events.count)-\(events.last?.seq ?? -1)"
     }
 
+    /// Activation is only a scheduling signal. It is deliberately excluded
+    /// from `dataVersion`, so changing tabs cannot invalidate cached output.
+    private var projectionTaskVersion: String {
+        "\(isActive ? "active" : "inactive")-\(dataVersion)"
+    }
+
     @MainActor
-    private func projectTrajectory() async {
+    private func projectTrajectory(version: String) async {
         let targetSessionId = sessionId
         if projectedSessionId != targetSessionId {
             projectedSessionId = targetSessionId
+            projectedDataVersion = nil
             nodes = []
         }
         isProjecting = true
@@ -198,6 +210,7 @@ struct TrajectoryView: View {
             nodes = Array(projection.nodes[start..<projection.nodes.count])
             try? await Task.sleep(for: .milliseconds(12))
         }
+        projectedDataVersion = version
         isProjecting = false
     }
 }
@@ -754,26 +767,17 @@ private struct TrajectoryRow: View {
     }
 }
 
-/// A row tap that is rejected whenever the finger actually travelled. Using
-/// global coordinates keeps the measurement independent of the page moving
-/// underneath the touch during a horizontal swipe.
+/// A real tap recognizer keeps row selection independent from the parent
+/// horizontal pager without installing a zero-distance drag recognizer. The
+/// latter competes with the vertical ScrollView and can prevent it scrolling.
 private struct MovementQualifiedTapModifier: ViewModifier {
     let action: () -> Void
-    private let tapTolerance: CGFloat = 10
 
     func body(content: Content) -> some View {
         content
             .simultaneousGesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                    .onEnded { value in
-                        let travelled = hypot(value.translation.width, value.translation.height)
-                        let predicted = hypot(
-                            value.predictedEndTranslation.width,
-                            value.predictedEndTranslation.height
-                        )
-                        guard max(travelled, predicted) <= tapTolerance else { return }
-                        action()
-                    }
+                SpatialTapGesture()
+                    .onEnded { _ in action() }
             )
             .accessibilityAddTraits(.isButton)
             .accessibilityAction(named: Text("打开"), action)

@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="Design/whale-girl-ios-app-promo-16x9-v3.png" alt="鲸鱼娘展示 DeepSeek Harness Mobile iOS 应用" width="100%">
+
 # DeepSeek Harness Mobile
 
 **在 iPhone 上延续 DeepSeek Harness 的原生工作流。**

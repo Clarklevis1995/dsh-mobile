@@ -74,7 +74,10 @@ struct WorkspaceView: View {
             Spacer()
             authenticationMenu
             settingsButton
+                // Match the outer glass circle to the workspace cards' trailing edge.
+                .padding(.trailing, -4)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

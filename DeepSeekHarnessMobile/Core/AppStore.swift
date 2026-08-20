@@ -94,11 +94,16 @@ final class AppStore: ObservableObject {
     private var pendingPermissionOptionsSessionId: String?
     private var sessionControlRequestTokens: [String: UUID] = [:]
     private var defaultConfigurationRequestTokens: [String: UUID] = [:]
+    /// Navigation preparation is intentionally cheap. Remote activation begins
+    /// from the destination lifecycle, after NavigationStack installs its bar.
+    private var preparedConversationActivationKey: String?
+    private var activeConversationActivationKey: String?
     private var presentsNextConnectionFailureAsAlert = true
     private static let permissionPresets: Set<String> = ["read-only", "workspace-write", "danger-full-access"]
     private static let defaultPermissionPresets: Set<String> = ["ask", "read-only", "workspace-write", "danger-full-access"]
     private static let historyPageByteBudget = 4 * 1024 * 1024
     private static let historyPagesPerBatch = 2
+    private static let newConversationActivationKey = "__new-conversation__"
 
     private enum HistoryBatchKind {
         case latest
@@ -276,33 +281,76 @@ final class AppStore: ObservableObject {
         beginDefaultConfigurationRequest("save-default-model")
         gateway.saveDefaultModel(provider: provider, model: model, reasoningEffort: reasoningEffort)
     }
-    func startNewSession() {
+    func prepareNewConversation() {
         selectedSessionId = nil
         waitingForNewSession = false
-        gateway.subscribe(sessionId: nil)
-        // The composer for an unsaved session mirrors the deployment defaults.
-        // Refresh here so changes made by WebUI or another client are visible
-        // before the user sends the first message.
-        refreshDefaultConfiguration()
+        preparedConversationActivationKey = Self.newConversationActivationKey
+        activeConversationActivationKey = nil
     }
-    func open(_ session: SessionSummary) {
+
+    func prepareConversation(for session: SessionSummary) {
         selectedSessionId = session.id
-        markRead(session.id)
-        gateway.subscribe(sessionId: session.id)
+        waitingForNewSession = false
+        preparedConversationActivationKey = session.id
+        activeConversationActivationKey = nil
+    }
+
+    /// Activates the already-pushed conversation. The yield points separate
+    /// independent request groups so they cannot monopolize a transition frame.
+    func activatePreparedConversation(sessionID: String?) async {
+        let activationKey = sessionID ?? Self.newConversationActivationKey
+        guard preparedConversationActivationKey == activationKey,
+              activeConversationActivationKey != activationKey,
+              sessionID == selectedSessionId,
+              gateway.state.isConnected else { return }
+
+        activeConversationActivationKey = activationKey
+        guard !Task.isCancelled else { return }
+
+        if let sessionID {
+            markRead(sessionID)
+            gateway.subscribe(sessionId: sessionID)
+        } else {
+            gateway.subscribe(sessionId: nil)
+        }
+
+        await Task.yield()
+        guard !Task.isCancelled,
+              preparedConversationActivationKey == activationKey else { return }
+
         if agentPresets.isEmpty {
             beginDefaultConfigurationRequest("agent-presets")
             gateway.requestAgentPresets()
         }
-        if shouldRefreshHistory(for: session) {
-            loadHistory(for: session.id)
+
+        if let sessionID,
+           let session = sessions.first(where: { $0.id == sessionID }),
+           shouldRefreshHistory(for: session) {
+            loadHistory(for: sessionID)
         }
-        refreshSessionControls(for: session.id)
+
+        await Task.yield()
+        guard !Task.isCancelled,
+              preparedConversationActivationKey == activationKey else { return }
+
+        if let sessionID {
+            refreshSessionControls(for: sessionID)
+        } else {
+            // An unsaved session mirrors the deployment defaults before send.
+            refreshDefaultConfiguration()
+        }
     }
 
     private func shouldRefreshHistory(for session: SessionSummary) -> Bool {
         guard !historyLoadingSessionIds.contains(session.id) else { return false }
         guard let syncedActivity = historySyncedActivityDates[session.id] else { return true }
-        return session.lastActivity > syncedActivity
+        // A completed history baseline may subsequently be extended by the
+        // subscribed live tail. Both sources are already present locally, so
+        // compare the remote summary against the newest covered activity
+        // instead of the older history-request timestamp alone.
+        let latestLocalActivity = events[session.id]?.last?.date ?? syncedActivity
+        let coveredActivity = max(syncedActivity, latestLocalActivity)
+        return session.lastActivity > coveredActivity
     }
     func loadHistory(for sessionId: String, older: Bool = false) {
         guard gateway.state.isConnected else {
@@ -369,6 +417,8 @@ final class AppStore: ObservableObject {
         }
     }
     func resumeWorkspace() {
+        preparedConversationActivationKey = nil
+        activeConversationActivationKey = nil
         gateway.subscribe(sessionId: nil)
         refreshRemoteState()
     }
@@ -453,7 +503,12 @@ final class AppStore: ObservableObject {
             notice("网关已连接", "\(authentication) · Mobile protocol v\(frame.protocol ?? 1) · \(frame.clients ?? 1) 个客户端")
             refreshRemoteState()
             refreshDefaultConfiguration()
-            if let selectedSessionId { refreshSessionControls(for: selectedSessionId) }
+            if preparedConversationActivationKey != nil {
+                Task { [weak self] in
+                    guard let self else { return }
+                    await self.activatePreparedConversation(sessionID: self.selectedSessionId)
+                }
+            }
         case "pong":
             notice("心跳正常", frame.at.map { Date(timeIntervalSince1970: $0 / 1000).formatted(date: .omitted, time: .standard) } ?? "pong")
         case "subscribed":
@@ -971,6 +1026,9 @@ final class AppStore: ObservableObject {
     }
 
     private func handleConnectionFailure(_ detail: String) {
+        // Keep the prepared destination, but require a fresh activation after
+        // the transport reconnects and emits its next hello frame.
+        activeConversationActivationKey = nil
         // A transport/authentication failure invalidates every outstanding
         // business request. Cancel their timeout tokens first so an unrelated
         // "agent-presets 请求超时" cannot replace the real WebSocket cause.
@@ -1059,6 +1117,10 @@ final class AppStore: ObservableObject {
 
     private func markRead(_ id: String) {
         guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        // Mutating an already-false array element still triggers `sessions`'
+        // didSet, which encodes the complete list and writes UserDefaults on
+        // the main actor. Avoid paying that cost on every navigation push.
+        guard sessions[index].hasUnread else { return }
         sessions[index].hasUnread = false
     }
     private func persistSessions() {

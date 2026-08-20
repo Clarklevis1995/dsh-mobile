@@ -5,7 +5,6 @@ import UIKit
 struct ConversationView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.colorScheme) private var colorScheme
-    private let onBack: () -> Void
     @State private var activeView = 0
     @State private var draft = ""
     @State private var showsContextUsage = false
@@ -14,21 +13,17 @@ struct ConversationView: View {
     @State private var isPinnedToBottom = true
     @State private var composerHeight: CGFloat = 168
     @State private var viewportScrollToBottomToken = 0
+    @State private var viewportProxy = ConversationViewportProxy()
     @State private var isPreparingHistoryPresentation = false
     @State private var historyPresentationSessionID: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @FocusState private var composerIsFocused: Bool
     private let conversationBottomClearance: CGFloat = 22
 
-    init(onBack: @escaping () -> Void) {
-        self.onBack = onBack
-    }
-
     var body: some View {
         ZStack {
             conversationBackground.ignoresSafeArea()
             VStack(spacing: 0) {
-                topBar
                 Picker("视图", selection: $activeView) {
                     Text("对话").tag(0)
                     Text("轨迹").tag(1)
@@ -83,49 +78,10 @@ struct ConversationView: View {
         .black.opacity(colorScheme == .dark ? 0.34 : 0.10)
     }
 
-    private var topBar: some View {
-        HStack(spacing: 10) {
-            Button {
-                // Resign the composer's focus first and let SwiftUI commit
-                // that state change before triggering the navigation pop.
-                // Doing both in the same transaction is what produces the
-                // "NavigationRequestObserver tried to update multiple times
-                // per frame" warning when the keyboard is still up.
-                composerIsFocused = false
-                DispatchQueue.main.async {
-                    onBack()
-                }
-            } label: {
-                Image(systemName: "chevron.left").frame(width: 38, height: 38).glassSurface(radius: 19)
-            }
-            .buttonStyle(.plain)
-            Text(store.selectedSession.map(\.title) ?? "新建 DeepSeek Harness")
-                .font(.system(size: 18, weight: .semibold))
-                .lineLimit(1)
-                .layoutPriority(1)
-            Spacer()
-            ConnectionDot(state: store.gateway.state)
-            Text(topBarAgentPresetTitle)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-            Menu {
-                Button("重新加载历史", systemImage: "clock.arrow.circlepath") {
-                    if let id = store.selectedSessionId { store.loadHistory(for: id) }
-                }
-                Button("发送 Ping", systemImage: "wave.3.right") { store.gateway.ping() }
-            } label: {
-                Image(systemName: "ellipsis").frame(width: 38, height: 38).glassSurface(radius: 19)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 16).padding(.top, 8)
-    }
-
     private var chat: some View {
         ZStack(alignment: .bottom) {
             ConversationViewport(
+                proxy: viewportProxy,
                 sessionID: store.selectedSessionId,
                 timeline: store.conversationTimeline(for: store.selectedSessionId ?? "__empty__"),
                 supplementalEntries: supplementalViewportEntries,
@@ -228,8 +184,12 @@ struct ConversationView: View {
                 return
             }
             historyPresentationSessionID = sessionID
-            isPreparingHistoryPresentation = isLoadingSelectedHistory || !conversationItems.isEmpty
-            if !isLoadingSelectedHistory, !conversationItems.isEmpty {
+            let hasUsableLocalContent = !conversationItems.isEmpty
+            // Cached content is immediately presentable. A background refresh
+            // must never replace it with a full-screen loading mask; the mask
+            // is reserved for a genuinely cold session with no local rows.
+            isPreparingHistoryPresentation = isLoadingSelectedHistory && !hasUsableLocalContent
+            if hasUsableLocalContent {
                 viewportScrollToBottomToken &+= 1
             }
         }
@@ -462,6 +422,7 @@ struct ConversationView: View {
         HStack(spacing: 0) {
             Spacer(minLength: 0)
             Button {
+                viewportProxy.prepareForOverlayPresentation()
                 showsSessionStatsPopover = true
             } label: {
                 HStack(spacing: 7) {
@@ -681,11 +642,6 @@ struct ConversationView: View {
         guard let id = store.agentPresetDefault else { return "默认 Agent" }
         return agentPresetTitle(id)
     }
-    private var topBarAgentPresetTitle: String {
-        let id = store.selectedSession?.agentPreset ?? store.agentPresetDefault
-        guard let id else { return "Agent" }
-        return agentPresetTitle(id)
-    }
     private func agentPresetTitle(_ id: String) -> String {
         if let preset = store.agentPresets.first(where: { $0.id == id }) {
             return preset.displayName
@@ -821,17 +777,38 @@ struct ConversationView: View {
                     streamingAssistant: .init(title: item.title, text: item.text)
                 )
             }
+            if case .message(let item) = entry.content,
+               item.kind == .user {
+                return ConversationViewportEntry(
+                    id: entry.id,
+                    revision: viewportEntryRevision(entry),
+                    userMessage: .init(
+                        text: item.text,
+                        showsCopyButton: entry.showsCopyButton
+                    )
+                )
+            }
             let content: AnyView
+            let allowsHeightCaching: Bool
             switch entry.content {
             case .message(let item):
                 content = AnyView(ConversationRow(item: item, showsCopyButton: entry.showsCopyButton))
+                // Fenced code uses a horizontal ScrollView. Its vertical ideal
+                // size is stable after layout, but not necessarily during the
+                // first UIHostingConfiguration measurement. Let UIKit measure
+                // these rows live instead of replaying a premature short cache.
+                allowsHeightCaching = !MarkdownViewportSizing.requiresLiveMeasurement(item.text)
             case .process(let group):
                 content = AnyView(ConversationProcessRow(group: group))
+                // Nested reasoning/tool disclosures intentionally change
+                // their row height after a tap.
+                allowsHeightCaching = false
             }
             return ConversationViewportEntry(
                 id: entry.id,
                 revision: viewportEntryRevision(entry),
-                content: content
+                content: content,
+                allowsHeightCaching: allowsHeightCaching
             )
         }
     }
@@ -896,7 +873,12 @@ private struct PersistentSessionPager<ConversationPage: View, TrajectoryPage: Vi
             .frame(width: pageWidth * 2, alignment: .leading)
             .offset(x: -CGFloat(selection) * pageWidth + constrainedDrag)
             .contentShape(Rectangle())
-            .simultaneousGesture(pageGesture(pageWidth: pageWidth))
+            .simultaneousGesture(
+                pageGesture(
+                    pageWidth: pageWidth,
+                    pagerFrame: geometry.frame(in: .global)
+                )
+            )
         }
         .clipped()
     }
@@ -909,13 +891,32 @@ private struct PersistentSessionPager<ConversationPage: View, TrajectoryPage: Vi
             : dragTranslation
     }
 
-    private func pageGesture(pageWidth: CGFloat) -> some Gesture {
+    private func pageGesture(pageWidth: CGFloat, pagerFrame: CGRect) -> some Gesture {
         DragGesture(minimumDistance: 12, coordinateSpace: .local)
             .onChanged { value in
                 if dragAxis == nil {
-                    dragAxis = abs(value.translation.width) > abs(value.translation.height)
-                        ? .horizontal
-                        : .vertical
+                    let isSystemBackGesture = value.startLocation.x <= 28
+                        && value.translation.width > 0
+                    let globalStart = CGPoint(
+                        x: pagerFrame.minX + value.startLocation.x,
+                        y: pagerFrame.minY + value.startLocation.y
+                    )
+                    if NestedHorizontalScrollResolver.containsScrollableView(at: globalStart) {
+                        // Code blocks own the complete touch sequence. The
+                        // pager must not reinterpret the same pan as a tab
+                        // transition when the finger reaches the cell edge.
+                        dragAxis = .nestedHorizontalScroll
+                    } else if isSystemBackGesture {
+                        // The NavigationStack's native edge-pop gesture owns
+                        // this region. Keeping the pager inert here prevents a
+                        // right swipe from moving the pages underneath the
+                        // interactive navigation transition.
+                        dragAxis = .navigationBack
+                    } else {
+                        dragAxis = abs(value.translation.width) > abs(value.translation.height)
+                            ? .horizontal
+                            : .vertical
+                    }
                 }
                 guard dragAxis == .horizontal else { return }
                 dragTranslation = value.translation.width
@@ -955,6 +956,38 @@ private struct PersistentSessionPager<ConversationPage: View, TrajectoryPage: Vi
 private enum SessionPageDragAxis {
     case horizontal
     case vertical
+    case navigationBack
+    case nestedHorizontalScroll
+}
+
+/// SwiftUI's nested horizontal ScrollView is backed by UIScrollView even when
+/// it lives inside a UIHostingConfiguration collection cell. Resolve gesture
+/// ownership from the actual hit-test chain at touch-down: a child that has
+/// horizontal overflow wins; otherwise the session pager may switch tabs.
+@MainActor
+private enum NestedHorizontalScrollResolver {
+    static func containsScrollableView(at globalPoint: CGPoint) -> Bool {
+        guard let window = keyWindow else { return false }
+        let point = window.convert(globalPoint, from: nil)
+        var hitView = window.hitTest(point, with: nil)
+
+        while let view = hitView {
+            if let scrollView = view as? UIScrollView,
+               scrollView.isScrollEnabled,
+               scrollView.contentSize.width > scrollView.bounds.width + 1 {
+                return true
+            }
+            hitView = view.superview
+        }
+        return false
+    }
+
+    private static var keyWindow: UIWindow? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)
+    }
 }
 
 private struct ComposerHeightPreferenceKey: PreferenceKey {
@@ -1766,6 +1799,10 @@ private struct ConversationRow: View {
                     }
                 if showsCopyButton { CopyMessageButton(text: item.text) }
             }
+            // Long pasted payloads should remain a trailing chat bubble, not
+            // expand edge-to-edge. This fixed inset also removes a variable
+            // width input from self-sizing while the list is being dragged.
+            .padding(.leading, 34)
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.vertical, 12)
         case .context:
@@ -2003,7 +2040,7 @@ struct MarkdownContent: View {
     init(_ text: String, compact: Bool = false) { self.text = text; self.compact = compact }
 
     var body: some View {
-        Markdown(markdownSource)
+        Markdown(ParsedMarkdownCache.document(for: markdownSource))
             .markdownTheme(.deepSeek(compact: compact))
             .markdownCodeSyntaxHighlighter(DSHCodeSyntaxHighlighter())
     }
@@ -2013,6 +2050,36 @@ struct MarkdownContent: View {
         // punctuation outside the chip. MarkdownUI's renderer merges their
         // separate font runs into one rounded background on modern iOS.
         InlineCodePadding.apply(to: text)
+    }
+}
+
+/// Completed messages are immutable, but collection-view reuse can bring the
+/// same message on screen many times. Reuse MarkdownUI's parsed block tree so
+/// scrolling does not repeatedly parse long responses on the main thread.
+private enum ParsedMarkdownCache {
+    private final class Box: NSObject {
+        let document: MarkdownUI.MarkdownContent
+
+        init(_ document: MarkdownUI.MarkdownContent) {
+            self.document = document
+        }
+    }
+
+    private static let cache: NSCache<NSString, Box> = {
+        let cache = NSCache<NSString, Box>()
+        cache.countLimit = 256
+        cache.totalCostLimit = 16 * 1_024 * 1_024
+        return cache
+    }()
+
+    static func document(for source: String) -> MarkdownUI.MarkdownContent {
+        let key = source as NSString
+        if let cached = cache.object(forKey: key) {
+            return cached.document
+        }
+        let document = MarkdownUI.MarkdownContent(source)
+        cache.setObject(Box(document), forKey: key, cost: source.utf8.count)
+        return document
     }
 }
 
@@ -2055,12 +2122,16 @@ private extension Theme {
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
                         configuration.label
-                            .fixedSize(horizontal: true, vertical: false)
+                            .fixedSize(horizontal: true, vertical: true)
                             .markdownTextStyle {
                                 FontFamilyVariant(.monospaced)
                                 FontSize(compact ? 11 : 13)
                             }
                     }
+                    // A horizontal ScrollView has no useful UIKit intrinsic
+                    // height of its own. Preserve the code content's ideal
+                    // vertical size when the hosting cell is self-sized.
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(compact ? 10 : 12)
                 .background(Color(uiColor: .secondarySystemFill))
@@ -2076,6 +2147,17 @@ private extension Theme {
                         bottom: compact ? 10 : 18
                     )
             }
+    }
+}
+
+private enum MarkdownViewportSizing {
+    private static let fencedCode = try! NSRegularExpression(
+        pattern: #"(?m)^[\t ]{0,3}(?:```|~~~)"#
+    )
+
+    static func requiresLiveMeasurement(_ source: String) -> Bool {
+        let range = NSRange(location: 0, length: (source as NSString).length)
+        return fencedCode.firstMatch(in: source, range: range) != nil
     }
 }
 
