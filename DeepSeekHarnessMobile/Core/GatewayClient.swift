@@ -178,6 +178,31 @@ final class GatewayClient: ObservableObject {
         send(payload)
     }
 
+    func answerQuestion(rpcId: String, sessionId: String, answers: [GatewayQuestionAnswer]) {
+        let encodedAnswers: [[String: Any]] = answers.map { answer in
+            var value: [String: Any] = [
+                "id": answer.id,
+                "selected": answer.selected
+            ]
+            if let custom = answer.custom { value["custom"] = custom }
+            return value
+        }
+        send([
+            "type": "question-answer",
+            "rpcId": rpcId,
+            "sessionId": sessionId,
+            "answers": encodedAnswers
+        ])
+    }
+
+    func cancelQuestion(rpcId: String, sessionId: String) {
+        send([
+            "type": "question-cancel",
+            "rpcId": rpcId,
+            "sessionId": sessionId
+        ])
+    }
+
     private func send(_ object: [String: Any]) {
         guard let socket else {
             state = .failed("WebSocket 尚未连接")

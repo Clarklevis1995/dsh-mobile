@@ -25,7 +25,7 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(frame.event?.text, "thinking")
     }
 
-    func testConversationHidesInfrastructureEventsAndPluginPrompts() {
+    func testConversationShowsPluginPromptsAsCompactContextRows() {
         let records = [
             SessionEvent(sessionId: "s1", seq: 1, time: 1, event: GatewayEvent(type: "permission/preset")),
             SessionEvent(sessionId: "s1", seq: 2, time: 2, event: GatewayEvent(type: "user/message", text: "runtime", source: "plugin")),
@@ -34,7 +34,7 @@ final class GatewayProtocolTests: XCTestCase {
             SessionEvent(sessionId: "s1", seq: 5, time: 5, event: GatewayEvent(type: "tool/call", name: "Read"))
         ]
         let items = ConversationItem.make(from: records)
-        XCTAssertEqual(items.map(\.title), ["你", "Think", "DeepSeek", "Read"])
+        XCTAssertEqual(items.map(\.title), ["上下文注入 · plugin", "你", "Think", "DeepSeek", "Read"])
     }
 
     func testHistoryRebaseKeepsLiveTailAndDeduplicatesOverlap() throws {
@@ -196,5 +196,33 @@ final class GatewayProtocolTests: XCTestCase {
         let breakdown = history.projections?["values"]?["contextBreakdown"]?.decode(GatewayContextBreakdown.self)
         XCTAssertEqual(breakdown?.toolsTokens, 8247)
         XCTAssertEqual(history.projections?["values"]?["permissions"]?["currentValue"]?.stringValue, "workspace-write")
+    }
+
+    func testDecodesReplayedHumanQuestionRequest() throws {
+        let json = #"{"kind":"question-requested","rpcId":"rpc-1","sessionId":"s1","replay":true,"questions":[{"id":"direction","header":"研究方向","question":"你想研究哪个方向？","detail":"请选择最感兴趣的方向","options":[{"label":"核心架构 (推荐)","description":"了解插件分层"},{"label":"移动端"}],"multiSelect":true},{"id":"notes","question":"还有什么要求？","multiSelect":false}]}"#
+        let frame = try GatewayWireDecoder.decode(Data(json.utf8))
+
+        XCTAssertEqual(frame.rpcId, "rpc-1")
+        XCTAssertEqual(frame.sessionId, "s1")
+        XCTAssertEqual(frame.replay, true)
+        XCTAssertEqual(frame.questions?.count, 2)
+        XCTAssertEqual(frame.questions?.first?.options?.first?.label, "核心架构 (推荐)")
+        XCTAssertEqual(frame.questions?.first?.allowsMultipleSelections, true)
+    }
+
+    func testDecodesQuestionResponseAndResolution() throws {
+        let response = try GatewayWireDecoder.decode(Data(#"{"kind":"question-response","rpcId":"rpc-1","sessionId":"s1","action":"answer","accepted":false,"reason":"not-pending"}"#.utf8))
+        XCTAssertEqual(response.action, "answer")
+        XCTAssertEqual(response.accepted, false)
+        XCTAssertEqual(response.reason, "not-pending")
+
+        let resolved = try GatewayWireDecoder.decode(Data(#"{"kind":"question-resolved","rpcId":"rpc-1","sessionId":"s1","outcome":"answered"}"#.utf8))
+        XCTAssertEqual(resolved.outcome, "answered")
+    }
+
+    func testQuestionAnswerTrimsCustomText() {
+        let answer = GatewayQuestionAnswer(id: "custom", selected: [], custom: "  自定义回答  ")
+        XCTAssertEqual(answer.custom, "自定义回答")
+        XCTAssertNil(GatewayQuestionAnswer(id: "empty", selected: [], custom: "  \n ").custom)
     }
 }

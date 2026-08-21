@@ -141,7 +141,19 @@ struct ConversationView: View {
                     if let snapshot = store.selectedSessionStatsSnapshot {
                         sessionStatsBanner(snapshot)
                     }
-                    composer
+                    if let request = store.selectedPendingQuestionRequest {
+                        HumanQuestionView(
+                            request: request,
+                            status: store.questionRequestStatuses[request.rpcId] ?? .idle,
+                            onAnswer: { store.answerQuestion(request, answers: $0) },
+                            onCancel: { store.cancelQuestion(request) }
+                        )
+                        .id(request.rpcId)
+                        .padding(.bottom, composerBottomPadding)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else {
+                        composer
+                    }
                 }
                 .background {
                     GeometryReader { composerGeometry in
@@ -162,6 +174,11 @@ struct ConversationView: View {
         .onChange(of: composerIsFocused) { _, isFocused in
             guard isFocused else { return }
             viewportScrollToBottomToken &+= 1
+        }
+        .onChange(of: store.selectedPendingQuestionRequest?.rpcId) { _, rpcId in
+            guard rpcId != nil else { return }
+            composerIsFocused = false
+            if isPinnedToBottom { viewportScrollToBottomToken &+= 1 }
         }
         .onChange(of: isLoadingSelectedHistory) { wasLoading, isLoading in
             guard historyPresentationSessionID == store.selectedSessionId,

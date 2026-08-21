@@ -64,6 +64,8 @@ final class AppStore: ObservableObject {
     @Published var defaultModelSelection: GatewayModelSelection?
     @Published var defaultConfigurationLoadingKinds: Set<String> = []
     @Published var workspaceScrollAnchor: String?
+    @Published private(set) var pendingQuestionRequests: [GatewayPendingQuestionRequest] = []
+    @Published private(set) var questionRequestStatuses: [String: GatewayQuestionRequestStatus] = [:]
 
     let gateway = GatewayClient()
     private var pendingHistorySessionId: String?
@@ -140,6 +142,10 @@ final class AppStore: ObservableObject {
     var selectedPermissions: GatewaySessionPermissions? { selectedSessionId.flatMap { sessionPermissions[$0] } }
     var selectedContextSnapshot: GatewayContextSnapshot? { selectedSessionId.flatMap { contextSnapshots[$0] } }
     var selectedSessionStatsSnapshot: GatewaySessionStatsSnapshot? { selectedSessionId.flatMap { sessionStatsSnapshots[$0] } }
+    var selectedPendingQuestionRequest: GatewayPendingQuestionRequest? {
+        guard let selectedSessionId else { return nil }
+        return pendingQuestionRequests.first { $0.sessionId == selectedSessionId }
+    }
     func conversationTimeline(for sessionId: String) -> ConversationTimeline {
         if let timeline = conversationTimelines[sessionId] { return timeline }
         let timeline = ConversationTimeline()
@@ -491,6 +497,43 @@ final class AppStore: ObservableObject {
             workspaceId: selectedSessionId == nil ? activeWorkspace?.id : nil
         )
     }
+
+    func answerQuestion(_ request: GatewayPendingQuestionRequest, answers: [GatewayQuestionAnswer]) {
+        guard gateway.state.isConnected else {
+            questionRequestStatuses[request.rpcId] = .rejected("WebSocket 已断开，重连后再提交答案。")
+            return
+        }
+        guard request.questions.map(\.id) == answers.map(\.id) else {
+            questionRequestStatuses[request.rpcId] = .rejected("答案必须按原顺序覆盖整组问题。")
+            return
+        }
+        for (question, answer) in zip(request.questions, answers) {
+            let allowedLabels = Set((question.options ?? []).map(\.label))
+            guard Set(answer.selected).count == answer.selected.count,
+                  answer.selected.allSatisfy(allowedLabels.contains) else {
+                questionRequestStatuses[request.rpcId] = .rejected("“\(question.question)”包含无效或重复选项。")
+                return
+            }
+            if !question.allowsMultipleSelections {
+                guard answer.selected.count <= 1,
+                      !(answer.selected.count == 1 && answer.custom != nil) else {
+                    questionRequestStatuses[request.rpcId] = .rejected("单选题只能选择一个选项，且不能同时填写自定义答案。")
+                    return
+                }
+            }
+        }
+        questionRequestStatuses[request.rpcId] = .submitting(.answer)
+        gateway.answerQuestion(rpcId: request.rpcId, sessionId: request.sessionId, answers: answers)
+    }
+
+    func cancelQuestion(_ request: GatewayPendingQuestionRequest) {
+        guard gateway.state.isConnected else {
+            questionRequestStatuses[request.rpcId] = .rejected("WebSocket 已断开，重连后再跳过问题。")
+            return
+        }
+        questionRequestStatuses[request.rpcId] = .submitting(.cancel)
+        gateway.cancelQuestion(rpcId: request.rpcId, sessionId: request.sessionId)
+    }
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
     private func handle(_ frame: GatewayFrame) {
@@ -498,6 +541,12 @@ final class AppStore: ObservableObject {
         case "paired":
             notice("设备配对成功", frame.device?.name ?? "长期凭据已安全保存到 Keychain")
         case "hello":
+            // `hello` starts a new authenticated transport generation. The
+            // gateway immediately replays every still-pending request after
+            // it, so clearing here prevents questions cancelled by a DSH
+            // restart from lingering while replayed rpcIds are deduplicated.
+            pendingQuestionRequests.removeAll()
+            questionRequestStatuses.removeAll()
             presentsNextConnectionFailureAsAlert = true
             let authentication = frame.authenticated == false ? "Debug 未鉴权" : "设备鉴权成功"
             notice("网关已连接", "\(authentication) · Mobile protocol v\(frame.protocol ?? 1) · \(frame.clients ?? 1) 个客户端")
@@ -654,6 +703,12 @@ final class AppStore: ObservableObject {
                 notice(frame.created == true ? "工作区已创建" : "工作区已存在", workspace.path)
                 refreshRemoteState()
             }
+        case "question-requested":
+            handleQuestionRequested(frame)
+        case "question-response":
+            handleQuestionResponse(frame)
+        case "question-resolved":
+            handleQuestionResolved(frame)
         case "error":
             waitingForNewSession = false
             if frame.requestType == "directories" { directoryIsLoading = false }
@@ -666,6 +721,11 @@ final class AppStore: ObservableObject {
                 finishHistoryLoading(id)
             }
             let detail = [frame.code, frame.message].compactMap { $0 }.joined(separator: ": ")
+            if let requestType = frame.requestType,
+               ["question-answer", "question-cancel"].contains(requestType),
+               let rpcId = frame.rpcId ?? pendingQuestionRequests.first(where: { $0.sessionId == frame.sessionId })?.rpcId {
+                questionRequestStatuses[rpcId] = .rejected(detail.isEmpty ? "服务端拒绝了问题响应。" : detail)
+            }
             let failedRequest = frame.requestType ?? frame.code.flatMap(sessionControlKind(from:)) ?? frame.message.flatMap(sessionControlKind(from:))
             if let failedRequest { finishSessionControlRequest(failedRequest) }
             if frame.requestType == nil, failedRequest == nil {
@@ -677,6 +737,63 @@ final class AppStore: ObservableObject {
             notice("请求失败\(frame.requestType.map { " · \($0)" } ?? "")", detail, sessionId: frame.sessionId, isError: true)
         default: notice("未知网关响应", frame.kind)
         }
+    }
+
+    private func handleQuestionRequested(_ frame: GatewayFrame) {
+        guard let rpcId = frame.rpcId,
+              !rpcId.isEmpty,
+              let sessionId = frame.sessionId,
+              !sessionId.isEmpty,
+              let questions = frame.questions,
+              !questions.isEmpty else {
+            notice("问题请求无效", "缺少 rpcId、sessionId 或 questions。", sessionId: frame.sessionId, isError: true)
+            return
+        }
+        let request = GatewayPendingQuestionRequest(
+            rpcId: rpcId,
+            sessionId: sessionId,
+            questions: questions,
+            replay: frame.replay == true
+        )
+        if let index = pendingQuestionRequests.firstIndex(where: { $0.rpcId == rpcId }) {
+            pendingQuestionRequests[index] = request
+        } else {
+            pendingQuestionRequests.append(request)
+            questionRequestStatuses[rpcId] = .idle
+        }
+        notice(
+            frame.replay == true ? "待回答问题已恢复" : "Agent 正在等待回答",
+            questions.first?.question ?? "请回答 Agent 的问题",
+            sessionId: sessionId
+        )
+    }
+
+    private func handleQuestionResponse(_ frame: GatewayFrame) {
+        guard let rpcId = frame.rpcId else { return }
+        let action = GatewayQuestionAction(rawValue: frame.action ?? "") ?? .answer
+        if frame.accepted == true {
+            questionRequestStatuses[rpcId] = .accepted(action)
+            return
+        }
+        let reason = frame.reason ?? "bad-response"
+        if reason == "not-pending" {
+            if let request = pendingQuestionRequests.first(where: { $0.rpcId == rpcId }) {
+                notice("问题已在其他端处理", "当前响应未生效。", sessionId: request.sessionId)
+            }
+            pendingQuestionRequests.removeAll { $0.rpcId == rpcId }
+            questionRequestStatuses[rpcId] = nil
+        } else {
+            questionRequestStatuses[rpcId] = .rejected("服务端未接受答案（\(reason)），请检查后重试。")
+        }
+    }
+
+    private func handleQuestionResolved(_ frame: GatewayFrame) {
+        guard let rpcId = frame.rpcId else { return }
+        let request = pendingQuestionRequests.first { $0.rpcId == rpcId }
+        pendingQuestionRequests.removeAll { $0.rpcId == rpcId }
+        questionRequestStatuses[rpcId] = nil
+        let outcome = frame.outcome == "cancelled" ? "已跳过" : "已提交"
+        notice("Agent 问题\(outcome)", "等待 Agent 继续执行。", sessionId: frame.sessionId ?? request?.sessionId)
     }
 
     private func handleSent(_ frame: GatewayFrame) {

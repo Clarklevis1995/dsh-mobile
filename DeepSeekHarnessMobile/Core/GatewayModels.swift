@@ -119,6 +119,77 @@ struct GatewayFrame: Codable, Sendable {
     var target: String?
     var value: String?
     var applied: Bool?
+    // Human-in-the-loop question protocol (Mobile Gateway v0.5.0).
+    var rpcId: String?
+    var questions: [GatewayQuestion]?
+    var replay: Bool?
+    var action: String?
+    var accepted: Bool?
+    var reason: String?
+    var outcome: String?
+}
+
+struct GatewayQuestionOption: Codable, Hashable, Sendable, Identifiable {
+    var label: String
+    var description: String?
+    var id: String { label }
+}
+
+struct GatewayQuestionIntent: Codable, Hashable, Sendable {
+    var kind: String
+    var approve: String?
+}
+
+struct GatewayQuestion: Codable, Hashable, Sendable, Identifiable {
+    var id: String
+    var header: String?
+    var question: String
+    var detail: String?
+    var options: [GatewayQuestionOption]?
+    var multiSelect: Bool?
+    var intent: GatewayQuestionIntent?
+
+    var allowsMultipleSelections: Bool { multiSelect == true }
+}
+
+struct GatewayPendingQuestionRequest: Hashable, Sendable, Identifiable {
+    var rpcId: String
+    var sessionId: String
+    var questions: [GatewayQuestion]
+    var replay: Bool
+    var id: String { rpcId }
+}
+
+struct GatewayQuestionAnswer: Codable, Hashable, Sendable {
+    var id: String
+    var selected: [String]
+    var custom: String?
+
+    init(id: String, selected: [String], custom: String? = nil) {
+        self.id = id
+        self.selected = selected
+        let normalized = custom?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.custom = normalized?.isEmpty == false ? normalized : nil
+    }
+}
+
+enum GatewayQuestionAction: String, Hashable, Sendable {
+    case answer
+    case cancel
+}
+
+enum GatewayQuestionRequestStatus: Equatable, Sendable {
+    case idle
+    case submitting(GatewayQuestionAction)
+    case accepted(GatewayQuestionAction)
+    case rejected(String)
+
+    var isBusy: Bool {
+        switch self {
+        case .submitting, .accepted: true
+        case .idle, .rejected: false
+        }
+    }
 }
 
 struct GatewayDevice: Codable, Hashable, Sendable {
