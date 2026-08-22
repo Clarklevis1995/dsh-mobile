@@ -23,6 +23,12 @@ final class GatewayClient: ObservableObject {
     private var wantsConnection = false
     private var pairingCode: String?
     private var lastReportedFailure: String?
+    /// iOS may suspend and tear down a normal WebSocket after the app moves
+    /// into the background. Keep this lifecycle state separate from protocol
+    /// failures so an expected transport interruption doesn't become a modal
+    /// error when the app returns to the foreground.
+    private var isApplicationInBackground = false
+    private var isRecoveringFromBackground = false
 
     deinit {
         receiveTask?.cancel()
@@ -31,11 +37,44 @@ final class GatewayClient: ObservableObject {
     }
 
     func connect(to rawEndpoint: String) {
+        isRecoveringFromBackground = false
         beginConnection(to: rawEndpoint, pairingCode: nil, resetReportedFailure: true)
     }
 
     func connectForPairing(_ payload: GatewayPairingPayload) {
+        isRecoveringFromBackground = false
         beginConnection(to: payload.publicUrl, pairingCode: payload.pairingCode, resetReportedFailure: true)
+    }
+
+    /// Records the scene transition and optionally keeps the transport alive
+    /// while AppStore owns a finite UIKit background-task assertion.
+    func applicationDidEnterBackground(keepConnectionAlive: Bool) {
+        isApplicationInBackground = true
+        isRecoveringFromBackground = true
+        if !keepConnectionAlive {
+            suspendTransportForBackground()
+        }
+    }
+
+    /// Restores the transport immediately instead of waiting for the delayed
+    /// reconnect loop. A successful `hello` clears recovery mode.
+    func applicationDidBecomeActive() {
+        isApplicationInBackground = false
+        guard wantsConnection, !state.isConnected, let endpoint else { return }
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        beginConnection(
+            to: endpoint.absoluteString,
+            pairingCode: pairingCode,
+            resetReportedFailure: false
+        )
+    }
+
+    /// Called when iOS revokes the finite background execution allowance.
+    /// Closing deliberately avoids repeatedly reconnecting while suspended.
+    func backgroundExecutionDidExpire() {
+        guard isApplicationInBackground else { return }
+        suspendTransportForBackground()
     }
 
     private func beginConnection(to rawEndpoint: String, pairingCode: String?, resetReportedFailure: Bool) {
@@ -161,6 +200,14 @@ final class GatewayClient: ObservableObject {
         send(payload)
     }
 
+    func requestAttachment(sessionId: String, attachmentId: String) {
+        send([
+            "type": "attachment",
+            "sessionId": sessionId,
+            "attachmentId": attachmentId
+        ])
+    }
+
     func subscribe(sessionId: String?) {
         if let sessionId, !sessionId.isEmpty {
             send(["type": "subscribe", "sessionId": sessionId])
@@ -169,13 +216,39 @@ final class GatewayClient: ObservableObject {
         }
     }
 
-    func sendMessage(text: String, sessionId: String?, workspaceId: String? = nil) {
-        var payload: [String: Any] = ["type": "message", "text": text]
-        if let sessionId, !sessionId.isEmpty { payload["sessionId"] = sessionId }
-        if sessionId == nil, let workspaceId, !workspaceId.isEmpty {
-            payload["workspaceId"] = workspaceId
+    func sendMessage(
+        text: String,
+        images: [GatewayOutgoingImage] = [],
+        sessionId: String?,
+        workspaceId: String? = nil
+    ) {
+        guard let socket else {
+            state = .failed("WebSocket 尚未连接")
+            return
         }
-        send(payload)
+        let request = GatewayMessageRequest(
+            sessionId: sessionId?.isEmpty == false ? sessionId : nil,
+            text: text,
+            images: images.map {
+                GatewayMessageRequest.Image(
+                    mediaType: $0.mediaType,
+                    data: $0.data,
+                    name: $0.name
+                )
+            },
+            workspaceId: sessionId == nil && workspaceId?.isEmpty == false ? workspaceId : nil,
+            clientTimeZone: TimeZone.current.identifier
+        )
+        Task { [weak self] in
+            do {
+                let payload = try await Task.detached(priority: .userInitiated) {
+                    try JSONEncoder().encode(request)
+                }.value
+                try await socket.send(.string(String(decoding: payload, as: UTF8.self)))
+            } catch {
+                self?.handleFailure(error, socket: socket)
+            }
+        }
     }
 
     func answerQuestion(rpcId: String, sessionId: String, answers: [GatewayQuestionAnswer]) {
@@ -253,6 +326,7 @@ final class GatewayClient: ObservableObject {
                         // Debug mode may explicitly return authenticated=false.
                         state = .connected
                         lastReportedFailure = nil
+                        isRecoveringFromBackground = false
                         serverPort = frame.port
                         clientCount = frame.clients
                     }
@@ -277,34 +351,40 @@ final class GatewayClient: ObservableObject {
         let closeReason = socket?.closeReason.flatMap { String(data: $0, encoding: .utf8) }
         let detail: String
         let shouldReconnect: Bool
+        let shouldReportFailure: Bool
         switch (statusCode, closeCode) {
         case (401, _):
             if pairingCode == nil, let endpoint { GatewayTokenStore.delete(for: endpoint) }
             detail = "鉴权失败（HTTP 401）：设备 token 无效、已被吊销，或配对码已过期/使用过，请重新扫码配对。"
             shouldReconnect = false
+            shouldReportFailure = true
         case (503, _):
             detail = "移动网关暂未开启（HTTP 503）。已保留设备凭据，开启网关后会自动重连。"
             shouldReconnect = true
+            shouldReportFailure = !(isApplicationInBackground || isRecoveringFromBackground)
         case (_, 4003):
             detail = "服务端已重新开启设备鉴权（WebSocket 4003），请使用已保存的设备凭据重连或重新扫码。"
             shouldReconnect = false
+            shouldReportFailure = true
         case (_, 4004):
             detail = "移动网关已关闭（WebSocket 4004）。已保留设备凭据，重新开启后会自动重连。"
             shouldReconnect = true
+            shouldReportFailure = !(isApplicationInBackground || isRecoveringFromBackground)
         default:
             let reasonSuffix = closeReason.flatMap { $0.isEmpty ? nil : "；服务端原因：\($0)" } ?? ""
             detail = "WebSocket 连接失败：\(nsError.localizedDescription)（\(nsError.domain) \(nsError.code)）\(reasonSuffix)"
             shouldReconnect = true
+            shouldReportFailure = !(isApplicationInBackground || isRecoveringFromBackground)
         }
-        fail(detail, shouldReconnect: shouldReconnect)
+        fail(detail, shouldReconnect: shouldReconnect, reportFailure: shouldReportFailure)
     }
 
-    private func fail(_ detail: String, shouldReconnect: Bool) {
+    private func fail(_ detail: String, shouldReconnect: Bool, reportFailure: Bool = true) {
         state = .failed(detail)
         socket = nil
         receiveTask = nil
         if !shouldReconnect { wantsConnection = false }
-        if lastReportedFailure != detail {
+        if reportFailure, lastReportedFailure != detail {
             lastReportedFailure = detail
             onConnectionFailure?(detail)
         }
@@ -321,6 +401,17 @@ final class GatewayClient: ObservableObject {
         }
     }
 
+    private func suspendTransportForBackground() {
+        wantsConnection = true
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        receiveTask?.cancel()
+        receiveTask = nil
+        socket?.cancel(with: .goingAway, reason: nil)
+        socket = nil
+        state = .disconnected
+    }
+
     private static func httpResponse(from socket: URLSessionWebSocketTask?, error: NSError) -> HTTPURLResponse? {
         if let response = socket?.response as? HTTPURLResponse { return response }
         for key in ["NSErrorFailingURLResponseKey", "NSURLErrorFailingURLResponseErrorKey"] {
@@ -333,8 +424,25 @@ final class GatewayClient: ObservableObject {
     }
 }
 
+private struct GatewayMessageRequest: Encodable, Sendable {
+    struct Image: Encodable, Sendable {
+        var mediaType: String
+        // JSONEncoder serializes Data as standard Base64 without a Data URL
+        // prefix, exactly matching protocol 3.
+        var data: Data
+        var name: String?
+    }
+
+    let type = "message"
+    var sessionId: String?
+    var text: String
+    var images: [Image]
+    var workspaceId: String?
+    var clientTimeZone: String
+}
+
 private enum GatewayDeviceIdentityStore {
-    private static let service = "ai.deepseek.harness.mobile.device-identity"
+    private static let service = "ai.dsh.mobile.ios.device-identity"
     private static let account = "installation"
 
     static func loadOrCreate() throws -> String {
@@ -376,7 +484,7 @@ private enum GatewayDeviceIdentityStore {
 }
 
 private enum GatewayTokenStore {
-    private static let service = "ai.deepseek.harness.mobile.gateway-token"
+    private static let service = "ai.dsh.mobile.ios.gateway-token"
 
     static func load(for endpoint: URL) -> String? {
         let query: [String: Any] = [

@@ -10,6 +10,8 @@
 		39FD319C875F4B4A6893D676 /* GatewayProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */; };
 		48857E4314868A4DD9F695EA /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BE407E6C6512836EB108990D /* Foundation.framework */; };
 		5ED39F22065A71FC54D755AC /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61A1F439244BA594BF547C92 /* AppStore.swift */; };
+		CA11E0000000000000000001 /* ImageAttachmentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000002 /* ImageAttachmentCache.swift */; };
+		CA11E0000000000000000003 /* ImagePreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000004 /* ImagePreprocessor.swift */; };
 		605DCE79952E970820A95606 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEABECFD00017A6E10B1F4A2 /* ConversationView.swift */; };
 		605DCE79952E970820A95607 /* HumanQuestionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEABECFD00017A6E10B1F4A3 /* HumanQuestionView.swift */; };
 		6FED6D958ABD07A258CC53F0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 152A3874C0D169644C9C7B6D /* Assets.xcassets */; };
@@ -45,12 +47,14 @@
 		0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayProtocolTests.swift; sourceTree = "<group>"; };
 		12863E736F832D8F502B94A0 /* Theme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		152A3874C0D169644C9C7B6D /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		38457CD5C46830D1CA7E6D73 /* DeepSeekHarnessMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeepSeekHarnessMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		38457CD5C46830D1CA7E6D73 /* DshMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DshMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		430CA64DF207C7EF58574336 /* DeepSeekHarnessMobileApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeepSeekHarnessMobileApp.swift; sourceTree = "<group>"; };
 		59B069578BB7F31AD35F601A /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1A0C0000000000000000002 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		5A37B43613D712F252BA91D7 /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		61A1F439244BA594BF547C92 /* AppStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		CA11E0000000000000000002 /* ImageAttachmentCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImageAttachmentCache.swift; sourceTree = "<group>"; };
+		CA11E0000000000000000004 /* ImagePreprocessor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImagePreprocessor.swift; sourceTree = "<group>"; };
 		65009160A0642089906B54DF /* TrajectoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrajectoryView.swift; sourceTree = "<group>"; };
 		954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayModels.swift; sourceTree = "<group>"; };
 		A0C0FFEE0000000000000002 /* ConversationViewport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationViewport.swift; sourceTree = "<group>"; };
@@ -92,6 +96,8 @@
 			isa = PBXGroup;
 			children = (
 				61A1F439244BA594BF547C92 /* AppStore.swift */,
+				CA11E0000000000000000002 /* ImageAttachmentCache.swift */,
+				CA11E0000000000000000004 /* ImagePreprocessor.swift */,
 				A0C0FFEE0000000000000004 /* ConversationProjection.swift */,
 				E61E231D0CD3E07857F861B0 /* GatewayClient.swift */,
 				954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */,
@@ -191,7 +197,7 @@
 		D7854C843240E809A949A26E /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				38457CD5C46830D1CA7E6D73 /* DeepSeekHarnessMobile.app */,
+				38457CD5C46830D1CA7E6D73 /* DshMobile.app */,
 				B64F29E9B8346B9A678CA487 /* DeepSeekHarnessMobileTests.xctest */,
 			);
 			name = Products;
@@ -224,8 +230,8 @@
 			packageProductDependencies = (
 				4CE3D78565179C422C796509 /* MarkdownUI */,
 			);
-			productName = DeepSeekHarnessMobile;
-			productReference = 38457CD5C46830D1CA7E6D73 /* DeepSeekHarnessMobile.app */;
+			productName = DshMobile;
+			productReference = 38457CD5C46830D1CA7E6D73 /* DshMobile.app */;
 			productType = "com.apple.product-type.application";
 		};
 		7515E0402B76392350DE0E00 /* DeepSeekHarnessMobileTests */ = {
@@ -311,6 +317,8 @@
 			files = (
 				D3A40BFC0B9C8D4B1C8FAA95 /* DeepSeekHarnessMobileApp.swift in Sources */,
 				5ED39F22065A71FC54D755AC /* AppStore.swift in Sources */,
+				CA11E0000000000000000001 /* ImageAttachmentCache.swift in Sources */,
+				CA11E0000000000000000003 /* ImagePreprocessor.swift in Sources */,
 				A0C0FFEE0000000000000003 /* ConversationProjection.swift in Sources */,
 				80E777AC0855635BC3D12EA7 /* GatewayClient.swift in Sources */,
 				AFAE90EEB4462AD84169D356 /* GatewayModels.swift in Sources */,
@@ -347,10 +355,10 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.deepseek.harness.mobile.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.dsh.mobile.ios.tests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeepSeekHarnessMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeepSeekHarnessMobile";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DshMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DshMobile";
 			};
 			name = Debug;
 		};
@@ -369,7 +377,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = ai.deepseek.harness.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.dsh.mobile.ios;
+				PRODUCT_MODULE_NAME = DeepSeekHarnessMobile;
+				PRODUCT_NAME = DshMobile;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -383,10 +393,10 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.deepseek.harness.mobile.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.dsh.mobile.ios.tests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeepSeekHarnessMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeepSeekHarnessMobile";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DshMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DshMobile";
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -521,7 +531,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = ai.deepseek.harness.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.dsh.mobile.ios;
+				PRODUCT_MODULE_NAME = DeepSeekHarnessMobile;
+				PRODUCT_NAME = DshMobile;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
 				TARGETED_DEVICE_FAMILY = 1;

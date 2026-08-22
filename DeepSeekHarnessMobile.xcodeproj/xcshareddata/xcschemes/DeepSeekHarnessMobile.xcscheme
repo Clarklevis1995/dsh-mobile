@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "660802D096F9D6E6D171BFE5"
-               BuildableName = "DeepSeekHarnessMobile.app"
+               BuildableName = "DshMobile.app"
                BlueprintName = "DeepSeekHarnessMobile"
                ReferencedContainer = "container:DeepSeekHarnessMobile.xcodeproj">
             </BuildableReference>
@@ -31,7 +31,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "660802D096F9D6E6D171BFE5"
-            BuildableName = "DeepSeekHarnessMobile.app"
+            BuildableName = "DshMobile.app"
             BlueprintName = "DeepSeekHarnessMobile"
             ReferencedContainer = "container:DeepSeekHarnessMobile.xcodeproj">
          </BuildableReference>
@@ -64,7 +64,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "660802D096F9D6E6D171BFE5"
-            BuildableName = "DeepSeekHarnessMobile.app"
+            BuildableName = "DshMobile.app"
             BlueprintName = "DeepSeekHarnessMobile"
             ReferencedContainer = "container:DeepSeekHarnessMobile.xcodeproj">
          </BuildableReference>
@@ -81,7 +81,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "660802D096F9D6E6D171BFE5"
-            BuildableName = "DeepSeekHarnessMobile.app"
+            BuildableName = "DshMobile.app"
             BlueprintName = "DeepSeekHarnessMobile"
             ReferencedContainer = "container:DeepSeekHarnessMobile.xcodeproj">
          </BuildableReference>

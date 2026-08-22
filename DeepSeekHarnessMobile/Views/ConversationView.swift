@@ -1,5 +1,6 @@
 import SwiftUI
 import MarkdownUI
+import PhotosUI
 import UIKit
 
 struct ConversationView: View {
@@ -7,6 +8,9 @@ struct ConversationView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var activeView = 0
     @State private var draft = ""
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var pendingImages: [GatewayOutgoingImage] = []
+    @State private var isImportingImages = false
     @State private var showsContextUsage = false
     @State private var showsSessionStats = false
     @State private var showsSessionStatsPopover = false
@@ -337,6 +341,9 @@ struct ConversationView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if !pendingImages.isEmpty {
+                pendingImageStrip
+            }
             TextField("描述你想要构建的内容", text: $draft, axis: .vertical)
                 .lineLimit(1...5)
                 .font(.body)
@@ -345,6 +352,26 @@ struct ConversationView: View {
                 .padding(.horizontal, 3)
                 .frame(minHeight: 38, alignment: .top)
             HStack(spacing: 7) {
+                PhotosPicker(
+                    selection: $selectedPhotoItems,
+                    maxSelectionCount: max(1, 20 - pendingImages.count),
+                    matching: .images
+                ) {
+                    Group {
+                        if isImportingImages {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                    }
+                    .frame(width: 32, height: 32)
+                    .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!store.supportsImages || pendingImages.count >= 20 || isImportingImages)
+                .accessibilityLabel(store.supportsImages ? "添加图片" : "当前网关不支持图片")
+
                 permissionControl
 
                 Spacer(minLength: 2)
@@ -368,8 +395,12 @@ struct ConversationView: View {
 
                 Button {
                     let content = draft
+                    let images = pendingImages
+                    guard store.send(content, images: images) else { return }
                     draft = ""
-                    store.send(content)
+                    pendingImages = []
+                    selectedPhotoItems = []
+                    composerIsFocused = false
                     // Sending establishes a new tail-following intent before
                     // the gateway echoes the user event. The subsequent user
                     // bubble and first reasoning block can therefore grow
@@ -383,8 +414,8 @@ struct ConversationView: View {
                         .background(DSHColor.ocean, in: Circle())
                 }
                 .buttonStyle(.plain)
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.waitingForNewSession)
-                .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.48 : 1)
+                .disabled(!composerHasContent || store.waitingForNewSession || isImportingImages)
+                .opacity(composerHasContent ? 1 : 0.48)
             }
         }
         .padding(.horizontal, 14)
@@ -398,6 +429,93 @@ struct ConversationView: View {
         .shadow(color: glassShadow, radius: 18, y: 8)
         .padding(.horizontal, 14)
         .padding(.bottom, composerBottomPadding)
+        .onChange(of: selectedPhotoItems) { _, items in
+            guard !items.isEmpty else { return }
+            Task { await importPhotos(items) }
+        }
+    }
+
+    private var composerHasContent: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
+    }
+
+    private var pendingImageStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(pendingImages) { image in
+                    ZStack(alignment: .topTrailing) {
+                        if let uiImage = UIImage(data: image.data) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 72, height: 72)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        Button {
+                            pendingImages.removeAll { $0.id == image.id }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, .black.opacity(0.68))
+                                .font(.system(size: 20))
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 5, y: -5)
+                        .accessibilityLabel("移除图片")
+                    }
+                    .padding(.top, 5)
+                    .padding(.trailing, 5)
+                }
+            }
+        }
+        .frame(height: 82)
+    }
+
+    @MainActor
+    private func importPhotos(_ items: [PhotosPickerItem]) async {
+        isImportingImages = true
+        defer {
+            isImportingImages = false
+            selectedPhotoItems = []
+        }
+        var imported: [GatewayOutgoingImage] = []
+        for item in items.prefix(max(0, 20 - pendingImages.count)) {
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self),
+                      let mediaType = Self.imageMediaType(for: data) else {
+                    store.lastError = "所选图片不是受支持的 PNG、JPEG、WebP 或 GIF。"
+                    continue
+                }
+                let prepared = try await Task.detached(priority: .userInitiated) {
+                    try GatewayImagePreprocessor.prepare(data: data, mediaType: mediaType)
+                }.value
+                imported.append(GatewayOutgoingImage(mediaType: prepared.mediaType, data: prepared.data))
+            } catch {
+                store.lastError = "处理所选图片失败：\(error.localizedDescription)"
+            }
+        }
+        let existingBytes = pendingImages.reduce(0) { $0 + $1.data.count }
+        var acceptedBytes = existingBytes
+        for image in imported where !pendingImages.contains(where: { $0.mediaType == image.mediaType && $0.data == image.data }) {
+            guard acceptedBytes + image.data.count <= 100 * 1024 * 1024 else {
+                store.lastError = "一条消息中的图片总大小不能超过 100 MiB。"
+                break
+            }
+            pendingImages.append(image)
+            acceptedBytes += image.data.count
+        }
+    }
+
+    private static func imageMediaType(for data: Data) -> String? {
+        let bytes = [UInt8](data.prefix(12))
+        if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) { return "image/png" }
+        if bytes.starts(with: [0xFF, 0xD8, 0xFF]) { return "image/jpeg" }
+        if bytes.count >= 6,
+           String(bytes: bytes.prefix(6), encoding: .ascii).map({ $0 == "GIF87a" || $0 == "GIF89a" }) == true { return "image/gif" }
+        if bytes.count >= 12,
+           String(bytes: bytes[0..<4], encoding: .ascii) == "RIFF",
+           String(bytes: bytes[8..<12], encoding: .ascii) == "WEBP" { return "image/webp" }
+        return nil
     }
 
     private var composerBottomPadding: CGFloat {
@@ -573,24 +691,26 @@ struct ConversationView: View {
             if modelGroups.isEmpty {
                 Text("正在读取模型…")
             } else {
-                Menu("模型") {
-                    ForEach(modelGroups) { group in
-                        Section(group.name) {
-                            ForEach(group.models) { model in
-                                Button {
-                                    select(group: group, model: model)
-                                } label: {
-                                    Label(
-                                        model.name,
-                                        systemImage: isCurrent(group: group, model: model) ? "checkmark" : "circle"
-                                    )
-                                }
+                // Keep model selection in one native menu. Presenting a
+                // submenu before the outer Menu finishes its animation makes
+                // UIKit resolve the child against a transient anchor, which
+                // intermittently offsets and clips it near the composer.
+                ForEach(modelGroups) { group in
+                    Section(group.name) {
+                        ForEach(group.models) { model in
+                            Button {
+                                select(group: group, model: model)
+                            } label: {
+                                Label(
+                                    model.name,
+                                    systemImage: isCurrent(group: group, model: model) ? "checkmark" : "circle"
+                                )
                             }
                         }
                     }
                 }
                 if !currentEfforts.isEmpty {
-                    Menu("推理等级") {
+                    Section("推理等级") {
                         ForEach(currentEfforts) { effort in
                             Button {
                                 select(effort: effort)
@@ -801,6 +921,15 @@ struct ConversationView: View {
                     revision: viewportEntryRevision(entry),
                     userMessage: .init(
                         text: item.text,
+                        images: item.images.map { image in
+                            .init(
+                                id: image.id,
+                                data: store.imageData(for: image.id),
+                                width: image.width,
+                                height: image.height,
+                                name: image.name
+                            )
+                        },
                         showsCopyButton: entry.showsCopyButton
                     )
                 )
@@ -809,7 +938,11 @@ struct ConversationView: View {
             let allowsHeightCaching: Bool
             switch entry.content {
             case .message(let item):
-                content = AnyView(ConversationRow(item: item, showsCopyButton: entry.showsCopyButton))
+                content = AnyView(ConversationRow(
+                    item: item,
+                    showsCopyButton: entry.showsCopyButton,
+                    imageData: { store.imageData(for: $0) }
+                ))
                 // Fenced code uses a horizontal ScrollView. Its vertical ideal
                 // size is stable after layout, but not necessarily during the
                 // first UIHostingConfiguration measurement. Let UIKit measure
@@ -840,11 +973,23 @@ struct ConversationView: View {
             hasher.combine(item.title)
             hasher.combine(item.text)
             hasher.combine(item.isError)
+            for image in item.images {
+                hasher.combine(image)
+                hasher.combine(store.imageData(for: image.id) != nil)
+            }
         case .process(let group):
             for item in group.items {
                 hasher.combine(item.id)
                 hasher.combine(item.title)
-                hasher.combine(item.text)
+                // A collapsed process header does not render the growing
+                // reasoning body. Reconfiguring its hosted SwiftUI cell for
+                // every reasoning token repeatedly invalidates neighboring
+                // self-sized rows and causes visible overlap/flicker. The
+                // completed reasoning item receives a new id and refreshes
+                // the row once with its final text.
+                if !(item.kind == .reasoning && item.title.contains("正在推理")) {
+                    hasher.combine(item.text)
+                }
                 hasher.combine(item.isError)
             }
         }
@@ -1797,9 +1942,52 @@ private func toggleWithoutAnimation(_ value: Binding<Bool>, before: () -> Void =
     withTransaction(transaction) { value.wrappedValue.toggle() }
 }
 
+private struct AttachmentImageGrid: View {
+    let attachments: [GatewayImageAttachment]
+    let imageData: (String) -> Data?
+
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: 6),
+            count: attachments.count == 1 ? 1 : 2
+        )
+    }
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .trailing, spacing: 6) {
+            ForEach(attachments) { attachment in
+                Group {
+                    if let data = imageData(attachment.id), let image = UIImage(data: data) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        ZStack {
+                            Color(uiColor: .secondarySystemFill)
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+                }
+                .aspectRatio(
+                    attachment.height > 0 ? CGFloat(attachment.width) / CGFloat(attachment.height) : 1,
+                    contentMode: .fit
+                )
+                .frame(maxWidth: attachments.count == 1 ? 320 : 180, maxHeight: 280)
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(.white.opacity(0.16), lineWidth: 0.7)
+                }
+                .accessibilityLabel(attachment.name ?? "图片附件")
+            }
+        }
+    }
+}
+
 private struct ConversationRow: View {
     let item: ConversationItem
     let showsCopyButton: Bool
+    let imageData: (String) -> Data?
     @State private var expanded = false
     @Environment(\.colorScheme) private var colorScheme
 
@@ -1807,14 +1995,21 @@ private struct ConversationRow: View {
         switch item.kind {
         case .user:
             VStack(alignment: .trailing, spacing: 5) {
-                Text(item.text)
-                    .font(.body).padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(userBubbleFill, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 15, style: .continuous)
-                            .stroke(userBubbleEdge, lineWidth: 0.7)
+                VStack(alignment: .trailing, spacing: 8) {
+                    if !item.images.isEmpty {
+                        AttachmentImageGrid(attachments: item.images, imageData: imageData)
                     }
-                if showsCopyButton { CopyMessageButton(text: item.text) }
+                    if !item.text.isEmpty {
+                        Text(item.text).font(.body)
+                    }
+                }
+                .padding(.horizontal, 10).padding(.vertical, 10)
+                .background(userBubbleFill, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(userBubbleEdge, lineWidth: 0.7)
+                }
+                if showsCopyButton && !item.text.isEmpty { CopyMessageButton(text: item.text) }
             }
             // Long pasted payloads should remain a trailing chat bubble, not
             // expand edge-to-edge. This fixed inset also removes a variable
@@ -1840,9 +2035,14 @@ private struct ConversationRow: View {
                 }
                 .padding(.horizontal, 2)
                 .padding(.vertical, 5)
-                MarkdownContent(item.text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if showsCopyButton { CopyMessageButton(text: item.text) }
+                if !item.images.isEmpty {
+                    AttachmentImageGrid(attachments: item.images, imageData: imageData)
+                }
+                if !item.text.isEmpty {
+                    MarkdownContent(item.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if showsCopyButton && !item.text.isEmpty { CopyMessageButton(text: item.text) }
             }
             .padding(.vertical, 3)
             .frame(maxWidth: .infinity, alignment: .leading)

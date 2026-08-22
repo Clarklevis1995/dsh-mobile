@@ -48,7 +48,9 @@ Dir[File.join(root, 'DeepSeekHarnessMobileTests', '*.swift')].sort.each do |file
 end
 
 app.build_configurations.each do |config|
-  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'ai.deepseek.harness.mobile'
+  config.build_settings['PRODUCT_NAME'] = 'DshMobile'
+  config.build_settings['PRODUCT_MODULE_NAME'] = 'DeepSeekHarnessMobile'
+  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'ai.dsh.mobile.ios'
   config.build_settings['INFOPLIST_FILE'] = 'DeepSeekHarnessMobile/Resources/Info.plist'
   config.build_settings['ASSETCATALOG_COMPILER_APPICON_NAME'] = 'AppIcon'
   config.build_settings['ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME'] = 'AccentColor'
@@ -58,10 +60,10 @@ app.build_configurations.each do |config|
   config.build_settings['GENERATE_INFOPLIST_FILE'] = 'NO'
 end
 tests.build_configurations.each do |config|
-  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'ai.deepseek.harness.mobile.tests'
+  config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'ai.dsh.mobile.ios.tests'
   config.build_settings['SWIFT_VERSION'] = '5.10'
   config.build_settings['GENERATE_INFOPLIST_FILE'] = 'YES'
-  config.build_settings['TEST_HOST'] = '$(BUILT_PRODUCTS_DIR)/DeepSeekHarnessMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeepSeekHarnessMobile'
+  config.build_settings['TEST_HOST'] = '$(BUILT_PRODUCTS_DIR)/DshMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DshMobile'
   config.build_settings['BUNDLE_LOADER'] = '$(TEST_HOST)'
 end
 

@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 enum JSONValue: Codable, Hashable, Sendable {
     case string(String), number(Double), bool(Bool), object([String: JSONValue]), array([JSONValue]), null
@@ -60,6 +61,7 @@ enum JSONValue: Codable, Hashable, Sendable {
 struct GatewayFrame: Codable, Sendable {
     var kind: String
     var `protocol`: Int?
+    var capabilities: [String]?
     var authenticated: Bool?
     var token: String?
     var device: GatewayDevice?
@@ -127,6 +129,54 @@ struct GatewayFrame: Codable, Sendable {
     var accepted: Bool?
     var reason: String?
     var outcome: String?
+    // Image attachment protocol (Mobile Gateway v0.6.0 / protocol 3).
+    var attachment: GatewayImageAttachment?
+    var data: String?
+}
+
+struct GatewayImageAttachment: Codable, Hashable, Sendable, Identifiable {
+    var attachmentId: String
+    var mediaType: String
+    var bytes: Int
+    var width: Int
+    var height: Int
+    var name: String?
+
+    var id: String { attachmentId }
+}
+
+struct GatewayOutgoingImage: Hashable, Sendable, Identifiable {
+    var id = UUID()
+    var mediaType: String
+    var data: Data
+    var name: String? = nil
+}
+
+struct GatewayImageDimensions: Equatable, Sendable {
+    var width: Int
+    var height: Int
+
+    var longestSide: Int { max(width, height) }
+}
+
+enum GatewayImageInspector {
+    /// DSH 0.1.1's default attachment-store per-side limit.
+    static let maximumPixelSide = 2_000
+
+    static func dimensions(of data: Data) -> GatewayImageDimensions? {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, options) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+              width.intValue > 0,
+              height.intValue > 0 else { return nil }
+        return GatewayImageDimensions(width: width.intValue, height: height.intValue)
+    }
+
+    static func isWithinPixelLimits(_ dimensions: GatewayImageDimensions) -> Bool {
+        dimensions.longestSide <= maximumPixelSide
+    }
 }
 
 struct GatewayQuestionOption: Codable, Hashable, Sendable, Identifiable {
@@ -432,7 +482,13 @@ struct RawSessionEvent: Codable, Hashable, Sendable {
         let step = data["step"]?.doubleValue.map(Int.init)
         switch type {
         case "user/message":
-            return GatewayEvent(type: type, text: textBlocks(data["content"]), source: data["source"]?["kind"]?.stringValue, raw: data)
+            return GatewayEvent(
+                type: type,
+                text: textBlocks(data["content"]),
+                source: data["source"]?["kind"]?.stringValue,
+                images: imageBlocks(data["content"]),
+                raw: data
+            )
         case "assistant/chunk":
             let chunk = data["chunk"]
             let chunkType = chunk?["type"]?.stringValue
@@ -457,6 +513,7 @@ struct RawSessionEvent: Codable, Hashable, Sendable {
                 usage: data["usage"],
                 reasoning: reasoning,
                 toolCalls: calls,
+                images: imageBlocks(data["message"]?["content"]),
                 raw: data
             )
         case "tool/call":
@@ -499,6 +556,13 @@ struct RawSessionEvent: Codable, Hashable, Sendable {
         (value?.arrayValue ?? []).filter { $0["type"]?.stringValue == "text" }.compactMap { $0["text"]?.stringValue }.joined()
     }
 
+    private func imageBlocks(_ value: JSONValue?) -> [GatewayImageAttachment] {
+        (value?.arrayValue ?? []).compactMap { block in
+            guard block["type"]?.stringValue == "image" else { return nil }
+            return block["attachment"]?.decode(GatewayImageAttachment.self)
+        }
+    }
+
     private func toolResultText(_ message: JSONValue?) -> String {
         let outer = message?["content"]?.arrayValue ?? []
         return outer.flatMap { $0["content"]?.arrayValue ?? [] }.filter { $0["type"]?.stringValue == "text" }.compactMap { $0["text"]?.stringValue }.joined()
@@ -517,6 +581,7 @@ struct GatewayEvent: Codable, Hashable, Sendable, Identifiable {
     var finish: FinishInfo?
     var reasoning: String?
     var toolCalls: [ToolCall]?
+    var images: [GatewayImageAttachment]?
     var callId: String?
     var name: String?
     var arguments: JSONValue?

@@ -8,7 +8,16 @@ struct ConversationViewportEntry: Identifiable {
     }
 
     struct UserMessage {
+        struct Image {
+            let id: String
+            let data: Data?
+            let width: Int
+            let height: Int
+            let name: String?
+        }
+
         let text: String
+        let images: [Image]
         let showsCopyButton: Bool
     }
 
@@ -456,11 +465,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         collectionView.collectionViewLayout.invalidateLayout(with: context)
     }
 
-    /// User rows are sparse, so their first appearance used to be the moment
-    /// the collection view discovered that the real bubble was much taller
-    /// than the section's 44pt estimate. Measure those inexpensive plain-text
-    /// rows before applying the snapshot; scrolling never has to perform the
-    /// correction and Auto Layout pass on the first visible frame.
+    /// User rows are sparse and immutable. Premeasure both their attachment
+    /// grid and text bubble so the collection view never has to correct a
+    /// provisional height while an assistant row is streaming below them.
     private func prewarmUserMessageHeights(in entries: [ConversationViewportEntry]) {
         let width = collectionView.bounds.width
         guard width > 0 else { return }
@@ -468,10 +475,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             guard let userMessage = entry.userMessage else { continue }
             let key = CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
             guard cellHeightCache[key] == nil else { continue }
-            cellHeightCache[key] = UserMessageCell.estimatedHeight(
-                for: userMessage.text,
-                width: width
-            )
+            cellHeightCache[key] = UserMessageCell.estimatedHeight(for: userMessage, width: width)
         }
     }
 
@@ -760,30 +764,47 @@ private class StableSelfSizingCollectionViewCell: UICollectionViewCell {
 private final class UserMessageCell: StableSelfSizingCollectionViewCell {
     static let reuseIdentifier = "UserMessageCell"
 
+    private let stack = UIStackView()
+    private let imageGrid = UIStackView()
     private let bubbleView = UIView()
     private let messageLabel = UILabel()
     private let copyButton = UIButton(type: .system)
     private var copyResetWorkItem: DispatchWorkItem?
 
-    static func estimatedHeight(for text: String, width: CGFloat) -> CGFloat {
+    static func estimatedHeight(for payload: ConversationViewportEntry.UserMessage, width: CGFloat) -> CGFloat {
         let horizontalBubbleInset: CGFloat = 34
         let horizontalTextPadding: CGFloat = 28
         let maximumTextWidth = max(1, width - horizontalBubbleInset - horizontalTextPadding)
-        let textBounds = (text as NSString).boundingRect(
+        let textBounds = (payload.text as NSString).boundingRect(
             with: CGSize(width: maximumTextWidth, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             attributes: [.font: UIFont.preferredFont(forTextStyle: .body)],
             context: nil
         )
-        // 12 top + 20 bubble vertical padding + 5 copy gap + 26 copy button
-        // + 12 bottom. Whole points keep the compositional layout stable.
-        return ceil(75 + textBounds.height)
+        let imageHeight = gridHeight(for: payload.images, availableWidth: width - horizontalBubbleInset)
+        var contentHeight: CGFloat = 0
+        if imageHeight > 0 { contentHeight += imageHeight }
+        if !payload.text.isEmpty {
+            if contentHeight > 0 { contentHeight += 8 }
+            contentHeight += ceil(textBounds.height) + 20
+            if payload.showsCopyButton { contentHeight += 5 + 26 }
+        }
+        return ceil(24 + contentHeight)
     }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
         backgroundConfiguration = UIBackgroundConfiguration.clear()
+
+        stack.axis = .vertical
+        stack.alignment = .trailing
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        imageGrid.axis = .vertical
+        imageGrid.alignment = .trailing
+        imageGrid.spacing = 6
 
         bubbleView.layer.cornerRadius = 15
         bubbleView.layer.cornerCurve = .continuous
@@ -803,23 +824,24 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         copyButton.addTarget(self, action: #selector(copyMessage), for: .touchUpInside)
         copyButton.translatesAutoresizingMaskIntoConstraints = false
 
-        contentView.addSubview(bubbleView)
+        contentView.addSubview(stack)
+        stack.addArrangedSubview(imageGrid)
+        stack.addArrangedSubview(bubbleView)
         bubbleView.addSubview(messageLabel)
-        contentView.addSubview(copyButton)
+        stack.addArrangedSubview(copyButton)
+        stack.setCustomSpacing(5, after: bubbleView)
 
         NSLayoutConstraint.activate([
-            bubbleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            bubbleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            bubbleView.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 34),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 34),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
 
             messageLabel.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10),
             messageLabel.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10),
             messageLabel.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
             messageLabel.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
 
-            copyButton.topAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: 5),
-            copyButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            copyButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
             copyButton.widthAnchor.constraint(equalToConstant: 16),
             copyButton.heightAnchor.constraint(equalToConstant: 26)
         ])
@@ -833,6 +855,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         copyResetWorkItem?.cancel()
         copyResetWorkItem = nil
         messageLabel.text = nil
+        clearImageGrid()
         showCopied(false)
     }
 
@@ -846,7 +869,84 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         if messageLabel.text != payload.text {
             messageLabel.text = payload.text
         }
-        copyButton.isHidden = !payload.showsCopyButton
+        bubbleView.isHidden = payload.text.isEmpty
+        copyButton.isHidden = payload.text.isEmpty || !payload.showsCopyButton
+        applyImages(payload.images)
+    }
+
+    private func applyImages(_ images: [ConversationViewportEntry.UserMessage.Image]) {
+        clearImageGrid()
+        imageGrid.isHidden = images.isEmpty
+        guard !images.isEmpty else { return }
+        let availableWidth = max(1, contentView.bounds.width - 34)
+        for start in stride(from: 0, to: images.count, by: images.count == 1 ? 1 : 2) {
+            let row = UIStackView()
+            row.axis = .horizontal
+            row.alignment = .bottom
+            row.spacing = 6
+            for imagePayload in images[start..<min(start + (images.count == 1 ? 1 : 2), images.count)] {
+                let size = Self.displaySize(
+                    for: imagePayload,
+                    availableWidth: availableWidth,
+                    isSingle: images.count == 1
+                )
+                let imageView = UIImageView(image: imagePayload.data.flatMap(UIImage.init(data:)))
+                imageView.backgroundColor = .secondarySystemFill
+                imageView.contentMode = .scaleAspectFill
+                imageView.clipsToBounds = true
+                imageView.layer.cornerRadius = 11
+                imageView.layer.cornerCurve = .continuous
+                imageView.accessibilityLabel = imagePayload.name ?? "图片附件"
+                imageView.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate([
+                    imageView.widthAnchor.constraint(equalToConstant: size.width),
+                    imageView.heightAnchor.constraint(equalToConstant: size.height)
+                ])
+                row.addArrangedSubview(imageView)
+            }
+            imageGrid.addArrangedSubview(row)
+        }
+    }
+
+    private func clearImageGrid() {
+        for row in imageGrid.arrangedSubviews {
+            imageGrid.removeArrangedSubview(row)
+            row.removeFromSuperview()
+        }
+    }
+
+    private static func gridHeight(
+        for images: [ConversationViewportEntry.UserMessage.Image],
+        availableWidth: CGFloat
+    ) -> CGFloat {
+        guard !images.isEmpty else { return 0 }
+        var height: CGFloat = 0
+        let rowCapacity = images.count == 1 ? 1 : 2
+        for start in stride(from: 0, to: images.count, by: rowCapacity) {
+            let row = images[start..<min(start + rowCapacity, images.count)]
+            let rowHeight = row.map {
+                displaySize(for: $0, availableWidth: availableWidth, isSingle: images.count == 1).height
+            }.max() ?? 0
+            if height > 0 { height += 6 }
+            height += rowHeight
+        }
+        return height
+    }
+
+    private static func displaySize(
+        for image: ConversationViewportEntry.UserMessage.Image,
+        availableWidth: CGFloat,
+        isSingle: Bool
+    ) -> CGSize {
+        let sourceWidth = CGFloat(max(1, image.width))
+        let sourceHeight = CGFloat(max(1, image.height))
+        let maximumWidth = min(isSingle ? 320 : 180, isSingle ? availableWidth : (availableWidth - 6) / 2)
+        let maximumHeight: CGFloat = isSingle ? 480 : 280
+        let scale = min(1, min(maximumWidth / sourceWidth, maximumHeight / sourceHeight))
+        return CGSize(
+            width: max(1, floor(sourceWidth * scale)),
+            height: max(1, floor(sourceHeight * scale))
+        )
     }
 
     @objc private func copyMessage() {

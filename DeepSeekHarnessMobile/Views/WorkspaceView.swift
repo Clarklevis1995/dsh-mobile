@@ -201,8 +201,17 @@ struct WorkspaceView: View {
 
     private var sessionSearch: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.5))
-            TextField("搜索会话内容", text: $searchQuery).textInputAutocapitalization(.never)
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.white.opacity(0.68))
+            TextField(
+                "",
+                text: $searchQuery,
+                prompt: Text("搜索会话内容")
+                    .foregroundStyle(.white.opacity(0.58))
+            )
+            .foregroundStyle(.white.opacity(0.92))
+            .tint(.white)
+            .textInputAutocapitalization(.never)
         }
         .padding(.horizontal, 12).frame(height: 42)
         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 13))
@@ -463,15 +472,11 @@ private struct GatewayAuthenticationMenu: View {
             menu
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
-                .background(surfaceTint, in: Circle())
-                .animation(.easeInOut(duration: 0.22), value: gateway.state)
         } else {
             menu
                 .buttonStyle(.plain)
-                .background(surfaceTint, in: Circle())
                 .background(.ultraThinMaterial, in: Circle())
-                .overlay(Circle().stroke(borderTint, lineWidth: 0.8))
-                .animation(.easeInOut(duration: 0.22), value: gateway.state)
+                .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 0.8))
         }
     }
 
@@ -492,23 +497,6 @@ private struct GatewayAuthenticationMenu: View {
         .accessibilityLabel("设备认证，\(gateway.state.label)")
     }
 
-    private var surfaceTint: Color {
-        switch gateway.state {
-        case .connected: DSHColor.success.opacity(0.3)
-        case .connecting: DSHColor.amber.opacity(0.22)
-        case .failed: Color.red.opacity(0.24)
-        case .disconnected: Color.white.opacity(0.025)
-        }
-    }
-
-    private var borderTint: Color {
-        switch gateway.state {
-        case .connected: DSHColor.success.opacity(0.45)
-        case .connecting: DSHColor.amber.opacity(0.38)
-        case .failed: Color.red.opacity(0.42)
-        case .disconnected: Color.white.opacity(0.25)
-        }
-    }
 }
 
 private struct GatewayConnectionStatusText: View {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum InterfaceStyle: String, CaseIterable, Identifiable {
     case system, light, dark
@@ -66,6 +67,7 @@ final class AppStore: ObservableObject {
     @Published var workspaceScrollAnchor: String?
     @Published private(set) var pendingQuestionRequests: [GatewayPendingQuestionRequest] = []
     @Published private(set) var questionRequestStatuses: [String: GatewayQuestionRequestStatus] = [:]
+    @Published private(set) var supportsImages = false
 
     let gateway = GatewayClient()
     private var pendingHistorySessionId: String?
@@ -90,6 +92,12 @@ final class AppStore: ObservableObject {
     /// arrived since the previous tick, instead of replaying the whole
     /// session; see `projectIncrementally(for:)`.
     private var conversationProjectors: [String: ConversationProjector] = [:]
+    /// Decoded bytes live outside the raw/history message models. A bounded
+    /// memory layer fronts a seven-day, purgeable on-disk cache.
+    private let imageAttachmentCache = ImageAttachmentCache()
+    private var queuedImageAttachmentIDs: Set<String> = []
+    private var imageAttachmentQueue: [(sessionId: String, attachment: GatewayImageAttachment)] = []
+    private var inFlightImageAttachmentIDs: Set<String> = []
     private var pendingModelsSessionId: String?
     private var isPendingGlobalModelsRequest = false
     private var pendingModelSelectionSessionId: String?
@@ -101,6 +109,11 @@ final class AppStore: ObservableObject {
     private var preparedConversationActivationKey: String?
     private var activeConversationActivationKey: String?
     private var presentsNextConnectionFailureAsAlert = true
+    private var applicationIsInBackground = false
+    private var userInitiatedAgentWorkIsActive = false
+    private var outstandingUserInitiatedTurns = 0
+    private var backgroundAgentSessionID: String?
+    private var agentBackgroundTask: UIBackgroundTaskIdentifier = .invalid
     private static let permissionPresets: Set<String> = ["read-only", "workspace-write", "danger-full-access"]
     private static let defaultPermissionPresets: Set<String> = ["ask", "read-only", "workspace-write", "danger-full-access"]
     private static let historyPageByteBudget = 4 * 1024 * 1024
@@ -146,6 +159,9 @@ final class AppStore: ObservableObject {
         guard let selectedSessionId else { return nil }
         return pendingQuestionRequests.first { $0.sessionId == selectedSessionId }
     }
+    func imageData(for attachmentId: String) -> Data? {
+        imageAttachmentCache.data(for: attachmentId)
+    }
     func conversationTimeline(for sessionId: String) -> ConversationTimeline {
         if let timeline = conversationTimelines[sessionId] { return timeline }
         let timeline = ConversationTimeline()
@@ -183,6 +199,23 @@ final class AppStore: ObservableObject {
         presentsNextConnectionFailureAsAlert = true
         lastError = nil
         gateway.connect(to: endpoint)
+    }
+
+    func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            applicationIsInBackground = false
+            gateway.applicationDidBecomeActive()
+        case .background:
+            applicationIsInBackground = true
+            imageAttachmentCache.removeExpiredFiles()
+            let hasBackgroundAllowance = userInitiatedAgentWorkIsActive && agentBackgroundTask != .invalid
+            gateway.applicationDidEnterBackground(keepConnectionAlive: hasBackgroundAllowance)
+        case .inactive:
+            break
+        @unknown default:
+            break
+        }
     }
 
     func pair(usingQRCode rawValue: String, presentsFailureAlert: Bool = true) throws {
@@ -486,16 +519,24 @@ final class AppStore: ObservableObject {
         beginSessionControlRequest("permission")
         gateway.setPermission(sessionId: sessionId, name: name)
     }
-    func send(_ text: String) {
+    @discardableResult
+    func send(_ text: String, images: [GatewayOutgoingImage] = []) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        guard gateway.state.isConnected else { lastError = "请先在设置中连接 DeepSeek Harness"; return }
+        guard !trimmed.isEmpty || !images.isEmpty else { return false }
+        guard gateway.state.isConnected else { lastError = "请先在设置中连接 DeepSeek Harness"; return false }
+        guard images.isEmpty || supportsImages else {
+            lastError = "当前 Mobile Gateway 不支持图片，请升级并重启 dsh web。"
+            return false
+        }
         waitingForNewSession = selectedSessionId == nil
+        beginAgentBackgroundExecution(for: selectedSessionId, startsNewTurn: true)
         gateway.sendMessage(
             text: trimmed,
+            images: images,
             sessionId: selectedSessionId,
             workspaceId: selectedSessionId == nil ? activeWorkspace?.id : nil
         )
+        return true
     }
 
     func answerQuestion(_ request: GatewayPendingQuestionRequest, answers: [GatewayQuestionAnswer]) {
@@ -523,6 +564,7 @@ final class AppStore: ObservableObject {
             }
         }
         questionRequestStatuses[request.rpcId] = .submitting(.answer)
+        beginAgentBackgroundExecution(for: request.sessionId, startsNewTurn: false)
         gateway.answerQuestion(rpcId: request.rpcId, sessionId: request.sessionId, answers: answers)
     }
 
@@ -547,9 +589,16 @@ final class AppStore: ObservableObject {
             // restart from lingering while replayed rpcIds are deduplicated.
             pendingQuestionRequests.removeAll()
             questionRequestStatuses.removeAll()
+            supportsImages = (frame.protocol ?? 1) >= 3 && (frame.capabilities ?? []).contains("images")
+            inFlightImageAttachmentIDs.removeAll()
+            queuedImageAttachmentIDs.removeAll()
+            imageAttachmentQueue.removeAll()
             presentsNextConnectionFailureAsAlert = true
             let authentication = frame.authenticated == false ? "Debug 未鉴权" : "设备鉴权成功"
             notice("网关已连接", "\(authentication) · Mobile protocol v\(frame.protocol ?? 1) · \(frame.clients ?? 1) 个客户端")
+            for (sessionId, records) in events {
+                enqueueImageAttachments(in: records, sessionId: sessionId)
+            }
             refreshRemoteState()
             refreshDefaultConfiguration()
             if preparedConversationActivationKey != nil {
@@ -579,6 +628,7 @@ final class AppStore: ObservableObject {
             isRefreshing = false
             notice("会话列表已同步", "\(sessions.count) 个会话")
         case "history": applyHistoryRebased(frame)
+        case "attachment": handleImageAttachment(frame)
         case "search":
             searchResults = decodeItems(frame.items, as: GatewaySearchItem.self)
             notice("搜索完成", "\(searchResults.count) 条结果\(frame.hasMore == true ? "，还有更多" : "")")
@@ -798,6 +848,9 @@ final class AppStore: ObservableObject {
 
     private func handleSent(_ frame: GatewayFrame) {
         guard let id = frame.sessionId else { return }
+        if userInitiatedAgentWorkIsActive, backgroundAgentSessionID == nil {
+            backgroundAgentSessionID = id
+        }
         if selectedSessionId == nil { selectedSessionId = id }
         waitingForNewSession = false
         upsertSession(id: id, title: "新建 Harness 会话")
@@ -812,6 +865,7 @@ final class AppStore: ObservableObject {
     private func handleLiveEvent(_ frame: GatewayFrame) {
         guard let id = frame.sessionId, let seq = frame.seq, let time = frame.time, let event = frame.event else { return }
         merge(SessionEvent(sessionId: id, seq: seq, time: time, event: event))
+        enqueueImageAttachments(event.images ?? [], sessionId: id)
     }
     private func applyHistoryRebased(_ frame: GatewayFrame) {
         guard let id = frame.sessionId ?? pendingHistorySessionId ?? selectedSessionId else { return }
@@ -869,6 +923,7 @@ final class AppStore: ObservableObject {
                 self.events[id] = rebase.events
                 self.conversationProjectors[id] = rebase.projector
                 self.publishConversationItems(rebase.projector.items, for: id)
+                self.enqueueImageAttachments(in: rebase.events, sessionId: id)
                 break
             }
 
@@ -997,6 +1052,53 @@ final class AppStore: ObservableObject {
         scheduleConversationProjection(for: sessionId)
     }
 
+    private func enqueueImageAttachments(in records: [SessionEvent], sessionId: String) {
+        enqueueImageAttachments(records.flatMap { $0.event.images ?? [] }, sessionId: sessionId)
+    }
+
+    private func enqueueImageAttachments(_ attachments: [GatewayImageAttachment], sessionId: String) {
+        guard supportsImages else { return }
+        for attachment in attachments {
+            guard imageAttachmentCache.data(for: attachment.id) == nil else { continue }
+            guard !queuedImageAttachmentIDs.contains(attachment.id),
+                  !inFlightImageAttachmentIDs.contains(attachment.id) else { continue }
+            queuedImageAttachmentIDs.insert(attachment.id)
+            imageAttachmentQueue.append((sessionId, attachment))
+        }
+        pumpImageAttachmentQueue()
+    }
+
+    private func pumpImageAttachmentQueue() {
+        while inFlightImageAttachmentIDs.count < 3, !imageAttachmentQueue.isEmpty {
+            let request = imageAttachmentQueue.removeFirst()
+            queuedImageAttachmentIDs.remove(request.attachment.id)
+            guard imageAttachmentCache.data(for: request.attachment.id) == nil else { continue }
+            inFlightImageAttachmentIDs.insert(request.attachment.id)
+            gateway.requestAttachment(
+                sessionId: request.sessionId,
+                attachmentId: request.attachment.id
+            )
+        }
+    }
+
+    private func handleImageAttachment(_ frame: GatewayFrame) {
+        guard let attachment = frame.attachment else { return }
+        inFlightImageAttachmentIDs.remove(attachment.id)
+        defer { pumpImageAttachmentQueue() }
+        guard let encoded = frame.data,
+              let decoded = Data(base64Encoded: encoded),
+              decoded.count == attachment.bytes else {
+            notice("图片加载失败", "附件 \(attachment.id.prefix(12))… 的 Base64 或字节数无效。", sessionId: frame.sessionId, isError: true)
+            return
+        }
+        imageAttachmentCache.store(decoded, for: attachment.id)
+        guard let sessionId = frame.sessionId,
+              let items = renderedConversationItems[sessionId] else { return }
+        // The row revision also includes cache presence, so this publication
+        // replaces only rows whose attachment just became renderable.
+        conversationTimeline(for: sessionId).publish(items)
+    }
+
     private func scheduleConversationProjection(for sessionId: String) {
         let driver: ConversationProjectionDriver
         if let existing = conversationProjectionDrivers[sessionId] {
@@ -1075,6 +1177,14 @@ final class AppStore: ObservableObject {
     }
     private func applyEvent(_ record: SessionEvent) {
         let event = record.event
+        if event.type == "turn/end",
+           userInitiatedAgentWorkIsActive,
+           backgroundAgentSessionID == record.sessionId {
+            outstandingUserInitiatedTurns = max(0, outstandingUserInitiatedTurns - 1)
+            if outstandingUserInitiatedTurns == 0 {
+                finishAgentBackgroundExecution()
+            }
+        }
         if event.type == "turn/end", record.sessionId == selectedSessionId {
             beginSessionControlRequest("context-usage")
             beginSessionControlRequest("session-stats")
@@ -1154,6 +1264,51 @@ final class AppStore: ObservableObject {
             lastError = detail
         }
         presentsNextConnectionFailureAsAlert = true
+    }
+
+    private func beginAgentBackgroundExecution(for sessionID: String?, startsNewTurn: Bool) {
+        if startsNewTurn {
+            outstandingUserInitiatedTurns += 1
+        } else if outstandingUserInitiatedTurns == 0 {
+            // Answering an interactive question resumes the current Agent
+            // turn. Treat it as one outstanding turn when the original send
+            // happened before this process began tracking background work.
+            outstandingUserInitiatedTurns = 1
+        }
+        userInitiatedAgentWorkIsActive = true
+        if let sessionID {
+            backgroundAgentSessionID = sessionID
+        }
+        guard agentBackgroundTask == .invalid else { return }
+
+        agentBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Complete DSH Agent Turn") { [weak self] in
+            guard let self else { return }
+            self.expireAgentBackgroundExecution()
+        }
+    }
+
+    private func finishAgentBackgroundExecution() {
+        userInitiatedAgentWorkIsActive = false
+        outstandingUserInitiatedTurns = 0
+        backgroundAgentSessionID = nil
+        endAgentBackgroundTask()
+        if applicationIsInBackground {
+            gateway.backgroundExecutionDidExpire()
+        }
+    }
+
+    private func expireAgentBackgroundExecution() {
+        endAgentBackgroundTask()
+        if applicationIsInBackground {
+            gateway.backgroundExecutionDidExpire()
+        }
+    }
+
+    private func endAgentBackgroundTask() {
+        let identifier = agentBackgroundTask
+        guard identifier != .invalid else { return }
+        agentBackgroundTask = .invalid
+        UIApplication.shared.endBackgroundTask(identifier)
     }
 
     private func resetOutstandingRequests() {

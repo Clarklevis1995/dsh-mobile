@@ -8,8 +8,27 @@ struct ConversationItem: Identifiable, Sendable {
     let kind: Kind
     let title: String
     let text: String
+    let images: [GatewayImageAttachment]
     let isError: Bool
     let date: Date
+
+    init(
+        id: String,
+        kind: Kind,
+        title: String,
+        text: String,
+        images: [GatewayImageAttachment] = [],
+        isError: Bool,
+        date: Date
+    ) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.text = text
+        self.images = images
+        self.isError = isError
+        self.date = date
+    }
 
     /// Full (non-incremental) projection, used by callers that don't need to
     /// keep a `ConversationProjector` around (e.g. one-shot history commits).
@@ -38,7 +57,9 @@ struct ConversationItem: Identifiable, Sendable {
         switch event.type {
         case "user/message" where event.source == nil || event.source == "user":
             if let text = event.text, !text.isEmpty {
-                items.append(.init(id: record.id, kind: .user, title: "你", text: text, isError: false, date: record.date))
+                items.append(.init(id: record.id, kind: .user, title: "你", text: text, images: event.images ?? [], isError: false, date: record.date))
+            } else if let images = event.images, !images.isEmpty {
+                items.append(.init(id: record.id, kind: .user, title: "你", text: "", images: images, isError: false, date: record.date))
             }
         case "user/message":
             if let text = event.text, !text.isEmpty {
@@ -47,6 +68,7 @@ struct ConversationItem: Identifiable, Sendable {
                     kind: .context,
                     title: "上下文注入 · \(contextSourceName(event))",
                     text: text,
+                    images: event.images ?? [],
                     isError: false,
                     date: record.date
                 ))
@@ -70,17 +92,17 @@ struct ConversationItem: Identifiable, Sendable {
             removeStreamEntry(forKey: "text-\(key)", items: &items, indexes: &streamIndexes)
             removeStreamEntry(forKey: "reason-\(key)", items: &items, indexes: &streamIndexes)
             if let reasoning = event.reasoning, !reasoning.isEmpty {
-                items.append(.init(id: record.id + "-reason", kind: .reasoning, title: "Think", text: reasoning, isError: false, date: record.date))
+                items.append(.init(id: record.id + "-reason", kind: .reasoning, title: "Think", text: reasoning, images: [], isError: false, date: record.date))
             }
-            if let text = event.text, !text.isEmpty {
-                items.append(.init(id: record.id, kind: .assistant, title: "DeepSeek", text: text, isError: false, date: record.date))
+            if let text = event.text, !text.isEmpty || !(event.images ?? []).isEmpty {
+                items.append(.init(id: record.id, kind: .assistant, title: "DeepSeek", text: text, images: event.images ?? [], isError: false, date: record.date))
             }
         case "tool/call":
             let name = event.name ?? "Tool Call"
             let kind: Kind = name.caseInsensitiveCompare("run_code") == .orderedSame ? .jsonTool : .tool
-            items.append(.init(id: record.id, kind: kind, title: name, text: event.arguments?.jsonDisplayText ?? "", isError: false, date: record.date))
+            items.append(.init(id: record.id, kind: kind, title: name, text: event.arguments?.jsonDisplayText ?? "", images: [], isError: false, date: record.date))
         case "tool/result":
-            items.append(.init(id: record.id, kind: .toolResult, title: event.isError == true ? "工具失败" : "工具完成", text: event.preview ?? "", isError: event.isError == true, date: record.date))
+            items.append(.init(id: record.id, kind: .toolResult, title: event.isError == true ? "工具失败" : "工具完成", text: event.preview ?? "", images: [], isError: event.isError == true, date: record.date))
         default:
             break
         }
@@ -90,10 +112,10 @@ struct ConversationItem: Identifiable, Sendable {
         guard !delta.isEmpty else { return }
         if let index = indexes[key] {
             let old = result[index]
-            result[index] = .init(id: old.id, kind: old.kind, title: old.title, text: old.text + delta, isError: old.isError, date: date)
+            result[index] = .init(id: old.id, kind: old.kind, title: old.title, text: old.text + delta, images: old.images, isError: old.isError, date: date)
         } else {
             indexes[key] = result.count
-            result.append(.init(id: id, kind: kind, title: title, text: delta, isError: false, date: date))
+            result.append(.init(id: id, kind: kind, title: title, text: delta, images: [], isError: false, date: date))
         }
     }
 

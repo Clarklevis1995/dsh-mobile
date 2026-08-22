@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         RootNavigationHost(store: store)
@@ -9,6 +10,9 @@ struct RootView: View {
             .alert("DeepSeek Harness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
                 Button("好", role: .cancel) { store.lastError = nil }
             } message: { Text(store.lastError ?? "") }
+            .onChange(of: scenePhase) { _, phase in
+                store.handleScenePhase(phase)
+            }
     }
 }
 

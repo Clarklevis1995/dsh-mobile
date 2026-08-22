@@ -18,9 +18,9 @@ build/
 .build/
 .swiftpm/
 Package.resolved
+!DeepSeekHarnessMobile.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 # Local environment files
 .env
 .env.*
 !.env.example
-

@@ -1,7 +1,84 @@
 import XCTest
+import UIKit
 @testable import DeepSeekHarnessMobile
 
 final class GatewayProtocolTests: XCTestCase {
+    func testImageAttachmentCachePersistsAndExpires() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("image-cache-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var currentDate = Date(timeIntervalSince1970: 1_000)
+        let payload = Data("cached-image".utf8)
+        let cache = ImageAttachmentCache(
+            directoryURL: directory,
+            ttl: 60,
+            memoryCostLimit: 1,
+            now: { currentDate }
+        )
+
+        cache.store(payload, for: "attachment/unsafe-path")
+        cache.removeAllFromMemory()
+        XCTAssertEqual(cache.data(for: "attachment/unsafe-path"), payload)
+
+        cache.removeAllFromMemory()
+        currentDate.addTimeInterval(61)
+        XCTAssertNil(cache.data(for: "attachment/unsafe-path"))
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
+    }
+
+    func testImagePixelLimitPreflight() {
+        let accepted = GatewayImageDimensions(width: 2_000, height: 2_000)
+        let sideTooLong = GatewayImageDimensions(width: 2_001, height: 1_000)
+
+        XCTAssertTrue(GatewayImageInspector.isWithinPixelLimits(accepted))
+        XCTAssertFalse(GatewayImageInspector.isWithinPixelLimits(sideTooLong))
+    }
+
+    func testImagePreprocessorDownsizesToDSHLimits() throws {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 3_000, height: 1_500), format: format).image { context in
+            UIColor.systemBlue.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 3_000, height: 1_500))
+        }
+        let source = try XCTUnwrap(image.pngData())
+        let prepared = try GatewayImagePreprocessor.prepare(data: source, mediaType: "image/png")
+
+        XCTAssertEqual(prepared.mediaType, "image/jpeg")
+        XCTAssertLessThanOrEqual(prepared.data.count, GatewayImagePreprocessor.maximumBytes)
+        XCTAssertLessThanOrEqual(prepared.dimensions.longestSide, GatewayImagePreprocessor.maximumPixelSide)
+        XCTAssertLessThanOrEqual(
+            prepared.dimensions.width * prepared.dimensions.height,
+            GatewayImagePreprocessor.maximumPixels
+        )
+        XCTAssertEqual(prepared.dimensions.width, 2_000)
+        XCTAssertEqual(prepared.dimensions.height, 1_000)
+    }
+
+    func testDecodesProtocolThreeImageCapability() throws {
+        let json = #"{"kind":"hello","protocol":3,"capabilities":["images"],"authenticated":true}"#
+        let frame = try GatewayWireDecoder.decode(Data(json.utf8))
+
+        XCTAssertEqual(frame.protocol, 3)
+        XCTAssertEqual(frame.capabilities, ["images"])
+    }
+
+    func testDecodesLiveImageReference() throws {
+        let json = #"{"kind":"event","sessionId":"s1","seq":7,"time":1001,"event":{"type":"user/message","text":"描述它","source":"user","images":[{"attachmentId":"att-1","mediaType":"image/jpeg","bytes":12,"width":3,"height":4,"name":"photo.jpg"}]}}"#
+        let frame = try GatewayWireDecoder.decode(Data(json.utf8))
+
+        XCTAssertEqual(frame.event?.images?.first?.attachmentId, "att-1")
+        XCTAssertEqual(frame.event?.images?.first?.mediaType, "image/jpeg")
+    }
+
+    func testDecodesAttachmentPayload() throws {
+        let json = #"{"kind":"attachment","sessionId":"s1","attachment":{"attachmentId":"att-1","mediaType":"image/png","bytes":8,"width":1,"height":1},"data":"iVBORw0K"}"#
+        let frame = try GatewayWireDecoder.decode(Data(json.utf8))
+
+        XCTAssertEqual(frame.attachment?.attachmentId, "att-1")
+        XCTAssertEqual(frame.data, "iVBORw0K")
+    }
+
     func testDecodesToolEvent() throws {
         let json = #"{"kind":"event","sessionId":"s1","seq":4,"time":1000,"event":{"type":"tool/call","turn":1,"step":2,"callId":"c1","name":"Bash","arguments":{"cmd":"pwd"}}}"#
         let frame = try JSONDecoder().decode(GatewayFrame.self, from: Data(json.utf8))
@@ -163,6 +240,18 @@ final class GatewayProtocolTests: XCTestCase {
         let event = try XCTUnwrap(frame.events?.first?.normalized(sessionId: "s1"))
         XCTAssertEqual(event.event.type, "user/message")
         XCTAssertEqual(event.event.text, "历史消息")
+    }
+
+    func testNormalizesRawHistoryImageReferenceAndProjectsPureImageMessage() throws {
+        let json = #"{"kind":"history","events":[{"type":"user/message","seq":1,"time":1786937352,"data":{"content":[{"type":"image","attachment":{"attachmentId":"att-history","mediaType":"image/webp","bytes":42,"width":100,"height":80,"name":"image.webp"}}],"source":{"kind":"user"}}}],"hasMore":false}"#
+        let frame = try GatewayWireDecoder.decode(Data(json.utf8))
+        let event = try XCTUnwrap(frame.events?.first?.normalized(sessionId: "s1"))
+        let item = try XCTUnwrap(ConversationItem.make(from: [event]).first)
+
+        XCTAssertEqual(event.event.images?.first?.attachmentId, "att-history")
+        XCTAssertEqual(item.kind, .user)
+        XCTAssertEqual(item.text, "")
+        XCTAssertEqual(item.images.first?.mediaType, "image/webp")
     }
 
     func testNormalizesRawSubtoolDispatch() throws {
