@@ -64,7 +64,6 @@ final class AppStore: ObservableObject {
     @Published var permissionDefault: String?
     @Published var defaultModelSelection: GatewayModelSelection?
     @Published var defaultConfigurationLoadingKinds: Set<String> = []
-    @Published var workspaceScrollAnchor: String?
     @Published private(set) var pendingQuestionRequests: [GatewayPendingQuestionRequest] = []
     @Published private(set) var questionRequestStatuses: [String: GatewayQuestionRequestStatus] = [:]
     @Published private(set) var supportsImages = false
@@ -128,7 +127,6 @@ final class AppStore: ObservableObject {
     init() {
         selectedWorkspaceId = UserDefaults.standard.string(forKey: "gateway.selectedWorkspaceId")
         endpoint = UserDefaults.standard.string(forKey: "gateway.endpoint") ?? "ws://127.0.0.1:3080/ws/mobile"
-        workspaceScrollAnchor = nil
         if let data = UserDefaults.standard.data(forKey: "gateway.sessions"),
            let decoded = try? JSONDecoder().decode([SessionSummary].self, from: data) { sessions = decoded }
         UserDefaults.standard.removeObject(forKey: "gateway.conversationScrollAnchors")

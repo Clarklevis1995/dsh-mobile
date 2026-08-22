@@ -126,6 +126,46 @@ DeepSeek Harness Mobile 是一个面向 DeepSeek Harness 的原生 iOS 客户端
 
 移动端可扫描 WebUI 生成的一次性二维码完成配对。公网地址必须使用 `wss://`，配对码仅可使用一次并会在短时间后过期；已配对设备可在网关管理界面中查看和管理。
 
+#### 配对步骤
+
+1. **确认当前尚未配对。** 第一次进入 DshMobile 时，应用可能提示“鉴权失败（HTTP 401）”。这表示当前设备还没有与 Mobile Gateway 完成配对，关闭提示后继续下面的操作即可。
+
+   <p align="center">
+     <img src="Docs/images/screenshots/pairing-01-authentication-failed.png" alt="DshMobile 首次启动时提示鉴权失败" width="320">
+   </p>
+
+2. **打开配对页面。** 点击 App 右上角的鉴权按钮，在弹出的“设备认证”页面中选择扫码，或准备手动输入 WebUI 生成的 Base64URL 配对 Token。
+
+   <p align="center">
+     <img src="Docs/images/screenshots/pairing-dark.png" alt="DshMobile 设备认证与手动输入配对信息页面" width="320">
+   </p>
+
+3. **在 WebUI 中打开移动设备管理。** 成功安装并启用 `dsh-plugin-mobile-gateway` 后启动 DeepSeek Harness WebUI，左侧导航栏底部会出现“移动设备”入口，点击进入。
+
+   <p align="center">
+     <img src="Docs/images/screenshots/pairing-03-webui-mobile-device-entry.png" alt="DeepSeek Harness WebUI 左下角的移动设备入口" width="100%">
+   </p>
+
+4. **开启网关和设备鉴权。** WebUI 右侧会弹出“移动设备”面板，请同时开启“允许移动设备连接”和“设备鉴权”两个开关。
+
+   <p align="center">
+     <img src="Docs/images/screenshots/pairing-04-webui-gateway-settings.png" alt="WebUI 移动设备面板中的连接和设备鉴权开关" width="390">
+   </p>
+
+5. **确认地址并生成二维码。** 检查 WebSocket 地址是否为手机能够访问的 Mac 局域网 IP，然后填写设备名称并点击“生成配对二维码”。同一局域网可以使用 `ws://`；通过公网连接时必须使用 `wss://`。
+
+   <p align="center">
+     <img src="Docs/images/screenshots/pairing-05-webui-qr-token.png" alt="确认 WebSocket 地址并生成配对二维码和 Token" width="390">
+   </p>
+
+6. **选择扫码或手动输入。** 根据需要，使用 DshMobile 扫描 WebUI 中的二维码；也可以点击“复制配对 Token”，再将 Token 粘贴到 App 的设备认证页面。配对 Token 只能使用一次，并会在 5 分钟后过期。
+
+7. **确认连接成功。** 配对完成后返回首页，最近会话区域右侧会显示绿色“已连接”状态，此时即可开始使用移动端。
+
+   <p align="center">
+     <img src="Docs/images/screenshots/pairing-07-connected.png" alt="DshMobile 配对完成后的已连接状态" width="320">
+   </p>
+
 ## 技术实现
 
 ```text
