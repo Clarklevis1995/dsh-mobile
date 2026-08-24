@@ -17,7 +17,7 @@
 
 ## 项目简介
 
-DeepSeek Harness Mobile 是一个面向 DeepSeek Harness 的原生 iOS 客户端。它通过 `dsh-plugin-mobile-gateway` 与 Harness 建立 WebSocket 连接，将工作区、会话、实时回复和 Agent 执行轨迹带到 iPhone，同时延续 DeepSeek WebUI 克制、清晰的视觉语言。
+DeepSeek Harness Mobile 是一个面向 DeepSeek Harness 的原生 iOS 客户端。它通过 [`dsh-plugin-mobile-gateway`](https://github.com/Clarklevis1995/dsh-plugin-mobile-gateway) 与 Harness 建立 WebSocket 连接，将工作区、会话、实时回复和 Agent 执行轨迹带到 iPhone，同时延续 DeepSeek WebUI 克制、清晰的视觉语言。
 
 界面提供浅色与深色模式，并在支持的系统上使用 Liquid Glass 导航与交互控件；深色首页则以深海蓝、水波纹、网格和点阵鲸鱼构成与 Harness 官网一致的视觉氛围。
 
