@@ -126,6 +126,10 @@ final class ConversationViewportProxy {
     func prepareForOverlayPresentation() {
         controller?.stopInertialScrolling()
     }
+
+    func invalidateHeight(for id: String) {
+        controller?.invalidateHeight(for: id)
+    }
 }
 
 final class ConversationViewportController: UIViewController, UICollectionViewDelegate {
@@ -289,6 +293,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                     withReuseIdentifier: UserMessageCell.reuseIdentifier,
                     for: indexPath
                 ) as! UserMessageCell
+                self?.cacheUserMessageHeightIfNeeded(userMessage, entry: entry)
                 cell.configureMeasurement(
                     id: entry.id,
                     revision: entry.revision,
@@ -303,7 +308,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                         ] = height
                     }
                 )
-                cell.apply(userMessage)
+                cell.apply(userMessage, containerWidth: collectionView.bounds.width)
                 return cell
             }
             guard let cell = collectionView.dequeueReusableCell(
@@ -487,7 +492,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                   let cell = collectionView.cellForItem(at: indexPath) as? UserMessageCell else { continue }
             // Geometry is deliberately unchanged. Updating only UIImageView.image
             // avoids a collection-layout invalidation and preserves the anchor.
-            cell.apply(payload)
+            cell.apply(payload, containerWidth: collectionView.bounds.width)
         }
     }
 
@@ -514,9 +519,42 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         guard width > 0 else { return }
         for entry in entries {
             guard let userMessage = entry.userMessage else { continue }
-            let key = CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
-            guard cellHeightCache[key] == nil else { continue }
-            cellHeightCache[key] = UserMessageCell.estimatedHeight(for: userMessage, width: width)
+            cacheUserMessageHeightIfNeeded(userMessage, entry: entry)
+        }
+    }
+
+    /// `configure` can run before the collection view receives its final
+    /// bounds. Repeat the deterministic user-row premeasurement when the cell
+    /// provider is invoked so an image row never falls back to another reused
+    /// cell's provisional height.
+    private func cacheUserMessageHeightIfNeeded(
+        _ userMessage: ConversationViewportEntry.UserMessage,
+        entry: ConversationViewportEntry
+    ) {
+        let width = collectionView.bounds.width
+        guard width > 0 else { return }
+        let key = CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+        guard cellHeightCache[key] == nil else { return }
+        cellHeightCache[key] = UserMessageCell.estimatedHeight(for: userMessage, width: width)
+    }
+
+    /// Disclosure rows are normally immutable and can reuse their measured
+    /// height while scrolling. A tap is the only event that changes their
+    /// intrinsic height, so evict and remeasure just that item after SwiftUI
+    /// commits its expanded state instead of keeping every process row in live
+    /// measurement mode.
+    func invalidateHeight(for id: String) {
+        cellHeightCache = cellHeightCache.filter { $0.key.id != id }
+        guard let indexPath = dataSource.indexPath(for: id) else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  self.dataSource.indexPath(for: id) == indexPath else { return }
+            let context = UICollectionViewLayoutInvalidationContext()
+            context.invalidateItems(at: [indexPath])
+            UIView.performWithoutAnimation {
+                self.collectionView.collectionViewLayout.invalidateLayout(with: context)
+                self.collectionView.layoutIfNeeded()
+            }
         }
     }
 
@@ -805,6 +843,9 @@ private class StableSelfSizingCollectionViewCell: UICollectionViewCell {
 private final class UserMessageCell: StableSelfSizingCollectionViewCell {
     static let reuseIdentifier = "UserMessageCell"
 
+    private static let maximumSingleImageHeight: CGFloat = 320
+    private static let maximumGridImageHeight: CGFloat = 220
+
     private struct ImageLayout: Equatable {
         let id: String
         let width: Int
@@ -820,6 +861,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
     private let copyButton = UIButton(type: .system)
     private var copyResetWorkItem: DispatchWorkItem?
     private var renderedImageLayout: [ImageLayout] = []
+    private var renderedContainerWidthInPixels = 0
     private var imageViewsByID: [String: UIImageView] = [:]
     private var renderedImageAvailability: [String: Bool] = [:]
 
@@ -883,11 +925,23 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         stack.addArrangedSubview(copyButton)
         stack.setCustomSpacing(5, after: bubbleView)
 
+        let provisionalBottom = stack.bottomAnchor.constraint(
+            equalTo: contentView.bottomAnchor,
+            constant: -12
+        )
+        // UICollectionView first installs the layout's 80pt estimated height
+        // before asking this deterministic cell for its cached final height.
+        // A text row with its copy button has a taller required vertical chain.
+        // Let only the outer edge yield during that provisional pass so UIKit
+        // never has to break the label's content constraints; at the cached
+        // final height this constraint is satisfied normally.
+        provisionalBottom.priority = .init(999)
+
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
             stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             stack.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 34),
-            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            provisionalBottom,
 
             messageLabel.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10),
             messageLabel.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10),
@@ -907,8 +961,10 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         copyResetWorkItem?.cancel()
         copyResetWorkItem = nil
         messageLabel.text = nil
-        clearImageGrid()
-        renderedImageLayout = []
+        // Keep an already-built attachment grid until the next payload is
+        // known. UICollectionView commonly dequeues the same cell for the
+        // same row when it re-enters the viewport; retaining the hierarchy
+        // avoids rebuilding every image view and constraint during a fling.
         showCopied(false)
     }
 
@@ -918,32 +974,38 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         updateBubbleColors()
     }
 
-    func apply(_ payload: ConversationViewportEntry.UserMessage) {
+    func apply(_ payload: ConversationViewportEntry.UserMessage, containerWidth: CGFloat) {
         if messageLabel.text != payload.text {
             messageLabel.text = payload.text
         }
         bubbleView.isHidden = payload.text.isEmpty
         copyButton.isHidden = payload.text.isEmpty || !payload.showsCopyButton
-        applyImages(payload.images)
+        applyImages(payload.images, containerWidth: containerWidth)
     }
 
-    private func applyImages(_ images: [ConversationViewportEntry.UserMessage.Image]) {
+    private func applyImages(
+        _ images: [ConversationViewportEntry.UserMessage.Image],
+        containerWidth: CGFloat
+    ) {
         imageGrid.isHidden = images.isEmpty
         let layout = images.map { ImageLayout(id: $0.id, width: $0.width, height: $0.height) }
+        let widthInPixels = Int((containerWidth * UIScreen.main.scale).rounded())
 
         // The gateway sends attachment metadata first and bytes later. Keep
         // the exact same views and constraints when only bytes have changed;
         // tearing down the grid here causes a transient zero-height pass in a
         // self-sizing UICollectionView cell and makes the bottom anchor jump.
-        if layout == renderedImageLayout {
+        if layout == renderedImageLayout,
+           widthInPixels == renderedContainerWidthInPixels {
             for image in images { updateImageContent(image) }
             return
         }
 
         clearImageGrid()
         renderedImageLayout = layout
+        renderedContainerWidthInPixels = widthInPixels
         guard !images.isEmpty else { return }
-        let availableWidth = max(1, contentView.bounds.width - 34)
+        let availableWidth = max(1, containerWidth - 34)
         for start in stride(from: 0, to: images.count, by: images.count == 1 ? 1 : 2) {
             let row = UIStackView()
             row.axis = .horizontal
@@ -963,10 +1025,19 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
                 imageView.layer.cornerCurve = .continuous
                 imageView.accessibilityLabel = imagePayload.name ?? "图片附件"
                 imageView.translatesAutoresizingMaskIntoConstraints = false
-                NSLayoutConstraint.activate([
-                    imageView.widthAnchor.constraint(equalToConstant: size.width),
-                    imageView.heightAnchor.constraint(equalToConstant: size.height)
-                ])
+                let width = imageView.widthAnchor.constraint(equalToConstant: size.width)
+                let height = imageView.heightAnchor.constraint(equalToConstant: size.height)
+                // A reused self-sizing cell temporarily retains its previous
+                // UIView-Encapsulated-Layout-Height. Keep the target image size
+                // strong but breakable during that provisional pass; the
+                // required aspect-ratio constraint prevents visual distortion.
+                width.priority = .init(999)
+                height.priority = .init(999)
+                let aspectRatio = imageView.widthAnchor.constraint(
+                    equalTo: imageView.heightAnchor,
+                    multiplier: size.width / size.height
+                )
+                NSLayoutConstraint.activate([width, height, aspectRatio])
                 row.addArrangedSubview(imageView)
                 imageViewsByID[imagePayload.id] = imageView
                 updateImageContent(imagePayload)
@@ -1028,7 +1099,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         let sourceWidth = CGFloat(max(1, image.width))
         let sourceHeight = CGFloat(max(1, image.height))
         let maximumWidth = min(isSingle ? 320 : 180, isSingle ? availableWidth : (availableWidth - 6) / 2)
-        let maximumHeight: CGFloat = isSingle ? 480 : 280
+        let maximumHeight = isSingle ? maximumSingleImageHeight : maximumGridImageHeight
         let scale = min(1, min(maximumWidth / sourceWidth, maximumHeight / sourceHeight))
         return CGSize(
             width: max(1, floor(sourceWidth * scale)),

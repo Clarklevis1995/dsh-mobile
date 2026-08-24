@@ -905,12 +905,13 @@ struct ConversationView: View {
 
     private func makeConversationViewportEntries(from items: [ConversationItem]) -> [ConversationViewportEntry] {
         ConversationDisplayEntry.make(from: items).map { entry in
+            let revision = viewportEntryRevision(entry)
             if case .message(let item) = entry.content,
                item.kind == .assistant,
                item.title.contains("正在生成") {
                 return ConversationViewportEntry(
                     id: entry.id,
-                    revision: viewportEntryRevision(entry),
+                    revision: revision,
                     streamingAssistant: .init(title: item.title, text: item.text)
                 )
             }
@@ -918,7 +919,7 @@ struct ConversationView: View {
                item.kind == .user {
                 return ConversationViewportEntry(
                     id: entry.id,
-                    revision: viewportEntryRevision(entry),
+                    revision: revision,
                     userMessage: .init(
                         text: item.text,
                         images: item.images.map { image in
@@ -949,14 +950,21 @@ struct ConversationView: View {
                 // these rows live instead of replaying a premature short cache.
                 allowsHeightCaching = !MarkdownViewportSizing.requiresLiveMeasurement(item.text)
             case .process(let group):
-                content = AnyView(ConversationProcessRow(group: group))
-                // Nested reasoning/tool disclosures intentionally change
-                // their row height after a tap.
-                allowsHeightCaching = false
+                content = AnyView(
+                    ConversationProcessRow(group: group)
+                        .environment(\.conversationDisclosureWillToggle) {
+                            viewportProxy.invalidateHeight(for: entry.id)
+                        }
+                )
+                // Collapsed process rows are immutable while scrolling. Cache
+                // their settled height just like completed Markdown rows; the
+                // environment callback evicts and remeasures only this item
+                // when a nested disclosure is explicitly toggled.
+                allowsHeightCaching = true
             }
             return ConversationViewportEntry(
                 id: entry.id,
-                revision: viewportEntryRevision(entry),
+                revision: revision,
                 content: content,
                 allowsHeightCaching: allowsHeightCaching
             )
