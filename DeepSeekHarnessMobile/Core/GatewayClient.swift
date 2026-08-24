@@ -41,6 +41,17 @@ final class GatewayClient: ObservableObject {
         beginConnection(to: rawEndpoint, pairingCode: nil, resetReportedFailure: true)
     }
 
+    /// Cold launch should only restore a connection for a device that has
+    /// already completed pairing. Opening an unauthenticated socket merely to
+    /// discover that pairing is required produces a misleading failure alert.
+    func hasStoredCredential(for rawEndpoint: String) -> Bool {
+        guard let url = URL(string: rawEndpoint),
+              ["ws", "wss"].contains(url.scheme?.lowercased() ?? "") else {
+            return false
+        }
+        return GatewayTokenStore.load(for: url)?.isEmpty == false
+    }
+
     func connectForPairing(_ payload: GatewayPairingPayload) {
         isRecoveringFromBackground = false
         beginConnection(to: payload.publicUrl, pairingCode: payload.pairingCode, resetReportedFailure: true)
@@ -346,6 +357,13 @@ final class GatewayClient: ObservableObject {
     private func handleFailure(_ error: Error, socket: URLSessionWebSocketTask? = nil) {
         guard wantsConnection else { return }
         let nsError = error as NSError
+        // `beginConnection` deliberately cancels the previous task before it
+        // installs the replacement. Its receive loop can finish one actor turn
+        // later, after `wantsConnection` has become true again. Never let that
+        // stale cancellation overwrite the new connection or surface as a
+        // user-facing "连接失败" alert.
+        if let socket, let activeSocket = self.socket, socket !== activeSocket { return }
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled { return }
         let statusCode = Self.httpResponse(from: socket, error: nsError)?.statusCode
         let closeCode = socket?.closeCode.rawValue
         let closeReason = socket?.closeReason.flatMap { String(data: $0, encoding: .utf8) }

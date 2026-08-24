@@ -108,6 +108,7 @@ final class AppStore: ObservableObject {
     private var preparedConversationActivationKey: String?
     private var activeConversationActivationKey: String?
     private var presentsNextConnectionFailureAsAlert = true
+    private var hasHandledColdLaunchConnection = false
     private var applicationIsInBackground = false
     private var userInitiatedAgentWorkIsActive = false
     private var outstandingUserInitiatedTurns = 0
@@ -197,6 +198,18 @@ final class AppStore: ObservableObject {
         presentsNextConnectionFailureAsAlert = true
         lastError = nil
         gateway.connect(to: endpoint)
+    }
+
+    /// Restores a previously paired gateway without turning the initial,
+    /// intentionally unpaired state into a transport error.
+    func connectOnColdLaunchIfPaired() {
+        guard !hasHandledColdLaunchConnection else { return }
+        hasHandledColdLaunchConnection = true
+        guard gateway.hasStoredCredential(for: endpoint) else {
+            lastError = "尚未连接到 DeepSeek Harness。请点击主页右上角的 🔑 按钮，扫描配对二维码或手动输入 Token 进行连接。"
+            return
+        }
+        connect()
     }
 
     func handleScenePhase(_ phase: ScenePhase) {

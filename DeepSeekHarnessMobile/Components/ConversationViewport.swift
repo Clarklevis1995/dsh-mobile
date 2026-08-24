@@ -377,6 +377,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         collectionView.verticalScrollIndicatorInsets.bottom = bottomInset
         let ids = entries.map(\.id)
         let prependAnchor = capturePrependAnchor(for: ids)
+        let oldEntriesByID = entriesByID
         entriesByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
         prewarmUserMessageHeights(in: entries)
         let changed = entries.compactMap { previousRevisions[$0.id] == $0.revision ? nil : $0.id }
@@ -394,12 +395,26 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         let streamingChanged = changed.filter { id in
             previousRevisions[id] != nil && entriesByID[id]?.streamingAssistant != nil
         }
-        let configuredChanged = changed.filter { !streamingChanged.contains($0) }
+        // Attachment bytes arrive after their message metadata. The image has
+        // already reserved its final size from width/height, so replacing the
+        // placeholder must not reconfigure the self-sizing collection cell.
+        // Doing so while the assistant row is growing makes diffable layout
+        // reconciliation and tail following fight over contentOffset, which
+        // is visible as several large up/down jumps.
+        let stableUserMessageChanged = changed.filter { id in
+            guard previousRevisions[id] != nil,
+                  let old = oldEntriesByID[id]?.userMessage,
+                  let new = entriesByID[id]?.userMessage else { return false }
+            return Self.hasSameUserMessageGeometry(old, new)
+        }
+        let lightweightChanged = Set(streamingChanged + stableUserMessageChanged)
+        let configuredChanged = changed.filter { !lightweightChanged.contains($0) }
         let keepTail = isPinnedToBottom && revision != lastAppliedRevision
         let interactionGeneration = userInteractionGeneration
         lastAppliedRevision = revision
         previousRevisions = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.revision) })
         updateVisibleStreamingCells(streamingChanged)
+        updateVisibleUserMessageCells(stableUserMessageChanged)
 
         // Pure token growth never enters diffable reconciliation. The visible
         // TextKit cell has already appended the suffix; only its own estimated
@@ -463,6 +478,32 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         let context = UICollectionViewLayoutInvalidationContext()
         context.invalidateItems(at: invalidatedIndexPaths)
         collectionView.collectionViewLayout.invalidateLayout(with: context)
+    }
+
+    private func updateVisibleUserMessageCells(_ ids: [String]) {
+        for id in ids {
+            guard let payload = entriesByID[id]?.userMessage,
+                  let indexPath = dataSource.indexPath(for: id),
+                  let cell = collectionView.cellForItem(at: indexPath) as? UserMessageCell else { continue }
+            // Geometry is deliberately unchanged. Updating only UIImageView.image
+            // avoids a collection-layout invalidation and preserves the anchor.
+            cell.apply(payload)
+        }
+    }
+
+    private static func hasSameUserMessageGeometry(
+        _ lhs: ConversationViewportEntry.UserMessage,
+        _ rhs: ConversationViewportEntry.UserMessage
+    ) -> Bool {
+        guard lhs.text == rhs.text,
+              lhs.showsCopyButton == rhs.showsCopyButton,
+              lhs.images.count == rhs.images.count else { return false }
+        return zip(lhs.images, rhs.images).allSatisfy { old, new in
+            old.id == new.id
+                && old.width == new.width
+                && old.height == new.height
+                && old.name == new.name
+        }
     }
 
     /// User rows are sparse and immutable. Premeasure both their attachment
@@ -764,12 +805,23 @@ private class StableSelfSizingCollectionViewCell: UICollectionViewCell {
 private final class UserMessageCell: StableSelfSizingCollectionViewCell {
     static let reuseIdentifier = "UserMessageCell"
 
+    private struct ImageLayout: Equatable {
+        let id: String
+        let width: Int
+        let height: Int
+    }
+
+    private static let decodedImageCache = NSCache<NSString, UIImage>()
+
     private let stack = UIStackView()
     private let imageGrid = UIStackView()
     private let bubbleView = UIView()
     private let messageLabel = UILabel()
     private let copyButton = UIButton(type: .system)
     private var copyResetWorkItem: DispatchWorkItem?
+    private var renderedImageLayout: [ImageLayout] = []
+    private var imageViewsByID: [String: UIImageView] = [:]
+    private var renderedImageAvailability: [String: Bool] = [:]
 
     static func estimatedHeight(for payload: ConversationViewportEntry.UserMessage, width: CGFloat) -> CGFloat {
         let horizontalBubbleInset: CGFloat = 34
@@ -856,6 +908,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         copyResetWorkItem = nil
         messageLabel.text = nil
         clearImageGrid()
+        renderedImageLayout = []
         showCopied(false)
     }
 
@@ -875,8 +928,20 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
     }
 
     private func applyImages(_ images: [ConversationViewportEntry.UserMessage.Image]) {
-        clearImageGrid()
         imageGrid.isHidden = images.isEmpty
+        let layout = images.map { ImageLayout(id: $0.id, width: $0.width, height: $0.height) }
+
+        // The gateway sends attachment metadata first and bytes later. Keep
+        // the exact same views and constraints when only bytes have changed;
+        // tearing down the grid here causes a transient zero-height pass in a
+        // self-sizing UICollectionView cell and makes the bottom anchor jump.
+        if layout == renderedImageLayout {
+            for image in images { updateImageContent(image) }
+            return
+        }
+
+        clearImageGrid()
+        renderedImageLayout = layout
         guard !images.isEmpty else { return }
         let availableWidth = max(1, contentView.bounds.width - 34)
         for start in stride(from: 0, to: images.count, by: images.count == 1 ? 1 : 2) {
@@ -890,7 +955,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
                     availableWidth: availableWidth,
                     isSingle: images.count == 1
                 )
-                let imageView = UIImageView(image: imagePayload.data.flatMap(UIImage.init(data:)))
+                let imageView = UIImageView()
                 imageView.backgroundColor = .secondarySystemFill
                 imageView.contentMode = .scaleAspectFill
                 imageView.clipsToBounds = true
@@ -903,8 +968,28 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
                     imageView.heightAnchor.constraint(equalToConstant: size.height)
                 ])
                 row.addArrangedSubview(imageView)
+                imageViewsByID[imagePayload.id] = imageView
+                updateImageContent(imagePayload)
             }
             imageGrid.addArrangedSubview(row)
+        }
+    }
+
+    private func updateImageContent(_ payload: ConversationViewportEntry.UserMessage.Image) {
+        guard let imageView = imageViewsByID[payload.id] else { return }
+        let hasData = payload.data != nil
+        guard renderedImageAvailability[payload.id] != hasData else { return }
+        renderedImageAvailability[payload.id] = hasData
+        guard let data = payload.data else {
+            imageView.image = nil
+            return
+        }
+        let key = payload.id as NSString
+        if let cached = Self.decodedImageCache.object(forKey: key) {
+            imageView.image = cached
+        } else if let decoded = UIImage(data: data) {
+            Self.decodedImageCache.setObject(decoded, forKey: key)
+            imageView.image = decoded
         }
     }
 
@@ -913,6 +998,8 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
             imageGrid.removeArrangedSubview(row)
             row.removeFromSuperview()
         }
+        imageViewsByID.removeAll(keepingCapacity: true)
+        renderedImageAvailability.removeAll(keepingCapacity: true)
     }
 
     private static func gridHeight(
