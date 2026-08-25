@@ -10,10 +10,13 @@ struct WorkspaceView: View {
     @State private var showsDirectoryBrowser = false
     @State private var showsQRScanner = false
     @State private var showsManualPairing = false
+    @FocusState private var sessionSearchIsFocused: Bool
 
     var body: some View {
         ZStack {
             DeepOceanBackground()
+                .contentShape(Rectangle())
+                .onTapGesture { sessionSearchIsFocused = false }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     header.id("workspace-header")
@@ -39,7 +42,12 @@ struct WorkspaceView: View {
                 .padding(.horizontal, 22).padding(.top, 18)
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
         }
+        // A tap handled by empty layout content does not reach the background
+        // layer. Keep a container-level fallback; controls retain their own
+        // actions and the search field consumes its tap while becoming focused.
+        .onTapGesture { sessionSearchIsFocused = false }
         .foregroundStyle(.white)
         .onAppear {
             store.refreshRemoteState()
@@ -209,6 +217,9 @@ struct WorkspaceView: View {
             .foregroundStyle(.white.opacity(0.92))
             .tint(.white)
             .textInputAutocapitalization(.never)
+            .focused($sessionSearchIsFocused)
+            .submitLabel(.search)
+            .onSubmit { sessionSearchIsFocused = false }
         }
         .padding(.horizontal, 12).frame(height: 42)
         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 13))
@@ -253,7 +264,12 @@ struct WorkspaceView: View {
     private var sessionsList: some View {
         LazyVStack(spacing: 0) {
             ForEach(displayedSessions.prefix(12)) { session in
-                Button { onOpenSession(session) } label: { sessionRow(session) }
+                Button {
+                    sessionSearchIsFocused = false
+                    onOpenSession(session)
+                } label: {
+                    sessionRow(session)
+                }
                     .buttonStyle(.plain)
                     .id("workspace-session-\(session.id)")
 
