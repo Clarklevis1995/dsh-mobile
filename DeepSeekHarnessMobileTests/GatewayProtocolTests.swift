@@ -3,6 +3,14 @@ import UIKit
 @testable import DeepSeekHarnessMobile
 
 final class GatewayProtocolTests: XCTestCase {
+    func testDecodesDirectoryCreateResponse() throws {
+        let data = #"{"kind":"directory-create","path":"/tmp/workspace/Sources"}"#.data(using: .utf8)!
+        let frame = try JSONDecoder().decode(GatewayFrame.self, from: data)
+
+        XCTAssertEqual(frame.kind, "directory-create")
+        XCTAssertEqual(frame.path, "/tmp/workspace/Sources")
+    }
+
     func testImageAttachmentCachePersistsAndExpires() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("image-cache-\(UUID().uuidString)", isDirectory: true)

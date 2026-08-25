@@ -81,6 +81,8 @@ final class AppStore: ObservableObject {
     @Published var directoryCrumbs: [GatewayDirectoryItem] = []
     @Published var directoryEntries: [GatewayDirectoryItem] = []
     @Published var directoryIsLoading = false
+    @Published var directoryCreationIsLoading = false
+    @Published private(set) var createdDirectoryPathToReveal: String?
     @Published var workspaceCreationIsLoading = false
     @Published var protocolNotices: [GatewayNotice] = []
     @Published var endpoint: String { didSet { UserDefaults.standard.set(endpoint, forKey: "gateway.endpoint") } }
@@ -141,6 +143,7 @@ final class AppStore: ObservableObject {
     private var isPendingGlobalModelsRequest = false
     private var pendingModelSelectionSessionId: String?
     private var pendingPermissionOptionsSessionId: String?
+    private var pendingDirectoryCreationParentPath: String?
     private var sessionControlRequestTokens: [String: UUID] = [:]
     private var defaultConfigurationRequestTokens: [String: UUID] = [:]
     /// Navigation preparation is intentionally cheap. Remote activation begins
@@ -530,6 +533,24 @@ final class AppStore: ObservableObject {
         directoryIsLoading = true
         gateway.requestDirectories(path: path)
     }
+    func createDirectory(parentPath: String, name: String) {
+        guard gateway.state.isConnected else {
+            lastError = String(localized: "请先连接 DeepSeek Harness")
+            return
+        }
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedName.isEmpty else {
+            lastError = String(localized: "文件夹名称不能为空")
+            return
+        }
+        pendingDirectoryCreationParentPath = parentPath
+        directoryCreationIsLoading = true
+        gateway.createDirectory(path: parentPath, name: normalizedName)
+    }
+    func acknowledgeCreatedDirectoryReveal(path: String) {
+        guard createdDirectoryPathToReveal == path else { return }
+        createdDirectoryPathToReveal = nil
+    }
     func createWorkspace(path: String) {
         guard gateway.state.isConnected else {
             lastError = String(localized: "请先连接 DeepSeek Harness")
@@ -797,6 +818,20 @@ final class AppStore: ObservableObject {
             directoryCrumbs = frame.crumbs ?? []
             directoryEntries = frame.entries ?? []
             notice(String(localized: "目录已加载"), String(localized: "directory.loaded.detail", defaultValue: "\(frame.path ?? "") · \(directoryEntries.count) 项"))
+        case "directory-create":
+            directoryCreationIsLoading = false
+            let parentPath = pendingDirectoryCreationParentPath
+            pendingDirectoryCreationParentPath = nil
+            if let path = frame.path {
+                createdDirectoryPathToReveal = path
+                notice(String(localized: "文件夹已创建"), path)
+            }
+            // The protocol requires refreshing the parent after creation. Use
+            // the request's captured parent so the response cannot accidentally
+            // refresh a directory the user navigated to while it was in flight.
+            if let parentPath {
+                browseDirectories(path: parentPath)
+            }
         case "workspace-create":
             workspaceCreationIsLoading = false
             if let workspace = frame.workspace {
@@ -814,6 +849,10 @@ final class AppStore: ObservableObject {
         case "error":
             waitingForNewSession = false
             if frame.requestType == "directories" { directoryIsLoading = false }
+            if frame.requestType == "directory-create" {
+                directoryCreationIsLoading = false
+                pendingDirectoryCreationParentPath = nil
+            }
             if frame.requestType == "workspace-create" { workspaceCreationIsLoading = false }
             if let requestType = frame.requestType,
                ["agent-presets", "defaults", "default-model", "set-default", "save-default-model"].contains(requestType) {
@@ -1368,6 +1407,8 @@ final class AppStore: ObservableObject {
         for kind in Array(defaultConfigurationLoadingKinds) { finishDefaultConfigurationRequest(kind) }
         for id in Array(historyLoadingSessionIds) { finishHistoryLoading(id) }
         directoryIsLoading = false
+        directoryCreationIsLoading = false
+        pendingDirectoryCreationParentPath = nil
         workspaceCreationIsLoading = false
         isRefreshing = false
         waitingForNewSession = false

@@ -147,6 +147,9 @@ final class GatewayClient: ObservableObject {
         if let path, !path.isEmpty { payload["path"] = path }
         send(payload)
     }
+    func createDirectory(path: String, name: String) {
+        send(["type": "directory-create", "path": path, "name": name])
+    }
     func createWorkspace(path: String) { send(["type": "workspace-create", "path": path]) }
     func requestModels(sessionId: String? = nil) {
         var payload: [String: Any] = ["type": "models"]

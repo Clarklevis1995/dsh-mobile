@@ -647,7 +647,12 @@ struct ConversationView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .trailing)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(String(localized: "a11y.defaults.model", defaultValue: "新会话默认模型：\(defaultModelTitle)\(defaultModelEffortTitle.map { String(localized: "defaults.effort.suffix", defaultValue: "，推理等级 \($0)") } ?? ""))"))
+            .accessibilityLabel(
+                String(
+                    localized: "a11y.defaults.model",
+                    defaultValue: "新会话默认模型：\(defaultModelTitle)\(defaultModelEffortTitle.map { String(localized: "defaults.effort.suffix", defaultValue: "，推理等级 \($0)") } ?? "")"
+                )
+            )
         } else {
             modelMenu
         }

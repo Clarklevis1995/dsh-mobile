@@ -333,53 +333,90 @@ private struct DirectoryBrowserSheet: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var creatingPath: String?
+    @State private var showsCreateDirectoryPrompt = false
+    @State private var newDirectoryName = ""
+    @State private var highlightedDirectoryPath: String?
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Button {
-                        if let parentPath { store.browseDirectories(path: parentPath) }
-                    } label: {
-                        directoryRow(icon: "arrowshape.turn.up.left", title: "..", subtitle: String(localized: "返回上一级"))
-                    }
-                    .disabled(parentPath == nil)
-
-                    ForEach(store.directoryEntries) { entry in
+            ScrollViewReader { proxy in
+                List {
+                    Section {
                         Button {
-                            store.browseDirectories(path: entry.path)
+                            if let parentPath { store.browseDirectories(path: parentPath) }
                         } label: {
-                            directoryRow(
-                                icon: entry.hidden ? "folder.badge.questionmark" : "folder",
-                                title: entry.name,
-                                subtitle: entry.hidden ? String(localized: "隐藏目录") : nil
+                            directoryRow(icon: "arrowshape.turn.up.left", title: "..", subtitle: String(localized: "返回上一级"))
+                        }
+                        .disabled(parentPath == nil)
+
+                        ForEach(store.directoryEntries) { entry in
+                            Button {
+                                store.browseDirectories(path: entry.path)
+                            } label: {
+                                directoryRow(
+                                    icon: entry.hidden ? "folder.badge.questionmark" : "folder",
+                                    title: entry.name,
+                                    subtitle: entry.hidden ? String(localized: "隐藏目录") : nil
+                                )
+                            }
+                            .id(entry.path)
+                            .listRowBackground(
+                                ZStack {
+                                    Color(uiColor: .secondarySystemGroupedBackground)
+                                    if highlightedDirectoryPath == entry.path {
+                                        DSHColor.ocean.opacity(0.24)
+                                    }
+                                }
                             )
                         }
-                    }
-                } header: {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("当前目录")
-                        Text(store.directoryPath ?? String(localized: "正在读取…"))
-                            .font(.caption.monospaced())
-                            .textCase(nil)
-                            .foregroundStyle(.secondary)
+                    } header: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("当前目录")
+                            Text(store.directoryPath ?? String(localized: "正在读取…"))
+                                .font(.caption.monospaced())
+                                .textCase(nil)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-            }
-            .allowsHitTesting(!store.directoryIsLoading)
-            .overlay {
-                if store.directoryIsLoading && store.directoryEntries.isEmpty {
-                    ProgressView(String(localized: "正在读取远程目录…"))
+                .allowsHitTesting(!store.directoryIsLoading && !store.directoryCreationIsLoading)
+                .overlay {
+                    if store.directoryIsLoading && store.directoryEntries.isEmpty {
+                        ProgressView(String(localized: "正在读取远程目录…"))
+                    }
                 }
-            }
-            .safeAreaInset(edge: .bottom) {
-                createWorkspaceBar
-            }
-            .navigationTitle("选择工作区目录")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("取消") { dismiss() }
+                .safeAreaInset(edge: .bottom) {
+                    createWorkspaceBar
+                }
+                .navigationTitle("选择工作区目录")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            newDirectoryName = ""
+                            showsCreateDirectoryPrompt = true
+                        } label: {
+                            Label("新建文件夹", systemImage: "folder.badge.plus")
+                        }
+                        .disabled(store.directoryPath == nil || store.directoryIsLoading || store.directoryCreationIsLoading)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("取消") { dismiss() }
+                    }
+                }
+                .onChange(of: store.createdDirectoryPathToReveal) { _, _ in
+                    revealCreatedDirectory(using: proxy)
+                }
+                .onChange(of: store.directoryEntries) { _, _ in
+                    revealCreatedDirectory(using: proxy)
+                }
+                .task(id: highlightedDirectoryPath) {
+                    guard highlightedDirectoryPath != nil else { return }
+                    try? await Task.sleep(for: .seconds(1.6))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        highlightedDirectoryPath = nil
+                    }
                 }
             }
         }
@@ -394,11 +431,43 @@ private struct DirectoryBrowserSheet: View {
                   store.activeWorkspace?.path == creatingPath else { return }
             dismiss()
         }
+        .alert("新建文件夹", isPresented: $showsCreateDirectoryPrompt) {
+            TextField("文件夹名称", text: $newDirectoryName)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button("取消", role: .cancel) {}
+            Button("创建") { createDirectory() }
+                .disabled(normalizedDirectoryName.isEmpty)
+        } message: {
+            Text("将在当前目录中创建一个新的子文件夹。")
+        }
     }
 
     private var parentPath: String? {
         guard store.directoryCrumbs.count > 1 else { return nil }
         return store.directoryCrumbs.dropLast().last?.path
+    }
+
+    private var normalizedDirectoryName: String {
+        newDirectoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func createDirectory() {
+        guard let parentPath = store.directoryPath,
+              !normalizedDirectoryName.isEmpty else { return }
+        store.createDirectory(parentPath: parentPath, name: normalizedDirectoryName)
+    }
+
+    private func revealCreatedDirectory(using proxy: ScrollViewProxy) {
+        guard let path = store.createdDirectoryPathToReveal,
+              store.directoryEntries.contains(where: { $0.path == path }) else { return }
+        highlightedDirectoryPath = path
+        store.acknowledgeCreatedDirectoryReveal(path: path)
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                proxy.scrollTo(path, anchor: .center)
+            }
+        }
     }
 
     private func directoryRow(icon: String, title: String, subtitle: String?) -> some View {
@@ -458,8 +527,21 @@ private struct DirectoryBrowserSheet: View {
                 .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(.plain)
-            .disabled(store.directoryPath == nil || store.workspaceCreationIsLoading)
+            .disabled(
+                store.directoryPath == nil ||
+                store.workspaceCreationIsLoading ||
+                store.directoryCreationIsLoading
+            )
             .allowsHitTesting(!store.directoryIsLoading)
+
+            if store.directoryCreationIsLoading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("正在创建文件夹…")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 9)

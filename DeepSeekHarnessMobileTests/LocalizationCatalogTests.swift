@@ -1,21 +1,24 @@
 import XCTest
 @testable import DeepSeekHarnessMobile
 
-/// Guards the localization catalogs shipped in the app bundle: the compiled
-/// English tables must exist, stay populated, and keep their placeholder
-/// arguments intact, so an English device never silently falls back to
-/// source-language text.
+/// Guards the localization catalogs shipped in the app bundle: compiled
+/// tables must exist, stay populated, and keep placeholder arguments intact,
+/// so the UI never exposes localization identifiers to users.
 final class LocalizationCatalogTests: XCTestCase {
 
-    private func englishTable(_ name: String) throws -> [String: String] {
+    private func localizedTable(_ name: String, localization: String) throws -> [String: String] {
         guard let path = Bundle.main.path(forResource: name,
                                           ofType: "strings",
                                           inDirectory: nil,
-                                          forLocalization: "en"),
+                                          forLocalization: localization),
               let dict = NSDictionary(contentsOfFile: path) as? [String: String] else {
             return [:]
         }
         return dict
+    }
+
+    private func englishTable(_ name: String) throws -> [String: String] {
+        try localizedTable(name, localization: "en")
     }
 
     func testEnglishLocalizableTableIsPresentAndPopulated() throws {
@@ -55,6 +58,14 @@ final class LocalizationCatalogTests: XCTestCase {
         XCTAssertEqual(table["session.remote.title"], "Remote session %@")
         XCTAssertEqual(table["history.loaded.detail"], "%lld events%@%@")
         XCTAssertTrue(table["gateway.connected.detail"]?.contains("%lld") ?? false)
+    }
+
+    func testChineseRuntimeValuesDoNotExposeLocalizationKeys() throws {
+        let table = try localizedTable("Localizable", localization: "zh-Hans")
+        XCTAssertFalse(table.isEmpty, "zh-Hans.lproj/Localizable.strings is missing from the app bundle")
+        XCTAssertEqual(table["context.items.count"], "%lld 项上下文")
+        XCTAssertEqual(table["stats.turns.steps.line"], "%lld 轮 · %lld 步")
+        XCTAssertEqual(table["projection.context-injection"], "上下文注入 · %@")
     }
 
     func testEnglishInfoPlistStringsShipCameraAndLocalNetworkCopy() throws {

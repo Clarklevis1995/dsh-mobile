@@ -58,6 +58,12 @@
             "state" : "translated",
             "value" : "Context %lld%% used"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上下文已用 %lld%%"
+          }
         }
       }
     },
@@ -68,6 +74,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Default model for new sessions: %@%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新会话默认模型：%@%@"
           }
         }
       }
@@ -80,6 +92,12 @@
             "state" : "translated",
             "value" : "Default permission for new sessions: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新会话默认权限：%@"
+          }
         }
       }
     },
@@ -90,6 +108,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Device authentication, %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备认证，%@"
           }
         }
       }
@@ -102,6 +126,12 @@
             "state" : "translated",
             "value" : "Generating — jump to the latest message"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成，滚动到最新消息"
+          }
         }
       }
     },
@@ -112,6 +142,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Jump to the latest message"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "滚动到最新消息"
           }
         }
       }
@@ -124,6 +160,12 @@
             "state" : "translated",
             "value" : "Open %@ #%lld"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 %@ #%lld"
+          }
         }
       }
     },
@@ -134,6 +176,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Open request #%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 Request #%lld"
           }
         }
       }
@@ -178,6 +226,12 @@
             "state" : "translated",
             "value" : "Authentication failed (HTTP 401): the device token is invalid or revoked, or the pairing code expired/was already used. Pair again."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鉴权失败（HTTP 401）：设备 token 无效、已被吊销，或配对码已过期/使用过，请重新扫码配对。"
+          }
         }
       }
     },
@@ -188,6 +242,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "The server re-enabled device authentication (WebSocket 4003). Reconnect with the saved device credentials or pair again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务端已重新开启设备鉴权（WebSocket 4003），请使用已保存的设备凭据重连或重新扫码。"
           }
         }
       }
@@ -221,6 +281,12 @@
             "state" : "translated",
             "value" : "Camera access wasn’t granted. Allow DeepSeek Harness to use the camera in system settings, then try again."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未获得相机权限。请在系统设置中允许 DeepSeek Harness 使用相机后重试。"
+          }
         }
       }
     },
@@ -231,6 +297,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Camera access is unavailable. Allow DeepSeek Harness to use the camera in system settings, then try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相机权限不可用。请在系统设置中允许 DeepSeek Harness 使用相机后重试。"
           }
         }
       }
@@ -253,6 +325,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Camera failed to start: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相机启动失败：%@"
           }
         }
       }
@@ -287,6 +365,12 @@
             "state" : "translated",
             "value" : "; server reason: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "；服务端原因：%@"
+          }
         }
       }
     },
@@ -297,6 +381,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld context item(s)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 项上下文"
           }
         }
       }
@@ -309,6 +399,12 @@
             "state" : "translated",
             "value" : "%@ request timed out. Check the Mobile Gateway."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 请求超时，请检查 Mobile Gateway。"
+          }
         }
       }
     },
@@ -319,6 +415,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ request timed out. Check the Mobile Gateway (v0.1.11)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 请求超时，请检查 Mobile Gateway v0.1.11。"
           }
         }
       }
@@ -369,6 +471,12 @@
             "state" : "translated",
             "value" : ", reasoning effort %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "，推理等级 %@"
+          }
         }
       }
     },
@@ -379,6 +487,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Change the default model for new sessions to “%@”? This updates deployment-level settings and syncs to the WebUI."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将新会话的默认模型改为“%@”。这会更新部署级设置，并同步影响 WebUI。"
           }
         }
       }
@@ -391,6 +505,12 @@
             "state" : "translated",
             "value" : "Set the default permission for new sessions to “%@”? This updates deployment-level settings and syncs to the WebUI."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将新会话的默认权限改为“%@”。这会更新部署级设置，并同步影响 WebUI。"
+          }
         }
       }
     },
@@ -402,6 +522,12 @@
             "state" : "translated",
             "value" : "Make “%@” the default agent preset for new sessions? This updates deployment-level settings and syncs to the WebUI."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将“%@”设为新会话的默认 Agent 预设。这会更新部署级设置，并同步影响 WebUI。"
+          }
         }
       }
     },
@@ -409,6 +535,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %@"
+          }
+        },
+        "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ · %@"
@@ -424,6 +556,12 @@
             "state" : "translated",
             "value" : "%@ · %lld item(s)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %lld 项"
+          }
         }
       }
     },
@@ -434,6 +572,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Took %lld min %lld s"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "耗时 %lld 分钟 %lld 秒"
           }
         }
       }
@@ -446,6 +590,12 @@
             "state" : "translated",
             "value" : "Took %lld s"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "耗时 %lld 秒"
+          }
         }
       }
     },
@@ -456,6 +606,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Receiving %@… only"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅接收 %@…"
           }
         }
       }
@@ -468,6 +624,12 @@
             "state" : "translated",
             "value" : "The mobile gateway isn’t enabled yet (HTTP 503). Device credentials kept; will reconnect once it’s enabled."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移动网关暂未开启（HTTP 503）。已保留设备凭据，开启网关后会自动重连。"
+          }
         }
       }
     },
@@ -478,6 +640,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "The mobile gateway was closed (WebSocket 4004). Device credentials kept; will reconnect once it’s re-enabled."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移动网关已关闭（WebSocket 4004）。已保留设备凭据，重新开启后会自动重连。"
           }
         }
       }
@@ -490,6 +658,12 @@
             "state" : "translated",
             "value" : "%@ · Mobile protocol v%lld · %lld client(s)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Mobile protocol v%lld · %lld 个客户端"
+          }
         }
       }
     },
@@ -500,6 +674,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn’t read or create a unique device identifier: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取或创建设备唯一标识：%@"
           }
         }
       }
@@ -515,6 +695,12 @@
             "state" : "translated",
             "value" : "Auto-loading earlier messages · %lld synced"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在自动加载更早记录 · 已同步 %lld 个事件"
+          }
         }
       }
     },
@@ -525,6 +711,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gateway returned history cursor %@ repeatedly; stopped auto-pagination to avoid a loop."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网关重复返回历史游标 %lld，已停止自动续页以避免循环。"
           }
         }
       }
@@ -537,6 +729,12 @@
             "state" : "translated",
             "value" : "%lld events%@%@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个事件%@%@"
+          }
         }
       }
     },
@@ -547,6 +745,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Loading earlier messages…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载更早记录…"
           }
         }
       }
@@ -559,6 +763,12 @@
             "state" : "translated",
             "value" : "Loading earlier messages · %lld synced"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载更早记录 · 已同步 %lld 个事件"
+          }
         }
       }
     },
@@ -569,6 +779,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gateway returned hasMore:true without nextBeforeSeq; stopped auto-pagination."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网关返回 hasMore:true，但缺少 nextBeforeSeq，已停止自动续页。"
           }
         }
       }
@@ -581,6 +797,12 @@
             "state" : "translated",
             "value" : "Loading history · %lld/%lld"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载历史记录 · %lld/%lld"
+          }
         }
       }
     },
@@ -591,6 +813,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : " · Swipe up to load earlier messages"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · 向上滑动加载更早记录"
           }
         }
       }
@@ -603,6 +831,12 @@
             "state" : "translated",
             "value" : "Syncing conversation from Mobile Gateway…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在从 Mobile Gateway 同步会话内容…"
+          }
         }
       }
     },
@@ -614,6 +848,12 @@
             "state" : "translated",
             "value" : "Attachment %@… has invalid Base64 data or byte size."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附件 %@… 的 Base64 或字节数无效。"
+          }
         }
       }
     },
@@ -624,6 +864,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn’t process the selected image: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "处理所选图片失败：%@"
           }
         }
       }
@@ -639,6 +885,12 @@
             "state" : "translated",
             "value" : "Keychain error %lld"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keychain 错误 %d"
+          }
         }
       }
     },
@@ -650,6 +902,12 @@
             "state" : "translated",
             "value" : "%lld step(s)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 步"
+          }
         }
       }
     },
@@ -660,6 +918,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld turn(s)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 轮"
           }
         }
       }
@@ -697,6 +961,12 @@
             "state" : "translated",
             "value" : "Default configuration updated"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认配置已更新"
+          }
         }
       }
     },
@@ -719,6 +989,12 @@
             "state" : "translated",
             "value" : "Event subscription"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "事件订阅"
+          }
         }
       }
     },
@@ -730,6 +1006,12 @@
             "state" : "translated",
             "value" : "History loaded"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "历史记录已加载"
+          }
         }
       }
     },
@@ -740,6 +1022,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "History pagination failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "历史记录分页失败"
           }
         }
       }
@@ -762,6 +1050,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Image failed to load"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片加载失败"
           }
         }
       }
@@ -818,6 +1112,12 @@
             "state" : "translated",
             "value" : "Search finished"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索完成"
+          }
         }
       }
     },
@@ -828,6 +1128,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sessions synced"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话列表已同步"
           }
         }
       }
@@ -851,6 +1157,12 @@
             "state" : "translated",
             "value" : "Workspaces synced"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区已同步"
+          }
         }
       }
     },
@@ -864,6 +1176,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Can’t set an unknown or broken agent preset as the default: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法将未知或已损坏的 Agent 预设设为默认值：%@"
           }
         }
       }
@@ -887,6 +1205,12 @@
             "state" : "translated",
             "value" : "The pairing response lacks a long-term device token; credentials weren’t saved."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对响应缺少长期设备 token，未保存凭据"
+          }
         }
       }
     },
@@ -897,6 +1221,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Submitting the one-time pairing code and waiting for Mobile Gateway device authentication…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在提交一次性配对码并等待 Mobile Gateway 完成设备鉴权…"
           }
         }
       }
@@ -909,6 +1239,12 @@
             "state" : "translated",
             "value" : "Pairing succeeded, but saving the device token to Keychain failed: %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对成功，但无法将设备 token 写入 Keychain：%@"
+          }
         }
       }
     },
@@ -919,6 +1255,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unsupported pairing protocol version %lld; this client requires version 2."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不支持的配对协议版本 %lld，当前客户端需要 version 2。"
           }
         }
       }
@@ -934,6 +1276,12 @@
             "state" : "translated",
             "value" : "Unsupported permission: %@. Valid values are read-only, workspace-write, and danger-full-access."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不支持的访问权限：%@。可用状态为 read-only、workspace-write、danger-full-access。"
+          }
         }
       }
     },
@@ -944,6 +1292,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unsupported default permission: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不支持的默认权限：%@"
           }
         }
       }
@@ -956,6 +1310,12 @@
             "state" : "translated",
             "value" : "Permission state error · %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "权限状态错误 · %@"
+          }
         }
       }
     },
@@ -966,6 +1326,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Permission state “%@” is invalid; only read-only, workspace-write, and danger-full-access are supported."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "权限状态 \"%@\" 无效；仅支持 read-only、workspace-write、danger-full-access。"
           }
         }
       }
@@ -992,6 +1358,12 @@
             "state" : "translated",
             "value" : "Composes multi-step tool operations through the Code Mode SDK."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 Code Mode SDK 组合多步工具操作。"
+          }
         }
       }
     },
@@ -1002,6 +1374,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "For creating and maintaining custom agent presets."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于创建和维护自定义 Agent 预设。"
           }
         }
       }
@@ -1014,6 +1392,12 @@
             "state" : "translated",
             "value" : "An agent preset provided by DeepSeek Harness."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由 DeepSeek Harness 提供的 Agent 预设。"
+          }
         }
       }
     },
@@ -1024,6 +1408,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "A trimmed toolset for lightweight, direct coding tasks."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "精简工具集合，适合轻量、直接的编码任务。"
           }
         }
       }
@@ -1036,6 +1426,12 @@
             "state" : "translated",
             "value" : "A full-featured coding agent with file editing, shell, retrieval, skills, plans, and workflows."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "功能完整的编码 Agent，支持文件编辑、Shell、检索、Skills、计划与工作流。"
+          }
         }
       }
     },
@@ -1046,6 +1442,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Context injection · %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上下文注入 · %@"
           }
         }
       }
@@ -1069,6 +1471,12 @@
             "state" : "translated",
             "value" : "Agent question%@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 问题%@"
+          }
         }
       }
     },
@@ -1079,6 +1487,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@” contains invalid or duplicate options."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”包含无效或重复选项。"
           }
         }
       }
@@ -1091,6 +1505,12 @@
             "state" : "translated",
             "value" : "The server didn’t accept the answer (%@). Please check and try again."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务端未接受答案（%@），请检查后重试。"
+          }
         }
       }
     },
@@ -1102,6 +1522,12 @@
             "state" : "translated",
             "value" : "WebSocket disconnected. Reconnect before submitting answers."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WebSocket 已断开，重连后再提交答案。"
+          }
         }
       }
     },
@@ -1112,6 +1538,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "WebSocket disconnected. Reconnect before skipping."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WebSocket 已断开，重连后再跳过问题。"
           }
         }
       }
@@ -1157,6 +1589,12 @@
             "state" : "translated",
             "value" : "Skipping questions…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在跳过问题…"
+          }
         }
       }
     },
@@ -1167,6 +1605,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Submitting answers…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在提交整组答案…"
           }
         }
       }
@@ -1179,6 +1623,12 @@
             "state" : "translated",
             "value" : "Answer this question first."
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先完成这道问题。"
+          }
         }
       }
     },
@@ -1189,6 +1639,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Select an option or enter a custom answer."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择一个选项或填写自定义答案。"
           }
         }
       }
@@ -1201,6 +1657,12 @@
             "state" : "translated",
             "value" : "Request failed%@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求失败%@"
+          }
         }
       }
     },
@@ -1208,6 +1670,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ tok"
+          }
+        },
+        "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ tok"
@@ -1234,6 +1702,12 @@
             "state" : "translated",
             "value" : "%lld result(s)%@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 条结果%@"
+          }
         }
       }
     },
@@ -1244,6 +1718,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : ", more available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "，还有更多"
           }
         }
       }
@@ -1256,6 +1736,12 @@
             "state" : "translated",
             "value" : "Blank session %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空白会话 %@"
+          }
         }
       }
     },
@@ -1267,6 +1753,12 @@
             "state" : "translated",
             "value" : "New DeepSeek Harness"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建 DeepSeek Harness"
+          }
         }
       }
     },
@@ -1274,6 +1766,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@…"
+          }
+        },
+        "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@…"
@@ -1289,6 +1787,12 @@
             "state" : "translated",
             "value" : "Remote session %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远端会话 %@"
+          }
         }
       }
     },
@@ -1300,6 +1804,12 @@
             "state" : "translated",
             "value" : "%lld session(s)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个会话"
+          }
         }
       }
     },
@@ -1310,6 +1820,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "WebSocket isn’t connected"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WebSocket 尚未连接"
           }
         }
       }
@@ -1333,6 +1849,12 @@
             "state" : "translated",
             "value" : "Cache hit %lld%%"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缓存命中 %lld%%"
+          }
         }
       }
     },
@@ -1343,6 +1865,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Input %@ tok"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入 %@ tok"
           }
         }
       }
@@ -1355,6 +1883,12 @@
             "state" : "translated",
             "value" : "Tool calls %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具调用 %@"
+          }
         }
       }
     },
@@ -1366,6 +1900,12 @@
             "state" : "translated",
             "value" : "Avg first token %@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "首 token 平均 %@"
+          }
         }
       }
     },
@@ -1376,6 +1916,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld turns · %lld steps"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 轮 · %lld 步"
           }
         }
       }
@@ -1427,6 +1973,12 @@
             "state" : "translated",
             "value" : "%lld tool call(s)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 次工具调用"
+          }
         }
       }
     },
@@ -1441,6 +1993,12 @@
             "state" : "translated",
             "value" : "Used %@%@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用了 %@%@"
+          }
         }
       }
     },
@@ -1451,6 +2009,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "View %lld tool result(s)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看 %lld 个工具结果"
           }
         }
       }
@@ -1463,6 +2027,12 @@
             "state" : "translated",
             "value" : "Backfilling earlier trajectory records…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在补齐较早的轨迹记录…"
+          }
         }
       }
     },
@@ -1474,6 +2044,12 @@
             "state" : "translated",
             "value" : "Generating trajectory…"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成轨迹…"
+          }
         }
       }
     },
@@ -1484,6 +2060,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tool"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具"
           }
         }
       }
@@ -1499,6 +2081,12 @@
             "state" : "translated",
             "value" : "Tools"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具"
+          }
         }
       }
     },
@@ -1510,6 +2098,12 @@
             "state" : "translated",
             "value" : "%lld%%"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%%"
+          }
         }
       }
     },
@@ -1517,6 +2111,12 @@
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ tok/s"
+          }
+        },
+        "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ tok/s"
@@ -1543,6 +2143,12 @@
             "state" : "translated",
             "value" : "WebSocket connection failed: %@ (%@ %lld)%@"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WebSocket 连接失败：%@（%@ %lld）%@"
+          }
         }
       }
     },
@@ -1554,6 +2160,12 @@
             "state" : "translated",
             "value" : "%lld unassigned session(s)"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个未归属会话"
+          }
         }
       }
     },
@@ -1564,6 +2176,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld workspace(s)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个工作区"
           }
         }
       }
@@ -2083,6 +2701,9 @@
           }
         }
       }
+    },
+    "将在当前目录中创建一个新的子文件夹。" : {
+
     },
     "尚未连接到 DeepSeek Harness。请点击主页右上角的 🔑 按钮，扫描配对二维码或手动输入 Token 进行连接。" : {
       "extractionState" : "stale",
@@ -2896,6 +3517,9 @@
           }
         }
       }
+    },
+    "正在创建文件夹…" : {
+
     },
     "正在加载历史记录" : {
       "localizations" : {
