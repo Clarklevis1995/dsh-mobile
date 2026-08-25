@@ -16,12 +16,12 @@ enum L10n {
     static let remoteSessionTitlePrefix = String(localized: "远端会话")
 
     /// Placeholder title for a session first discovered on the server.
-    static func remoteSessionTitle(_ idPrefix: String) -> String {
+    static func remoteSessionTitle(_ idPrefix: some StringProtocol) -> String {
         String(localized: "session.remote.title", defaultValue: "远端会话 \(idPrefix)")
     }
 
     /// Placeholder title for a locally created blank session.
-    static func blankSessionTitle(_ idPrefix: String) -> String {
+    static func blankSessionTitle(_ idPrefix: some StringProtocol) -> String {
         String(localized: "session.blank.title", defaultValue: "空白会话 \(idPrefix)")
     }
 
