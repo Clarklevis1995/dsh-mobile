@@ -914,7 +914,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         copyButton.setImage(UIImage(named: "CopyMessage")?.withRenderingMode(.alwaysTemplate), for: .normal)
         copyButton.tintColor = .secondaryLabel
         copyButton.imageView?.contentMode = .scaleAspectFit
-        copyButton.accessibilityLabel = "复制正文"
+        copyButton.accessibilityLabel = String(localized: "复制正文")
         copyButton.addTarget(self, action: #selector(copyMessage), for: .touchUpInside)
         copyButton.translatesAutoresizingMaskIntoConstraints = false
 
@@ -1023,7 +1023,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
                 imageView.clipsToBounds = true
                 imageView.layer.cornerRadius = 11
                 imageView.layer.cornerCurve = .continuous
-                imageView.accessibilityLabel = imagePayload.name ?? "图片附件"
+                imageView.accessibilityLabel = imagePayload.name ?? String(localized: "图片附件")
                 imageView.translatesAutoresizingMaskIntoConstraints = false
                 let width = imageView.widthAnchor.constraint(equalToConstant: size.width)
                 let height = imageView.heightAnchor.constraint(equalToConstant: size.height)
@@ -1125,7 +1125,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         copyButton.tintColor = copied
             ? UIColor(red: 0.18, green: 0.42, blue: 0.9, alpha: 1)
             : .secondaryLabel
-        copyButton.accessibilityLabel = copied ? "已复制" : "复制正文"
+        copyButton.accessibilityLabel = copied ? String(localized: "已复制") : String(localized: "复制正文")
     }
 
     private func updateBubbleColors() {
