@@ -1,0 +1,3768 @@
+{
+  "sourceLanguage": "zh-Hans",
+  "strings": {
+    "跟随系统": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        }
+      }
+    },
+    "浅色": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Light"
+          }
+        }
+      }
+    },
+    "深色": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dark"
+          }
+        }
+      }
+    },
+    "尚未连接到 DeepSeek Harness。请点击主页右上角的 🔑 按钮，扫描配对二维码或手动输入 Token 进行连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not connected to DeepSeek Harness. Tap the 🔑 button at the top-right of Home to scan the pairing QR code or enter a token manually."
+          }
+        }
+      }
+    },
+    "pairing.error.broken-preset": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can’t set an unknown or broken agent preset as the default: %@"
+          }
+        }
+      }
+    },
+    "permissions.error.unsupported-default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsupported default permission: %@"
+          }
+        }
+      }
+    },
+    "请先连接 DeepSeek Harness": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to DeepSeek Harness first"
+          }
+        }
+      }
+    },
+    "WebSocket 尚未连接，无法加载历史记录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WebSocket isn’t connected; can’t load history"
+          }
+        }
+      }
+    },
+    "历史记录刷新超时": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History refresh timed out"
+          }
+        }
+      }
+    },
+    "已保留本地内容并继续接收实时事件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kept local content; live events keep streaming"
+          }
+        }
+      }
+    },
+    "历史记录加载超时，请重试": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading history timed out. Please try again."
+          }
+        }
+      }
+    },
+    "session.remote.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote session %@"
+          }
+        }
+      }
+    },
+    "permissions.error.invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsupported permission: %@. Valid values are read-only, workspace-write, and danger-full-access."
+          }
+        }
+      }
+    },
+    "请先在设置中连接 DeepSeek Harness": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to DeepSeek Harness in Settings first"
+          }
+        }
+      }
+    },
+    "当前 Mobile Gateway 不支持图片，请升级并重启 dsh web。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The current Mobile Gateway doesn’t support images. Upgrade and restart dsh web."
+          }
+        }
+      }
+    },
+    "q.rejected.ws.disconnected.answer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WebSocket disconnected. Reconnect before submitting answers."
+          }
+        }
+      }
+    },
+    "答案必须按原顺序覆盖整组问题。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Answers must cover every question, in the original order."
+          }
+        }
+      }
+    },
+    "q.rejected.bad-options": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” contains invalid or duplicate options."
+          }
+        }
+      }
+    },
+    "单选题只能选择一个选项，且不能同时填写自定义答案。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A single-choice question allows only one option and no custom answer at the same time."
+          }
+        }
+      }
+    },
+    "q.rejected.ws.disconnected.skip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WebSocket disconnected. Reconnect before skipping."
+          }
+        }
+      }
+    },
+    "设备配对成功": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device paired successfully"
+          }
+        }
+      }
+    },
+    "长期凭据已安全保存到 Keychain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Long-term credentials were saved securely to Keychain"
+          }
+        }
+      }
+    },
+    "Debug 未鉴权": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debug unauthenticated"
+          }
+        }
+      }
+    },
+    "设备鉴权成功": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device authentication succeeded"
+          }
+        }
+      }
+    },
+    "gateway.connected.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Mobile protocol v%lld · %lld client(s)"
+          }
+        }
+      }
+    },
+    "心跳正常": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heartbeat healthy"
+          }
+        }
+      }
+    },
+    "notice.event.subscription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event subscription"
+          }
+        }
+      }
+    },
+    "events.subscribe.single": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receiving %@… only"
+          }
+        }
+      }
+    },
+    "接收全部会话事件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receiving all session events"
+          }
+        }
+      }
+    },
+    "notice.workspaces.synced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspaces synced"
+          }
+        }
+      }
+    },
+    "workspaces.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld workspace(s)"
+          }
+        }
+      }
+    },
+    "notice.sessions.synced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions synced"
+          }
+        }
+      }
+    },
+    "sessions.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld session(s)"
+          }
+        }
+      }
+    },
+    "notice.search.finished": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search finished"
+          }
+        }
+      }
+    },
+    "search.results.more": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", more available"
+          }
+        }
+      }
+    },
+    "search.results.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld result(s)%@"
+          }
+        }
+      }
+    },
+    "notice.host.info": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Host info"
+          }
+        }
+      }
+    },
+    "notice.defaults.model-updated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default model updated"
+          }
+        }
+      }
+    },
+    "服务端未确认默认模型更新。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server didn’t acknowledge the default-model update."
+          }
+        }
+      }
+    },
+    "notice.defaults.updated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default configuration updated"
+          }
+        }
+      }
+    },
+    "defaults.updated.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@"
+          }
+        }
+      }
+    },
+    "服务端未确认默认配置更新。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server didn’t acknowledge the default-configuration update."
+          }
+        }
+      }
+    },
+    "notice.model.switched": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model switched"
+          }
+        }
+      }
+    },
+    "notice.permission.switched": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permission switched"
+          }
+        }
+      }
+    },
+    "notice.directory.loaded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Directory loaded"
+          }
+        }
+      }
+    },
+    "directory.loaded.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %lld item(s)"
+          }
+        }
+      }
+    },
+    "工作区已创建": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace created"
+          }
+        }
+      }
+    },
+    "工作区已存在": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace already exists"
+          }
+        }
+      }
+    },
+    "服务端拒绝了问题响应。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server rejected the question response."
+          }
+        }
+      }
+    },
+    "request.failed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request failed%@"
+          }
+        }
+      }
+    },
+    "notice.unknown.gateway-response": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown gateway response"
+          }
+        }
+      }
+    },
+    "问题请求无效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid question request"
+          }
+        }
+      }
+    },
+    "缺少 rpcId、sessionId 或 questions。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Missing rpcId, sessionId, or questions."
+          }
+        }
+      }
+    },
+    "questions.restored": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending questions restored"
+          }
+        }
+      }
+    },
+    "Agent 正在等待回答": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent is waiting for your answer"
+          }
+        }
+      }
+    },
+    "请回答 Agent 的问题": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please answer the agent’s question"
+          }
+        }
+      }
+    },
+    "notice.questions.handled-elsewhere": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questions handled elsewhere"
+          }
+        }
+      }
+    },
+    "当前响应未生效。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This response wasn’t applied."
+          }
+        }
+      }
+    },
+    "q.rejected.server-refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server didn’t accept the answer (%@). Please check and try again."
+          }
+        }
+      }
+    },
+    "已跳过": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipped"
+          }
+        }
+      }
+    },
+    "已提交": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submitted"
+          }
+        }
+      }
+    },
+    "q.outcome.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent question%@"
+          }
+        }
+      }
+    },
+    "等待 Agent 继续执行。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the agent to continue."
+          }
+        }
+      }
+    },
+    "新建 Harness 会话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Harness session"
+          }
+        }
+      }
+    },
+    "notice.message.sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message sent"
+          }
+        }
+      }
+    },
+    "notice.command.executed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command executed"
+          }
+        }
+      }
+    },
+    "session.preview.id": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@…"
+          }
+        }
+      }
+    },
+    "history.pagination.stopped.hasmore": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway returned hasMore:true without nextBeforeSeq; stopped auto-pagination."
+          }
+        }
+      }
+    },
+    "notice.history.pagination-failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History pagination failed"
+          }
+        }
+      }
+    },
+    "history.cursor.loop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway returned history cursor %@ repeatedly; stopped auto-pagination to avoid a loop."
+          }
+        }
+      }
+    },
+    "history.swipe.up.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · Swipe up to load earlier messages"
+          }
+        }
+      }
+    },
+    "notice.history.loaded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History loaded"
+          }
+        }
+      }
+    },
+    "history.loaded.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld events%@%@"
+          }
+        }
+      }
+    },
+    "notice.image.load-failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image failed to load"
+          }
+        }
+      }
+    },
+    "image.invalid.base64": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attachment %@… has invalid Base64 data or byte size."
+          }
+        }
+      }
+    },
+    "session.blank.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blank session %@"
+          }
+        }
+      }
+    },
+    "control.request.timeout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ request timed out. Check the Mobile Gateway."
+          }
+        }
+      }
+    },
+    "control.request.timeout.v0111": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ request timed out. Check the Mobile Gateway (v0.1.11)."
+          }
+        }
+      }
+    },
+    "permissions.state.invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permission state “%@” is invalid; only read-only, workspace-write, and danger-full-access are supported."
+          }
+        }
+      }
+    },
+    "permissions.state.error.source": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permission state error · %@"
+          }
+        }
+      }
+    },
+    "远端会话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote session"
+          }
+        }
+      }
+    },
+    "配对内容不是有效的 Base64URL 字符串。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The pairing payload isn’t a valid Base64URL string."
+          }
+        }
+      }
+    },
+    "Base64URL 解码后的内容不是有效的 DeepSeek Harness 配对 JSON。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Base64URL-decoded payload isn’t valid DeepSeek Harness pairing JSON."
+          }
+        }
+      }
+    },
+    "pairing.unsupported.version": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsupported pairing protocol version %lld; this client requires version 2."
+          }
+        }
+      }
+    },
+    "二维码中的 publicUrl 不是有效的 WebSocket 地址。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The publicUrl in the QR code isn’t a valid WebSocket address."
+          }
+        }
+      }
+    },
+    "二维码中的一次性 pairingCode 无效。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The one-time pairingCode in the QR code is invalid."
+          }
+        }
+      }
+    },
+    "二维码配对码已经过期，请在 WebUI 中重新生成。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The QR pairing code has expired. Generate a new one in the WebUI."
+          }
+        }
+      }
+    },
+    "二维码中的 publicUrl 不是有效的 ws:// 或 wss:// 地址": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The publicUrl in the QR code isn’t a valid ws:// or wss:// address"
+          }
+        }
+      }
+    },
+    "gateway.device-id.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t read or create a unique device identifier: %@"
+          }
+        }
+      }
+    },
+    "state.websocket.not-connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WebSocket isn’t connected"
+          }
+        }
+      }
+    },
+    "pairing.response.missing-token": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The pairing response lacks a long-term device token; credentials weren’t saved."
+          }
+        }
+      }
+    },
+    "pairing.token.keychain-failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pairing succeeded, but saving the device token to Keychain failed: %@"
+          }
+        }
+      }
+    },
+    "auth.failed.401": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication failed (HTTP 401): the device token is invalid or revoked, or the pairing code expired/was already used. Pair again."
+          }
+        }
+      }
+    },
+    "gateway.503.disabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The mobile gateway isn’t enabled yet (HTTP 503). Device credentials kept; will reconnect once it’s enabled."
+          }
+        }
+      }
+    },
+    "auth.reenabled.4003": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server re-enabled device authentication (WebSocket 4003). Reconnect with the saved device credentials or pair again."
+          }
+        }
+      }
+    },
+    "gateway.closed.4004": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The mobile gateway was closed (WebSocket 4004). Device credentials kept; will reconnect once it’s re-enabled."
+          }
+        }
+      }
+    },
+    "close.server-reason.suffix": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "; server reason: %@"
+          }
+        }
+      }
+    },
+    "websocket.connect-failed.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WebSocket connection failed: %@ (%@ %lld)%@"
+          }
+        }
+      }
+    },
+    "keychain.error.status": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keychain error %lld"
+          }
+        }
+      }
+    },
+    "未连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not connected"
+          }
+        }
+      }
+    },
+    "连接中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting"
+          }
+        }
+      }
+    },
+    "已连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected"
+          }
+        }
+      }
+    },
+    "连接失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection failed"
+          }
+        }
+      }
+    },
+    "标准模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard mode"
+          }
+        }
+      }
+    },
+    "PTC 模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PTC mode"
+          }
+        }
+      }
+    },
+    "极简模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimal mode"
+          }
+        }
+      }
+    },
+    "创造模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cordis mode"
+          }
+        }
+      }
+    },
+    "preset.blurb.standard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A full-featured coding agent with file editing, shell, retrieval, skills, plans, and workflows."
+          }
+        }
+      }
+    },
+    "preset.blurb.code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Composes multi-step tool operations through the Code Mode SDK."
+          }
+        }
+      }
+    },
+    "preset.blurb.minimal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A trimmed toolset for lightweight, direct coding tasks."
+          }
+        }
+      }
+    },
+    "preset.blurb.cordis": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For creating and maintaining custom agent presets."
+          }
+        }
+      }
+    },
+    "preset.blurb.default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent preset provided by DeepSeek Harness."
+          }
+        }
+      }
+    },
+    "无法解码所选图片。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t decode the selected image."
+          }
+        }
+      }
+    },
+    "无法将图片压缩到 DSH 允许的大小。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t compress the image to the size DSH allows."
+          }
+        }
+      }
+    },
+    "你": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You"
+          }
+        }
+      }
+    },
+    "DeepSeek · 正在生成": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek · Generating"
+          }
+        }
+      }
+    },
+    "Think · 正在推理": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Think · Reasoning"
+          }
+        }
+      }
+    },
+    "Tool Call · 正在组装": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool Call · Assembling"
+          }
+        }
+      }
+    },
+    "工具完成": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool completed"
+          }
+        }
+      }
+    },
+    "工具失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool failed"
+          }
+        }
+      }
+    },
+    "projection.context-injection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Context injection · %@"
+          }
+        }
+      }
+    },
+    "视图": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View"
+          }
+        }
+      }
+    },
+    "对话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversation"
+          }
+        }
+      }
+    },
+    "轨迹": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trajectory"
+          }
+        }
+      }
+    },
+    "操作远端 DSH Agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Control a remote DSH agent"
+          }
+        }
+      }
+    },
+    "发送任务后，工具调用、推理进度和最终回复会通过 Mobile Gateway 实时返回。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After you send a task, tool calls, reasoning progress, and the final reply stream back live through the Mobile Gateway."
+          }
+        }
+      }
+    },
+    "正在加载历史记录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading history"
+          }
+        }
+      }
+    },
+    "正在准备会话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing session"
+          }
+        }
+      }
+    },
+    "正在定位到最新消息…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jumping to the latest message…"
+          }
+        }
+      }
+    },
+    "描述你想要构建的内容": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Describe what you want to build"
+          }
+        }
+      }
+    },
+    "读取默认权限…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading default permission…"
+          }
+        }
+      }
+    },
+    "默认权限": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default permission"
+          }
+        }
+      }
+    },
+    "读取默认模型…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading default model…"
+          }
+        }
+      }
+    },
+    "正在读取权限…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading permissions…"
+          }
+        }
+      }
+    },
+    "正在读取模型…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading models…"
+          }
+        }
+      }
+    },
+    "推理等级": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reasoning effort"
+          }
+        }
+      }
+    },
+    "加载更早记录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load earlier messages"
+          }
+        }
+      }
+    },
+    "stats.asof.event": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data as of event #%lld"
+          }
+        }
+      }
+    },
+    "正在读取会话统计": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading session statistics"
+          }
+        }
+      }
+    },
+    "统计会在本轮结束后自动更新。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistics refresh automatically once the turn ends."
+          }
+        }
+      }
+    },
+    "会话状态": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session status"
+          }
+        }
+      }
+    },
+    "完成": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "查看完整统计": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View full statistics"
+          }
+        }
+      }
+    },
+    "上下文已用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Context used"
+          }
+        }
+      }
+    },
+    "正在读取上下文用量…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading context usage…"
+          }
+        }
+      }
+    },
+    "调用参数": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parameters"
+          }
+        }
+      }
+    },
+    "结果": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Result"
+          }
+        }
+      }
+    },
+    "session.new.fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New DeepSeek Harness"
+          }
+        }
+      }
+    },
+    "history.syncing.gateway": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Syncing conversation from Mobile Gateway…"
+          }
+        }
+      }
+    },
+    "history.loading.loaded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading earlier messages · %lld synced"
+          }
+        }
+      }
+    },
+    "history.loading.earlier": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading earlier messages…"
+          }
+        }
+      }
+    },
+    "history.autoloading.loaded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-loading earlier messages · %lld synced"
+          }
+        }
+      }
+    },
+    "history.progress.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading history · %lld/%lld"
+          }
+        }
+      }
+    },
+    "a11y.generating.jump-latest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generating — jump to the latest message"
+          }
+        }
+      }
+    },
+    "a11y.jump.latest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jump to the latest message"
+          }
+        }
+      }
+    },
+    "添加图片": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add image"
+          }
+        }
+      }
+    },
+    "当前网关不支持图片": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The current gateway doesn’t support images"
+          }
+        }
+      }
+    },
+    "a11y.context.percent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Context %lld%% used"
+          }
+        }
+      }
+    },
+    "移除图片": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove image"
+          }
+        }
+      }
+    },
+    "所选图片不是受支持的 PNG、JPEG、WebP 或 GIF。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected image isn’t a supported PNG, JPEG, WebP, or GIF."
+          }
+        }
+      }
+    },
+    "image.process.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t process the selected image: %@"
+          }
+        }
+      }
+    },
+    "一条消息中的图片总大小不能超过 100 MiB。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Images in one message can’t exceed 100 MiB in total."
+          }
+        }
+      }
+    },
+    "a11y.view.session-status": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View session run status"
+          }
+        }
+      }
+    },
+    "a11y.defaults.permission": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default permission for new sessions: %@"
+          }
+        }
+      }
+    },
+    "未读取": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not loaded"
+          }
+        }
+      }
+    },
+    "a11y.defaults.model": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default model for new sessions: %@%@"
+          }
+        }
+      }
+    },
+    "defaults.effort.suffix": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", reasoning effort %@"
+          }
+        }
+      }
+    },
+    "默认模型": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default model"
+          }
+        }
+      }
+    },
+    "默认 Agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default agent"
+          }
+        }
+      }
+    },
+    "每次询问": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask every time"
+          }
+        }
+      }
+    },
+    "只读": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read-only"
+          }
+        }
+      }
+    },
+    "工作区写入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace write"
+          }
+        }
+      }
+    },
+    "完全访问": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full access"
+          }
+        }
+      }
+    },
+    "stats.toolcalls.duration": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool calls %@"
+          }
+        }
+      }
+    },
+    "stats.ttft.avg": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avg first token %@"
+          }
+        }
+      }
+    },
+    "stats.cachehit.percent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache hit %lld%%"
+          }
+        }
+      }
+    },
+    "stats.input.tok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input %@ tok"
+          }
+        }
+      }
+    },
+    "正在读取会话统计…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading session statistics…"
+          }
+        }
+      }
+    },
+    "stats.turns.steps.line": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld turns · %lld steps"
+          }
+        }
+      }
+    },
+    "执行": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Execution"
+          }
+        }
+      }
+    },
+    "metric.turns.value": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld turn(s)"
+          }
+        }
+      }
+    },
+    "metric.steps.value": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld step(s)"
+          }
+        }
+      }
+    },
+    "轮次": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turns"
+          }
+        }
+      }
+    },
+    "步骤": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steps"
+          }
+        }
+      }
+    },
+    "工具调用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool calls"
+          }
+        }
+      }
+    },
+    "首 token 平均": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avg first token"
+          }
+        }
+      }
+    },
+    "解码吞吐": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decode throughput"
+          }
+        }
+      }
+    },
+    "Token 用量": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token usage"
+          }
+        }
+      }
+    },
+    "输入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input"
+          }
+        }
+      }
+    },
+    "输出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output"
+          }
+        }
+      }
+    },
+    "缓存读取": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache reads"
+          }
+        }
+      }
+    },
+    "缓存写入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache writes"
+          }
+        }
+      }
+    },
+    "推理": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reasoning"
+          }
+        }
+      }
+    },
+    "缓存命中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache hit"
+          }
+        }
+      }
+    },
+    "上下文": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Context"
+          }
+        }
+      }
+    },
+    "当前压力": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current pressure"
+          }
+        }
+      }
+    },
+    "预计用量": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projected usage"
+          }
+        }
+      }
+    },
+    "上下文窗口": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Context window"
+          }
+        }
+      }
+    },
+    "row.turns-steps.label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turns · Steps"
+          }
+        }
+      }
+    },
+    "value.throughput": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ tok/s"
+          }
+        }
+      }
+    },
+    "value.percent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld%%"
+          }
+        }
+      }
+    },
+    "row.input.value": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ tok"
+          }
+        }
+      }
+    },
+    "系统提示词": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System prompt"
+          }
+        }
+      }
+    },
+    "usage.row.tools": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tools"
+          }
+        }
+      }
+    },
+    "对话消息": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversation messages"
+          }
+        }
+      }
+    },
+    "未缓存输入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uncached input"
+          }
+        }
+      }
+    },
+    "模型输出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model output"
+          }
+        }
+      }
+    },
+    "context.items.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld context item(s)"
+          }
+        }
+      }
+    },
+    "duration.minutes-seconds": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %lld min %lld s"
+          }
+        }
+      }
+    },
+    "duration.seconds": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %lld s"
+          }
+        }
+      }
+    },
+    "思考过程": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking"
+          }
+        }
+      }
+    },
+    "toolcall.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld tool call(s)"
+          }
+        }
+      }
+    },
+    "tools.view-results": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View %lld tool result(s)"
+          }
+        }
+      }
+    },
+    "tools.used.summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used %@%@"
+          }
+        }
+      }
+    },
+    " 等工具": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " and more"
+          }
+        }
+      }
+    },
+    "图片附件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image attachment"
+          }
+        }
+      }
+    },
+    "已复制": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied"
+          }
+        }
+      }
+    },
+    "复制正文": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy body"
+          }
+        }
+      }
+    },
+    "失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failure"
+          }
+        }
+      }
+    },
+    "错误": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error"
+          }
+        }
+      }
+    },
+    "trajectory.tool.fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool"
+          }
+        }
+      }
+    },
+    "探索未至之境": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Explore uncharted waters"
+          }
+        }
+      }
+    },
+    "DeepSeek Harness 预览版": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek Harness Preview"
+          }
+        }
+      }
+    },
+    "未分组": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungrouped"
+          }
+        }
+      }
+    },
+    "添加工作区": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add workspace"
+          }
+        }
+      }
+    },
+    "最近会话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent sessions"
+          }
+        }
+      }
+    },
+    "搜索会话内容": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search session content"
+          }
+        }
+      }
+    },
+    "暂无已知会话。连接服务后创建第一个任务。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No known sessions yet. Connect to a server and create your first task."
+          }
+        }
+      }
+    },
+    "运行中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
+          }
+        }
+      }
+    },
+    "新建会话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New session"
+          }
+        }
+      }
+    },
+    "当前目录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current directory"
+          }
+        }
+      }
+    },
+    "正在读取…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading…"
+          }
+        }
+      }
+    },
+    "选择工作区目录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose workspace directory"
+          }
+        }
+      }
+    },
+    "取消": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "在当前目录创建工作区": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create workspace in current directory"
+          }
+        }
+      }
+    },
+    "扫描二维码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan QR code"
+          }
+        }
+      }
+    },
+    "手动输入配对信息": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter pairing details manually"
+          }
+        }
+      }
+    },
+    "重新配对并连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-pair and connect"
+          }
+        }
+      }
+    },
+    "连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect"
+          }
+        }
+      }
+    },
+    "设备认证": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device authentication"
+          }
+        }
+      }
+    },
+    "设置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings"
+          }
+        }
+      }
+    },
+    "选择工作区": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose workspace"
+          }
+        }
+      }
+    },
+    "workspace.ungrouped.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld unassigned session(s)"
+          }
+        }
+      }
+    },
+    "通过 Mobile Gateway 连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected via Mobile Gateway"
+          }
+        }
+      }
+    },
+    "返回上一级": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Up one level"
+          }
+        }
+      }
+    },
+    "隐藏目录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hidden directory"
+          }
+        }
+      }
+    },
+    "正在读取远程目录…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading remote directory…"
+          }
+        }
+      }
+    },
+    "a11y.device-auth.state": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device authentication, %@"
+          }
+        }
+      }
+    },
+    "配对信息无效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid pairing details"
+          }
+        }
+      }
+    },
+    "正在连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting"
+          }
+        }
+      }
+    },
+    "pairing.submitting.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submitting the one-time pairing code and waiting for Mobile Gateway device authentication…"
+          }
+        }
+      }
+    },
+    "连接成功": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected successfully"
+          }
+        }
+      }
+    },
+    "设备鉴权已完成，长期 token 已安全保存到 Keychain。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device authentication complete. The long-term token was saved securely to Keychain."
+          }
+        }
+      }
+    },
+    "请检查配对信息后重新连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check the pairing details and reconnect."
+          }
+        }
+      }
+    },
+    "pairing.manual.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste a Base64URL pairing string and tap Connect. The result appears here."
+          }
+        }
+      }
+    },
+    "取消扫描": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel scan"
+          }
+        }
+      }
+    },
+    "camera.denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera access wasn’t granted. Allow DeepSeek Harness to use the camera in system settings, then try again."
+          }
+        }
+      }
+    },
+    "camera.restricted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera access is unavailable. Allow DeepSeek Harness to use the camera in system settings, then try again."
+          }
+        }
+      }
+    },
+    "camera.status-unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t determine the current camera authorization status."
+          }
+        }
+      }
+    },
+    "camera.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No camera is available on this device."
+          }
+        }
+      }
+    },
+    "camera.session-failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t add the camera to the capture session."
+          }
+        }
+      }
+    },
+    "qr.metadata-unsupported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "QR code detection isn’t supported on this device."
+          }
+        }
+      }
+    },
+    "qr.metadata-type-unsupported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The current camera doesn’t support QR metadata detection."
+          }
+        }
+      }
+    },
+    "camera.start.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera failed to start: %@"
+          }
+        }
+      }
+    },
+    "好": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "重新加载历史": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload history"
+          }
+        }
+      }
+    },
+    "发送 Ping": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send ping"
+          }
+        }
+      }
+    },
+    "放弃这组问题？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard these questions?"
+          }
+        }
+      }
+    },
+    "跳过并让 Agent 继续": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip and let the agent continue"
+          }
+        }
+      }
+    },
+    "继续回答": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep answering"
+          }
+        }
+      }
+    },
+    "当前填写的答案不会提交。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Answers you’ve already typed won’t be submitted."
+          }
+        }
+      }
+    },
+    "需要你的回答": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your answer is needed"
+          }
+        }
+      }
+    },
+    "已从断线前恢复": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovered from the disconnect"
+          }
+        }
+      }
+    },
+    "收起问题卡片": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapse question card"
+          }
+        }
+      }
+    },
+    "放弃整组问题": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard all questions"
+          }
+        }
+      }
+    },
+    "可以选择多项": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Multiple selections allowed"
+          }
+        }
+      }
+    },
+    "输入你的答案": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type your answer"
+          }
+        }
+      }
+    },
+    "或输入自定义答案": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Or type a custom answer"
+          }
+        }
+      }
+    },
+    "推荐": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recommended"
+          }
+        }
+      }
+    },
+    "跳过问题": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip question"
+          }
+        }
+      }
+    },
+    "提交": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submit"
+          }
+        }
+      }
+    },
+    "下一题": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next question"
+          }
+        }
+      }
+    },
+    "questions.submitting.answers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submitting answers…"
+          }
+        }
+      }
+    },
+    "questions.skipping": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skipping questions…"
+          }
+        }
+      }
+    },
+    "服务端已接收，正在恢复 Agent…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Received by the server; resuming the agent…"
+          }
+        }
+      }
+    },
+    "计划待审": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plan awaiting review"
+          }
+        }
+      }
+    },
+    "去聊天里说": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reply in chat"
+          }
+        }
+      }
+    },
+    "拒绝": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject"
+          }
+        }
+      }
+    },
+    "确认执行": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve and run"
+          }
+        }
+      }
+    },
+    "questions.validation.pick-one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select an option or enter a custom answer."
+          }
+        }
+      }
+    },
+    "questions.validation.finish-first": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Answer this question first."
+          }
+        }
+      }
+    },
+    "低": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low"
+          }
+        }
+      }
+    },
+    "中": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medium"
+          }
+        }
+      }
+    },
+    "高": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "High"
+          }
+        }
+      }
+    },
+    "Agent 预设": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent presets"
+          }
+        }
+      }
+    },
+    "权限": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permissions"
+          }
+        }
+      }
+    },
+    "新会话默认配置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Defaults for new sessions"
+          }
+        }
+      }
+    },
+    "与 WebUI 使用同一份部署级设置。修改只影响之后新建的会话，运行中的会话保持启动时的配置。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shares deployment-level settings with the WebUI. Changes only affect sessions created afterwards; running sessions keep the configuration they started with."
+          }
+        }
+      }
+    },
+    "断开连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnect"
+          }
+        }
+      }
+    },
+    "Ping 网关": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ping gateway"
+          }
+        }
+      }
+    },
+    "版本": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        }
+      }
+    },
+    "已连接会话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attached sessions"
+          }
+        }
+      }
+    },
+    "外观": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appearance"
+          }
+        }
+      }
+    },
+    "界面": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interface"
+          }
+        }
+      }
+    },
+    "修改全局默认权限？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change the global default permission?"
+          }
+        }
+      }
+    },
+    "defaults.permission.confirm.body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the default permission for new sessions to “%@”? This updates deployment-level settings and syncs to the WebUI."
+          }
+        }
+      }
+    },
+    "确认修改": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply change"
+          }
+        }
+      }
+    },
+    "预设决定 Agent 使用的工具、提示词与能力。选择后只对新建会话生效。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A preset defines the agent’s tools, prompts, and capabilities. The choice only affects newly created sessions."
+          }
+        }
+      }
+    },
+    "正在读取 Agent 预设…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading agent presets…"
+          }
+        }
+      }
+    },
+    "没有可用的 Agent 预设": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No agent presets available"
+          }
+        }
+      }
+    },
+    "请确认 Mobile Gateway 已升级到 v0.1.11 并保持连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make sure Mobile Gateway is upgraded to v0.1.11 and stays connected."
+          }
+        }
+      }
+    },
+    "设为全局默认预设？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set as global default preset?"
+          }
+        }
+      }
+    },
+    "defaults.preset.confirm.body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make “%@” the default agent preset for new sessions? This updates deployment-level settings and syncs to the WebUI."
+          }
+        }
+      }
+    },
+    "设为默认": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set default"
+          }
+        }
+      }
+    },
+    "服务端支持编写自定义预设，并提供预设配置文档。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server supports authoring custom presets and provides preset configuration docs."
+          }
+        }
+      }
+    },
+    "服务端支持编写自定义 Agent 预设。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server supports authoring custom agent presets."
+          }
+        }
+      }
+    },
+    "服务端提供 Agent 预设配置文档。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server provides agent preset configuration docs."
+          }
+        }
+      }
+    },
+    "当前使用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Currently using"
+          }
+        }
+      }
+    },
+    "该预设存在配置错误，暂时不能设为默认值": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This preset has configuration errors and can’t be set as the default right now"
+          }
+        }
+      }
+    },
+    "为之后新建的会话设置默认模型与思考等级。这会更新部署级设置，同步影响 WebUI，运行中的会话保持启动时的配置。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sets the default model and reasoning effort for future sessions. This updates deployment-level settings, syncs to the WebUI, and leaves running sessions on the configuration they started with."
+          }
+        }
+      }
+    },
+    "正在读取模型列表…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading model list…"
+          }
+        }
+      }
+    },
+    "暂无可用模型": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No models available"
+          }
+        }
+      }
+    },
+    "未能读取到模型列表，请检查网关连接后下拉重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t load the model list. Check the gateway connection, then pull to retry."
+          }
+        }
+      }
+    },
+    "修改默认模型？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change default model?"
+          }
+        }
+      }
+    },
+    "defaults.model.confirm.body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change the default model for new sessions to “%@”? This updates deployment-level settings and syncs to the WebUI."
+          }
+        }
+      }
+    },
+    "思考等级": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reasoning effort"
+          }
+        }
+      }
+    },
+    "trajectory.generating": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generating trajectory…"
+          }
+        }
+      }
+    },
+    "trajectory.backfilling": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backfilling earlier trajectory records…"
+          }
+        }
+      }
+    },
+    "a11y.open.request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open request #%lld"
+          }
+        }
+      }
+    },
+    "a11y.open.node": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %@ #%lld"
+          }
+        }
+      }
+    },
+    "打开": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        }
+      }
+    },
+    "摘要": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summary"
+          }
+        }
+      }
+    },
+    "预览": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview"
+          }
+        }
+      }
+    },
+    "原始": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raw"
+          }
+        }
+      }
+    },
+    "选项": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options"
+          }
+        }
+      }
+    },
+    "用量": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usage"
+          }
+        }
+      }
+    },
+    "耗时": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timing"
+          }
+        }
+      }
+    },
+    "参数": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parameters"
+          }
+        }
+      }
+    },
+    "没有记录模型选项": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No model options were recorded"
+          }
+        }
+      }
+    },
+    "没有参数": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No parameters"
+          }
+        }
+      }
+    },
+    "等待工具返回…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the tool to return…"
+          }
+        }
+      }
+    },
+    "没有记录工具 Schema": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No tool schema was recorded"
+          }
+        }
+      }
+    },
+    "需要写入或执行敏感操作时请求确认": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asks for confirmation before writing or running sensitive operations"
+          }
+        }
+      }
+    },
+    "允许读取工作区，不允许修改文件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can read the workspace but not modify files"
+          }
+        }
+      }
+    },
+    "允许在当前工作区内读取和写入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can read and write within the current workspace"
+          }
+        }
+      }
+    },
+    "允许不受沙箱限制地访问宿主环境": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can access the host environment without sandbox limits"
+          }
+        }
+      }
+    },
+    "扫描设备配对码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan device pairing code"
+          }
+        }
+      }
+    },
+    "请扫描 Harness WebUI 生成的二维码": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan the QR code generated by the Harness WebUI"
+          }
+        }
+      }
+    },
+    "将二维码完整放入框内": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fit the entire QR code inside the frame"
+          }
+        }
+      }
+    },
+    "粘贴 Harness WebUI 提供的 Base64URL 配对字符串。长期设备 token 仍只会保存到 Keychain。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste the Base64URL pairing string from the Harness WebUI. The long-term device token is still saved only to Keychain."
+          }
+        }
+      }
+    },
+    "输入 Base64URL 配对字符串后点击连接，结果会显示在这里。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste a Base64URL pairing string and tap Connect. The result appears here."
+          }
+        }
+      }
+    },
+    "网关已连接": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway connected"
+          }
+        }
+      }
+    },
+    "宿主信息": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Host info"
+          }
+        }
+      }
+    },
+    "默认模型已更新": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default model updated"
+          }
+        }
+      }
+    },
+    "模型已切换": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model switched"
+          }
+        }
+      }
+    },
+    "权限已切换": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permission switched"
+          }
+        }
+      }
+    },
+    "目录已加载": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Directory loaded"
+          }
+        }
+      }
+    },
+    "未知网关响应": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown gateway response"
+          }
+        }
+      }
+    },
+    "待回答问题已恢复": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending questions restored"
+          }
+        }
+      }
+    },
+    "问题已在其他端处理": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questions handled elsewhere"
+          }
+        }
+      }
+    },
+    "消息已发送": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message sent"
+          }
+        }
+      }
+    },
+    "命令已执行": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command executed"
+          }
+        }
+      }
+    },
+    "正在生成轨迹…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generating trajectory…"
+          }
+        }
+      }
+    },
+    "正在补齐较早的轨迹记录…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backfilling earlier trajectory records…"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

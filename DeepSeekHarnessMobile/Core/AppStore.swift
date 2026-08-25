@@ -4,7 +4,7 @@ import UIKit
 enum InterfaceStyle: String, CaseIterable, Identifiable {
     case system, light, dark
     var id: String { rawValue }
-    var title: String { switch self { case .system: "跟随系统"; case .light: "浅色"; case .dark: "深色" } }
+    var title: String { switch self { case .system: String(localized: "跟随系统"); case .light: String(localized: "浅色"); case .dark: String(localized: "深色") } }
     var colorScheme: ColorScheme? { switch self { case .system: nil; case .light: .light; case .dark: .dark } }
 }
 
@@ -206,7 +206,7 @@ final class AppStore: ObservableObject {
         guard !hasHandledColdLaunchConnection else { return }
         hasHandledColdLaunchConnection = true
         guard gateway.hasStoredCredential(for: endpoint) else {
-            lastError = "尚未连接到 DeepSeek Harness。请点击主页右上角的 🔑 按钮，扫描配对二维码或手动输入 Token 进行连接。"
+            lastError = String(localized: "尚未连接到 DeepSeek Harness。请点击主页右上角的 🔑 按钮，扫描配对二维码或手动输入 Token 进行连接。")
             return
         }
         connect()
@@ -296,14 +296,14 @@ final class AppStore: ObservableObject {
     }
     func setDefaultAgentPreset(_ id: String) {
         guard agentPresets.contains(where: { $0.id == id && $0.broken != true }) else {
-            lastError = "无法将未知或已损坏的 Agent 预设设为默认值：\(id)"
+            lastError = String(localized: "pairing.error.broken-preset", defaultValue: "无法将未知或已损坏的 Agent 预设设为默认值：\(id)")
             return
         }
         setGlobalDefault(target: "agent-preset", value: id)
     }
     func setDefaultPermission(_ value: String) {
         guard Self.defaultPermissionPresets.contains(value) else {
-            lastError = "不支持的默认权限：\(value)"
+            lastError = String(localized: "permissions.error.unsupported-default", defaultValue: "不支持的默认权限：\(value)")
             return
         }
         setGlobalDefault(target: "permission", value: value)
@@ -325,7 +325,7 @@ final class AppStore: ObservableObject {
     }
     func saveDefaultModel(provider: String, model: String, reasoningEffort: String?) {
         guard gateway.state.isConnected else {
-            lastError = "请先连接 DeepSeek Harness"
+            lastError = String(localized: "请先连接 DeepSeek Harness")
             return
         }
         beginDefaultConfigurationRequest("save-default-model")
@@ -404,7 +404,7 @@ final class AppStore: ObservableObject {
     }
     func loadHistory(for sessionId: String, older: Bool = false) {
         guard gateway.state.isConnected else {
-            lastError = "WebSocket 尚未连接，无法加载历史记录"
+            lastError = String(localized: "WebSocket 尚未连接，无法加载历史记录")
             return
         }
         guard !historyLoadingSessionIds.contains(sessionId) else { return }
@@ -457,12 +457,12 @@ final class AppStore: ObservableObject {
             self.scheduleConversationProjection(for: sessionId)
             if hasUsableLocalContent {
                 self.notice(
-                    "历史记录刷新超时",
-                    "已保留本地内容并继续接收实时事件",
+                    String(localized: "历史记录刷新超时"),
+                    String(localized: "已保留本地内容并继续接收实时事件"),
                     sessionId: sessionId
                 )
             } else {
-                self.lastError = "历史记录加载超时，请重试"
+                self.lastError = String(localized: "历史记录加载超时，请重试")
             }
         }
     }
@@ -475,7 +475,7 @@ final class AppStore: ObservableObject {
     func addKnownSession(_ id: String) {
         let normalized = id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
-        upsertSession(id: normalized, title: "远端会话 \(normalized.prefix(8))")
+        upsertSession(id: normalized, title: L10n.remoteSessionTitle(normalized.prefix(8)))
     }
     func search(_ query: String) {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -483,7 +483,7 @@ final class AppStore: ObservableObject {
     }
     func browseDirectories(path: String? = nil) {
         guard gateway.state.isConnected else {
-            lastError = "请先连接 DeepSeek Harness"
+            lastError = String(localized: "请先连接 DeepSeek Harness")
             return
         }
         directoryIsLoading = true
@@ -491,7 +491,7 @@ final class AppStore: ObservableObject {
     }
     func createWorkspace(path: String) {
         guard gateway.state.isConnected else {
-            lastError = "请先连接 DeepSeek Harness"
+            lastError = String(localized: "请先连接 DeepSeek Harness")
             return
         }
         workspaceCreationIsLoading = true
@@ -524,7 +524,7 @@ final class AppStore: ObservableObject {
     func setPermission(_ name: String) {
         guard let sessionId = selectedSessionId else { return }
         guard Self.permissionPresets.contains(name) else {
-            lastError = "不支持的访问权限：\(name)。可用状态为 read-only、workspace-write、danger-full-access。"
+            lastError = String(localized: "permissions.error.invalid", defaultValue: "不支持的访问权限：\(name)。可用状态为 read-only、workspace-write、danger-full-access。")
             return
         }
         beginSessionControlRequest("permission")
@@ -534,9 +534,9 @@ final class AppStore: ObservableObject {
     func send(_ text: String, images: [GatewayOutgoingImage] = []) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !images.isEmpty else { return false }
-        guard gateway.state.isConnected else { lastError = "请先在设置中连接 DeepSeek Harness"; return false }
+        guard gateway.state.isConnected else { lastError = String(localized: "请先在设置中连接 DeepSeek Harness"); return false }
         guard images.isEmpty || supportsImages else {
-            lastError = "当前 Mobile Gateway 不支持图片，请升级并重启 dsh web。"
+            lastError = String(localized: "当前 Mobile Gateway 不支持图片，请升级并重启 dsh web。")
             return false
         }
         waitingForNewSession = selectedSessionId == nil
@@ -552,24 +552,24 @@ final class AppStore: ObservableObject {
 
     func answerQuestion(_ request: GatewayPendingQuestionRequest, answers: [GatewayQuestionAnswer]) {
         guard gateway.state.isConnected else {
-            questionRequestStatuses[request.rpcId] = .rejected("WebSocket 已断开，重连后再提交答案。")
+            questionRequestStatuses[request.rpcId] = .rejected(String(localized: "q.rejected.ws.disconnected.answer", defaultValue: "WebSocket 已断开，重连后再提交答案。"))
             return
         }
         guard request.questions.map(\.id) == answers.map(\.id) else {
-            questionRequestStatuses[request.rpcId] = .rejected("答案必须按原顺序覆盖整组问题。")
+            questionRequestStatuses[request.rpcId] = .rejected(String(localized: "答案必须按原顺序覆盖整组问题。"))
             return
         }
         for (question, answer) in zip(request.questions, answers) {
             let allowedLabels = Set((question.options ?? []).map(\.label))
             guard Set(answer.selected).count == answer.selected.count,
                   answer.selected.allSatisfy(allowedLabels.contains) else {
-                questionRequestStatuses[request.rpcId] = .rejected("“\(question.question)”包含无效或重复选项。")
+                questionRequestStatuses[request.rpcId] = .rejected(String(localized: "q.rejected.bad-options", defaultValue: "“\(question.question)”包含无效或重复选项。"))
                 return
             }
             if !question.allowsMultipleSelections {
                 guard answer.selected.count <= 1,
                       !(answer.selected.count == 1 && answer.custom != nil) else {
-                    questionRequestStatuses[request.rpcId] = .rejected("单选题只能选择一个选项，且不能同时填写自定义答案。")
+                    questionRequestStatuses[request.rpcId] = .rejected(String(localized: "单选题只能选择一个选项，且不能同时填写自定义答案。"))
                     return
                 }
             }
@@ -581,7 +581,7 @@ final class AppStore: ObservableObject {
 
     func cancelQuestion(_ request: GatewayPendingQuestionRequest) {
         guard gateway.state.isConnected else {
-            questionRequestStatuses[request.rpcId] = .rejected("WebSocket 已断开，重连后再跳过问题。")
+            questionRequestStatuses[request.rpcId] = .rejected(String(localized: "q.rejected.ws.disconnected.skip", defaultValue: "WebSocket 已断开，重连后再跳过问题。"))
             return
         }
         questionRequestStatuses[request.rpcId] = .submitting(.cancel)
@@ -592,7 +592,7 @@ final class AppStore: ObservableObject {
     private func handle(_ frame: GatewayFrame) {
         switch frame.kind {
         case "paired":
-            notice("设备配对成功", frame.device?.name ?? "长期凭据已安全保存到 Keychain")
+            notice(String(localized: "设备配对成功"), frame.device?.name ?? String(localized: "长期凭据已安全保存到 Keychain"))
         case "hello":
             // `hello` starts a new authenticated transport generation. The
             // gateway immediately replays every still-pending request after
@@ -605,8 +605,8 @@ final class AppStore: ObservableObject {
             queuedImageAttachmentIDs.removeAll()
             imageAttachmentQueue.removeAll()
             presentsNextConnectionFailureAsAlert = true
-            let authentication = frame.authenticated == false ? "Debug 未鉴权" : "设备鉴权成功"
-            notice("网关已连接", "\(authentication) · Mobile protocol v\(frame.protocol ?? 1) · \(frame.clients ?? 1) 个客户端")
+            let authentication = frame.authenticated == false ? String(localized: "Debug 未鉴权") : String(localized: "设备鉴权成功")
+            notice(String(localized: "网关已连接"), String(localized: "gateway.connected.detail", defaultValue: "\(authentication) · Mobile protocol v\(frame.protocol ?? 1) · \(frame.clients ?? 1) 个客户端"))
             for (sessionId, records) in events {
                 enqueueImageAttachments(in: records, sessionId: sessionId)
             }
@@ -619,9 +619,9 @@ final class AppStore: ObservableObject {
                 }
             }
         case "pong":
-            notice("心跳正常", frame.at.map { Date(timeIntervalSince1970: $0 / 1000).formatted(date: .omitted, time: .standard) } ?? "pong")
+            notice(String(localized: "心跳正常"), frame.at.map { Date(timeIntervalSince1970: $0 / 1000).formatted(date: .omitted, time: .standard) } ?? "pong")
         case "subscribed":
-            notice("事件订阅", frame.sessionId.map { "仅接收 \($0.prefix(12))…" } ?? "接收全部会话事件", sessionId: frame.sessionId)
+            notice(String(localized: "notice.event.subscription", defaultValue: "事件订阅"), frame.sessionId.map { String(localized: "events.subscribe.single", defaultValue: "仅接收 \($0.prefix(12))…") } ?? String(localized: "接收全部会话事件"), sessionId: frame.sessionId)
         case "sent": handleSent(frame)
         case "event": handleLiveEvent(frame)
         case "workspaces":
@@ -633,19 +633,19 @@ final class AppStore: ObservableObject {
                 selectedWorkspaceId = workspaces.first?.id ?? Self.ungroupedWorkspaceID
             }
             archivedSessionIds = Set(frame.archivedSessionIds ?? [])
-            notice("工作区已同步", "\(workspaces.count) 个工作区")
+            notice(String(localized: "notice.workspaces.synced", defaultValue: "工作区已同步"), String(localized: "workspaces.count", defaultValue: "\(workspaces.count) 个工作区"))
         case "sessions":
             applyRemoteSessions(decodeItems(frame.items, as: GatewaySessionSummary.self))
             isRefreshing = false
-            notice("会话列表已同步", "\(sessions.count) 个会话")
+            notice(String(localized: "notice.sessions.synced", defaultValue: "会话列表已同步"), String(localized: "sessions.count", defaultValue: "\(sessions.count) 个会话"))
         case "history": applyHistoryRebased(frame)
         case "attachment": handleImageAttachment(frame)
         case "search":
             searchResults = decodeItems(frame.items, as: GatewaySearchItem.self)
-            notice("搜索完成", "\(searchResults.count) 条结果\(frame.hasMore == true ? "，还有更多" : "")")
+            notice(String(localized: "notice.search.finished", defaultValue: "搜索完成"), String(localized: "search.results.count", defaultValue: "\(searchResults.count) 条结果\(frame.hasMore == true ? String(localized: "search.results.more", defaultValue: "，还有更多") : "")"))
         case "host":
             hostSnapshot = GatewayHostSnapshot(version: frame.version, cwd: frame.cwd, provider: frame.provider, model: frame.model, attachedSessions: frame.attachedSessions, canOpenPath: frame.canOpenPath)
-            notice("宿主信息", [frame.version, frame.provider, frame.model].compactMap { $0 }.joined(separator: " · "))
+            notice(String(localized: "宿主信息"), [frame.version, frame.provider, frame.model].compactMap { $0 }.joined(separator: " · "))
         case "agent-presets":
             agentPresets = frame.presets ?? []
             agentPresetsAuthorable = frame.authorable ?? false
@@ -664,22 +664,22 @@ final class AppStore: ObservableObject {
         case "save-default-model":
             if let saved = frame.saved {
                 defaultModelSelection = saved
-                notice("默认模型已更新", [saved.model, saved.reasoningEffort].compactMap { $0 }.joined(separator: " · "))
+                notice(String(localized: "默认模型已更新"), [saved.model, saved.reasoningEffort].compactMap { $0 }.joined(separator: " · "))
             } else {
-                lastError = "服务端未确认默认模型更新。"
+                lastError = String(localized: "服务端未确认默认模型更新。")
             }
             finishDefaultConfigurationRequest("save-default-model")
         case "set-default":
             if frame.applied == true, let target = frame.target, let value = frame.value {
                 if target == "agent-preset" { agentPresetDefault = value }
                 if target == "permission" { permissionDefault = value }
-                notice("默认配置已更新", "\(target) · \(value)")
+                notice(String(localized: "notice.defaults.updated", defaultValue: "默认配置已更新"), String(localized: "defaults.updated.detail", defaultValue: "\(target) · \(value)"))
                 finishDefaultConfigurationRequest("set-default")
                 beginDefaultConfigurationRequest("defaults")
                 gateway.requestDefaults()
             } else {
                 finishDefaultConfigurationRequest("set-default")
-                lastError = "服务端未确认默认配置更新。"
+                lastError = String(localized: "服务端未确认默认配置更新。")
             }
         case "models":
             if let id = frame.sessionId ?? pendingModelsSessionId {
@@ -702,7 +702,7 @@ final class AppStore: ObservableObject {
                 var catalog = modelCatalogs[id] ?? GatewayModelCatalog(current: nil, routable: true, groups: [])
                 catalog.current = selected
                 modelCatalogs[id] = catalog
-                notice("模型已切换", [selected.model, selected.reasoningEffort].compactMap { $0 }.joined(separator: " · "), sessionId: id)
+                notice(String(localized: "模型已切换"), [selected.model, selected.reasoningEffort].compactMap { $0 }.joined(separator: " · "), sessionId: id)
             }
             pendingModelSelectionSessionId = nil
             finishSessionControlRequest("select-model")
@@ -720,7 +720,7 @@ final class AppStore: ObservableObject {
                     permissions.currentValue = name
                     permissions.preset = name
                     sessionPermissions[id] = permissions
-                    notice("权限已切换", name, sessionId: id)
+                    notice(String(localized: "权限已切换"), name, sessionId: id)
                 } else {
                     reportInvalidPermission(name, sessionId: id, source: "permission")
                 }
@@ -755,13 +755,13 @@ final class AppStore: ObservableObject {
             directoryHome = frame.home
             directoryCrumbs = frame.crumbs ?? []
             directoryEntries = frame.entries ?? []
-            notice("目录已加载", "\(frame.path ?? "") · \(directoryEntries.count) 项")
+            notice(String(localized: "目录已加载"), String(localized: "directory.loaded.detail", defaultValue: "\(frame.path ?? "") · \(directoryEntries.count) 项"))
         case "workspace-create":
             workspaceCreationIsLoading = false
             if let workspace = frame.workspace {
                 if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) { workspaces[index] = workspace } else { workspaces.append(workspace) }
                 selectedWorkspaceId = workspace.id
-                notice(frame.created == true ? "工作区已创建" : "工作区已存在", workspace.path)
+                notice(frame.created == true ? String(localized: "工作区已创建") : String(localized: "工作区已存在"), workspace.path)
                 refreshRemoteState()
             }
         case "question-requested":
@@ -785,7 +785,7 @@ final class AppStore: ObservableObject {
             if let requestType = frame.requestType,
                ["question-answer", "question-cancel"].contains(requestType),
                let rpcId = frame.rpcId ?? pendingQuestionRequests.first(where: { $0.sessionId == frame.sessionId })?.rpcId {
-                questionRequestStatuses[rpcId] = .rejected(detail.isEmpty ? "服务端拒绝了问题响应。" : detail)
+                questionRequestStatuses[rpcId] = .rejected(detail.isEmpty ? String(localized: "服务端拒绝了问题响应。") : detail)
             }
             let failedRequest = frame.requestType ?? frame.code.flatMap(sessionControlKind(from:)) ?? frame.message.flatMap(sessionControlKind(from:))
             if let failedRequest { finishSessionControlRequest(failedRequest) }
@@ -795,8 +795,8 @@ final class AppStore: ObservableObject {
                 for kind in Array(sessionControlLoadingKinds) { finishSessionControlRequest(kind) }
             }
             lastError = detail
-            notice("请求失败\(frame.requestType.map { " · \($0)" } ?? "")", detail, sessionId: frame.sessionId, isError: true)
-        default: notice("未知网关响应", frame.kind)
+            notice(String(localized: "request.failed.title", defaultValue: "请求失败\(frame.requestType.map { " · \($0)" } ?? "")"), detail, sessionId: frame.sessionId, isError: true)
+        default: notice(String(localized: "未知网关响应"), frame.kind)
         }
     }
 
@@ -807,7 +807,7 @@ final class AppStore: ObservableObject {
               !sessionId.isEmpty,
               let questions = frame.questions,
               !questions.isEmpty else {
-            notice("问题请求无效", "缺少 rpcId、sessionId 或 questions。", sessionId: frame.sessionId, isError: true)
+            notice(String(localized: "问题请求无效"), String(localized: "缺少 rpcId、sessionId 或 questions。"), sessionId: frame.sessionId, isError: true)
             return
         }
         let request = GatewayPendingQuestionRequest(
@@ -823,8 +823,8 @@ final class AppStore: ObservableObject {
             questionRequestStatuses[rpcId] = .idle
         }
         notice(
-            frame.replay == true ? "待回答问题已恢复" : "Agent 正在等待回答",
-            questions.first?.question ?? "请回答 Agent 的问题",
+            frame.replay == true ? String(localized: "待回答问题已恢复") : String(localized: "Agent 正在等待回答"),
+            questions.first?.question ?? String(localized: "请回答 Agent 的问题"),
             sessionId: sessionId
         )
     }
@@ -839,12 +839,12 @@ final class AppStore: ObservableObject {
         let reason = frame.reason ?? "bad-response"
         if reason == "not-pending" {
             if let request = pendingQuestionRequests.first(where: { $0.rpcId == rpcId }) {
-                notice("问题已在其他端处理", "当前响应未生效。", sessionId: request.sessionId)
+                notice(String(localized: "问题已在其他端处理"), String(localized: "当前响应未生效。"), sessionId: request.sessionId)
             }
             pendingQuestionRequests.removeAll { $0.rpcId == rpcId }
             questionRequestStatuses[rpcId] = nil
         } else {
-            questionRequestStatuses[rpcId] = .rejected("服务端未接受答案（\(reason)），请检查后重试。")
+            questionRequestStatuses[rpcId] = .rejected(String(localized: "q.rejected.server-refused", defaultValue: "服务端未接受答案（\(reason)），请检查后重试。"))
         }
     }
 
@@ -853,8 +853,8 @@ final class AppStore: ObservableObject {
         let request = pendingQuestionRequests.first { $0.rpcId == rpcId }
         pendingQuestionRequests.removeAll { $0.rpcId == rpcId }
         questionRequestStatuses[rpcId] = nil
-        let outcome = frame.outcome == "cancelled" ? "已跳过" : "已提交"
-        notice("Agent 问题\(outcome)", "等待 Agent 继续执行。", sessionId: frame.sessionId ?? request?.sessionId)
+        let outcome = frame.outcome == "cancelled" ? String(localized: "已跳过") : String(localized: "已提交")
+        notice(String(localized: "q.outcome.title", defaultValue: "Agent 问题\(outcome)"), String(localized: "等待 Agent 继续执行。"), sessionId: frame.sessionId ?? request?.sessionId)
     }
 
     private func handleSent(_ frame: GatewayFrame) {
@@ -864,11 +864,11 @@ final class AppStore: ObservableObject {
         }
         if selectedSessionId == nil { selectedSessionId = id }
         waitingForNewSession = false
-        upsertSession(id: id, title: "新建 Harness 会话")
+        upsertSession(id: id, title: L10n.newSessionPlaceholderTitle)
         if let index = sessions.firstIndex(where: { $0.id == id }) {
             sessions[index].agentPreset = agentPresetDefault
         }
-        notice(frame.command == nil ? "消息已发送" : "命令已执行", frame.command?.displayText ?? "\(id.prefix(12))…", sessionId: id)
+        notice(frame.command == nil ? String(localized: "消息已发送") : String(localized: "命令已执行"), frame.command?.displayText ?? String(localized: "session.preview.id", defaultValue: "\(id.prefix(12))…"), sessionId: id)
         gateway.subscribe(sessionId: id)
         gateway.requestSessions()
         refreshSessionControls(for: id)
@@ -963,22 +963,22 @@ final class AppStore: ObservableObject {
             if frame.hasMore == true,
                self.historyBatchPageCounts[id, default: 0] < Self.historyPagesPerBatch {
                 guard let cursor = frame.nextBeforeSeq else {
-                    let message = "网关返回 hasMore:true，但缺少 nextBeforeSeq，已停止自动续页。"
+                    let message = String(localized: "history.pagination.stopped.hasmore", defaultValue: "网关返回 hasMore:true，但缺少 nextBeforeSeq，已停止自动续页。")
                     self.historyHasMore[id] = false
                     self.historyNextBeforeSeq[id] = nil
                     self.finishHistoryLoading(id)
                     self.lastError = message
-                    self.notice("历史记录分页失败", message, sessionId: id, isError: true)
+                    self.notice(String(localized: "notice.history.pagination-failed", defaultValue: "历史记录分页失败"), message, sessionId: id, isError: true)
                     return
                 }
                 var seenCursors = self.historyPaginationCursors[id, default: []]
                 guard !seenCursors.contains(cursor) else {
-                    let message = "网关重复返回历史游标 \(cursor)，已停止自动续页以避免循环。"
+                    let message = String(localized: "history.cursor.loop", defaultValue: "网关重复返回历史游标 \(cursor)，已停止自动续页以避免循环。")
                     self.historyHasMore[id] = false
                     self.historyNextBeforeSeq[id] = nil
                     self.finishHistoryLoading(id)
                     self.lastError = message
-                    self.notice("历史记录分页失败", message, sessionId: id, isError: true)
+                    self.notice(String(localized: "notice.history.pagination-failed", defaultValue: "历史记录分页失败"), message, sessionId: id, isError: true)
                     return
                 }
                 seenCursors.insert(cursor)
@@ -999,8 +999,8 @@ final class AppStore: ObservableObject {
             }
             self.finishHistoryLoading(id)
             let byteDetail = totalBytes > 0 ? " · \(ByteCountFormatter.string(fromByteCount: Int64(totalBytes), countStyle: .file))" : ""
-            let moreDetail = self.historyHasMore[id] == true ? " · 向上滑动加载更早记录" : ""
-            self.notice("历史记录已加载", "\(totalEvents) 个事件\(byteDetail)\(moreDetail)", sessionId: id)
+            let moreDetail = self.historyHasMore[id] == true ? String(localized: "history.swipe.up.hint", defaultValue: " · 向上滑动加载更早记录") : ""
+            self.notice(String(localized: "notice.history.loaded", defaultValue: "历史记录已加载"), String(localized: "history.loaded.detail", defaultValue: "\(totalEvents) 个事件\(byteDetail)\(moreDetail)"), sessionId: id)
         }
     }
     private func finishHistoryLoading(_ sessionId: String) {
@@ -1099,7 +1099,7 @@ final class AppStore: ObservableObject {
         guard let encoded = frame.data,
               let decoded = Data(base64Encoded: encoded),
               decoded.count == attachment.bytes else {
-            notice("图片加载失败", "附件 \(attachment.id.prefix(12))… 的 Base64 或字节数无效。", sessionId: frame.sessionId, isError: true)
+            notice(String(localized: "notice.image.load-failed", defaultValue: "图片加载失败"), String(localized: "image.invalid.base64", defaultValue: "附件 \(attachment.id.prefix(12))… 的 Base64 或字节数无效。"), sessionId: frame.sessionId, isError: true)
             return
         }
         imageAttachmentCache.store(decoded, for: attachment.id)
@@ -1165,7 +1165,7 @@ final class AppStore: ObservableObject {
     private func applyRemoteSessions(_ remote: [GatewaySessionSummary]) {
         for item in remote where !archivedSessionIds.contains(item.sessionId) {
             let fallback = item.cwd.map { URL(fileURLWithPath: $0).lastPathComponent }.flatMap { $0.isEmpty ? nil : $0 }
-            let title = item.projectedTitle ?? fallback ?? "远端会话 \(item.sessionId.prefix(8))"
+            let title = item.projectedTitle ?? fallback ?? L10n.remoteSessionTitle(item.sessionId.prefix(8))
             let date = Date(timeIntervalSince1970: item.updatedAt > 10_000_000_000 ? item.updatedAt / 1000 : item.updatedAt)
             if let index = sessions.firstIndex(where: { $0.id == item.sessionId }) {
                 sessions[index].title = title
@@ -1175,7 +1175,7 @@ final class AppStore: ObservableObject {
             } else {
                 sessions.append(SessionSummary(
                     id: item.sessionId,
-                    title: item.blank ? "空白会话 \(item.sessionId.prefix(8))" : title,
+                    title: item.blank ? L10n.blankSessionTitle(item.sessionId.prefix(8)) : title,
                     lastActivity: date,
                     isRunning: item.running,
                     hasUnread: false,
@@ -1259,7 +1259,7 @@ final class AppStore: ObservableObject {
             try? await Task.sleep(for: .seconds(12))
             guard let self, self.sessionControlRequestTokens[kind] == token else { return }
             self.finishSessionControlRequest(kind)
-            self.lastError = "\(kind) 请求超时，请检查 Mobile Gateway。"
+            self.lastError = String(localized: "control.request.timeout", defaultValue: "\(kind) 请求超时，请检查 Mobile Gateway。")
         }
     }
 
@@ -1343,7 +1343,7 @@ final class AppStore: ObservableObject {
 
     private func setGlobalDefault(target: String, value: String) {
         guard gateway.state.isConnected else {
-            lastError = "请先连接 DeepSeek Harness"
+            lastError = String(localized: "请先连接 DeepSeek Harness")
             return
         }
         beginDefaultConfigurationRequest("set-default")
@@ -1358,7 +1358,7 @@ final class AppStore: ObservableObject {
             try? await Task.sleep(for: .seconds(12))
             guard let self, self.defaultConfigurationRequestTokens[kind] == token else { return }
             self.finishDefaultConfigurationRequest(kind)
-            self.lastError = "\(kind) 请求超时，请检查 Mobile Gateway v0.1.11。"
+            self.lastError = String(localized: "control.request.timeout.v0111", defaultValue: "\(kind) 请求超时，请检查 Mobile Gateway v0.1.11。")
         }
     }
 
@@ -1381,9 +1381,9 @@ final class AppStore: ObservableObject {
     private func reportInvalidPermission(_ value: String, sessionId: String, source: String) {
         finishSessionControlRequest("permission")
         finishSessionControlRequest("permission-options")
-        let detail = "权限状态 \"\(value)\" 无效；仅支持 read-only、workspace-write、danger-full-access。"
+        let detail = String(localized: "permissions.state.invalid", defaultValue: "权限状态 \"\(value)\" 无效；仅支持 read-only、workspace-write、danger-full-access。")
         lastError = detail
-        notice("权限状态错误 · \(source)", detail, sessionId: sessionId, isError: true)
+        notice(String(localized: "permissions.state.error.source", defaultValue: "权限状态错误 · \(source)"), detail, sessionId: sessionId, isError: true)
     }
 
     private func sessionControlKind(from value: String) -> String? {
@@ -1392,9 +1392,9 @@ final class AppStore: ObservableObject {
     }
     private func upsertSession(id: String, title: String?) {
         if let index = sessions.firstIndex(where: { $0.id == id }) {
-            if let title, !title.isEmpty, sessions[index].title.hasPrefix("新建") || sessions[index].title.hasPrefix("远端") { sessions[index].title = title }
+            if let title, !title.isEmpty, sessions[index].title == L10n.newSessionPlaceholderTitle || sessions[index].title.hasPrefix(L10n.remoteSessionTitlePrefix) { sessions[index].title = title }
         } else {
-            sessions.insert(SessionSummary(id: id, title: title ?? "远端会话 \(id.prefix(8))", lastActivity: .now, isRunning: false, hasUnread: false), at: 0)
+            sessions.insert(SessionSummary(id: id, title: title ?? L10n.remoteSessionTitle(id.prefix(8)), lastActivity: .now, isRunning: false, hasUnread: false), at: 0)
         }
     }
 
@@ -1422,17 +1422,17 @@ private enum PairingPayloadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidBase64URL:
-            "配对内容不是有效的 Base64URL 字符串。"
+            String(localized: "配对内容不是有效的 Base64URL 字符串。")
         case .invalidJSON:
-            "Base64URL 解码后的内容不是有效的 DeepSeek Harness 配对 JSON。"
+            String(localized: "Base64URL 解码后的内容不是有效的 DeepSeek Harness 配对 JSON。")
         case .unsupportedVersion(let version):
-            "不支持的配对协议版本 \(version)，当前客户端需要 version 2。"
+            String(localized: "pairing.unsupported.version", defaultValue: "不支持的配对协议版本 \(version)，当前客户端需要 version 2。")
         case .invalidEndpoint:
-            "二维码中的 publicUrl 不是有效的 WebSocket 地址。"
+            String(localized: "二维码中的 publicUrl 不是有效的 WebSocket 地址。")
         case .invalidCode:
-            "二维码中的一次性 pairingCode 无效。"
+            String(localized: "二维码中的一次性 pairingCode 无效。")
         case .expired:
-            "二维码配对码已经过期，请在 WebUI 中重新生成。"
+            String(localized: "二维码配对码已经过期，请在 WebUI 中重新生成。")
         }
     }
 }

@@ -5,12 +5,12 @@ struct SettingsView: View {
     @State private var pendingPermission: DefaultPermissionChoice?
 
     private var selectedPresetName: String {
-        guard let id = store.agentPresetDefault else { return "未读取" }
+        guard let id = store.agentPresetDefault else { return String(localized: "未读取") }
         return store.agentPresets.first(where: { $0.id == id })?.displayName ?? id
     }
 
     private var selectedPermissionName: String {
-        guard let id = store.permissionDefault else { return "未读取" }
+        guard let id = store.permissionDefault else { return String(localized: "未读取") }
         return DefaultPermissionChoice.option(id: id)?.title ?? id
     }
 
@@ -24,7 +24,7 @@ struct SettingsView: View {
     }
 
     private var defaultModelValueText: String {
-        guard let selection = store.defaultModelSelection else { return "未读取" }
+        guard let selection = store.defaultModelSelection else { return String(localized: "未读取") }
         let item = store.anyModelCatalog?.groups
             .first(where: { $0.id == selection.provider })?
             .models.first(where: { $0.id == selection.model })
@@ -44,9 +44,9 @@ struct SettingsView: View {
 
     static func reasoningEffortDisplayName(_ id: String) -> String {
         switch id.lowercased() {
-        case "low": return "低"
-        case "medium": return "中"
-        case "high": return "高"
+        case "low": return String(localized: "低")
+        case "medium": return String(localized: "中")
+        case "high": return String(localized: "高")
         default: return id.capitalized
         }
     }
@@ -58,7 +58,7 @@ struct SettingsView: View {
                     AgentPresetSelectionView()
                 } label: {
                     DefaultConfigurationRow(
-                        title: "Agent 预设",
+                        title: String(localized: "Agent 预设"),
                         value: selectedPresetName,
                         isLoading: defaultsAreLoading
                     )
@@ -69,7 +69,7 @@ struct SettingsView: View {
                     DefaultModelSelectionView()
                 } label: {
                     DefaultConfigurationRow(
-                        title: "默认模型",
+                        title: String(localized: "默认模型"),
                         value: defaultModelValueText,
                         isLoading: defaultModelIsLoading
                     )
@@ -90,7 +90,7 @@ struct SettingsView: View {
                     }
                 } label: {
                     DefaultConfigurationRow(
-                        title: "权限",
+                        title: String(localized: "权限"),
                         value: selectedPermissionName,
                         isLoading: defaultsAreLoading
                     )
@@ -117,7 +117,7 @@ struct SettingsView: View {
                         Text("Port \(port)").foregroundStyle(.secondary)
                     }
                 }
-                Button(store.gateway.state.isConnected ? "断开连接" : "连接") {
+                Button(store.gateway.state.isConnected ? String(localized: "断开连接") : String(localized: "连接")) {
                     if store.gateway.state.isConnected {
                         store.gateway.disconnect()
                     } else {
@@ -168,7 +168,7 @@ struct SettingsView: View {
         .alert(item: $pendingPermission) { option in
             Alert(
                 title: Text("修改全局默认权限？"),
-                message: Text("将新会话的默认权限改为“\(option.title)”。这会更新部署级设置，并同步影响 WebUI。"),
+                message: Text(String(localized: "defaults.permission.confirm.body", defaultValue: "将新会话的默认权限改为“\(option.title)”。这会更新部署级设置，并同步影响 WebUI。")),
                 primaryButton: .cancel(Text("取消")),
                 secondaryButton: .default(Text("确认修改")) {
                     store.setDefaultPermission(option.id)
@@ -207,10 +207,10 @@ private struct DefaultPermissionChoice: Identifiable, Hashable {
     let description: String
 
     static let options = [
-        DefaultPermissionChoice(id: "ask", title: "每次询问", description: "需要写入或执行敏感操作时请求确认"),
-        DefaultPermissionChoice(id: "read-only", title: "只读", description: "允许读取工作区，不允许修改文件"),
-        DefaultPermissionChoice(id: "workspace-write", title: "工作区写入", description: "允许在当前工作区内读取和写入"),
-        DefaultPermissionChoice(id: "danger-full-access", title: "完全访问", description: "允许不受沙箱限制地访问宿主环境")
+        DefaultPermissionChoice(id: "ask", title: L10n.permissionName(for: "ask"), description: String(localized: "需要写入或执行敏感操作时请求确认")),
+        DefaultPermissionChoice(id: "read-only", title: L10n.permissionName(for: "read-only"), description: String(localized: "允许读取工作区，不允许修改文件")),
+        DefaultPermissionChoice(id: "workspace-write", title: L10n.permissionName(for: "workspace-write"), description: String(localized: "允许在当前工作区内读取和写入")),
+        DefaultPermissionChoice(id: "danger-full-access", title: L10n.permissionName(for: "danger-full-access"), description: String(localized: "允许不受沙箱限制地访问宿主环境"))
     ]
 
     static func option(id: String) -> DefaultPermissionChoice? {
@@ -289,7 +289,7 @@ private struct AgentPresetSelectionView: View {
         .alert(item: $pendingPreset) { preset in
             Alert(
                 title: Text("设为全局默认预设？"),
-                message: Text("将“\(preset.displayName)”设为新会话的默认 Agent 预设。这会更新部署级设置，并同步影响 WebUI。"),
+                message: Text(String(localized: "defaults.preset.confirm.body", defaultValue: "将“\(preset.displayName)”设为新会话的默认 Agent 预设。这会更新部署级设置，并同步影响 WebUI。")),
                 primaryButton: .cancel(Text("取消")),
                 secondaryButton: .default(Text("设为默认")) {
                     store.setDefaultAgentPreset(preset.id)
@@ -300,9 +300,9 @@ private struct AgentPresetSelectionView: View {
 
     private var presetCapabilityText: String {
         switch (store.agentPresetsAuthorable, store.agentPresetsHasDocument) {
-        case (true, true): return "服务端支持编写自定义预设，并提供预设配置文档。"
-        case (true, false): return "服务端支持编写自定义 Agent 预设。"
-        case (false, true): return "服务端提供 Agent 预设配置文档。"
+        case (true, true): return String(localized: "服务端支持编写自定义预设，并提供预设配置文档。")
+        case (true, false): return String(localized: "服务端支持编写自定义 Agent 预设。")
+        case (false, true): return String(localized: "服务端提供 Agent 预设配置文档。")
         case (false, false): return ""
         }
     }
@@ -441,7 +441,7 @@ private struct DefaultModelSelectionView: View {
         .alert(item: $pendingChange) { change in
             Alert(
                 title: Text("修改默认模型？"),
-                message: Text("将新会话的默认模型改为“\(change.summary)”。这会更新部署级设置，并同步影响 WebUI。"),
+                message: Text(String(localized: "defaults.model.confirm.body", defaultValue: "将新会话的默认模型改为“\(change.summary)”。这会更新部署级设置，并同步影响 WebUI。")),
                 primaryButton: .cancel(Text("取消")),
                 secondaryButton: .default(Text("确认修改")) {
                     store.saveDefaultModel(provider: change.provider, model: change.model, reasoningEffort: change.reasoningEffort)

@@ -375,24 +375,12 @@ struct GatewayAgentPreset: Codable, Hashable, Sendable, Identifiable {
 
     var displayName: String {
         if let name, !name.isEmpty { return name }
-        switch id {
-        case "standard": return "标准模式"
-        case "code": return "PTC 模式"
-        case "minimal": return "极简模式"
-        case "cordis": return "创造模式"
-        default: return id
-        }
+        return L10n.presetModeName(for: id)
     }
 
     var displayDescription: String {
         if let description, !description.isEmpty { return description }
-        switch id {
-        case "standard": return "功能完整的编码 Agent，支持文件编辑、Shell、检索、Skills、计划与工作流。"
-        case "code": return "通过 Code Mode SDK 组合多步工具操作。"
-        case "minimal": return "精简工具集合，适合轻量、直接的编码任务。"
-        case "cordis": return "用于创建和维护自定义 Agent 预设。"
-        default: return "由 DeepSeek Harness 提供的 Agent 预设。"
-        }
+        return L10n.presetModeBlurb(for: id)
     }
 }
 
@@ -645,10 +633,10 @@ enum ConnectionState: Equatable {
 
     var label: String {
         switch self {
-        case .disconnected: "未连接"
-        case .connecting: "连接中"
-        case .connected: "已连接"
-        case .failed: "连接失败"
+        case .disconnected: String(localized: "未连接")
+        case .connecting: String(localized: "连接中")
+        case .connected: String(localized: "已连接")
+        case .failed: String(localized: "连接失败")
         }
     }
 

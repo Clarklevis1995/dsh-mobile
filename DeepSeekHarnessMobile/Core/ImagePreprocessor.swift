@@ -12,8 +12,8 @@ enum GatewayImagePreprocessorError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .cannotDecode: "无法解码所选图片。"
-        case .cannotEncode: "无法将图片压缩到 DSH 允许的大小。"
+        case .cannotDecode: String(localized: "无法解码所选图片。")
+        case .cannotEncode: String(localized: "无法将图片压缩到 DSH 允许的大小。")
         }
     }
 }

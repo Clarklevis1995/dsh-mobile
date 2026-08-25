@@ -58,7 +58,7 @@ struct ConversationView: View {
         .sheet(isPresented: $showsSessionStats) {
             SessionStatsSheet(
                 snapshot: store.selectedSessionStatsSnapshot,
-                sessionTitle: store.selectedSession?.title ?? "新建 DeepSeek Harness"
+                sessionTitle: store.selectedSession?.title ?? String(localized: "session.new.fallback", defaultValue: "新建 DeepSeek Harness")
             )
         }
     }
@@ -262,9 +262,9 @@ struct ConversationView: View {
                 ProgressView()
                     .controlSize(.large)
                     .tint(DSHColor.ocean)
-                Text(isLoadingSelectedHistory ? "正在加载历史记录" : "正在准备会话")
+                Text(isLoadingSelectedHistory ? String(localized: "正在加载历史记录") : String(localized: "正在准备会话"))
                     .font(.title3.weight(.semibold))
-                Text(isLoadingSelectedHistory ? historyProgressText : "正在定位到最新消息…")
+                Text(isLoadingSelectedHistory ? historyProgressText : String(localized: "正在定位到最新消息…"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -289,19 +289,19 @@ struct ConversationView: View {
     private var historyProgressText: String {
         guard let id = store.selectedSessionId,
               let progress = store.historyLoadProgress[id] else {
-            return "正在从 Mobile Gateway 同步会话内容…"
+            return String(localized: "history.syncing.gateway", defaultValue: "正在从 Mobile Gateway 同步会话内容…")
         }
         if isLoadingOlderSelectedHistory {
             return progress.loaded > 0
-                ? "正在加载更早记录 · 已同步 \(progress.loaded) 个事件"
-                : "正在加载更早记录…"
+                ? String(localized: "history.loading.loaded", defaultValue: "正在加载更早记录 · 已同步 \(progress.loaded) 个事件")
+                : String(localized: "history.loading.earlier", defaultValue: "正在加载更早记录…")
         }
         guard let total = progress.total else {
             return progress.loaded > 0
-                ? "正在自动加载更早记录 · 已同步 \(progress.loaded) 个事件"
-                : "正在从 Mobile Gateway 同步会话内容…"
+                ? String(localized: "history.autoloading.loaded", defaultValue: "正在自动加载更早记录 · 已同步 \(progress.loaded) 个事件")
+                : String(localized: "history.syncing.gateway", defaultValue: "正在从 Mobile Gateway 同步会话内容…")
         }
-        return "正在加载历史记录 · \(progress.loaded)/\(total)"
+        return String(localized: "history.progress.count", defaultValue: "正在加载历史记录 · \(progress.loaded)/\(total)")
     }
 
     @ViewBuilder
@@ -313,14 +313,14 @@ struct ConversationView: View {
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
-            .accessibilityLabel(isGenerating ? "正在生成，滚动到最新消息" : "滚动到最新消息")
+            .accessibilityLabel(isGenerating ? String(localized: "a11y.generating.jump-latest", defaultValue: "正在生成，滚动到最新消息") : String(localized: "a11y.jump.latest", defaultValue: "滚动到最新消息"))
         } else {
             Button(action: action) {
                 scrollToBottomButtonIcon(isGenerating: isGenerating)
                     .glassSurface(radius: 18)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isGenerating ? "正在生成，滚动到最新消息" : "滚动到最新消息")
+            .accessibilityLabel(isGenerating ? String(localized: "a11y.generating.jump-latest", defaultValue: "正在生成，滚动到最新消息") : String(localized: "a11y.jump.latest", defaultValue: "滚动到最新消息"))
         }
     }
 
@@ -370,7 +370,7 @@ struct ConversationView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!store.supportsImages || pendingImages.count >= 20 || isImportingImages)
-                .accessibilityLabel(store.supportsImages ? "添加图片" : "当前网关不支持图片")
+                .accessibilityLabel(store.supportsImages ? String(localized: "添加图片") : String(localized: "当前网关不支持图片"))
 
                 permissionControl
 
@@ -387,7 +387,7 @@ struct ConversationView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(store.selectedContextSnapshot == nil)
-                .accessibilityLabel("上下文已用 \(Int(contextProgress * 100))%")
+                .accessibilityLabel(String(localized: "a11y.context.percent", defaultValue: "上下文已用 \(Int(contextProgress * 100))%"))
                 .popover(isPresented: $showsContextUsage, arrowEdge: .bottom) {
                     ContextUsagePopover(snapshot: store.selectedContextSnapshot)
                         .presentationCompactAdaptation(.popover)
@@ -483,7 +483,7 @@ struct ConversationView: View {
             do {
                 guard let data = try await item.loadTransferable(type: Data.self),
                       let mediaType = Self.imageMediaType(for: data) else {
-                    store.lastError = "所选图片不是受支持的 PNG、JPEG、WebP 或 GIF。"
+                    store.lastError = String(localized: "所选图片不是受支持的 PNG、JPEG、WebP 或 GIF。")
                     continue
                 }
                 let prepared = try await Task.detached(priority: .userInitiated) {
@@ -491,14 +491,14 @@ struct ConversationView: View {
                 }.value
                 imported.append(GatewayOutgoingImage(mediaType: prepared.mediaType, data: prepared.data))
             } catch {
-                store.lastError = "处理所选图片失败：\(error.localizedDescription)"
+                store.lastError = String(localized: "image.process.failed", defaultValue: "处理所选图片失败：\(error.localizedDescription)")
             }
         }
         let existingBytes = pendingImages.reduce(0) { $0 + $1.data.count }
         var acceptedBytes = existingBytes
         for image in imported where !pendingImages.contains(where: { $0.mediaType == image.mediaType && $0.data == image.data }) {
             guard acceptedBytes + image.data.count <= 100 * 1024 * 1024 else {
-                store.lastError = "一条消息中的图片总大小不能超过 100 MiB。"
+                store.lastError = String(localized: "一条消息中的图片总大小不能超过 100 MiB。")
                 break
             }
             pendingImages.append(image)
@@ -561,7 +561,7 @@ struct ConversationView: View {
                 showsSessionStatsPopover = true
             } label: {
                 HStack(spacing: 7) {
-                    Text(SessionStatsFormatter.turnsStepsLine(snapshot.stats) ?? "正在读取会话统计…")
+                    Text(SessionStatsFormatter.turnsStepsLine(snapshot.stats) ?? String(localized: "正在读取会话统计…"))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -615,7 +615,7 @@ struct ConversationView: View {
             .lineLimit(1)
             .frame(width: 92, alignment: .leading)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("新会话默认权限：\(store.permissionDefault.map(permissionTitle) ?? "未读取")")
+            .accessibilityLabel(String(localized: "a11y.defaults.permission", defaultValue: "新会话默认权限：\(store.permissionDefault.map(permissionTitle) ?? String(localized: "未读取"))"))
         } else {
             permissionMenu
         }
@@ -647,7 +647,7 @@ struct ConversationView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .trailing)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("新会话默认模型：\(defaultModelTitle)\(defaultModelEffortTitle.map { "，推理等级 \($0)" } ?? "")")
+            .accessibilityLabel(String(localized: "a11y.defaults.model", defaultValue: "新会话默认模型：\(defaultModelTitle)\(defaultModelEffortTitle.map { String(localized: "defaults.effort.suffix", defaultValue: "，推理等级 \($0)") } ?? ""))"))
         } else {
             modelMenu
         }
@@ -769,27 +769,21 @@ struct ConversationView: View {
         store.defaultConfigurationLoadingKinds.contains("default-model")
     }
     private var defaultModelTitle: String {
-        guard let selection = store.defaultModelSelection else { return "默认模型" }
+        guard let selection = store.defaultModelSelection else { return String(localized: "默认模型") }
         return modelTitle(for: selection.model)
     }
     private var defaultModelEffortTitle: String? {
         store.defaultModelSelection?.reasoningEffort.map(reasoningEffortTitle)
     }
     private var defaultAgentPresetTitle: String {
-        guard let id = store.agentPresetDefault else { return "默认 Agent" }
+        guard let id = store.agentPresetDefault else { return String(localized: "默认 Agent") }
         return agentPresetTitle(id)
     }
     private func agentPresetTitle(_ id: String) -> String {
         if let preset = store.agentPresets.first(where: { $0.id == id }) {
             return preset.displayName
         }
-        switch id {
-        case "standard": return "标准模式"
-        case "code": return "PTC 模式"
-        case "minimal": return "极简模式"
-        case "cordis": return "创造模式"
-        default: return id
-        }
+        return L10n.presetModeName(for: id)
     }
     private var permissionIsLoading: Bool {
         store.sessionControlLoadingKinds.contains("permission-options") || store.sessionControlLoadingKinds.contains("permission")
@@ -834,13 +828,7 @@ struct ConversationView: View {
     }
 
     private func permissionTitle(_ value: String) -> String {
-        switch value {
-        case "ask": "每次询问"
-        case "read-only": "只读"
-        case "workspace-write": "工作区写入"
-        case "danger-full-access": "完全访问"
-        default: value
-        }
+        L10n.permissionName(for: value)
     }
     private func permissionIcon(_ value: String) -> String {
         switch value {
@@ -908,7 +896,7 @@ struct ConversationView: View {
             let revision = viewportEntryRevision(entry)
             if case .message(let item) = entry.content,
                item.kind == .assistant,
-               item.title.contains("正在生成") {
+               item.title == L10n.streamingAssistantTitle {
                 return ConversationViewportEntry(
                     id: entry.id,
                     revision: revision,
@@ -995,7 +983,7 @@ struct ConversationView: View {
                 // self-sized rows and causes visible overlap/flicker. The
                 // completed reasoning item receives a new id and refreshes
                 // the row once with its final text.
-                if !(item.kind == .reasoning && item.title.contains("正在推理")) {
+                if !(item.kind == .reasoning && item.title == L10n.streamingReasoningTitle) {
                     hasher.combine(item.text)
                 }
                 hasher.combine(item.isError)
@@ -1240,28 +1228,28 @@ private enum SessionStatsFormatter {
         }
         let timings = [
             stats?.llmMs.map { "LLM \(duration($0))" },
-            stats?.toolMs.map { "工具调用 \(duration($0))" }
+            stats?.toolMs.map { String(localized: "stats.toolcalls.duration", defaultValue: "工具调用 \(duration($0))") }
         ].compactMap { $0 }.joined(separator: " · ")
         if !timings.isEmpty { sections.append(timings) }
         let averageTTFT = averageTTFT(stats)
         let throughput = throughput(stats)
         let performance = [
-            averageTTFT.map { "首 token 平均 \(duration($0))" },
+            averageTTFT.map { String(localized: "stats.ttft.avg", defaultValue: "首 token 平均 \(duration($0))") },
             throughput.map { "\(compactDecimal($0)) tok/s" }
         ].compactMap { $0 }.joined(separator: " · ")
         if !performance.isEmpty { sections.append(performance) }
         if let cacheRate = cacheHitRate(snapshot.tokenUsage?.totals) {
-            sections.append("缓存命中 \(Int((cacheRate * 100).rounded()))%")
+            sections.append(String(localized: "stats.cachehit.percent", defaultValue: "缓存命中 \(Int((cacheRate * 100).rounded()))%"))
         }
         if let input = snapshot.tokenUsage?.totals?.inputTokens {
-            sections.append("输入 \(compact(input)) tok")
+            sections.append(String(localized: "stats.input.tok", defaultValue: "输入 \(compact(input)) tok"))
         }
-        return sections.isEmpty ? "正在读取会话统计…" : sections.joined(separator: "  |  ")
+        return sections.isEmpty ? String(localized: "正在读取会话统计…") : sections.joined(separator: "  |  ")
     }
 
     static func turnsStepsLine(_ stats: GatewaySessionStats?) -> String? {
         guard stats?.turns != nil || stats?.steps != nil else { return nil }
-        return "\(stats?.turns ?? 0) 轮 · \(stats?.steps ?? 0) 步"
+        return String(localized: "stats.turns.steps.line", defaultValue: "\(stats?.turns ?? 0) 轮 · \(stats?.steps ?? 0) 步")
     }
 
     static func duration(_ milliseconds: Double) -> String {
@@ -1319,31 +1307,31 @@ private struct SessionStatsSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     if let snapshot, let stats = snapshot.stats {
-                        metricsSection("执行") {
-                            metric("轮次", "\(stats.turns ?? 0) 轮")
-                            metric("步骤", "\(stats.steps ?? 0) 步")
+                        metricsSection(String(localized: "执行")) {
+                            metric(String(localized: "轮次"), String(localized: "metric.turns.value", defaultValue: "\(stats.turns ?? 0) 轮"))
+                            metric(String(localized: "步骤"), String(localized: "metric.steps.value", defaultValue: "\(stats.steps ?? 0) 步"))
                             metric("LLM", stats.llmMs.map(SessionStatsFormatter.duration) ?? "—")
-                            metric("工具调用", stats.toolMs.map(SessionStatsFormatter.duration) ?? "—")
-                            metric("首 token 平均", SessionStatsFormatter.averageTTFT(stats).map(SessionStatsFormatter.duration) ?? "—")
-                            metric("解码吞吐", SessionStatsFormatter.throughput(stats).map { "\(SessionStatsFormatter.compactDecimal($0)) tok/s" } ?? "—")
+                            metric(String(localized: "工具调用"), stats.toolMs.map(SessionStatsFormatter.duration) ?? "—")
+                            metric(String(localized: "首 token 平均"), SessionStatsFormatter.averageTTFT(stats).map(SessionStatsFormatter.duration) ?? "—")
+                            metric(String(localized: "解码吞吐"), SessionStatsFormatter.throughput(stats).map { String(localized: "value.throughput", defaultValue: "\(SessionStatsFormatter.compactDecimal($0)) tok/s") } ?? "—")
                         }
 
                         if let totals = snapshot.tokenUsage?.totals {
-                            metricsSection("Token 用量") {
-                                metric("输入", token(totals.inputTokens))
-                                metric("输出", token(totals.outputTokens))
-                                metric("缓存读取", token(totals.cacheReadTokens))
-                                metric("缓存写入", token(totals.cacheWriteTokens))
-                                metric("推理", token(totals.reasoningTokens))
-                                metric("缓存命中", SessionStatsFormatter.cacheHitRate(totals).map { "\(Int(($0 * 100).rounded()))%" } ?? "—")
+                            metricsSection(String(localized: "Token 用量")) {
+                                metric(String(localized: "输入"), token(totals.inputTokens))
+                                metric(String(localized: "输出"), token(totals.outputTokens))
+                                metric(String(localized: "缓存读取"), token(totals.cacheReadTokens))
+                                metric(String(localized: "缓存写入"), token(totals.cacheWriteTokens))
+                                metric(String(localized: "推理"), token(totals.reasoningTokens))
+                                metric(String(localized: "缓存命中"), SessionStatsFormatter.cacheHitRate(totals).map { String(localized: "value.percent", defaultValue: "\(Int(($0 * 100).rounded()))%") } ?? "—")
                             }
                         }
 
                         if let pressure = snapshot.contextPressure {
-                            metricsSection("上下文") {
-                                metric("当前压力", token(pressure.pressureTokens))
-                                metric("预计用量", token(pressure.projectedTokens))
-                                metric("上下文窗口", token(pressure.contextWindow))
+                            metricsSection(String(localized: "上下文")) {
+                                metric(String(localized: "当前压力"), token(pressure.pressureTokens))
+                                metric(String(localized: "预计用量"), token(pressure.projectedTokens))
+                                metric(String(localized: "上下文窗口"), token(pressure.contextWindow))
                             }
                         }
 
@@ -1404,25 +1392,25 @@ private struct SessionStatsPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let turnsSteps = SessionStatsFormatter.turnsStepsLine(stats) {
-                row("轮次 · 步骤", turnsSteps)
+                row(String(localized: "轮次 · 步骤"), turnsSteps)
             }
             if let llm = stats?.llmMs {
                 row("LLM", SessionStatsFormatter.duration(llm))
             }
             if let tool = stats?.toolMs {
-                row("工具调用", SessionStatsFormatter.duration(tool))
+                row(String(localized: "工具调用"), SessionStatsFormatter.duration(tool))
             }
             if let ttft = SessionStatsFormatter.averageTTFT(stats) {
-                row("首 token 平均", SessionStatsFormatter.duration(ttft))
+                row(String(localized: "首 token 平均"), SessionStatsFormatter.duration(ttft))
             }
             if let throughput = SessionStatsFormatter.throughput(stats) {
-                row("解码吞吐", "\(SessionStatsFormatter.compactDecimal(throughput)) tok/s")
+                row(String(localized: "解码吞吐"), String(localized: "value.throughput", defaultValue: "\(SessionStatsFormatter.compactDecimal(throughput)) tok/s"))
             }
             if let cacheRate = SessionStatsFormatter.cacheHitRate(snapshot.tokenUsage?.totals) {
-                row("缓存命中", "\(Int((cacheRate * 100).rounded()))%")
+                row(String(localized: "缓存命中"), String(localized: "value.percent", defaultValue: "\(Int((cacheRate * 100).rounded()))%"))
             }
             if let input = snapshot.tokenUsage?.totals?.inputTokens {
-                row("输入", "\(SessionStatsFormatter.compact(input)) tok")
+                row(String(localized: "输入"), String(localized: "row.input.value", defaultValue: "\(SessionStatsFormatter.compact(input)) tok"))
             }
 
             Divider()
@@ -1480,13 +1468,13 @@ private struct ContextUsagePopover: View {
                 .tint(DSHColor.ocean)
 
             if let breakdown = snapshot?.breakdown {
-                usageRow("系统提示词", value: breakdown.systemTokens, color: .gray)
-                usageRow("工具", value: breakdown.toolsTokens, color: DSHColor.purple)
-                usageRow("对话消息", value: breakdown.messageTokens, color: DSHColor.ocean)
+                usageRow(String(localized: "系统提示词"), value: breakdown.systemTokens, color: .gray)
+                usageRow(String(localized: "usage.row.tools", defaultValue: "工具"), value: breakdown.toolsTokens, color: DSHColor.purple)
+                usageRow(String(localized: "对话消息"), value: breakdown.messageTokens, color: DSHColor.ocean)
             } else if let usage = snapshot?.tokenUsage {
-                usageRow("未缓存输入", value: usage.uncachedInputTokens, color: DSHColor.ocean)
-                usageRow("缓存读取", value: usage.cacheReadTokens, color: DSHColor.purple)
-                usageRow("模型输出", value: usage.outputTokens, color: DSHColor.orange)
+                usageRow(String(localized: "未缓存输入"), value: usage.uncachedInputTokens, color: DSHColor.ocean)
+                usageRow(String(localized: "缓存读取"), value: usage.cacheReadTokens, color: DSHColor.purple)
+                usageRow(String(localized: "模型输出"), value: usage.outputTokens, color: DSHColor.orange)
             } else {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -1717,20 +1705,20 @@ private struct ConversationProcessRow: View {
 
     private var processTitle: String {
         if group.contextCount > 0, group.toolCount == 0, reasoningText.isEmpty {
-            return group.contextCount == 1 ? "上下文" : "\(group.contextCount) 项上下文"
+            return group.contextCount == 1 ? String(localized: "上下文") : String(localized: "context.items.count", defaultValue: "\(group.contextCount) 项上下文")
         }
         let duration = group.duration
         let base: String
         if duration >= 60 {
-            base = "耗时 \(Int(duration) / 60) 分钟 \(Int(duration) % 60) 秒"
+            base = String(localized: "duration.minutes-seconds", defaultValue: "耗时 \(Int(duration) / 60) 分钟 \(Int(duration) % 60) 秒")
         } else if duration >= 1 {
-            base = "耗时 \(Int(duration.rounded())) 秒"
+            base = String(localized: "duration.seconds", defaultValue: "耗时 \(Int(duration.rounded())) 秒")
         } else {
-            base = "思考过程"
+            base = String(localized: "思考过程")
         }
         var details: [String] = []
-        if group.contextCount > 0 { details.append("\(group.contextCount) 项上下文") }
-        if group.toolCount > 0 { details.append("\(group.toolCount) 次工具调用") }
+        if group.contextCount > 0 { details.append(String(localized: "context.items.count", defaultValue: "\(group.contextCount) 项上下文")) }
+        if group.toolCount > 0 { details.append(String(localized: "toolcall.count", defaultValue: "\(group.toolCount) 次工具调用")) }
         return details.isEmpty ? base : "\(base) · \(details.joined(separator: " · "))"
     }
 }
@@ -1854,7 +1842,7 @@ private struct ConversationToolBundle: View {
 
     private var bundleTitle: String {
         let names = tools.compactMap { $0.call?.title }.prefix(2).joined(separator: "、")
-        return names.isEmpty ? "查看 \(tools.count) 个工具结果" : "使用了 \(names)\(tools.count > 2 ? " 等工具" : "")"
+        return names.isEmpty ? String(localized: "tools.view-results", defaultValue: "查看 \(tools.count) 个工具结果") : String(localized: "tools.used.summary", defaultValue: "使用了 \(names)\(tools.count > 2 ? String(localized: " 等工具") : "")")
     }
 }
 
@@ -1870,12 +1858,12 @@ private struct ConversationProcessToolRow: View {
                     Image(systemName: tool.result?.isError == true ? "exclamationmark.triangle" : "terminal")
                         .foregroundStyle(tool.result?.isError == true ? .red : DSHColor.orange)
                         .frame(width: 17)
-                    Text(tool.call?.title ?? tool.result?.title ?? "工具")
+                    Text(tool.call?.title ?? tool.result?.title ?? String(localized: "trajectory.tool.fallback", defaultValue: "工具"))
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     if let result = tool.result {
-                        Text(result.isError ? "失败" : "完成")
+                        Text(result.isError ? String(localized: "失败") : String(localized: "完成"))
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(result.isError ? .red : .secondary)
                     }
@@ -1898,7 +1886,7 @@ private struct ConversationProcessToolRow: View {
                         ToolArgumentsView(text: call.text)
                     }
                     if let result = tool.result, !result.text.isEmpty {
-                        Text(result.isError ? "错误" : "结果")
+                        Text(result.isError ? String(localized: "错误") : String(localized: "结果"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(result.isError ? .red : .secondary)
                         ToolOutputView(text: result.text)
@@ -1986,7 +1974,7 @@ private struct AttachmentImageGrid: View {
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .stroke(.white.opacity(0.16), lineWidth: 0.7)
                 }
-                .accessibilityLabel(attachment.name ?? "图片附件")
+                .accessibilityLabel(attachment.name ?? String(localized: "图片附件"))
             }
         }
     }
@@ -2070,7 +2058,7 @@ private struct ConversationRow: View {
                 text: item.text,
                 icon: item.isError ? "exclamationmark.triangle" : "wrench.and.screwdriver",
                 tint: item.isError ? .red : DSHColor.orange,
-                rendersOutput: item.title == "工具完成" || item.title == "工具失败"
+                rendersOutput: item.title == L10n.toolResultDoneTitle || item.title == L10n.toolResultFailedTitle
             )
         case .jsonTool:
             CompactEventDisclosure(
@@ -2136,7 +2124,7 @@ private struct CopyMessageButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(copied ? "已复制" : "复制正文")
+        .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制正文"))
     }
 }
 

@@ -111,7 +111,15 @@ final class GatewayProtocolTests: XCTestCase {
             SessionEvent(sessionId: "s1", seq: 5, time: 5, event: GatewayEvent(type: "tool/call", name: "Read"))
         ]
         let items = ConversationItem.make(from: records)
-        XCTAssertEqual(items.map(\.title), ["上下文注入 · plugin", "你", "Think", "DeepSeek", "Read"])
+        // Expected titles resolve through the same localized constants the
+        // projection uses, so this passes under any test locale.
+        XCTAssertEqual(items.map(\.title), [
+            L10n.contextInjectionTitle("plugin"),
+            L10n.userMessageTitle,
+            "Think",
+            "DeepSeek",
+            "Read",
+        ])
     }
 
     func testHistoryRebaseKeepsLiveTailAndDeduplicatesOverlap() throws {
