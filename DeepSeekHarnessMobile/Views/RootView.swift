@@ -8,7 +8,7 @@ struct RootView: View {
         RootNavigationHost(store: store)
             .equatable()
             .alert("DeepSeek Harness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
-                Button("好", role: .cancel) { store.lastError = nil }
+                Button(String(localized: "好"), role: .cancel) { store.lastError = nil }
             } message: { Text(store.lastError ?? "") }
             .onChange(of: scenePhase) { _, phase in
                 store.handleScenePhase(phase)
@@ -92,7 +92,7 @@ private struct RootNavigationHost: View, Equatable {
         let presetID = session?.agentPreset ?? store.agentPresetDefault
         return ConversationNavigationHeader(
             sessionID: session?.id,
-            title: session?.title ?? "新建 DeepSeek Harness",
+            title: session?.title ?? String(localized: "session.new.fallback", defaultValue: "新建 DeepSeek Harness"),
             agentPresetTitle: agentPresetDisplayName(for: presetID)
         )
     }
@@ -102,13 +102,7 @@ private struct RootNavigationHost: View, Equatable {
         if let preset = store.agentPresets.first(where: { $0.id == id }) {
             return preset.displayName
         }
-        switch id {
-        case "standard": return "标准模式"
-        case "code": return "PTC 模式"
-        case "minimal": return "极简模式"
-        case "cordis": return "创造模式"
-        default: return id
-        }
+        return L10n.presetModeName(for: id)
     }
 
     private func navigate(to route: AppRoute) {
@@ -169,8 +163,8 @@ private struct ConversationNavigationShell<Content: View>: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button("重新加载历史", systemImage: "clock.arrow.circlepath", action: onReloadHistory)
-                        Button("发送 Ping", systemImage: "wave.3.right", action: onPing)
+                        Button(String(localized: "重新加载历史"), systemImage: "clock.arrow.circlepath", action: onReloadHistory)
+                        Button(String(localized: "发送 Ping"), systemImage: "wave.3.right", action: onPing)
                     } label: {
                         Image(systemName: "ellipsis")
                     }

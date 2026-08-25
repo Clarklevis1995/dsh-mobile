@@ -102,7 +102,7 @@ struct WorkspaceView: View {
 
     @ViewBuilder
     private var settingsButton: some View {
-        headerButton(systemName: "gearshape.fill", accessibilityLabel: "设置", action: onSettings)
+        headerButton(systemName: "gearshape.fill", accessibilityLabel: String(localized: "设置"), action: onSettings)
     }
 
     @ViewBuilder
@@ -166,7 +166,7 @@ struct WorkspaceView: View {
             workspaceCardLabel
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("选择工作区")
+        .accessibilityLabel(String(localized: "选择工作区"))
     }
 
     private var workspaceCardLabel: some View {
@@ -251,14 +251,14 @@ struct WorkspaceView: View {
     }
 
     private var workspaceDisplayTitle: String {
-        store.isUngroupedWorkspaceSelected ? "未分组" : (store.activeWorkspace?.title ?? "DeepseekHarnessProject")
+        store.isUngroupedWorkspaceSelected ? String(localized: "未分组") : (store.activeWorkspace?.title ?? "DeepseekHarnessProject")
     }
 
     private var workspaceDisplayPath: String {
         if store.isUngroupedWorkspaceSelected {
-            return "\(store.ungroupedSessions.count) 个未归属会话"
+            return String(localized: "workspace.ungrouped.count", defaultValue: "\(store.ungroupedSessions.count) 个未归属会话")
         }
-        return store.activeWorkspace?.path ?? "通过 Mobile Gateway 连接"
+        return store.activeWorkspace?.path ?? String(localized: "通过 Mobile Gateway 连接")
     }
 
     private var sessionsList: some View {
@@ -291,7 +291,7 @@ struct WorkspaceView: View {
                 Text(String(session.id.prefix(16))).font(.caption2.monospaced()).foregroundStyle(.white.opacity(0.42))
             }
             Spacer()
-            Text(session.isRunning ? "运行中" : session.lastActivity.formatted(.relative(presentation: .named)))
+            Text(session.isRunning ? String(localized: "运行中") : session.lastActivity.formatted(.relative(presentation: .named)))
                 .font(.caption).foregroundStyle(session.isRunning ? .blue : .white.opacity(0.48))
         }
         .padding(.horizontal, 4)
@@ -341,7 +341,7 @@ private struct DirectoryBrowserSheet: View {
                     Button {
                         if let parentPath { store.browseDirectories(path: parentPath) }
                     } label: {
-                        directoryRow(icon: "arrowshape.turn.up.left", title: "..", subtitle: "返回上一级")
+                        directoryRow(icon: "arrowshape.turn.up.left", title: "..", subtitle: String(localized: "返回上一级"))
                     }
                     .disabled(parentPath == nil)
 
@@ -352,14 +352,14 @@ private struct DirectoryBrowserSheet: View {
                             directoryRow(
                                 icon: entry.hidden ? "folder.badge.questionmark" : "folder",
                                 title: entry.name,
-                                subtitle: entry.hidden ? "隐藏目录" : nil
+                                subtitle: entry.hidden ? String(localized: "隐藏目录") : nil
                             )
                         }
                     }
                 } header: {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("当前目录")
-                        Text(store.directoryPath ?? "正在读取…")
+                        Text(store.directoryPath ?? String(localized: "正在读取…"))
                             .font(.caption.monospaced())
                             .textCase(nil)
                             .foregroundStyle(.secondary)
@@ -369,7 +369,7 @@ private struct DirectoryBrowserSheet: View {
             .allowsHitTesting(!store.directoryIsLoading)
             .overlay {
                 if store.directoryIsLoading && store.directoryEntries.isEmpty {
-                    ProgressView("正在读取远程目录…")
+                    ProgressView(String(localized: "正在读取远程目录…"))
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -507,7 +507,7 @@ private struct GatewayAuthenticationMenu: View {
                 .frame(width: 40, height: 40)
                 .contentShape(Circle())
         }
-        .accessibilityLabel("设备认证，\(gateway.state.label)")
+        .accessibilityLabel(String(localized: "a11y.device-auth.state", defaultValue: "设备认证，\(gateway.state.label)"))
     }
 
 }
@@ -585,7 +585,7 @@ private struct ManualGatewayPairingSheet: View {
                             } else {
                                 Image(systemName: "link")
                             }
-                            Text(gateway.state.isConnected ? "重新配对并连接" : "连接")
+                            Text(gateway.state.isConnected ? String(localized: "重新配对并连接") : String(localized: "连接"))
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
@@ -616,7 +616,7 @@ private struct ManualGatewayPairingSheet: View {
     private var connectionResult: some View {
         if let validationError {
             resultCard(
-                title: "配对信息无效",
+                title: String(localized: "配对信息无效"),
                 detail: validationError,
                 color: .red,
                 symbol: "exclamationmark.triangle.fill"
@@ -625,29 +625,29 @@ private struct ManualGatewayPairingSheet: View {
             switch gateway.state {
             case .connecting:
                 resultCard(
-                    title: "正在连接",
-                    detail: "正在提交一次性配对码并等待 Mobile Gateway 完成设备鉴权…",
+                    title: String(localized: "正在连接"),
+                    detail: String(localized: "pairing.submitting.detail", defaultValue: "正在提交一次性配对码并等待 Mobile Gateway 完成设备鉴权…"),
                     color: DSHColor.amber,
                     symbol: "arrow.triangle.2.circlepath"
                 )
             case .connected:
                 resultCard(
-                    title: "连接成功",
-                    detail: "设备鉴权已完成，长期 token 已安全保存到 Keychain。",
+                    title: String(localized: "连接成功"),
+                    detail: String(localized: "设备鉴权已完成，长期 token 已安全保存到 Keychain。"),
                     color: DSHColor.success,
                     symbol: "checkmark.circle.fill"
                 )
             case .failed(let reason):
                 resultCard(
-                    title: "连接失败",
+                    title: String(localized: "连接失败"),
                     detail: reason,
                     color: .red,
                     symbol: "xmark.octagon.fill"
                 )
             case .disconnected:
                 resultCard(
-                    title: "未连接",
-                    detail: "请检查配对信息后重新连接。",
+                    title: String(localized: "未连接"),
+                    detail: String(localized: "请检查配对信息后重新连接。"),
                     color: .secondary,
                     symbol: "network.slash"
                 )
@@ -655,7 +655,7 @@ private struct ManualGatewayPairingSheet: View {
         } else {
             resultCard(
                 title: gateway.state.label,
-                detail: "输入 Base64URL 配对字符串后点击连接，结果会显示在这里。",
+                detail: String(localized: "输入 Base64URL 配对字符串后点击连接，结果会显示在这里。"),
                 color: .secondary,
                 symbol: "person.badge.key.fill"
             )
@@ -734,7 +734,7 @@ private struct GatewayQRScannerView: View {
                     }
                     .buttonStyle(.plain)
                     .background(.ultraThinMaterial, in: Circle())
-                    .accessibilityLabel("取消扫描")
+                    .accessibilityLabel(String(localized: "取消扫描"))
                 }
                 .padding(.horizontal, 22)
                 .padding(.top, 18)
@@ -803,14 +803,14 @@ private final class GatewayScannerController: UIViewController, AVCaptureMetadat
                     if granted {
                         self.configureAndRun()
                     } else {
-                        self.finish(with: "未获得相机权限。请在系统设置中允许 DeepSeek Harness 使用相机后重试。")
+                        self.finish(with: String(localized: "camera.denied", defaultValue: "未获得相机权限。请在系统设置中允许 DeepSeek Harness 使用相机后重试。"))
                     }
                 }
             }
         case .denied, .restricted:
-            finish(with: "相机权限不可用。请在系统设置中允许 DeepSeek Harness 使用相机后重试。")
+            finish(with: String(localized: "camera.restricted", defaultValue: "相机权限不可用。请在系统设置中允许 DeepSeek Harness 使用相机后重试。"))
         @unknown default:
-            finish(with: "无法确定当前相机权限状态。")
+            finish(with: String(localized: "无法确定当前相机权限状态。"))
         }
     }
 
@@ -824,26 +824,26 @@ private final class GatewayScannerController: UIViewController, AVCaptureMetadat
     private func configureAndRun() {
         guard !captureSession.isRunning, captureSession.inputs.isEmpty else { return }
         guard let camera = AVCaptureDevice.default(for: .video) else {
-            finish(with: "此设备没有可用的相机。")
+            finish(with: String(localized: "此设备没有可用的相机。"))
             return
         }
         do {
             let input = try AVCaptureDeviceInput(device: camera)
             guard captureSession.canAddInput(input) else {
-                finish(with: "无法把相机接入扫码会话。")
+                finish(with: String(localized: "无法把相机接入扫码会话。"))
                 return
             }
             captureSession.addInput(input)
 
             let output = AVCaptureMetadataOutput()
             guard captureSession.canAddOutput(output) else {
-                finish(with: "当前设备不支持二维码识别。")
+                finish(with: String(localized: "当前设备不支持二维码识别。"))
                 return
             }
             captureSession.addOutput(output)
             output.setMetadataObjectsDelegate(self, queue: .main)
             guard output.availableMetadataObjectTypes.contains(.qr) else {
-                finish(with: "当前相机不支持二维码元数据识别。")
+                finish(with: String(localized: "当前相机不支持二维码元数据识别。"))
                 return
             }
             output.metadataObjectTypes = [.qr]
@@ -858,7 +858,7 @@ private final class GatewayScannerController: UIViewController, AVCaptureMetadat
                 captureSession.startRunning()
             }
         } catch {
-            finish(with: "相机启动失败：\(error.localizedDescription)")
+            finish(with: String(localized: "camera.start.failed", defaultValue: "相机启动失败：\(error.localizedDescription)"))
         }
     }
 

@@ -57,16 +57,16 @@ struct ConversationItem: Identifiable, Sendable {
         switch event.type {
         case "user/message" where event.source == nil || event.source == "user":
             if let text = event.text, !text.isEmpty {
-                items.append(.init(id: record.id, kind: .user, title: "你", text: text, images: event.images ?? [], isError: false, date: record.date))
+                items.append(.init(id: record.id, kind: .user, title: L10n.userMessageTitle, text: text, images: event.images ?? [], isError: false, date: record.date))
             } else if let images = event.images, !images.isEmpty {
-                items.append(.init(id: record.id, kind: .user, title: "你", text: "", images: images, isError: false, date: record.date))
+                items.append(.init(id: record.id, kind: .user, title: L10n.userMessageTitle, text: "", images: images, isError: false, date: record.date))
             }
         case "user/message":
             if let text = event.text, !text.isEmpty {
                 items.append(.init(
                     id: record.id,
                     kind: .context,
-                    title: "上下文注入 · \(contextSourceName(event))",
+                    title: L10n.contextInjectionTitle(contextSourceName(event)),
                     text: text,
                     images: event.images ?? [],
                     isError: false,
@@ -74,12 +74,12 @@ struct ConversationItem: Identifiable, Sendable {
                 ))
             }
         case "assistant/chunk" where event.chunkType == "text-delta" && !finalizedKeys.contains(key):
-            appendStream(id: "stream-text-\(key)", key: "text-\(key)", kind: .assistant, title: "DeepSeek · 正在生成", delta: event.text ?? "", date: record.date, result: &items, indexes: &streamIndexes)
+            appendStream(id: "stream-text-\(key)", key: "text-\(key)", kind: .assistant, title: L10n.streamingAssistantTitle, delta: event.text ?? "", date: record.date, result: &items, indexes: &streamIndexes)
         case "assistant/chunk" where event.chunkType == "reasoning-delta" && !finalizedKeys.contains(key):
-            appendStream(id: "stream-reason-\(key)", key: "reason-\(key)", kind: .reasoning, title: "Think · 正在推理", delta: event.text ?? "", date: record.date, result: &items, indexes: &streamIndexes)
+            appendStream(id: "stream-reason-\(key)", key: "reason-\(key)", kind: .reasoning, title: L10n.streamingReasoningTitle, delta: event.text ?? "", date: record.date, result: &items, indexes: &streamIndexes)
         case "assistant/chunk" where event.chunkType == "tool-call-delta" && !finalizedKeys.contains(key):
             let toolKey = event.tool?.id ?? key
-            let name = event.tool?.name ?? "Tool Call · 正在组装"
+            let name = event.tool?.name ?? L10n.assemblingToolTitle
             let kind: Kind = name.caseInsensitiveCompare("run_code") == .orderedSame ? .jsonTool : .tool
             appendStream(id: "stream-tool-\(toolKey)", key: "tool-\(toolKey)", kind: kind, title: name, delta: event.tool?.argumentsDelta ?? "", date: record.date, result: &items, indexes: &streamIndexes)
         case "assistant/message":
@@ -102,7 +102,7 @@ struct ConversationItem: Identifiable, Sendable {
             let kind: Kind = name.caseInsensitiveCompare("run_code") == .orderedSame ? .jsonTool : .tool
             items.append(.init(id: record.id, kind: kind, title: name, text: event.arguments?.jsonDisplayText ?? "", images: [], isError: false, date: record.date))
         case "tool/result":
-            items.append(.init(id: record.id, kind: .toolResult, title: event.isError == true ? "工具失败" : "工具完成", text: event.preview ?? "", images: [], isError: event.isError == true, date: record.date))
+            items.append(.init(id: record.id, kind: .toolResult, title: event.isError == true ? L10n.toolResultFailedTitle : L10n.toolResultDoneTitle, text: event.preview ?? "", images: [], isError: event.isError == true, date: record.date))
         default:
             break
         }

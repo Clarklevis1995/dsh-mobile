@@ -40,6 +40,10 @@ resources = app_group.new_group('Resources', 'Resources')
 resources.new_file('Info.plist')
 assets = resources.new_file('Assets.xcassets')
 app.resources_build_phase.add_file_reference(assets)
+localizable = resources.new_file('Localizable.xcstrings')
+app.resources_build_phase.add_file_reference(localizable)
+infoplist_strings = resources.new_file('InfoPlist.xcstrings')
+app.resources_build_phase.add_file_reference(infoplist_strings)
 
 test_group = project.main_group.new_group('DeepSeekHarnessMobileTests', 'DeepSeekHarnessMobileTests')
 Dir[File.join(root, 'DeepSeekHarnessMobileTests', '*.swift')].sort.each do |file|
@@ -57,6 +61,7 @@ app.build_configurations.each do |config|
   config.build_settings['SWIFT_VERSION'] = '5.10'
   config.build_settings['TARGETED_DEVICE_FAMILY'] = '1'
   config.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
+  config.build_settings['LOCALIZATION_PREFERS_STRING_CATALOGS'] = 'YES'
   config.build_settings['GENERATE_INFOPLIST_FILE'] = 'NO'
 end
 tests.build_configurations.each do |config|

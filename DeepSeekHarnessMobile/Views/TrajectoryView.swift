@@ -31,7 +31,7 @@ struct TrajectoryView: View {
                         if isProjecting {
                             HStack(spacing: 9) {
                                 ProgressView().tint(DSHColor.ocean)
-                                Text(nodes.isEmpty ? "正在生成轨迹…" : "正在补齐较早的轨迹记录…")
+                                Text(nodes.isEmpty ? String(localized: "trajectory.generating", defaultValue: "正在生成轨迹…") : String(localized: "trajectory.backfilling", defaultValue: "正在补齐较早的轨迹记录…"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 Spacer()
@@ -706,7 +706,7 @@ private struct TrajectoryRow: View {
                         .frame(width: 10, height: 20)
                         .contentShape(Rectangle())
                         .movementQualifiedTap { onRequest(requestNode) }
-                        .accessibilityLabel("打开 Request #\(requestNode.request?.number ?? 0)")
+                        .accessibilityLabel(String(localized: "a11y.open.request", defaultValue: "打开 Request #\(requestNode.request?.number ?? 0)"))
                 } else {
                     Circle()
                         .fill(node.kind.color)
@@ -746,7 +746,7 @@ private struct TrajectoryRow: View {
             .frame(height: 20)
             .contentShape(Rectangle())
             .movementQualifiedTap(action: onSelect)
-            .accessibilityLabel("打开 \(node.kind.label) #\(node.startSeq)")
+            .accessibilityLabel(String(localized: "a11y.open.node", defaultValue: "打开 \(node.kind.label) #\(node.startSeq)"))
         }
         .padding(.horizontal, 8)
         .frame(height: 42)
@@ -817,21 +817,21 @@ private struct EventDetailSheet: View {
         case summary, preview, raw
 
         var title: String {
-            switch self { case .summary: "摘要"; case .preview: "预览"; case .raw: "原始" }
+            switch self { case .summary: String(localized: "摘要"); case .preview: String(localized: "预览"); case .raw: String(localized: "原始") }
         }
     }
 
     private enum RequestTab: Int, CaseIterable {
         case summary, options, usage, timing
         var title: String {
-            switch self { case .summary: "摘要"; case .options: "选项"; case .usage: "用量"; case .timing: "耗时" }
+            switch self { case .summary: String(localized: "摘要"); case .options: String(localized: "选项"); case .usage: String(localized: "用量"); case .timing: String(localized: "耗时") }
         }
     }
 
     private enum ToolTab: Int, CaseIterable {
         case summary, payload, result, schema, timing
         var title: String {
-            switch self { case .summary: "摘要"; case .payload: "参数"; case .result: "结果"; case .schema: "Schema"; case .timing: "耗时" }
+            switch self { case .summary: String(localized: "摘要"); case .payload: String(localized: "参数"); case .result: String(localized: "结果"); case .schema: "Schema"; case .timing: String(localized: "耗时") }
         }
     }
 
@@ -1010,7 +1010,7 @@ private struct EventDetailSheet: View {
         if let options = requestInfo?.options {
             jsonCode(options)
         } else {
-            unavailable("没有记录模型选项")
+            unavailable(String(localized: "没有记录模型选项"))
         }
     }
 
@@ -1052,7 +1052,7 @@ private struct EventDetailSheet: View {
         if let arguments = toolArgumentValue {
             jsonCode(arguments)
         } else {
-            unavailable("没有参数")
+            unavailable(String(localized: "没有参数"))
         }
     }
 
@@ -1064,7 +1064,7 @@ private struct EventDetailSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            unavailable(isCompleted ? "(no output)" : "等待工具返回…")
+            unavailable(isCompleted ? "(no output)" : String(localized: "等待工具返回…"))
         }
     }
 
@@ -1083,7 +1083,7 @@ private struct EventDetailSheet: View {
                 }
             }
         } else {
-            unavailable("没有记录工具 Schema")
+            unavailable(String(localized: "没有记录工具 Schema"))
         }
     }
 

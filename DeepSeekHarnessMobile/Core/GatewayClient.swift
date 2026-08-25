@@ -91,7 +91,7 @@ final class GatewayClient: ObservableObject {
     private func beginConnection(to rawEndpoint: String, pairingCode: String?, resetReportedFailure: Bool) {
         disconnect(reconnect: false)
         guard let url = URL(string: rawEndpoint), ["ws", "wss"].contains(url.scheme?.lowercased() ?? "") else {
-            fail("二维码中的 publicUrl 不是有效的 ws:// 或 wss:// 地址", shouldReconnect: false)
+            fail(String(localized: "二维码中的 publicUrl 不是有效的 ws:// 或 wss:// 地址"), shouldReconnect: false)
             return
         }
         wantsConnection = true
@@ -103,7 +103,7 @@ final class GatewayClient: ObservableObject {
         do {
             request.setValue(try GatewayDeviceIdentityStore.loadOrCreate(), forHTTPHeaderField: "X-DSH-Device-ID")
         } catch {
-            fail("无法读取或创建设备唯一标识：\(error.localizedDescription)", shouldReconnect: false)
+            fail(String(localized: "gateway.device-id.unavailable", defaultValue: "无法读取或创建设备唯一标识：\(error.localizedDescription)"), shouldReconnect: false)
             return
         }
         if let pairingCode {
@@ -234,7 +234,7 @@ final class GatewayClient: ObservableObject {
         workspaceId: String? = nil
     ) {
         guard let socket else {
-            state = .failed("WebSocket 尚未连接")
+            state = .failed(String(localized: "state.websocket.not-connected", defaultValue: "WebSocket 尚未连接"))
             return
         }
         let request = GatewayMessageRequest(
@@ -289,7 +289,7 @@ final class GatewayClient: ObservableObject {
 
     private func send(_ object: [String: Any]) {
         guard let socket else {
-            state = .failed("WebSocket 尚未连接")
+            state = .failed(String(localized: "state.websocket.not-connected", defaultValue: "WebSocket 尚未连接"))
             return
         }
         do {
@@ -322,14 +322,14 @@ final class GatewayClient: ObservableObject {
                     }.value
                     if frame.kind == "paired" {
                         guard let endpoint, let token = frame.token, !token.isEmpty else {
-                            fail("配对响应缺少长期设备 token，未保存凭据", shouldReconnect: false)
+                            fail(String(localized: "pairing.response.missing-token", defaultValue: "配对响应缺少长期设备 token，未保存凭据"), shouldReconnect: false)
                             return
                         }
                         do {
                             try GatewayTokenStore.save(token, for: endpoint)
                             pairingCode = nil
                         } catch {
-                            fail("配对成功，但无法将设备 token 写入 Keychain：\(error.localizedDescription)", shouldReconnect: false)
+                            fail(String(localized: "pairing.token.keychain-failed", defaultValue: "配对成功，但无法将设备 token 写入 Keychain：\(error.localizedDescription)"), shouldReconnect: false)
                             return
                         }
                     } else if frame.kind == "hello" {
@@ -373,24 +373,24 @@ final class GatewayClient: ObservableObject {
         switch (statusCode, closeCode) {
         case (401, _):
             if pairingCode == nil, let endpoint { GatewayTokenStore.delete(for: endpoint) }
-            detail = "鉴权失败（HTTP 401）：设备 token 无效、已被吊销，或配对码已过期/使用过，请重新扫码配对。"
+            detail = String(localized: "auth.failed.401", defaultValue: "鉴权失败（HTTP 401）：设备 token 无效、已被吊销，或配对码已过期/使用过，请重新扫码配对。")
             shouldReconnect = false
             shouldReportFailure = true
         case (503, _):
-            detail = "移动网关暂未开启（HTTP 503）。已保留设备凭据，开启网关后会自动重连。"
+            detail = String(localized: "gateway.503.disabled", defaultValue: "移动网关暂未开启（HTTP 503）。已保留设备凭据，开启网关后会自动重连。")
             shouldReconnect = true
             shouldReportFailure = !(isApplicationInBackground || isRecoveringFromBackground)
         case (_, 4003):
-            detail = "服务端已重新开启设备鉴权（WebSocket 4003），请使用已保存的设备凭据重连或重新扫码。"
+            detail = String(localized: "auth.reenabled.4003", defaultValue: "服务端已重新开启设备鉴权（WebSocket 4003），请使用已保存的设备凭据重连或重新扫码。")
             shouldReconnect = false
             shouldReportFailure = true
         case (_, 4004):
-            detail = "移动网关已关闭（WebSocket 4004）。已保留设备凭据，重新开启后会自动重连。"
+            detail = String(localized: "gateway.closed.4004", defaultValue: "移动网关已关闭（WebSocket 4004）。已保留设备凭据，重新开启后会自动重连。")
             shouldReconnect = true
             shouldReportFailure = !(isApplicationInBackground || isRecoveringFromBackground)
         default:
-            let reasonSuffix = closeReason.flatMap { $0.isEmpty ? nil : "；服务端原因：\($0)" } ?? ""
-            detail = "WebSocket 连接失败：\(nsError.localizedDescription)（\(nsError.domain) \(nsError.code)）\(reasonSuffix)"
+            let reasonSuffix = closeReason.flatMap { $0.isEmpty ? nil : String(localized: "close.server-reason.suffix", defaultValue: "；服务端原因：\($0)") } ?? ""
+            detail = String(localized: "websocket.connect-failed.detail", defaultValue: "WebSocket 连接失败：\(nsError.localizedDescription)（\(nsError.domain) \(nsError.code)）\(reasonSuffix)")
             shouldReconnect = true
             shouldReportFailure = !(isApplicationInBackground || isRecoveringFromBackground)
         }
@@ -496,7 +496,7 @@ private enum GatewayDeviceIdentityStore {
     private struct KeychainError: LocalizedError {
         let status: OSStatus
         var errorDescription: String? {
-            (SecCopyErrorMessageString(status, nil) as String?) ?? "Keychain 错误 \(status)"
+            (SecCopyErrorMessageString(status, nil) as String?) ?? String(localized: "keychain.error.status", defaultValue: "Keychain 错误 \(status)")
         }
     }
 }
@@ -556,7 +556,7 @@ private enum GatewayTokenStore {
     private struct KeychainError: LocalizedError {
         let status: OSStatus
         var errorDescription: String? {
-            (SecCopyErrorMessageString(status, nil) as String?) ?? "Keychain 错误 \(status)"
+            (SecCopyErrorMessageString(status, nil) as String?) ?? String(localized: "keychain.error.status", defaultValue: "Keychain 错误 \(status)")
         }
     }
 }
