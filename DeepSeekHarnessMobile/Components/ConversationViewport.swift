@@ -56,6 +56,12 @@ struct ConversationViewportEntry: Identifiable {
     }
 }
 
+private struct ConversationImagePreviewItem {
+    let id: String
+    let image: UIImage?
+    let name: String?
+}
+
 /// UIKit-backed viewport for streaming conversation timelines.
 struct ConversationViewport: UIViewControllerRepresentable {
     let proxy: ConversationViewportProxy
@@ -308,6 +314,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                         ] = height
                     }
                 )
+                cell.onOpenImagePreview = { [weak self] items, initialIndex in
+                    self?.presentImagePreview(items, initialIndex: initialIndex)
+                }
                 cell.apply(userMessage, containerWidth: collectionView.bounds.width)
                 return cell
             }
@@ -348,6 +357,21 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 
     @objc private func dismissKeyboardFromConversation() {
         view.window?.endEditing(true)
+    }
+
+    private func presentImagePreview(
+        _ items: [ConversationImagePreviewItem],
+        initialIndex: Int
+    ) {
+        guard !items.isEmpty, presentedViewController == nil else { return }
+        stopInertialScrolling()
+        let preview = ConversationImagePreviewController(
+            items: items,
+            initialIndex: initialIndex
+        )
+        preview.modalPresentationStyle = .overFullScreen
+        preview.modalTransitionStyle = .crossDissolve
+        present(preview, animated: true)
     }
 
     /// Presenting a popover while a self-sizing collection view is still
@@ -844,12 +868,115 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
     static let reuseIdentifier = "UserMessageCell"
 
     private static let maximumSingleImageHeight: CGFloat = 320
-    private static let maximumGridImageHeight: CGFloat = 220
+    private static let stackedCardSide: CGFloat = 164
+    private static let stackedCardOffset: CGFloat = 12
 
     private struct ImageLayout: Equatable {
         let id: String
         let width: Int
         let height: Int
+    }
+
+    /// Frame-based thumbnail composition avoids making the collection view
+    /// solve a second nested stack of competing width/height constraints.
+    /// Multiple images use equal square cards and `scaleAspectFill`, so cards
+    /// may crop their thumbnail but never stretch the source image.
+    private final class AttachmentPreviewControl: UIControl {
+        private let visibleIDs: [String]
+        private let preferredSize: CGSize
+        private let cardSide: CGFloat
+        private let cardOffset: CGFloat
+        private let countLabel = UILabel()
+        private(set) var imageViewsByID: [String: UIImageView] = [:]
+
+        init(
+            images: [ConversationViewportEntry.UserMessage.Image],
+            availableWidth: CGFloat
+        ) {
+            visibleIDs = Array(images.prefix(3).map(\.id))
+            preferredSize = UserMessageCell.previewSize(
+                for: images,
+                availableWidth: availableWidth
+            )
+            if images.count > 1 {
+                let visibleCount = CGFloat(min(3, images.count))
+                cardOffset = UserMessageCell.stackedCardOffset
+                cardSide = preferredSize.width - cardOffset * (visibleCount - 1)
+            } else {
+                cardOffset = 0
+                cardSide = preferredSize.width
+            }
+            super.init(frame: CGRect(origin: .zero, size: preferredSize))
+
+            for payload in images.prefix(3).reversed() {
+                let imageView = UIImageView()
+                imageView.backgroundColor = .secondarySystemFill
+                imageView.contentMode = .scaleAspectFill
+                imageView.clipsToBounds = true
+                imageView.layer.cornerRadius = images.count > 1 ? 18 : 11
+                imageView.layer.cornerCurve = .continuous
+                imageView.layer.borderWidth = images.count > 1 ? 2 : 0
+                imageView.layer.borderColor = UIColor.systemBackground.cgColor
+                imageView.accessibilityLabel = payload.name ?? String(localized: "图片附件")
+                addSubview(imageView)
+                imageViewsByID[payload.id] = imageView
+            }
+
+            countLabel.text = "\(images.count)张"
+            countLabel.font = .preferredFont(forTextStyle: .caption1).withWeight(.semibold)
+            countLabel.textColor = .white
+            countLabel.textAlignment = .center
+            countLabel.backgroundColor = UIColor.black.withAlphaComponent(0.58)
+            countLabel.layer.cornerRadius = 12
+            countLabel.layer.cornerCurve = .continuous
+            countLabel.clipsToBounds = true
+            countLabel.isHidden = images.count < 2
+            addSubview(countLabel)
+
+            isAccessibilityElement = true
+            accessibilityTraits = .button
+            accessibilityLabel = images.count > 1
+                ? String(localized: "查看\(images.count)张图片")
+                : String(localized: "查看图片")
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override var intrinsicContentSize: CGSize { preferredSize }
+
+        override var isHighlighted: Bool {
+            didSet {
+                alpha = isHighlighted ? 0.78 : 1
+            }
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard !visibleIDs.isEmpty else { return }
+            if visibleIDs.count == 1 {
+                imageViewsByID[visibleIDs[0]]?.frame = bounds
+                return
+            }
+
+            let count = visibleIDs.count
+            for (index, id) in visibleIDs.enumerated() {
+                // First attachment stays on top and closest to the message;
+                // the remaining cards fan toward the upper trailing edge.
+                let x = cardOffset * CGFloat(index)
+                let y = cardOffset * CGFloat(count - 1 - index)
+                imageViewsByID[id]?.frame = CGRect(x: x, y: y, width: cardSide, height: cardSide)
+            }
+            if let frontFrame = imageViewsByID[visibleIDs[0]]?.frame {
+                countLabel.frame = CGRect(
+                    x: frontFrame.maxX - 51,
+                    y: frontFrame.maxY - 32,
+                    width: 45,
+                    height: 26
+                )
+                bringSubviewToFront(imageViewsByID[visibleIDs[0]]!)
+                bringSubviewToFront(countLabel)
+            }
+        }
     }
 
     private static let decodedImageCache = NSCache<NSString, UIImage>()
@@ -862,8 +989,11 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
     private var copyResetWorkItem: DispatchWorkItem?
     private var renderedImageLayout: [ImageLayout] = []
     private var renderedContainerWidthInPixels = 0
+    private var renderedImages: [ConversationViewportEntry.UserMessage.Image] = []
+    private weak var imagePreviewControl: AttachmentPreviewControl?
     private var imageViewsByID: [String: UIImageView] = [:]
     private var renderedImageAvailability: [String: Bool] = [:]
+    var onOpenImagePreview: (([ConversationImagePreviewItem], Int) -> Void)?
 
     static func estimatedHeight(for payload: ConversationViewportEntry.UserMessage, width: CGFloat) -> CGFloat {
         let horizontalBubbleInset: CGFloat = 34
@@ -875,7 +1005,10 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
             attributes: [.font: UIFont.preferredFont(forTextStyle: .body)],
             context: nil
         )
-        let imageHeight = gridHeight(for: payload.images, availableWidth: width - horizontalBubbleInset)
+        let imageHeight = previewSize(
+            for: payload.images,
+            availableWidth: width - horizontalBubbleInset
+        ).height
         var contentHeight: CGFloat = 0
         if imageHeight > 0 { contentHeight += imageHeight }
         if !payload.text.isEmpty {
@@ -961,6 +1094,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         copyResetWorkItem?.cancel()
         copyResetWorkItem = nil
         messageLabel.text = nil
+        onOpenImagePreview = nil
         // Keep an already-built attachment grid until the next payload is
         // known. UICollectionView commonly dequeues the same cell for the
         // same row when it re-enters the viewport; retaining the hierarchy
@@ -988,6 +1122,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         containerWidth: CGFloat
     ) {
         imageGrid.isHidden = images.isEmpty
+        renderedImages = images
         let layout = images.map { ImageLayout(id: $0.id, width: $0.width, height: $0.height) }
         let widthInPixels = Int((containerWidth * UIScreen.main.scale).rounded())
 
@@ -1006,44 +1141,12 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
         renderedContainerWidthInPixels = widthInPixels
         guard !images.isEmpty else { return }
         let availableWidth = max(1, containerWidth - 34)
-        for start in stride(from: 0, to: images.count, by: images.count == 1 ? 1 : 2) {
-            let row = UIStackView()
-            row.axis = .horizontal
-            row.alignment = .bottom
-            row.spacing = 6
-            for imagePayload in images[start..<min(start + (images.count == 1 ? 1 : 2), images.count)] {
-                let size = Self.displaySize(
-                    for: imagePayload,
-                    availableWidth: availableWidth,
-                    isSingle: images.count == 1
-                )
-                let imageView = UIImageView()
-                imageView.backgroundColor = .secondarySystemFill
-                imageView.contentMode = .scaleAspectFill
-                imageView.clipsToBounds = true
-                imageView.layer.cornerRadius = 11
-                imageView.layer.cornerCurve = .continuous
-                imageView.accessibilityLabel = imagePayload.name ?? String(localized: "图片附件")
-                imageView.translatesAutoresizingMaskIntoConstraints = false
-                let width = imageView.widthAnchor.constraint(equalToConstant: size.width)
-                let height = imageView.heightAnchor.constraint(equalToConstant: size.height)
-                // A reused self-sizing cell temporarily retains its previous
-                // UIView-Encapsulated-Layout-Height. Keep the target image size
-                // strong but breakable during that provisional pass; the
-                // required aspect-ratio constraint prevents visual distortion.
-                width.priority = .init(999)
-                height.priority = .init(999)
-                let aspectRatio = imageView.widthAnchor.constraint(
-                    equalTo: imageView.heightAnchor,
-                    multiplier: size.width / size.height
-                )
-                NSLayoutConstraint.activate([width, height, aspectRatio])
-                row.addArrangedSubview(imageView)
-                imageViewsByID[imagePayload.id] = imageView
-                updateImageContent(imagePayload)
-            }
-            imageGrid.addArrangedSubview(row)
-        }
+        let preview = AttachmentPreviewControl(images: images, availableWidth: availableWidth)
+        preview.addTarget(self, action: #selector(openImagePreview), for: .touchUpInside)
+        imageGrid.addArrangedSubview(preview)
+        imagePreviewControl = preview
+        imageViewsByID = preview.imageViewsByID
+        for image in images { updateImageContent(image) }
     }
 
     private func updateImageContent(_ payload: ConversationViewportEntry.UserMessage.Image) {
@@ -1065,46 +1168,64 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
     }
 
     private func clearImageGrid() {
-        for row in imageGrid.arrangedSubviews {
-            imageGrid.removeArrangedSubview(row)
-            row.removeFromSuperview()
+        for preview in imageGrid.arrangedSubviews {
+            imageGrid.removeArrangedSubview(preview)
+            preview.removeFromSuperview()
         }
+        imagePreviewControl = nil
         imageViewsByID.removeAll(keepingCapacity: true)
         renderedImageAvailability.removeAll(keepingCapacity: true)
     }
 
-    private static func gridHeight(
+    private static func previewSize(
         for images: [ConversationViewportEntry.UserMessage.Image],
         availableWidth: CGFloat
-    ) -> CGFloat {
-        guard !images.isEmpty else { return 0 }
-        var height: CGFloat = 0
-        let rowCapacity = images.count == 1 ? 1 : 2
-        for start in stride(from: 0, to: images.count, by: rowCapacity) {
-            let row = images[start..<min(start + rowCapacity, images.count)]
-            let rowHeight = row.map {
-                displaySize(for: $0, availableWidth: availableWidth, isSingle: images.count == 1).height
-            }.max() ?? 0
-            if height > 0 { height += 6 }
-            height += rowHeight
+    ) -> CGSize {
+        guard let first = images.first else { return .zero }
+        if images.count == 1 {
+            return displaySize(for: first, availableWidth: availableWidth)
         }
-        return height
+        let visibleCount = CGFloat(min(3, images.count))
+        let side = min(
+            stackedCardSide,
+            max(96, floor(availableWidth - stackedCardOffset * (visibleCount - 1)))
+        )
+        let length = side + stackedCardOffset * (visibleCount - 1)
+        return CGSize(width: length, height: length)
     }
 
     private static func displaySize(
         for image: ConversationViewportEntry.UserMessage.Image,
-        availableWidth: CGFloat,
-        isSingle: Bool
+        availableWidth: CGFloat
     ) -> CGSize {
         let sourceWidth = CGFloat(max(1, image.width))
         let sourceHeight = CGFloat(max(1, image.height))
-        let maximumWidth = min(isSingle ? 320 : 180, isSingle ? availableWidth : (availableWidth - 6) / 2)
-        let maximumHeight = isSingle ? maximumSingleImageHeight : maximumGridImageHeight
+        let maximumWidth = min(320, availableWidth)
+        let maximumHeight = maximumSingleImageHeight
         let scale = min(1, min(maximumWidth / sourceWidth, maximumHeight / sourceHeight))
         return CGSize(
             width: max(1, floor(sourceWidth * scale)),
             height: max(1, floor(sourceHeight * scale))
         )
+    }
+
+    @objc private func openImagePreview() {
+        guard !renderedImages.isEmpty else { return }
+        let items = renderedImages.map { payload in
+            let key = payload.id as NSString
+            let image = imageViewsByID[payload.id]?.image
+                ?? Self.decodedImageCache.object(forKey: key)
+                ?? payload.data.flatMap(UIImage.init(data:))
+            if let image, Self.decodedImageCache.object(forKey: key) == nil {
+                Self.decodedImageCache.setObject(image, forKey: key)
+            }
+            return ConversationImagePreviewItem(
+                id: payload.id,
+                image: image,
+                name: payload.name
+            )
+        }
+        onOpenImagePreview?(items, 0)
     }
 
     @objc private func copyMessage() {
@@ -1142,6 +1263,227 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
             blue: 0.9,
             alpha: dark ? 0.34 : 0.08
         ).cgColor
+    }
+}
+
+private final class ConversationImagePreviewController: UIViewController,
+    UIPageViewControllerDataSource,
+    UIPageViewControllerDelegate {
+
+    private let items: [ConversationImagePreviewItem]
+    private let initialIndex: Int
+    private let pageController = UIPageViewController(
+        transitionStyle: .scroll,
+        navigationOrientation: .horizontal
+    )
+    private let countLabel = UILabel()
+
+    init(items: [ConversationImagePreviewItem], initialIndex: Int) {
+        self.items = items
+        self.initialIndex = min(max(0, initialIndex), max(0, items.count - 1))
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationCapturesStatusBarAppearance = true
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var prefersStatusBarHidden: Bool { true }
+    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+
+        addChild(pageController)
+        pageController.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(pageController.view)
+        pageController.didMove(toParent: self)
+        pageController.dataSource = self
+        pageController.delegate = self
+
+        let closeButton = UIButton(type: .system)
+        closeButton.setImage(
+            UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(weight: .semibold)),
+            for: .normal
+        )
+        closeButton.tintColor = .white
+        closeButton.backgroundColor = UIColor.white.withAlphaComponent(0.16)
+        closeButton.layer.cornerRadius = 19
+        closeButton.layer.cornerCurve = .continuous
+        closeButton.accessibilityLabel = String(localized: "关闭图片预览")
+        closeButton.addTarget(self, action: #selector(close), for: .touchUpInside)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(closeButton)
+
+        countLabel.font = .preferredFont(forTextStyle: .subheadline).withWeight(.semibold)
+        countLabel.textColor = .white
+        countLabel.textAlignment = .center
+        countLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(countLabel)
+
+        NSLayoutConstraint.activate([
+            pageController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            pageController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            pageController.view.topAnchor.constraint(equalTo: view.topAnchor),
+            pageController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            closeButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 10),
+            closeButton.widthAnchor.constraint(equalToConstant: 38),
+            closeButton.heightAnchor.constraint(equalToConstant: 38),
+
+            countLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            countLabel.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor)
+        ])
+
+        let initial = page(at: initialIndex)
+        pageController.setViewControllers([initial], direction: .forward, animated: false)
+        updateCount(initialIndex)
+    }
+
+    private func page(at index: Int) -> ZoomingImageViewController {
+        ZoomingImageViewController(item: items[index], index: index)
+    }
+
+    private func updateCount(_ index: Int) {
+        countLabel.text = items.count > 1 ? "\(index + 1) / \(items.count)" : "1 / 1"
+    }
+
+    @objc private func close() {
+        dismiss(animated: true)
+    }
+
+    func pageViewController(
+        _ pageViewController: UIPageViewController,
+        viewControllerBefore viewController: UIViewController
+    ) -> UIViewController? {
+        guard let page = viewController as? ZoomingImageViewController,
+              page.index > 0 else { return nil }
+        return self.page(at: page.index - 1)
+    }
+
+    func pageViewController(
+        _ pageViewController: UIPageViewController,
+        viewControllerAfter viewController: UIViewController
+    ) -> UIViewController? {
+        guard let page = viewController as? ZoomingImageViewController,
+              page.index + 1 < items.count else { return nil }
+        return self.page(at: page.index + 1)
+    }
+
+    func pageViewController(
+        _ pageViewController: UIPageViewController,
+        didFinishAnimating finished: Bool,
+        previousViewControllers: [UIViewController],
+        transitionCompleted completed: Bool
+    ) {
+        guard completed,
+              let page = pageViewController.viewControllers?.first as? ZoomingImageViewController else { return }
+        updateCount(page.index)
+    }
+}
+
+private final class ZoomingImageViewController: UIViewController, UIScrollViewDelegate {
+    let index: Int
+    private let item: ConversationImagePreviewItem
+    private let scrollView = UIScrollView()
+    private let imageView = UIImageView()
+
+    init(item: ConversationImagePreviewItem, index: Int) {
+        self.item = item
+        self.index = index
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+
+        scrollView.delegate = self
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 5
+        scrollView.bouncesZoom = true
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.contentInsetAdjustmentBehavior = .never
+        view.addSubview(scrollView)
+
+        imageView.image = item.image
+        imageView.contentMode = .scaleAspectFit
+        imageView.backgroundColor = .black
+        imageView.accessibilityLabel = item.name ?? String(localized: "图片")
+        scrollView.addSubview(imageView)
+
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        scrollView.addGestureRecognizer(doubleTap)
+
+        if item.image == nil {
+            let placeholder = UIImageView(image: UIImage(systemName: "photo"))
+            placeholder.tintColor = UIColor.white.withAlphaComponent(0.42)
+            placeholder.contentMode = .scaleAspectFit
+            placeholder.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(placeholder)
+            NSLayoutConstraint.activate([
+                placeholder.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                placeholder.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+                placeholder.widthAnchor.constraint(equalToConstant: 54),
+                placeholder.heightAnchor.constraint(equalToConstant: 54)
+            ])
+        }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        scrollView.frame = view.bounds
+        guard scrollView.zoomScale == scrollView.minimumZoomScale else {
+            centerImage()
+            return
+        }
+        imageView.frame = scrollView.bounds
+        scrollView.contentSize = imageView.bounds.size
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+        imageView
+    }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        centerImage()
+    }
+
+    private func centerImage() {
+        let boundsSize = scrollView.bounds.size
+        var frame = imageView.frame
+        frame.origin.x = frame.size.width < boundsSize.width
+            ? (boundsSize.width - frame.size.width) / 2
+            : 0
+        frame.origin.y = frame.size.height < boundsSize.height
+            ? (boundsSize.height - frame.size.height) / 2
+            : 0
+        imageView.frame = frame
+    }
+
+    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+        if scrollView.zoomScale > scrollView.minimumZoomScale {
+            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
+            return
+        }
+        let targetScale = min(2.5, scrollView.maximumZoomScale)
+        let point = gesture.location(in: imageView)
+        let width = scrollView.bounds.width / targetScale
+        let height = scrollView.bounds.height / targetScale
+        scrollView.zoom(
+            to: CGRect(
+                x: point.x - width / 2,
+                y: point.y - height / 2,
+                width: width,
+                height: height
+            ),
+            animated: true
+        )
     }
 }
 
