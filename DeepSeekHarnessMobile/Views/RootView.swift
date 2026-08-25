@@ -102,10 +102,7 @@ private struct RootNavigationHost: View, Equatable {
         if let preset = store.agentPresets.first(where: { $0.id == id }) {
             return preset.displayName
         }
-        switch id {
         return L10n.presetModeName(for: id)
-        default: return id
-        }
     }
 
     private func navigate(to route: AppRoute) {
