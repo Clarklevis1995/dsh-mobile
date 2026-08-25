@@ -148,12 +148,22 @@ struct SettingsView: View {
                 }
             }
 
-            Section("外观") {
+            Section {
                 Picker("界面", selection: $store.interfaceStyle) {
                     ForEach(InterfaceStyle.allCases) {
                         Text($0.title).tag($0)
                     }
                 }
+                Picker("语言", selection: $store.appLanguage) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(verbatim: language.title).tag(language)
+                    }
+                }
+                .pickerStyle(.navigationLink)
+            } header: {
+                Text("外观")
+            } footer: {
+                Text("语言设置将在重新启动应用后生效。")
             }
         }
         .navigationTitle("设置")

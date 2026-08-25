@@ -8,6 +8,43 @@ enum InterfaceStyle: String, CaseIterable, Identifiable {
     var colorScheme: ColorScheme? { switch self { case .system: nil; case .light: .light; case .dark: .dark } }
 }
 
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system
+    case simplifiedChinese = "zh-Hans"
+    case english = "en"
+
+    static let preferenceKey = "app.language"
+    private static let appleLanguagesKey = "AppleLanguages"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: String(localized: "跟随系统")
+        case .simplifiedChinese: "简体中文"
+        case .english: "English"
+        }
+    }
+
+    static func load(from defaults: UserDefaults = .standard) -> AppLanguage {
+        guard let value = defaults.string(forKey: preferenceKey),
+              let language = AppLanguage(rawValue: value) else {
+            return .system
+        }
+        return language
+    }
+
+    func apply(to defaults: UserDefaults = .standard) {
+        defaults.set(rawValue, forKey: Self.preferenceKey)
+        switch self {
+        case .system:
+            defaults.removeObject(forKey: Self.appleLanguagesKey)
+        case .simplifiedChinese, .english:
+            defaults.set([rawValue], forKey: Self.appleLanguagesKey)
+        }
+    }
+}
+
 struct HistoryLoadProgress: Equatable {
     var loaded: Int
     var total: Int?
@@ -48,6 +85,9 @@ final class AppStore: ObservableObject {
     @Published var protocolNotices: [GatewayNotice] = []
     @Published var endpoint: String { didSet { UserDefaults.standard.set(endpoint, forKey: "gateway.endpoint") } }
     @Published var interfaceStyle: InterfaceStyle = .system
+    @Published var appLanguage: AppLanguage {
+        didSet { appLanguage.apply() }
+    }
     @Published var lastError: String?
     @Published var waitingForNewSession = false
     @Published var isRefreshing = false
@@ -126,6 +166,7 @@ final class AppStore: ObservableObject {
     }
 
     init() {
+        appLanguage = AppLanguage.load()
         selectedWorkspaceId = UserDefaults.standard.string(forKey: "gateway.selectedWorkspaceId")
         endpoint = UserDefaults.standard.string(forKey: "gateway.endpoint") ?? "ws://127.0.0.1:3080/ws/mobile"
         if let data = UserDefaults.standard.data(forKey: "gateway.sessions"),

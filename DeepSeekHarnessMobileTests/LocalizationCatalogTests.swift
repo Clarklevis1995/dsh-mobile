@@ -1,4 +1,5 @@
 import XCTest
+@testable import DeepSeekHarnessMobile
 
 /// Guards the localization catalogs shipped in the app bundle: the compiled
 /// English tables must exist, stay populated, and keep their placeholder
@@ -24,6 +25,29 @@ final class LocalizationCatalogTests: XCTestCase {
 
         let blank = table.filter { $0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         XCTAssertTrue(blank.isEmpty, "Blank English translations for: \(blank.keys.sorted())")
+        XCTAssertEqual(table["语言"], "Language")
+        XCTAssertEqual(table["语言设置将在重新启动应用后生效。"],
+                       "Language changes take effect after restarting the app.")
+    }
+
+    func testAppLanguagePersistsSystemAndExplicitLanguageChoices() throws {
+        let suiteName = "AppLanguageTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(AppLanguage.load(from: defaults), .system)
+
+        AppLanguage.english.apply(to: defaults)
+        XCTAssertEqual(AppLanguage.load(from: defaults), .english)
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en"])
+
+        AppLanguage.simplifiedChinese.apply(to: defaults)
+        XCTAssertEqual(AppLanguage.load(from: defaults), .simplifiedChinese)
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["zh-Hans"])
+
+        AppLanguage.system.apply(to: defaults)
+        XCTAssertEqual(AppLanguage.load(from: defaults), .system)
+        XCTAssertNil(defaults.persistentDomain(forName: suiteName)?["AppleLanguages"])
     }
 
     func testFormatSpecifiersSurviveTranslation() {
