@@ -674,6 +674,13 @@ final class AppStore: ObservableObject {
             }
             refreshRemoteState()
             refreshDefaultConfiguration()
+            // Every `hello` begins a new transport generation: the server-side
+            // subscription from the previous connection is gone. Background
+            // suspension tears the transport down without the failure callback
+            // that normally invalidates an activation, so reset it here to let
+            // the open conversation re-activate on the new generation —
+            // re-subscribing live events and catching up missed history.
+            activeConversationActivationKey = nil
             if preparedConversationActivationKey != nil {
                 Task { [weak self] in
                     guard let self else { return }
@@ -699,6 +706,7 @@ final class AppStore: ObservableObject {
         case "sessions":
             applyRemoteSessions(decodeItems(frame.items, as: GatewaySessionSummary.self))
             isRefreshing = false
+            reconcileOpenConversationWithRemoteState()
             notice(String(localized: "notice.sessions.synced", defaultValue: "会话列表已同步"), String(localized: "sessions.count", defaultValue: "\(sessions.count) 个会话"))
         case "history": applyHistoryRebased(frame)
         case "attachment": handleImageAttachment(frame)
@@ -942,7 +950,14 @@ final class AppStore: ObservableObject {
         if userInitiatedAgentWorkIsActive, backgroundAgentSessionID == nil {
             backgroundAgentSessionID = id
         }
-        if selectedSessionId == nil { selectedSessionId = id }
+        if selectedSessionId == nil {
+            selectedSessionId = id
+            // The pushed "new conversation" destination has just become a
+            // real session. Align the activation key so a later transport
+            // generation (reconnect after backgrounding) can re-activate the
+            // pushed view instead of leaving it without a subscription.
+            preparedConversationActivationKey = id
+        }
         waitingForNewSession = false
         upsertSession(id: id, title: L10n.newSessionPlaceholderTitle)
         if let index = sessions.firstIndex(where: { $0.id == id }) {
@@ -1265,6 +1280,21 @@ final class AppStore: ObservableObject {
         }
         sessions.removeAll { archivedSessionIds.contains($0.id) }
         sessions.sort { $0.lastActivity > $1.lastActivity }
+    }
+    /// A fresh session summary is the first authoritative signal that the open
+    /// conversation fell behind while the app was disconnected or backgrounded:
+    /// `subscribe` is only an event filter, so live frames carry output produced
+    /// *after* the transport re-subscribes and never replay the gap. Re-activation
+    /// on `hello` runs before this response arrives and therefore compares
+    /// against the stale summary; reconciling here, with the updated list,
+    /// closes that race. `shouldRefreshHistory` keeps an in-sync (or still
+    /// loading) conversation from fetching anything.
+    private func reconcileOpenConversationWithRemoteState() {
+        guard let id = selectedSessionId,
+              preparedConversationActivationKey == id,
+              let session = sessions.first(where: { $0.id == id }),
+              shouldRefreshHistory(for: session) else { return }
+        loadHistory(for: id)
     }
     private func applyEvent(_ record: SessionEvent) {
         let event = record.event
