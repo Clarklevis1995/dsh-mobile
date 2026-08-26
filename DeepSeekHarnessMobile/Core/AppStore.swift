@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 enum InterfaceStyle: String, CaseIterable, Identifiable {
     case system, light, dark
@@ -45,20 +44,15 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
-struct HistoryLoadProgress: Equatable {
-    var loaded: Int
-    var total: Int?
-}
-
 @MainActor
 final class AppStore: ObservableObject {
     static let ungroupedWorkspaceID = "__ungrouped__"
 
     @Published var selectedSessionId: String?
-    @Published var sessions: [SessionSummary] = [] { didSet { persistSessions() } }
+    @Published var sessions: [SessionSummary] = []
     @Published var workspaces: [GatewayWorkspace] = []
     @Published var selectedWorkspaceId: String? {
-        didSet { UserDefaults.standard.set(selectedWorkspaceId, forKey: "gateway.selectedWorkspaceId") }
+        didSet { preferences.selectedWorkspaceID = selectedWorkspaceId }
     }
     @Published var archivedSessionIds: Set<String> = []
     /// Raw protocol storage. UI updates are driven by the throttled compact
@@ -85,7 +79,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var createdDirectoryPathToReveal: String?
     @Published var workspaceCreationIsLoading = false
     @Published var protocolNotices: [GatewayNotice] = []
-    @Published var endpoint: String { didSet { UserDefaults.standard.set(endpoint, forKey: "gateway.endpoint") } }
+    @Published var endpoint: String { didSet { preferences.endpoint = endpoint } }
     @Published var interfaceStyle: InterfaceStyle = .system
     @Published var appLanguage: AppLanguage {
         didSet { appLanguage.apply() }
@@ -111,18 +105,12 @@ final class AppStore: ObservableObject {
     @Published private(set) var supportsImages = false
 
     let gateway = GatewayClient()
-    private var pendingHistorySessionId: String?
-    private var historyRequestTokens: [String: UUID] = [:]
-    private var historyPaginationCursors: [String: Set<Int>] = [:]
-    private var historyNextBeforeSeq: [String: Int] = [:]
-    private var historyBatchPageCounts: [String: Int] = [:]
-    private var historyBatchKinds: [String: HistoryBatchKind] = [:]
-    private var historyLoadedEventCounts: [String: Int] = [:]
-    private var historyLoadedByteCounts: [String: Int] = [:]
+    private let preferences: AppPreferences
+    private var historyState = HistoryState()
+    private let historySyncEngine = HistorySyncEngine()
     /// The remote session activity timestamp covered by a completed history load.
     /// This intentionally remains an in-memory cache: events are not persisted
     /// across launches, so a fresh process must fetch history again.
-    private var historySyncedActivityDates: [String: Date] = [:]
     private var conversationProjectionDrivers: [String: ConversationProjectionDriver] = [:]
     private var conversationTimelines: [String: ConversationTimeline] = [:]
     /// Invalidates an in-flight cold projection when a completed history
@@ -136,49 +124,41 @@ final class AppStore: ObservableObject {
     /// Decoded bytes live outside the raw/history message models. A bounded
     /// memory layer fronts a seven-day, purgeable on-disk cache.
     private let imageAttachmentCache = ImageAttachmentCache()
-    private var queuedImageAttachmentIDs: Set<String> = []
-    private var imageAttachmentQueue: [(sessionId: String, attachment: GatewayImageAttachment)] = []
-    private var inFlightImageAttachmentIDs: Set<String> = []
+    private var attachmentLoader = AttachmentLoader()
     private var pendingModelsSessionId: String?
     private var isPendingGlobalModelsRequest = false
     private var pendingModelSelectionSessionId: String?
     private var pendingPermissionOptionsSessionId: String?
     private var pendingDirectoryCreationParentPath: String?
-    private var sessionControlRequestTokens: [String: UUID] = [:]
-    private var defaultConfigurationRequestTokens: [String: UUID] = [:]
+    private let sessionControlRequestTracker = RequestTracker()
+    private let defaultConfigurationRequestTracker = RequestTracker()
     /// Navigation preparation is intentionally cheap. Remote activation begins
     /// from the destination lifecycle, after NavigationStack installs its bar.
     private var preparedConversationActivationKey: String?
     private var activeConversationActivationKey: String?
     private var presentsNextConnectionFailureAsAlert = true
     private var hasHandledColdLaunchConnection = false
-    private var applicationIsInBackground = false
-    private var userInitiatedAgentWorkIsActive = false
-    private var outstandingUserInitiatedTurns = 0
-    private var backgroundAgentSessionID: String?
-    private var agentBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+    private let backgroundExecutionController = AgentBackgroundExecutionController()
     private static let permissionPresets: Set<String> = ["read-only", "workspace-write", "danger-full-access"]
     private static let defaultPermissionPresets: Set<String> = ["ask", "read-only", "workspace-write", "danger-full-access"]
-    private static let historyPageByteBudget = 4 * 1024 * 1024
-    private static let historyPagesPerBatch = 2
+    private static let defaultConfigurationRequestKinds: Set<String> = [
+        "agent-presets", "defaults", "default-model", "set-default", "save-default-model"
+    ]
     private static let newConversationActivationKey = "__new-conversation__"
 
-    private enum HistoryBatchKind {
-        case latest
-        case older
-    }
-
-    init() {
+    init(preferences: AppPreferences = UserDefaultsAppPreferences()) {
+        self.preferences = preferences
         appLanguage = AppLanguage.load()
-        selectedWorkspaceId = UserDefaults.standard.string(forKey: "gateway.selectedWorkspaceId")
-        endpoint = UserDefaults.standard.string(forKey: "gateway.endpoint") ?? "ws://127.0.0.1:3080/ws/mobile"
-        if let data = UserDefaults.standard.data(forKey: "gateway.sessions"),
-           let decoded = try? JSONDecoder().decode([SessionSummary].self, from: data) { sessions = decoded }
-        UserDefaults.standard.removeObject(forKey: "gateway.conversationScrollAnchors")
-        UserDefaults.standard.removeObject(forKey: "gateway.manuallyPositionedSessionIds")
+        selectedWorkspaceId = preferences.selectedWorkspaceID
+        endpoint = preferences.endpoint
+        sessions = preferences.loadSessions()
+        preferences.performMigrations()
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
         gateway.onConnectionFailure = { [weak self] detail in
             self?.handleConnectionFailure(detail)
+        }
+        backgroundExecutionController.onBackgroundAllowanceExpired = { [weak self] in
+            self?.gateway.backgroundExecutionDidExpire()
         }
     }
 
@@ -259,13 +239,14 @@ final class AppStore: ObservableObject {
     func handleScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            applicationIsInBackground = false
+            backgroundExecutionController.applicationDidBecomeActive()
             gateway.applicationDidBecomeActive()
         case .background:
-            applicationIsInBackground = true
+            backgroundExecutionController.applicationDidEnterBackground()
             imageAttachmentCache.removeExpiredFiles()
-            let hasBackgroundAllowance = userInitiatedAgentWorkIsActive && agentBackgroundTask != .invalid
-            gateway.applicationDidEnterBackground(keepConnectionAlive: hasBackgroundAllowance)
+            gateway.applicationDidEnterBackground(
+                keepConnectionAlive: backgroundExecutionController.keepsConnectionAlive
+            )
         case .inactive:
             break
         @unknown default:
@@ -274,35 +255,7 @@ final class AppStore: ObservableObject {
     }
 
     func pair(usingQRCode rawValue: String, presentsFailureAlert: Bool = true) throws {
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = Self.decodeStrictBase64URL(trimmed) else {
-            throw PairingPayloadError.invalidBase64URL
-        }
-        let payload: GatewayPairingPayload
-        do {
-            payload = try JSONDecoder().decode(GatewayPairingPayload.self, from: data)
-        } catch {
-            throw PairingPayloadError.invalidJSON
-        }
-        guard payload.version == 2 else {
-            throw PairingPayloadError.unsupportedVersion(payload.version)
-        }
-        guard let url = payload.endpoint,
-              ["ws", "wss"].contains(url.scheme?.lowercased() ?? ""),
-              url.host != nil else {
-            throw PairingPayloadError.invalidEndpoint
-        }
-        guard !payload.pairingCode.isEmpty,
-              !payload.pairingCode.contains(","),
-              payload.pairingCode.unicodeScalars.allSatisfy({
-                  !CharacterSet.whitespacesAndNewlines.contains($0) &&
-                  !CharacterSet.controlCharacters.contains($0)
-              }) else {
-            throw PairingPayloadError.invalidCode
-        }
-        guard payload.expirationDate > .now else {
-            throw PairingPayloadError.expired
-        }
+        let payload = try PairingPayloadParser.parse(rawValue)
         resetOutstandingRequests()
         presentsNextConnectionFailureAsAlert = presentsFailureAlert
         lastError = nil
@@ -310,18 +263,6 @@ final class AppStore: ObservableObject {
         gateway.connectForPairing(payload)
     }
 
-    private static func decodeStrictBase64URL(_ value: String) -> Data? {
-        guard !value.isEmpty,
-              !value.contains("="),
-              value.unicodeScalars.allSatisfy({ scalar in
-                  CharacterSet.alphanumerics.contains(scalar) || scalar == "-" || scalar == "_"
-              }),
-              value.count % 4 != 1 else { return nil }
-        var base64 = value.replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
-        return Data(base64Encoded: base64, options: [])
-    }
     func refreshRemoteState() {
         guard gateway.state.isConnected else { return }
         isRefreshing = true
@@ -340,14 +281,14 @@ final class AppStore: ObservableObject {
     }
     func setDefaultAgentPreset(_ id: String) {
         guard agentPresets.contains(where: { $0.id == id && $0.broken != true }) else {
-            lastError = String(localized: "pairing.error.broken-preset", defaultValue: "无法将未知或已损坏的 Agent 预设设为默认值：\(id)")
+            lastError = String(localized: "agent.preset.default.invalid", defaultValue: "无法将未知或已损坏的 Agent 预设设为默认值：\(id)")
             return
         }
         setGlobalDefault(target: "agent-preset", value: id)
     }
     func setDefaultPermission(_ value: String) {
         guard Self.defaultPermissionPresets.contains(value) else {
-            lastError = String(localized: "permissions.error.unsupported-default", defaultValue: "不支持的默认权限：\(value)")
+            lastError = String(localized: "permissions.default.unsupported", defaultValue: "不支持的默认权限：\(value)")
             return
         }
         setGlobalDefault(target: "permission", value: value)
@@ -363,7 +304,7 @@ final class AppStore: ObservableObject {
         guard gateway.state.isConnected else { return }
         guard anyModelCatalog == nil else { return }
         guard !sessionControlLoadingKinds.contains("models") else { return }
-        isPendingGlobalModelsRequest = true
+        reduceSessionControl(.modelsRequestTargeted(sessionID: nil))
         beginSessionControlRequest("models")
         gateway.requestModels()
     }
@@ -376,14 +317,14 @@ final class AppStore: ObservableObject {
         gateway.saveDefaultModel(provider: provider, model: model, reasoningEffort: reasoningEffort)
     }
     func prepareNewConversation() {
-        selectedSessionId = nil
+        reduceSessionList(.select(nil))
         waitingForNewSession = false
         preparedConversationActivationKey = Self.newConversationActivationKey
         activeConversationActivationKey = nil
     }
 
     func prepareConversation(for session: SessionSummary) {
-        selectedSessionId = session.id
+        reduceSessionList(.select(session.id))
         waitingForNewSession = false
         preparedConversationActivationKey = session.id
         activeConversationActivationKey = nil
@@ -437,7 +378,8 @@ final class AppStore: ObservableObject {
 
     private func shouldRefreshHistory(for session: SessionSummary) -> Bool {
         guard !historyLoadingSessionIds.contains(session.id) else { return false }
-        guard let syncedActivity = historySyncedActivityDates[session.id] else { return true }
+        guard let syncedTimestamp = historyState.sessions[session.id]?.syncedActivityTimestamp else { return true }
+        let syncedActivity = Date(timeIntervalSince1970: syncedTimestamp)
         // A completed history baseline may subsequently be extended by the
         // subscribed live tail. Both sources are already present locally, so
         // compare the remote summary against the newest covered activity
@@ -451,53 +393,23 @@ final class AppStore: ObservableObject {
             lastError = String(localized: "WebSocket 尚未连接，无法加载历史记录")
             return
         }
-        guard !historyLoadingSessionIds.contains(sessionId) else { return }
-        if older, historyHasMore[sessionId] != true { return }
-        pendingHistorySessionId = sessionId
-        historyLoadingSessionIds.insert(sessionId)
-        if older { historyLoadingOlderSessionIds.insert(sessionId) }
-        historyLoadProgress[sessionId] = HistoryLoadProgress(loaded: 0, total: nil)
-        historyPaginationCursors[sessionId] = []
-        historyBatchPageCounts[sessionId] = 0
-        historyBatchKinds[sessionId] = older ? .older : .latest
-        historyLoadedEventCounts[sessionId] = 0
-        historyLoadedByteCounts[sessionId] = 0
-        if !older, events[sessionId, default: []].isEmpty {
-            historyHasMore[sessionId] = false
-            historyNextBeforeSeq[sessionId] = nil
+        let result = reduceHistory(.start(
+            sessionID: sessionId,
+            older: older,
+            hasLocalEvents: !events[sessionId, default: []].isEmpty,
+            earliestLocalSequence: events[sessionId]?.first?.seq
+        ))
+        if case .requestPage(let beforeSequence) = result {
+            requestHistoryPage(for: sessionId, beforeSeq: beforeSequence)
         }
-        // Keep the installed projector alive. History is built as a separate
-        // baseline and atomically rebased under the still-advancing live tail.
-        let before = older
-            ? historyNextBeforeSeq[sessionId] ?? events[sessionId]?.map(\.seq).min()
-            : nil
-        if older, before == nil {
-            finishHistoryLoading(sessionId)
-            historyHasMore[sessionId] = false
-            return
-        }
-        if let before {
-            historyPaginationCursors[sessionId] = [before]
-        }
-        requestHistoryPage(for: sessionId, beforeSeq: before)
     }
 
     private func requestHistoryPage(for sessionId: String, beforeSeq: Int?) {
-        let token = UUID()
-        historyRequestTokens[sessionId] = token
-        gateway.requestHistory(
-            sessionId: sessionId,
-            beforeSeq: beforeSeq,
-            maxMessages: 60,
-            maxBytes: Self.historyPageByteBudget,
-            view: "conversation"
-        )
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(20))
-            guard let self, self.historyRequestTokens[sessionId] == token else { return }
+        historySyncEngine.beginRequest(sessionID: sessionId, timeout: .seconds(20)) { [weak self] in
+            guard let self else { return }
             let hasUsableLocalContent = !self.events[sessionId, default: []].isEmpty
                 || !self.renderedConversationItems[sessionId, default: []].isEmpty
-            self.finishHistoryLoading(sessionId)
+            _ = self.reduceHistory(.timedOut(sessionID: sessionId))
             self.scheduleConversationProjection(for: sessionId)
             if hasUsableLocalContent {
                 self.notice(
@@ -509,6 +421,13 @@ final class AppStore: ObservableObject {
                 self.lastError = String(localized: "历史记录加载超时，请重试")
             }
         }
+        gateway.requestHistory(
+            sessionId: sessionId,
+            beforeSeq: beforeSeq,
+            maxMessages: historySyncEngine.configuration.pageMessageLimit,
+            maxBytes: historySyncEngine.configuration.pageByteBudget,
+            view: "conversation"
+        )
     }
     func resumeWorkspace() {
         preparedConversationActivationKey = nil
@@ -519,7 +438,7 @@ final class AppStore: ObservableObject {
     func addKnownSession(_ id: String) {
         let normalized = id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
-        upsertSession(id: normalized, title: L10n.remoteSessionTitle(normalized.prefix(8)))
+        reduceSessionList(.knownSessionAdded(normalized))
     }
     func search(_ query: String) {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -561,8 +480,8 @@ final class AppStore: ObservableObject {
     }
     func refreshSessionControls(for sessionId: String) {
         guard gateway.state.isConnected else { return }
-        pendingModelsSessionId = sessionId
-        pendingPermissionOptionsSessionId = sessionId
+        reduceSessionControl(.modelsRequestTargeted(sessionID: sessionId))
+        reduceSessionControl(.permissionOptionsTargeted(sessionID: sessionId))
         beginSessionControlRequest("models")
         beginSessionControlRequest("permission-options")
         beginSessionControlRequest("context-usage")
@@ -574,7 +493,7 @@ final class AppStore: ObservableObject {
     }
     func selectModel(provider: String, model: String, reasoningEffort: String?) {
         guard let sessionId = selectedSessionId else { return }
-        pendingModelSelectionSessionId = sessionId
+        reduceSessionControl(.modelSelectionTargeted(sessionID: sessionId))
         beginSessionControlRequest("select-model")
         gateway.selectModel(
             sessionId: sessionId,
@@ -613,64 +532,76 @@ final class AppStore: ObservableObject {
     }
 
     func answerQuestion(_ request: GatewayPendingQuestionRequest, answers: [GatewayQuestionAnswer]) {
-        guard gateway.state.isConnected else {
-            questionRequestStatuses[request.rpcId] = .rejected(String(localized: "q.rejected.ws.disconnected.answer", defaultValue: "WebSocket 已断开，重连后再提交答案。"))
-            return
-        }
-        guard request.questions.map(\.id) == answers.map(\.id) else {
-            questionRequestStatuses[request.rpcId] = .rejected(String(localized: "答案必须按原顺序覆盖整组问题。"))
-            return
-        }
-        for (question, answer) in zip(request.questions, answers) {
-            let allowedLabels = Set((question.options ?? []).map(\.label))
-            guard Set(answer.selected).count == answer.selected.count,
-                  answer.selected.allSatisfy(allowedLabels.contains) else {
-                questionRequestStatuses[request.rpcId] = .rejected(String(localized: "q.rejected.bad-options", defaultValue: "“\(question.question)”包含无效或重复选项。"))
-                return
-            }
-            if !question.allowsMultipleSelections {
-                guard answer.selected.count <= 1,
-                      !(answer.selected.count == 1 && answer.custom != nil) else {
-                    questionRequestStatuses[request.rpcId] = .rejected(String(localized: "单选题只能选择一个选项，且不能同时填写自定义答案。"))
-                    return
-                }
-            }
-        }
-        questionRequestStatuses[request.rpcId] = .submitting(.answer)
+        reduceQuestion(.submit(
+            request: request,
+            submission: .answer(answers),
+            isConnected: gateway.state.isConnected
+        ))
+        guard questionRequestStatuses[request.rpcId] == .submitting(.answer) else { return }
         beginAgentBackgroundExecution(for: request.sessionId, startsNewTurn: false)
         gateway.answerQuestion(rpcId: request.rpcId, sessionId: request.sessionId, answers: answers)
     }
 
     func cancelQuestion(_ request: GatewayPendingQuestionRequest) {
-        guard gateway.state.isConnected else {
-            questionRequestStatuses[request.rpcId] = .rejected(String(localized: "q.rejected.ws.disconnected.skip", defaultValue: "WebSocket 已断开，重连后再跳过问题。"))
-            return
-        }
-        questionRequestStatuses[request.rpcId] = .submitting(.cancel)
+        reduceQuestion(.submit(
+            request: request,
+            submission: .cancel,
+            isConnected: gateway.state.isConnected
+        ))
+        guard questionRequestStatuses[request.rpcId] == .submitting(.cancel) else { return }
         gateway.cancelQuestion(rpcId: request.rpcId, sessionId: request.sessionId)
     }
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
     private func handle(_ frame: GatewayFrame) {
-        switch frame.kind {
-        case "paired":
-            notice(String(localized: "设备配对成功"), frame.device?.name ?? String(localized: "长期凭据已安全保存到 Keychain"))
-        case "hello":
-            // `hello` starts a new authenticated transport generation. The
-            // gateway immediately replays every still-pending request after
-            // it, so clearing here prevents questions cancelled by a DSH
-            // restart from lingering while replayed rpcIds are deduplicated.
-            pendingQuestionRequests.removeAll()
-            questionRequestStatuses.removeAll()
-            supportsImages = (frame.protocol ?? 1) >= 3 && (frame.capabilities ?? []).contains("images")
-            inFlightImageAttachmentIDs.removeAll()
-            queuedImageAttachmentIDs.removeAll()
-            imageAttachmentQueue.removeAll()
+        let context = GatewayFrameRoutingContext(
+            selectedSessionID: selectedSessionId,
+            pendingHistorySessionID: historyState.pendingSessionID,
+            pendingModelsSessionID: pendingModelsSessionId,
+            isPendingGlobalModelsRequest: isPendingGlobalModelsRequest,
+            pendingModelSelectionSessionID: pendingModelSelectionSessionId,
+            pendingPermissionOptionsSessionID: pendingPermissionOptionsSessionId
+        )
+        handle(GatewayFrameRouter.route(frame, context: context))
+    }
+
+    private func handle(_ route: GatewayFrameRoute) {
+        switch route {
+        case .connection(let route): handleConnectionRoute(route)
+        case .content(let route): handleContentRoute(route)
+        case .control(let route): handleControlRoute(route)
+        case .workspace(let route): handleWorkspaceRoute(route)
+        case .question(let route): handleQuestionRoute(route)
+        case .failure(let payload): handleFailure(payload)
+        case .ignored: break
+        case .unknown(let kind): notice(String(localized: "未知网关响应"), kind)
+        }
+    }
+
+    private func handleConnectionRoute(_ route: GatewayConnectionRoute) {
+        switch route {
+        case .paired(let deviceName):
+            notice(
+                String(localized: "设备配对成功"),
+                deviceName ?? String(localized: "长期凭据已安全保存到 Keychain")
+            )
+        case .hello(let payload):
+            reduceQuestion(.reset)
+            supportsImages = payload.protocolVersion >= 3 && payload.capabilities.contains("images")
+            attachmentLoader.reset()
             presentsNextConnectionFailureAsAlert = true
-            let authentication = frame.authenticated == false ? String(localized: "Debug 未鉴权") : String(localized: "设备鉴权成功")
-            notice(String(localized: "网关已连接"), String(localized: "gateway.connected.detail", defaultValue: "\(authentication) · Mobile protocol v\(frame.protocol ?? 1) · \(frame.clients ?? 1) 个客户端"))
-            for (sessionId, records) in events {
-                enqueueImageAttachments(in: records, sessionId: sessionId)
+            let authentication = payload.authenticated
+                ? String(localized: "设备鉴权成功")
+                : String(localized: "Debug 未鉴权")
+            notice(
+                String(localized: "网关已连接"),
+                String(
+                    localized: "gateway.connected.detail",
+                    defaultValue: "\(authentication) · Mobile protocol v\(payload.protocolVersion) · \(payload.clients) 个客户端"
+                )
+            )
+            for (sessionID, records) in events {
+                enqueueImageAttachments(in: records, sessionId: sessionID)
             }
             refreshRemoteState()
             refreshDefaultConfiguration()
@@ -680,62 +611,101 @@ final class AppStore: ObservableObject {
                     await self.activatePreparedConversation(sessionID: self.selectedSessionId)
                 }
             }
-        case "pong":
-            notice(String(localized: "心跳正常"), frame.at.map { Date(timeIntervalSince1970: $0 / 1000).formatted(date: .omitted, time: .standard) } ?? "pong")
-        case "subscribed":
-            notice(String(localized: "notice.event.subscription", defaultValue: "事件订阅"), frame.sessionId.map { String(localized: "events.subscribe.single", defaultValue: "仅接收 \($0.prefix(12))…") } ?? String(localized: "接收全部会话事件"), sessionId: frame.sessionId)
-        case "sent": handleSent(frame)
-        case "event": handleLiveEvent(frame)
-        case "workspaces":
-            workspaces = decodeItems(frame.items, as: GatewayWorkspace.self)
+        case .pong(let timestamp):
+            let detail = timestamp.map {
+                Date(timeIntervalSince1970: $0 / 1_000).formatted(date: .omitted, time: .standard)
+            } ?? "pong"
+            notice(String(localized: "心跳正常"), detail)
+        case .subscribed(let sessionID):
+            let detail = sessionID.map {
+                String(localized: "events.subscribe.single", defaultValue: "仅接收 \($0.prefix(12))…")
+            } ?? String(localized: "接收全部会话事件")
+            notice(
+                String(localized: "notice.event.subscription", defaultValue: "事件订阅"),
+                detail,
+                sessionId: sessionID
+            )
+        }
+    }
+
+    private func handleContentRoute(_ route: GatewayContentRoute) {
+        switch route {
+        case .sent(let sessionID, let command):
+            handleSent(sessionID: sessionID, command: command)
+        case .liveEvent(let record):
+            merge(record)
+            enqueueImageAttachments(record.event.images ?? [], sessionId: record.sessionId)
+        case .workspaces(let received, let archivedSessionIDs):
+            workspaces = received
             if selectedWorkspaceId == nil || (
                 selectedWorkspaceId != Self.ungroupedWorkspaceID &&
                 !workspaces.contains(where: { $0.id == selectedWorkspaceId })
             ) {
                 selectedWorkspaceId = workspaces.first?.id ?? Self.ungroupedWorkspaceID
             }
-            archivedSessionIds = Set(frame.archivedSessionIds ?? [])
-            notice(String(localized: "notice.workspaces.synced", defaultValue: "工作区已同步"), String(localized: "workspaces.count", defaultValue: "\(workspaces.count) 个工作区"))
-        case "sessions":
-            applyRemoteSessions(decodeItems(frame.items, as: GatewaySessionSummary.self))
+            reduceSessionList(.setArchivedSessionIDs(archivedSessionIDs))
+            notice(
+                String(localized: "notice.workspaces.synced", defaultValue: "工作区已同步"),
+                String(localized: "workspaces.count", defaultValue: "\(workspaces.count) 个工作区")
+            )
+        case .sessions(let received):
+            reduceSessionList(.remoteSessionsReceived(received))
             isRefreshing = false
-            notice(String(localized: "notice.sessions.synced", defaultValue: "会话列表已同步"), String(localized: "sessions.count", defaultValue: "\(sessions.count) 个会话"))
-        case "history": applyHistoryRebased(frame)
-        case "attachment": handleImageAttachment(frame)
-        case "search":
-            searchResults = decodeItems(frame.items, as: GatewaySearchItem.self)
-            notice(String(localized: "notice.search.finished", defaultValue: "搜索完成"), String(localized: "search.results.count", defaultValue: "\(searchResults.count) 条结果\(frame.hasMore == true ? String(localized: "search.results.more", defaultValue: "，还有更多") : "")"))
-        case "host":
-            hostSnapshot = GatewayHostSnapshot(version: frame.version, cwd: frame.cwd, provider: frame.provider, model: frame.model, attachedSessions: frame.attachedSessions, canOpenPath: frame.canOpenPath)
-            notice(String(localized: "宿主信息"), [frame.version, frame.provider, frame.model].compactMap { $0 }.joined(separator: " · "))
-        case "agent-presets":
-            agentPresets = frame.presets ?? []
-            agentPresetsAuthorable = frame.authorable ?? false
-            agentPresetsHasDocument = frame.hasDocument ?? false
-            if agentPresetDefault == nil {
-                agentPresetDefault = agentPresets.first(where: \.isDefault)?.id
+            notice(
+                String(localized: "notice.sessions.synced", defaultValue: "会话列表已同步"),
+                String(localized: "sessions.count", defaultValue: "\(sessions.count) 个会话")
+            )
+        case .history(let payload):
+            applyHistoryRebased(payload)
+        case .attachment(let payload):
+            handleImageAttachment(payload)
+        case .search(let received, let hasMore):
+            searchResults = received
+            notice(
+                String(localized: "notice.search.finished", defaultValue: "搜索完成"),
+                String(
+                    localized: "search.results.count",
+                    defaultValue: "\(received.count) 条结果\(hasMore ? String(localized: "search.results.more", defaultValue: "，还有更多") : "")"
+                )
+            )
+        case .host(let snapshot):
+            hostSnapshot = snapshot
+            notice(
+                String(localized: "宿主信息"),
+                [snapshot.version, snapshot.provider, snapshot.model].compactMap { $0 }.joined(separator: " · ")
+            )
+        }
+    }
+
+    private func handleControlRoute(_ route: GatewayControlRoute) {
+        switch route {
+        case .action(let action, let finishRequest):
+            reduceSessionControl(action)
+            if let finishRequest {
+                if Self.defaultConfigurationRequestKinds.contains(finishRequest) {
+                    finishDefaultConfigurationRequest(finishRequest)
+                } else {
+                    finishSessionControlRequest(finishRequest)
+                }
             }
-            finishDefaultConfigurationRequest("agent-presets")
-        case "defaults":
-            agentPresetDefault = frame.agentPresetDefault
-            permissionDefault = frame.permissionDefault
-            finishDefaultConfigurationRequest("defaults")
-        case "default-model":
-            defaultModelSelection = frame.selection
-            finishDefaultConfigurationRequest("default-model")
-        case "save-default-model":
-            if let saved = frame.saved {
-                defaultModelSelection = saved
-                notice(String(localized: "默认模型已更新"), [saved.model, saved.reasoningEffort].compactMap { $0 }.joined(separator: " · "))
+        case .saveDefaultModel(let saved):
+            if let saved {
+                reduceSessionControl(.defaultModelReceived(saved))
+                notice(
+                    String(localized: "默认模型已更新"),
+                    [saved.model, saved.reasoningEffort].compactMap { $0 }.joined(separator: " · ")
+                )
             } else {
                 lastError = String(localized: "服务端未确认默认模型更新。")
             }
             finishDefaultConfigurationRequest("save-default-model")
-        case "set-default":
-            if frame.applied == true, let target = frame.target, let value = frame.value {
-                if target == "agent-preset" { agentPresetDefault = value }
-                if target == "permission" { permissionDefault = value }
-                notice(String(localized: "notice.defaults.updated", defaultValue: "默认配置已更新"), String(localized: "defaults.updated.detail", defaultValue: "\(target) · \(value)"))
+        case .setDefault(let applied, let target, let value):
+            if applied, let target, let value {
+                reduceSessionControl(.globalDefaultApplied(target: target, value: value))
+                notice(
+                    String(localized: "notice.defaults.updated", defaultValue: "默认配置已更新"),
+                    String(localized: "defaults.updated.detail", defaultValue: "\(target) · \(value)")
+                )
                 finishDefaultConfigurationRequest("set-default")
                 beginDefaultConfigurationRequest("defaults")
                 gateway.requestDefaults()
@@ -743,86 +713,53 @@ final class AppStore: ObservableObject {
                 finishDefaultConfigurationRequest("set-default")
                 lastError = String(localized: "服务端未确认默认配置更新。")
             }
-        case "models":
-            if let id = frame.sessionId ?? pendingModelsSessionId {
-                modelCatalogs[id] = GatewayModelCatalog(
-                    current: frame.current,
-                    routable: frame.routable ?? false,
-                    groups: frame.groups ?? []
-                )
-            } else if isPendingGlobalModelsRequest {
-                globalModelCatalog = GatewayModelCatalog(
-                    current: nil,
-                    routable: false,
-                    groups: frame.groups ?? []
+        case .modelSelected(let sessionID, let selection):
+            if let sessionID, let selection {
+                reduceSessionControl(.modelSelected(sessionID: sessionID, selection: selection))
+                notice(
+                    String(localized: "模型已切换"),
+                    [selection.model, selection.reasoningEffort].compactMap { $0 }.joined(separator: " · "),
+                    sessionId: sessionID
                 )
             }
-            finishSessionControlRequest("models")
-        case "select-model":
-            if let id = frame.sessionId ?? pendingModelSelectionSessionId,
-               let selected = frame.selected {
-                var catalog = modelCatalogs[id] ?? GatewayModelCatalog(current: nil, routable: true, groups: [])
-                catalog.current = selected
-                modelCatalogs[id] = catalog
-                notice(String(localized: "模型已切换"), [selected.model, selected.reasoningEffort].compactMap { $0 }.joined(separator: " · "), sessionId: id)
-            }
-            pendingModelSelectionSessionId = nil
+            reduceSessionControl(.modelSelectionResolved)
             finishSessionControlRequest("select-model")
-        case "permission-options":
-            if let id = frame.sessionId ?? pendingPermissionOptionsSessionId,
-               let permissions = frame.sessionPermissions {
-                applyPermissions(permissions, sessionId: id, source: "permission-options")
+        case .permissionOptions(let sessionID, let permissions):
+            if let sessionID, let permissions {
+                applyPermissions(permissions, sessionId: sessionID, source: "permission-options")
             }
-            pendingPermissionOptionsSessionId = nil
+            reduceSessionControl(.permissionOptionsResolved)
             finishSessionControlRequest("permission-options")
-        case "permission":
-            if let id = frame.sessionId ?? selectedSessionId, let name = frame.set {
-                if Self.permissionPresets.contains(name) {
-                    var permissions = sessionPermissions[id] ?? GatewaySessionPermissions()
-                    permissions.currentValue = name
-                    permissions.preset = name
-                    sessionPermissions[id] = permissions
-                    notice(String(localized: "权限已切换"), name, sessionId: id)
+        case .permissionSelected(let sessionID, let value):
+            if let sessionID, let value {
+                if Self.permissionPresets.contains(value) {
+                    reduceSessionControl(.permissionSelected(sessionID: sessionID, value: value))
+                    notice(String(localized: "权限已切换"), value, sessionId: sessionID)
                 } else {
-                    reportInvalidPermission(name, sessionId: id, source: "permission")
+                    reportInvalidPermission(value, sessionId: sessionID, source: "permission")
                 }
             }
             finishSessionControlRequest("permission")
-        case "context-usage":
-            if let id = frame.sessionId ?? selectedSessionId {
-                var snapshot = contextSnapshots[id] ?? GatewayContextSnapshot()
-                snapshot.asOfSeq = frame.asOfSeq ?? snapshot.asOfSeq
-                snapshot.tokenUsage = frame.tokenUsage ?? snapshot.tokenUsage
-                snapshot.pressure = frame.contextPressure ?? snapshot.pressure
-                contextSnapshots[id] = snapshot
-            }
-            finishSessionControlRequest("context-usage")
-        case "session-stats":
-            if let id = frame.sessionId ?? selectedSessionId {
-                var snapshot = sessionStatsSnapshots[id] ?? GatewaySessionStatsSnapshot()
-                snapshot.asOfSeq = frame.asOfSeq ?? snapshot.asOfSeq
-                snapshot.stats = frame.sessionStats ?? snapshot.stats
-                // The statistics endpoint uses a nested `tokenUsage.totals`
-                // object, while context-usage returns the older flat shape.
-                if let totals = frame.tokenUsage?.totals {
-                    snapshot.tokenUsage = GatewaySessionTokenUsage(totals: totals)
-                }
-                snapshot.contextPressure = frame.contextPressure ?? snapshot.contextPressure
-                sessionStatsSnapshots[id] = snapshot
-            }
-            finishSessionControlRequest("session-stats")
-        case "directories":
+        }
+    }
+
+    private func handleWorkspaceRoute(_ route: GatewayWorkspaceRoute) {
+        switch route {
+        case .directories(let path, let home, let crumbs, let entries):
             directoryIsLoading = false
-            directoryPath = frame.path
-            directoryHome = frame.home
-            directoryCrumbs = frame.crumbs ?? []
-            directoryEntries = frame.entries ?? []
-            notice(String(localized: "目录已加载"), String(localized: "directory.loaded.detail", defaultValue: "\(frame.path ?? "") · \(directoryEntries.count) 项"))
-        case "directory-create":
+            directoryPath = path
+            directoryHome = home
+            directoryCrumbs = crumbs
+            directoryEntries = entries
+            notice(
+                String(localized: "目录已加载"),
+                String(localized: "directory.loaded.detail", defaultValue: "\(path ?? "") · \(entries.count) 项")
+            )
+        case .directoryCreated(let path):
             directoryCreationIsLoading = false
             let parentPath = pendingDirectoryCreationParentPath
             pendingDirectoryCreationParentPath = nil
-            if let path = frame.path {
+            if let path {
                 createdDirectoryPathToReveal = path
                 notice(String(localized: "文件夹已创建"), path)
             }
@@ -832,154 +769,138 @@ final class AppStore: ObservableObject {
             if let parentPath {
                 browseDirectories(path: parentPath)
             }
-        case "workspace-create":
+        case .workspaceCreated(let workspace, let created):
             workspaceCreationIsLoading = false
-            if let workspace = frame.workspace {
-                if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) { workspaces[index] = workspace } else { workspaces.append(workspace) }
-                selectedWorkspaceId = workspace.id
-                notice(frame.created == true ? String(localized: "工作区已创建") : String(localized: "工作区已存在"), workspace.path)
-                refreshRemoteState()
+            guard let workspace else { return }
+            if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) {
+                workspaces[index] = workspace
+            } else {
+                workspaces.append(workspace)
             }
-        case "question-requested":
-            handleQuestionRequested(frame)
-        case "question-response":
-            handleQuestionResponse(frame)
-        case "question-resolved":
-            handleQuestionResolved(frame)
-        case "error":
-            waitingForNewSession = false
-            if frame.requestType == "directories" { directoryIsLoading = false }
-            if frame.requestType == "directory-create" {
-                directoryCreationIsLoading = false
-                pendingDirectoryCreationParentPath = nil
-            }
-            if frame.requestType == "workspace-create" { workspaceCreationIsLoading = false }
-            if let requestType = frame.requestType,
-               ["agent-presets", "defaults", "default-model", "set-default", "save-default-model"].contains(requestType) {
-                finishDefaultConfigurationRequest(requestType)
-            }
-            if frame.requestType == "history", let id = frame.sessionId ?? pendingHistorySessionId {
-                finishHistoryLoading(id)
-            }
-            let detail = [frame.code, frame.message].compactMap { $0 }.joined(separator: ": ")
-            if let requestType = frame.requestType,
-               ["question-answer", "question-cancel"].contains(requestType),
-               let rpcId = frame.rpcId ?? pendingQuestionRequests.first(where: { $0.sessionId == frame.sessionId })?.rpcId {
-                questionRequestStatuses[rpcId] = .rejected(detail.isEmpty ? String(localized: "服务端拒绝了问题响应。") : detail)
-            }
-            let failedRequest = frame.requestType ?? frame.code.flatMap(sessionControlKind(from:)) ?? frame.message.flatMap(sessionControlKind(from:))
-            if let failedRequest { finishSessionControlRequest(failedRequest) }
-            if frame.requestType == nil, failedRequest == nil {
-                // A malformed gateway error cannot be correlated safely. Stop
-                // all composer spinners and surface the error instead.
-                for kind in Array(sessionControlLoadingKinds) { finishSessionControlRequest(kind) }
-            }
-            lastError = detail
-            notice(String(localized: "request.failed.title", defaultValue: "请求失败\(frame.requestType.map { " · \($0)" } ?? "")"), detail, sessionId: frame.sessionId, isError: true)
-        default: notice(String(localized: "未知网关响应"), frame.kind)
+            selectedWorkspaceId = workspace.id
+            notice(
+                created ? String(localized: "工作区已创建") : String(localized: "工作区已存在"),
+                workspace.path
+            )
+            refreshRemoteState()
         }
     }
 
-    private func handleQuestionRequested(_ frame: GatewayFrame) {
-        guard let rpcId = frame.rpcId,
-              !rpcId.isEmpty,
-              let sessionId = frame.sessionId,
-              !sessionId.isEmpty,
-              let questions = frame.questions,
-              !questions.isEmpty else {
-            notice(String(localized: "问题请求无效"), String(localized: "缺少 rpcId、sessionId 或 questions。"), sessionId: frame.sessionId, isError: true)
-            return
-        }
-        let request = GatewayPendingQuestionRequest(
-            rpcId: rpcId,
-            sessionId: sessionId,
-            questions: questions,
-            replay: frame.replay == true
-        )
-        if let index = pendingQuestionRequests.firstIndex(where: { $0.rpcId == rpcId }) {
-            pendingQuestionRequests[index] = request
-        } else {
-            pendingQuestionRequests.append(request)
-            questionRequestStatuses[rpcId] = .idle
-        }
-        notice(
-            frame.replay == true ? String(localized: "待回答问题已恢复") : String(localized: "Agent 正在等待回答"),
-            questions.first?.question ?? String(localized: "请回答 Agent 的问题"),
-            sessionId: sessionId
-        )
-    }
-
-    private func handleQuestionResponse(_ frame: GatewayFrame) {
-        guard let rpcId = frame.rpcId else { return }
-        let action = GatewayQuestionAction(rawValue: frame.action ?? "") ?? .answer
-        if frame.accepted == true {
-            questionRequestStatuses[rpcId] = .accepted(action)
-            return
-        }
-        let reason = frame.reason ?? "bad-response"
-        if reason == "not-pending" {
-            if let request = pendingQuestionRequests.first(where: { $0.rpcId == rpcId }) {
-                notice(String(localized: "问题已在其他端处理"), String(localized: "当前响应未生效。"), sessionId: request.sessionId)
+    private func handleQuestionRoute(_ route: GatewayQuestionRoute) {
+        switch route {
+        case .requested(let action, let sessionID, let preview, let replay):
+            reduceQuestion(action)
+            notice(
+                replay ? String(localized: "待回答问题已恢复") : String(localized: "Agent 正在等待回答"),
+                preview.isEmpty ? String(localized: "请回答 Agent 的问题") : preview,
+                sessionId: sessionID
+            )
+        case .invalidRequest(let sessionID):
+            notice(
+                String(localized: "问题请求无效"),
+                String(localized: "缺少 rpcId、sessionId 或 questions。"),
+                sessionId: sessionID,
+                isError: true
+            )
+        case .response(let action, let rpcID, let wasNotPending):
+            if wasNotPending,
+               let request = pendingQuestionRequests.first(where: { $0.rpcId == rpcID }) {
+                notice(
+                    String(localized: "问题已在其他端处理"),
+                    String(localized: "当前响应未生效。"),
+                    sessionId: request.sessionId
+                )
             }
-            pendingQuestionRequests.removeAll { $0.rpcId == rpcId }
-            questionRequestStatuses[rpcId] = nil
-        } else {
-            questionRequestStatuses[rpcId] = .rejected(String(localized: "q.rejected.server-refused", defaultValue: "服务端未接受答案（\(reason)），请检查后重试。"))
+            reduceQuestion(action)
+        case .resolved(let action, let rpcID, let sessionID, let cancelled):
+            let pendingSessionID = pendingQuestionRequests.first { $0.rpcId == rpcID }?.sessionId
+            reduceQuestion(action)
+            let outcome = cancelled ? String(localized: "已跳过") : String(localized: "已提交")
+            notice(
+                String(localized: "q.outcome.title", defaultValue: "Agent 问题\(outcome)"),
+                String(localized: "等待 Agent 继续执行。"),
+                sessionId: sessionID ?? pendingSessionID
+            )
         }
     }
 
-    private func handleQuestionResolved(_ frame: GatewayFrame) {
-        guard let rpcId = frame.rpcId else { return }
-        let request = pendingQuestionRequests.first { $0.rpcId == rpcId }
-        pendingQuestionRequests.removeAll { $0.rpcId == rpcId }
-        questionRequestStatuses[rpcId] = nil
-        let outcome = frame.outcome == "cancelled" ? String(localized: "已跳过") : String(localized: "已提交")
-        notice(String(localized: "q.outcome.title", defaultValue: "Agent 问题\(outcome)"), String(localized: "等待 Agent 继续执行。"), sessionId: frame.sessionId ?? request?.sessionId)
-    }
-
-    private func handleSent(_ frame: GatewayFrame) {
-        guard let id = frame.sessionId else { return }
-        if userInitiatedAgentWorkIsActive, backgroundAgentSessionID == nil {
-            backgroundAgentSessionID = id
-        }
-        if selectedSessionId == nil { selectedSessionId = id }
+    private func handleFailure(_ payload: GatewayFailurePayload) {
         waitingForNewSession = false
-        upsertSession(id: id, title: L10n.newSessionPlaceholderTitle)
-        if let index = sessions.firstIndex(where: { $0.id == id }) {
-            sessions[index].agentPreset = agentPresetDefault
+        if payload.requestType == "directories" { directoryIsLoading = false }
+        if payload.requestType == "directory-create" {
+            directoryCreationIsLoading = false
+            pendingDirectoryCreationParentPath = nil
         }
-        notice(frame.command == nil ? String(localized: "消息已发送") : String(localized: "命令已执行"), frame.command?.displayText ?? String(localized: "session.preview.id", defaultValue: "\(id.prefix(12))…"), sessionId: id)
-        gateway.subscribe(sessionId: id)
+        if payload.requestType == "workspace-create" { workspaceCreationIsLoading = false }
+        if let requestType = payload.requestType,
+           Self.defaultConfigurationRequestKinds.contains(requestType) {
+            finishDefaultConfigurationRequest(requestType)
+        }
+        if payload.requestType == "history",
+           let sessionID = payload.sessionID ?? historyState.pendingSessionID {
+            finishHistoryLoading(sessionID)
+        }
+        let detail = [payload.code, payload.message].compactMap { $0 }.joined(separator: ": ")
+        if let requestType = payload.requestType,
+           ["question-answer", "question-cancel"].contains(requestType),
+           let rpcID = payload.rpcID
+                ?? pendingQuestionRequests.first(where: { $0.sessionId == payload.sessionID })?.rpcId {
+            reduceQuestion(.requestFailed(rpcID: rpcID, message: detail))
+        }
+        let failedRequest = payload.requestType
+            ?? payload.code.flatMap(sessionControlKind(from:))
+            ?? payload.message.flatMap(sessionControlKind(from:))
+        if let failedRequest { finishSessionControlRequest(failedRequest) }
+        if payload.requestType == nil, failedRequest == nil {
+            for kind in Array(sessionControlLoadingKinds) { finishSessionControlRequest(kind) }
+        }
+        lastError = detail
+        notice(
+            String(
+                localized: "request.failed.title",
+                defaultValue: "请求失败\(payload.requestType.map { " · \($0)" } ?? "")"
+            ),
+            detail,
+            sessionId: payload.sessionID,
+            isError: true
+        )
+    }
+
+    private func handleSent(sessionID: String, command: JSONValue?) {
+        backgroundExecutionController.associateSessionIfNeeded(sessionID)
+        waitingForNewSession = false
+        reduceSessionList(.messageSent(sessionID: sessionID, agentPreset: agentPresetDefault))
+        notice(
+            command == nil ? String(localized: "消息已发送") : String(localized: "命令已执行"),
+            command?.displayText
+                ?? String(localized: "session.preview.id", defaultValue: "\(sessionID.prefix(12))…"),
+            sessionId: sessionID
+        )
+        gateway.subscribe(sessionId: sessionID)
         gateway.requestSessions()
-        refreshSessionControls(for: id)
+        refreshSessionControls(for: sessionID)
     }
-    private func handleLiveEvent(_ frame: GatewayFrame) {
-        guard let id = frame.sessionId, let seq = frame.seq, let time = frame.time, let event = frame.event else { return }
-        merge(SessionEvent(sessionId: id, seq: seq, time: time, event: event))
-        enqueueImageAttachments(event.images ?? [], sessionId: id)
-    }
-    private func applyHistoryRebased(_ frame: GatewayFrame) {
-        guard let id = frame.sessionId ?? pendingHistorySessionId ?? selectedSessionId else { return }
+    private func applyHistoryRebased(_ payload: GatewayHistoryPayload) {
+        guard let id = payload.sessionID else { return }
         // A timed-out request may still produce a late response. It must not
         // overwrite newer live content after the app has already fallen back
         // to subscription-driven incremental rendering.
-        guard historyLoadingSessionIds.contains(id), historyRequestTokens[id] != nil else { return }
-        applyHistoryProjections(frame.projections, sessionId: id)
-        let rawEvents = frame.events ?? []
-        let pageEventOffset = historyLoadedEventCounts[id, default: 0]
+        guard historyLoadingSessionIds.contains(id), historySyncEngine.isActive(sessionID: id) else { return }
+        applyHistoryProjections(payload.projections, sessionId: id)
+        let rawEvents = payload.rawEvents
         // Invalidate the network timeout; processing now has its own token.
-        let processingToken = UUID()
-        historyRequestTokens[id] = processingToken
-        historyLoadProgress[id] = HistoryLoadProgress(
-            loaded: pageEventOffset,
-            total: frame.hasMore == true ? nil : pageEventOffset + rawEvents.count
-        )
+        let processingToken = historySyncEngine.beginProcessing(sessionID: id)
+        _ = reduceHistory(.processingStarted(
+            sessionID: id,
+            rawEventCount: rawEvents.count,
+            hasMore: payload.hasMore
+        ))
 
         Task { [weak self] in
             let normalized = await Task.detached(priority: .userInitiated) {
                 rawEvents.map { $0.normalized(sessionId: id) }
             }.value
-            guard let self, self.historyRequestTokens[id] == processingToken else { return }
+            guard let self, self.historySyncEngine.isCurrent(processingToken, sessionID: id) else { return }
 
             // Build history beside the installed live projector. If a rare
             // out-of-order live event lands below the candidate watermark while
@@ -993,7 +914,7 @@ final class AppStore: ObservableObject {
                 var rebase = await Task.detached(priority: .userInitiated) {
                     ConversationHistoryRebase.build(history: normalized, current: rebaseSource)
                 }.value
-                guard self.historyRequestTokens[id] == processingToken else { return }
+                guard self.historySyncEngine.isCurrent(processingToken, sessionID: id) else { return }
 
                 // Only duplicate/out-of-order live mutations advance this
                 // epoch. Normal chunks append concurrently without invalidating
@@ -1018,116 +939,41 @@ final class AppStore: ObservableObject {
                 break
             }
 
-            self.historyLoadProgress[id] = HistoryLoadProgress(
-                loaded: pageEventOffset + normalized.count,
-                total: frame.hasMore == true ? nil : pageEventOffset + normalized.count
-            )
-
-            self.historyLoadedEventCounts[id] = pageEventOffset + normalized.count
-            self.historyLoadedByteCounts[id, default: 0] += frame.bytes ?? 0
-            self.historyHasMore[id] = frame.hasMore ?? false
-            self.historyBatchPageCounts[id, default: 0] += 1
-
-            if frame.hasMore == true, let earliestLocalSeq = self.events[id]?.first?.seq {
-                // A latest-tail refresh can run while many older pages are
-                // already cached. Continue from the oldest local event rather
-                // than rewinding to page three and downloading cached pages
-                // again on the next upward pagination request.
-                self.historyNextBeforeSeq[id] = earliestLocalSeq
-            } else if let cursor = frame.nextBeforeSeq {
-                self.historyNextBeforeSeq[id] = cursor
-            } else if frame.hasMore != true {
-                self.historyNextBeforeSeq[id] = nil
-            }
-
-            if frame.hasMore == true,
-               self.historyBatchPageCounts[id, default: 0] < Self.historyPagesPerBatch {
-                guard let cursor = frame.nextBeforeSeq else {
-                    let message = String(localized: "history.pagination.stopped.hasmore", defaultValue: "网关返回 hasMore:true，但缺少 nextBeforeSeq，已停止自动续页。")
-                    self.historyHasMore[id] = false
-                    self.historyNextBeforeSeq[id] = nil
-                    self.finishHistoryLoading(id)
-                    self.lastError = message
-                    self.notice(String(localized: "notice.history.pagination-failed", defaultValue: "历史记录分页失败"), message, sessionId: id, isError: true)
-                    return
-                }
-                var seenCursors = self.historyPaginationCursors[id, default: []]
-                guard !seenCursors.contains(cursor) else {
-                    let message = String(localized: "history.cursor.loop", defaultValue: "网关重复返回历史游标 \(cursor)，已停止自动续页以避免循环。")
-                    self.historyHasMore[id] = false
-                    self.historyNextBeforeSeq[id] = nil
-                    self.finishHistoryLoading(id)
-                    self.lastError = message
-                    self.notice(String(localized: "notice.history.pagination-failed", defaultValue: "历史记录分页失败"), message, sessionId: id, isError: true)
-                    return
-                }
-                seenCursors.insert(cursor)
-                self.historyPaginationCursors[id] = seenCursors
-                self.requestHistoryPage(for: id, beforeSeq: cursor)
-                return
-            }
-
-            let totalEvents = self.historyLoadedEventCounts[id, default: 0]
-            let totalBytes = self.historyLoadedByteCounts[id, default: 0]
-            // Loading the newest batch establishes a tail watermark even when
-            // older pages still exist. Reopening the session can therefore use
-            // the in-memory pages immediately and only refresh when the remote
-            // session has genuinely changed.
-            if self.historyBatchKinds[id] == .latest,
-               let activity = self.sessions.first(where: { $0.id == id })?.lastActivity {
-                self.historySyncedActivityDates[id] = activity
-            }
-            self.finishHistoryLoading(id)
-            let byteDetail = totalBytes > 0 ? " · \(ByteCountFormatter.string(fromByteCount: Int64(totalBytes), countStyle: .file))" : ""
-            let moreDetail = self.historyHasMore[id] == true ? String(localized: "history.swipe.up.hint", defaultValue: " · 向上滑动加载更早记录") : ""
-            self.notice(String(localized: "notice.history.loaded", defaultValue: "历史记录已加载"), String(localized: "history.loaded.detail", defaultValue: "\(totalEvents) 个事件\(byteDetail)\(moreDetail)"), sessionId: id)
+            let result = self.reduceHistory(.pageCommitted(
+                sessionID: id,
+                eventCount: normalized.count,
+                byteCount: payload.byteCount,
+                hasMore: payload.hasMore,
+                nextBeforeSequence: payload.nextBeforeSequence,
+                earliestLocalSequence: self.events[id]?.first?.seq,
+                remoteActivityTimestamp: self.sessions.first(where: { $0.id == id })?.lastActivity.timeIntervalSince1970
+            ))
+            self.handleHistoryResult(result, sessionID: id)
         }
     }
     private func finishHistoryLoading(_ sessionId: String) {
-        historyRequestTokens[sessionId] = nil
-        historyPaginationCursors[sessionId] = nil
-        historyBatchPageCounts[sessionId] = nil
-        historyBatchKinds[sessionId] = nil
-        historyLoadedEventCounts[sessionId] = nil
-        historyLoadedByteCounts[sessionId] = nil
-        historyLoadingSessionIds.remove(sessionId)
-        historyLoadingOlderSessionIds.remove(sessionId)
-        historyLoadProgress[sessionId] = nil
-        if pendingHistorySessionId == sessionId { pendingHistorySessionId = nil }
+        historySyncEngine.finish(sessionID: sessionId)
+        _ = reduceHistory(.cancelled(sessionID: sessionId))
     }
     private func applyHistoryProjections(_ projections: JSONValue?, sessionId: String) {
         guard let values = projections?["values"] else { return }
-        var snapshot = contextSnapshots[sessionId] ?? GatewayContextSnapshot()
-        snapshot.asOfSeq = projections?["asOfSeq"]?.doubleValue.map(Int.init) ?? snapshot.asOfSeq
-        snapshot.tokenUsage = values["tokenUsage"]?.decode(GatewayTokenUsage.self) ?? snapshot.tokenUsage
-        snapshot.pressure = values["contextPressure"]?.decode(GatewayContextPressure.self) ?? snapshot.pressure
-        snapshot.breakdown = values["contextBreakdown"]?.decode(GatewayContextBreakdown.self) ?? snapshot.breakdown
-        contextSnapshots[sessionId] = snapshot
+        reduceSessionControl(.contextReceived(
+            sessionID: sessionId,
+            asOfSequence: projections?["asOfSeq"]?.doubleValue.map(Int.init),
+            tokenUsage: values["tokenUsage"]?.decode(GatewayTokenUsage.self),
+            pressure: values["contextPressure"]?.decode(GatewayContextPressure.self),
+            breakdown: values["contextBreakdown"]?.decode(GatewayContextBreakdown.self)
+        ))
         if let permissions = values["permissions"]?.decode(GatewaySessionPermissions.self) {
             applyPermissions(permissions, sessionId: sessionId, source: "history.projections")
         }
     }
     private func merge(_ record: SessionEvent) {
         let sessionId = record.sessionId
-        if let lastSeq = events[sessionId]?.last?.seq, record.seq > lastSeq {
-            // Live gateway traffic is normally strictly seq-ascending. Keep
-            // that hot path O(1): the previous implementation copied and
-            // sorted the complete event log for every token delta.
-            events[sessionId, default: []].append(record)
-        } else {
-            var list = events[sessionId, default: []]
-            var low = 0
-            var high = list.count
-            while low < high {
-                let middle = (low + high) / 2
-                if list[middle].seq < record.seq { low = middle + 1 } else { high = middle }
-            }
-            if low < list.count, list[low].seq == record.seq {
-                list[low] = record
-            } else {
-                list.insert(record, at: low)
-            }
-            events[sessionId] = list
+        var sessionEvents = events[sessionId, default: []]
+        let mergeResult = HistoryEventMerger.merge(record, into: &sessionEvents)
+        events[sessionId] = sessionEvents
+        if mergeResult.replacedOrInsertedOutOfOrder {
             // A duplicate or out-of-order frame may fall behind lastSeq and
             // therefore cannot be folded safely into the append-only cache.
             conversationProjectors[sessionId] = nil
@@ -1137,9 +983,10 @@ final class AppStore: ObservableObject {
         // Once the cache has been fully established, subscribed live events are
         // already the newest local content. Advance the watermark so reopening
         // the session does not download the same history again.
-        if let syncedActivity = historySyncedActivityDates[sessionId] {
-            historySyncedActivityDates[sessionId] = max(syncedActivity, record.date)
-        }
+        _ = reduceHistory(.liveEventReceived(
+            sessionID: sessionId,
+            activityTimestamp: record.date.timeIntervalSince1970
+        ))
         scheduleConversationProjection(for: sessionId)
     }
 
@@ -1149,41 +996,40 @@ final class AppStore: ObservableObject {
 
     private func enqueueImageAttachments(_ attachments: [GatewayImageAttachment], sessionId: String) {
         guard supportsImages else { return }
-        for attachment in attachments {
-            guard imageAttachmentCache.data(for: attachment.id) == nil else { continue }
-            guard !queuedImageAttachmentIDs.contains(attachment.id),
-                  !inFlightImageAttachmentIDs.contains(attachment.id) else { continue }
-            queuedImageAttachmentIDs.insert(attachment.id)
-            imageAttachmentQueue.append((sessionId, attachment))
+        let requests = attachmentLoader.enqueue(attachments, sessionID: sessionId) {
+            imageAttachmentCache.data(for: $0) != nil
         }
-        pumpImageAttachmentQueue()
+        requestImageAttachments(requests)
     }
 
-    private func pumpImageAttachmentQueue() {
-        while inFlightImageAttachmentIDs.count < 3, !imageAttachmentQueue.isEmpty {
-            let request = imageAttachmentQueue.removeFirst()
-            queuedImageAttachmentIDs.remove(request.attachment.id)
-            guard imageAttachmentCache.data(for: request.attachment.id) == nil else { continue }
-            inFlightImageAttachmentIDs.insert(request.attachment.id)
+    private func requestImageAttachments(_ requests: [AttachmentLoadRequest]) {
+        for request in requests {
             gateway.requestAttachment(
-                sessionId: request.sessionId,
+                sessionId: request.sessionID,
                 attachmentId: request.attachment.id
             )
         }
     }
 
-    private func handleImageAttachment(_ frame: GatewayFrame) {
-        guard let attachment = frame.attachment else { return }
-        inFlightImageAttachmentIDs.remove(attachment.id)
-        defer { pumpImageAttachmentQueue() }
-        guard let encoded = frame.data,
+    private func handleImageAttachment(_ payload: GatewayAttachmentPayload) {
+        let attachment = payload.attachment
+        let nextRequests = attachmentLoader.complete(attachmentID: attachment.id) {
+            imageAttachmentCache.data(for: $0) != nil
+        }
+        defer { requestImageAttachments(nextRequests) }
+        guard let encoded = payload.base64Data,
               let decoded = Data(base64Encoded: encoded),
               decoded.count == attachment.bytes else {
-            notice(String(localized: "notice.image.load-failed", defaultValue: "图片加载失败"), String(localized: "image.invalid.base64", defaultValue: "附件 \(attachment.id.prefix(12))… 的 Base64 或字节数无效。"), sessionId: frame.sessionId, isError: true)
+            notice(
+                String(localized: "notice.image.load-failed", defaultValue: "图片加载失败"),
+                String(localized: "image.invalid.base64", defaultValue: "附件 \(attachment.id.prefix(12))… 的 Base64 或字节数无效。"),
+                sessionId: payload.sessionID,
+                isError: true
+            )
             return
         }
         imageAttachmentCache.store(decoded, for: attachment.id)
-        guard let sessionId = frame.sessionId,
+        guard let sessionId = payload.sessionID,
               let items = renderedConversationItems[sessionId] else { return }
         // The row revision also includes cache presence, so this publication
         // replaces only rows whose attachment just became renderable.
@@ -1242,39 +1088,10 @@ final class AppStore: ObservableObject {
             conversationContentSessionIds.insert(sessionId)
         }
     }
-    private func applyRemoteSessions(_ remote: [GatewaySessionSummary]) {
-        for item in remote where !archivedSessionIds.contains(item.sessionId) {
-            let fallback = item.cwd.map { URL(fileURLWithPath: $0).lastPathComponent }.flatMap { $0.isEmpty ? nil : $0 }
-            let title = item.projectedTitle ?? fallback ?? L10n.remoteSessionTitle(item.sessionId.prefix(8))
-            let date = Date(timeIntervalSince1970: item.updatedAt > 10_000_000_000 ? item.updatedAt / 1000 : item.updatedAt)
-            if let index = sessions.firstIndex(where: { $0.id == item.sessionId }) {
-                sessions[index].title = title
-                sessions[index].lastActivity = date
-                sessions[index].isRunning = item.running
-                sessions[index].agentPreset = item.agentPreset ?? sessions[index].agentPreset
-            } else {
-                sessions.append(SessionSummary(
-                    id: item.sessionId,
-                    title: item.blank ? L10n.blankSessionTitle(item.sessionId.prefix(8)) : title,
-                    lastActivity: date,
-                    isRunning: item.running,
-                    hasUnread: false,
-                    agentPreset: item.agentPreset
-                ))
-            }
-        }
-        sessions.removeAll { archivedSessionIds.contains($0.id) }
-        sessions.sort { $0.lastActivity > $1.lastActivity }
-    }
     private func applyEvent(_ record: SessionEvent) {
         let event = record.event
-        if event.type == "turn/end",
-           userInitiatedAgentWorkIsActive,
-           backgroundAgentSessionID == record.sessionId {
-            outstandingUserInitiatedTurns = max(0, outstandingUserInitiatedTurns - 1)
-            if outstandingUserInitiatedTurns == 0 {
-                finishAgentBackgroundExecution()
-            }
+        if event.type == "turn/end" {
+            backgroundExecutionController.turnEnded(sessionID: record.sessionId)
         }
         if event.type == "turn/end", record.sessionId == selectedSessionId {
             beginSessionControlRequest("context-usage")
@@ -1285,10 +1102,7 @@ final class AppStore: ObservableObject {
         if event.type == "permission/preset",
            let preset = event.raw?["preset"]?.stringValue ?? event.raw?["name"]?.stringValue {
             if Self.permissionPresets.contains(preset) {
-                var permissions = sessionPermissions[record.sessionId] ?? GatewaySessionPermissions()
-                permissions.currentValue = preset
-                permissions.preset = preset
-                sessionPermissions[record.sessionId] = permissions
+                reduceSessionControl(.permissionSelected(sessionID: record.sessionId, value: preset))
             } else {
                 reportInvalidPermission(preset, sessionId: record.sessionId, source: "permission/preset")
             }
@@ -1297,48 +1111,32 @@ final class AppStore: ObservableObject {
             let provider = config["provider"]?.stringValue
             let model = config["model"]?.stringValue
             if let provider, let model {
-                var catalog = modelCatalogs[record.sessionId] ?? GatewayModelCatalog(current: nil, routable: true, groups: [])
-                catalog.current = GatewayModelSelection(
+                reduceSessionControl(.modelSelected(
+                    sessionID: record.sessionId,
+                    selection: GatewayModelSelection(
                     provider: provider,
                     model: model,
                     reasoningEffort: config["reasoningEffort"]?.stringValue
-                )
-                modelCatalogs[record.sessionId] = catalog
+                    )
+                ))
             }
         }
-        let title: String? = event.type == "user/message" ? event.text.map { String($0.prefix(28)) } : (event.type == "session/title" ? event.text : nil)
-        upsertSession(id: record.sessionId, title: title)
         // Token, reasoning and tool deltas belong exclusively to the session
         // timeline. Updating this @Published array for every packet used to
         // invalidate the complete app hierarchy, re-sort the sidebar, encode
         // it and write UserDefaults while the user was trying to scroll.
-        let updatesSessionMetadata = event.type == "user/message"
-            || event.type == "session/title"
-            || event.type == "turn/start"
-            || event.type == "turn/end"
-            || event.type == "assistant/message"
-        guard updatesSessionMetadata else { return }
-        guard let index = sessions.firstIndex(where: { $0.id == record.sessionId }) else { return }
-        sessions[index].lastActivity = record.date
-        if event.type == "turn/start" { sessions[index].isRunning = true }
-        if event.type == "turn/end" { sessions[index].isRunning = false }
-        if selectedSessionId != record.sessionId { sessions[index].hasUnread = true }
-        sessions.sort { $0.lastActivity > $1.lastActivity }
+        reduceSessionList(.eventReceived(record))
     }
-    private func decodeItems<T: Decodable>(_ items: [JSONValue]?, as type: T.Type) -> [T] { (items ?? []).compactMap { $0.decode(type) } }
     private func notice(_ title: String, _ text: String, sessionId: String? = nil, isError: Bool = false) {
         protocolNotices.append(GatewayNotice(sessionId: sessionId, title: title, text: text, isError: isError))
         if protocolNotices.count > 100 { protocolNotices.removeFirst(protocolNotices.count - 100) }
     }
 
     private func beginSessionControlRequest(_ kind: String) {
-        let token = UUID()
-        sessionControlRequestTokens[kind] = token
-        sessionControlLoadingKinds.insert(kind)
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(12))
-            guard let self, self.sessionControlRequestTokens[kind] == token else { return }
-            self.finishSessionControlRequest(kind)
+        reduceSessionControl(.requestStarted(kind))
+        sessionControlRequestTracker.begin(kind, timeout: .seconds(12)) { [weak self] in
+            guard let self else { return }
+            self.reduceSessionControl(.requestTimedOut(kind))
             self.lastError = String(localized: "control.request.timeout", defaultValue: "\(kind) 请求超时，请检查 Mobile Gateway。")
         }
     }
@@ -1355,51 +1153,11 @@ final class AppStore: ObservableObject {
             lastError = detail
         }
         presentsNextConnectionFailureAsAlert = true
+        backgroundExecutionController.cancel()
     }
 
     private func beginAgentBackgroundExecution(for sessionID: String?, startsNewTurn: Bool) {
-        if startsNewTurn {
-            outstandingUserInitiatedTurns += 1
-        } else if outstandingUserInitiatedTurns == 0 {
-            // Answering an interactive question resumes the current Agent
-            // turn. Treat it as one outstanding turn when the original send
-            // happened before this process began tracking background work.
-            outstandingUserInitiatedTurns = 1
-        }
-        userInitiatedAgentWorkIsActive = true
-        if let sessionID {
-            backgroundAgentSessionID = sessionID
-        }
-        guard agentBackgroundTask == .invalid else { return }
-
-        agentBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Complete DSH Agent Turn") { [weak self] in
-            guard let self else { return }
-            self.expireAgentBackgroundExecution()
-        }
-    }
-
-    private func finishAgentBackgroundExecution() {
-        userInitiatedAgentWorkIsActive = false
-        outstandingUserInitiatedTurns = 0
-        backgroundAgentSessionID = nil
-        endAgentBackgroundTask()
-        if applicationIsInBackground {
-            gateway.backgroundExecutionDidExpire()
-        }
-    }
-
-    private func expireAgentBackgroundExecution() {
-        endAgentBackgroundTask()
-        if applicationIsInBackground {
-            gateway.backgroundExecutionDidExpire()
-        }
-    }
-
-    private func endAgentBackgroundTask() {
-        let identifier = agentBackgroundTask
-        guard identifier != .invalid else { return }
-        agentBackgroundTask = .invalid
-        UIApplication.shared.endBackgroundTask(identifier)
+        backgroundExecutionController.begin(sessionID: sessionID, startsNewTurn: startsNewTurn)
     }
 
     private func resetOutstandingRequests() {
@@ -1415,12 +1173,8 @@ final class AppStore: ObservableObject {
     }
 
     private func finishSessionControlRequest(_ kind: String) {
-        sessionControlRequestTokens[kind] = nil
-        sessionControlLoadingKinds.remove(kind)
-        if kind == "models" {
-            pendingModelsSessionId = nil
-            isPendingGlobalModelsRequest = false
-        }
+        sessionControlRequestTracker.finish(kind)
+        reduceSessionControl(.requestFinished(kind))
     }
 
     private func setGlobalDefault(target: String, value: String) {
@@ -1433,20 +1187,17 @@ final class AppStore: ObservableObject {
     }
 
     private func beginDefaultConfigurationRequest(_ kind: String) {
-        let token = UUID()
-        defaultConfigurationRequestTokens[kind] = token
-        defaultConfigurationLoadingKinds.insert(kind)
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(12))
-            guard let self, self.defaultConfigurationRequestTokens[kind] == token else { return }
-            self.finishDefaultConfigurationRequest(kind)
+        reduceSessionControl(.defaultConfigurationRequestStarted(kind))
+        defaultConfigurationRequestTracker.begin(kind, timeout: .seconds(12)) { [weak self] in
+            guard let self else { return }
+            self.reduceSessionControl(.defaultConfigurationRequestTimedOut(kind))
             self.lastError = String(localized: "control.request.timeout.v0111", defaultValue: "\(kind) 请求超时，请检查 Mobile Gateway v0.1.11。")
         }
     }
 
     private func finishDefaultConfigurationRequest(_ kind: String) {
-        defaultConfigurationRequestTokens[kind] = nil
-        defaultConfigurationLoadingKinds.remove(kind)
+        defaultConfigurationRequestTracker.finish(kind)
+        reduceSessionControl(.defaultConfigurationRequestFinished(kind))
     }
 
     private func applyPermissions(_ incoming: GatewaySessionPermissions, sessionId: String, source: String) {
@@ -1455,9 +1206,7 @@ final class AppStore: ObservableObject {
             reportInvalidPermission(current, sessionId: sessionId, source: source)
             return
         }
-        var permissions = incoming
-        permissions.options = (incoming.options ?? []).filter { Self.permissionPresets.contains($0.value) }
-        sessionPermissions[sessionId] = permissions
+        reduceSessionControl(.permissionsReceived(sessionID: sessionId, permissions: incoming))
     }
 
     private func reportInvalidPermission(_ value: String, sessionId: String, source: String) {
@@ -1472,49 +1221,130 @@ final class AppStore: ObservableObject {
         ["permission-options", "select-model", "context-usage", "session-stats", "permission", "models"]
             .first { value.localizedCaseInsensitiveContains($0) }
     }
-    private func upsertSession(id: String, title: String?) {
-        if let index = sessions.firstIndex(where: { $0.id == id }) {
-            if let title, !title.isEmpty, sessions[index].title == L10n.newSessionPlaceholderTitle || sessions[index].title.hasPrefix(L10n.remoteSessionTitlePrefix) { sessions[index].title = title }
-        } else {
-            sessions.insert(SessionSummary(id: id, title: title ?? L10n.remoteSessionTitle(id.prefix(8)), lastActivity: .now, isRunning: false, hasUnread: false), at: 0)
+    private func markRead(_ id: String) {
+        reduceSessionList(.markRead(id))
+    }
+    private func reduceSessionList(_ action: SessionListAction) {
+        var state = SessionListState(
+            sessions: sessions,
+            archivedSessionIDs: archivedSessionIds,
+            selectedSessionID: selectedSessionId
+        )
+        SessionListReducer.reduce(state: &state, action: action)
+        if state.sessions != sessions {
+            sessions = state.sessions
+            persistSessions()
+        }
+        if state.archivedSessionIDs != archivedSessionIds {
+            archivedSessionIds = state.archivedSessionIDs
+        }
+        if state.selectedSessionID != selectedSessionId {
+            selectedSessionId = state.selectedSessionID
         }
     }
-
-    private func markRead(_ id: String) {
-        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
-        // Mutating an already-false array element still triggers `sessions`'
-        // didSet, which encodes the complete list and writes UserDefaults on
-        // the main actor. Avoid paying that cost on every navigation push.
-        guard sessions[index].hasUnread else { return }
-        sessions[index].hasUnread = false
+    private func reduceQuestion(_ action: QuestionAction) {
+        var state = QuestionState(
+            pendingRequests: pendingQuestionRequests,
+            requestStatuses: questionRequestStatuses
+        )
+        QuestionReducer.reduce(state: &state, action: action)
+        if state.pendingRequests != pendingQuestionRequests {
+            pendingQuestionRequests = state.pendingRequests
+        }
+        if state.requestStatuses != questionRequestStatuses {
+            questionRequestStatuses = state.requestStatuses
+        }
+    }
+    @discardableResult
+    private func reduceHistory(_ action: HistoryAction) -> HistoryResult {
+        let result = HistoryReducer.reduce(state: &historyState, action: action)
+        let hasMore = historyState.sessions.mapValues(\.hasMore)
+        let loading = Set(historyState.sessions.compactMap { $0.value.isLoading ? $0.key : nil })
+        let loadingOlder = Set(historyState.sessions.compactMap { $0.value.isLoadingOlder ? $0.key : nil })
+        let progress = Dictionary(uniqueKeysWithValues: historyState.sessions.compactMap { key, value in
+            value.progress.map { (key, $0) }
+        })
+        if hasMore != historyHasMore { historyHasMore = hasMore }
+        if loading != historyLoadingSessionIds { historyLoadingSessionIds = loading }
+        if loadingOlder != historyLoadingOlderSessionIds { historyLoadingOlderSessionIds = loadingOlder }
+        if progress != historyLoadProgress { historyLoadProgress = progress }
+        return result
+    }
+    private func handleHistoryResult(_ result: HistoryResult, sessionID: String) {
+        switch result {
+        case .none:
+            break
+        case .requestPage(let beforeSequence):
+            requestHistoryPage(for: sessionID, beforeSeq: beforeSequence)
+        case .stopped:
+            historySyncEngine.finish(sessionID: sessionID)
+        case .failed(let message):
+            historySyncEngine.finish(sessionID: sessionID)
+            lastError = message
+            notice(String(localized: "notice.history.pagination-failed", defaultValue: "历史记录分页失败"), message, sessionId: sessionID, isError: true)
+        case .completed(let eventCount, let byteCount, let hasMore):
+            historySyncEngine.finish(sessionID: sessionID)
+            let byteDetail = byteCount > 0
+                ? " · \(ByteCountFormatter.string(fromByteCount: Int64(byteCount), countStyle: .file))"
+                : ""
+            let moreDetail = hasMore ? String(localized: "history.swipe.up.hint", defaultValue: " · 向上滑动加载更早记录") : ""
+            notice(
+                String(localized: "notice.history.loaded", defaultValue: "历史记录已加载"),
+                String(localized: "history.loaded.detail", defaultValue: "\(eventCount) 个事件\(byteDetail)\(moreDetail)"),
+                sessionId: sessionID
+            )
+        }
+    }
+    private func reduceSessionControl(_ action: SessionControlAction) {
+        var state = SessionControlState(
+            modelCatalogs: modelCatalogs,
+            globalModelCatalog: globalModelCatalog,
+            sessionPermissions: sessionPermissions,
+            contextSnapshots: contextSnapshots,
+            sessionStatsSnapshots: sessionStatsSnapshots,
+            agentPresets: agentPresets,
+            agentPresetsAuthorable: agentPresetsAuthorable,
+            agentPresetsHasDocument: agentPresetsHasDocument,
+            agentPresetDefault: agentPresetDefault,
+            permissionDefault: permissionDefault,
+            defaultModelSelection: defaultModelSelection,
+            loadingKinds: sessionControlLoadingKinds,
+            defaultConfigurationLoadingKinds: defaultConfigurationLoadingKinds,
+            pendingModelsSessionID: pendingModelsSessionId,
+            isPendingGlobalModelsRequest: isPendingGlobalModelsRequest,
+            pendingModelSelectionSessionID: pendingModelSelectionSessionId,
+            pendingPermissionOptionsSessionID: pendingPermissionOptionsSessionId
+        )
+        SessionControlReducer.reduce(state: &state, action: action)
+        if state.modelCatalogs != modelCatalogs { modelCatalogs = state.modelCatalogs }
+        if state.globalModelCatalog != globalModelCatalog { globalModelCatalog = state.globalModelCatalog }
+        if state.sessionPermissions != sessionPermissions { sessionPermissions = state.sessionPermissions }
+        if state.contextSnapshots != contextSnapshots { contextSnapshots = state.contextSnapshots }
+        if state.sessionStatsSnapshots != sessionStatsSnapshots { sessionStatsSnapshots = state.sessionStatsSnapshots }
+        if state.agentPresets != agentPresets { agentPresets = state.agentPresets }
+        if state.agentPresetsAuthorable != agentPresetsAuthorable {
+            agentPresetsAuthorable = state.agentPresetsAuthorable
+        }
+        if state.agentPresetsHasDocument != agentPresetsHasDocument {
+            agentPresetsHasDocument = state.agentPresetsHasDocument
+        }
+        if state.agentPresetDefault != agentPresetDefault { agentPresetDefault = state.agentPresetDefault }
+        if state.permissionDefault != permissionDefault { permissionDefault = state.permissionDefault }
+        if state.defaultModelSelection != defaultModelSelection {
+            defaultModelSelection = state.defaultModelSelection
+        }
+        if state.loadingKinds != sessionControlLoadingKinds {
+            sessionControlLoadingKinds = state.loadingKinds
+        }
+        if state.defaultConfigurationLoadingKinds != defaultConfigurationLoadingKinds {
+            defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds
+        }
+        pendingModelsSessionId = state.pendingModelsSessionID
+        isPendingGlobalModelsRequest = state.isPendingGlobalModelsRequest
+        pendingModelSelectionSessionId = state.pendingModelSelectionSessionID
+        pendingPermissionOptionsSessionId = state.pendingPermissionOptionsSessionID
     }
     private func persistSessions() {
-        if let data = try? JSONEncoder().encode(sessions) { UserDefaults.standard.set(data, forKey: "gateway.sessions") }
-    }
-}
-
-private enum PairingPayloadError: LocalizedError {
-    case invalidBase64URL
-    case invalidJSON
-    case unsupportedVersion(Int)
-    case invalidEndpoint
-    case invalidCode
-    case expired
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidBase64URL:
-            String(localized: "配对内容不是有效的 Base64URL 字符串。")
-        case .invalidJSON:
-            String(localized: "Base64URL 解码后的内容不是有效的 DeepSeek Harness 配对 JSON。")
-        case .unsupportedVersion(let version):
-            String(localized: "pairing.unsupported.version", defaultValue: "不支持的配对协议版本 \(version)，当前客户端需要 version 2。")
-        case .invalidEndpoint:
-            String(localized: "二维码中的 publicUrl 不是有效的 WebSocket 地址。")
-        case .invalidCode:
-            String(localized: "二维码中的一次性 pairingCode 无效。")
-        case .expired:
-            String(localized: "二维码配对码已经过期，请在 WebUI 中重新生成。")
-        }
+        preferences.saveSessions(sessions)
     }
 }

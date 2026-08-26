@@ -20,6 +20,16 @@ build/
 Package.resolved
 !DeepSeekHarnessMobile.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
+# Gradle / Android local state
+.gradle/
+.kotlin/
+.idea/
+local.properties
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
 # Local environment files
 .env
 .env.*

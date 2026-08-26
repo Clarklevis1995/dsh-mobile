@@ -11,6 +11,18 @@
 		CA11E000000000000000000F /* LocalizationCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000011 /* LocalizationCatalogTests.swift */; };
 		48857E4314868A4DD9F695EA /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BE407E6C6512836EB108990D /* Foundation.framework */; };
 		5ED39F22065A71FC54D755AC /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61A1F439244BA594BF547C92 /* AppStore.swift */; };
+		A9F100000000000000000001 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F100000000000000000002 /* AppPreferences.swift */; };
+		A9F200000000000000000001 /* PairingPayloadParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F200000000000000000002 /* PairingPayloadParser.swift */; };
+		A9F300000000000000000001 /* SessionListReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F300000000000000000002 /* SessionListReducer.swift */; };
+		A9F400000000000000000001 /* QuestionReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F400000000000000000002 /* QuestionReducer.swift */; };
+		A9F500000000000000000001 /* SessionControlReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F500000000000000000002 /* SessionControlReducer.swift */; };
+		A9F600000000000000000001 /* RequestTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F600000000000000000002 /* RequestTracker.swift */; };
+		A9F700000000000000000001 /* HistoryReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F700000000000000000002 /* HistoryReducer.swift */; };
+		A9F800000000000000000001 /* HistorySyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F800000000000000000002 /* HistorySyncEngine.swift */; };
+		A9F900000000000000000001 /* AttachmentLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F900000000000000000002 /* AttachmentLoader.swift */; };
+		A9FA00000000000000000001 /* AgentBackgroundExecutionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */; };
+		A9FB00000000000000000001 /* GatewayFrameRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FB00000000000000000002 /* GatewayFrameRouter.swift */; };
+		A9FC00000000000000000001 /* KMPSharedAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FC00000000000000000002 /* KMPSharedAdapter.swift */; };
 		CA11E0000000000000000001 /* ImageAttachmentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000002 /* ImageAttachmentCache.swift */; };
 		CA11E0000000000000000003 /* ImagePreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000004 /* ImagePreprocessor.swift */; };
 		605DCE79952E970820A95606 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEABECFD00017A6E10B1F4A2 /* ConversationView.swift */; };
@@ -61,6 +73,18 @@
 		A1A0C0000000000000000002 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		5A37B43613D712F252BA91D7 /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		61A1F439244BA594BF547C92 /* AppStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		A9F100000000000000000002 /* AppPreferences.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
+		A9F200000000000000000002 /* PairingPayloadParser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairingPayloadParser.swift; sourceTree = "<group>"; };
+		A9F300000000000000000002 /* SessionListReducer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionListReducer.swift; sourceTree = "<group>"; };
+		A9F400000000000000000002 /* QuestionReducer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuestionReducer.swift; sourceTree = "<group>"; };
+		A9F500000000000000000002 /* SessionControlReducer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionControlReducer.swift; sourceTree = "<group>"; };
+		A9F600000000000000000002 /* RequestTracker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RequestTracker.swift; sourceTree = "<group>"; };
+		A9F700000000000000000002 /* HistoryReducer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryReducer.swift; sourceTree = "<group>"; };
+		A9F800000000000000000002 /* HistorySyncEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistorySyncEngine.swift; sourceTree = "<group>"; };
+		A9F900000000000000000002 /* AttachmentLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AttachmentLoader.swift; sourceTree = "<group>"; };
+		A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentBackgroundExecutionController.swift; sourceTree = "<group>"; };
+		A9FB00000000000000000002 /* GatewayFrameRouter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayFrameRouter.swift; sourceTree = "<group>"; };
+		A9FC00000000000000000002 /* KMPSharedAdapter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KMPSharedAdapter.swift; sourceTree = "<group>"; };
 		CA11E0000000000000000002 /* ImageAttachmentCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImageAttachmentCache.swift; sourceTree = "<group>"; };
 		CA11E0000000000000000004 /* ImagePreprocessor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImagePreprocessor.swift; sourceTree = "<group>"; };
 		65009160A0642089906B54DF /* TrajectoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrajectoryView.swift; sourceTree = "<group>"; };
@@ -103,6 +127,18 @@
 		08B74F3553B9DFCE13B07DE9 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				A9F100000000000000000002 /* AppPreferences.swift */,
+				A9F200000000000000000002 /* PairingPayloadParser.swift */,
+				A9F300000000000000000002 /* SessionListReducer.swift */,
+				A9F400000000000000000002 /* QuestionReducer.swift */,
+				A9F500000000000000000002 /* SessionControlReducer.swift */,
+				A9F600000000000000000002 /* RequestTracker.swift */,
+				A9F700000000000000000002 /* HistoryReducer.swift */,
+				A9F800000000000000000002 /* HistorySyncEngine.swift */,
+				A9F900000000000000000002 /* AttachmentLoader.swift */,
+				A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */,
+				A9FB00000000000000000002 /* GatewayFrameRouter.swift */,
+				A9FC00000000000000000002 /* KMPSharedAdapter.swift */,
 				61A1F439244BA594BF547C92 /* AppStore.swift */,
 				CA11E0000000000000000002 /* ImageAttachmentCache.swift */,
 				CA11E0000000000000000004 /* ImagePreprocessor.swift */,
@@ -230,6 +266,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 62C8D12628E44A75D40278DD /* Build configuration list for PBXNativeTarget "DeepSeekHarnessMobile" */;
 			buildPhases = (
+				A9FC00000000000000000003 /* Build KMP Framework */,
 				83446887BD782B48B6E0170F /* Sources */,
 				2730CFAAB3AB8815D8F74EB4 /* Frameworks */,
 				29B92305AFBD472635128223 /* Resources */,
@@ -317,6 +354,29 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		A9FC00000000000000000003 /* Build KMP Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build KMP Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\ncd \"$SRCROOT\"\nif [ -z \"${ANDROID_HOME:-}\" ]; then\n  export ANDROID_HOME=\"${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}\"\nfi\ncase \"$CONFIGURATION\" in\n  *[Rr]elease*) KMP_BUILD_TYPE=Release ;;\n  *) KMP_BUILD_TYPE=Debug ;;\nesac\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n  case \"$ARCHS\" in\n    *x86_64*) KMP_TARGET=IosX64 ;;\n    *) KMP_TARGET=IosSimulatorArm64 ;;\n  esac\nelse\n  KMP_TARGET=IosArm64\nfi\n\"$SRCROOT/gradlew\" \"\:shared\:link${KMP_BUILD_TYPE}Framework${KMP_TARGET}\" --quiet\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		19F565C157878369B2723E65 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -332,6 +392,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				D3A40BFC0B9C8D4B1C8FAA95 /* DeepSeekHarnessMobileApp.swift in Sources */,
+				A9F100000000000000000001 /* AppPreferences.swift in Sources */,
+				A9F200000000000000000001 /* PairingPayloadParser.swift in Sources */,
+				A9F300000000000000000001 /* SessionListReducer.swift in Sources */,
+				A9F400000000000000000001 /* QuestionReducer.swift in Sources */,
+				A9F500000000000000000001 /* SessionControlReducer.swift in Sources */,
+				A9F600000000000000000001 /* RequestTracker.swift in Sources */,
+				A9F700000000000000000001 /* HistoryReducer.swift in Sources */,
+				A9F800000000000000000001 /* HistorySyncEngine.swift in Sources */,
+				A9F900000000000000000001 /* AttachmentLoader.swift in Sources */,
+				A9FA00000000000000000001 /* AgentBackgroundExecutionController.swift in Sources */,
+				A9FB00000000000000000001 /* GatewayFrameRouter.swift in Sources */,
+				A9FC00000000000000000001 /* KMPSharedAdapter.swift in Sources */,
 				5ED39F22065A71FC54D755AC /* AppStore.swift in Sources */,
 				CA11E0000000000000000001 /* ImageAttachmentCache.swift in Sources */,
 				CA11E0000000000000000003 /* ImagePreprocessor.swift in Sources */,
@@ -370,6 +442,9 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/shared/build/bin/iosArm64/debugFramework";
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=arm64]" = "$(SRCROOT)/shared/build/bin/iosSimulatorArm64/debugFramework";
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=x86_64]" = "$(SRCROOT)/shared/build/bin/iosX64/debugFramework";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.dsh.mobile.ios.tests;
@@ -389,6 +464,9 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				DEVELOPMENT_TEAM = SHVN6YQNQF;
 				GENERATE_INFOPLIST_FILE = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/shared/build/bin/iosArm64/debugFramework";
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=arm64]" = "$(SRCROOT)/shared/build/bin/iosSimulatorArm64/debugFramework";
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=x86_64]" = "$(SRCROOT)/shared/build/bin/iosX64/debugFramework";
 				INFOPLIST_FILE = DeepSeekHarnessMobile/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -409,6 +487,9 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/shared/build/bin/iosArm64/releaseFramework";
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=arm64]" = "$(SRCROOT)/shared/build/bin/iosSimulatorArm64/releaseFramework";
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=x86_64]" = "$(SRCROOT)/shared/build/bin/iosX64/releaseFramework";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.dsh.mobile.ios.tests;
@@ -544,6 +625,9 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				DEVELOPMENT_TEAM = SHVN6YQNQF;
 				GENERATE_INFOPLIST_FILE = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/shared/build/bin/iosArm64/releaseFramework";
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=arm64]" = "$(SRCROOT)/shared/build/bin/iosSimulatorArm64/releaseFramework";
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=x86_64]" = "$(SRCROOT)/shared/build/bin/iosX64/releaseFramework";
 				INFOPLIST_FILE = DeepSeekHarnessMobile/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

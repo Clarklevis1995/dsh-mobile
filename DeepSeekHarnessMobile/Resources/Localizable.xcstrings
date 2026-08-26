@@ -710,7 +710,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gateway returned history cursor %@ repeatedly; stopped auto-pagination to avoid a loop."
+            "value" : "Gateway returned history cursor %lld repeatedly; stopped auto-pagination to avoid a loop."
           }
         },
         "zh-Hans" : {
