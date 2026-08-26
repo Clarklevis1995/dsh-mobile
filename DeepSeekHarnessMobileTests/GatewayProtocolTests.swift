@@ -2,6 +2,7 @@ import XCTest
 import UIKit
 import ImageIO
 import UniformTypeIdentifiers
+import class DeepSeekHarnessShared.SharedQuestionResult
 import class DeepSeekHarnessShared.SharedSessionListResult
 @testable import DeepSeekHarnessMobile
 
@@ -152,7 +153,7 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(record.event.text, "done")
     }
 
-    func testGatewayFrameRouterBuildsQuestionDomainActionsAndRejectsMalformedRequest() throws {
+    func testGatewayFrameRouterBuildsQuestionPayloadAndRejectsMalformedRequest() throws {
         let context = GatewayFrameRoutingContext(
             selectedSessionID: nil,
             pendingHistorySessionID: nil,
@@ -164,16 +165,14 @@ final class GatewayProtocolTests: XCTestCase {
         let valid = try GatewayWireDecoder.decode(Data(
             #"{"kind":"question-requested","rpcId":"rpc-1","sessionId":"s1","replay":true,"questions":[{"id":"q1","question":"继续？"}]}"#.utf8
         ))
-        guard case .question(.requested(let action, let sessionID, let preview, let replay)) =
+        guard case .question(.requested(let request, let sessionID, let preview, let replay)) =
                 GatewayFrameRouter.route(valid, context: context) else {
             return XCTFail("有效问题应生成 requested action")
         }
         XCTAssertEqual(sessionID, "s1")
         XCTAssertEqual(preview, "继续？")
         XCTAssertTrue(replay)
-        var state = QuestionState()
-        QuestionReducer.reduce(state: &state, action: action)
-        XCTAssertEqual(state.pendingRequests.first?.rpcId, "rpc-1")
+        XCTAssertEqual(request.rpcId, "rpc-1")
 
         let invalid = try GatewayWireDecoder.decode(Data(
             #"{"kind":"question-requested","sessionId":"s1","questions":[]}"#.utf8
@@ -252,6 +251,108 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(controller.outstandingTurns, 1)
         controller.turnEnded(sessionID: "s1")
         XCTAssertFalse(controller.keepsConnectionAlive)
+        XCTAssertEqual(application.endedIdentifiers.count, 1)
+        XCTAssertEqual(expirationCount, 1)
+    }
+
+    @MainActor
+    func testQuestionBackgroundAllowanceDoesNotEndAnotherTurnAndAcceptedRestoresTurn() {
+        let application = BackgroundTaskApplicationSpy()
+        let controller = AgentBackgroundExecutionController(application: application)
+
+        controller.begin(sessionID: "s1", startsNewTurn: true)
+        controller.beginQuestionAnswer(rpcID: "rpc-1", sessionID: "s1")
+        controller.releaseQuestionAnswer(rpcID: "rpc-1")
+
+        XCTAssertTrue(controller.isAgentWorkActive)
+        XCTAssertEqual(controller.outstandingTurns, 1)
+        XCTAssertTrue(controller.questionAllowanceSessionIDs.isEmpty)
+        XCTAssertEqual(application.endedIdentifiers.count, 0)
+
+        controller.turnEnded(sessionID: "s1")
+        XCTAssertFalse(controller.isAgentWorkActive)
+        XCTAssertEqual(application.endedIdentifiers.count, 1)
+
+        controller.beginQuestionAnswer(rpcID: "rpc-restored", sessionID: "s2")
+        XCTAssertEqual(controller.outstandingTurns, 0)
+        controller.questionAnswerAccepted(rpcID: "rpc-restored")
+        XCTAssertEqual(controller.outstandingTurns, 1)
+        XCTAssertTrue(controller.questionAllowanceSessionIDs.isEmpty)
+        XCTAssertTrue(controller.keepsConnectionAlive)
+
+        controller.turnEnded(sessionID: "s2")
+        XCTAssertFalse(controller.isAgentWorkActive)
+        XCTAssertEqual(application.endedIdentifiers.count, 2)
+    }
+
+    @MainActor
+    func testBackgroundExecutionTracksTurnsAndAcceptedQuestionsPerSession() {
+        let application = BackgroundTaskApplicationSpy()
+        let controller = AgentBackgroundExecutionController(application: application)
+
+        controller.begin(sessionID: "s1", startsNewTurn: true)
+        controller.beginQuestionAnswer(rpcID: "rpc-s2-a", sessionID: "s2")
+        controller.beginQuestionAnswer(rpcID: "rpc-s2-b", sessionID: "s2")
+        controller.questionAnswerAccepted(rpcID: "rpc-s2-a")
+        controller.questionAnswerAccepted(rpcID: "rpc-s2-b")
+
+        XCTAssertEqual(controller.outstandingTurnsBySessionID, ["s1": 1, "s2": 1])
+        XCTAssertEqual(controller.outstandingTurns, 2)
+        XCTAssertNil(controller.sessionID)
+        XCTAssertEqual(application.beginCallCount, 1)
+
+        controller.turnEnded(sessionID: "s1")
+        XCTAssertEqual(controller.outstandingTurnsBySessionID, ["s2": 1])
+        XCTAssertTrue(controller.keepsConnectionAlive)
+        XCTAssertEqual(application.endedIdentifiers.count, 0)
+
+        controller.turnEnded(sessionID: "s2")
+        XCTAssertFalse(controller.isAgentWorkActive)
+        XCTAssertEqual(application.endedIdentifiers.count, 1)
+    }
+
+    @MainActor
+    func testBackgroundExecutionReleasesOnlyTargetSessionAllowancesAndCancelClearsAll() {
+        let application = BackgroundTaskApplicationSpy()
+        let controller = AgentBackgroundExecutionController(application: application)
+
+        controller.beginQuestionAnswer(rpcID: "rpc-s1-a", sessionID: "s1")
+        controller.beginQuestionAnswer(rpcID: "rpc-s1-b", sessionID: "s1")
+        controller.beginQuestionAnswer(rpcID: "rpc-s2", sessionID: "s2")
+        controller.releaseQuestionAnswers(sessionID: "s1")
+
+        XCTAssertEqual(controller.questionAllowanceSessionIDs, ["rpc-s2": "s2"])
+        XCTAssertTrue(controller.keepsConnectionAlive)
+        XCTAssertEqual(application.endedIdentifiers.count, 0)
+
+        controller.cancel()
+        XCTAssertTrue(controller.outstandingTurnsBySessionID.isEmpty)
+        XCTAssertEqual(controller.unassociatedOutstandingTurns, 0)
+        XCTAssertTrue(controller.questionAllowanceSessionIDs.isEmpty)
+        XCTAssertFalse(controller.keepsConnectionAlive)
+        XCTAssertEqual(application.endedIdentifiers.count, 1)
+    }
+
+    @MainActor
+    func testBackgroundTaskExpirationClearsAllInternalActivity() async {
+        let application = BackgroundTaskApplicationSpy()
+        let controller = AgentBackgroundExecutionController(application: application)
+        var expirationCount = 0
+        controller.onBackgroundAllowanceExpired = { expirationCount += 1 }
+
+        controller.begin(sessionID: "s1", startsNewTurn: true)
+        controller.beginQuestionAnswer(rpcID: "rpc-1", sessionID: "s1")
+        controller.applicationDidEnterBackground()
+        application.expirationHandler?()
+        await Task.yield()
+
+        XCTAssertFalse(controller.isAgentWorkActive)
+        XCTAssertFalse(controller.keepsConnectionAlive)
+        XCTAssertEqual(controller.outstandingTurns, 0)
+        XCTAssertTrue(controller.outstandingTurnsBySessionID.isEmpty)
+        XCTAssertEqual(controller.unassociatedOutstandingTurns, 0)
+        XCTAssertNil(controller.sessionID)
+        XCTAssertTrue(controller.questionAllowanceSessionIDs.isEmpty)
         XCTAssertEqual(application.endedIdentifiers.count, 1)
         XCTAssertEqual(expirationCount, 1)
     }
@@ -989,6 +1090,274 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(store.sessions, [persisted])
         XCTAssertEqual(preferences.savedSessionSnapshots, [])
         XCTAssertEqual(bridge.mutationCallCount, 1)
+    }
+
+    @MainActor
+    func testKMPQuestionAdapterMatchesSwiftFixtureAndEmitsEffectOnce() {
+        let request = questionRequest()
+        let answers = [
+            GatewayQuestionAnswer(id: "direction", selected: ["架构"]),
+            GatewayQuestionAnswer(id: "notes", selected: [], custom: "保持原生 UI")
+        ]
+        let adapter = KMPQuestionStoreAdapter()
+        var swiftState = QuestionState()
+
+        var transition = adapter.reduce(.requestReceived(request))
+        QuestionReducer.reduce(state: &swiftState, action: .requestReceived(request))
+        XCTAssertNil(transition.error)
+        XCTAssertEqual(transition.snapshot.pendingRequests, swiftState.pendingRequests)
+        XCTAssertEqual(transition.snapshot.platformStatuses, swiftState.requestStatuses)
+
+        transition = adapter.reduce(.submitAnswer(
+            rpcID: request.rpcId,
+            answers: answers,
+            isConnected: true
+        ))
+        QuestionReducer.reduce(
+            state: &swiftState,
+            action: .submit(request: request, submission: .answer(answers), isConnected: true)
+        )
+        XCTAssertEqual(transition.snapshot.platformStatuses, swiftState.requestStatuses)
+        XCTAssertEqual(transition.effect?.action, "answer")
+        XCTAssertEqual(transition.effect?.answers, answers)
+
+        // 第二次相同 intent 不能再次产生网络 effect。
+        transition = adapter.reduce(.submitAnswer(
+            rpcID: request.rpcId,
+            answers: answers,
+            isConnected: true
+        ))
+        XCTAssertNil(transition.effect)
+
+        transition = adapter.reduce(.responseReceived(
+            rpcID: request.rpcId,
+            action: .answer,
+            accepted: true,
+            reason: nil
+        ))
+        QuestionReducer.reduce(
+            state: &swiftState,
+            action: .responseReceived(rpcID: request.rpcId, action: .answer, accepted: true, reason: nil)
+        )
+        XCTAssertEqual(transition.snapshot.platformStatuses, swiftState.requestStatuses)
+
+        var replay = request
+        replay.replay = true
+        transition = adapter.reduce(.requestReceived(replay))
+        QuestionReducer.reduce(state: &swiftState, action: .requestReceived(replay))
+        XCTAssertEqual(transition.snapshot.pendingRequests, swiftState.pendingRequests)
+        XCTAssertEqual(transition.snapshot.platformStatuses, swiftState.requestStatuses)
+
+        transition = adapter.reduce(.resolved(rpcID: request.rpcId))
+        QuestionReducer.reduce(state: &swiftState, action: .resolved(rpcID: request.rpcId))
+        XCTAssertEqual(transition.snapshot.pendingRequests, swiftState.pendingRequests)
+        XCTAssertEqual(transition.snapshot.platformStatuses, swiftState.requestStatuses)
+    }
+
+    @MainActor
+    func testKMPQuestionAdapterFailsClosedBeforeMalformedEffectCanExecute() {
+        let bridge = MalformedMutationQuestionBridge()
+        let adapter = KMPQuestionStoreAdapter(bridge: bridge)
+        XCTAssertTrue(adapter.isOperational)
+
+        let transition = adapter.reduce(.requestReceived(questionRequest()))
+        XCTAssertNotNil(transition.error)
+        XCTAssertNil(transition.effect)
+        XCTAssertFalse(adapter.isOperational)
+        XCTAssertEqual(bridge.mutationCallCount, 1)
+
+        let second = adapter.reduce(.reset)
+        XCTAssertNotNil(second.error)
+        XCTAssertNil(second.effect)
+        XCTAssertEqual(bridge.mutationCallCount, 1)
+    }
+
+    @MainActor
+    func testAppStoreNeverExecutesSemanticallyMismatchedQuestionEffects() {
+        let request = questionRequest()
+        let answers = [
+            GatewayQuestionAnswer(id: "direction", selected: ["架构"]),
+            GatewayQuestionAnswer(id: "notes", selected: [], custom: "保持原生 UI")
+        ]
+
+        for mismatch in SemanticQuestionEffectMismatch.allCases {
+            let bridge = SemanticMismatchQuestionBridge(request: request, mismatch: mismatch)
+            let executor = GatewayQuestionEffectExecutorSpy()
+            let backgroundApplication = BackgroundTaskApplicationSpy()
+            let backgroundController = AgentBackgroundExecutionController(application: backgroundApplication)
+            let store = AppStore(
+                preferences: AppPreferencesSpy(
+                    endpoint: "wss://injected.example/ws/mobile",
+                    selectedWorkspaceID: nil,
+                    sessions: []
+                ),
+                questionBridge: bridge,
+                questionEffectExecutor: executor,
+                backgroundExecutionController: backgroundController
+            )
+
+            store.answerQuestion(request, answers: answers)
+
+            XCTAssertEqual(executor.answerCalls.count, 0, "\(mismatch)")
+            XCTAssertEqual(executor.cancelCallCount, 0, "\(mismatch)")
+            XCTAssertEqual(bridge.submitCallCount, 1, "\(mismatch)")
+            XCTAssertNotNil(store.lastError, "\(mismatch)")
+            XCTAssertFalse(backgroundController.isAgentWorkActive, "\(mismatch)")
+
+            // 一次语义错配后永久 fail closed，后续 intent 不再进入 KMP bridge。
+            store.answerQuestion(request, answers: answers)
+            XCTAssertEqual(bridge.submitCallCount, 1, "\(mismatch)")
+            XCTAssertEqual(executor.answerCalls.count, 0, "\(mismatch)")
+        }
+    }
+
+    @MainActor
+    func testAppStoreCoordinatesQuestionAllowanceAcrossTerminalRoutes() throws {
+        func makeStore() -> (
+            store: AppStore,
+            controller: AgentBackgroundExecutionController,
+            executor: GatewayQuestionEffectExecutorSpy,
+            request: GatewayPendingQuestionRequest
+        ) {
+            let request = questionRequest()
+            let controller = AgentBackgroundExecutionController(application: BackgroundTaskApplicationSpy())
+            let executor = GatewayQuestionEffectExecutorSpy()
+            let store = AppStore(
+                preferences: AppPreferencesSpy(
+                    endpoint: "wss://injected.example/ws/mobile",
+                    selectedWorkspaceID: nil,
+                    sessions: []
+                ),
+                questionBridge: QuestionLifecycleBridge(request: request),
+                questionEffectExecutor: executor,
+                backgroundExecutionController: controller
+            )
+            store.answerQuestion(request, answers: [
+                GatewayQuestionAnswer(id: "direction", selected: ["架构"]),
+                GatewayQuestionAnswer(id: "notes", selected: [], custom: "保持原生 UI")
+            ])
+            XCTAssertEqual(executor.answerCalls.count, 1)
+            XCTAssertEqual(controller.questionAllowanceSessionIDs[request.rpcId], request.sessionId)
+            XCTAssertEqual(controller.outstandingTurns, 0)
+            return (store, controller, executor, request)
+        }
+
+        do {
+            let fixture = makeStore()
+            fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+                #"{"kind":"question-response","rpcId":"rpc-question","action":"answer","accepted":false,"reason":"not-pending"}"#.utf8
+            )))
+            XCTAssertFalse(fixture.controller.isAgentWorkActive)
+            XCTAssertEqual(fixture.controller.outstandingTurns, 0)
+        }
+
+        do {
+            let fixture = makeStore()
+            fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+                #"{"kind":"question-response","rpcId":"rpc-question","action":"answer","accepted":false,"reason":"bad-response"}"#.utf8
+            )))
+            XCTAssertFalse(fixture.controller.isAgentWorkActive)
+            XCTAssertEqual(fixture.controller.outstandingTurns, 0)
+        }
+
+        do {
+            let fixture = makeStore()
+            fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+                #"{"kind":"error","requestType":"question-answer","rpcId":"rpc-question","sessionId":"session-question","code":"failed"}"#.utf8
+            )))
+            XCTAssertFalse(fixture.controller.isAgentWorkActive)
+            XCTAssertEqual(fixture.controller.outstandingTurns, 0)
+        }
+
+        do {
+            let fixture = makeStore()
+            fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+                #"{"kind":"hello","protocol":3,"capabilities":[],"authenticated":true,"clients":1}"#.utf8
+            )))
+            XCTAssertFalse(fixture.controller.isAgentWorkActive)
+            XCTAssertEqual(fixture.controller.outstandingTurns, 0)
+        }
+
+        do {
+            let fixture = makeStore()
+            fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+                #"{"kind":"question-response","rpcId":"rpc-question","action":"answer","accepted":true}"#.utf8
+            )))
+            XCTAssertTrue(fixture.controller.questionAllowanceSessionIDs.isEmpty)
+            XCTAssertEqual(fixture.controller.outstandingTurns, 1)
+
+            fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+                #"{"kind":"question-resolved","rpcId":"rpc-question","sessionId":"session-question","outcome":"answered"}"#.utf8
+            )))
+            XCTAssertEqual(fixture.controller.outstandingTurns, 1)
+            fixture.controller.turnEnded(sessionID: fixture.request.sessionId)
+            XCTAssertFalse(fixture.controller.isAgentWorkActive)
+        }
+    }
+
+    @MainActor
+    func testQuestionFailureWithoutRpcIDFailsAndReleasesAllRequestsInSession() throws {
+        let controller = AgentBackgroundExecutionController(application: BackgroundTaskApplicationSpy())
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            backgroundExecutionController: controller
+        )
+        for (rpcID, sessionID) in [("rpc-s1-a", "s1"), ("rpc-s1-b", "s1"), ("rpc-s2", "s2")] {
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+                #"{"kind":"question-requested","rpcId":"\#(rpcID)","sessionId":"\#(sessionID)","questions":[{"id":"q1","question":"继续？"}]}"#.utf8
+            )))
+            controller.beginQuestionAnswer(rpcID: rpcID, sessionID: sessionID)
+        }
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"error","requestType":"question-answer","sessionId":"s1","code":"failed"}"#.utf8
+        )))
+
+        XCTAssertEqual(store.questionRequestStatuses["rpc-s1-a"], .rejected("failed"))
+        XCTAssertEqual(store.questionRequestStatuses["rpc-s1-b"], .rejected("failed"))
+        XCTAssertEqual(store.questionRequestStatuses["rpc-s2"], .idle)
+        XCTAssertEqual(controller.questionAllowanceSessionIDs, ["rpc-s2": "s2"])
+        XCTAssertEqual(store.pendingQuestionRequests.count, 3)
+    }
+
+    @MainActor
+    func testAppStoreQuestionRoutePublishesKMPStateAndHelloResetsIt() throws {
+        let store = AppStore(preferences: AppPreferencesSpy(
+            endpoint: "wss://injected.example/ws/mobile",
+            selectedWorkspaceID: nil,
+            sessions: []
+        ))
+        let requested = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"question-requested","rpcId":"rpc-app","sessionId":"s-app","questions":[{"id":"q1","question":"继续？","options":[{"label":"是"}]}]}"#.utf8
+        ))
+        store.gateway.onFrame?(requested)
+        let request = try XCTUnwrap(store.pendingQuestionRequests.first)
+        XCTAssertEqual(store.questionRequestStatuses[request.rpcId], .idle)
+
+        store.answerQuestion(request, answers: [GatewayQuestionAnswer(id: "q1", selected: ["是"])])
+        XCTAssertEqual(
+            store.questionRequestStatuses[request.rpcId],
+            .rejected(String(localized: "q.rejected.ws.disconnected.answer", defaultValue: "WebSocket 已断开，重连后再提交答案。"))
+        )
+
+        let notPending = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"question-response","rpcId":"rpc-app","action":"answer","accepted":false,"reason":"not-pending"}"#.utf8
+        ))
+        store.gateway.onFrame?(notPending)
+        XCTAssertTrue(store.pendingQuestionRequests.isEmpty)
+        XCTAssertNil(store.questionRequestStatuses[request.rpcId])
+
+        store.gateway.onFrame?(requested)
+        let hello = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"hello","protocol":3,"capabilities":[],"authenticated":true,"clients":1}"#.utf8
+        ))
+        store.gateway.onFrame?(hello)
+        XCTAssertTrue(store.pendingQuestionRequests.isEmpty)
+        XCTAssertTrue(store.questionRequestStatuses.isEmpty)
     }
 
     func testQuestionReducerAddsRequestAndReplayPreservesSubmissionStatus() {
@@ -1734,6 +2103,239 @@ private final class MalformedMutationSessionListBridge: KMPSessionListStoreBridg
             errorCode: nil,
             errorMessage: nil
         )
+    }
+}
+
+private final class MalformedMutationQuestionBridge: KMPQuestionStoreBridging {
+    private(set) var mutationCallCount = 0
+
+    func snapshot() -> SharedQuestionResult {
+        SharedQuestionResult(
+            snapshotJson: #"{"pendingRequests":[],"requestStatuses":{}}"#,
+            effectJson: nil,
+            errorCode: nil,
+            errorMessage: nil
+        )
+    }
+
+    func reset() -> SharedQuestionResult { malformedMutation() }
+    func requestReceived(requestJson: String) -> SharedQuestionResult { malformedMutation() }
+    func submitAnswer(rpcId: String, answersJson: String, isConnected: Bool) -> SharedQuestionResult {
+        malformedMutation()
+    }
+    func submitCancel(rpcId: String, isConnected: Bool) -> SharedQuestionResult { malformedMutation() }
+    func responseReceived(
+        rpcId: String,
+        action: String,
+        accepted: Bool,
+        reason: String?
+    ) -> SharedQuestionResult {
+        malformedMutation()
+    }
+    func resolved(rpcId: String) -> SharedQuestionResult { malformedMutation() }
+    func requestFailed(rpcId: String, message: String?) -> SharedQuestionResult { malformedMutation() }
+    func sessionRequestsFailed(sessionId: String, message: String?) -> SharedQuestionResult { malformedMutation() }
+
+    private func malformedMutation() -> SharedQuestionResult {
+        mutationCallCount += 1
+        return SharedQuestionResult(
+            snapshotJson: #"{"pendingRequests":[],"requestStatuses":{}}"#,
+            effectJson: "not-json",
+            errorCode: nil,
+            errorMessage: nil
+        )
+    }
+}
+
+private enum SemanticQuestionEffectMismatch: CaseIterable {
+    case rpcID
+    case sessionID
+    case snapshotStatus
+    case emptyAnswers
+    case answerOrder
+}
+
+private final class SemanticMismatchQuestionBridge: KMPQuestionStoreBridging {
+    let request: GatewayPendingQuestionRequest
+    let mismatch: SemanticQuestionEffectMismatch
+    private(set) var submitCallCount = 0
+
+    init(request: GatewayPendingQuestionRequest, mismatch: SemanticQuestionEffectMismatch) {
+        self.request = request
+        self.mismatch = mismatch
+    }
+
+    func snapshot() -> SharedQuestionResult {
+        result(snapshot: KMPQuestionSnapshot(
+            pendingRequests: [request],
+            requestStatuses: [request.rpcId: KMPQuestionStatusSnapshot(kind: "idle")]
+        ))
+    }
+
+    func reset() -> SharedQuestionResult { snapshot() }
+    func requestReceived(requestJson: String) -> SharedQuestionResult { snapshot() }
+
+    func submitAnswer(rpcId: String, answersJson: String, isConnected: Bool) -> SharedQuestionResult {
+        submitCallCount += 1
+        let submittedAnswers = (try? JSONDecoder().decode(
+            [GatewayQuestionAnswer].self,
+            from: Data(answersJson.utf8)
+        )) ?? []
+        let status = mismatch == .snapshotStatus
+            ? KMPQuestionStatusSnapshot(kind: "accepted", action: "answer")
+            : KMPQuestionStatusSnapshot(kind: "submitting", action: "answer")
+        let effectAnswers: [GatewayQuestionAnswer]
+        switch mismatch {
+        case .emptyAnswers:
+            effectAnswers = []
+        case .answerOrder:
+            effectAnswers = Array(submittedAnswers.reversed())
+        default:
+            effectAnswers = submittedAnswers
+        }
+        return result(
+            snapshot: KMPQuestionSnapshot(
+                pendingRequests: [request],
+                requestStatuses: [request.rpcId: status]
+            ),
+            effect: KMPQuestionEffect(
+                action: "answer",
+                rpcId: mismatch == .rpcID ? "rpc-other" : request.rpcId,
+                sessionId: mismatch == .sessionID ? "session-other" : request.sessionId,
+                answers: effectAnswers
+            )
+        )
+    }
+
+    func submitCancel(rpcId: String, isConnected: Bool) -> SharedQuestionResult { snapshot() }
+    func responseReceived(
+        rpcId: String,
+        action: String,
+        accepted: Bool,
+        reason: String?
+    ) -> SharedQuestionResult { snapshot() }
+    func resolved(rpcId: String) -> SharedQuestionResult { snapshot() }
+    func requestFailed(rpcId: String, message: String?) -> SharedQuestionResult { snapshot() }
+    func sessionRequestsFailed(sessionId: String, message: String?) -> SharedQuestionResult { snapshot() }
+
+    private func result(
+        snapshot: KMPQuestionSnapshot,
+        effect: KMPQuestionEffect? = nil
+    ) -> SharedQuestionResult {
+        let encoder = JSONEncoder()
+        return SharedQuestionResult(
+            snapshotJson: String(decoding: try! encoder.encode(snapshot), as: UTF8.self),
+            effectJson: effect.map { String(decoding: try! encoder.encode($0), as: UTF8.self) },
+            errorCode: nil,
+            errorMessage: nil
+        )
+    }
+}
+
+private final class QuestionLifecycleBridge: KMPQuestionStoreBridging {
+    private let request: GatewayPendingQuestionRequest
+    private var snapshotValue: KMPQuestionSnapshot
+
+    init(request: GatewayPendingQuestionRequest) {
+        self.request = request
+        snapshotValue = KMPQuestionSnapshot(
+            pendingRequests: [request],
+            requestStatuses: [request.rpcId: KMPQuestionStatusSnapshot(kind: "idle")]
+        )
+    }
+
+    func snapshot() -> SharedQuestionResult { result() }
+
+    func reset() -> SharedQuestionResult {
+        snapshotValue = .empty
+        return result()
+    }
+
+    func requestReceived(requestJson: String) -> SharedQuestionResult { result() }
+
+    func submitAnswer(rpcId: String, answersJson: String, isConnected: Bool) -> SharedQuestionResult {
+        let answers = (try? JSONDecoder().decode(
+            [GatewayQuestionAnswer].self,
+            from: Data(answersJson.utf8)
+        )) ?? []
+        snapshotValue.requestStatuses[rpcId] = KMPQuestionStatusSnapshot(kind: "submitting", action: "answer")
+        return result(effect: KMPQuestionEffect(
+            action: "answer",
+            rpcId: rpcId,
+            sessionId: request.sessionId,
+            answers: answers
+        ))
+    }
+
+    func submitCancel(rpcId: String, isConnected: Bool) -> SharedQuestionResult { result() }
+
+    func responseReceived(
+        rpcId: String,
+        action: String,
+        accepted: Bool,
+        reason: String?
+    ) -> SharedQuestionResult {
+        if accepted {
+            snapshotValue.requestStatuses[rpcId] = KMPQuestionStatusSnapshot(kind: "accepted", action: action)
+        } else if reason == "not-pending" {
+            snapshotValue = .empty
+        } else {
+            snapshotValue.requestStatuses[rpcId] = KMPQuestionStatusSnapshot(
+                kind: "rejected",
+                failureCode: "SERVER_REJECTED",
+                failureArgument: reason
+            )
+        }
+        return result()
+    }
+
+    func resolved(rpcId: String) -> SharedQuestionResult {
+        snapshotValue = .empty
+        return result()
+    }
+
+    func requestFailed(rpcId: String, message: String?) -> SharedQuestionResult {
+        snapshotValue.requestStatuses[rpcId] = KMPQuestionStatusSnapshot(
+            kind: "rejected",
+            failureCode: "REQUEST_FAILED",
+            failureArgument: message
+        )
+        return result()
+    }
+
+    func sessionRequestsFailed(sessionId: String, message: String?) -> SharedQuestionResult {
+        for request in snapshotValue.pendingRequests where request.sessionId == sessionId {
+            snapshotValue.requestStatuses[request.rpcId] = KMPQuestionStatusSnapshot(
+                kind: "rejected",
+                failureCode: "REQUEST_FAILED",
+                failureArgument: message
+            )
+        }
+        return result()
+    }
+
+    private func result(effect: KMPQuestionEffect? = nil) -> SharedQuestionResult {
+        let encoder = JSONEncoder()
+        return SharedQuestionResult(
+            snapshotJson: String(decoding: try! encoder.encode(snapshotValue), as: UTF8.self),
+            effectJson: effect.map { String(decoding: try! encoder.encode($0), as: UTF8.self) },
+            errorCode: nil,
+            errorMessage: nil
+        )
+    }
+}
+
+@MainActor
+private final class GatewayQuestionEffectExecutorSpy: GatewayQuestionEffectExecuting {
+    private(set) var answerCalls: [(rpcID: String, sessionID: String, answers: [GatewayQuestionAnswer])] = []
+    private(set) var cancelCallCount = 0
+
+    func answerQuestion(rpcId: String, sessionId: String, answers: [GatewayQuestionAnswer]) {
+        answerCalls.append((rpcId, sessionId, answers))
+    }
+
+    func cancelQuestion(rpcId: String, sessionId: String) {
+        cancelCallCount += 1
     }
 }
 

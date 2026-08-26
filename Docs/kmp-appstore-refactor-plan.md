@@ -4,7 +4,7 @@
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
 > 最近更新：2026-08-26  
-> 当前任务：阶段 9.3——将 Human Question 流程切换到 KMP
+> 当前任务：阶段 9.4——将模型、权限、Context Usage、Stats、Agent Presets 和默认配置状态切换到 KMP
 
 ## 使用说明
 
@@ -182,7 +182,7 @@ shared/src/commonMain/                  # 后续阶段创建
 
 - [x] 9.1 先将 SessionList 的远端合并、排序、归档、选择、运行和未读状态切换到 KMP。
 - [x] 9.2 保持 `UserDefaultsAppPreferences` 为 iOS 持久化适配器，在 Swift snapshot 与既有持久化模型之间做显式映射。
-- [ ] 9.3 将 Human Question 请求、校验、提交状态、响应和 resolved 流程切换到 KMP。
+- [x] 9.3 将 Human Question 请求、校验、提交状态、响应和 resolved 流程切换到 KMP。
 - [ ] 9.4 将模型、权限、Context Usage、Stats、Agent Presets 和默认配置状态切换到 KMP。
 - [ ] 9.5 每完成一个子系统，关闭该子系统的 Swift 写路径并保留一轮可回滚开关；人工验收通过后删除开关。
 
@@ -286,6 +286,9 @@ xcodebuild test \
 
 ### 2026-08-26
 
+- 完成阶段 9.3：新增有状态 `SharedQuestionStore`，iOS Human Question 的请求、答案校验、提交/取消状态、Gateway 响应、resolved 与失败恢复统一改为 KMP 单写；Swift `pendingQuestionRequests` 和 `questionRequestStatuses` 仅发布 KMP 快照，旧 Swift Reducer 写路径已关闭。
+- Question effect 采用 fail-closed：仅在 KMP mutation 成功、快照可解析且 effect 与原始 intent 在 `rpcId`、`sessionId`、action 和 answers 上语义一致时才执行网络副作用；任何结构化错误、坏快照或 effect 不匹配都会关闭后续 mutation，且不会误发 Gateway 请求。后台执行额度改为按 session 分别计数，Human Question 临时额度按 `rpcId` 追踪；无 `rpcId` 的连接/会话失败会原子清理匹配请求及额度，避免跨 session 串扰和后台任务泄漏。
+- 阶段 9.3 自动化门禁通过：`./gradlew :shared:iosSimulatorArm64Test --rerun-tasks` 共 30 项测试、0 失败；iPhone 17 Pro 模拟器全量 `xcodebuild test` 共 80 项测试、0 失败；`./gradlew :androidApp:testDebugUnitTest` 构建成功；Android CLI 正确识别 debug/release variants 且 Debug APK 存在；`git diff --check` 通过。下一步为阶段 9.4。
 - 完成阶段 9.1～9.2：新增有状态 `SharedSessionListStore`，iOS `AppStore` 的远端会话合并、排序、归档、选择、运行和未读转换均经 KMP Reducer 提交；Swift 属性仅作为 UI/持久化快照，`UserDefaultsAppPreferences` 继续承担 iOS I/O，并通过稳定 JSON 值显式映射旧 `SessionSummary`，旧安装数据格式不变。
 - SessionList 桥接采用 fail-closed：初始化恢复失败时保留已持久化的 Swift 快照且不再调用 KMP mutation；若 KMP mutation 成功后返回 Swift 无法解析的快照，则永久关闭该实例的后续 mutation，防止两端状态分叉和错误持久化。KMP mutation 自身先完成快照序列化再原子提交，结构化失败不会污染原状态；Swift/Kotlin 对应边界测试及阶段 9.1～9.2 前置自动化门禁均已通过。下一步为阶段 9.3。
 - 用户完成阶段 8 iOS 真实 Gateway 人工核验：DEBUG Console 确认 KMP 只读影子已启用且未报告差异，Human Question 和实际产品流程正常；一次 WebSocket `NSURLErrorDomain -1011` 握手失败未影响后续连接，按独立网络日志记录。阶段 8 全部验收通过，下一步为阶段 9.1。

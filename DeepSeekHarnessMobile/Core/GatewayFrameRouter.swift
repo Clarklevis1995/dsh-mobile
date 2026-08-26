@@ -88,19 +88,20 @@ enum GatewayWorkspaceRoute {
 
 enum GatewayQuestionRoute {
     case requested(
-        action: QuestionAction,
+        request: GatewayPendingQuestionRequest,
         sessionID: String,
         preview: String,
         replay: Bool
     )
     case invalidRequest(sessionID: String?)
     case response(
-        action: QuestionAction,
         rpcID: String,
+        action: GatewayQuestionAction,
+        accepted: Bool,
+        reason: String?,
         wasNotPending: Bool
     )
     case resolved(
-        action: QuestionAction,
         rpcID: String,
         sessionID: String?,
         cancelled: Bool
@@ -284,7 +285,7 @@ enum GatewayFrameRouter {
                 replay: frame.replay == true
             )
             return .question(.requested(
-                action: .requestReceived(request),
+                request: request,
                 sessionID: sessionID,
                 preview: questions.first?.question ?? "",
                 replay: frame.replay == true
@@ -293,19 +294,15 @@ enum GatewayFrameRouter {
             guard let rpcID = frame.rpcId else { return .ignored }
             let reason = frame.reason ?? "bad-response"
             return .question(.response(
-                action: .responseReceived(
-                    rpcID: rpcID,
-                    action: GatewayQuestionAction(rawValue: frame.action ?? "") ?? .answer,
-                    accepted: frame.accepted == true,
-                    reason: reason
-                ),
                 rpcID: rpcID,
+                action: GatewayQuestionAction(rawValue: frame.action ?? "") ?? .answer,
+                accepted: frame.accepted == true,
+                reason: reason,
                 wasNotPending: frame.accepted != true && reason == "not-pending"
             ))
         case "question-resolved":
             guard let rpcID = frame.rpcId else { return .ignored }
             return .question(.resolved(
-                action: .resolved(rpcID: rpcID),
                 rpcID: rpcID,
                 sessionID: frame.sessionId,
                 cancelled: frame.outcome == "cancelled"

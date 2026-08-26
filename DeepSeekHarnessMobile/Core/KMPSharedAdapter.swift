@@ -229,6 +229,330 @@ final class KMPSessionListStoreAdapter {
     }
 }
 
+struct KMPQuestionStatusSnapshot: Codable, Equatable {
+    var kind: String
+    var action: String?
+    var failureCode: String?
+    var failureArgument: String?
+
+    var platformStatus: GatewayQuestionRequestStatus {
+        switch kind {
+        case "submitting":
+            return .submitting(GatewayQuestionAction(rawValue: action ?? "") ?? .answer)
+        case "accepted":
+            return .accepted(GatewayQuestionAction(rawValue: action ?? "") ?? .answer)
+        case "rejected":
+            return .rejected(localizedFailure)
+        default:
+            return .idle
+        }
+    }
+
+    private var localizedFailure: String {
+        switch failureCode {
+        case "DISCONNECTED_ANSWER":
+            String(localized: "q.rejected.ws.disconnected.answer", defaultValue: "WebSocket 已断开，重连后再提交答案。")
+        case "DISCONNECTED_CANCEL":
+            String(localized: "q.rejected.ws.disconnected.skip", defaultValue: "WebSocket 已断开，重连后再跳过问题。")
+        case "INVALID_ANSWER_ORDER":
+            String(localized: "答案必须按原顺序覆盖整组问题。")
+        case "INVALID_OR_DUPLICATE_OPTIONS":
+            String(
+                format: String(localized: "q.rejected.bad-options", defaultValue: "“%@”包含无效或重复选项。"),
+                failureArgument ?? ""
+            )
+        case "SINGLE_SELECTION_REQUIRED":
+            String(localized: "单选题只能选择一个选项，且不能同时填写自定义答案。")
+        case "REQUEST_FAILED":
+            if let failureArgument, !failureArgument.isEmpty {
+                failureArgument
+            } else {
+                String(localized: "服务端拒绝了问题响应。")
+            }
+        case "SERVER_REJECTED":
+            String(
+                format: String(localized: "q.rejected.server-refused", defaultValue: "服务端未接受答案（%@），请检查后重试。"),
+                failureArgument ?? "bad-response"
+            )
+        default:
+            String(localized: "服务端拒绝了问题响应。")
+        }
+    }
+}
+
+struct KMPQuestionSnapshot: Codable, Equatable {
+    var pendingRequests: [GatewayPendingQuestionRequest]
+    var requestStatuses: [String: KMPQuestionStatusSnapshot]
+
+    var platformStatuses: [String: GatewayQuestionRequestStatus] {
+        requestStatuses.mapValues(\.platformStatus)
+    }
+
+    static let empty = KMPQuestionSnapshot(pendingRequests: [], requestStatuses: [:])
+
+    var hasValidWireValues: Bool {
+        let validFailureCodes = Set([
+            "DISCONNECTED_ANSWER", "DISCONNECTED_CANCEL", "INVALID_ANSWER_ORDER",
+            "INVALID_OR_DUPLICATE_OPTIONS", "SINGLE_SELECTION_REQUIRED",
+            "SERVER_REJECTED", "REQUEST_FAILED"
+        ])
+        return Set(pendingRequests.map(\.rpcId)).count == pendingRequests.count
+            && requestStatuses.values.allSatisfy { status in
+                switch status.kind {
+                case "idle": status.action == nil && status.failureCode == nil
+                case "submitting", "accepted":
+                    status.action.flatMap(GatewayQuestionAction.init(rawValue:)) != nil
+                        && status.failureCode == nil
+                case "rejected": status.action == nil && status.failureCode.map(validFailureCodes.contains) == true
+                default: false
+                }
+            }
+    }
+}
+
+struct KMPQuestionEffect: Codable, Equatable {
+    var action: String
+    var rpcId: String
+    var sessionId: String
+    var answers: [GatewayQuestionAnswer]?
+
+    var hasValidWireValues: Bool {
+        switch GatewayQuestionAction(rawValue: action) {
+        case .answer: answers != nil
+        case .cancel: answers == nil
+        case nil: false
+        }
+    }
+}
+
+enum KMPQuestionIntent {
+    case reset
+    case requestReceived(GatewayPendingQuestionRequest)
+    case submitAnswer(rpcID: String, answers: [GatewayQuestionAnswer], isConnected: Bool)
+    case submitCancel(rpcID: String, isConnected: Bool)
+    case responseReceived(rpcID: String, action: GatewayQuestionAction, accepted: Bool, reason: String?)
+    case resolved(rpcID: String)
+    case requestFailed(rpcID: String, message: String)
+    case sessionRequestsFailed(sessionID: String, message: String)
+}
+
+enum KMPQuestionStoreError: LocalizedError, Equatable {
+    case encoding(String)
+    case bridge(code: String, message: String?)
+    case invalidSnapshot(String)
+    case invalidEffect(String)
+    case initializationFailed(String)
+    case runtimeFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .encoding(let message): "无法编码 iOS Question 输入：\(message)"
+        case .bridge(let code, let message): "KMP Question 失败（\(code)）：\(message ?? "无详细信息")"
+        case .invalidSnapshot(let message): "无法解码 KMP Question 快照：\(message)"
+        case .invalidEffect(let message): "无法解码 KMP Question effect：\(message)"
+        case .initializationFailed(let message): "KMP Question 初始化失败，已停止后续状态写入：\(message)"
+        case .runtimeFailed(let message): "KMP Question 运行期结果失效，已停止后续状态写入：\(message)"
+        }
+    }
+}
+
+protocol KMPQuestionStoreBridging: AnyObject {
+    func snapshot() -> SharedQuestionResult
+    func reset() -> SharedQuestionResult
+    func requestReceived(requestJson: String) -> SharedQuestionResult
+    func submitAnswer(rpcId: String, answersJson: String, isConnected: Bool) -> SharedQuestionResult
+    func submitCancel(rpcId: String, isConnected: Bool) -> SharedQuestionResult
+    func responseReceived(
+        rpcId: String,
+        action: String,
+        accepted: Bool,
+        reason: String?
+    ) -> SharedQuestionResult
+    func resolved(rpcId: String) -> SharedQuestionResult
+    func requestFailed(rpcId: String, message: String?) -> SharedQuestionResult
+    func sessionRequestsFailed(sessionId: String, message: String?) -> SharedQuestionResult
+}
+
+extension SharedQuestionStore: KMPQuestionStoreBridging {}
+
+struct KMPQuestionTransition {
+    var snapshot: KMPQuestionSnapshot
+    var effect: KMPQuestionEffect?
+    var error: KMPQuestionStoreError?
+}
+
+/// AppStore 的 MainActor 是 Question 状态和 effect 的唯一串行提交入口。
+@MainActor
+final class KMPQuestionStoreAdapter {
+    private let store: any KMPQuestionStoreBridging
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    private(set) var snapshot: KMPQuestionSnapshot = .empty
+    private(set) var initializationError: KMPQuestionStoreError?
+    private(set) var runtimeError: KMPQuestionStoreError?
+    var isOperational: Bool { initializationError == nil && runtimeError == nil }
+
+    init(
+        bridge: (any KMPQuestionStoreBridging)? = nil,
+        facade: SharedMobileFacade = SharedMobileFacade()
+    ) {
+        store = bridge ?? facade.makeQuestionStore()
+        let transition = decode(store.snapshot(), requiresSnapshot: true, intent: nil)
+        snapshot = transition.snapshot
+        initializationError = transition.error
+    }
+
+    /// 非抛出入口。成功快照和 effect 必须同时可解码，否则永久 fail closed 且不执行 I/O。
+    @discardableResult
+    func reduce(_ intent: KMPQuestionIntent) -> KMPQuestionTransition {
+        if let initializationError {
+            return failed(.initializationFailed(initializationError.localizedDescription))
+        }
+        if let runtimeError {
+            return failed(.runtimeFailed(runtimeError.localizedDescription))
+        }
+
+        let result: SharedQuestionResult
+        do {
+            switch intent {
+            case .reset:
+                result = store.reset()
+            case .requestReceived(let request):
+                result = store.requestReceived(requestJson: try encode(request))
+            case .submitAnswer(let rpcID, let answers, let isConnected):
+                result = store.submitAnswer(
+                    rpcId: rpcID,
+                    answersJson: try encode(answers),
+                    isConnected: isConnected
+                )
+            case .submitCancel(let rpcID, let isConnected):
+                result = store.submitCancel(rpcId: rpcID, isConnected: isConnected)
+            case .responseReceived(let rpcID, let action, let accepted, let reason):
+                result = store.responseReceived(
+                    rpcId: rpcID,
+                    action: action.rawValue,
+                    accepted: accepted,
+                    reason: reason
+                )
+            case .resolved(let rpcID):
+                result = store.resolved(rpcId: rpcID)
+            case .requestFailed(let rpcID, let message):
+                result = store.requestFailed(rpcId: rpcID, message: message)
+            case .sessionRequestsFailed(let sessionID, let message):
+                result = store.sessionRequestsFailed(sessionId: sessionID, message: message)
+            }
+        } catch {
+            return failed(.encoding(error.localizedDescription))
+        }
+        return decode(result, requiresSnapshot: false, intent: intent)
+    }
+
+    private func encode<T: Encodable>(_ value: T) throws -> String {
+        String(decoding: try encoder.encode(value), as: UTF8.self)
+    }
+
+    private func decode(
+        _ result: SharedQuestionResult,
+        requiresSnapshot: Bool,
+        intent: KMPQuestionIntent?
+    ) -> KMPQuestionTransition {
+        guard result.isSuccess else {
+            return failed(.bridge(
+                code: result.errorCode ?? "unknown-error",
+                message: result.errorMessage
+            ))
+        }
+
+        let nextSnapshot: KMPQuestionSnapshot
+        if let json = result.snapshotJson {
+            do {
+                nextSnapshot = try decoder.decode(KMPQuestionSnapshot.self, from: Data(json.utf8))
+            } catch {
+                return failClosed(.invalidSnapshot(error.localizedDescription))
+            }
+            guard nextSnapshot.hasValidWireValues else {
+                return failClosed(.invalidSnapshot("KMP 返回了未知状态或动作"))
+            }
+        } else if requiresSnapshot {
+            return failClosed(.invalidSnapshot("KMP 未返回初始化快照"))
+        } else {
+            nextSnapshot = snapshot
+        }
+
+        let effect: KMPQuestionEffect?
+        if let json = result.effectJson {
+            guard result.snapshotJson != nil else {
+                return failClosed(.invalidEffect("effect 缺少同事务快照"))
+            }
+            do {
+                effect = try decoder.decode(KMPQuestionEffect.self, from: Data(json.utf8))
+            } catch {
+                return failClosed(.invalidEffect(error.localizedDescription))
+            }
+            guard effect?.hasValidWireValues == true else {
+                return failClosed(.invalidEffect("KMP 返回了未知动作或不完整 payload"))
+            }
+            guard let effect,
+                  effectIsSemanticallyValid(effect, in: nextSnapshot, for: intent) else {
+                return failClosed(.invalidEffect("effect 与同事务快照或提交 intent 语义不一致"))
+            }
+        } else {
+            effect = nil
+        }
+
+        snapshot = nextSnapshot
+        return KMPQuestionTransition(snapshot: snapshot, effect: effect, error: nil)
+    }
+
+    private func effectIsSemanticallyValid(
+        _ effect: KMPQuestionEffect,
+        in nextSnapshot: KMPQuestionSnapshot,
+        for intent: KMPQuestionIntent?
+    ) -> Bool {
+        guard !effect.rpcId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !effect.sessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let request = nextSnapshot.pendingRequests.first(where: { $0.rpcId == effect.rpcId }),
+              request.sessionId == effect.sessionId,
+              let status = nextSnapshot.requestStatuses[effect.rpcId],
+              status.kind == "submitting",
+              status.action == effect.action,
+              status.failureCode == nil else {
+            return false
+        }
+
+        switch (GatewayQuestionAction(rawValue: effect.action), intent) {
+        case (.answer?, .submitAnswer(let rpcID, let submittedAnswers, _)):
+            guard effect.rpcId == rpcID,
+                  let answers = effect.answers,
+                  !answers.isEmpty,
+                  answers == submittedAnswers else {
+                return false
+            }
+            let questionIDs = request.questions.map(\.id)
+            let answerIDs = answers.map(\.id)
+            return !questionIDs.isEmpty
+                && Set(questionIDs).count == questionIDs.count
+                && answerIDs == questionIDs
+                && Set(answerIDs) == Set(questionIDs)
+        case (.cancel?, .submitCancel(let rpcID, _)):
+            return effect.rpcId == rpcID && effect.answers == nil
+        default:
+            // KMP effect 只能由当次 submit intent 产生；其他 reducer 事务不得偷渡 I/O。
+            return false
+        }
+    }
+
+    private func failed(_ error: KMPQuestionStoreError) -> KMPQuestionTransition {
+        KMPQuestionTransition(snapshot: snapshot, effect: nil, error: error)
+    }
+
+    private func failClosed(_ error: KMPQuestionStoreError) -> KMPQuestionTransition {
+        runtimeError = error
+        return failed(error)
+    }
+}
+
 struct KMPShadowRouteFingerprint: Codable, Equatable, CustomStringConvertible {
     var category: String
     var route: String
@@ -412,10 +736,7 @@ final class KMPShadowValidator {
             }
         case .question(let route):
             switch route {
-            case .requested(let action, let sessionID, _, let replay):
-                guard case .requestReceived(let request) = action else {
-                    return make("question", "requested", sessionId: sessionID, replay: replay)
-                }
+            case .requested(let request, let sessionID, _, let replay):
                 return make(
                     "question",
                     "requested",
@@ -431,10 +752,7 @@ final class KMPShadowValidator {
                     sessionId: sessionID,
                     malformedReason: "missing-request-fields"
                 )
-            case .response(let action, let rpcID, let wasNotPending):
-                guard case .responseReceived(_, let responseAction, let accepted, _) = action else {
-                    return make("question", "response", rpcId: rpcID)
-                }
+            case .response(let rpcID, let responseAction, let accepted, _, let wasNotPending):
                 return make(
                     "question",
                     "response",
@@ -443,7 +761,7 @@ final class KMPShadowValidator {
                     accepted: accepted,
                     outcome: wasNotPending ? "not-pending" : nil
                 )
-            case .resolved(_, let rpcID, let sessionID, let cancelled):
+            case .resolved(let rpcID, let sessionID, let cancelled):
                 return make(
                     "question",
                     "resolved",

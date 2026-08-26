@@ -10,7 +10,8 @@ enum class QuestionFailureCode {
     INVALID_ANSWER_ORDER,
     INVALID_OR_DUPLICATE_OPTIONS,
     SINGLE_SELECTION_REQUIRED,
-    SERVER_REJECTED
+    SERVER_REJECTED,
+    REQUEST_FAILED
 }
 
 data class QuestionFailure(
@@ -51,6 +52,7 @@ sealed interface QuestionAction {
     ) : QuestionAction
     data class Resolved(val rpcId: String) : QuestionAction
     data class RequestFailed(val rpcId: String, val message: String?) : QuestionAction
+    data class SessionRequestsFailed(val sessionId: String, val message: String?) : QuestionAction
 }
 
 object QuestionReducer {
@@ -90,9 +92,18 @@ object QuestionReducer {
         is QuestionAction.RequestFailed -> state.withStatus(
             action.rpcId,
             QuestionRequestStatus.Rejected(
-                QuestionFailure(QuestionFailureCode.SERVER_REJECTED, action.message?.takeIf(String::isNotBlank))
+                QuestionFailure(QuestionFailureCode.REQUEST_FAILED, action.message?.takeIf(String::isNotBlank))
             )
         )
+        is QuestionAction.SessionRequestsFailed -> {
+            val rpcIds = state.pendingRequests
+                .filter { it.sessionId == action.sessionId }
+                .map { it.rpcId }
+            val failure = QuestionRequestStatus.Rejected(
+                QuestionFailure(QuestionFailureCode.REQUEST_FAILED, action.message?.takeIf(String::isNotBlank))
+            )
+            state.copy(requestStatuses = state.requestStatuses + rpcIds.associateWith { failure })
+        }
     }
 
     private fun submit(state: QuestionState, action: QuestionAction.Submit): QuestionState {

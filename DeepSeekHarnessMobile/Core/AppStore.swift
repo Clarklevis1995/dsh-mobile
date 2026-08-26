@@ -1,5 +1,22 @@
 import SwiftUI
 
+@MainActor
+protocol GatewayQuestionEffectExecuting: AnyObject {
+    func answerQuestion(rpcId: String, sessionId: String, answers: [GatewayQuestionAnswer])
+    func cancelQuestion(rpcId: String, sessionId: String)
+}
+
+extension GatewayClient: GatewayQuestionEffectExecuting {}
+
+private extension GatewayQuestionRequestStatus {
+    var isAnswerInFlight: Bool {
+        switch self {
+        case .submitting(.answer), .accepted(.answer): true
+        case .idle, .submitting(.cancel), .accepted(.cancel), .rejected: false
+        }
+    }
+}
+
 enum InterfaceStyle: String, CaseIterable, Identifiable {
     case system, light, dark
     var id: String { rawValue }
@@ -108,6 +125,9 @@ final class AppStore: ObservableObject {
     private let preferences: AppPreferences
     /// SessionList 的唯一业务状态来源；Swift 属性只是 UI/持久化快照。
     private let kmpSessionListStore: KMPSessionListStoreAdapter
+    /// Human Question 的唯一业务状态来源；Swift 属性只发布 KMP 快照。
+    private let kmpQuestionStore: KMPQuestionStoreAdapter
+    private let questionEffectExecutor: any GatewayQuestionEffectExecuting
     private var historyState = HistoryState()
     private let historySyncEngine = HistorySyncEngine()
     /// The remote session activity timestamp covered by a completed history load.
@@ -140,7 +160,7 @@ final class AppStore: ObservableObject {
     private var activeConversationActivationKey: String?
     private var presentsNextConnectionFailureAsAlert = true
     private var hasHandledColdLaunchConnection = false
-    private let backgroundExecutionController = AgentBackgroundExecutionController()
+    private let backgroundExecutionController: AgentBackgroundExecutionController
 #if DEBUG
     /// 只记录路由差异；影子 effect 永远不执行，也不参与产品状态写入。
     private let kmpShadowValidator = KMPShadowValidator()
@@ -154,22 +174,34 @@ final class AppStore: ObservableObject {
 
     init(
         preferences: AppPreferences = UserDefaultsAppPreferences(),
-        sessionListBridge: (any KMPSessionListStoreBridging)? = nil
+        sessionListBridge: (any KMPSessionListStoreBridging)? = nil,
+        questionBridge: (any KMPQuestionStoreBridging)? = nil,
+        questionEffectExecutor: (any GatewayQuestionEffectExecuting)? = nil,
+        backgroundExecutionController: AgentBackgroundExecutionController? = nil
     ) {
         self.preferences = preferences
+        self.questionEffectExecutor = questionEffectExecutor ?? gateway
+        self.backgroundExecutionController = backgroundExecutionController ?? AgentBackgroundExecutionController()
         let persistedSessions = preferences.loadSessions()
         let kmpSessionListStore = KMPSessionListStoreAdapter(
             sessions: persistedSessions,
             bridge: sessionListBridge
         )
         self.kmpSessionListStore = kmpSessionListStore
+        let kmpQuestionStore = KMPQuestionStoreAdapter(bridge: questionBridge)
+        self.kmpQuestionStore = kmpQuestionStore
         appLanguage = AppLanguage.load()
         selectedWorkspaceId = preferences.selectedWorkspaceID
         endpoint = preferences.endpoint
         selectedSessionId = kmpSessionListStore.snapshot.selectedSessionId
         sessions = kmpSessionListStore.snapshot.persistedSessions
         archivedSessionIds = kmpSessionListStore.snapshot.archivedSessionIDSet
+        pendingQuestionRequests = kmpQuestionStore.snapshot.pendingRequests
+        questionRequestStatuses = kmpQuestionStore.snapshot.platformStatuses
         if let error = kmpSessionListStore.initializationError {
+            lastError = error.localizedDescription
+        }
+        if let error = kmpQuestionStore.initializationError {
             lastError = error.localizedDescription
         }
         preferences.performMigrations()
@@ -177,7 +209,7 @@ final class AppStore: ObservableObject {
         gateway.onConnectionFailure = { [weak self] detail in
             self?.handleConnectionFailure(detail)
         }
-        backgroundExecutionController.onBackgroundAllowanceExpired = { [weak self] in
+        self.backgroundExecutionController.onBackgroundAllowanceExpired = { [weak self] in
             self?.gateway.backgroundExecutionDidExpire()
         }
     }
@@ -552,24 +584,24 @@ final class AppStore: ObservableObject {
     }
 
     func answerQuestion(_ request: GatewayPendingQuestionRequest, answers: [GatewayQuestionAnswer]) {
-        reduceQuestion(.submit(
-            request: request,
-            submission: .answer(answers),
+        let transition = reduceQuestion(.submitAnswer(
+            rpcID: request.rpcId,
+            answers: answers,
             isConnected: gateway.state.isConnected
         ))
-        guard questionRequestStatuses[request.rpcId] == .submitting(.answer) else { return }
-        beginAgentBackgroundExecution(for: request.sessionId, startsNewTurn: false)
-        gateway.answerQuestion(rpcId: request.rpcId, sessionId: request.sessionId, answers: answers)
+        executeQuestionEffect(transition.effect)
+        if transition.effect == nil,
+           questionRequestStatuses[request.rpcId]?.isAnswerInFlight != true {
+            backgroundExecutionController.releaseQuestionAnswer(rpcID: request.rpcId)
+        }
     }
 
     func cancelQuestion(_ request: GatewayPendingQuestionRequest) {
-        reduceQuestion(.submit(
-            request: request,
-            submission: .cancel,
+        let transition = reduceQuestion(.submitCancel(
+            rpcID: request.rpcId,
             isConnected: gateway.state.isConnected
         ))
-        guard questionRequestStatuses[request.rpcId] == .submitting(.cancel) else { return }
-        gateway.cancelQuestion(rpcId: request.rpcId, sessionId: request.sessionId)
+        executeQuestionEffect(transition.effect)
     }
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
@@ -610,6 +642,7 @@ final class AppStore: ObservableObject {
                 deviceName ?? String(localized: "长期凭据已安全保存到 Keychain")
             )
         case .hello(let payload):
+            backgroundExecutionController.releaseAllQuestionAnswers()
             reduceQuestion(.reset)
             supportsImages = payload.protocolVersion >= 3 && payload.capabilities.contains("images")
             attachmentLoader.reset()
@@ -812,8 +845,8 @@ final class AppStore: ObservableObject {
 
     private func handleQuestionRoute(_ route: GatewayQuestionRoute) {
         switch route {
-        case .requested(let action, let sessionID, let preview, let replay):
-            reduceQuestion(action)
+        case .requested(let request, let sessionID, let preview, let replay):
+            reduceQuestion(.requestReceived(request))
             notice(
                 replay ? String(localized: "待回答问题已恢复") : String(localized: "Agent 正在等待回答"),
                 preview.isEmpty ? String(localized: "请回答 Agent 的问题") : preview,
@@ -826,7 +859,7 @@ final class AppStore: ObservableObject {
                 sessionId: sessionID,
                 isError: true
             )
-        case .response(let action, let rpcID, let wasNotPending):
+        case .response(let rpcID, let action, let accepted, let reason, let wasNotPending):
             if wasNotPending,
                let request = pendingQuestionRequests.first(where: { $0.rpcId == rpcID }) {
                 notice(
@@ -835,10 +868,28 @@ final class AppStore: ObservableObject {
                     sessionId: request.sessionId
                 )
             }
-            reduceQuestion(action)
-        case .resolved(let action, let rpcID, let sessionID, let cancelled):
+            reduceQuestion(.responseReceived(
+                rpcID: rpcID,
+                action: action,
+                accepted: accepted,
+                reason: reason
+            ))
+            if action == .answer {
+                if accepted {
+                    backgroundExecutionController.questionAnswerAccepted(rpcID: rpcID)
+                } else {
+                    backgroundExecutionController.releaseQuestionAnswer(rpcID: rpcID)
+                }
+            }
+        case .resolved(let rpcID, let sessionID, let cancelled):
             let pendingSessionID = pendingQuestionRequests.first { $0.rpcId == rpcID }?.sessionId
-            reduceQuestion(action)
+            let wasAnswerInFlight = questionRequestStatuses[rpcID]?.isAnswerInFlight == true
+            reduceQuestion(.resolved(rpcID: rpcID))
+            if wasAnswerInFlight && !cancelled {
+                backgroundExecutionController.questionAnswerAccepted(rpcID: rpcID)
+            } else {
+                backgroundExecutionController.releaseQuestionAnswer(rpcID: rpcID)
+            }
             let outcome = cancelled ? String(localized: "已跳过") : String(localized: "已提交")
             notice(
                 String(localized: "q.outcome.title", defaultValue: "Agent 问题\(outcome)"),
@@ -866,10 +917,16 @@ final class AppStore: ObservableObject {
         }
         let detail = [payload.code, payload.message].compactMap { $0 }.joined(separator: ": ")
         if let requestType = payload.requestType,
-           ["question-answer", "question-cancel"].contains(requestType),
-           let rpcID = payload.rpcID
-                ?? pendingQuestionRequests.first(where: { $0.sessionId == payload.sessionID })?.rpcId {
-            reduceQuestion(.requestFailed(rpcID: rpcID, message: detail))
+           ["question-answer", "question-cancel"].contains(requestType) {
+            if let rpcID = payload.rpcID {
+                reduceQuestion(.requestFailed(rpcID: rpcID, message: detail))
+                backgroundExecutionController.releaseQuestionAnswer(rpcID: rpcID)
+            } else if let sessionID = payload.sessionID {
+                // 旧网关可能省略 rpcId；此时按 session 原子失败全部相关请求，
+                // 不能从多个 pending request 中猜测任意一个 rpcId。
+                reduceQuestion(.sessionRequestsFailed(sessionID: sessionID, message: detail))
+                backgroundExecutionController.releaseQuestionAnswers(sessionID: sessionID)
+            }
         }
         let failedRequest = payload.requestType
             ?? payload.code.flatMap(sessionControlKind(from:))
@@ -1185,6 +1242,7 @@ final class AppStore: ObservableObject {
     }
 
     private func resetOutstandingRequests() {
+        backgroundExecutionController.releaseAllQuestionAnswers()
         for kind in Array(sessionControlLoadingKinds) { finishSessionControlRequest(kind) }
         for kind in Array(defaultConfigurationLoadingKinds) { finishDefaultConfigurationRequest(kind) }
         for id in Array(historyLoadingSessionIds) { finishHistoryLoading(id) }
@@ -1269,17 +1327,38 @@ final class AppStore: ObservableObject {
             selectedSessionId = snapshot.selectedSessionId
         }
     }
-    private func reduceQuestion(_ action: QuestionAction) {
-        var state = QuestionState(
-            pendingRequests: pendingQuestionRequests,
-            requestStatuses: questionRequestStatuses
-        )
-        QuestionReducer.reduce(state: &state, action: action)
-        if state.pendingRequests != pendingQuestionRequests {
-            pendingQuestionRequests = state.pendingRequests
+    @discardableResult
+    private func reduceQuestion(_ intent: KMPQuestionIntent) -> KMPQuestionTransition {
+        let transition = kmpQuestionStore.reduce(intent)
+        if let error = transition.error {
+            lastError = error.localizedDescription
+            return transition
         }
-        if state.requestStatuses != questionRequestStatuses {
-            questionRequestStatuses = state.requestStatuses
+        if transition.snapshot.pendingRequests != pendingQuestionRequests {
+            pendingQuestionRequests = transition.snapshot.pendingRequests
+        }
+        let statuses = transition.snapshot.platformStatuses
+        if statuses != questionRequestStatuses { questionRequestStatuses = statuses }
+        return transition
+    }
+    private func executeQuestionEffect(_ effect: KMPQuestionEffect?) {
+        guard let effect else { return }
+        switch effect.action {
+        case GatewayQuestionAction.answer.rawValue:
+            guard let answers = effect.answers, !answers.isEmpty else { return }
+            backgroundExecutionController.beginQuestionAnswer(
+                rpcID: effect.rpcId,
+                sessionID: effect.sessionId
+            )
+            questionEffectExecutor.answerQuestion(
+                rpcId: effect.rpcId,
+                sessionId: effect.sessionId,
+                answers: answers
+            )
+        case GatewayQuestionAction.cancel.rawValue:
+            questionEffectExecutor.cancelQuestion(rpcId: effect.rpcId, sessionId: effect.sessionId)
+        default:
+            lastError = "KMP Question 返回未知 effect：\(effect.action)"
         }
     }
     @discardableResult

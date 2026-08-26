@@ -217,7 +217,7 @@ struct GatewayQuestion: Codable, Hashable, Sendable, Identifiable {
     var allowsMultipleSelections: Bool { multiSelect == true }
 }
 
-struct GatewayPendingQuestionRequest: Hashable, Sendable, Identifiable {
+struct GatewayPendingQuestionRequest: Codable, Hashable, Sendable, Identifiable {
     var rpcId: String
     var sessionId: String
     var questions: [GatewayQuestion]

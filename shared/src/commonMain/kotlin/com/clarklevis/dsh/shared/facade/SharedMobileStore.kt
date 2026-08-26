@@ -196,5 +196,7 @@ class SharedMobileFacade {
         blankSessionPrefix = blankSessionPrefix
     )
 
+    fun makeQuestionStore(): SharedQuestionStore = SharedQuestionStore()
+
     fun makeShadowFacade(): SharedShadowFacade = SharedShadowFacade()
 }
