@@ -68,6 +68,10 @@ enum ConversationReconciliation {
     /// subscribed live tail; both sources count as coverage. A session with
     /// live events but no completed baseline is still covered up to its
     /// newest event and only reloads when the remote summary moves past it.
+    ///
+    /// The comparison is intentionally strict: equality counts as covered
+    /// (a >= comparison would reload on every frame), so same-timestamp
+    /// missed events only recover once remote activity moves strictly ahead.
     static func historyDecision(
         remoteLastActivity: Date,
         syncedActivity: Date?,
@@ -75,9 +79,15 @@ enum ConversationReconciliation {
         isHistoryLoading: Bool
     ) -> HistoryDecision {
         if isHistoryLoading { return .skipLoading }
-        guard let coveredActivity = [syncedActivity, latestLocalEventDate].compactMap({ $0 }).max() else {
-            return .needsBaseline
+        // Newest covered activity, without allocating a temporary array on
+        // every `sessions` frame (Optional is not Comparable).
+        let coveredActivity: Date?
+        if let synced = syncedActivity, let event = latestLocalEventDate {
+            coveredActivity = max(synced, event)
+        } else {
+            coveredActivity = syncedActivity ?? latestLocalEventDate
         }
+        guard let coveredActivity else { return .needsBaseline }
         return remoteLastActivity > coveredActivity ? .reloadHistory : .skipLoading
     }
 
@@ -171,6 +181,11 @@ final class AppStore: ObservableObject {
     /// Sessions whose disappearance from the authoritative list has already
     /// been surfaced once, so repeated `sessions` frames stay silent.
     private var missingConversationNoticeSessionIds: Set<String> = []
+    /// Sessions created by this device's own sends that no remote `sessions`
+    /// frame has listed yet. They are exempt from the missing-session check
+    /// so a pre-send snapshot response cannot produce a false "deleted"
+    /// notice for a conversation that just came to life.
+    private var unconfirmedLocallyCreatedSessionIds: Set<String> = []
     private var conversationProjectionDrivers: [String: ConversationProjectionDriver] = [:]
     private var conversationTimelines: [String: ConversationTimeline] = [:]
     /// Invalidates an in-flight cold projection when a completed history
@@ -562,6 +577,9 @@ final class AppStore: ObservableObject {
     func resumeWorkspace() {
         preparedConversationActivationKey = nil
         activeConversationActivationKey = nil
+        // The open conversation's lifecycle ended; its disappearance-notice
+        // bookkeeping should not outlive it.
+        missingConversationNoticeSessionIds.removeAll()
         gateway.subscribe(sessionId: nil)
         refreshRemoteState()
     }
@@ -730,6 +748,16 @@ final class AppStore: ObservableObject {
             // the open conversation re-activate on the new generation —
             // re-subscribing live events and catching up missed history.
             activeConversationActivationKey = nil
+            // History loads still marked in-flight also belong to the previous
+            // generation: the server never retransmits their responses, and
+            // without this reset the re-activation below would short-circuit
+            // to .skipLoading for up to the 20 s request timeout — leaving a
+            // first-baseline fetch that was interrupted by backgrounding
+            // permanently unfetched. Their timeout tasks see a cleared token
+            // and stay silent.
+            for staleSessionId in Array(historyLoadingSessionIds) {
+                finishHistoryLoading(staleSessionId)
+            }
             if preparedConversationActivationKey != nil {
                 Task { [weak self] in
                     guard let self else { return }
@@ -753,9 +781,18 @@ final class AppStore: ObservableObject {
             archivedSessionIds = Set(frame.archivedSessionIds ?? [])
             notice(String(localized: "notice.workspaces.synced", defaultValue: "工作区已同步"), String(localized: "workspaces.count", defaultValue: "\(workspaces.count) 个工作区"))
         case "sessions":
-            applyRemoteSessions(decodeItems(frame.items, as: GatewaySessionSummary.self))
+            let remoteSummaries = decodeItems(frame.items, as: GatewaySessionSummary.self)
+            applyRemoteSessions(remoteSummaries)
+            // The frame's own id set is the authoritative presence signal —
+            // the upsert-only local list cannot detect hard deletions.
+            let presentSessionIds = Set(
+                remoteSummaries
+                    .filter { !archivedSessionIds.contains($0.sessionId) }
+                    .map(\.sessionId)
+            )
+            unconfirmedLocallyCreatedSessionIds.subtract(presentSessionIds)
             isRefreshing = false
-            reconcileOpenConversationWithRemoteState()
+            reconcileOpenConversationWithRemoteState(presentSessionIds: presentSessionIds)
             notice(String(localized: "notice.sessions.synced", defaultValue: "会话列表已同步"), String(localized: "sessions.count", defaultValue: "\(sessions.count) 个会话"))
         case "history": applyHistoryRebased(frame)
         case "attachment": handleImageAttachment(frame)
@@ -1002,13 +1039,17 @@ final class AppStore: ObservableObject {
         if selectedSessionId == nil {
             selectedSessionId = id
             // The pushed "new conversation" destination has just become a
-            // real session. Align the prepared key so a later transport
-            // generation (reconnect after backgrounding) can re-activate the
-            // pushed view instead of leaving it without a subscription, and
-            // drop the stale sentinel activation so `prepared == active`
-            // holds again once the next activation runs.
+            // real session. Align the prepared key so the next transport
+            // generation's hello re-activation targets the real session id
+            // (rather than the __new-conversation__ sentinel) and can
+            // re-subscribe it, and drop the stale sentinel activation so
+            // `prepared == active` holds again once that activation runs.
+            // Track the id as locally created until a remote sessions frame
+            // confirms it, so a pre-send snapshot of the session list cannot
+            // read as a deletion.
             preparedConversationActivationKey = id
             activeConversationActivationKey = nil
+            unconfirmedLocallyCreatedSessionIds.insert(id)
         }
         waitingForNewSession = false
         upsertSession(id: id, title: L10n.newSessionPlaceholderTitle)
@@ -1346,18 +1387,21 @@ final class AppStore: ObservableObject {
     /// coverage only reload when remote activity is genuinely ahead — a
     /// brand-new session's own first send therefore never triggers a
     /// redundant full history fetch.
-    private func reconcileOpenConversationWithRemoteState() {
+    private func reconcileOpenConversationWithRemoteState(presentSessionIds: Set<String>) {
         // Only an already-open (prepared and selected) conversation
         // reconciles; the `__new-conversation__` sentinel never matches a
         // session id.
         guard let id = selectedSessionId,
               preparedConversationActivationKey == id else { return }
-        guard let session = sessions.first(where: { $0.id == id }) else {
-            // The authoritative list no longer contains the open session: it
+        guard presentSessionIds.contains(id) || unconfirmedLocallyCreatedSessionIds.contains(id) else {
+            // The authoritative frame no longer lists the open session: it
             // was deleted or archived on another device. Cached content stays
             // visible, and navigation chrome is immutable, so surface a notice
             // instead of silently swapping a different session underneath the
-            // pushed title. Notify once per disappearance.
+            // pushed title. Notify once per disappearance. A session created
+            // by this device's own send that no remote frame has confirmed
+            // yet is exempt — a pre-send snapshot response must not read as
+            // a deletion.
             if missingConversationNoticeSessionIds.insert(id).inserted {
                 notice(
                     String(localized: "notice.session.missing.title", defaultValue: "会话已不可用"),
@@ -1369,7 +1413,10 @@ final class AppStore: ObservableObject {
             return
         }
         missingConversationNoticeSessionIds.remove(id)
-        guard ConversationReconciliation.reconcileShouldLoadHistory(historyDecision(for: session)) else { return }
+        guard let session = sessions.first(where: { $0.id == id }),
+              ConversationReconciliation.reconcileShouldLoadHistory(historyDecision(for: session)) else { return }
+        // loadHistory re-checks the in-flight guard internally, so a race
+        // with the hello-triggered activation Task cannot double-load.
         loadHistory(for: id)
     }
     private func applyEvent(_ record: SessionEvent) {

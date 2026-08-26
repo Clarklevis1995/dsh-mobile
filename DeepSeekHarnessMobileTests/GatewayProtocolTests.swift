@@ -360,10 +360,11 @@ final class ConversationReconciliationTests: XCTestCase {
     }
 
     func testNoLocalKnowledgeNeedsBaseline() {
-        let t0 = Date(timeIntervalSince1970: 1_000)
-        let t1 = t0.addingTimeInterval(60)
         // No baseline and no cached events: nothing to compare against.
-        XCTAssertEqual(decision(remote: t1, synced: nil, latestEvent: nil), .needsBaseline)
+        XCTAssertEqual(
+            decision(remote: Date(timeIntervalSince1970: 1_060), synced: nil, latestEvent: nil),
+            .needsBaseline
+        )
     }
 
     func testRemoteAheadOfCoverageReloads() {
@@ -381,6 +382,8 @@ final class ConversationReconciliationTests: XCTestCase {
         let t1 = t0.addingTimeInterval(60)
         XCTAssertEqual(decision(remote: t1, synced: t1, latestEvent: nil), .skipLoading)
         XCTAssertEqual(decision(remote: t0, synced: nil, latestEvent: t1), .skipLoading)
+        // A completed baseline ahead of the remote summary also short-circuits.
+        XCTAssertEqual(decision(remote: t0, synced: t1, latestEvent: nil), .skipLoading)
         // Equal timestamps count as covered, not behind.
         XCTAssertEqual(decision(remote: t1, synced: nil, latestEvent: t1), .skipLoading)
         XCTAssertEqual(decision(remote: t1, synced: t0, latestEvent: t1), .skipLoading)
