@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 
@@ -103,6 +104,44 @@ enum ConversationReconciliation {
     static func reconcileShouldLoadHistory(_ decision: HistoryDecision) -> Bool {
         decision == .reloadHistory
     }
+
+    /// What the reconcile should do with the currently open conversation
+    /// once a fresh `sessions` frame has arrived.
+    enum OpenConversationDisposition: Equatable {
+        /// No conversation is open (nothing selected, or the prepared key is
+        /// the `__new-conversation__` sentinel / another session).
+        case notOpen
+        /// The open session was archived on another device. Product decision:
+        /// archiving means the user does not want to see it anywhere, so the
+        /// app pops back to the workspace list instead of anchoring on it.
+        case dismissToWorkspace
+        /// The open session is absent from the authoritative list: deleted on
+        /// another device. Cached content stays visible under a notice.
+        case showMissingNotice
+        /// The session is present (or a locally created send not yet listed);
+        /// proceed to the staleness check.
+        case continueReconciling
+    }
+
+    static func openConversationDisposition(
+        selectedSessionId: String?,
+        preparedActivationKey: String?,
+        archivedSessionIds: Set<String>,
+        presentSessionIds: Set<String>,
+        unconfirmedLocallyCreatedSessionIds: Set<String>
+    ) -> OpenConversationDisposition {
+        guard let id = selectedSessionId, preparedActivationKey == id else { return .notOpen }
+        // Archived is checked before presence: an archived id necessarily
+        // references a real server-side session (it cannot appear in the
+        // archived list through any local race), and the server omits
+        // archived sessions from the active summary list, so it would
+        // otherwise fall through to the missing-notice branch.
+        if archivedSessionIds.contains(id) { return .dismissToWorkspace }
+        guard presentSessionIds.contains(id) || unconfirmedLocallyCreatedSessionIds.contains(id) else {
+            return .showMissingNotice
+        }
+        return .continueReconciling
+    }
 }
 
 @MainActor
@@ -164,6 +203,11 @@ final class AppStore: ObservableObject {
     @Published private(set) var pendingQuestionRequests: [GatewayPendingQuestionRequest] = []
     @Published private(set) var questionRequestStatuses: [String: GatewayQuestionRequestStatus] = [:]
     @Published private(set) var supportsImages = false
+    /// Increments when the open conversation must be dismissed (its session
+    /// was archived on another device). RootNavigationHost subscribes via
+    /// `conversationDismissalPublisher` and pops the navigation stack; the
+    /// resulting empty path drives `resumeWorkspace()` for cleanup.
+    @Published private(set) var conversationDismissalToken = 0
 
     let gateway = GatewayClient()
     private var pendingHistorySessionId: String?
@@ -298,6 +342,17 @@ final class AppStore: ObservableObject {
     var ungroupedSessions: [SessionSummary] {
         let groupedSessionIds = Set(workspaces.flatMap(\.sessionIds))
         return sessions.filter { !groupedSessionIds.contains($0.id) }
+    }
+
+    /// View-side subscription for `conversationDismissalToken`. `onReceive`
+    /// works on views that hold the store as an unobserved reference (the
+    /// equatable navigation host never re-evaluates its body, so onChange
+    /// would never fire).
+    var conversationDismissalPublisher: AnyPublisher<Void, Never> {
+        $conversationDismissalToken
+            .dropFirst()
+            .map { _ in () }
+            .eraseToAnyPublisher()
     }
 
     func connect() {
@@ -1388,29 +1443,48 @@ final class AppStore: ObservableObject {
     /// brand-new session's own first send therefore never triggers a
     /// redundant full history fetch.
     private func reconcileOpenConversationWithRemoteState(presentSessionIds: Set<String>) {
-        // Only an already-open (prepared and selected) conversation
-        // reconciles; the `__new-conversation__` sentinel never matches a
-        // session id.
-        guard let id = selectedSessionId,
-              preparedConversationActivationKey == id else { return }
-        guard presentSessionIds.contains(id) || unconfirmedLocallyCreatedSessionIds.contains(id) else {
+        guard let id = selectedSessionId else { return }
+        switch ConversationReconciliation.openConversationDisposition(
+            selectedSessionId: selectedSessionId,
+            preparedActivationKey: preparedConversationActivationKey,
+            archivedSessionIds: archivedSessionIds,
+            presentSessionIds: presentSessionIds,
+            unconfirmedLocallyCreatedSessionIds: unconfirmedLocallyCreatedSessionIds
+        ) {
+        case .notOpen:
+            return
+        case .dismissToWorkspace:
+            // The session was archived on another device: archiving is a
+            // "do not show me this anywhere" signal, so pop back to the
+            // workspace list instead of anchoring on it. Clear the activation
+            // state immediately so a subsequent frame cannot re-emit; the
+            // empty navigation path then drives resumeWorkspace() for the
+            // unsubscribe/refresh cleanup.
+            preparedConversationActivationKey = nil
+            activeConversationActivationKey = nil
+            missingConversationNoticeSessionIds.remove(id)
+            conversationDismissalToken &+= 1
+            return
+        case .showMissingNotice:
             // The authoritative frame no longer lists the open session: it
-            // was deleted or archived on another device. Cached content stays
-            // visible, and navigation chrome is immutable, so surface a notice
-            // instead of silently swapping a different session underneath the
-            // pushed title. Notify once per disappearance. A session created
-            // by this device's own send that no remote frame has confirmed
-            // yet is exempt — a pre-send snapshot response must not read as
-            // a deletion.
+            // was deleted on another device (archived was handled above).
+            // Cached content stays visible, and navigation chrome is
+            // immutable, so surface a notice instead of silently swapping a
+            // different session underneath the pushed title. Notify once per
+            // disappearance. A session created by this device's own send that
+            // no remote frame has confirmed yet is exempt — a pre-send
+            // snapshot response must not read as a deletion.
             if missingConversationNoticeSessionIds.insert(id).inserted {
                 notice(
                     String(localized: "notice.session.missing.title", defaultValue: "会话已不可用"),
-                    String(localized: "notice.session.missing.detail", defaultValue: "当前会话已在其他设备被删除或归档，显示的仍是本地缓存内容。"),
+                    String(localized: "notice.session.missing.detail", defaultValue: "当前会话已在其他设备被删除，显示的仍是本地缓存内容。"),
                     sessionId: id,
                     isError: true
                 )
             }
             return
+        case .continueReconciling:
+            break
         }
         missingConversationNoticeSessionIds.remove(id)
         guard let session = sessions.first(where: { $0.id == id }),

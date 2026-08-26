@@ -399,4 +399,58 @@ final class ConversationReconciliationTests: XCTestCase {
         XCTAssertEqual(ConversationReconciliation.activationShouldLoadHistory(.skipLoading), false)
         XCTAssertEqual(ConversationReconciliation.reconcileShouldLoadHistory(.skipLoading), false)
     }
+
+    // MARK: - Open-conversation disposition (archived pop / missing notice)
+
+    private func disposition(
+        selected: String?,
+        prepared: String? = "s1",
+        archived: Set<String> = [],
+        present: Set<String> = ["s1"],
+        unconfirmed: Set<String> = []
+    ) -> ConversationReconciliation.OpenConversationDisposition {
+        ConversationReconciliation.openConversationDisposition(
+            selectedSessionId: selected,
+            preparedActivationKey: prepared,
+            archivedSessionIds: archived,
+            presentSessionIds: present,
+            unconfirmedLocallyCreatedSessionIds: unconfirmed
+        )
+    }
+
+    func testDispositionRequiresOpenConversation() {
+        XCTAssertEqual(disposition(selected: nil), .notOpen)
+        // Prepared key pointing at another destination (or the
+        // __new-conversation__ sentinel) means no open conversation to act on.
+        XCTAssertEqual(disposition(selected: "s1", prepared: "s2"), .notOpen)
+        XCTAssertEqual(disposition(selected: "s1", prepared: nil), .notOpen)
+    }
+
+    func testArchivedSessionDismissesToWorkspace() {
+        // Archiving is checked first: it wins even when the archived session
+        // is naturally absent from the active presence set (the server omits
+        // archived sessions from summaries).
+        XCTAssertEqual(
+            disposition(selected: "s1", archived: ["s1"], present: []),
+            .dismissToWorkspace
+        )
+        XCTAssertEqual(
+            disposition(selected: "s1", archived: ["s1"], present: ["s1"]),
+            .dismissToWorkspace
+        )
+    }
+
+    func testMissingSessionShowsNoticeOnlyWhenNotExempt() {
+        XCTAssertEqual(disposition(selected: "s1", present: []), .showMissingNotice)
+        // A locally created send not yet listed by any remote frame is exempt
+        // from the deletion notice (pre-send snapshot race).
+        XCTAssertEqual(
+            disposition(selected: "s1", present: [], unconfirmed: ["s1"]),
+            .continueReconciling
+        )
+    }
+
+    func testPresentSessionContinuesReconciling() {
+        XCTAssertEqual(disposition(selected: "s1"), .continueReconciling)
+    }
 }

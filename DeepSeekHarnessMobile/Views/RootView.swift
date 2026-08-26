@@ -57,6 +57,13 @@ private struct RootNavigationHost: View, Equatable {
         .onChange(of: navigationPath) { _, path in
             if path.isEmpty { store.resumeWorkspace() }
         }
+        .onReceive(store.conversationDismissalPublisher) { _ in
+            // The open session was archived on another device; pop to the
+            // workspace list. The emptied path triggers the observer above,
+            // which resumes workspace subscriptions and refreshes.
+            guard !navigationPath.isEmpty else { return }
+            navigationPath.removeAll()
+        }
     }
 
     @ViewBuilder
