@@ -368,7 +368,7 @@ struct GatewayModelGroup: Codable, Hashable, Sendable, Identifiable {
     var models: [GatewayModelItem]
 }
 
-struct GatewayModelCatalog: Hashable, Sendable {
+struct GatewayModelCatalog: Codable, Hashable, Sendable {
     var current: GatewayModelSelection?
     var routable: Bool
     var groups: [GatewayModelGroup]
@@ -427,7 +427,7 @@ struct GatewayContextBreakdown: Codable, Hashable, Sendable {
     var messageTokens: Int?
 }
 
-struct GatewayContextSnapshot: Hashable, Sendable {
+struct GatewayContextSnapshot: Codable, Hashable, Sendable {
     var asOfSeq: Int? = nil
     var tokenUsage: GatewayTokenUsage? = nil
     var pressure: GatewayContextPressure? = nil
@@ -463,7 +463,7 @@ struct GatewaySessionTokenUsageTotals: Codable, Hashable, Sendable {
     var reasoningTokens: Int?
 }
 
-struct GatewaySessionStatsSnapshot: Hashable, Sendable {
+struct GatewaySessionStatsSnapshot: Codable, Hashable, Sendable {
     var asOfSeq: Int? = nil
     var stats: GatewaySessionStats? = nil
     var tokenUsage: GatewaySessionTokenUsage? = nil

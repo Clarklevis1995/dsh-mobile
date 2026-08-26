@@ -32,18 +32,18 @@ enum SessionControlAction {
         groups: [GatewayModelGroup],
         isGlobalRequest: Bool
     )
-    case modelSelected(sessionID: String, selection: GatewayModelSelection)
-    case permissionsReceived(sessionID: String, permissions: GatewaySessionPermissions)
-    case permissionSelected(sessionID: String, value: String)
+    case modelSelected(sessionID: String?, selection: GatewayModelSelection)
+    case permissionsReceived(sessionID: String?, permissions: GatewaySessionPermissions)
+    case permissionSelected(sessionID: String?, value: String)
     case contextReceived(
-        sessionID: String,
+        sessionID: String?,
         asOfSequence: Int?,
         tokenUsage: GatewayTokenUsage?,
         pressure: GatewayContextPressure?,
         breakdown: GatewayContextBreakdown?
     )
     case statsReceived(
-        sessionID: String,
+        sessionID: String?,
         asOfSequence: Int?,
         stats: GatewaySessionStats?,
         tokenUsageTotals: GatewaySessionTokenUsageTotals?,
@@ -88,21 +88,25 @@ enum SessionControlReducer {
                 state.globalModelCatalog = GatewayModelCatalog(current: nil, routable: false, groups: groups)
             }
         case .modelSelected(let sessionID, let selection):
+            guard let sessionID else { return }
             var catalog = state.modelCatalogs[sessionID]
                 ?? GatewayModelCatalog(current: nil, routable: true, groups: [])
             catalog.current = selection
             state.modelCatalogs[sessionID] = catalog
         case .permissionsReceived(let sessionID, var permissions):
+            guard let sessionID else { return }
             permissions.options = (permissions.options ?? []).filter {
                 supportedPermissionPresets.contains($0.value)
             }
             state.sessionPermissions[sessionID] = permissions
         case .permissionSelected(let sessionID, let value):
+            guard let sessionID else { return }
             var permissions = state.sessionPermissions[sessionID] ?? GatewaySessionPermissions()
             permissions.currentValue = value
             permissions.preset = value
             state.sessionPermissions[sessionID] = permissions
         case .contextReceived(let sessionID, let asOfSequence, let tokenUsage, let pressure, let breakdown):
+            guard let sessionID else { return }
             var snapshot = state.contextSnapshots[sessionID] ?? GatewayContextSnapshot()
             snapshot.asOfSeq = asOfSequence ?? snapshot.asOfSeq
             snapshot.tokenUsage = tokenUsage ?? snapshot.tokenUsage
@@ -110,6 +114,7 @@ enum SessionControlReducer {
             snapshot.breakdown = breakdown ?? snapshot.breakdown
             state.contextSnapshots[sessionID] = snapshot
         case .statsReceived(let sessionID, let asOfSequence, let stats, let totals, let pressure):
+            guard let sessionID else { return }
             var snapshot = state.sessionStatsSnapshots[sessionID] ?? GatewaySessionStatsSnapshot()
             snapshot.asOfSeq = asOfSequence ?? snapshot.asOfSeq
             snapshot.stats = stats ?? snapshot.stats

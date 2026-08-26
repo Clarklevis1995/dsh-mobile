@@ -198,5 +198,7 @@ class SharedMobileFacade {
 
     fun makeQuestionStore(): SharedQuestionStore = SharedQuestionStore()
 
+    fun makeSessionControlStore(): SharedSessionControlStore = SharedSessionControlStore()
+
     fun makeShadowFacade(): SharedShadowFacade = SharedShadowFacade()
 }

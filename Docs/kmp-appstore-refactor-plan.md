@@ -4,7 +4,7 @@
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
 > 最近更新：2026-08-26  
-> 当前任务：阶段 9.4——将模型、权限、Context Usage、Stats、Agent Presets 和默认配置状态切换到 KMP
+> 当前任务：暂停，等待阶段 9.1～9.4 iOS 人工核验；通过后执行阶段 9.5
 
 ## 使用说明
 
@@ -183,10 +183,14 @@ shared/src/commonMain/                  # 后续阶段创建
 - [x] 9.1 先将 SessionList 的远端合并、排序、归档、选择、运行和未读状态切换到 KMP。
 - [x] 9.2 保持 `UserDefaultsAppPreferences` 为 iOS 持久化适配器，在 Swift snapshot 与既有持久化模型之间做显式映射。
 - [x] 9.3 将 Human Question 请求、校验、提交状态、响应和 resolved 流程切换到 KMP。
-- [ ] 9.4 将模型、权限、Context Usage、Stats、Agent Presets 和默认配置状态切换到 KMP。
+- [x] 9.4 将模型、权限、Context Usage、Stats、Agent Presets 和默认配置状态切换到 KMP。
 - [ ] 9.5 每完成一个子系统，关闭该子系统的 Swift 写路径并保留一轮可回滚开关；人工验收通过后删除开关。
 
 验收标准：iOS UI、旧安装数据和 Gateway 请求语义保持不变；每个已切换子系统只有 KMP 一个业务状态来源；自动化测试与会话、问题、模型、权限人工回归通过。
+
+阶段 9.4 自动化验收结论：KMP `shared` 全量 42 项测试、iPhone 17 Pro（iOS 26.2 Simulator）全量 92 项测试和 Android 2 项单元测试均为 0 失败；Android Debug APK 与 iOS 无签名 Release Device 构建成功；`git diff --check` 通过。阶段 9.1～9.4 的人工核验清单见 `Docs/kmp-stage9-manual-verification.md`。
+
+性能债务：当前 SessionControl 每次有状态变化仍跨 KMP/Swift 边界编解码全量 JSON snapshot（P3）。必须在阶段 10 开始前完成增量 patch 或结构化桥接方案评估，并在进入高频 Conversation/Trajectory 流式状态切换前落地适当方案，避免每个 token 复制完整状态。
 
 ### 阶段 10：iOS Conversation、Trajectory 与 History 切换
 
@@ -286,6 +290,11 @@ xcodebuild test \
 
 ### 2026-08-26
 
+- 完成阶段 9.4：新增有状态 `SharedSessionControlStore`，模型、权限、Context Usage、Stats、Agent Presets、默认模型与默认配置统一由 KMP 单写；Swift `AppStore` 只发布 KMP snapshot 并执行经过语义校验的显式 effect，旧 Swift SessionControl 写路径已关闭。
+- SessionControl 对同 kind 请求采用 `active + queued(latest-wins)` 串行模型，KMP 在同一事务内维护 request target、generation token、完成信号与下一 effect；Swift 桥接校验 `applied`、`committed`、`completedKind/completedRequestToken`、snapshot 和 effect 不变量，任何坏结果均在状态提交和平台 I/O 前 fail-closed。序列号统一使用 `Long/KotlinLong`，覆盖超过 Int32 的 Gateway sequence。
+- Gateway 响应不回显 request token，因此正常成功依赖“每个请求只有一个终态响应”的协议边界；超时、失败和跨 session 切换会要求显式 session 关联或隔离该 kind，迟到、缺少关联或 target 不匹配的响应不会提交到新 generation。断线/新 `hello` 会清除上一连接代际的 active、queued、token 与隔离状态。
+- 阶段 9.4 自动化门禁通过：KMP `:shared:allTests --rerun-tasks` 共 42 项测试、0 失败；iPhone 17 Pro（iOS 26.2 Simulator）`xcodebuild test` 共 92 项测试、0 失败；Android 单测 2 项、0 失败且 Debug APK 构建成功（约 12 MB）；iOS 无签名 Release Device 构建成功；`git diff --check` 通过。当前暂停，等待阶段 9.1～9.4 iOS 人工核验，通过后执行阶段 9.5。
+- 记录 P3 性能债务：SessionControl 当前仍跨桥接层传递全量 JSON snapshot。阶段 10 前必须评估增量 patch/结构化桥接，并在高频流式迁移前采用合适方案，禁止把全量 snapshot 模式直接扩展到逐 token 路径。
 - 完成阶段 9.3：新增有状态 `SharedQuestionStore`，iOS Human Question 的请求、答案校验、提交/取消状态、Gateway 响应、resolved 与失败恢复统一改为 KMP 单写；Swift `pendingQuestionRequests` 和 `questionRequestStatuses` 仅发布 KMP 快照，旧 Swift Reducer 写路径已关闭。
 - Question effect 采用 fail-closed：仅在 KMP mutation 成功、快照可解析且 effect 与原始 intent 在 `rpcId`、`sessionId`、action 和 answers 上语义一致时才执行网络副作用；任何结构化错误、坏快照或 effect 不匹配都会关闭后续 mutation，且不会误发 Gateway 请求。后台执行额度改为按 session 分别计数，Human Question 临时额度按 `rpcId` 追踪；无 `rpcId` 的连接/会话失败会原子清理匹配请求及额度，避免跨 session 串扰和后台任务泄漏。
 - 阶段 9.3 自动化门禁通过：`./gradlew :shared:iosSimulatorArm64Test --rerun-tasks` 共 30 项测试、0 失败；iPhone 17 Pro 模拟器全量 `xcodebuild test` 共 80 项测试、0 失败；`./gradlew :androidApp:testDebugUnitTest` 构建成功；Android CLI 正确识别 debug/release variants 且 Debug APK 存在；`git diff --check` 通过。下一步为阶段 9.4。

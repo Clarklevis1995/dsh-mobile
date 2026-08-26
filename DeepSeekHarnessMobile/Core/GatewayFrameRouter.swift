@@ -215,7 +215,7 @@ enum GatewayFrameRouter {
             ))
         case "models":
             return .control(.action(.modelsReceived(
-                sessionID: frame.sessionId ?? context.pendingModelsSessionID,
+                sessionID: frame.sessionId,
                 current: frame.current,
                 routable: frame.routable ?? false,
                 groups: frame.groups ?? [],
@@ -223,36 +223,30 @@ enum GatewayFrameRouter {
             ), finishRequest: "models"))
         case "select-model":
             return .control(.modelSelected(
-                sessionID: frame.sessionId ?? context.pendingModelSelectionSessionID,
+                sessionID: frame.sessionId,
                 selection: frame.selected
             ))
         case "permission-options":
             return .control(.permissionOptions(
-                sessionID: frame.sessionId ?? context.pendingPermissionOptionsSessionID,
+                sessionID: frame.sessionId,
                 permissions: frame.sessionPermissions
             ))
         case "permission":
             return .control(.permissionSelected(
-                sessionID: frame.sessionId ?? context.selectedSessionID,
+                sessionID: frame.sessionId,
                 value: frame.set
             ))
         case "context-usage":
-            guard let sessionID = frame.sessionId ?? context.selectedSessionID else {
-                return .control(.action(.requestFinished("context-usage"), finishRequest: "context-usage"))
-            }
             return .control(.action(.contextReceived(
-                sessionID: sessionID,
+                sessionID: frame.sessionId,
                 asOfSequence: frame.asOfSeq,
                 tokenUsage: frame.tokenUsage,
                 pressure: frame.contextPressure,
                 breakdown: nil
             ), finishRequest: "context-usage"))
         case "session-stats":
-            guard let sessionID = frame.sessionId ?? context.selectedSessionID else {
-                return .control(.action(.requestFinished("session-stats"), finishRequest: "session-stats"))
-            }
             return .control(.action(.statsReceived(
-                sessionID: sessionID,
+                sessionID: frame.sessionId,
                 asOfSequence: frame.asOfSeq,
                 stats: frame.sessionStats,
                 tokenUsageTotals: frame.tokenUsage?.totals,

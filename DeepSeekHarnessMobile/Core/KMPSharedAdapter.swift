@@ -553,6 +553,699 @@ final class KMPQuestionStoreAdapter {
     }
 }
 
+struct KMPSessionControlSnapshot: Codable, Equatable {
+    var modelCatalogs: [String: GatewayModelCatalog]
+    var globalModelCatalog: GatewayModelCatalog?
+    var sessionPermissions: [String: GatewaySessionPermissions]
+    var contextSnapshots: [String: GatewayContextSnapshot]
+    var sessionStatsSnapshots: [String: GatewaySessionStatsSnapshot]
+    var agentPresets: [GatewayAgentPreset]
+    var agentPresetsAuthorable: Bool
+    var agentPresetsHasDocument: Bool
+    var agentPresetDefault: String?
+    var permissionDefault: String?
+    var defaultModelSelection: GatewayModelSelection?
+    var loadingKinds: Set<String>
+    var defaultConfigurationLoadingKinds: Set<String>
+    var pendingModelsSessionId: String?
+    var isPendingGlobalModelsRequest: Bool
+    var pendingModelSelectionSessionId: String?
+    var pendingPermissionOptionsSessionId: String?
+    var requestTokens: [String: String]
+    var activeRequestTargets: [String: KMPSessionControlRequestTarget]
+    var queuedRequestTargets: [String: KMPSessionControlRequestTarget]
+    var previousCompletedRequestTargets: [String: KMPSessionControlRequestTarget]
+    var explicitSessionRequiredKinds: Set<String>
+    var quarantinedRequestKinds: Set<String>
+
+    static let empty = KMPSessionControlSnapshot(
+        modelCatalogs: [:],
+        globalModelCatalog: nil,
+        sessionPermissions: [:],
+        contextSnapshots: [:],
+        sessionStatsSnapshots: [:],
+        agentPresets: [],
+        agentPresetsAuthorable: false,
+        agentPresetsHasDocument: false,
+        agentPresetDefault: nil,
+        permissionDefault: nil,
+        defaultModelSelection: nil,
+        loadingKinds: [],
+        defaultConfigurationLoadingKinds: [],
+        pendingModelsSessionId: nil,
+        isPendingGlobalModelsRequest: false,
+        pendingModelSelectionSessionId: nil,
+        pendingPermissionOptionsSessionId: nil,
+        requestTokens: [:],
+        activeRequestTargets: [:],
+        queuedRequestTargets: [:],
+        previousCompletedRequestTargets: [:],
+        explicitSessionRequiredKinds: [],
+        quarantinedRequestKinds: []
+    )
+
+    var hasValidWireValues: Bool {
+        let sessionKinds = Set(["models", "permission-options", "context-usage", "session-stats", "select-model", "permission"])
+        let defaultKinds = Set(["agent-presets", "defaults", "default-model", "set-default", "save-default-model"])
+        let loading = loadingKinds.union(defaultConfigurationLoadingKinds)
+        let activeKinds = Set(activeRequestTargets.keys)
+        let activeClassificationIsValid = activeRequestTargets.allSatisfy { kind, target in
+            target.kind == kind
+                && (target.isDefault ? defaultKinds.contains(kind) : sessionKinds.contains(kind))
+                && target.hasCompletePayload
+        }
+        let queuedIsValid = queuedRequestTargets.allSatisfy { kind, target in
+            target.kind == kind && target.hasCompletePayload
+                && activeRequestTargets[kind] != nil && target != activeRequestTargets[kind]
+        }
+        let previousIsValid = previousCompletedRequestTargets.allSatisfy { kind, target in
+            target.kind == kind
+                && (target.isDefault ? defaultKinds.contains(kind) : sessionKinds.contains(kind))
+                && target.hasCompletePayload
+        }
+        let models = activeRequestTargets["models"]
+        return loadingKinds.isSubset(of: sessionKinds)
+            && defaultConfigurationLoadingKinds.isSubset(of: defaultKinds)
+            && Set(requestTokens.keys) == loading
+            && requestTokens.values.allSatisfy { !$0.isEmpty }
+            && activeKinds == loading
+            && activeClassificationIsValid
+            && queuedIsValid
+            && previousIsValid
+            && explicitSessionRequiredKinds.isSubset(of: activeKinds)
+            && explicitSessionRequiredKinds.allSatisfy { activeRequestTargets[$0]?.sessionId != nil }
+            && quarantinedRequestKinds.isDisjoint(with: activeKinds)
+            && quarantinedRequestKinds.isDisjoint(with: Set(queuedRequestTargets.keys))
+            && pendingModelsSessionId == models?.sessionId
+            && isPendingGlobalModelsRequest == (models != nil && models?.sessionId == nil)
+            && pendingModelSelectionSessionId == activeRequestTargets["select-model"]?.sessionId
+            && pendingPermissionOptionsSessionId == activeRequestTargets["permission-options"]?.sessionId
+    }
+}
+
+struct KMPSessionControlRequestTarget: Codable, Equatable {
+    var kind: String
+    var isDefault: Bool
+    var sessionId: String?
+    var provider: String?
+    var model: String?
+    var reasoningEffort: String?
+    var target: String?
+    var value: String?
+
+    init(
+        kind: String,
+        isDefault: Bool,
+        sessionId: String? = nil,
+        provider: String? = nil,
+        model: String? = nil,
+        reasoningEffort: String? = nil,
+        target: String? = nil,
+        value: String? = nil
+    ) {
+        self.kind = kind
+        self.isDefault = isDefault
+        self.sessionId = sessionId
+        self.provider = provider
+        self.model = model
+        self.reasoningEffort = reasoningEffort
+        self.target = target
+        self.value = value
+    }
+
+    var hasCompletePayload: Bool {
+        let session = sessionId?.isEmpty == false
+        let hasProvider = provider?.isEmpty == false
+        let hasModel = model?.isEmpty == false
+        let hasTarget = target?.isEmpty == false
+        let hasValue = value?.isEmpty == false
+        switch kind {
+        case "models":
+            return !isDefault && (sessionId == nil || session) && provider == nil && model == nil
+                && reasoningEffort == nil && target == nil && value == nil
+        case "permission-options", "context-usage", "session-stats":
+            return !isDefault && session && provider == nil && model == nil
+                && reasoningEffort == nil && target == nil && value == nil
+        case "agent-presets", "defaults", "default-model":
+            return isDefault && sessionId == nil && provider == nil && model == nil
+                && reasoningEffort == nil && target == nil && value == nil
+        case "select-model":
+            return !isDefault && session && hasProvider && hasModel && target == nil && value == nil
+        case "permission":
+            return !isDefault && session && hasValue && provider == nil && model == nil
+                && reasoningEffort == nil && target == nil
+        case "save-default-model":
+            return isDefault && sessionId == nil && hasProvider && hasModel && target == nil && value == nil
+        case "set-default":
+            return isDefault && sessionId == nil && provider == nil && model == nil
+                && reasoningEffort == nil && hasTarget && hasValue
+                && (target == "permission" || target == "agent-preset")
+        default:
+            return false
+        }
+    }
+}
+
+struct KMPSessionControlEffect: Codable, Equatable {
+    var kind: String
+    var requestKey: String
+    var requestToken: String
+    var sessionId: String?
+    var provider: String?
+    var model: String?
+    var reasoningEffort: String?
+    var target: String?
+    var value: String?
+}
+
+enum KMPSessionControlIntent {
+    case action(SessionControlAction)
+    case projection(SessionControlAction)
+    case defaultModelSaved(GatewayModelSelection?)
+    case requestModels(sessionID: String?, isConnected: Bool)
+    case requestPermissionOptions(sessionID: String, isConnected: Bool)
+    case requestContextUsage(sessionID: String, isConnected: Bool)
+    case requestSessionStats(sessionID: String, isConnected: Bool)
+    case requestAgentPresets(isConnected: Bool)
+    case requestDefaults(isConnected: Bool)
+    case requestDefaultModel(isConnected: Bool)
+    case selectModel(sessionID: String, selection: GatewayModelSelection, isConnected: Bool)
+    case setPermission(sessionID: String, value: String, isConnected: Bool)
+    case saveDefaultModel(selection: GatewayModelSelection, isConnected: Bool)
+    case setDefault(target: String, value: String, isConnected: Bool)
+    case requestFinished(kind: String, isDefault: Bool, requestToken: String)
+    case requestTimedOut(kind: String, isDefault: Bool, requestToken: String)
+    case requestFailed(kind: String, isDefault: Bool, requestToken: String)
+    case requestsDisconnected
+}
+
+enum KMPSessionControlStoreError: LocalizedError, Equatable {
+    case encoding(String)
+    case bridge(code: String, message: String?)
+    case invalidSnapshot(String)
+    case invalidEffect(String)
+    case initializationFailed(String)
+    case runtimeFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .encoding(let message): "无法编码 iOS SessionControl 输入：\(message)"
+        case .bridge(let code, let message): "KMP SessionControl 失败（\(code)）：\(message ?? "无详细信息")"
+        case .invalidSnapshot(let message): "无法解码 KMP SessionControl 快照：\(message)"
+        case .invalidEffect(let message): "无法解码 KMP SessionControl effect：\(message)"
+        case .initializationFailed(let message): "KMP SessionControl 初始化失败，已停止后续状态写入：\(message)"
+        case .runtimeFailed(let message): "KMP SessionControl 运行期结果失效，已停止后续状态写入：\(message)"
+        }
+    }
+}
+
+protocol KMPSessionControlStoreBridging: AnyObject {
+    func snapshot() -> SharedSessionControlResult
+    func requestModels(sessionId: String?, isConnected: Bool) -> SharedSessionControlResult
+    func requestPermissionOptions(sessionId: String, isConnected: Bool) -> SharedSessionControlResult
+    func requestContextUsage(sessionId: String, isConnected: Bool) -> SharedSessionControlResult
+    func requestSessionStats(sessionId: String, isConnected: Bool) -> SharedSessionControlResult
+    func requestAgentPresets(isConnected: Bool) -> SharedSessionControlResult
+    func requestDefaults(isConnected: Bool) -> SharedSessionControlResult
+    func requestDefaultModel(isConnected: Bool) -> SharedSessionControlResult
+    func selectModel(sessionId: String, selectionJson: String, isConnected: Bool) -> SharedSessionControlResult
+    func setPermission(sessionId: String, value: String, isConnected: Bool) -> SharedSessionControlResult
+    func saveDefaultModel(selectionJson: String, isConnected: Bool) -> SharedSessionControlResult
+    func setDefault(target: String, value: String, isConnected: Bool) -> SharedSessionControlResult
+    func agentPresetsReceived(presetsJson: String, authorable: Bool, hasDocument: Bool) -> SharedSessionControlResult
+    func defaultsReceived(agentPreset: String?, permission: String?) -> SharedSessionControlResult
+    func defaultModelReceived(selectionJson: String?) -> SharedSessionControlResult
+    func globalDefaultApplied(target: String, value: String) -> SharedSessionControlResult
+    func modelsReceived(
+        sessionId: String?,
+        currentJson: String?,
+        routable: Bool,
+        groupsJson: String,
+        isGlobalRequest: Bool
+    ) -> SharedSessionControlResult
+    func defaultModelSaved(selectionJson: String?) -> SharedSessionControlResult
+    func modelSelected(sessionId: String?, selectionJson: String) -> SharedSessionControlResult
+    func permissionsReceived(sessionId: String?, permissionsJson: String) -> SharedSessionControlResult
+    func permissionSelected(sessionId: String?, value: String) -> SharedSessionControlResult
+    func contextReceived(
+        sessionId: String?,
+        asOfSequence: KotlinLong?,
+        tokenUsageJson: String?,
+        pressureJson: String?,
+        breakdownJson: String?
+    ) -> SharedSessionControlResult
+    func statsReceived(
+        sessionId: String?,
+        asOfSequence: KotlinLong?,
+        statsJson: String?,
+        tokenUsageTotalsJson: String?,
+        contextPressureJson: String?
+    ) -> SharedSessionControlResult
+    func mergeContextProjection(sessionId: String, asOfSequence: KotlinLong?, tokenUsageJson: String?, pressureJson: String?, breakdownJson: String?) -> SharedSessionControlResult
+    func mergeStatsProjection(sessionId: String, asOfSequence: KotlinLong?, statsJson: String?, tokenUsageTotalsJson: String?, contextPressureJson: String?) -> SharedSessionControlResult
+    func mergePermissionsProjection(sessionId: String, permissionsJson: String) -> SharedSessionControlResult
+    func mergeModelProjection(sessionId: String, selectionJson: String) -> SharedSessionControlResult
+    func mergePermissionProjection(sessionId: String, value: String) -> SharedSessionControlResult
+    func requestFinished(kind: String, isDefault: Bool, requestToken: String?) -> SharedSessionControlResult
+    func requestTimedOut(kind: String, isDefault: Bool, requestToken: String?) -> SharedSessionControlResult
+    func requestFailed(kind: String, isDefault: Bool, requestToken: String?) -> SharedSessionControlResult
+    func requestsDisconnected() -> SharedSessionControlResult
+}
+
+extension SharedSessionControlStore: KMPSessionControlStoreBridging {}
+
+struct KMPSessionControlTransition {
+    var snapshot: KMPSessionControlSnapshot
+    var effects: [KMPSessionControlEffect]
+    var applied: Bool
+    var committed: Bool
+    var completedKind: String?
+    var completedRequestToken: String?
+    var error: KMPSessionControlStoreError?
+
+    func completed(_ kind: String) -> Bool {
+        applied && committed && completedKind == kind && completedRequestToken?.isEmpty == false
+    }
+}
+
+/// MainActor 是 SessionControl 状态与 effect 的唯一 Swift 串行提交入口。
+@MainActor
+final class KMPSessionControlStoreAdapter {
+    private let store: any KMPSessionControlStoreBridging
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    private(set) var snapshot: KMPSessionControlSnapshot = .empty
+    private(set) var initializationError: KMPSessionControlStoreError?
+    private(set) var runtimeError: KMPSessionControlStoreError?
+    var isOperational: Bool { initializationError == nil && runtimeError == nil }
+
+    init(
+        bridge: (any KMPSessionControlStoreBridging)? = nil,
+        facade: SharedMobileFacade = SharedMobileFacade()
+    ) {
+        store = bridge ?? facade.makeSessionControlStore()
+        let transition = decode(store.snapshot(), requiresSnapshot: true, intent: nil)
+        snapshot = transition.snapshot
+        initializationError = transition.error
+    }
+
+    @discardableResult
+    func reduce(_ intent: KMPSessionControlIntent) -> KMPSessionControlTransition {
+        if let initializationError {
+            return failed(.initializationFailed(initializationError.localizedDescription))
+        }
+        if let runtimeError {
+            return failed(.runtimeFailed(runtimeError.localizedDescription))
+        }
+
+        let result: SharedSessionControlResult
+        do {
+            switch intent {
+            case .action(let action):
+                result = try reduceAction(action, isProjection: false)
+            case .projection(let action):
+                result = try reduceAction(action, isProjection: true)
+            case .defaultModelSaved(let selection):
+                result = store.defaultModelSaved(selectionJson: try selection.map(encode))
+            case .requestModels(let sessionID, let connected):
+                result = store.requestModels(sessionId: sessionID, isConnected: connected)
+            case .requestPermissionOptions(let sessionID, let connected):
+                result = store.requestPermissionOptions(sessionId: sessionID, isConnected: connected)
+            case .requestContextUsage(let sessionID, let connected):
+                result = store.requestContextUsage(sessionId: sessionID, isConnected: connected)
+            case .requestSessionStats(let sessionID, let connected):
+                result = store.requestSessionStats(sessionId: sessionID, isConnected: connected)
+            case .requestAgentPresets(let connected):
+                result = store.requestAgentPresets(isConnected: connected)
+            case .requestDefaults(let connected):
+                result = store.requestDefaults(isConnected: connected)
+            case .requestDefaultModel(let connected):
+                result = store.requestDefaultModel(isConnected: connected)
+            case .selectModel(let sessionID, let selection, let connected):
+                result = store.selectModel(
+                    sessionId: sessionID,
+                    selectionJson: try encode(selection),
+                    isConnected: connected
+                )
+            case .setPermission(let sessionID, let value, let connected):
+                result = store.setPermission(sessionId: sessionID, value: value, isConnected: connected)
+            case .saveDefaultModel(let selection, let connected):
+                result = store.saveDefaultModel(selectionJson: try encode(selection), isConnected: connected)
+            case .setDefault(let target, let value, let connected):
+                result = store.setDefault(target: target, value: value, isConnected: connected)
+            case .requestFinished(let kind, let isDefault, let token):
+                result = store.requestFinished(kind: kind, isDefault: isDefault, requestToken: token)
+            case .requestTimedOut(let kind, let isDefault, let token):
+                result = store.requestTimedOut(kind: kind, isDefault: isDefault, requestToken: token)
+            case .requestFailed(let kind, let isDefault, let token):
+                result = store.requestFailed(kind: kind, isDefault: isDefault, requestToken: token)
+            case .requestsDisconnected:
+                result = store.requestsDisconnected()
+            }
+        } catch {
+            return failed(.encoding(error.localizedDescription))
+        }
+        return decode(result, requiresSnapshot: false, intent: intent)
+    }
+
+    private func reduceAction(
+        _ action: SessionControlAction,
+        isProjection: Bool
+    ) throws -> SharedSessionControlResult {
+        switch action {
+        case .agentPresetsReceived(let presets, let authorable, let hasDocument):
+            return store.agentPresetsReceived(
+                presetsJson: try encode(presets),
+                authorable: authorable,
+                hasDocument: hasDocument
+            )
+        case .defaultsReceived(let agentPreset, let permission):
+            return store.defaultsReceived(agentPreset: agentPreset, permission: permission)
+        case .defaultModelReceived(let selection):
+            return store.defaultModelReceived(selectionJson: try selection.map(encode))
+        case .globalDefaultApplied(let target, let value):
+            return store.globalDefaultApplied(target: target, value: value)
+        case .modelsReceived(let sessionID, let current, let routable, let groups, let global):
+            return store.modelsReceived(
+                sessionId: sessionID,
+                currentJson: try current.map(encode),
+                routable: routable,
+                groupsJson: try encode(groups),
+                isGlobalRequest: global
+            )
+        case .modelSelected(let sessionID, let selection):
+            if isProjection {
+                guard let sessionID else { throw KMPSessionControlStoreError.encoding("模型投影缺少 sessionId") }
+                return store.mergeModelProjection(sessionId: sessionID, selectionJson: try encode(selection))
+            }
+            return store.modelSelected(sessionId: sessionID, selectionJson: try encode(selection))
+        case .permissionsReceived(let sessionID, let permissions):
+            if isProjection {
+                guard let sessionID else { throw KMPSessionControlStoreError.encoding("权限投影缺少 sessionId") }
+                return store.mergePermissionsProjection(sessionId: sessionID, permissionsJson: try encode(permissions))
+            }
+            return store.permissionsReceived(sessionId: sessionID, permissionsJson: try encode(permissions))
+        case .permissionSelected(let sessionID, let value):
+            if isProjection {
+                guard let sessionID else { throw KMPSessionControlStoreError.encoding("权限事件投影缺少 sessionId") }
+                return store.mergePermissionProjection(sessionId: sessionID, value: value)
+            }
+            return store.permissionSelected(sessionId: sessionID, value: value)
+        case .contextReceived(let sessionID, let sequence, let usage, let pressure, let breakdown):
+            let sequence = sequence.map { KotlinLong(longLong: Int64($0)) }
+            if isProjection {
+                guard let sessionID else { throw KMPSessionControlStoreError.encoding("Context 投影缺少 sessionId") }
+                return store.mergeContextProjection(
+                    sessionId: sessionID, asOfSequence: sequence,
+                    tokenUsageJson: try usage.map(encode), pressureJson: try pressure.map(encode),
+                    breakdownJson: try breakdown.map(encode)
+                )
+            } else {
+                return store.contextReceived(
+                    sessionId: sessionID, asOfSequence: sequence,
+                    tokenUsageJson: try usage.map(encode), pressureJson: try pressure.map(encode),
+                    breakdownJson: try breakdown.map(encode)
+                )
+            }
+        case .statsReceived(let sessionID, let sequence, let stats, let totals, let pressure):
+            let sequence = sequence.map { KotlinLong(longLong: Int64($0)) }
+            if isProjection {
+                guard let sessionID else { throw KMPSessionControlStoreError.encoding("Stats 投影缺少 sessionId") }
+                return store.mergeStatsProjection(
+                    sessionId: sessionID, asOfSequence: sequence,
+                    statsJson: try stats.map(encode), tokenUsageTotalsJson: try totals.map(encode),
+                    contextPressureJson: try pressure.map(encode)
+                )
+            } else {
+                return store.statsReceived(
+                    sessionId: sessionID, asOfSequence: sequence,
+                    statsJson: try stats.map(encode), tokenUsageTotalsJson: try totals.map(encode),
+                    contextPressureJson: try pressure.map(encode)
+                )
+            }
+        case .requestStarted:
+            throw KMPSessionControlStoreError.encoding("Swift 不得直接启动 KMP 请求状态")
+        case .requestFinished(let kind):
+            guard let token = snapshot.requestTokens[kind] else { return store.snapshot() }
+            return store.requestFinished(kind: kind, isDefault: false, requestToken: token)
+        case .requestTimedOut(let kind):
+            guard let token = snapshot.requestTokens[kind] else { return store.snapshot() }
+            return store.requestTimedOut(kind: kind, isDefault: false, requestToken: token)
+        case .defaultConfigurationRequestStarted:
+            throw KMPSessionControlStoreError.encoding("Swift 不得直接启动 KMP 默认配置请求状态")
+        case .defaultConfigurationRequestFinished(let kind):
+            guard let token = snapshot.requestTokens[kind] else { return store.snapshot() }
+            return store.requestFinished(kind: kind, isDefault: true, requestToken: token)
+        case .defaultConfigurationRequestTimedOut(let kind):
+            guard let token = snapshot.requestTokens[kind] else { return store.snapshot() }
+            return store.requestTimedOut(kind: kind, isDefault: true, requestToken: token)
+        case .modelsRequestTargeted, .modelSelectionTargeted, .permissionOptionsTargeted:
+            throw KMPSessionControlStoreError.encoding("请求 target 必须与 KMP effect 在同一事务建立")
+        case .modelSelectionResolved, .permissionOptionsResolved:
+            return store.snapshot()
+        }
+    }
+
+    private func encode<T: Encodable>(_ value: T) throws -> String {
+        String(decoding: try encoder.encode(value), as: UTF8.self)
+    }
+
+    private func decode(
+        _ result: SharedSessionControlResult,
+        requiresSnapshot: Bool,
+        intent: KMPSessionControlIntent?
+    ) -> KMPSessionControlTransition {
+        // P3 性能债务：目前每次有状态变化都跨 KMP 边界编解码全量 JSON snapshot。
+        // 数据量上升后改为增量 patch/结构化桥接；本阶段优先保证原子校验与 fail-closed。
+        guard result.isSuccess else {
+            return failed(.bridge(code: result.errorCode ?? "unknown-error", message: result.errorMessage))
+        }
+        let oldSnapshot = snapshot
+        let nextSnapshot: KMPSessionControlSnapshot
+        if let json = result.snapshotJson {
+            do {
+                nextSnapshot = try decoder.decode(KMPSessionControlSnapshot.self, from: Data(json.utf8))
+            } catch {
+                return failClosed(.invalidSnapshot(error.localizedDescription))
+            }
+            guard nextSnapshot.hasValidWireValues else {
+                return failClosed(.invalidSnapshot("loading kind、request token 或 target 关联无效"))
+            }
+        } else if requiresSnapshot {
+            return failClosed(.invalidSnapshot("KMP 未返回初始化快照"))
+        } else {
+            nextSnapshot = snapshot
+        }
+
+        guard !result.committed || result.snapshotJson != nil else {
+            return failClosed(.invalidSnapshot("committed 结果缺少同事务快照"))
+        }
+        let completedKind = result.completedKind
+        let completedToken = result.completedRequestToken
+        guard (completedKind == nil) == (completedToken == nil) else {
+            return failClosed(.invalidSnapshot("completed kind/token 必须同时存在"))
+        }
+        let effects: [KMPSessionControlEffect]
+        do {
+            effects = try decoder.decode([KMPSessionControlEffect].self, from: Data(result.effectsJson.utf8))
+        } catch {
+            return failClosed(.invalidEffect(error.localizedDescription))
+        }
+
+        // result 的控制信号必须描述同一个原子事务。任何坏信号都会永久 fail closed，
+        // 且在 snapshot 提交和 effect 暴露前返回，保证零平台 I/O。
+        if !requiresSnapshot, result.committed != (nextSnapshot != oldSnapshot) {
+            return failClosed(.invalidSnapshot("committed 与提交前后快照变化不一致"))
+        }
+        guard result.applied || (!result.committed && effects.isEmpty && completedKind == nil) else {
+            return failClosed(.invalidSnapshot("未 applied 的结果不得提交、完成 generation 或产生 effect"))
+        }
+        if !effects.isEmpty && (!result.applied || !result.committed || result.snapshotJson == nil) {
+            return failClosed(.invalidEffect("非空 effect 必须来自 applied + committed 的同事务快照"))
+        }
+
+        let stableTokenKinds = Set(oldSnapshot.requestTokens.keys).intersection(nextSnapshot.requestTokens.keys)
+        guard stableTokenKinds.allSatisfy({ kind in
+            oldSnapshot.requestTokens[kind] != nextSnapshot.requestTokens[kind]
+                || oldSnapshot.activeRequestTargets[kind] == nextSnapshot.activeRequestTargets[kind]
+        }) else {
+            return failClosed(.invalidSnapshot("同 token 的 active target 不得变化"))
+        }
+        let retiredKinds = Set(oldSnapshot.requestTokens.compactMap { kind, token in
+            nextSnapshot.requestTokens[kind] == token ? nil : kind
+        })
+        if let completedKind, let completedToken {
+            guard result.applied,
+                  result.committed,
+                  !completedKind.isEmpty,
+                  !completedToken.isEmpty,
+                  retiredKinds == [completedKind],
+                  oldSnapshot.requestTokens[completedKind] == completedToken,
+                  oldSnapshot.activeRequestTargets[completedKind] != nil,
+                  nextSnapshot.requestTokens[completedKind] != completedToken else {
+                return failClosed(.invalidSnapshot("completed generation 与提交前后快照不一致"))
+            }
+        } else if !retiredKinds.isEmpty {
+            // 连接代际重置可一次清空全部请求；普通事务退役 generation 必须明确回传 kind/token。
+            guard case .some(.requestsDisconnected) = intent, effects.isEmpty else {
+                return failClosed(.invalidSnapshot("request token 已变化但缺少 completed generation 信号"))
+            }
+        }
+        guard effects.count <= 1,
+              effects.allSatisfy({
+                  effectIsSemanticallyValid(
+                      $0,
+                      oldSnapshot: oldSnapshot,
+                      nextSnapshot: nextSnapshot,
+                      intent: intent,
+                      completedKind: completedKind
+                  )
+              }) else {
+            return failClosed(.invalidEffect("effect 与快照、request token 或 intent 语义不一致"))
+        }
+
+        snapshot = nextSnapshot
+        return KMPSessionControlTransition(
+            snapshot: snapshot,
+            effects: effects,
+            applied: result.applied,
+            committed: result.committed,
+            completedKind: completedKind,
+            completedRequestToken: completedToken,
+            error: nil
+        )
+    }
+
+    private func effectIsSemanticallyValid(
+        _ effect: KMPSessionControlEffect,
+        oldSnapshot: KMPSessionControlSnapshot,
+        nextSnapshot: KMPSessionControlSnapshot,
+        intent: KMPSessionControlIntent?,
+        completedKind: String?
+    ) -> Bool {
+        guard effect.kind == effect.requestKey,
+              !effect.requestToken.isEmpty,
+              nextSnapshot.requestTokens[effect.requestKey] == effect.requestToken,
+              let active = nextSnapshot.activeRequestTargets[effect.requestKey],
+              effect.kind == active.kind,
+              effectPayloadIsComplete(effect) else { return false }
+        let matchesActive = effect.sessionId == active.sessionId
+            && effect.provider == active.provider
+            && effect.model == active.model
+            && effect.reasoningEffort == active.reasoningEffort
+            && effect.target == active.target
+            && effect.value == active.value
+        guard matchesActive else { return false }
+
+        if let directTarget = directRequestTarget(for: intent) {
+            return completedKind == nil && directTarget == active
+        }
+
+        // response/failure/timeout 只能启动提交前已经存在的 queued target；projection 和普通
+        // 无 queued response 不能借 KMP 异常结果偷渡网络 I/O。
+        guard let completedKind,
+              completedKind == effect.requestKey,
+              oldSnapshot.queuedRequestTargets[completedKind] == active else { return false }
+        switch intent {
+        case .action, .defaultModelSaved, .requestFinished, .requestTimedOut, .requestFailed:
+            return true
+        case .projection, .requestsDisconnected, .none,
+             .requestModels, .requestPermissionOptions, .requestContextUsage, .requestSessionStats,
+             .requestAgentPresets, .requestDefaults, .requestDefaultModel, .selectModel,
+             .setPermission, .saveDefaultModel, .setDefault:
+            return false
+        }
+    }
+
+    private func directRequestTarget(for intent: KMPSessionControlIntent?) -> KMPSessionControlRequestTarget? {
+        switch intent {
+        case .requestModels(let sessionID, true):
+            return .init(kind: "models", isDefault: false, sessionId: sessionID)
+        case .requestPermissionOptions(let sessionID, true):
+            return .init(kind: "permission-options", isDefault: false, sessionId: sessionID)
+        case .requestContextUsage(let sessionID, true):
+            return .init(kind: "context-usage", isDefault: false, sessionId: sessionID)
+        case .requestSessionStats(let sessionID, true):
+            return .init(kind: "session-stats", isDefault: false, sessionId: sessionID)
+        case .requestAgentPresets(true):
+            return .init(kind: "agent-presets", isDefault: true)
+        case .requestDefaults(true):
+            return .init(kind: "defaults", isDefault: true)
+        case .requestDefaultModel(true):
+            return .init(kind: "default-model", isDefault: true)
+        case .selectModel(let sessionID, let selection, true):
+            return .init(
+                kind: "select-model", isDefault: false, sessionId: sessionID,
+                provider: selection.provider, model: selection.model,
+                reasoningEffort: selection.reasoningEffort
+            )
+        case .setPermission(let sessionID, let value, true):
+            return .init(kind: "permission", isDefault: false, sessionId: sessionID, value: value)
+        case .saveDefaultModel(let selection, true):
+            return .init(
+                kind: "save-default-model", isDefault: true,
+                provider: selection.provider, model: selection.model,
+                reasoningEffort: selection.reasoningEffort
+            )
+        case .setDefault(let target, let value, true):
+            return .init(kind: "set-default", isDefault: true, target: target, value: value)
+        default:
+            return nil
+        }
+    }
+
+    private func effectPayloadIsComplete(_ effect: KMPSessionControlEffect) -> Bool {
+        let session = effect.sessionId?.isEmpty == false
+        let provider = effect.provider?.isEmpty == false
+        let model = effect.model?.isEmpty == false
+        let target = effect.target?.isEmpty == false
+        let value = effect.value?.isEmpty == false
+        switch effect.kind {
+        case "models":
+            return (effect.sessionId == nil || session)
+                && effect.provider == nil && effect.model == nil && effect.reasoningEffort == nil
+                && effect.target == nil && effect.value == nil
+        case "permission-options", "context-usage", "session-stats":
+            return session && effect.provider == nil && effect.model == nil
+                && effect.reasoningEffort == nil && effect.target == nil && effect.value == nil
+        case "agent-presets", "defaults", "default-model":
+            return effect.sessionId == nil && effect.provider == nil && effect.model == nil
+                && effect.reasoningEffort == nil && effect.target == nil && effect.value == nil
+        case "select-model":
+            return session && provider && model && effect.target == nil && effect.value == nil
+        case "permission":
+            return session && value && effect.provider == nil && effect.model == nil
+                && effect.reasoningEffort == nil && effect.target == nil
+        case "save-default-model":
+            return provider && model && effect.sessionId == nil && effect.target == nil && effect.value == nil
+        case "set-default":
+            return target && value && effect.sessionId == nil && effect.provider == nil
+                && effect.model == nil && effect.reasoningEffort == nil
+                && (effect.target == "permission" || effect.target == "agent-preset")
+        default:
+            return false
+        }
+    }
+
+    private func failed(_ error: KMPSessionControlStoreError) -> KMPSessionControlTransition {
+        KMPSessionControlTransition(
+            snapshot: snapshot,
+            effects: [],
+            applied: false,
+            committed: false,
+            completedKind: nil,
+            completedRequestToken: nil,
+            error: error
+        )
+    }
+
+    private func failClosed(_ error: KMPSessionControlStoreError) -> KMPSessionControlTransition {
+        runtimeError = error
+        return failed(error)
+    }
+}
+
 struct KMPShadowRouteFingerprint: Codable, Equatable, CustomStringConvertible {
     var category: String
     var route: String

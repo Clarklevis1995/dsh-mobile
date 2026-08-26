@@ -13,7 +13,21 @@ import com.clarklevis.dsh.shared.protocol.GatewaySessionStatsSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewaySessionTokenUsage
 import com.clarklevis.dsh.shared.protocol.GatewaySessionTokenUsageTotals
 import com.clarklevis.dsh.shared.protocol.GatewayTokenUsage
+import kotlinx.serialization.Serializable
 
+@Serializable
+data class SessionControlRequestTarget(
+    val kind: String,
+    val isDefault: Boolean,
+    val sessionId: String? = null,
+    val provider: String? = null,
+    val model: String? = null,
+    val reasoningEffort: String? = null,
+    val target: String? = null,
+    val value: String? = null
+)
+
+@Serializable
 data class SessionControlState(
     val modelCatalogs: Map<String, GatewayModelCatalog> = emptyMap(),
     val globalModelCatalog: GatewayModelCatalog? = null,
@@ -31,7 +45,22 @@ data class SessionControlState(
     val pendingModelsSessionId: String? = null,
     val isPendingGlobalModelsRequest: Boolean = false,
     val pendingModelSelectionSessionId: String? = null,
-    val pendingPermissionOptionsSessionId: String? = null
+    val pendingPermissionOptionsSessionId: String? = null,
+    /** 平台 RequestTracker 使用的关联 token；响应、失败或超时后必须移除。 */
+    val requestTokens: Map<String, String> = emptyMap(),
+    /** 每个 kind 正在飞行的完整 target，不得从当前 UI 选中会话反推。 */
+    val activeRequestTargets: Map<String, SessionControlRequestTarget> = emptyMap(),
+    /** 同 kind 仅保留最新的不同 target，当前请求结束后自动启动。 */
+    val queuedRequestTargets: Map<String, SessionControlRequestTarget> = emptyMap(),
+    /**
+     * 每个 kind 上一代已完成的 target。Gateway 当前不回显 request token；新一代只能用
+     * 这个边界拒绝迟到响应，绝不能把无法区分的响应猜成当前 generation。
+     */
+    val previousCompletedRequestTargets: Map<String, SessionControlRequestTarget> = emptyMap(),
+    /** 超时/失败后的新 generation 只接受显式 sessionId，避免无 target 迟到响应污染。 */
+    val explicitSessionRequiredKinds: Set<String> = emptySet(),
+    /** 无法在网关协议中唯一关联的 kind，在下一次连接代际前 fail closed。 */
+    val quarantinedRequestKinds: Set<String> = emptySet()
 )
 
 sealed interface SessionControlAction {
@@ -51,22 +80,22 @@ sealed interface SessionControlAction {
     data class PermissionSelected(val sessionId: String, val value: String) : SessionControlAction
     data class ContextReceived(
         val sessionId: String,
-        val asOfSequence: Int?,
+        val asOfSequence: Long?,
         val tokenUsage: GatewayTokenUsage?,
         val pressure: GatewayContextPressure?,
         val breakdown: GatewayContextBreakdown?
     ) : SessionControlAction
     data class StatsReceived(
         val sessionId: String,
-        val asOfSequence: Int?,
+        val asOfSequence: Long?,
         val stats: GatewaySessionStats?,
         val tokenUsageTotals: GatewaySessionTokenUsageTotals?,
         val contextPressure: GatewayContextPressure?
     ) : SessionControlAction
-    data class RequestStarted(val kind: String) : SessionControlAction
+    data class RequestStarted(val kind: String, val token: String? = null) : SessionControlAction
     data class RequestFinished(val kind: String) : SessionControlAction
     data class RequestTimedOut(val kind: String) : SessionControlAction
-    data class DefaultRequestStarted(val kind: String) : SessionControlAction
+    data class DefaultRequestStarted(val kind: String, val token: String? = null) : SessionControlAction
     data class DefaultRequestFinished(val kind: String) : SessionControlAction
     data class DefaultRequestTimedOut(val kind: String) : SessionControlAction
     data class ModelsRequestTargeted(val sessionId: String?) : SessionControlAction
@@ -140,12 +169,18 @@ object SessionControlReducer {
                 )
             ))
         }
-        is SessionControlAction.RequestStarted -> state.copy(loadingKinds = state.loadingKinds + action.kind)
+        is SessionControlAction.RequestStarted -> state.copy(
+            loadingKinds = state.loadingKinds + action.kind,
+            requestTokens = action.token?.let { state.requestTokens + (action.kind to it) } ?: state.requestTokens
+        )
         is SessionControlAction.RequestFinished -> finishRequest(state, action.kind)
         is SessionControlAction.RequestTimedOut -> finishRequest(state, action.kind)
-        is SessionControlAction.DefaultRequestStarted -> state.copy(defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds + action.kind)
-        is SessionControlAction.DefaultRequestFinished -> state.copy(defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds - action.kind)
-        is SessionControlAction.DefaultRequestTimedOut -> state.copy(defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds - action.kind)
+        is SessionControlAction.DefaultRequestStarted -> state.copy(
+            defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds + action.kind,
+            requestTokens = action.token?.let { state.requestTokens + (action.kind to it) } ?: state.requestTokens
+        )
+        is SessionControlAction.DefaultRequestFinished -> finishDefaultRequest(state, action.kind)
+        is SessionControlAction.DefaultRequestTimedOut -> finishDefaultRequest(state, action.kind)
         is SessionControlAction.ModelsRequestTargeted -> state.copy(
             pendingModelsSessionId = action.sessionId,
             isPendingGlobalModelsRequest = action.sessionId == null
@@ -158,7 +193,13 @@ object SessionControlReducer {
 
     private fun finishRequest(state: SessionControlState, kind: String): SessionControlState = state.copy(
         loadingKinds = state.loadingKinds - kind,
+        requestTokens = state.requestTokens - kind,
         pendingModelsSessionId = if (kind == "models") null else state.pendingModelsSessionId,
         isPendingGlobalModelsRequest = if (kind == "models") false else state.isPendingGlobalModelsRequest
+    )
+
+    private fun finishDefaultRequest(state: SessionControlState, kind: String): SessionControlState = state.copy(
+        defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds - kind,
+        requestTokens = state.requestTokens - kind
     )
 }

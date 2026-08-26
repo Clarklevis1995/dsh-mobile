@@ -3,7 +3,10 @@ import UIKit
 import ImageIO
 import UniformTypeIdentifiers
 import class DeepSeekHarnessShared.SharedQuestionResult
+import class DeepSeekHarnessShared.SharedSessionControlResult
+import class DeepSeekHarnessShared.SharedSessionControlStore
 import class DeepSeekHarnessShared.SharedSessionListResult
+import class DeepSeekHarnessShared.KotlinLong
 @testable import DeepSeekHarnessMobile
 
 private enum GatewayProtocolParityFixtures {
@@ -184,7 +187,7 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(sessionID, "s1")
     }
 
-    func testGatewayFrameRouterUsesPendingSessionControlTargets() throws {
+    func testGatewayFrameRouterPreservesMissingSessionForKMPRequestCorrelation() throws {
         let context = GatewayFrameRoutingContext(
             selectedSessionID: "selected",
             pendingHistorySessionID: nil,
@@ -198,9 +201,9 @@ final class GatewayProtocolTests: XCTestCase {
         ))
         guard case .control(.modelSelected(let sessionID, let selection)) =
                 GatewayFrameRouter.route(selected, context: context) else {
-            return XCTFail("select-model 应使用 pending session")
+            return XCTFail("select-model 应保留网关原始 target")
         }
-        XCTAssertEqual(sessionID, "selection-session")
+        XCTAssertNil(sessionID)
         XCTAssertEqual(selection?.model, "gpt-5")
     }
 
@@ -1743,6 +1746,447 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
+    func testKMPSessionControlAdapterMatchesSwiftFixtureAndEmitsRequestEffectOnce() {
+        let adapter = KMPSessionControlStoreAdapter()
+        var swiftState = SessionControlState()
+
+        var transition = adapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
+        XCTAssertNil(transition.error)
+        XCTAssertEqual(transition.effects.count, 1)
+        XCTAssertEqual(transition.effects.first?.kind, "models")
+        XCTAssertEqual(transition.effects.first?.sessionId, "session-1")
+        XCTAssertEqual(
+            transition.snapshot.requestTokens["models"],
+            transition.effects.first?.requestToken
+        )
+
+        // 尚未完成的同 kind 请求不得再次生成网络 I/O。
+        transition = adapter.reduce(.requestModels(sessionID: "session-2", isConnected: true))
+        XCTAssertNil(transition.error)
+        XCTAssertTrue(transition.effects.isEmpty)
+        XCTAssertEqual(transition.snapshot.pendingModelsSessionId, "session-1")
+        XCTAssertEqual(transition.snapshot.queuedRequestTargets["models"]?.sessionId, "session-2")
+
+        let selected = GatewayModelSelection(provider: "openai", model: "gpt-5", reasoningEffort: "high")
+        let modelsAction = SessionControlAction.modelsReceived(
+            sessionID: "session-1",
+            current: selected,
+            routable: true,
+            groups: [],
+            isGlobalRequest: false
+        )
+        transition = adapter.reduce(.action(modelsAction))
+        SessionControlReducer.reduce(state: &swiftState, action: modelsAction)
+        XCTAssertEqual(transition.snapshot.modelCatalogs, swiftState.modelCatalogs)
+        XCTAssertEqual(transition.effects.first?.sessionId, "session-2")
+        XCTAssertEqual(transition.snapshot.pendingModelsSessionId, "session-2")
+        XCTAssertTrue(transition.snapshot.explicitSessionRequiredKinds.contains("models"))
+
+        transition = adapter.reduce(.action(.modelsReceived(
+            sessionID: "session-2",
+            current: nil,
+            routable: true,
+            groups: [],
+            isGlobalRequest: false
+        )))
+        XCTAssertTrue(transition.snapshot.loadingKinds.isEmpty)
+        XCTAssertNil(transition.snapshot.requestTokens["models"])
+        XCTAssertNil(transition.snapshot.pendingModelsSessionId)
+
+        let permissions = GatewaySessionPermissions(
+            options: [
+                GatewayPermissionOption(value: "read-only", name: "Read"),
+                GatewayPermissionOption(value: "future", name: "Future")
+            ],
+            currentValue: "read-only"
+        )
+        let permissionsAction = SessionControlAction.permissionsReceived(
+            sessionID: "session-1",
+            permissions: permissions
+        )
+        _ = adapter.reduce(.requestPermissionOptions(sessionID: "session-1", isConnected: true))
+        transition = adapter.reduce(.action(permissionsAction))
+        SessionControlReducer.reduce(state: &swiftState, action: permissionsAction)
+        XCTAssertEqual(transition.snapshot.sessionPermissions, swiftState.sessionPermissions)
+        XCTAssertEqual(
+            transition.snapshot.sessionPermissions["session-1"]?.options?.map(\.value),
+            ["read-only"]
+        )
+    }
+
+    @MainActor
+    func testKMPSessionControlAdapterMergesHistoryAndRealtimePartialSnapshots() {
+        let adapter = KMPSessionControlStoreAdapter()
+        _ = adapter.reduce(.projection(.contextReceived(
+            sessionID: "session-1",
+            asOfSequence: 10,
+            tokenUsage: GatewayTokenUsage(uncachedInputTokens: 12),
+            pressure: nil,
+            breakdown: GatewayContextBreakdown(systemTokens: 4)
+        )))
+        var transition = adapter.reduce(.projection(.contextReceived(
+            sessionID: "session-1",
+            asOfSequence: nil,
+            tokenUsage: nil,
+            pressure: GatewayContextPressure(pressureTokens: 30, contextWindow: 100),
+            breakdown: nil
+        )))
+        XCTAssertEqual(transition.snapshot.contextSnapshots["session-1"]?.asOfSeq, 10)
+        XCTAssertEqual(
+            transition.snapshot.contextSnapshots["session-1"]?.tokenUsage?.uncachedInputTokens,
+            12
+        )
+        XCTAssertEqual(transition.snapshot.contextSnapshots["session-1"]?.pressure?.pressureTokens, 30)
+        XCTAssertEqual(transition.snapshot.contextSnapshots["session-1"]?.breakdown?.systemTokens, 4)
+
+        _ = adapter.reduce(.projection(.statsReceived(
+            sessionID: "session-1",
+            asOfSequence: 20,
+            stats: GatewaySessionStats(turns: 2, steps: 5),
+            tokenUsageTotals: GatewaySessionTokenUsageTotals(inputTokens: 100),
+            contextPressure: nil
+        )))
+        transition = adapter.reduce(.projection(.statsReceived(
+            sessionID: "session-1",
+            asOfSequence: nil,
+            stats: nil,
+            tokenUsageTotals: nil,
+            contextPressure: GatewayContextPressure(projectedTokens: 80, contextWindow: 1_000)
+        )))
+        XCTAssertEqual(transition.snapshot.sessionStatsSnapshots["session-1"]?.stats?.turns, 2)
+        XCTAssertEqual(
+            transition.snapshot.sessionStatsSnapshots["session-1"]?.tokenUsage?.totals?.inputTokens,
+            100
+        )
+        XCTAssertEqual(
+            transition.snapshot.sessionStatsSnapshots["session-1"]?.contextPressure?.projectedTokens,
+            80
+        )
+
+        let largeSequence = Int(Int32.max) + 42
+        transition = adapter.reduce(.projection(.contextReceived(
+            sessionID: "session-1",
+            asOfSequence: largeSequence,
+            tokenUsage: nil,
+            pressure: nil,
+            breakdown: nil
+        )))
+        XCTAssertEqual(transition.snapshot.contextSnapshots["session-1"]?.asOfSeq, largeSequence)
+    }
+
+    @MainActor
+    func testKMPSessionControlAdapterPermanentlyFailsClosedAfterMalformedCommittedSnapshot() {
+        let bridge = MalformedSessionControlBridge()
+        let adapter = KMPSessionControlStoreAdapter(bridge: bridge)
+        XCTAssertTrue(adapter.isOperational)
+
+        var transition = adapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
+        XCTAssertNotNil(transition.error)
+        XCTAssertTrue(transition.effects.isEmpty)
+        XCTAssertFalse(adapter.isOperational)
+        XCTAssertEqual(bridge.requestCallCount, 1)
+
+        transition = adapter.reduce(.requestModels(sessionID: "session-2", isConnected: true))
+        XCTAssertNotNil(transition.error)
+        XCTAssertTrue(transition.effects.isEmpty)
+        XCTAssertEqual(bridge.requestCallCount, 1)
+    }
+
+    @MainActor
+    func testKMPSessionControlAdapterPermanentlyFailsClosedOnInconsistentResultSignals() {
+        for defect in InvalidSessionControlResultBridge.Defect.allCases {
+            let bridge = InvalidSessionControlResultBridge(defect: defect)
+            let adapter = KMPSessionControlStoreAdapter(bridge: bridge)
+            let original = adapter.snapshot
+
+            var transition = adapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
+            XCTAssertNotNil(transition.error, "\(defect)")
+            XCTAssertTrue(transition.effects.isEmpty, "\(defect)")
+            XCTAssertEqual(transition.snapshot, original, "\(defect)")
+            XCTAssertFalse(adapter.isOperational, "\(defect)")
+
+            transition = adapter.reduce(.requestModels(sessionID: "session-2", isConnected: true))
+            XCTAssertNotNil(transition.error, "\(defect)")
+            XCTAssertTrue(transition.effects.isEmpty, "\(defect)")
+            XCTAssertEqual(bridge.requestCallCount, 1, "\(defect)")
+        }
+    }
+
+    @MainActor
+    func testKMPSessionControlRejectsSemanticEffectBeforeAppStoreIO() {
+        let executor = SessionControlEffectExecutorSpy()
+        let appStore = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            sessionControlEffectExecutor: executor
+        )
+
+        let normal = KMPSessionControlStoreAdapter().reduce(
+            .requestModels(sessionID: "session-1", isConnected: true)
+        )
+        XCTAssertNil(normal.error)
+        normal.effects.forEach(appStore.executeSessionControlEffect)
+        XCTAssertEqual(executor.modelsTargets, ["session-1"])
+
+        let invalidAdapter = KMPSessionControlStoreAdapter(bridge: SemanticInvalidSessionControlEffectBridge())
+        let invalid = invalidAdapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
+        XCTAssertNotNil(invalid.error)
+        XCTAssertTrue(invalid.effects.isEmpty)
+        invalid.effects.forEach(appStore.executeSessionControlEffect)
+        XCTAssertEqual(executor.modelsTargets, ["session-1"])
+    }
+
+    @MainActor
+    func testKMPSessionControlRejectsIntentSmugglingMissingPayloadAndProjectionEffect() {
+        var transition = KMPSessionControlStoreAdapter(
+            bridge: IntentSmugglingSessionControlBridge()
+        ).reduce(.requestModels(sessionID: "session-1", isConnected: true))
+        XCTAssertNotNil(transition.error)
+        XCTAssertTrue(transition.effects.isEmpty)
+
+        let selection = GatewayModelSelection(provider: "openai", model: "gpt-5")
+        transition = KMPSessionControlStoreAdapter(
+            bridge: MissingPayloadSessionControlBridge()
+        ).reduce(.selectModel(sessionID: "session-1", selection: selection, isConnected: true))
+        XCTAssertNotNil(transition.error)
+        XCTAssertTrue(transition.effects.isEmpty)
+
+        transition = KMPSessionControlStoreAdapter(
+            bridge: ProjectionSmugglingSessionControlBridge()
+        ).reduce(.projection(.contextReceived(
+            sessionID: "session-1",
+            asOfSequence: 1,
+            tokenUsage: nil,
+            pressure: nil,
+            breakdown: nil
+        )))
+        XCTAssertNotNil(transition.error)
+        XCTAssertTrue(transition.effects.isEmpty)
+    }
+
+    @MainActor
+    func testNegativeControlResponseImmediatelyCompletesCurrentGeneration() throws {
+        let bridge = SharedSessionControlStore()
+        let selection = GatewayModelSelection(provider: "openai", model: "gpt-5")
+        _ = bridge.selectModel(
+            sessionId: "session-1",
+            selectionJson: String(decoding: try JSONEncoder().encode(selection), as: UTF8.self),
+            isConnected: true
+        )
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            sessionControlBridge: bridge
+        )
+        XCTAssertTrue(store.sessionControlLoadingKinds.contains("select-model"))
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"select-model","sessionId":"session-1"}"#.utf8
+        )))
+
+        XCTAssertFalse(store.sessionControlLoadingKinds.contains("select-model"))
+        let snapshot = try JSONDecoder().decode(
+            KMPSessionControlSnapshot.self,
+            from: Data(bridge.snapshot().snapshotJson!.utf8)
+        )
+        XCTAssertNil(snapshot.requestTokens["select-model"])
+    }
+
+    @MainActor
+    func testHelloResetsPreviousConnectionGenerationBeforeRefresh() throws {
+        let bridge = SharedSessionControlStore()
+        let old = bridge.requestModels(sessionId: "old-session", isConnected: true)
+        let oldToken = try JSONDecoder().decode(
+            [KMPSessionControlEffect].self,
+            from: Data(old.effectsJson.utf8)
+        ).first!.requestToken
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            sessionControlBridge: bridge
+        )
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"hello","protocol":3,"capabilities":[],"authenticated":true,"clients":1}"#.utf8
+        )))
+
+        let snapshot = try JSONDecoder().decode(
+            KMPSessionControlSnapshot.self,
+            from: Data(bridge.snapshot().snapshotJson!.utf8)
+        )
+        XCTAssertNotEqual(snapshot.requestTokens["models"], oldToken)
+        XCTAssertNil(snapshot.activeRequestTargets["models"]?.sessionId)
+        XCTAssertTrue(snapshot.previousCompletedRequestTargets.isEmpty)
+    }
+
+    @MainActor
+    func testLateNilResponseAndTokenlessErrorDoNotFinishNewNormalGeneration() throws {
+        let bridge = SharedSessionControlStore()
+        _ = bridge.requestModels(sessionId: "session-a", isConnected: true)
+        _ = bridge.modelsReceived(
+            sessionId: "session-a",
+            currentJson: nil,
+            routable: true,
+            groupsJson: "[]",
+            isGlobalRequest: false
+        )
+        let second = bridge.requestModels(sessionId: "session-b", isConnected: true)
+        let secondToken = try JSONDecoder().decode(
+            [KMPSessionControlEffect].self,
+            from: Data(second.effectsJson.utf8)
+        ).first!.requestToken
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            sessionControlBridge: bridge
+        )
+
+        for json in [
+            #"{"kind":"models","groups":[]}"#,
+            #"{"kind":"error","requestType":"models","message":"late-a"}"#
+        ] {
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(json.utf8)))
+        }
+        XCTAssertNil(store.lastError)
+        XCTAssertTrue(store.protocolNotices.isEmpty)
+        var snapshot = try JSONDecoder().decode(
+            KMPSessionControlSnapshot.self,
+            from: Data(bridge.snapshot().snapshotJson!.utf8)
+        )
+        XCTAssertEqual(snapshot.requestTokens["models"], secondToken)
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"models","sessionId":"session-b","groups":[]}"#.utf8
+        )))
+        snapshot = try JSONDecoder().decode(
+            KMPSessionControlSnapshot.self,
+            from: Data(bridge.snapshot().snapshotJson!.utf8)
+        )
+        XCTAssertNil(snapshot.requestTokens["models"])
+    }
+
+    @MainActor
+    func testCorrelatedNegativeDefaultResponseFinishesWithoutWaitingForTimeout() throws {
+        let bridge = SharedSessionControlStore()
+        _ = bridge.setDefault(target: "permission", value: "read-only", isConnected: true)
+        _ = bridge.globalDefaultApplied(target: "permission", value: "read-only")
+        _ = bridge.setDefault(target: "permission", value: "workspace-write", isConnected: true)
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            sessionControlBridge: bridge
+        )
+        XCTAssertTrue(store.defaultConfigurationLoadingKinds.contains("set-default"))
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"set-default","applied":false,"target":"permission","value":"workspace-write"}"#.utf8
+        )))
+
+        XCTAssertFalse(store.defaultConfigurationLoadingKinds.contains("set-default"))
+        XCTAssertNotNil(store.lastError)
+        XCTAssertEqual(store.protocolNotices.last?.isError, true)
+        let snapshot = try JSONDecoder().decode(
+            KMPSessionControlSnapshot.self,
+            from: Data(bridge.snapshot().snapshotJson!.utf8)
+        )
+        XCTAssertNil(snapshot.requestTokens["set-default"])
+    }
+
+    @MainActor
+    func testAmbiguousRepeatedNegativeDefaultResponsesDoNotShowFalseErrors() throws {
+        let selection = GatewayModelSelection(provider: "openai", model: "gpt-5")
+        let selectionJSON = String(decoding: try JSONEncoder().encode(selection), as: UTF8.self)
+
+        let saveBridge = SharedSessionControlStore()
+        _ = saveBridge.saveDefaultModel(selectionJson: selectionJSON, isConnected: true)
+        _ = saveBridge.defaultModelSaved(selectionJson: selectionJSON)
+        _ = saveBridge.saveDefaultModel(selectionJson: selectionJSON, isConnected: true)
+        let saveStore = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            sessionControlBridge: saveBridge
+        )
+        saveStore.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"save-default-model"}"#.utf8
+        )))
+        XCTAssertTrue(saveStore.defaultConfigurationLoadingKinds.contains("save-default-model"))
+        XCTAssertNil(saveStore.lastError)
+        XCTAssertTrue(saveStore.protocolNotices.isEmpty)
+
+        let defaultBridge = SharedSessionControlStore()
+        _ = defaultBridge.setDefault(target: "permission", value: "read-only", isConnected: true)
+        _ = defaultBridge.globalDefaultApplied(target: "permission", value: "read-only")
+        _ = defaultBridge.setDefault(target: "permission", value: "read-only", isConnected: true)
+        let defaultStore = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            sessionControlBridge: defaultBridge
+        )
+        defaultStore.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"set-default","applied":false,"target":"permission","value":"read-only"}"#.utf8
+        )))
+        XCTAssertTrue(defaultStore.defaultConfigurationLoadingKinds.contains("set-default"))
+        XCTAssertNil(defaultStore.lastError)
+        XCTAssertTrue(defaultStore.protocolNotices.isEmpty)
+    }
+
+    @MainActor
+    func testAppStoreIgnoresUncorrelatedSessionControlResponses() throws {
+        let executor = SessionControlEffectExecutorSpy()
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            sessionControlEffectExecutor: executor
+        )
+        let frames = [
+            #"{"kind":"agent-presets","presets":[{"id":"standard","isDefault":true}],"authorable":true,"hasDocument":true}"#,
+            #"{"kind":"defaults","agentPresetDefault":"standard","permissionDefault":"ask"}"#,
+            #"{"kind":"models","sessionId":"session-1","current":{"provider":"openai","model":"gpt-5"},"routable":true,"groups":[]}"#,
+            #"{"kind":"permission-options","sessionId":"session-1","sessionPermissions":{"options":[{"value":"read-only","name":"Read"},{"value":"future","name":"Future"}],"currentValue":"read-only"}}"#,
+            #"{"kind":"context-usage","sessionId":"session-1","asOfSeq":10,"tokenUsage":{"uncachedInputTokens":12}}"#,
+            #"{"kind":"session-stats","sessionId":"session-1","asOfSeq":20,"sessionStats":{"turns":2},"tokenUsage":{"totals":{"inputTokens":100}}}"#,
+            #"{"kind":"set-default","applied":true,"target":"permission","value":"ask"}"#
+        ]
+        for json in frames {
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(json.utf8)))
+        }
+
+        XCTAssertTrue(store.agentPresets.isEmpty)
+        XCTAssertNil(store.agentPresetDefault)
+        XCTAssertNil(store.permissionDefault)
+        XCTAssertTrue(store.modelCatalogs.isEmpty)
+        XCTAssertTrue(store.sessionPermissions.isEmpty)
+        XCTAssertTrue(store.contextSnapshots.isEmpty)
+        XCTAssertTrue(store.sessionStatsSnapshots.isEmpty)
+        XCTAssertEqual(executor.defaultsRequestCount, 0)
+        XCTAssertTrue(store.protocolNotices.isEmpty)
+    }
+
+    @MainActor
     func testRequestTrackerFiresOnlyLatestGeneration() async throws {
         let tracker = RequestTracker()
         var timeouts: [String] = []
@@ -1994,6 +2438,300 @@ final class GatewayProtocolTests: XCTestCase {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
     }
+}
+
+@MainActor
+private final class SessionControlEffectExecutorSpy: GatewaySessionControlEffectExecuting {
+    private(set) var modelsTargets: [String?] = []
+    private(set) var defaultsRequestCount = 0
+    func requestModels(sessionId: String?) { modelsTargets.append(sessionId) }
+    func requestPermissionOptions(sessionId: String?) {}
+    func requestContextUsage(sessionId: String) {}
+    func requestSessionStats(sessionId: String) {}
+    func requestAgentPresets() {}
+    func requestDefaults() { defaultsRequestCount += 1 }
+    func requestDefaultModel() {}
+    func selectModel(sessionId: String, provider: String, model: String, reasoningEffort: String?) {}
+    func setPermission(sessionId: String, name: String) {}
+    func saveDefaultModel(provider: String, model: String, reasoningEffort: String?) {}
+    func setDefault(target: String, value: String) {}
+}
+
+private final class IntentSmugglingSessionControlBridge: MalformedSessionControlBridge {
+    override func requestModels(sessionId: String?, isConnected: Bool) -> SharedSessionControlResult {
+        forgedRequestResult(target: .init(kind: "models", isDefault: false, sessionId: "session-2"))
+    }
+}
+
+private final class MissingPayloadSessionControlBridge: MalformedSessionControlBridge {
+    override func selectModel(
+        sessionId: String,
+        selectionJson: String,
+        isConnected: Bool
+    ) -> SharedSessionControlResult {
+        forgedRequestResult(target: .init(
+            kind: "select-model",
+            isDefault: false,
+            sessionId: sessionId,
+            provider: "openai",
+            model: nil
+        ))
+    }
+}
+
+private final class ProjectionSmugglingSessionControlBridge: MalformedSessionControlBridge {
+    override func mergeContextProjection(
+        sessionId: String,
+        asOfSequence: KotlinLong?,
+        tokenUsageJson: String?,
+        pressureJson: String?,
+        breakdownJson: String?
+    ) -> SharedSessionControlResult {
+        forgedRequestResult(target: .init(kind: "context-usage", isDefault: false, sessionId: sessionId))
+    }
+}
+
+private final class SemanticInvalidSessionControlEffectBridge: MalformedSessionControlBridge {
+    override func requestModels(sessionId: String?, isConnected: Bool) -> SharedSessionControlResult {
+        requestCallCount += 1
+        var snapshot = KMPSessionControlSnapshot.empty
+        let target = KMPSessionControlRequestTarget(
+            kind: "models",
+            isDefault: false,
+            sessionId: sessionId,
+            provider: nil,
+            model: nil,
+            reasoningEffort: nil,
+            target: nil,
+            value: nil
+        )
+        snapshot.loadingKinds = ["models"]
+        snapshot.pendingModelsSessionId = sessionId
+        snapshot.requestTokens = ["models": "models:1"]
+        snapshot.activeRequestTargets = ["models": target]
+        let effect = KMPSessionControlEffect(
+            kind: "models",
+            requestKey: "models",
+            requestToken: "models:1",
+            sessionId: "wrong-session",
+            provider: nil,
+            model: nil,
+            reasoningEffort: nil,
+            target: nil,
+            value: nil
+        )
+        return SharedSessionControlResult(
+            snapshotJson: Self.encode(snapshot),
+            effectsJson: Self.encode([effect]),
+            errorCode: nil,
+            errorMessage: nil,
+            applied: true,
+            committed: true,
+            completedKind: nil,
+            completedRequestToken: nil
+        )
+    }
+}
+
+private final class InvalidSessionControlResultBridge: MalformedSessionControlBridge {
+    enum Defect: CaseIterable {
+        case uncommittedSnapshotMutation
+        case effectWithoutApplied
+        case committedWithoutMutation
+        case inconsistentCompletion
+    }
+
+    private let defect: Defect
+
+    init(defect: Defect) {
+        self.defect = defect
+    }
+
+    override func requestModels(sessionId: String?, isConnected: Bool) -> SharedSessionControlResult {
+        requestCallCount += 1
+        let valid = forgedRequestResult(
+            target: .init(kind: "models", isDefault: false, sessionId: sessionId)
+        )
+        switch defect {
+        case .uncommittedSnapshotMutation:
+            return SharedSessionControlResult(
+                snapshotJson: valid.snapshotJson,
+                effectsJson: "[]",
+                errorCode: nil,
+                errorMessage: nil,
+                applied: true,
+                committed: false,
+                completedKind: nil,
+                completedRequestToken: nil
+            )
+        case .effectWithoutApplied:
+            return SharedSessionControlResult(
+                snapshotJson: valid.snapshotJson,
+                effectsJson: valid.effectsJson,
+                errorCode: nil,
+                errorMessage: nil,
+                applied: false,
+                committed: true,
+                completedKind: nil,
+                completedRequestToken: nil
+            )
+        case .committedWithoutMutation:
+            return SharedSessionControlResult(
+                snapshotJson: Self.encode(KMPSessionControlSnapshot.empty),
+                effectsJson: "[]",
+                errorCode: nil,
+                errorMessage: nil,
+                applied: true,
+                committed: true,
+                completedKind: nil,
+                completedRequestToken: nil
+            )
+        case .inconsistentCompletion:
+            return SharedSessionControlResult(
+                snapshotJson: valid.snapshotJson,
+                effectsJson: "[]",
+                errorCode: nil,
+                errorMessage: nil,
+                applied: true,
+                committed: true,
+                completedKind: "models",
+                completedRequestToken: "models:missing"
+            )
+        }
+    }
+}
+
+private class MalformedSessionControlBridge: KMPSessionControlStoreBridging {
+    fileprivate(set) var requestCallCount = 0
+
+    fileprivate static func encode<T: Encodable>(_ value: T) -> String {
+        String(decoding: try! JSONEncoder().encode(value), as: UTF8.self)
+    }
+
+    func snapshot() -> SharedSessionControlResult {
+        let json = try! JSONEncoder().encode(KMPSessionControlSnapshot.empty)
+        return SharedSessionControlResult(
+            snapshotJson: String(decoding: json, as: UTF8.self),
+            effectsJson: "[]",
+            errorCode: nil,
+            errorMessage: nil,
+            applied: false,
+            committed: false,
+            completedKind: nil,
+            completedRequestToken: nil
+        )
+    }
+
+    func requestModels(sessionId: String?, isConnected: Bool) -> SharedSessionControlResult {
+        requestCallCount += 1
+        return SharedSessionControlResult(
+            snapshotJson: "{}",
+            effectsJson: "[]",
+            errorCode: nil,
+            errorMessage: nil,
+            applied: true,
+            committed: true,
+            completedKind: nil,
+            completedRequestToken: nil
+        )
+    }
+
+    func selectModel(
+        sessionId: String,
+        selectionJson: String,
+        isConnected: Bool
+    ) -> SharedSessionControlResult { unimplemented() }
+
+    func mergeContextProjection(
+        sessionId: String,
+        asOfSequence: KotlinLong?,
+        tokenUsageJson: String?,
+        pressureJson: String?,
+        breakdownJson: String?
+    ) -> SharedSessionControlResult { unimplemented() }
+
+    fileprivate func forgedRequestResult(target: KMPSessionControlRequestTarget) -> SharedSessionControlResult {
+        let token = "\(target.kind):forged"
+        var snapshot = KMPSessionControlSnapshot.empty
+        if target.isDefault {
+            snapshot.defaultConfigurationLoadingKinds = [target.kind]
+        } else {
+            snapshot.loadingKinds = [target.kind]
+        }
+        snapshot.requestTokens = [target.kind: token]
+        snapshot.activeRequestTargets = [target.kind: target]
+        if target.kind == "models" {
+            snapshot.pendingModelsSessionId = target.sessionId
+            snapshot.isPendingGlobalModelsRequest = target.sessionId == nil
+        }
+        if target.kind == "select-model" { snapshot.pendingModelSelectionSessionId = target.sessionId }
+        if target.kind == "permission-options" { snapshot.pendingPermissionOptionsSessionId = target.sessionId }
+        let effect = KMPSessionControlEffect(
+            kind: target.kind,
+            requestKey: target.kind,
+            requestToken: token,
+            sessionId: target.sessionId,
+            provider: target.provider,
+            model: target.model,
+            reasoningEffort: target.reasoningEffort,
+            target: target.target,
+            value: target.value
+        )
+        return SharedSessionControlResult(
+            snapshotJson: Self.encode(snapshot),
+            effectsJson: Self.encode([effect]),
+            errorCode: nil,
+            errorMessage: nil,
+            applied: true,
+            committed: true,
+            completedKind: nil,
+            completedRequestToken: nil
+        )
+    }
+}
+
+private extension KMPSessionControlStoreBridging {
+    func unimplemented() -> SharedSessionControlResult {
+        SharedSessionControlResult(
+            snapshotJson: nil,
+            effectsJson: "[]",
+            errorCode: "unexpected-test-call",
+            errorMessage: nil,
+            applied: false,
+            committed: false,
+            completedKind: nil,
+            completedRequestToken: nil
+        )
+    }
+    func requestPermissionOptions(sessionId: String, isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
+    func requestContextUsage(sessionId: String, isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
+    func requestSessionStats(sessionId: String, isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
+    func requestAgentPresets(isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
+    func requestDefaults(isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
+    func requestDefaultModel(isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
+    func setPermission(sessionId: String, value: String, isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
+    func saveDefaultModel(selectionJson: String, isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
+    func setDefault(target: String, value: String, isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
+    func agentPresetsReceived(presetsJson: String, authorable: Bool, hasDocument: Bool) -> SharedSessionControlResult { unimplemented() }
+    func defaultsReceived(agentPreset: String?, permission: String?) -> SharedSessionControlResult { unimplemented() }
+    func defaultModelReceived(selectionJson: String?) -> SharedSessionControlResult { unimplemented() }
+    func globalDefaultApplied(target: String, value: String) -> SharedSessionControlResult { unimplemented() }
+    func modelsReceived(sessionId: String?, currentJson: String?, routable: Bool, groupsJson: String, isGlobalRequest: Bool) -> SharedSessionControlResult { unimplemented() }
+    func defaultModelSaved(selectionJson: String?) -> SharedSessionControlResult { unimplemented() }
+    func modelSelected(sessionId: String?, selectionJson: String) -> SharedSessionControlResult { unimplemented() }
+    func permissionsReceived(sessionId: String?, permissionsJson: String) -> SharedSessionControlResult { unimplemented() }
+    func permissionSelected(sessionId: String?, value: String) -> SharedSessionControlResult { unimplemented() }
+    func contextReceived(sessionId: String?, asOfSequence: KotlinLong?, tokenUsageJson: String?, pressureJson: String?, breakdownJson: String?) -> SharedSessionControlResult { unimplemented() }
+    func statsReceived(sessionId: String?, asOfSequence: KotlinLong?, statsJson: String?, tokenUsageTotalsJson: String?, contextPressureJson: String?) -> SharedSessionControlResult { unimplemented() }
+    func mergeContextProjection(sessionId: String, asOfSequence: KotlinLong?, tokenUsageJson: String?, pressureJson: String?, breakdownJson: String?) -> SharedSessionControlResult { unimplemented() }
+    func mergeStatsProjection(sessionId: String, asOfSequence: KotlinLong?, statsJson: String?, tokenUsageTotalsJson: String?, contextPressureJson: String?) -> SharedSessionControlResult { unimplemented() }
+    func mergePermissionsProjection(sessionId: String, permissionsJson: String) -> SharedSessionControlResult { unimplemented() }
+    func mergeModelProjection(sessionId: String, selectionJson: String) -> SharedSessionControlResult { unimplemented() }
+    func mergePermissionProjection(sessionId: String, value: String) -> SharedSessionControlResult { unimplemented() }
+    func requestFinished(kind: String, isDefault: Bool, requestToken: String?) -> SharedSessionControlResult { unimplemented() }
+    func requestTimedOut(kind: String, isDefault: Bool, requestToken: String?) -> SharedSessionControlResult { unimplemented() }
+    func requestFailed(kind: String, isDefault: Bool, requestToken: String?) -> SharedSessionControlResult { unimplemented() }
+    func requestsDisconnected() -> SharedSessionControlResult { unimplemented() }
 }
 
 private final class FailingRestoreSessionListBridge: KMPSessionListStoreBridging {

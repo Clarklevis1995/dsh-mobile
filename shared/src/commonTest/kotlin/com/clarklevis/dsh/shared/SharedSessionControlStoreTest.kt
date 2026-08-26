@@ -1,0 +1,275 @@
+package com.clarklevis.dsh.shared
+
+import com.clarklevis.dsh.shared.domain.SessionControlState
+import com.clarklevis.dsh.shared.facade.SharedSessionControlEffect
+import com.clarklevis.dsh.shared.facade.SharedSessionControlStore
+import com.clarklevis.dsh.shared.protocol.wireJson
+import kotlinx.serialization.decodeFromString
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class SharedSessionControlStoreTest {
+    @Test
+    fun sameKindRequestsAreSerializedAndLatestDifferentTargetIsQueued() {
+        val store = SharedSessionControlStore()
+
+        val first = store.requestModels("session-1", isConnected = true)
+        val firstState = first.state()
+        val effect = first.effects().single()
+        assertEquals("models", effect.kind)
+        assertEquals("session-1", effect.sessionId)
+        assertEquals(effect.requestToken, firstState.requestTokens["models"])
+        assertEquals("session-1", firstState.pendingModelsSessionId)
+        assertTrue("models" in firstState.loadingKinds)
+
+        val queued = store.requestModels("session-2", isConnected = true)
+        assertTrue(queued.effects().isEmpty())
+        assertEquals("session-2", queued.state().queuedRequestTargets["models"]?.sessionId)
+
+        // 旧 generation 的超时回调必须携带 token；结束 A 与启动 B 是同一事务。
+        val timedOut = store.requestTimedOut("models", isDefault = false, effect.requestToken)
+        val retryEffect = timedOut.effects().single()
+        val retryState = timedOut.state()
+        assertTrue("models" in retryState.loadingKinds)
+        assertEquals("session-2", retryState.pendingModelsSessionId)
+        assertEquals(retryEffect.requestToken, retryState.requestTokens["models"])
+        assertTrue(retryEffect.requestToken != effect.requestToken)
+        assertTrue("models" in retryState.explicitSessionRequiredKinds)
+
+        // A 的迟到响应不得提交到 B，也不得结束 B。
+        val ambiguousLate = store.modelsReceived(null, null, true, "[]", false)
+        assertNull(ambiguousLate.snapshotJson)
+        val late = store.modelsReceived("session-1", null, true, "[]", false)
+        assertNull(late.snapshotJson)
+        assertEquals(retryEffect.requestToken, store.snapshot().state().requestTokens["models"])
+
+        val completed = store.modelsReceived("session-2", null, true, "[]", false).state()
+        assertFalse("models" in completed.loadingKinds)
+        assertNull(completed.requestTokens["models"])
+        assertNull(completed.pendingModelsSessionId)
+    }
+
+    @Test
+    fun latestWinsCancelsQueuedTargetWhenActiveTargetIsRequestedAgain() {
+        val store = SharedSessionControlStore()
+        val first = store.requestModels("session-a", true)
+        store.requestModels("session-b", true)
+
+        val returnedToA = store.requestModels("session-a", true)
+        assertTrue(returnedToA.effects().isEmpty())
+        assertTrue(returnedToA.committed)
+        assertTrue(returnedToA.state().queuedRequestTargets.isEmpty())
+
+        val completedA = store.modelsReceived("session-a", null, true, "[]", false)
+        assertEquals(first.effects().single().requestToken, completedA.completedRequestToken)
+        assertTrue(completedA.effects().isEmpty())
+        assertTrue(completedA.state().activeRequestTargets.isEmpty())
+    }
+
+    @Test
+    fun normalGenerationRejectsLateNilResponseAndOldTokenFailure() {
+        val store = SharedSessionControlStore()
+        val first = store.requestModels("session-a", true).effects().single()
+        store.modelsReceived("session-a", null, true, "[]", false)
+
+        val second = store.requestModels("session-b", true).effects().single()
+        assertTrue("models" in store.snapshot().state().explicitSessionRequiredKinds)
+
+        // Gateway 不回显 token；后续 session-bound generation 必须显式携带 sessionId。
+        assertFalse(store.modelsReceived(null, null, true, "[]", false).applied)
+        assertFalse(store.modelsReceived("session-a", null, true, "[]", false).applied)
+        assertFalse(store.requestFailed("models", false, first.requestToken).applied)
+        assertEquals(second.requestToken, store.snapshot().state().requestTokens["models"])
+
+        val completed = store.modelsReceived("session-b", null, true, "[]", false)
+        assertTrue(completed.applied)
+        assertTrue(completed.committed)
+        assertEquals(second.requestToken, completed.completedRequestToken)
+    }
+
+    @Test
+    fun normalSuccessfulDefaultRefreshAllowsSameTargetNextGeneration() {
+        val store = SharedSessionControlStore()
+        store.requestAgentPresets(true)
+        store.agentPresetsReceived("[]", false, false)
+
+        val repeated = store.requestAgentPresets(true)
+        assertEquals("agent-presets", repeated.effects().single().kind)
+        assertFalse("agent-presets" in repeated.state().quarantinedRequestKinds)
+    }
+
+    @Test
+    fun normalSuccessfulTargetReuseAfterInterleavedGenerationStartsNewEffect() {
+        val store = SharedSessionControlStore()
+        store.requestModels("session-a", true)
+        store.modelsReceived("session-a", null, true, "[]", false)
+        store.requestModels("session-b", true)
+        store.modelsReceived("session-b", null, true, "[]", false)
+
+        val reused = store.requestModels("session-a", true)
+        assertEquals("session-a", reused.effects().single().sessionId)
+        assertFalse("models" in reused.state().quarantinedRequestKinds)
+    }
+
+    @Test
+    fun repeatedContextStatsAndDefaultsRefreshesEmitEffectsAfterNormalSuccess() {
+        val store = SharedSessionControlStore()
+
+        store.requestContextUsage("session-1", true)
+        store.contextReceived("session-1", 1, null, null, null)
+        assertEquals("context-usage", store.requestContextUsage("session-1", true).effects().single().kind)
+        store.contextReceived("session-1", 2, null, null, null)
+
+        store.requestSessionStats("session-1", true)
+        store.statsReceived("session-1", 1, null, null, null)
+        assertEquals("session-stats", store.requestSessionStats("session-1", true).effects().single().kind)
+        store.statsReceived("session-1", 2, null, null, null)
+
+        store.requestDefaults(true)
+        store.defaultsReceived("standard", "ask")
+        assertEquals("defaults", store.requestDefaults(true).effects().single().kind)
+        assertTrue(store.snapshot().state().quarantinedRequestKinds.isEmpty())
+    }
+
+    @Test
+    fun mergesControlResponsesAndFiltersUnsupportedPermissions() {
+        val store = SharedSessionControlStore()
+        store.mergeContextProjection(
+            sessionId = "session-1",
+            asOfSequence = 10,
+            tokenUsageJson = """{"uncachedInputTokens":12}""",
+            pressureJson = null,
+            breakdownJson = null
+        )
+        val context = store.mergeContextProjection(
+            sessionId = "session-1",
+            asOfSequence = null,
+            tokenUsageJson = null,
+            pressureJson = """{"pressureTokens":30,"contextWindow":100}""",
+            breakdownJson = """{"systemTokens":4}"""
+        ).state().contextSnapshots["session-1"]
+
+        assertEquals(10, context?.asOfSeq)
+        assertEquals(12, context?.tokenUsage?.uncachedInputTokens)
+        assertEquals(30, context?.pressure?.pressureTokens)
+        assertEquals(4, context?.breakdown?.systemTokens)
+
+        val permissions = store.mergePermissionsProjection(
+            "session-1",
+            """{"options":[{"value":"read-only","name":"Read"},{"value":"future","name":"Future"}],"currentValue":"read-only"}"""
+        ).state().sessionPermissions["session-1"]
+        assertEquals(listOf("read-only"), permissions?.options?.map { it.value })
+
+        val rejected = store.mergePermissionProjection("session-1", "future")
+        assertEquals("invalid-permission-state", rejected.errorCode)
+        assertNull(rejected.snapshotJson)
+
+        val invalidProjection = store.mergePermissionsProjection(
+            "session-1",
+            """{"options":[],"currentValue":"future"}"""
+        )
+        assertEquals("session-control-merge-permissions-projection-failed", invalidProjection.errorCode)
+        assertNull(invalidProjection.snapshotJson)
+    }
+
+    @Test
+    fun uncorrelatedInvalidPermissionResponseIsIgnoredWithoutError() {
+        val store = SharedSessionControlStore()
+        val withoutActive = store.permissionSelected("session-1", "future")
+        assertTrue(withoutActive.isSuccess)
+        assertFalse(withoutActive.applied)
+        assertNull(withoutActive.snapshotJson)
+
+        store.setPermission("session-1", "read-only", true)
+        val wrongTarget = store.permissionSelected("session-2", "future")
+        assertTrue(wrongTarget.isSuccess)
+        assertFalse(wrongTarget.applied)
+        assertNull(wrongTarget.snapshotJson)
+        assertEquals("read-only", store.snapshot().state().activeRequestTargets["permission"]?.value)
+    }
+
+    @Test
+    fun defaultsAndStatsRemainKmpOwnedAcrossPartialResponses() {
+        val store = SharedSessionControlStore()
+        store.requestAgentPresets(isConnected = true)
+        store.agentPresetsReceived(
+            """[{"id":"standard","isDefault":true},{"id":"broken","isDefault":false,"broken":true}]""",
+            authorable = true,
+            hasDocument = true
+        )
+        store.requestDefaults(isConnected = true)
+        var state = store.defaultsReceived("standard", "ask").state()
+        assertEquals("standard", state.agentPresetDefault)
+        assertEquals("ask", state.permissionDefault)
+        assertTrue(state.agentPresetsAuthorable)
+
+        val setDefault = store.setDefault("agent-preset", "standard", isConnected = true)
+        assertEquals("set-default", setDefault.effects().single().kind)
+        assertEquals("invalid-agent-preset", store.setDefault("agent-preset", "broken", true).errorCode)
+
+        store.requestSessionStats("session-1", true)
+        store.statsReceived(
+            "session-1",
+            20,
+            """{"turns":2,"steps":5}""",
+            """{"inputTokens":100,"outputTokens":20}""",
+            null
+        )
+        state = store.snapshot().state()
+        val stats = assertNotNull(state.sessionStatsSnapshots["session-1"])
+        assertEquals(20, stats.asOfSeq)
+        assertEquals(2, stats.stats?.turns)
+        assertEquals(100, stats.tokenUsage?.totals?.inputTokens)
+        // 同一次业务快照的第二部分通过独立 projection 合并，不伪造 request generation。
+        state = store.mergeStatsProjection(
+            "session-1", null, null, null,
+            """{"projectedTokens":80,"contextWindow":1000}"""
+        ).state()
+        assertEquals(80, state.sessionStatsSnapshots["session-1"]?.contextPressure?.projectedTokens)
+    }
+
+    @Test
+    fun sequenceIsLongAndPreservesValuesAboveInt32Max() {
+        val store = SharedSessionControlStore()
+        val sequence = Int.MAX_VALUE.toLong() + 42L
+        store.requestContextUsage("session-1", true)
+        val state = store.contextReceived("session-1", sequence, null, null, null).state()
+        assertEquals(sequence, state.contextSnapshots["session-1"]?.asOfSeq)
+    }
+
+    @Test
+    fun ambiguousTargetIsQuarantinedAfterTimeoutUntilDisconnect() {
+        val store = SharedSessionControlStore()
+        val first = store.requestAgentPresets(true).effects().single()
+        val timedOut = store.requestTimedOut("agent-presets", true, first.requestToken).state()
+        assertTrue("agent-presets" in timedOut.quarantinedRequestKinds)
+        assertEquals(
+            "response-correlation-quarantined",
+            store.requestAgentPresets(true).errorCode
+        )
+        assertNull(store.agentPresetsReceived("[]", false, false).snapshotJson)
+
+        store.requestsDisconnected()
+        assertEquals(1, store.requestAgentPresets(true).effects().size)
+    }
+
+    @Test
+    fun disconnectedIntentReturnsStructuredFailureWithoutStateMutation() {
+        val store = SharedSessionControlStore()
+        val result = store.requestAgentPresets(isConnected = false)
+        assertEquals("not-connected", result.errorCode)
+        assertNull(result.snapshotJson)
+        assertTrue(result.effects().isEmpty())
+        assertTrue(store.snapshot().state().defaultConfigurationLoadingKinds.isEmpty())
+    }
+
+    private fun com.clarklevis.dsh.shared.facade.SharedSessionControlResult.state(): SessionControlState =
+        wireJson.decodeFromString(requireNotNull(snapshotJson))
+
+    private fun com.clarklevis.dsh.shared.facade.SharedSessionControlResult.effects(): List<SharedSessionControlEffect> =
+        wireJson.decodeFromString(effectsJson)
+}

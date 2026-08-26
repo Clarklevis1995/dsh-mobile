@@ -8,6 +8,23 @@ protocol GatewayQuestionEffectExecuting: AnyObject {
 
 extension GatewayClient: GatewayQuestionEffectExecuting {}
 
+@MainActor
+protocol GatewaySessionControlEffectExecuting: AnyObject {
+    func requestModels(sessionId: String?)
+    func requestPermissionOptions(sessionId: String?)
+    func requestContextUsage(sessionId: String)
+    func requestSessionStats(sessionId: String)
+    func requestAgentPresets()
+    func requestDefaults()
+    func requestDefaultModel()
+    func selectModel(sessionId: String, provider: String, model: String, reasoningEffort: String?)
+    func setPermission(sessionId: String, name: String)
+    func saveDefaultModel(provider: String, model: String, reasoningEffort: String?)
+    func setDefault(target: String, value: String)
+}
+
+extension GatewayClient: GatewaySessionControlEffectExecuting {}
+
 private extension GatewayQuestionRequestStatus {
     var isAnswerInFlight: Bool {
         switch self {
@@ -128,6 +145,9 @@ final class AppStore: ObservableObject {
     /// Human Question 的唯一业务状态来源；Swift 属性只发布 KMP 快照。
     private let kmpQuestionStore: KMPQuestionStoreAdapter
     private let questionEffectExecutor: any GatewayQuestionEffectExecuting
+    /// SessionControl 的唯一业务状态来源；Swift 属性只发布 KMP 快照。
+    private let kmpSessionControlStore: KMPSessionControlStoreAdapter
+    private let sessionControlEffectExecutor: any GatewaySessionControlEffectExecuting
     private var historyState = HistoryState()
     private let historySyncEngine = HistorySyncEngine()
     /// The remote session activity timestamp covered by a completed history load.
@@ -165,8 +185,6 @@ final class AppStore: ObservableObject {
     /// 只记录路由差异；影子 effect 永远不执行，也不参与产品状态写入。
     private let kmpShadowValidator = KMPShadowValidator()
 #endif
-    private static let permissionPresets: Set<String> = ["read-only", "workspace-write", "danger-full-access"]
-    private static let defaultPermissionPresets: Set<String> = ["ask", "read-only", "workspace-write", "danger-full-access"]
     private static let defaultConfigurationRequestKinds: Set<String> = [
         "agent-presets", "defaults", "default-model", "set-default", "save-default-model"
     ]
@@ -176,7 +194,9 @@ final class AppStore: ObservableObject {
         preferences: AppPreferences = UserDefaultsAppPreferences(),
         sessionListBridge: (any KMPSessionListStoreBridging)? = nil,
         questionBridge: (any KMPQuestionStoreBridging)? = nil,
+        sessionControlBridge: (any KMPSessionControlStoreBridging)? = nil,
         questionEffectExecutor: (any GatewayQuestionEffectExecuting)? = nil,
+        sessionControlEffectExecutor: (any GatewaySessionControlEffectExecuting)? = nil,
         backgroundExecutionController: AgentBackgroundExecutionController? = nil
     ) {
         self.preferences = preferences
@@ -190,6 +210,9 @@ final class AppStore: ObservableObject {
         self.kmpSessionListStore = kmpSessionListStore
         let kmpQuestionStore = KMPQuestionStoreAdapter(bridge: questionBridge)
         self.kmpQuestionStore = kmpQuestionStore
+        let kmpSessionControlStore = KMPSessionControlStoreAdapter(bridge: sessionControlBridge)
+        self.kmpSessionControlStore = kmpSessionControlStore
+        self.sessionControlEffectExecutor = sessionControlEffectExecutor ?? gateway
         appLanguage = AppLanguage.load()
         selectedWorkspaceId = preferences.selectedWorkspaceID
         endpoint = preferences.endpoint
@@ -198,10 +221,14 @@ final class AppStore: ObservableObject {
         archivedSessionIds = kmpSessionListStore.snapshot.archivedSessionIDSet
         pendingQuestionRequests = kmpQuestionStore.snapshot.pendingRequests
         questionRequestStatuses = kmpQuestionStore.snapshot.platformStatuses
+        applySessionControlSnapshot(kmpSessionControlStore.snapshot)
         if let error = kmpSessionListStore.initializationError {
             lastError = error.localizedDescription
         }
         if let error = kmpQuestionStore.initializationError {
+            lastError = error.localizedDescription
+        }
+        if let error = kmpSessionControlStore.initializationError {
             lastError = error.localizedDescription
         }
         preferences.performMigrations()
@@ -324,25 +351,14 @@ final class AppStore: ObservableObject {
     }
     func refreshDefaultConfiguration() {
         guard gateway.state.isConnected else { return }
-        beginDefaultConfigurationRequest("agent-presets")
-        beginDefaultConfigurationRequest("defaults")
-        beginDefaultConfigurationRequest("default-model")
-        gateway.requestAgentPresets()
-        gateway.requestDefaults()
-        gateway.requestDefaultModel()
+        dispatchSessionControl(.requestAgentPresets(isConnected: true))
+        dispatchSessionControl(.requestDefaults(isConnected: true))
+        dispatchSessionControl(.requestDefaultModel(isConnected: true))
     }
     func setDefaultAgentPreset(_ id: String) {
-        guard agentPresets.contains(where: { $0.id == id && $0.broken != true }) else {
-            lastError = String(localized: "agent.preset.default.invalid", defaultValue: "无法将未知或已损坏的 Agent 预设设为默认值：\(id)")
-            return
-        }
         setGlobalDefault(target: "agent-preset", value: id)
     }
     func setDefaultPermission(_ value: String) {
-        guard Self.defaultPermissionPresets.contains(value) else {
-            lastError = String(localized: "permissions.default.unsupported", defaultValue: "不支持的默认权限：\(value)")
-            return
-        }
         setGlobalDefault(target: "permission", value: value)
     }
     /// The default-model picker in Settings is not tied to any session, so it
@@ -356,17 +372,21 @@ final class AppStore: ObservableObject {
         guard gateway.state.isConnected else { return }
         guard anyModelCatalog == nil else { return }
         guard !sessionControlLoadingKinds.contains("models") else { return }
-        reduceSessionControl(.modelsRequestTargeted(sessionID: nil))
-        beginSessionControlRequest("models")
-        gateway.requestModels()
+        dispatchSessionControl(.requestModels(sessionID: nil, isConnected: true))
     }
     func saveDefaultModel(provider: String, model: String, reasoningEffort: String?) {
         guard gateway.state.isConnected else {
             lastError = String(localized: "请先连接 DeepSeek Harness")
             return
         }
-        beginDefaultConfigurationRequest("save-default-model")
-        gateway.saveDefaultModel(provider: provider, model: model, reasoningEffort: reasoningEffort)
+        dispatchSessionControl(.saveDefaultModel(
+            selection: GatewayModelSelection(
+                provider: provider,
+                model: model,
+                reasoningEffort: reasoningEffort
+            ),
+            isConnected: true
+        ))
     }
     func prepareNewConversation() {
         reduceSessionList(.select(nil))
@@ -406,8 +426,7 @@ final class AppStore: ObservableObject {
               preparedConversationActivationKey == activationKey else { return }
 
         if agentPresets.isEmpty {
-            beginDefaultConfigurationRequest("agent-presets")
-            gateway.requestAgentPresets()
+            dispatchSessionControl(.requestAgentPresets(isConnected: true))
         }
 
         if let sessionID,
@@ -532,36 +551,30 @@ final class AppStore: ObservableObject {
     }
     func refreshSessionControls(for sessionId: String) {
         guard gateway.state.isConnected else { return }
-        reduceSessionControl(.modelsRequestTargeted(sessionID: sessionId))
-        reduceSessionControl(.permissionOptionsTargeted(sessionID: sessionId))
-        beginSessionControlRequest("models")
-        beginSessionControlRequest("permission-options")
-        beginSessionControlRequest("context-usage")
-        beginSessionControlRequest("session-stats")
-        gateway.requestModels(sessionId: sessionId)
-        gateway.requestPermissionOptions(sessionId: sessionId)
-        gateway.requestContextUsage(sessionId: sessionId)
-        gateway.requestSessionStats(sessionId: sessionId)
+        dispatchSessionControl(.requestModels(sessionID: sessionId, isConnected: true))
+        dispatchSessionControl(.requestPermissionOptions(sessionID: sessionId, isConnected: true))
+        dispatchSessionControl(.requestContextUsage(sessionID: sessionId, isConnected: true))
+        dispatchSessionControl(.requestSessionStats(sessionID: sessionId, isConnected: true))
     }
     func selectModel(provider: String, model: String, reasoningEffort: String?) {
         guard let sessionId = selectedSessionId else { return }
-        reduceSessionControl(.modelSelectionTargeted(sessionID: sessionId))
-        beginSessionControlRequest("select-model")
-        gateway.selectModel(
-            sessionId: sessionId,
-            provider: provider,
-            model: model,
-            reasoningEffort: reasoningEffort
-        )
+        dispatchSessionControl(.selectModel(
+            sessionID: sessionId,
+            selection: GatewayModelSelection(
+                provider: provider,
+                model: model,
+                reasoningEffort: reasoningEffort
+            ),
+            isConnected: gateway.state.isConnected
+        ))
     }
     func setPermission(_ name: String) {
         guard let sessionId = selectedSessionId else { return }
-        guard Self.permissionPresets.contains(name) else {
-            lastError = String(localized: "permissions.error.invalid", defaultValue: "不支持的访问权限：\(name)。可用状态为 read-only、workspace-write、danger-full-access。")
-            return
-        }
-        beginSessionControlRequest("permission")
-        gateway.setPermission(sessionId: sessionId, name: name)
+        dispatchSessionControl(.setPermission(
+            sessionID: sessionId,
+            value: name,
+            isConnected: gateway.state.isConnected
+        ))
     }
     @discardableResult
     func send(_ text: String, images: [GatewayOutgoingImage] = []) -> Bool {
@@ -642,6 +655,9 @@ final class AppStore: ObservableObject {
                 deviceName ?? String(localized: "长期凭据已安全保存到 Keychain")
             )
         case .hello(let payload):
+            // hello 定义新的连接代际。必须先清除上一代 request identity/quarantine，
+            // 再发送本代 refresh，避免旧 token 或迟到响应跨连接污染新请求。
+            resetOutstandingRequests()
             backgroundExecutionController.releaseAllQuestionAnswers()
             reduceQuestion(.reset)
             supportsImages = payload.protocolVersion >= 3 && payload.capabilities.contains("images")
@@ -737,66 +753,91 @@ final class AppStore: ObservableObject {
     private func handleControlRoute(_ route: GatewayControlRoute) {
         switch route {
         case .action(let action, let finishRequest):
-            reduceSessionControl(action)
-            if let finishRequest {
-                if Self.defaultConfigurationRequestKinds.contains(finishRequest) {
-                    finishDefaultConfigurationRequest(finishRequest)
-                } else {
-                    finishSessionControlRequest(finishRequest)
-                }
-            }
+            let transition = reduceSessionControl(action)
+            // KMP 响应事务已原子完成 active 并可能启动 queued；
+            // 这里不能再按 kind finish，否则会误结束新 generation。
+            if let finishRequest { cancelCompletedSessionControlTracker(finishRequest, transition: transition) }
         case .saveDefaultModel(let saved):
             if let saved {
-                reduceSessionControl(.defaultModelReceived(saved))
-                notice(
-                    String(localized: "默认模型已更新"),
-                    [saved.model, saved.reasoningEffort].compactMap { $0 }.joined(separator: " · ")
-                )
+                let transition = applySessionControlTransition(kmpSessionControlStore.reduce(.defaultModelSaved(saved)))
+                transition.effects.forEach(executeSessionControlEffect)
+                cancelCompletedSessionControlTracker("save-default-model", transition: transition)
+                if transition.completed("save-default-model") {
+                    notice(
+                        String(localized: "默认模型已更新"),
+                        [saved.model, saved.reasoningEffort].compactMap { $0 }.joined(separator: " · ")
+                    )
+                }
             } else {
-                lastError = String(localized: "服务端未确认默认模型更新。")
-            }
-            finishDefaultConfigurationRequest("save-default-model")
-        case .setDefault(let applied, let target, let value):
-            if applied, let target, let value {
-                reduceSessionControl(.globalDefaultApplied(target: target, value: value))
-                notice(
-                    String(localized: "notice.defaults.updated", defaultValue: "默认配置已更新"),
-                    String(localized: "defaults.updated.detail", defaultValue: "\(target) · \(value)")
-                )
-                finishDefaultConfigurationRequest("set-default")
-                beginDefaultConfigurationRequest("defaults")
-                gateway.requestDefaults()
-            } else {
-                finishDefaultConfigurationRequest("set-default")
-                lastError = String(localized: "服务端未确认默认配置更新。")
-            }
-        case .modelSelected(let sessionID, let selection):
-            if let sessionID, let selection {
-                reduceSessionControl(.modelSelected(sessionID: sessionID, selection: selection))
-                notice(
-                    String(localized: "模型已切换"),
-                    [selection.model, selection.reasoningEffort].compactMap { $0 }.joined(separator: " · "),
-                    sessionId: sessionID
-                )
-            }
-            reduceSessionControl(.modelSelectionResolved)
-            finishSessionControlRequest("select-model")
-        case .permissionOptions(let sessionID, let permissions):
-            if let sessionID, let permissions {
-                applyPermissions(permissions, sessionId: sessionID, source: "permission-options")
-            }
-            reduceSessionControl(.permissionOptionsResolved)
-            finishSessionControlRequest("permission-options")
-        case .permissionSelected(let sessionID, let value):
-            if let sessionID, let value {
-                if Self.permissionPresets.contains(value) {
-                    reduceSessionControl(.permissionSelected(sessionID: sessionID, value: value))
-                    notice(String(localized: "权限已切换"), value, sessionId: sessionID)
-                } else {
-                    reportInvalidPermission(value, sessionId: sessionID, source: "permission")
+                if failDefaultConfigurationRequest("save-default-model") {
+                    let message = String(localized: "服务端未确认默认模型更新。")
+                    lastError = message
+                    notice(String(localized: "默认模型更新失败"), message, isError: true)
                 }
             }
-            finishSessionControlRequest("permission")
+        case .setDefault(let applied, let target, let value):
+            if applied, let target, let value {
+                let transition = reduceSessionControl(.globalDefaultApplied(target: target, value: value))
+                cancelCompletedSessionControlTracker("set-default", transition: transition)
+                if transition.completed("set-default") {
+                    notice(
+                        String(localized: "notice.defaults.updated", defaultValue: "默认配置已更新"),
+                        String(localized: "defaults.updated.detail", defaultValue: "\(target) · \(value)")
+                    )
+                    dispatchSessionControl(.requestDefaults(isConnected: gateway.state.isConnected))
+                }
+            } else {
+                if failDefaultConfigurationRequest(
+                    "set-default",
+                    responseTarget: target,
+                    responseValue: value
+                ) {
+                    let message = String(localized: "服务端未确认默认配置更新。")
+                    lastError = message
+                    notice(String(localized: "默认配置更新失败"), message, isError: true)
+                }
+            }
+        case .modelSelected(let sessionID, let selection):
+            if let selection {
+                let targetSessionID = sessionID
+                    ?? kmpSessionControlStore.snapshot.activeRequestTargets["select-model"]?.sessionId
+                let transition = reduceSessionControl(.modelSelected(sessionID: sessionID, selection: selection))
+                cancelCompletedSessionControlTracker("select-model", transition: transition)
+                if transition.completed("select-model"), let targetSessionID {
+                    notice(
+                        String(localized: "模型已切换"),
+                        [selection.model, selection.reasoningEffort].compactMap { $0 }.joined(separator: " · "),
+                        sessionId: targetSessionID
+                    )
+                }
+            } else {
+                if failSessionControlRequest("select-model", responseSessionID: sessionID) {
+                    reportNegativeSessionControlResponse("select-model", sessionID: sessionID)
+                }
+            }
+        case .permissionOptions(let sessionID, let permissions):
+            if let permissions {
+                let transition = reduceSessionControl(.permissionsReceived(sessionID: sessionID, permissions: permissions))
+                cancelCompletedSessionControlTracker("permission-options", transition: transition)
+            } else {
+                if failSessionControlRequest("permission-options", responseSessionID: sessionID) {
+                    reportNegativeSessionControlResponse("permission-options", sessionID: sessionID)
+                }
+            }
+        case .permissionSelected(let sessionID, let value):
+            if let value {
+                let targetSessionID = sessionID
+                    ?? kmpSessionControlStore.snapshot.activeRequestTargets["permission"]?.sessionId
+                let transition = reduceSessionControl(.permissionSelected(sessionID: sessionID, value: value))
+                cancelCompletedSessionControlTracker("permission", transition: transition)
+                if transition.completed("permission"), let targetSessionID {
+                    notice(String(localized: "权限已切换"), value, sessionId: targetSessionID)
+                }
+            } else {
+                if failSessionControlRequest("permission", responseSessionID: sessionID) {
+                    reportNegativeSessionControlResponse("permission", sessionID: sessionID)
+                }
+            }
         }
     }
 
@@ -907,9 +948,10 @@ final class AppStore: ObservableObject {
             pendingDirectoryCreationParentPath = nil
         }
         if payload.requestType == "workspace-create" { workspaceCreationIsLoading = false }
+        var correlatedControlFailure: Bool?
         if let requestType = payload.requestType,
            Self.defaultConfigurationRequestKinds.contains(requestType) {
-            finishDefaultConfigurationRequest(requestType)
+            correlatedControlFailure = failDefaultConfigurationRequest(requestType)
         }
         if payload.requestType == "history",
            let sessionID = payload.sessionID ?? historyState.pendingSessionID {
@@ -928,13 +970,27 @@ final class AppStore: ObservableObject {
                 backgroundExecutionController.releaseQuestionAnswers(sessionID: sessionID)
             }
         }
-        let failedRequest = payload.requestType
-            ?? payload.code.flatMap(sessionControlKind(from:))
+        let failedRequest = payload.requestType.flatMap { requestType in
+            Self.defaultConfigurationRequestKinds.contains(requestType) ? nil
+                : sessionControlKind(from: requestType)
+        } ?? payload.code.flatMap(sessionControlKind(from:))
             ?? payload.message.flatMap(sessionControlKind(from:))
-        if let failedRequest { finishSessionControlRequest(failedRequest) }
-        if payload.requestType == nil, failedRequest == nil {
-            for kind in Array(sessionControlLoadingKinds) { finishSessionControlRequest(kind) }
+        if let failedRequest {
+            correlatedControlFailure = failSessionControlRequest(
+                failedRequest,
+                responseSessionID: payload.sessionID
+            )
         }
+        if payload.requestType == nil, failedRequest == nil {
+            let outstanding = Array(sessionControlLoadingKinds)
+            if !outstanding.isEmpty {
+                correlatedControlFailure = outstanding.reduce(false) { applied, kind in
+                    failSessionControlRequest(kind, responseSessionID: payload.sessionID) || applied
+                }
+            }
+        }
+        // 已识别为 SessionControl 的迟到/无关联 error 不属于当前 generation，零 UI 提示。
+        guard correlatedControlFailure != false else { return }
         lastError = detail
         notice(
             String(
@@ -1038,7 +1094,7 @@ final class AppStore: ObservableObject {
     }
     private func applyHistoryProjections(_ projections: JSONValue?, sessionId: String) {
         guard let values = projections?["values"] else { return }
-        reduceSessionControl(.contextReceived(
+        reduceSessionControlProjection(.contextReceived(
             sessionID: sessionId,
             asOfSequence: projections?["asOfSeq"]?.doubleValue.map(Int.init),
             tokenUsage: values["tokenUsage"]?.decode(GatewayTokenUsage.self),
@@ -1046,7 +1102,7 @@ final class AppStore: ObservableObject {
             breakdown: values["contextBreakdown"]?.decode(GatewayContextBreakdown.self)
         ))
         if let permissions = values["permissions"]?.decode(GatewaySessionPermissions.self) {
-            applyPermissions(permissions, sessionId: sessionId, source: "history.projections")
+            reduceSessionControlProjection(.permissionsReceived(sessionID: sessionId, permissions: permissions))
         }
     }
     private func merge(_ record: SessionEvent) {
@@ -1175,24 +1231,24 @@ final class AppStore: ObservableObject {
             backgroundExecutionController.turnEnded(sessionID: record.sessionId)
         }
         if event.type == "turn/end", record.sessionId == selectedSessionId {
-            beginSessionControlRequest("context-usage")
-            beginSessionControlRequest("session-stats")
-            gateway.requestContextUsage(sessionId: record.sessionId)
-            gateway.requestSessionStats(sessionId: record.sessionId)
+            dispatchSessionControl(.requestContextUsage(
+                sessionID: record.sessionId,
+                isConnected: gateway.state.isConnected
+            ))
+            dispatchSessionControl(.requestSessionStats(
+                sessionID: record.sessionId,
+                isConnected: gateway.state.isConnected
+            ))
         }
         if event.type == "permission/preset",
            let preset = event.raw?["preset"]?.stringValue ?? event.raw?["name"]?.stringValue {
-            if Self.permissionPresets.contains(preset) {
-                reduceSessionControl(.permissionSelected(sessionID: record.sessionId, value: preset))
-            } else {
-                reportInvalidPermission(preset, sessionId: record.sessionId, source: "permission/preset")
-            }
+            reduceSessionControlProjection(.permissionSelected(sessionID: record.sessionId, value: preset))
         }
         if event.type == "request/header", let config = event.raw?["header"]?["config"] {
             let provider = config["provider"]?.stringValue
             let model = config["model"]?.stringValue
             if let provider, let model {
-                reduceSessionControl(.modelSelected(
+                reduceSessionControlProjection(.modelSelected(
                     sessionID: record.sessionId,
                     selection: GatewayModelSelection(
                     provider: provider,
@@ -1211,15 +1267,6 @@ final class AppStore: ObservableObject {
     private func notice(_ title: String, _ text: String, sessionId: String? = nil, isError: Bool = false) {
         protocolNotices.append(GatewayNotice(sessionId: sessionId, title: title, text: text, isError: isError))
         if protocolNotices.count > 100 { protocolNotices.removeFirst(protocolNotices.count - 100) }
-    }
-
-    private func beginSessionControlRequest(_ kind: String) {
-        reduceSessionControl(.requestStarted(kind))
-        sessionControlRequestTracker.begin(kind, timeout: .seconds(12)) { [weak self] in
-            guard let self else { return }
-            self.reduceSessionControl(.requestTimedOut(kind))
-            self.lastError = String(localized: "control.request.timeout", defaultValue: "\(kind) 请求超时，请检查 Mobile Gateway。")
-        }
     }
 
     private func handleConnectionFailure(_ detail: String) {
@@ -1243,8 +1290,9 @@ final class AppStore: ObservableObject {
 
     private func resetOutstandingRequests() {
         backgroundExecutionController.releaseAllQuestionAnswers()
-        for kind in Array(sessionControlLoadingKinds) { finishSessionControlRequest(kind) }
-        for kind in Array(defaultConfigurationLoadingKinds) { finishDefaultConfigurationRequest(kind) }
+        for kind in Array(sessionControlLoadingKinds) { sessionControlRequestTracker.finish(kind) }
+        for kind in Array(defaultConfigurationLoadingKinds) { defaultConfigurationRequestTracker.finish(kind) }
+        applySessionControlTransition(kmpSessionControlStore.reduce(.requestsDisconnected))
         for id in Array(historyLoadingSessionIds) { finishHistoryLoading(id) }
         directoryIsLoading = false
         directoryCreationIsLoading = false
@@ -1254,9 +1302,24 @@ final class AppStore: ObservableObject {
         waitingForNewSession = false
     }
 
-    private func finishSessionControlRequest(_ kind: String) {
+    @discardableResult
+    private func failSessionControlRequest(_ kind: String, responseSessionID: String? = nil) -> Bool {
+        guard let token = kmpSessionControlStore.snapshot.requestTokens[kind],
+              let active = kmpSessionControlStore.snapshot.activeRequestTargets[kind],
+              !(kmpSessionControlStore.snapshot.explicitSessionRequiredKinds.contains(kind) && responseSessionID == nil),
+              responseSessionID == nil || responseSessionID == active.sessionId,
+              sessionControlFailureCanCorrelate(
+                  kind: kind,
+                  active: active,
+                  responseSessionID: responseSessionID
+              ) else { return false }
+        let transition = applySessionControlTransition(kmpSessionControlStore.reduce(.requestFailed(
+            kind: kind, isDefault: false, requestToken: token
+        )))
+        guard transition.applied else { return false }
         sessionControlRequestTracker.finish(kind)
-        reduceSessionControl(.requestFinished(kind))
+        transition.effects.forEach(executeSessionControlEffect)
+        return true
     }
 
     private func setGlobalDefault(target: String, value: String) {
@@ -1264,39 +1327,52 @@ final class AppStore: ObservableObject {
             lastError = String(localized: "请先连接 DeepSeek Harness")
             return
         }
-        beginDefaultConfigurationRequest("set-default")
-        gateway.setDefault(target: target, value: value)
+        dispatchSessionControl(.setDefault(target: target, value: value, isConnected: true))
     }
 
-    private func beginDefaultConfigurationRequest(_ kind: String) {
-        reduceSessionControl(.defaultConfigurationRequestStarted(kind))
-        defaultConfigurationRequestTracker.begin(kind, timeout: .seconds(12)) { [weak self] in
-            guard let self else { return }
-            self.reduceSessionControl(.defaultConfigurationRequestTimedOut(kind))
-            self.lastError = String(localized: "control.request.timeout.v0111", defaultValue: "\(kind) 请求超时，请检查 Mobile Gateway v0.1.11。")
+    @discardableResult
+    private func failDefaultConfigurationRequest(
+        _ kind: String,
+        responseTarget: String? = nil,
+        responseValue: String? = nil
+    ) -> Bool {
+        guard let token = kmpSessionControlStore.snapshot.requestTokens[kind] else { return false }
+        if let previous = kmpSessionControlStore.snapshot.previousCompletedRequestTargets[kind] {
+            guard let active = kmpSessionControlStore.snapshot.activeRequestTargets[kind],
+                  responseTarget == active.target,
+                  responseValue == active.value,
+                  responseTarget != previous.target || responseValue != previous.value else { return false }
         }
-    }
-
-    private func finishDefaultConfigurationRequest(_ kind: String) {
+        let transition = applySessionControlTransition(kmpSessionControlStore.reduce(.requestFailed(
+            kind: kind, isDefault: true, requestToken: token
+        )))
+        guard transition.applied else { return false }
         defaultConfigurationRequestTracker.finish(kind)
-        reduceSessionControl(.defaultConfigurationRequestFinished(kind))
+        transition.effects.forEach(executeSessionControlEffect)
+        return true
     }
 
-    private func applyPermissions(_ incoming: GatewaySessionPermissions, sessionId: String, source: String) {
-        let current = incoming.currentValue ?? incoming.preset
-        if let current, !Self.permissionPresets.contains(current) {
-            reportInvalidPermission(current, sessionId: sessionId, source: source)
-            return
+    private func reportNegativeSessionControlResponse(_ kind: String, sessionID: String?) {
+        let message = String(
+            localized: "control.request.rejected",
+            defaultValue: "服务端未确认 \(kind) 请求。"
+        )
+        lastError = message
+        notice(String(localized: "控制请求失败"), message, sessionId: sessionID, isError: true)
+    }
+
+    private func sessionControlFailureCanCorrelate(
+        kind: String,
+        active: KMPSessionControlRequestTarget,
+        responseSessionID: String?
+    ) -> Bool {
+        guard let previous = kmpSessionControlStore.snapshot.previousCompletedRequestTargets[kind] else {
+            return true
         }
-        reduceSessionControl(.permissionsReceived(sessionID: sessionId, permissions: incoming))
-    }
-
-    private func reportInvalidPermission(_ value: String, sessionId: String, source: String) {
-        finishSessionControlRequest("permission")
-        finishSessionControlRequest("permission-options")
-        let detail = String(localized: "permissions.state.invalid", defaultValue: "权限状态 \"\(value)\" 无效；仅支持 read-only、workspace-write、danger-full-access。")
-        lastError = detail
-        notice(String(localized: "permissions.state.error.source", defaultValue: "权限状态错误 · \(source)"), detail, sessionId: sessionId, isError: true)
+        // error 帧无 request token/业务 payload。只有显式 sessionId 同时匹配 active 且排除
+        // 上一代 session 时才可立即失败；其余情况宁可等待 timeout，也不能结束新 generation。
+        guard let responseSessionID else { return false }
+        return responseSessionID == active.sessionId && responseSessionID != previous.sessionId
     }
 
     private func sessionControlKind(from value: String) -> String? {
@@ -1401,27 +1477,30 @@ final class AppStore: ObservableObject {
             )
         }
     }
-    private func reduceSessionControl(_ action: SessionControlAction) {
-        var state = SessionControlState(
-            modelCatalogs: modelCatalogs,
-            globalModelCatalog: globalModelCatalog,
-            sessionPermissions: sessionPermissions,
-            contextSnapshots: contextSnapshots,
-            sessionStatsSnapshots: sessionStatsSnapshots,
-            agentPresets: agentPresets,
-            agentPresetsAuthorable: agentPresetsAuthorable,
-            agentPresetsHasDocument: agentPresetsHasDocument,
-            agentPresetDefault: agentPresetDefault,
-            permissionDefault: permissionDefault,
-            defaultModelSelection: defaultModelSelection,
-            loadingKinds: sessionControlLoadingKinds,
-            defaultConfigurationLoadingKinds: defaultConfigurationLoadingKinds,
-            pendingModelsSessionID: pendingModelsSessionId,
-            isPendingGlobalModelsRequest: isPendingGlobalModelsRequest,
-            pendingModelSelectionSessionID: pendingModelSelectionSessionId,
-            pendingPermissionOptionsSessionID: pendingPermissionOptionsSessionId
-        )
-        SessionControlReducer.reduce(state: &state, action: action)
+    @discardableResult
+    private func reduceSessionControl(_ action: SessionControlAction) -> KMPSessionControlTransition {
+        let transition = applySessionControlTransition(kmpSessionControlStore.reduce(.action(action)))
+        transition.effects.forEach(executeSessionControlEffect)
+        return transition
+    }
+    @discardableResult
+    private func reduceSessionControlProjection(_ action: SessionControlAction) -> KMPSessionControlTransition {
+        applySessionControlTransition(kmpSessionControlStore.reduce(.projection(action)))
+    }
+    private func dispatchSessionControl(_ intent: KMPSessionControlIntent) {
+        let transition = applySessionControlTransition(kmpSessionControlStore.reduce(intent))
+        guard transition.error == nil else { return }
+        transition.effects.forEach(executeSessionControlEffect)
+    }
+    @discardableResult
+    private func applySessionControlTransition(
+        _ transition: KMPSessionControlTransition
+    ) -> KMPSessionControlTransition {
+        applySessionControlSnapshot(transition.snapshot)
+        if let error = transition.error { lastError = error.localizedDescription }
+        return transition
+    }
+    private func applySessionControlSnapshot(_ state: KMPSessionControlSnapshot) {
         if state.modelCatalogs != modelCatalogs { modelCatalogs = state.modelCatalogs }
         if state.globalModelCatalog != globalModelCatalog { globalModelCatalog = state.globalModelCatalog }
         if state.sessionPermissions != sessionPermissions { sessionPermissions = state.sessionPermissions }
@@ -1439,16 +1518,89 @@ final class AppStore: ObservableObject {
         if state.defaultModelSelection != defaultModelSelection {
             defaultModelSelection = state.defaultModelSelection
         }
-        if state.loadingKinds != sessionControlLoadingKinds {
-            sessionControlLoadingKinds = state.loadingKinds
-        }
+        if state.loadingKinds != sessionControlLoadingKinds { sessionControlLoadingKinds = state.loadingKinds }
         if state.defaultConfigurationLoadingKinds != defaultConfigurationLoadingKinds {
             defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds
         }
-        pendingModelsSessionId = state.pendingModelsSessionID
+        pendingModelsSessionId = state.pendingModelsSessionId
         isPendingGlobalModelsRequest = state.isPendingGlobalModelsRequest
-        pendingModelSelectionSessionId = state.pendingModelSelectionSessionID
-        pendingPermissionOptionsSessionId = state.pendingPermissionOptionsSessionID
+        pendingModelSelectionSessionId = state.pendingModelSelectionSessionId
+        pendingPermissionOptionsSessionId = state.pendingPermissionOptionsSessionId
+    }
+    private func cancelCompletedSessionControlTracker(
+        _ kind: String,
+        transition: KMPSessionControlTransition
+    ) {
+        // queued B 的 effect 在 reduceSessionControl 内已用 tracker.begin 替换了 A；
+        // 只在没有新 generation 时取消旧 timeout，避免迟到 A 误取消 B。
+        guard transition.completedKind == kind else { return }
+        guard transition.effects.isEmpty else { return }
+        let tracker = Self.defaultConfigurationRequestKinds.contains(kind)
+            ? defaultConfigurationRequestTracker
+            : sessionControlRequestTracker
+        tracker.finish(kind)
+    }
+    func executeSessionControlEffect(_ effect: KMPSessionControlEffect) {
+        let isDefault = Self.defaultConfigurationRequestKinds.contains(effect.requestKey)
+        let tracker = isDefault ? defaultConfigurationRequestTracker : sessionControlRequestTracker
+        tracker.begin(effect.requestKey, timeout: .seconds(12)) { [weak self] in
+            guard let self,
+                  self.kmpSessionControlStore.snapshot.requestTokens[effect.requestKey] == effect.requestToken else {
+                return
+            }
+            let transition = self.applySessionControlTransition(self.kmpSessionControlStore.reduce(.requestTimedOut(
+                kind: effect.requestKey,
+                isDefault: isDefault,
+                requestToken: effect.requestToken
+            )))
+            transition.effects.forEach(self.executeSessionControlEffect)
+            self.lastError = isDefault
+                ? String(localized: "control.request.timeout.v0111", defaultValue: "\(effect.requestKey) 请求超时，请检查 Mobile Gateway v0.1.11。")
+                : String(localized: "control.request.timeout", defaultValue: "\(effect.requestKey) 请求超时，请检查 Mobile Gateway。")
+        }
+        switch effect.kind {
+        case "models":
+            sessionControlEffectExecutor.requestModels(sessionId: effect.sessionId)
+        case "permission-options":
+            sessionControlEffectExecutor.requestPermissionOptions(sessionId: effect.sessionId)
+        case "context-usage":
+            if let sessionID = effect.sessionId { sessionControlEffectExecutor.requestContextUsage(sessionId: sessionID) }
+        case "session-stats":
+            if let sessionID = effect.sessionId { sessionControlEffectExecutor.requestSessionStats(sessionId: sessionID) }
+        case "agent-presets":
+            sessionControlEffectExecutor.requestAgentPresets()
+        case "defaults":
+            sessionControlEffectExecutor.requestDefaults()
+        case "default-model":
+            sessionControlEffectExecutor.requestDefaultModel()
+        case "select-model":
+            if let sessionID = effect.sessionId, let provider = effect.provider, let model = effect.model {
+                sessionControlEffectExecutor.selectModel(
+                    sessionId: sessionID,
+                    provider: provider,
+                    model: model,
+                    reasoningEffort: effect.reasoningEffort
+                )
+            }
+        case "permission":
+            if let sessionID = effect.sessionId, let value = effect.value {
+                sessionControlEffectExecutor.setPermission(sessionId: sessionID, name: value)
+            }
+        case "save-default-model":
+            if let provider = effect.provider, let model = effect.model {
+                sessionControlEffectExecutor.saveDefaultModel(
+                    provider: provider,
+                    model: model,
+                    reasoningEffort: effect.reasoningEffort
+                )
+            }
+        case "set-default":
+            if let target = effect.target, let value = effect.value {
+                sessionControlEffectExecutor.setDefault(target: target, value: value)
+            }
+        default:
+            lastError = "KMP SessionControl 返回未知 effect：\(effect.kind)"
+        }
     }
     private func persistSessions() {
         preferences.saveSessions(sessions)

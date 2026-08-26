@@ -245,41 +245,41 @@ class SharedShadowFacade {
         )
         "models" -> control(
             route = "models",
-            sessionId = frame.sessionId ?: context.pendingModelsSessionId,
+            sessionId = frame.sessionId,
             finishRequest = "models",
             itemCount = frame.groups.orEmpty().size,
             action = if (context.pendingGlobalModelsRequest) "global" else "session"
         )
         "select-model" -> control(
             route = "select-model",
-            sessionId = frame.sessionId ?: context.pendingModelSelectionSessionId
+            sessionId = frame.sessionId
         )
         "permission-options" -> control(
             route = "permission-options",
-            sessionId = frame.sessionId ?: context.pendingPermissionOptionsSessionId,
+            sessionId = frame.sessionId,
             itemCount = frame.sessionPermissions?.options.orEmpty().size
         )
         "permission" -> control(
             route = "permission",
-            sessionId = frame.sessionId ?: context.selectedSessionId,
+            sessionId = frame.sessionId,
             value = frame.set
         )
         "context-usage" -> {
-            val sessionId = frame.sessionId ?: context.selectedSessionId
+            val sessionId = frame.sessionId
             control(
                 route = "context-usage",
                 sessionId = sessionId,
                 finishRequest = "context-usage",
-                action = if (sessionId == null) "request-finished" else "context-received"
+                action = "context-received"
             )
         }
         "session-stats" -> {
-            val sessionId = frame.sessionId ?: context.selectedSessionId
+            val sessionId = frame.sessionId
             control(
                 route = "session-stats",
                 sessionId = sessionId,
                 finishRequest = "session-stats",
-                action = if (sessionId == null) "request-finished" else "stats-received"
+                action = "stats-received"
             )
         }
         "directories" -> outcome(

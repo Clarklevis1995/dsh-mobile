@@ -54,7 +54,7 @@ data class GatewayFrame(
     val namespace: JsonValue? = null,
     val sessionPermissions: GatewaySessionPermissions? = null,
     val set: String? = null,
-    val asOfSeq: Int? = null,
+    val asOfSeq: Long? = null,
     val sessionStats: GatewaySessionStats? = null,
     val tokenUsage: GatewayTokenUsage? = null,
     val contextPressure: GatewayContextPressure? = null,
@@ -176,7 +176,7 @@ data class GatewayHostSnapshot(
 @Serializable data class GatewayModelReasoning(val efforts: List<GatewayReasoningEffort>, val defaultEffort: String? = null)
 @Serializable data class GatewayModelItem(val id: String, val name: String, val reasoning: GatewayModelReasoning? = null)
 @Serializable data class GatewayModelGroup(val id: String, val name: String, val models: List<GatewayModelItem>)
-data class GatewayModelCatalog(val current: GatewayModelSelection?, val routable: Boolean, val groups: List<GatewayModelGroup>)
+@Serializable data class GatewayModelCatalog(val current: GatewayModelSelection?, val routable: Boolean, val groups: List<GatewayModelGroup>)
 @Serializable data class GatewayPermissionOption(val value: String, val name: String)
 
 @Serializable
@@ -209,7 +209,7 @@ data class GatewayTokenUsage(
 
 @Serializable data class GatewayContextPressure(val pressureTokens: Int? = null, val projectedTokens: Int? = null, val contextWindow: Int? = null)
 @Serializable data class GatewayContextBreakdown(val systemTokens: Int? = null, val toolsTokens: Int? = null, val messageTokens: Int? = null)
-data class GatewayContextSnapshot(val asOfSeq: Int? = null, val tokenUsage: GatewayTokenUsage? = null, val pressure: GatewayContextPressure? = null, val breakdown: GatewayContextBreakdown? = null)
+@Serializable data class GatewayContextSnapshot(val asOfSeq: Long? = null, val tokenUsage: GatewayTokenUsage? = null, val pressure: GatewayContextPressure? = null, val breakdown: GatewayContextBreakdown? = null)
 
 @Serializable
 data class GatewaySessionStats(
@@ -237,8 +237,9 @@ data class GatewaySessionTokenUsageTotals(
     val reasoningTokens: Int? = null
 )
 
+@Serializable
 data class GatewaySessionStatsSnapshot(
-    val asOfSeq: Int? = null,
+    val asOfSeq: Long? = null,
     val stats: GatewaySessionStats? = null,
     val tokenUsage: GatewaySessionTokenUsage? = null,
     val contextPressure: GatewayContextPressure? = null
