@@ -139,6 +139,10 @@ final class AppStore: ObservableObject {
     private var presentsNextConnectionFailureAsAlert = true
     private var hasHandledColdLaunchConnection = false
     private let backgroundExecutionController = AgentBackgroundExecutionController()
+#if DEBUG
+    /// 只记录路由差异；影子 effect 永远不执行，也不参与产品状态写入。
+    private let kmpShadowValidator = KMPShadowValidator()
+#endif
     private static let permissionPresets: Set<String> = ["read-only", "workspace-write", "danger-full-access"]
     private static let defaultPermissionPresets: Set<String> = ["ask", "read-only", "workspace-write", "danger-full-access"]
     private static let defaultConfigurationRequestKinds: Set<String> = [
@@ -562,7 +566,11 @@ final class AppStore: ObservableObject {
             pendingModelSelectionSessionID: pendingModelSelectionSessionId,
             pendingPermissionOptionsSessionID: pendingPermissionOptionsSessionId
         )
-        handle(GatewayFrameRouter.route(frame, context: context))
+        let route = GatewayFrameRouter.route(frame, context: context)
+#if DEBUG
+        kmpShadowValidator.validate(frame: frame, context: context, swiftRoute: route)
+#endif
+        handle(route)
     }
 
     private func handle(_ route: GatewayFrameRoute) {

@@ -1,12 +1,21 @@
 import Foundation
 
-struct GatewayFrameRoutingContext {
+struct GatewayFrameRoutingContext: Codable, Equatable {
     var selectedSessionID: String?
     var pendingHistorySessionID: String?
     var pendingModelsSessionID: String?
     var isPendingGlobalModelsRequest: Bool
     var pendingModelSelectionSessionID: String?
     var pendingPermissionOptionsSessionID: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case selectedSessionID = "selectedSessionId"
+        case pendingHistorySessionID = "pendingHistorySessionId"
+        case pendingModelsSessionID = "pendingModelsSessionId"
+        case isPendingGlobalModelsRequest = "pendingGlobalModelsRequest"
+        case pendingModelSelectionSessionID = "pendingModelSelectionSessionId"
+        case pendingPermissionOptionsSessionID = "pendingPermissionOptionsSessionId"
+    }
 }
 
 struct GatewayHelloPayload {

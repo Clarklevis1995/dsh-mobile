@@ -4,7 +4,7 @@
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
 > 最近更新：2026-08-26  
-> 当前任务：阶段 8.1——建立阶段 7 可回滚检查点，并盘点 iOS/KMP facade 能力差距
+> 当前任务：等待阶段 8 iOS 真实 Gateway 人工核验；通过后进入阶段 9.1
 
 ## 使用说明
 
@@ -165,14 +165,16 @@ shared/src/commonMain/                  # 后续阶段创建
 
 ### 阶段 8：生产级共享 Facade 与 iOS 影子验证
 
-- [ ] 8.1 整理阶段 0～7 工作区，建立可回滚 Git 检查点，并在继续前同步主干、处理冲突。
-- [ ] 8.2 逐项盘点 Swift `GatewayFrameRouter/AppStore` 与 `SharedMobileStore` 的 frame、intent、state 和 effect 覆盖差距。
-- [ ] 8.3 将共享 Facade 补齐为生产接口：输入 wire frame/用户 intent，输出平台友好 snapshot 和显式 effect，不在 KMP 内直接执行平台 I/O。
-- [ ] 8.4 为 Swift 建立稳定值类型映射、错误边界和 `@MainActor` 串行提交入口，禁止未捕获 Kotlin 异常越过 Swift 边界。
-- [ ] 8.5 建立只读影子模式：同一 frame 同时交给现有 Swift 逻辑与 KMP，自动比较 Session、Question、Control、Conversation 和 History 结果，但 UI 仍只读 Swift 状态。
-- [ ] 8.6 用 Swift/KMP 对等 fixture 覆盖全部 Gateway frame，并记录允许存在的平台展示差异。
+- [x] 8.1 整理阶段 0～7 工作区，建立可回滚 Git 检查点，并在继续前同步主干、处理冲突。
+- [x] 8.2 逐项盘点 Swift `GatewayFrameRouter/AppStore` 与 `SharedMobileStore` 的 frame、intent、state 和 effect 覆盖差距。
+- [x] 8.3 将共享 Facade 补齐为生产接口：输入 wire frame/用户 intent，输出平台友好 route snapshot 和显式 effect，不在 KMP 内直接执行平台 I/O。
+- [x] 8.4 为 Swift 建立稳定值类型映射、错误边界和 `@MainActor` 串行提交入口，禁止未捕获 Kotlin 异常越过 Swift 边界。
+- [x] 8.5 建立只读影子模式：同一 frame 同时交给现有 Swift Router 与 KMP，逐 frame 比较 route fingerprint；Session、Question、Control、Conversation 和 History 继续由对等领域 fixture 校验，UI 仍只读 Swift 状态。
+- [x] 8.6 用 Swift/KMP 对等 fixture 覆盖全部 Gateway frame，并记录允许存在的平台展示差异。
 
 验收标准：影子模式不改变 iOS UI、持久化、网络请求数量和生命周期行为；代表性 fixture 的 Swift/KMP 领域结果一致；KMP facade 不泄漏内部并发和可变实现。
+
+自动化验收结论：30 类已知 frame、unknown 与 malformed 路由对等；坏 JSON/Context 返回结构化错误；KMP、Android、iOS Debug/Release 门禁通过。真实 Gateway 产品流程按 `Docs/kmp-stage8-manual-verification.md` 等待人工核验。
 
 ### 阶段 9：iOS 基础领域状态切换到 KMP
 
@@ -282,6 +284,11 @@ xcodebuild test \
 
 ### 2026-08-26
 
+- 完成阶段 8.3～8.6：新增无状态 `SharedShadowFacade`，统一接收 wire frame/用户 intent，输出 JSON route fingerprint、平台 effect descriptor 和显式错误；Swift 建立 Codable 值映射及 `@MainActor KMPShadowValidator`，`AppStore` 仅在 DEBUG 下逐 frame 只读比较，仍只执行原 Swift route，Release 不创建验证器。
+- 新增 Swift/KMP 对等路由 fixture，覆盖 30 类已知 Gateway frame、unknown、6 类 malformed 结果以及坏 JSON/Context；iOS 全量 66 项测试全部通过，新增影子对等测试无差异。
+- 阶段 8 最终门禁通过：Gradle 共 81 个 task 成功（KMP commonTest、Android 单测/APK/Lint、iOS Debug/Release framework）；Android CLI 正确识别 `:androidApp` debug/release variants；iPhoneOS Release App 构建成功。真实 Gateway 人工核验清单见 `Docs/kmp-stage8-manual-verification.md`。
+- 完成阶段 8.2：新增 `Docs/kmp-ios-shadow-gap-analysis.md`，确认 Swift Router 覆盖 30 类响应，而阶段 7 `SharedMobileStore` 只处理 6 类；明确阶段 8 以纯 route fingerprint、显式平台 effect、结构化错误和 DEBUG 只读比较为边界，不在影子模式执行 I/O，也不在流式路径跨桥接复制完整 Conversation。
+- 完成阶段 8.1：将 Android Studio 生成的 `.kotlin/` 元数据加入忽略规则，以提交 `454be78` 建立阶段 0～7 可回滚检查点；获取最新 `origin/main` 后主干仍停留在 `e53b372`，当前分支仅领先 1 个提交，无冲突、无 stash。下一步为阶段 8.2 能力差距盘点。
 - 扩展阶段 8～14 路线图：先生产化共享 facade 并以只读影子模式验证 Swift/KMP 一致性，再分批切换 iOS 基础领域、Conversation/Trajectory/History 并删除 Swift 重复实现；随后完成 Android 真实 Gateway、平台服务、原生产品 UI 以及双端发布门禁。下一步从阶段 8.1 建立可回滚检查点和能力差距盘点开始。
 - 用户已完成阶段 7 Android 人工测试：共享 fixture 能生成运行中 Session、Conversation 投影和 Human Question；最终 `event` 正确替换流式临时消息；无效 JSON 能显示错误且不破坏既有状态；重置后 frame、Question、Session、Conversation 和错误全部清空，应用无崩溃。阶段 7 的自动化与人工验收全部通过。
 - 完成阶段 7.6：建立 Kotlin `GatewayProtocolFixtures` 与 Swift `GatewayProtocolParityFixtures` 对等样本，覆盖网关遗漏 `kind: event`、Human Question、图片附件和历史图片归一化；fixture 对齐过程修复 Kotlin `JsonValue` 数字经 Double 表示后无法反序列化为图片 Int 元数据的问题。

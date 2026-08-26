@@ -168,7 +168,10 @@ class SharedMobileStore {
 class SharedMobileFacade {
     fun moduleSummary(): String = SharedModuleInfo.summary()
 
-    fun decodeFrameKind(json: String): String = GatewayWireDecoder.decode(json).kind
+    fun decodeFrameKind(json: String): String? =
+        runCatching { GatewayWireDecoder.decode(json).kind }.getOrNull()
 
     fun makeStore(): SharedMobileStore = SharedMobileStore()
+
+    fun makeShadowFacade(): SharedShadowFacade = SharedShadowFacade()
 }

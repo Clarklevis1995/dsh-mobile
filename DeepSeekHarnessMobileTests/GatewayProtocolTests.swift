@@ -12,6 +12,55 @@ private enum GatewayProtocolParityFixtures {
     static let historyImage = #"{"kind":"history","events":[{"type":"user/message","seq":1,"time":1786937352,"data":{"content":[{"type":"image","attachment":{"attachmentId":"att-history","mediaType":"image/webp","bytes":42,"width":100,"height":80,"name":"image.webp"}}],"source":{"kind":"user"}}}],"hasMore":false}"#
 }
 
+private enum GatewayShadowRouteFixtures {
+    struct Fixture {
+        var json: String
+        var category: String
+        var route: String
+    }
+
+    // 与 shared/commonTest/GatewayProtocolFixtures.ALL_ROUTES 逐项保持一致。
+    static let all = [
+        Fixture(json: #"{"kind":"paired"}"#, category: "connection", route: "paired"),
+        Fixture(json: #"{"kind":"hello","protocol":3,"capabilities":["images"],"authenticated":true,"clients":2}"#, category: "connection", route: "hello"),
+        Fixture(json: #"{"kind":"pong","at":1000}"#, category: "connection", route: "pong"),
+        Fixture(json: #"{"kind":"subscribed","sessionId":"s1"}"#, category: "connection", route: "subscribed"),
+        Fixture(json: #"{"kind":"sent","sessionId":"s1"}"#, category: "content", route: "sent"),
+        Fixture(json: #"{"kind":"event","sessionId":"s1","seq":1,"time":1000,"event":{"type":"assistant/message","text":"done"}}"#, category: "content", route: "live-event"),
+        Fixture(json: #"{"kind":"workspaces","items":[],"archivedSessionIds":[]}"#, category: "content", route: "workspaces"),
+        Fixture(json: #"{"kind":"sessions","items":[]}"#, category: "content", route: "sessions"),
+        Fixture(json: #"{"kind":"history","events":[],"hasMore":false}"#, category: "content", route: "history"),
+        Fixture(json: #"{"kind":"attachment","sessionId":"s1","attachment":{"attachmentId":"a1","mediaType":"image/png","bytes":1,"width":1,"height":1}}"#, category: "content", route: "attachment"),
+        Fixture(json: #"{"kind":"search","items":[],"hasMore":true}"#, category: "content", route: "search"),
+        Fixture(json: #"{"kind":"host","version":"1.0"}"#, category: "content", route: "host"),
+        Fixture(json: #"{"kind":"agent-presets","presets":[],"authorable":false,"hasDocument":false}"#, category: "control", route: "agent-presets"),
+        Fixture(json: #"{"kind":"defaults","agentPresetDefault":"standard","permissionDefault":"ask"}"#, category: "control", route: "defaults"),
+        Fixture(json: #"{"kind":"default-model","selection":{"provider":"openai","model":"gpt-5"}}"#, category: "control", route: "default-model"),
+        Fixture(json: #"{"kind":"save-default-model","saved":{"provider":"openai","model":"gpt-5"}}"#, category: "control", route: "save-default-model"),
+        Fixture(json: #"{"kind":"set-default","applied":true,"target":"permission","value":"ask"}"#, category: "control", route: "set-default"),
+        Fixture(json: #"{"kind":"models","groups":[],"routable":true}"#, category: "control", route: "models"),
+        Fixture(json: #"{"kind":"select-model","selected":{"provider":"openai","model":"gpt-5"}}"#, category: "control", route: "select-model"),
+        Fixture(json: #"{"kind":"permission-options","sessionPermissions":{"options":[]}}"#, category: "control", route: "permission-options"),
+        Fixture(json: #"{"kind":"permission","set":"workspace-write"}"#, category: "control", route: "permission"),
+        Fixture(json: #"{"kind":"context-usage","asOfSeq":8}"#, category: "control", route: "context-usage"),
+        Fixture(json: #"{"kind":"session-stats","asOfSeq":8}"#, category: "control", route: "session-stats"),
+        Fixture(json: #"{"kind":"directories","entries":[],"crumbs":[]}"#, category: "workspace", route: "directories"),
+        Fixture(json: #"{"kind":"directory-create","path":"/tmp/new"}"#, category: "workspace", route: "directory-create"),
+        Fixture(json: #"{"kind":"workspace-create","created":false}"#, category: "workspace", route: "workspace-create"),
+        Fixture(json: #"{"kind":"question-requested","rpcId":"rpc-1","sessionId":"s1","replay":true,"questions":[{"id":"q1","question":"继续？"}]}"#, category: "question", route: "requested"),
+        Fixture(json: #"{"kind":"question-response","rpcId":"rpc-1","action":"cancel","accepted":false,"reason":"not-pending"}"#, category: "question", route: "response"),
+        Fixture(json: #"{"kind":"question-resolved","rpcId":"rpc-1","sessionId":"s1","outcome":"cancelled"}"#, category: "question", route: "resolved"),
+        Fixture(json: #"{"kind":"error","requestType":"history","code":"failed","sessionId":"s1","rpcId":"rpc-1"}"#, category: "failure", route: "error"),
+        Fixture(json: #"{"kind":"future-frame"}"#, category: "unknown", route: "future-frame"),
+        Fixture(json: #"{"kind":"sent"}"#, category: "ignored", route: "sent"),
+        Fixture(json: #"{"kind":"event"}"#, category: "ignored", route: "event"),
+        Fixture(json: #"{"kind":"attachment"}"#, category: "ignored", route: "attachment"),
+        Fixture(json: #"{"kind":"question-requested","sessionId":"s1","questions":[]}"#, category: "question", route: "invalid-request"),
+        Fixture(json: #"{"kind":"question-response"}"#, category: "ignored", route: "question-response"),
+        Fixture(json: #"{"kind":"question-resolved"}"#, category: "ignored", route: "question-resolved")
+    ]
+}
+
 final class GatewayProtocolTests: XCTestCase {
     func testKMPSharedAdapterLinksFrameworkAndNormalizesFixture() {
         let adapter = KMPSharedAdapter()
@@ -22,6 +71,31 @@ final class GatewayProtocolTests: XCTestCase {
             "event"
         )
         XCTAssertEqual(adapter.makeStore().loadManualTestFixture().sessions.count, 1)
+        XCTAssertNil(adapter.decodeFrameKind("abc"))
+    }
+
+    @MainActor
+    func testKMPShadowRoutesAllKnownAndMalformedFramesWithoutDifferences() throws {
+        let context = GatewayFrameRoutingContext(
+            selectedSessionID: "selected",
+            pendingHistorySessionID: "history-session",
+            pendingModelsSessionID: "models-session",
+            isPendingGlobalModelsRequest: false,
+            pendingModelSelectionSessionID: "selection-session",
+            pendingPermissionOptionsSessionID: "permission-session"
+        )
+        let validator = KMPShadowValidator()
+
+        for fixture in GatewayShadowRouteFixtures.all {
+            let frame = try GatewayWireDecoder.decode(Data(fixture.json.utf8))
+            let swiftRoute = GatewayFrameRouter.route(frame, context: context)
+            let result = validator.validate(frame: frame, context: context, swiftRoute: swiftRoute)
+
+            XCTAssertNil(result.difference, "\(fixture.route): \(String(describing: result.difference))")
+            XCTAssertEqual(result.fingerprint?.category, fixture.category, fixture.route)
+            XCTAssertEqual(result.fingerprint?.route, fixture.route, fixture.route)
+        }
+        XCTAssertTrue(validator.differences.isEmpty)
     }
 
     func testDecodesDirectoryCreateResponse() throws {
