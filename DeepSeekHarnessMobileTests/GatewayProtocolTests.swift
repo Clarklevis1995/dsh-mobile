@@ -331,3 +331,69 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertNil(GatewayQuestionAnswer(id: "empty", selected: [], custom: "  \n ").custom)
     }
 }
+
+/// Guards the pure staleness arithmetic that decides when the open
+/// conversation re-fetches history after a reconnect/background gap: the
+/// backgrounding staleness bug (session list refreshed, chat never caught
+/// up) must stay reproducible in a unit test.
+final class ConversationReconciliationTests: XCTestCase {
+    private func decision(
+        remote: Date,
+        synced: Date?,
+        latestEvent: Date?,
+        loading: Bool = false
+    ) -> ConversationReconciliation.HistoryDecision {
+        ConversationReconciliation.historyDecision(
+            remoteLastActivity: remote,
+            syncedActivity: synced,
+            latestLocalEventDate: latestEvent,
+            isHistoryLoading: loading
+        )
+    }
+
+    func testInFlightLoadAlwaysSkips() {
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let t1 = t0.addingTimeInterval(60)
+        let t2 = t0.addingTimeInterval(120)
+        XCTAssertEqual(decision(remote: t2, synced: t1, latestEvent: t1, loading: true), .skipLoading)
+        XCTAssertEqual(decision(remote: t2, synced: nil, latestEvent: nil, loading: true), .skipLoading)
+    }
+
+    func testNoLocalKnowledgeNeedsBaseline() {
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let t1 = t0.addingTimeInterval(60)
+        // No baseline and no cached events: nothing to compare against.
+        XCTAssertEqual(decision(remote: t1, synced: nil, latestEvent: nil), .needsBaseline)
+    }
+
+    func testRemoteAheadOfCoverageReloads() {
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let t1 = t0.addingTimeInterval(60)
+        let t2 = t0.addingTimeInterval(120)
+        XCTAssertEqual(decision(remote: t2, synced: t1, latestEvent: nil), .reloadHistory)
+        // Live events without a completed baseline still count as coverage,
+        // so only a genuinely newer remote summary reloads.
+        XCTAssertEqual(decision(remote: t2, synced: nil, latestEvent: t1), .reloadHistory)
+    }
+
+    func testCurrentCoverageSkips() {
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let t1 = t0.addingTimeInterval(60)
+        XCTAssertEqual(decision(remote: t1, synced: t1, latestEvent: nil), .skipLoading)
+        XCTAssertEqual(decision(remote: t0, synced: nil, latestEvent: t1), .skipLoading)
+        // Equal timestamps count as covered, not behind.
+        XCTAssertEqual(decision(remote: t1, synced: nil, latestEvent: t1), .skipLoading)
+        XCTAssertEqual(decision(remote: t1, synced: t0, latestEvent: t1), .skipLoading)
+    }
+
+    func testActivationAndReconcilePoliciesDifferOnlyOnBaseline() {
+        // Activation (conversation push / transport hello) may establish a
+        // first baseline; reconcile (every sessions frame) may not.
+        XCTAssertEqual(ConversationReconciliation.activationShouldLoadHistory(.needsBaseline), true)
+        XCTAssertEqual(ConversationReconciliation.reconcileShouldLoadHistory(.needsBaseline), false)
+        XCTAssertEqual(ConversationReconciliation.activationShouldLoadHistory(.reloadHistory), true)
+        XCTAssertEqual(ConversationReconciliation.reconcileShouldLoadHistory(.reloadHistory), true)
+        XCTAssertEqual(ConversationReconciliation.activationShouldLoadHistory(.skipLoading), false)
+        XCTAssertEqual(ConversationReconciliation.reconcileShouldLoadHistory(.skipLoading), false)
+    }
+}

@@ -1121,6 +1121,40 @@
         }
       }
     },
+    "notice.session.missing.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session was deleted or archived on another device; the view now shows locally cached content only."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前会话已在其他设备被删除或归档，显示的仍是本地缓存内容。"
+          }
+        }
+      }
+    },
+    "notice.session.missing.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session unavailable"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话已不可用"
+          }
+        }
+      }
+    },
     "notice.sessions.synced" : {
       "extractionState" : "manual",
       "localizations" : {

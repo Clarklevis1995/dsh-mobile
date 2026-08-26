@@ -50,6 +50,51 @@ struct HistoryLoadProgress: Equatable {
     var total: Int?
 }
 
+/// Pure staleness arithmetic for conversation history. One definition of
+/// "behind", with the activation-vs-reconcile policy made explicit instead of
+/// duplicated across call sites: activation may establish a first baseline,
+/// the per-`sessions`-frame reconcile only reloads on a concrete gap.
+enum ConversationReconciliation {
+    enum HistoryDecision: Equatable {
+        /// A load is already in flight, or local coverage is already current.
+        case skipLoading
+        /// Nothing is known locally — no completed baseline and no cached events.
+        case needsBaseline
+        /// Remote activity is strictly ahead of the newest covered activity.
+        case reloadHistory
+    }
+
+    /// A completed history baseline may subsequently be extended by the
+    /// subscribed live tail; both sources count as coverage. A session with
+    /// live events but no completed baseline is still covered up to its
+    /// newest event and only reloads when the remote summary moves past it.
+    static func historyDecision(
+        remoteLastActivity: Date,
+        syncedActivity: Date?,
+        latestLocalEventDate: Date?,
+        isHistoryLoading: Bool
+    ) -> HistoryDecision {
+        if isHistoryLoading { return .skipLoading }
+        guard let coveredActivity = [syncedActivity, latestLocalEventDate].compactMap({ $0 }).max() else {
+            return .needsBaseline
+        }
+        return remoteLastActivity > coveredActivity ? .reloadHistory : .skipLoading
+    }
+
+    /// Activation (conversation push, transport `hello`): the one path allowed
+    /// to establish a first baseline for a session with no local content.
+    static func activationShouldLoadHistory(_ decision: HistoryDecision) -> Bool {
+        decision != .skipLoading
+    }
+
+    /// Reconcile (every `sessions` frame): never fetches for a session it
+    /// cannot compare against local coverage, so a brand-new session's own
+    /// first send does not trigger a redundant full history fetch.
+    static func reconcileShouldLoadHistory(_ decision: HistoryDecision) -> Bool {
+        decision == .reloadHistory
+    }
+}
+
 @MainActor
 final class AppStore: ObservableObject {
     static let ungroupedWorkspaceID = "__ungrouped__"
@@ -123,6 +168,9 @@ final class AppStore: ObservableObject {
     /// This intentionally remains an in-memory cache: events are not persisted
     /// across launches, so a fresh process must fetch history again.
     private var historySyncedActivityDates: [String: Date] = [:]
+    /// Sessions whose disappearance from the authoritative list has already
+    /// been surfaced once, so repeated `sessions` frames stay silent.
+    private var missingConversationNoticeSessionIds: Set<String> = []
     private var conversationProjectionDrivers: [String: ConversationProjectionDriver] = [:]
     private var conversationTimelines: [String: ConversationTimeline] = [:]
     /// Invalidates an in-flight cold projection when a completed history
@@ -435,16 +483,17 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func historyDecision(for session: SessionSummary) -> ConversationReconciliation.HistoryDecision {
+        ConversationReconciliation.historyDecision(
+            remoteLastActivity: session.lastActivity,
+            syncedActivity: historySyncedActivityDates[session.id],
+            latestLocalEventDate: events[session.id]?.last?.date,
+            isHistoryLoading: historyLoadingSessionIds.contains(session.id)
+        )
+    }
+
     private func shouldRefreshHistory(for session: SessionSummary) -> Bool {
-        guard !historyLoadingSessionIds.contains(session.id) else { return false }
-        guard let syncedActivity = historySyncedActivityDates[session.id] else { return true }
-        // A completed history baseline may subsequently be extended by the
-        // subscribed live tail. Both sources are already present locally, so
-        // compare the remote summary against the newest covered activity
-        // instead of the older history-request timestamp alone.
-        let latestLocalActivity = events[session.id]?.last?.date ?? syncedActivity
-        let coveredActivity = max(syncedActivity, latestLocalActivity)
-        return session.lastActivity > coveredActivity
+        ConversationReconciliation.activationShouldLoadHistory(historyDecision(for: session))
     }
     func loadHistory(for sessionId: String, older: Bool = false) {
         guard gateway.state.isConnected else {
@@ -953,10 +1002,13 @@ final class AppStore: ObservableObject {
         if selectedSessionId == nil {
             selectedSessionId = id
             // The pushed "new conversation" destination has just become a
-            // real session. Align the activation key so a later transport
+            // real session. Align the prepared key so a later transport
             // generation (reconnect after backgrounding) can re-activate the
-            // pushed view instead of leaving it without a subscription.
+            // pushed view instead of leaving it without a subscription, and
+            // drop the stale sentinel activation so `prepared == active`
+            // holds again once the next activation runs.
             preparedConversationActivationKey = id
+            activeConversationActivationKey = nil
         }
         waitingForNewSession = false
         upsertSession(id: id, title: L10n.newSessionPlaceholderTitle)
@@ -1287,13 +1339,37 @@ final class AppStore: ObservableObject {
     /// *after* the transport re-subscribes and never replay the gap. Re-activation
     /// on `hello` runs before this response arrives and therefore compares
     /// against the stale summary; reconciling here, with the updated list,
-    /// closes that race. `shouldRefreshHistory` keeps an in-sync (or still
-    /// loading) conversation from fetching anything.
+    /// closes that race.
+    ///
+    /// Safe to call on every `sessions` frame: the decision helper
+    /// short-circuits in-flight loads, and sessions without established local
+    /// coverage only reload when remote activity is genuinely ahead — a
+    /// brand-new session's own first send therefore never triggers a
+    /// redundant full history fetch.
     private func reconcileOpenConversationWithRemoteState() {
+        // Only an already-open (prepared and selected) conversation
+        // reconciles; the `__new-conversation__` sentinel never matches a
+        // session id.
         guard let id = selectedSessionId,
-              preparedConversationActivationKey == id,
-              let session = sessions.first(where: { $0.id == id }),
-              shouldRefreshHistory(for: session) else { return }
+              preparedConversationActivationKey == id else { return }
+        guard let session = sessions.first(where: { $0.id == id }) else {
+            // The authoritative list no longer contains the open session: it
+            // was deleted or archived on another device. Cached content stays
+            // visible, and navigation chrome is immutable, so surface a notice
+            // instead of silently swapping a different session underneath the
+            // pushed title. Notify once per disappearance.
+            if missingConversationNoticeSessionIds.insert(id).inserted {
+                notice(
+                    String(localized: "notice.session.missing.title", defaultValue: "会话已不可用"),
+                    String(localized: "notice.session.missing.detail", defaultValue: "当前会话已在其他设备被删除或归档，显示的仍是本地缓存内容。"),
+                    sessionId: id,
+                    isError: true
+                )
+            }
+            return
+        }
+        missingConversationNoticeSessionIds.remove(id)
+        guard ConversationReconciliation.reconcileShouldLoadHistory(historyDecision(for: session)) else { return }
         loadHistory(for: id)
     }
     private func applyEvent(_ record: SessionEvent) {
