@@ -17,6 +17,218 @@ struct KMPSharedAdapter {
     func makeShadowFacade() -> SharedShadowFacade { facade.makeShadowFacade() }
 }
 
+struct KMPSessionSummarySnapshot: Codable, Equatable {
+    var id: String
+    var title: String
+    var lastActivityEpochSeconds: Double
+    var isRunning: Bool
+    var hasUnread: Bool
+    var agentPreset: String?
+
+    init(_ session: SessionSummary) {
+        id = session.id
+        title = session.title
+        lastActivityEpochSeconds = session.lastActivity.timeIntervalSince1970
+        isRunning = session.isRunning
+        hasUnread = session.hasUnread
+        agentPreset = session.agentPreset
+    }
+
+    var persistedSession: SessionSummary {
+        SessionSummary(
+            id: id,
+            title: title,
+            lastActivity: Date(timeIntervalSince1970: lastActivityEpochSeconds),
+            isRunning: isRunning,
+            hasUnread: hasUnread,
+            agentPreset: agentPreset
+        )
+    }
+}
+
+/// KMP 会话状态与 iOS ObservableObject/UserDefaults 模型之间的显式值映射。
+struct KMPSessionListSnapshot: Codable, Equatable {
+    var sessions: [KMPSessionSummarySnapshot]
+    var archivedSessionIds: [String]
+    var selectedSessionId: String?
+
+    init(
+        sessions: [SessionSummary],
+        archivedSessionIds: Set<String>,
+        selectedSessionId: String?
+    ) {
+        self.sessions = sessions.map(KMPSessionSummarySnapshot.init)
+        self.archivedSessionIds = archivedSessionIds.sorted()
+        self.selectedSessionId = selectedSessionId
+    }
+
+    var persistedSessions: [SessionSummary] { sessions.map(\.persistedSession) }
+    var archivedSessionIDSet: Set<String> { Set(archivedSessionIds) }
+}
+
+enum KMPSessionListStoreError: LocalizedError, Equatable {
+    case encoding(String)
+    case bridge(code: String, message: String?)
+    case invalidSnapshot(String)
+    case initializationFailed(String)
+    case runtimeFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .encoding(let message):
+            "无法编码 iOS SessionList 输入：\(message)"
+        case .bridge(let code, let message):
+            "KMP SessionList 失败（\(code)）：\(message ?? "无详细信息")"
+        case .invalidSnapshot(let message):
+            "无法解码 KMP SessionList 快照：\(message)"
+        case .initializationFailed(let message):
+            "KMP SessionList 初始化失败，已停止后续状态写入：\(message)"
+        case .runtimeFailed(let message):
+            "KMP SessionList 运行期快照失效，已停止后续状态写入：\(message)"
+        }
+    }
+}
+
+/// 将 Kotlin 门面收窄成可替换边界，确保初始化失败路径可以在 Swift 单测中验证。
+protocol KMPSessionListStoreBridging: AnyObject {
+    func snapshot() -> SharedSessionListResult
+    func restore(snapshotJson: String) -> SharedSessionListResult
+    func selectSession(sessionId: String?) -> SharedSessionListResult
+    func setArchivedSessionIds(sessionIdsJson: String) -> SharedSessionListResult
+    func receiveRemoteSessions(sessionsJson: String) -> SharedSessionListResult
+    func messageSent(
+        sessionId: String,
+        agentPreset: String?,
+        insertedAtEpochSeconds: Double
+    ) -> SharedSessionListResult
+    func addKnownSession(sessionId: String, insertedAtEpochSeconds: Double) -> SharedSessionListResult
+    func receiveEvent(eventJson: String, insertedAtEpochSeconds: Double) -> SharedSessionListResult
+    func markRead(sessionId: String) -> SharedSessionListResult
+}
+
+extension SharedSessionListStore: KMPSessionListStoreBridging {}
+
+/// AppStore 的 MainActor 是唯一串行入口；本适配器只映射稳定 JSON 值并调用 KMP。
+@MainActor
+final class KMPSessionListStoreAdapter {
+    private let store: any KMPSessionListStoreBridging
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    private(set) var snapshot: KMPSessionListSnapshot
+    private(set) var initializationError: KMPSessionListStoreError?
+    /// KMP 已接受 mutation、但返回的成功快照无法由 Swift 解码时，永久关闭该实例。
+    /// 继续调用 bridge 会基于 Swift 不可见的 Kotlin 状态推进，造成 UI/持久化分叉。
+    private(set) var runtimeError: KMPSessionListStoreError?
+    var isInitialized: Bool { initializationError == nil }
+    var isOperational: Bool { initializationError == nil && runtimeError == nil }
+
+    init(
+        sessions: [SessionSummary],
+        archivedSessionIds: Set<String> = [],
+        selectedSessionId: String? = nil,
+        bridge: (any KMPSessionListStoreBridging)? = nil,
+        facade: SharedMobileFacade = SharedMobileFacade()
+    ) {
+        let initial = KMPSessionListSnapshot(
+            sessions: sessions,
+            archivedSessionIds: archivedSessionIds,
+            selectedSessionId: selectedSessionId
+        )
+        snapshot = initial
+        store = bridge ?? facade.makeSessionListStore(
+                newSessionTitle: L10n.newSessionPlaceholderTitle,
+                remoteSessionPrefix: L10n.remoteSessionTitle(""),
+                blankSessionPrefix: L10n.blankSessionTitle("")
+            )
+        do {
+            let json = try encode(initial)
+            snapshot = try decode(store.restore(snapshotJson: json))
+        } catch let error as KMPSessionListStoreError {
+            initializationError = error
+        } catch {
+            let mapped = KMPSessionListStoreError.invalidSnapshot(error.localizedDescription)
+            initializationError = mapped
+        }
+    }
+
+    @discardableResult
+    func reduce(_ action: SessionListAction, now: Date = .now) throws -> KMPSessionListSnapshot {
+        if let initializationError {
+            throw KMPSessionListStoreError.initializationFailed(
+                initializationError.localizedDescription
+            )
+        }
+        if let runtimeError {
+            throw KMPSessionListStoreError.runtimeFailed(
+                runtimeError.localizedDescription
+            )
+        }
+        let result: SharedSessionListResult
+        switch action {
+        case .select(let sessionID):
+            result = store.selectSession(sessionId: sessionID)
+        case .setArchivedSessionIDs(let sessionIDs):
+            result = store.setArchivedSessionIds(sessionIdsJson: try encode(sessionIDs.sorted()))
+        case .remoteSessionsReceived(let sessions):
+            result = store.receiveRemoteSessions(sessionsJson: try encode(sessions))
+        case .messageSent(let sessionID, let agentPreset):
+            result = store.messageSent(
+                sessionId: sessionID,
+                agentPreset: agentPreset,
+                insertedAtEpochSeconds: now.timeIntervalSince1970
+            )
+        case .knownSessionAdded(let sessionID):
+            result = store.addKnownSession(
+                sessionId: sessionID,
+                insertedAtEpochSeconds: now.timeIntervalSince1970
+            )
+        case .eventReceived(let event):
+            result = store.receiveEvent(
+                eventJson: try encode(event),
+                insertedAtEpochSeconds: now.timeIntervalSince1970
+            )
+        case .markRead(let sessionID):
+            result = store.markRead(sessionId: sessionID)
+        }
+        do {
+            snapshot = try decode(result)
+        } catch let error as KMPSessionListStoreError {
+            // 仅在 bridge 声称成功却交回 Swift 无法理解的快照时永久 fail-closed。
+            // 编码错误发生在 bridge 调用前；显式 bridge 失败也没有隐藏的状态提交。
+            if case .invalidSnapshot = error {
+                runtimeError = error
+            }
+            throw error
+        }
+        return snapshot
+    }
+
+    private func encode<T: Encodable>(_ value: T) throws -> String {
+        do {
+            return String(decoding: try encoder.encode(value), as: UTF8.self)
+        } catch {
+            throw KMPSessionListStoreError.encoding(error.localizedDescription)
+        }
+    }
+
+    private func decode(_ result: SharedSessionListResult) throws -> KMPSessionListSnapshot {
+        guard result.isSuccess else {
+            throw KMPSessionListStoreError.bridge(
+                code: result.errorCode ?? "unknown-error",
+                message: result.errorMessage
+            )
+        }
+        // KMP 对无状态变化的流式事件返回空快照，避免反复跨桥复制完整列表。
+        guard let json = result.snapshotJson else { return snapshot }
+        do {
+            return try decoder.decode(KMPSessionListSnapshot.self, from: Data(json.utf8))
+        } catch {
+            throw KMPSessionListStoreError.invalidSnapshot(error.localizedDescription)
+        }
+    }
+}
+
 struct KMPShadowRouteFingerprint: Codable, Equatable, CustomStringConvertible {
     var category: String
     var route: String

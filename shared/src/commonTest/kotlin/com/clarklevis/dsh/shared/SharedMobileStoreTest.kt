@@ -38,4 +38,22 @@ class SharedMobileStoreTest {
         assertEquals(1, snapshot.sessions.size)
         assertTrue(!snapshot.lastError.isNullOrBlank())
     }
+
+    @Test
+    fun historyAndStreamCreateSessionsWithReliableTimestamps() {
+        val store = SharedMobileStore(nowEpochSeconds = { 1_800_000_000.0 })
+
+        var snapshot = store.acceptFrame(
+            """{"kind":"history","sessionId":"empty-history","events":[]}"""
+        )
+        assertEquals(1_800_000_000.0, snapshot.sessions.single().lastActivityEpochSeconds)
+
+        snapshot = store.acceptFrame(
+            """{"kind":"event","sessionId":"stream","seq":1,"time":1800000001000,"event":{"type":"assistant/chunk","text":"delta"}}"""
+        )
+        assertEquals(
+            1_800_000_001.0,
+            snapshot.sessions.first { it.id == "stream" }.lastActivityEpochSeconds
+        )
+    }
 }

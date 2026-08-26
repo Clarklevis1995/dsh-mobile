@@ -100,10 +100,29 @@ class ProtocolAndReducerTest {
         state = SessionListReducer.reduce(
             state,
             SessionListAction.EventReceived(
-                SessionEvent("s1", 2, 1_700_000_001.0, GatewayEvent("assistant/message", text = "done"))
+                SessionEvent("s1", 2, 1_700_000_001.0, GatewayEvent("assistant/message", text = "done")),
+                insertedAtEpochSeconds = 1_700_000_001.0
             )
         )
         assertTrue(state.sessions.single().hasUnread)
+    }
+
+    @Test
+    fun sessionListReducerUsesPlatformTimestampOnlyWhenItCreatesLocalSummary() {
+        var state = SessionListReducer.reduce(
+            SessionListState(),
+            SessionListAction.KnownSessionAdded("known", insertedAtEpochSeconds = 123.0)
+        )
+        assertEquals(123.0, state.sessions.single().lastActivityEpochSeconds)
+
+        state = SessionListReducer.reduce(
+            state,
+            SessionListAction.EventReceived(
+                SessionEvent("chunk-only", 1, 200.0, GatewayEvent("assistant/chunk", text = "delta")),
+                insertedAtEpochSeconds = 456.0
+            )
+        )
+        assertEquals(456.0, state.sessions.first { it.id == "chunk-only" }.lastActivityEpochSeconds)
     }
 
     @Test

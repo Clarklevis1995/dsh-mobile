@@ -2,6 +2,7 @@ import XCTest
 import UIKit
 import ImageIO
 import UniformTypeIdentifiers
+import class DeepSeekHarnessShared.SharedSessionListResult
 @testable import DeepSeekHarnessMobile
 
 private enum GatewayProtocolParityFixtures {
@@ -812,6 +813,184 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(state.selectedSessionID, "existing-selection")
     }
 
+    @MainActor
+    func testKMPSessionListAdapterMapsPersistenceAndOwnsSessionStateTransitions() throws {
+        let persisted = SessionSummary(
+            id: "existing",
+            title: "旧标题",
+            lastActivity: Date(timeIntervalSince1970: 10),
+            isRunning: false,
+            hasUnread: true,
+            agentPreset: "keep"
+        )
+        let adapter = KMPSessionListStoreAdapter(
+            sessions: [persisted],
+            selectedSessionId: "selected"
+        )
+        XCTAssertNil(adapter.initializationError)
+        XCTAssertNil(adapter.runtimeError)
+        XCTAssertTrue(adapter.isOperational)
+        XCTAssertEqual(adapter.snapshot.persistedSessions, [persisted])
+
+        _ = try adapter.reduce(.setArchivedSessionIDs(["archived"]))
+        let remote = [
+            GatewaySessionSummary(
+                sessionId: "existing",
+                updatedAt: 2_000,
+                running: true,
+                blank: false,
+                cwd: "/tmp/existing"
+            ),
+            GatewaySessionSummary(
+                sessionId: "new",
+                updatedAt: 3_000,
+                running: false,
+                blank: false,
+                cwd: "/tmp/new",
+                agentPreset: "standard"
+            ),
+            GatewaySessionSummary(
+                sessionId: "archived",
+                updatedAt: 4_000,
+                running: false,
+                blank: false,
+                cwd: "/tmp/archived"
+            )
+        ]
+        var snapshot = try adapter.reduce(.remoteSessionsReceived(remote))
+        XCTAssertEqual(snapshot.persistedSessions.map(\.id), ["new", "existing"])
+        XCTAssertEqual(snapshot.persistedSessions.last?.agentPreset, "keep")
+        XCTAssertEqual(snapshot.persistedSessions.last?.isRunning, true)
+        XCTAssertEqual(snapshot.persistedSessions.last?.hasUnread, true)
+
+        snapshot = try adapter.reduce(.eventReceived(SessionEvent(
+            sessionId: "new",
+            seq: 1,
+            time: 3_001,
+            event: GatewayEvent(type: "turn/start")
+        )), now: Date(timeIntervalSince1970: 9_999))
+        XCTAssertEqual(snapshot.persistedSessions.first?.id, "new")
+        XCTAssertEqual(snapshot.persistedSessions.first?.isRunning, true)
+        XCTAssertEqual(snapshot.persistedSessions.first?.hasUnread, true)
+
+        _ = try adapter.reduce(.select("new"))
+        snapshot = try adapter.reduce(.markRead("new"))
+        XCTAssertEqual(snapshot.selectedSessionId, "new")
+        XCTAssertEqual(snapshot.persistedSessions.first?.hasUnread, false)
+
+        snapshot = try adapter.reduce(
+            .knownSessionAdded("known"),
+            now: Date(timeIntervalSince1970: 8_000)
+        )
+        XCTAssertEqual(
+            snapshot.persistedSessions.first { $0.id == "known" }?.lastActivity,
+            Date(timeIntervalSince1970: 8_000)
+        )
+    }
+
+    @MainActor
+    func testKMPSessionListAdapterFailsClosedAfterRestoreFailure() throws {
+        let persisted = SessionSummary(
+            id: "persisted",
+            title: "必须保留",
+            lastActivity: Date(timeIntervalSince1970: 123),
+            isRunning: true,
+            hasUnread: true
+        )
+        let bridge = FailingRestoreSessionListBridge()
+        let adapter = KMPSessionListStoreAdapter(sessions: [persisted], bridge: bridge)
+
+        XCTAssertFalse(adapter.isInitialized)
+        XCTAssertNotNil(adapter.initializationError)
+        XCTAssertEqual(adapter.snapshot.persistedSessions, [persisted])
+
+        XCTAssertThrowsError(
+            try adapter.reduce(
+                .knownSessionAdded("must-not-reduce"),
+                now: Date(timeIntervalSince1970: 9_999)
+            )
+        ) { error in
+            guard case KMPSessionListStoreError.initializationFailed = error else {
+                return XCTFail("预期 initializationFailed，实际为 \(error)")
+            }
+        }
+        XCTAssertEqual(bridge.nonRestoreCallCount, 0)
+        XCTAssertEqual(adapter.snapshot.persistedSessions, [persisted])
+    }
+
+    @MainActor
+    func testKMPSessionListAdapterFailsClosedAfterMalformedRuntimeSnapshot() throws {
+        let persisted = SessionSummary(
+            id: "persisted",
+            title: "必须保留",
+            lastActivity: Date(timeIntervalSince1970: 123),
+            isRunning: true,
+            hasUnread: true
+        )
+        let bridge = MalformedMutationSessionListBridge()
+        let adapter = KMPSessionListStoreAdapter(sessions: [persisted], bridge: bridge)
+
+        XCTAssertTrue(adapter.isOperational)
+        XCTAssertThrowsError(
+            try adapter.reduce(
+                .knownSessionAdded("hidden-kmp-session"),
+                now: Date(timeIntervalSince1970: 9_999)
+            )
+        ) { error in
+            guard case KMPSessionListStoreError.invalidSnapshot = error else {
+                return XCTFail("预期 invalidSnapshot，实际为 \(error)")
+            }
+        }
+        XCTAssertEqual(bridge.mutationCallCount, 1)
+        XCTAssertNotNil(adapter.runtimeError)
+        XCTAssertFalse(adapter.isOperational)
+        XCTAssertEqual(adapter.snapshot.persistedSessions, [persisted])
+
+        XCTAssertThrowsError(
+            try adapter.reduce(
+                .knownSessionAdded("must-not-reach-bridge"),
+                now: Date(timeIntervalSince1970: 10_000)
+            )
+        ) { error in
+            guard case KMPSessionListStoreError.runtimeFailed = error else {
+                return XCTFail("预期 runtimeFailed，实际为 \(error)")
+            }
+        }
+        XCTAssertEqual(bridge.mutationCallCount, 1)
+        XCTAssertEqual(adapter.snapshot.persistedSessions, [persisted])
+    }
+
+    @MainActor
+    func testAppStoreDoesNotPersistAfterMalformedKMPRuntimeSnapshot() {
+        let persisted = SessionSummary(
+            id: "persisted",
+            title: "必须保留",
+            lastActivity: Date(timeIntervalSince1970: 123),
+            isRunning: false,
+            hasUnread: false
+        )
+        let preferences = AppPreferencesSpy(
+            endpoint: "wss://injected.example/ws/mobile",
+            selectedWorkspaceID: nil,
+            sessions: [persisted]
+        )
+        let bridge = MalformedMutationSessionListBridge()
+        let store = AppStore(preferences: preferences, sessionListBridge: bridge)
+
+        store.addKnownSession("hidden-kmp-session")
+
+        XCTAssertEqual(store.sessions, [persisted])
+        XCTAssertEqual(preferences.savedSessionSnapshots, [])
+        XCTAssertEqual(bridge.mutationCallCount, 1)
+        XCTAssertNotNil(store.lastError)
+
+        store.addKnownSession("must-not-reach-bridge")
+
+        XCTAssertEqual(store.sessions, [persisted])
+        XCTAssertEqual(preferences.savedSessionSnapshots, [])
+        XCTAssertEqual(bridge.mutationCallCount, 1)
+    }
+
     func testQuestionReducerAddsRequestAndReplayPreservesSubmissionStatus() {
         let request = questionRequest()
         var state = QuestionState()
@@ -1445,6 +1624,116 @@ final class GatewayProtocolTests: XCTestCase {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+}
+
+private final class FailingRestoreSessionListBridge: KMPSessionListStoreBridging {
+    private(set) var nonRestoreCallCount = 0
+
+    func snapshot() -> SharedSessionListResult { unexpectedCall() }
+
+    func restore(snapshotJson: String) -> SharedSessionListResult {
+        SharedSessionListResult(
+            snapshotJson: nil,
+            errorCode: "session-list-restore-failed",
+            errorMessage: "injected restore failure"
+        )
+    }
+
+    func selectSession(sessionId: String?) -> SharedSessionListResult { unexpectedCall() }
+
+    func setArchivedSessionIds(sessionIdsJson: String) -> SharedSessionListResult { unexpectedCall() }
+
+    func receiveRemoteSessions(sessionsJson: String) -> SharedSessionListResult { unexpectedCall() }
+
+    func messageSent(
+        sessionId: String,
+        agentPreset: String?,
+        insertedAtEpochSeconds: Double
+    ) -> SharedSessionListResult {
+        unexpectedCall()
+    }
+
+    func addKnownSession(
+        sessionId: String,
+        insertedAtEpochSeconds: Double
+    ) -> SharedSessionListResult {
+        unexpectedCall()
+    }
+
+    func receiveEvent(
+        eventJson: String,
+        insertedAtEpochSeconds: Double
+    ) -> SharedSessionListResult {
+        unexpectedCall()
+    }
+
+    func markRead(sessionId: String) -> SharedSessionListResult { unexpectedCall() }
+
+    private func unexpectedCall() -> SharedSessionListResult {
+        nonRestoreCallCount += 1
+        return SharedSessionListResult(
+            snapshotJson: "{\"sessions\":[],\"archivedSessionIds\":[]}",
+            errorCode: nil,
+            errorMessage: nil
+        )
+    }
+}
+
+private final class MalformedMutationSessionListBridge: KMPSessionListStoreBridging {
+    private(set) var mutationCallCount = 0
+
+    func snapshot() -> SharedSessionListResult { malformedMutation() }
+
+    func restore(snapshotJson: String) -> SharedSessionListResult {
+        SharedSessionListResult(
+            snapshotJson: snapshotJson,
+            errorCode: nil,
+            errorMessage: nil
+        )
+    }
+
+    func selectSession(sessionId: String?) -> SharedSessionListResult { malformedMutation() }
+
+    func setArchivedSessionIds(sessionIdsJson: String) -> SharedSessionListResult {
+        malformedMutation()
+    }
+
+    func receiveRemoteSessions(sessionsJson: String) -> SharedSessionListResult {
+        malformedMutation()
+    }
+
+    func messageSent(
+        sessionId: String,
+        agentPreset: String?,
+        insertedAtEpochSeconds: Double
+    ) -> SharedSessionListResult {
+        malformedMutation()
+    }
+
+    func addKnownSession(
+        sessionId: String,
+        insertedAtEpochSeconds: Double
+    ) -> SharedSessionListResult {
+        malformedMutation()
+    }
+
+    func receiveEvent(
+        eventJson: String,
+        insertedAtEpochSeconds: Double
+    ) -> SharedSessionListResult {
+        malformedMutation()
+    }
+
+    func markRead(sessionId: String) -> SharedSessionListResult { malformedMutation() }
+
+    private func malformedMutation() -> SharedSessionListResult {
+        mutationCallCount += 1
+        return SharedSessionListResult(
+            snapshotJson: "not-json",
+            errorCode: nil,
+            errorMessage: nil
+        )
     }
 }
 

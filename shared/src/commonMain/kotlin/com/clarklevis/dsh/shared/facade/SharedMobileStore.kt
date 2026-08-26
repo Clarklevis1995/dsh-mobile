@@ -8,6 +8,7 @@ import com.clarklevis.dsh.shared.domain.SessionListAction
 import com.clarklevis.dsh.shared.domain.SessionListReducer
 import com.clarklevis.dsh.shared.domain.SessionListState
 import com.clarklevis.dsh.shared.domain.SessionSummary
+import com.clarklevis.dsh.shared.domain.normalizeEpochSeconds
 import com.clarklevis.dsh.shared.projection.ConversationItem
 import com.clarklevis.dsh.shared.projection.ConversationProjector
 import com.clarklevis.dsh.shared.protocol.GatewayPendingQuestionRequest
@@ -17,6 +18,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import com.clarklevis.dsh.shared.protocol.SessionEvent
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlin.time.Clock
 
 data class SharedMobileSnapshot(
     val sessions: List<SessionSummary> = emptyList(),
@@ -33,7 +35,11 @@ data class SharedMobileSnapshot(
  * 平台层负责网络、持久化与线程切换；调用方必须在自己的串行 UI/store
  * 上下文中提交 intent。该类只做 wire decode、Reducer 和纯投影。
  */
-class SharedMobileStore {
+class SharedMobileStore(
+    private val nowEpochSeconds: () -> Double = {
+        Clock.System.now().toEpochMilliseconds().toDouble() / 1_000.0
+    }
+) {
     private var sessionListState = SessionListState()
     private var questionState = QuestionState()
     private val eventsBySession = mutableMapOf<String, List<SessionEvent>>()
@@ -81,9 +87,13 @@ class SharedMobileStore {
                     if (sessionId != null) {
                         val normalized = frame.events.orEmpty().map { it.normalized(sessionId) }
                         eventsBySession[sessionId] = normalized
+                        val insertedAtEpochSeconds = normalized
+                            .maxOfOrNull { normalizeEpochSeconds(it.time) }
+                            ?: frame.time?.let(::normalizeEpochSeconds)
+                            ?: nowEpochSeconds()
                         sessionListState = SessionListReducer.reduce(
                             sessionListState,
-                            SessionListAction.KnownSessionAdded(sessionId)
+                            SessionListAction.KnownSessionAdded(sessionId, insertedAtEpochSeconds)
                         )
                     }
                 }
@@ -145,7 +155,10 @@ class SharedMobileStore {
     }
 
     private fun acceptEvent(record: SessionEvent) {
-        sessionListState = SessionListReducer.reduce(sessionListState, SessionListAction.EventReceived(record))
+        sessionListState = SessionListReducer.reduce(
+            sessionListState,
+            SessionListAction.EventReceived(record, normalizeEpochSeconds(record.time))
+        )
         val existing = eventsBySession[record.sessionId].orEmpty()
         val records = existing.associateBy(SessionEvent::seq).toMutableMap().apply { put(record.seq, record) }
         eventsBySession[record.sessionId] = records.values.sortedBy(SessionEvent::seq)
@@ -172,6 +185,16 @@ class SharedMobileFacade {
         runCatching { GatewayWireDecoder.decode(json).kind }.getOrNull()
 
     fun makeStore(): SharedMobileStore = SharedMobileStore()
+
+    fun makeSessionListStore(
+        newSessionTitle: String,
+        remoteSessionPrefix: String,
+        blankSessionPrefix: String
+    ): SharedSessionListStore = SharedSessionListStore(
+        newSessionTitle = newSessionTitle,
+        remoteSessionPrefix = remoteSessionPrefix,
+        blankSessionPrefix = blankSessionPrefix
+    )
 
     fun makeShadowFacade(): SharedShadowFacade = SharedShadowFacade()
 }

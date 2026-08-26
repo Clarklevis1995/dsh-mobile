@@ -106,6 +106,8 @@ final class AppStore: ObservableObject {
 
     let gateway = GatewayClient()
     private let preferences: AppPreferences
+    /// SessionList 的唯一业务状态来源；Swift 属性只是 UI/持久化快照。
+    private let kmpSessionListStore: KMPSessionListStoreAdapter
     private var historyState = HistoryState()
     private let historySyncEngine = HistorySyncEngine()
     /// The remote session activity timestamp covered by a completed history load.
@@ -150,12 +152,26 @@ final class AppStore: ObservableObject {
     ]
     private static let newConversationActivationKey = "__new-conversation__"
 
-    init(preferences: AppPreferences = UserDefaultsAppPreferences()) {
+    init(
+        preferences: AppPreferences = UserDefaultsAppPreferences(),
+        sessionListBridge: (any KMPSessionListStoreBridging)? = nil
+    ) {
         self.preferences = preferences
+        let persistedSessions = preferences.loadSessions()
+        let kmpSessionListStore = KMPSessionListStoreAdapter(
+            sessions: persistedSessions,
+            bridge: sessionListBridge
+        )
+        self.kmpSessionListStore = kmpSessionListStore
         appLanguage = AppLanguage.load()
         selectedWorkspaceId = preferences.selectedWorkspaceID
         endpoint = preferences.endpoint
-        sessions = preferences.loadSessions()
+        selectedSessionId = kmpSessionListStore.snapshot.selectedSessionId
+        sessions = kmpSessionListStore.snapshot.persistedSessions
+        archivedSessionIds = kmpSessionListStore.snapshot.archivedSessionIDSet
+        if let error = kmpSessionListStore.initializationError {
+            lastError = error.localizedDescription
+        }
         preferences.performMigrations()
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
         gateway.onConnectionFailure = { [weak self] detail in
@@ -1233,21 +1249,24 @@ final class AppStore: ObservableObject {
         reduceSessionList(.markRead(id))
     }
     private func reduceSessionList(_ action: SessionListAction) {
-        var state = SessionListState(
-            sessions: sessions,
-            archivedSessionIDs: archivedSessionIds,
-            selectedSessionID: selectedSessionId
-        )
-        SessionListReducer.reduce(state: &state, action: action)
-        if state.sessions != sessions {
-            sessions = state.sessions
+        let snapshot: KMPSessionListSnapshot
+        do {
+            snapshot = try kmpSessionListStore.reduce(action)
+        } catch {
+            lastError = error.localizedDescription
+            return
+        }
+        let mappedSessions = snapshot.persistedSessions
+        if mappedSessions != sessions {
+            sessions = mappedSessions
             persistSessions()
         }
-        if state.archivedSessionIDs != archivedSessionIds {
-            archivedSessionIds = state.archivedSessionIDs
+        let mappedArchivedSessionIDs = snapshot.archivedSessionIDSet
+        if mappedArchivedSessionIDs != archivedSessionIds {
+            archivedSessionIds = mappedArchivedSessionIDs
         }
-        if state.selectedSessionID != selectedSessionId {
-            selectedSessionId = state.selectedSessionID
+        if snapshot.selectedSessionId != selectedSessionId {
+            selectedSessionId = snapshot.selectedSessionId
         }
     }
     private func reduceQuestion(_ action: QuestionAction) {

@@ -31,9 +31,19 @@ sealed interface SessionListAction {
     data class Select(val sessionId: String?) : SessionListAction
     data class SetArchivedSessionIds(val sessionIds: Set<String>) : SessionListAction
     data class RemoteSessionsReceived(val sessions: List<GatewaySessionSummary>) : SessionListAction
-    data class MessageSent(val sessionId: String, val agentPreset: String?) : SessionListAction
-    data class KnownSessionAdded(val sessionId: String) : SessionListAction
-    data class EventReceived(val event: SessionEvent) : SessionListAction
+    data class MessageSent(
+        val sessionId: String,
+        val agentPreset: String?,
+        val insertedAtEpochSeconds: Double
+    ) : SessionListAction
+    data class KnownSessionAdded(
+        val sessionId: String,
+        val insertedAtEpochSeconds: Double
+    ) : SessionListAction
+    data class EventReceived(
+        val event: SessionEvent,
+        val insertedAtEpochSeconds: Double
+    ) : SessionListAction
     data class MarkRead(val sessionId: String) : SessionListAction
 }
 
@@ -44,13 +54,16 @@ object SessionListReducer {
         labels: SessionListLabels = SessionListLabels()
     ): SessionListState = when (action) {
         is SessionListAction.Select -> state.copy(selectedSessionId = action.sessionId)
-        is SessionListAction.SetArchivedSessionIds -> state.copy(
-            archivedSessionIds = action.sessionIds,
-            sessions = state.sessions.filterNot { it.id in action.sessionIds }
-        )
+        is SessionListAction.SetArchivedSessionIds -> state.copy(archivedSessionIds = action.sessionIds)
         is SessionListAction.RemoteSessionsReceived -> mergeRemoteSessions(state, action.sessions, labels)
         is SessionListAction.MessageSent -> {
-            val sessions = upsert(state.sessions, action.sessionId, labels.newSessionTitle, labels).map {
+            val sessions = upsert(
+                state.sessions,
+                action.sessionId,
+                labels.newSessionTitle,
+                labels,
+                action.insertedAtEpochSeconds
+            ).map {
                 if (it.id == action.sessionId) it.copy(agentPreset = action.agentPreset) else it
             }
             state.copy(
@@ -59,9 +72,20 @@ object SessionListReducer {
             )
         }
         is SessionListAction.KnownSessionAdded -> state.copy(
-            sessions = upsert(state.sessions, action.sessionId, labels.remoteTitle(action.sessionId), labels)
+            sessions = upsert(
+                state.sessions,
+                action.sessionId,
+                labels.remoteTitle(action.sessionId),
+                labels,
+                action.insertedAtEpochSeconds
+            )
         )
-        is SessionListAction.EventReceived -> applyEvent(state, action.event, labels)
+        is SessionListAction.EventReceived -> applyEvent(
+            state,
+            action.event,
+            labels,
+            action.insertedAtEpochSeconds
+        )
         is SessionListAction.MarkRead -> state.copy(
             sessions = state.sessions.map {
                 if (it.id == action.sessionId) it.copy(hasUnread = false) else it
@@ -102,7 +126,8 @@ object SessionListReducer {
     private fun applyEvent(
         state: SessionListState,
         record: SessionEvent,
-        labels: SessionListLabels
+        labels: SessionListLabels,
+        insertedAtEpochSeconds: Double
     ): SessionListState {
         val event = record.event
         val title = when (event.type) {
@@ -110,7 +135,7 @@ object SessionListReducer {
             "session/title" -> event.text
             else -> null
         }
-        var sessions = upsert(state.sessions, record.sessionId, title, labels)
+        var sessions = upsert(state.sessions, record.sessionId, title, labels, insertedAtEpochSeconds)
         val updatesMetadata = event.type in setOf(
             "user/message", "session/title", "turn/start", "turn/end", "assistant/message"
         )
@@ -134,12 +159,19 @@ object SessionListReducer {
         sessions: List<SessionSummary>,
         id: String,
         title: String?,
-        labels: SessionListLabels
+        labels: SessionListLabels,
+        insertedAtEpochSeconds: Double
     ): List<SessionSummary> {
         val index = sessions.indexOfFirst { it.id == id }
         if (index < 0) {
             return listOf(
-                SessionSummary(id, title ?: labels.remoteTitle(id), 0.0, false, false)
+                SessionSummary(
+                    id,
+                    title ?: labels.remoteTitle(id),
+                    insertedAtEpochSeconds,
+                    false,
+                    false
+                )
             ) + sessions
         }
         val existing = sessions[index]
