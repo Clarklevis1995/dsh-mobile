@@ -421,21 +421,39 @@ final class ConversationReconciliationTests: XCTestCase {
     func testDispositionRequiresOpenConversation() {
         XCTAssertEqual(disposition(selected: nil), .notOpen)
         // Prepared key pointing at another destination (or the
-        // __new-conversation__ sentinel) means no open conversation to act on.
+        // __new-conversation__ sentinel, which never equals a session id)
+        // means no open conversation to act on.
         XCTAssertEqual(disposition(selected: "s1", prepared: "s2"), .notOpen)
         XCTAssertEqual(disposition(selected: "s1", prepared: nil), .notOpen)
+        XCTAssertEqual(
+            disposition(selected: "s1", prepared: "__new-conversation__"),
+            .notOpen
+        )
     }
 
     func testArchivedSessionDismissesToWorkspace() {
-        // Archiving is checked first: it wins even when the archived session
-        // is naturally absent from the active presence set (the server omits
-        // archived sessions from summaries).
+        // Archived wins when the id is genuinely absent from the raw presence
+        // set (the server omits archived sessions from summaries, so a fresh
+        // frame always produces this cell).
         XCTAssertEqual(
             disposition(selected: "s1", archived: ["s1"], present: []),
             .dismissToWorkspace
         )
+        // Archived + raw-present is the stale-set cell (un-archived on the
+        // desktop, workspaces frame not yet re-fetched): a raw-listed id is
+        // active by construction, so it must NOT dismiss.
         XCTAssertEqual(
             disposition(selected: "s1", archived: ["s1"], present: ["s1"]),
+            .continueReconciling
+        )
+    }
+
+    func testArchivedWinsOverUnconfirmedLocallyCreated() {
+        // A locally created session can legitimately end up archived before
+        // any sessions frame lists it; the archived check precedes the
+        // unconfirmed exemption.
+        XCTAssertEqual(
+            disposition(selected: "s1", archived: ["s1"], present: [], unconfirmed: ["s1"]),
             .dismissToWorkspace
         )
     }

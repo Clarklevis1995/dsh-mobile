@@ -131,12 +131,15 @@ enum ConversationReconciliation {
         unconfirmedLocallyCreatedSessionIds: Set<String>
     ) -> OpenConversationDisposition {
         guard let id = selectedSessionId, preparedActivationKey == id else { return .notOpen }
-        // Archived is checked before presence: an archived id necessarily
-        // references a real server-side session (it cannot appear in the
-        // archived list through any local race), and the server omits
-        // archived sessions from the active summary list, so it would
-        // otherwise fall through to the missing-notice branch.
-        if archivedSessionIds.contains(id) { return .dismissToWorkspace }
+        // Archived wins only when the id is genuinely absent from the current
+        // frame's raw presence set: the server omits archived sessions from
+        // the active summary list, so a raw-listed id is active by
+        // construction. This keeps a stale archived set (refreshed by the
+        // independent workspaces frame) from dismissing a session that was
+        // just un-archived on the desktop.
+        if archivedSessionIds.contains(id), !presentSessionIds.contains(id) {
+            return .dismissToWorkspace
+        }
         guard presentSessionIds.contains(id) || unconfirmedLocallyCreatedSessionIds.contains(id) else {
             return .showMissingNotice
         }
@@ -230,6 +233,17 @@ final class AppStore: ObservableObject {
     /// so a pre-send snapshot response cannot produce a false "deleted"
     /// notice for a conversation that just came to life.
     private var unconfirmedLocallyCreatedSessionIds: Set<String> = []
+    /// Raw session-id presence from the most recent `sessions` frame. The
+    /// `workspaces` frame refreshes the archived set independently, so its
+    /// handler re-runs the open-conversation disposition against this —
+    /// the two responses of a reconnect's paired requests race.
+    private var lastSessionsFramePresenceIds: Set<String> = []
+    /// True between a paired workspaces+sessions request and the workspaces
+    /// response, while the archived set may lag the summaries. The
+    /// missing-session notice is deferred while stale because the pending
+    /// workspaces frame disambiguates archived (pop) from deleted (notice).
+    /// Starts stale: cold launch has no archived knowledge at all.
+    private var archivedSessionIdsStale = true
     private var conversationProjectionDrivers: [String: ConversationProjectionDriver] = [:]
     private var conversationTimelines: [String: ConversationTimeline] = [:]
     /// Invalidates an in-flight cold projection when a completed history
@@ -442,6 +456,10 @@ final class AppStore: ObservableObject {
     }
     func refreshRemoteState() {
         guard gateway.state.isConnected else { return }
+        // The archived set is about to lag the summaries until the workspaces
+        // response lands; mark it so the reconcile can defer ambiguous
+        // missing-notices instead of guessing deleted vs archived.
+        archivedSessionIdsStale = true
         isRefreshing = true
         gateway.requestWorkspaces()
         gateway.requestSessions()
@@ -834,17 +852,26 @@ final class AppStore: ObservableObject {
                 selectedWorkspaceId = workspaces.first?.id ?? Self.ungroupedWorkspaceID
             }
             archivedSessionIds = Set(frame.archivedSessionIds ?? [])
+            archivedSessionIdsStale = false
+            // The archived set just refreshed. Re-run the open-conversation
+            // disposition against it and the most recent sessions presence:
+            // on reconnect the paired responses race, so the sessions frame
+            // may have deferred its missing-notice (or carried a stale
+            // archived set) until exactly this moment.
+            reconcileOpenConversationWithRemoteState(presentSessionIds: lastSessionsFramePresenceIds)
             notice(String(localized: "notice.workspaces.synced", defaultValue: "工作区已同步"), String(localized: "workspaces.count", defaultValue: "\(workspaces.count) 个工作区"))
         case "sessions":
             let remoteSummaries = decodeItems(frame.items, as: GatewaySessionSummary.self)
             applyRemoteSessions(remoteSummaries)
-            // The frame's own id set is the authoritative presence signal —
-            // the upsert-only local list cannot detect hard deletions.
-            let presentSessionIds = Set(
-                remoteSummaries
-                    .filter { !archivedSessionIds.contains($0.sessionId) }
-                    .map(\.sessionId)
-            )
+            // The frame's raw id set is the authoritative presence signal —
+            // the upsert-only local list cannot detect hard deletions. It is
+            // deliberately NOT filtered through the (independently
+            // refreshed, possibly stale) archived set: the server omits
+            // archived sessions from summaries, so a raw-listed id is active
+            // by construction, and filtering here would let a stale archived
+            // set read an un-archived session as archived.
+            let presentSessionIds = Set(remoteSummaries.map(\.sessionId))
+            lastSessionsFramePresenceIds = presentSessionIds
             unconfirmedLocallyCreatedSessionIds.subtract(presentSessionIds)
             isRefreshing = false
             reconcileOpenConversationWithRemoteState(presentSessionIds: presentSessionIds)
@@ -1457,13 +1484,15 @@ final class AppStore: ObservableObject {
             // The session was archived on another device: archiving is a
             // "do not show me this anywhere" signal, so pop back to the
             // workspace list instead of anchoring on it. Clear the activation
-            // state immediately so a subsequent frame cannot re-emit; the
-            // empty navigation path then drives resumeWorkspace() for the
-            // unsubscribe/refresh cleanup.
+            // and selection state immediately so a subsequent frame cannot
+            // re-emit; the empty navigation path then drives resumeWorkspace()
+            // for the unsubscribe/refresh cleanup.
             preparedConversationActivationKey = nil
             activeConversationActivationKey = nil
+            selectedSessionId = nil
             missingConversationNoticeSessionIds.remove(id)
-            conversationDismissalToken &+= 1
+            unconfirmedLocallyCreatedSessionIds.remove(id)
+            conversationDismissalToken += 1
             return
         case .showMissingNotice:
             // The authoritative frame no longer lists the open session: it
@@ -1474,6 +1503,13 @@ final class AppStore: ObservableObject {
             // disappearance. A session created by this device's own send that
             // no remote frame has confirmed yet is exempt — a pre-send
             // snapshot response must not read as a deletion.
+            guard !archivedSessionIdsStale else {
+                // A paired workspaces+sessions request is in flight and the
+                // archived set may lag this summary. Defer: the workspaces
+                // frame's re-run either pops (archived) or lands back here
+                // with a fresh set to notice (deleted).
+                return
+            }
             if missingConversationNoticeSessionIds.insert(id).inserted {
                 notice(
                     String(localized: "notice.session.missing.title", defaultValue: "会话已不可用"),
