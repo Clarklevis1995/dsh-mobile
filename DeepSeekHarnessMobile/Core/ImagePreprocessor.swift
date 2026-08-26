@@ -31,7 +31,8 @@ enum GatewayImagePreprocessor {
         guard let originalDimensions = GatewayImageInspector.dimensions(of: data) else {
             throw GatewayImagePreprocessorError.cannotDecode
         }
-        if accepts(data: data, dimensions: originalDimensions) {
+        let orientation = GatewayImageInspector.orientation(of: data)
+        if accepts(data: data, dimensions: originalDimensions), orientation == 1 {
             return GatewayPreparedImage(mediaType: mediaType, data: data, dimensions: originalDimensions)
         }
         guard let sourceImage = UIImage(data: data) else {

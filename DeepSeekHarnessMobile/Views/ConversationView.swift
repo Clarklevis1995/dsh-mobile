@@ -445,10 +445,11 @@ struct ConversationView: View {
                 ForEach(pendingImages) { image in
                     ZStack(alignment: .topTrailing) {
                         if let uiImage = UIImage(data: image.data) {
+                            let previewSize = pendingImagePreviewSize(for: uiImage)
                             Image(uiImage: uiImage)
                                 .resizable()
-                                .scaledToFill()
-                                .frame(width: 72, height: 72)
+                                .scaledToFit()
+                                .frame(width: previewSize.width, height: previewSize.height)
                                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
                         Button {
@@ -469,6 +470,18 @@ struct ConversationView: View {
             }
         }
         .frame(height: 82)
+    }
+
+    private func pendingImagePreviewSize(for image: UIImage) -> CGSize {
+        let sourceSize = image.size
+        guard sourceSize.width > 0, sourceSize.height > 0 else {
+            return CGSize(width: 72, height: 72)
+        }
+        let scale = min(72 / sourceSize.width, 72 / sourceSize.height)
+        return CGSize(
+            width: max(1, sourceSize.width * scale),
+            height: max(1, sourceSize.height * scale)
+        )
     }
 
     @MainActor

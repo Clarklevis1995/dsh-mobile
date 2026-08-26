@@ -171,7 +171,22 @@ enum GatewayImageInspector {
               let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
               width.intValue > 0,
               height.intValue > 0 else { return nil }
+        let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
+        if [5, 6, 7, 8].contains(orientation) {
+            return GatewayImageDimensions(width: height.intValue, height: width.intValue)
+        }
         return GatewayImageDimensions(width: width.intValue, height: height.intValue)
+    }
+
+    /// Returns the EXIF/CGImage orientation stored in the first frame. A
+    /// missing orientation is equivalent to `.up` (1).
+    static func orientation(of data: Data) -> Int {
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, options),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, options) as? [CFString: Any] else {
+            return 1
+        }
+        return (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
     }
 
     static func isWithinPixelLimits(_ dimensions: GatewayImageDimensions) -> Bool {

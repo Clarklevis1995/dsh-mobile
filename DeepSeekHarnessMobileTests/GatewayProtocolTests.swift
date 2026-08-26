@@ -1,5 +1,7 @@
 import XCTest
 import UIKit
+import ImageIO
+import UniformTypeIdentifiers
 @testable import DeepSeekHarnessMobile
 
 final class GatewayProtocolTests: XCTestCase {
@@ -61,6 +63,42 @@ final class GatewayProtocolTests: XCTestCase {
         )
         XCTAssertEqual(prepared.dimensions.width, 2_000)
         XCTAssertEqual(prepared.dimensions.height, 1_000)
+    }
+
+    func testImagePreprocessorNormalizesOrientationWithoutChangingAspectRatio() throws {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 20), format: format).image { context in
+            UIColor.systemOrange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 40, height: 20))
+        }
+        let sourceData = try XCTUnwrap(image.jpegData(compressionQuality: 0.9))
+        let source = try XCTUnwrap(CGImageSourceCreateWithData(sourceData as CFData, nil))
+        let orientedData = NSMutableData()
+        let destination = try XCTUnwrap(
+            CGImageDestinationCreateWithData(
+                orientedData,
+                UTType.jpeg.identifier as CFString,
+                1,
+                nil
+            )
+        )
+        CGImageDestinationAddImageFromSource(
+            destination,
+            source,
+            0,
+            [kCGImagePropertyOrientation: 6] as CFDictionary
+        )
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+
+        let input = orientedData as Data
+        XCTAssertEqual(GatewayImageInspector.dimensions(of: input), GatewayImageDimensions(width: 20, height: 40))
+
+        let prepared = try GatewayImagePreprocessor.prepare(data: input, mediaType: "image/jpeg")
+
+        XCTAssertEqual(prepared.dimensions, GatewayImageDimensions(width: 20, height: 40))
+        XCTAssertEqual(GatewayImageInspector.dimensions(of: prepared.data), GatewayImageDimensions(width: 20, height: 40))
+        XCTAssertEqual(GatewayImageInspector.orientation(of: prepared.data), 1)
     }
 
     func testDecodesProtocolThreeImageCapability() throws {
