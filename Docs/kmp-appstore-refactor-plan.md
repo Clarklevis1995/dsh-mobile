@@ -4,7 +4,7 @@
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
 > 最近更新：2026-08-26  
-> 当前任务：等待阶段 8 iOS 真实 Gateway 人工核验；通过后进入阶段 9.1
+> 当前任务：阶段 9.1——将 SessionList 的基础领域状态切换到 KMP
 
 ## 使用说明
 
@@ -174,7 +174,9 @@ shared/src/commonMain/                  # 后续阶段创建
 
 验收标准：影子模式不改变 iOS UI、持久化、网络请求数量和生命周期行为；代表性 fixture 的 Swift/KMP 领域结果一致；KMP facade 不泄漏内部并发和可变实现。
 
-自动化验收结论：30 类已知 frame、unknown 与 malformed 路由对等；坏 JSON/Context 返回结构化错误；KMP、Android、iOS Debug/Release 门禁通过。真实 Gateway 产品流程按 `Docs/kmp-stage8-manual-verification.md` 等待人工核验。
+自动化验收结论：30 类已知 frame、unknown 与 malformed 路由对等；坏 JSON/Context 返回结构化错误；KMP、Android、iOS Debug/Release 门禁通过。
+
+人工验收结论：2026-08-26 用户确认真实 Gateway 使用流程未发现异常；DEBUG 影子验证已启用，Human Question 正常展示，Console 未出现 KMP 影子差异。阶段 8 自动化与人工验收全部通过。
 
 ### 阶段 9：iOS 基础领域状态切换到 KMP
 
@@ -284,6 +286,7 @@ xcodebuild test \
 
 ### 2026-08-26
 
+- 用户完成阶段 8 iOS 真实 Gateway 人工核验：DEBUG Console 确认 KMP 只读影子已启用且未报告差异，Human Question 和实际产品流程正常；一次 WebSocket `NSURLErrorDomain -1011` 握手失败未影响后续连接，按独立网络日志记录。阶段 8 全部验收通过，下一步为阶段 9.1。
 - 完成阶段 8.3～8.6：新增无状态 `SharedShadowFacade`，统一接收 wire frame/用户 intent，输出 JSON route fingerprint、平台 effect descriptor 和显式错误；Swift 建立 Codable 值映射及 `@MainActor KMPShadowValidator`，`AppStore` 仅在 DEBUG 下逐 frame 只读比较，仍只执行原 Swift route，Release 不创建验证器。
 - 新增 Swift/KMP 对等路由 fixture，覆盖 30 类已知 Gateway frame、unknown、6 类 malformed 结果以及坏 JSON/Context；iOS 全量 66 项测试全部通过，新增影子对等测试无差异。
 - 阶段 8 最终门禁通过：Gradle 共 81 个 task 成功（KMP commonTest、Android 单测/APK/Lint、iOS Debug/Release framework）；Android CLI 正确识别 `:androidApp` debug/release variants；iPhoneOS Release App 构建成功。真实 Gateway 人工核验清单见 `Docs/kmp-stage8-manual-verification.md`。
