@@ -26,6 +26,7 @@
 
 - [ ] 打开会话控制区，模型目录、当前模型和 reasoning effort 正确；切换模型后刷新仍保持服务端结果。
 - [ ] 权限选项与当前权限正确；切换 `read-only`、`workspace-write` 等支持值后状态及时更新，不出现不支持值。
+- [ ] 连续两次进入同一会话并打开控制区，即使 Gateway 的 `models` / `permission-options` 响应省略 `sessionId`，模型和权限仍能完成加载且不会超时。
 - [ ] Context Usage 与 Stats 能加载并随新消息刷新，token、turn、step 等数值合理且不会回退到其他会话。
 - [ ] Agent Presets 可加载；可用预设可设为默认，损坏或未知预设不能设为默认。
 - [ ] 修改默认模型、默认权限或默认 Agent Preset 后重新进入设置/重启 App，服务端确认值仍正确。
@@ -49,3 +50,9 @@
   - Kotlin/Native 未捕获异常或进程崩溃
 
 人工核验通过后，在迁移计划的变更记录中写明日期、设备/系统、Gateway 环境与结果，再开始阶段 9.5。
+
+## 核验记录
+
+- 2026-08-27 首轮人工核验未通过：Android Studio 启动的 iPhone 17 / iOS 26.5 Simulator 中，重复进入同一会话后出现 `KMP SessionControl 运行期结果失效`，随后模型和权限配置无法加载，`permission-options` 进入 12 秒超时。
+- 根因：同一 target 的正常第二次刷新被错误标记为必须显式携带 `sessionId`；兼容 Gateway 省略该字段时响应被忽略。超时隔离分支又遗漏清理 `explicitSessionRequiredKinds`，形成无 active target 的无效快照并触发永久 fail-closed。
+- 已修复并通过自动化门禁：KMP 44 项、iOS Simulator 94 项均为 0 失败；Android 单测/APK 与 iPhoneOS Release 构建成功。等待重新执行本清单第 3、4 节，人工结果仍保持“待核验”。

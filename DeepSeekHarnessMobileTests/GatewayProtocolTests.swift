@@ -1875,6 +1875,72 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
+    func testKMPSessionControlRepeatedLegacyResponsesRemainOperational() {
+        let adapter = KMPSessionControlStoreAdapter()
+        let permissions = GatewaySessionPermissions(
+            options: [GatewayPermissionOption(value: "read-only", name: "Read")],
+            currentValue: "read-only"
+        )
+
+        _ = adapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
+        _ = adapter.reduce(.action(.modelsReceived(
+            sessionID: nil,
+            current: nil,
+            routable: true,
+            groups: [],
+            isGlobalRequest: false
+        )))
+        var transition = adapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
+        XCTAssertNil(transition.error)
+        XCTAssertFalse(transition.snapshot.explicitSessionRequiredKinds.contains("models"))
+        transition = adapter.reduce(.action(.modelsReceived(
+            sessionID: nil,
+            current: nil,
+            routable: true,
+            groups: [],
+            isGlobalRequest: false
+        )))
+        XCTAssertNil(transition.error)
+
+        _ = adapter.reduce(.requestPermissionOptions(sessionID: "session-1", isConnected: true))
+        _ = adapter.reduce(.action(.permissionsReceived(sessionID: nil, permissions: permissions)))
+        transition = adapter.reduce(.requestPermissionOptions(sessionID: "session-1", isConnected: true))
+        XCTAssertNil(transition.error)
+        XCTAssertFalse(transition.snapshot.explicitSessionRequiredKinds.contains("permission-options"))
+        transition = adapter.reduce(.action(.permissionsReceived(sessionID: nil, permissions: permissions)))
+        XCTAssertNil(transition.error)
+        XCTAssertTrue(adapter.isOperational)
+        XCTAssertFalse(transition.snapshot.loadingKinds.contains("permission-options"))
+    }
+
+    @MainActor
+    func testKMPSessionControlTimeoutKeepsSnapshotInvariantValid() {
+        let adapter = KMPSessionControlStoreAdapter()
+        _ = adapter.reduce(.requestModels(sessionID: "session-a", isConnected: true))
+        _ = adapter.reduce(.action(.modelsReceived(
+            sessionID: "session-a",
+            current: nil,
+            routable: true,
+            groups: [],
+            isGlobalRequest: false
+        )))
+        let started = adapter.reduce(.requestModels(sessionID: "session-b", isConnected: true))
+        let token = try! XCTUnwrap(started.snapshot.requestTokens["models"])
+        XCTAssertTrue(started.snapshot.explicitSessionRequiredKinds.contains("models"))
+
+        let timedOut = adapter.reduce(.requestTimedOut(
+            kind: "models",
+            isDefault: false,
+            requestToken: token
+        ))
+        XCTAssertNil(timedOut.error)
+        XCTAssertTrue(adapter.isOperational)
+        XCTAssertTrue(timedOut.snapshot.quarantinedRequestKinds.contains("models"))
+        XCTAssertFalse(timedOut.snapshot.explicitSessionRequiredKinds.contains("models"))
+        XCTAssertNil(timedOut.snapshot.activeRequestTargets["models"])
+    }
+
+    @MainActor
     func testKMPSessionControlAdapterPermanentlyFailsClosedAfterMalformedCommittedSnapshot() {
         let bridge = MalformedSessionControlBridge()
         let adapter = KMPSessionControlStoreAdapter(bridge: bridge)

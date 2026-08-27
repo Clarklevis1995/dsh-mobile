@@ -136,6 +136,46 @@ class SharedSessionControlStoreTest {
     }
 
     @Test
+    fun repeatedSameSessionRefreshAcceptsLegacyResponsesWithoutSessionId() {
+        val store = SharedSessionControlStore()
+        val permissions = """{"options":[{"value":"read-only","name":"Read"}],"currentValue":"read-only"}"""
+
+        store.requestModels("session-1", true)
+        assertTrue(store.modelsReceived(null, null, true, "[]", false).applied)
+        val repeatedModels = store.requestModels("session-1", true)
+        assertFalse("models" in repeatedModels.state().explicitSessionRequiredKinds)
+        assertTrue(store.modelsReceived(null, null, true, "[]", false).applied)
+
+        store.requestPermissionOptions("session-1", true)
+        assertTrue(store.permissionsReceived(null, permissions).applied)
+        val repeatedPermissions = store.requestPermissionOptions("session-1", true)
+        assertFalse("permission-options" in repeatedPermissions.state().explicitSessionRequiredKinds)
+        val completed = store.permissionsReceived(null, permissions)
+        assertTrue(completed.applied)
+        assertFalse("permission-options" in completed.state().loadingKinds)
+    }
+
+    @Test
+    fun abnormalTerminationClearsExplicitSessionRequirementBeforeQuarantine() {
+        val store = SharedSessionControlStore()
+        store.requestModels("session-a", true)
+        store.modelsReceived("session-a", null, true, "[]", false)
+
+        val second = store.requestModels("session-b", true)
+        assertTrue("models" in second.state().explicitSessionRequiredKinds)
+        val timedOut = store.requestTimedOut(
+            "models",
+            isDefault = false,
+            second.effects().single().requestToken
+        )
+
+        assertTrue(timedOut.applied)
+        assertTrue("models" in timedOut.state().quarantinedRequestKinds)
+        assertFalse("models" in timedOut.state().explicitSessionRequiredKinds)
+        assertFalse("models" in timedOut.state().activeRequestTargets)
+    }
+
+    @Test
     fun mergesControlResponsesAndFiltersUnsupportedPermissions() {
         val store = SharedSessionControlStore()
         store.mergeContextProjection(

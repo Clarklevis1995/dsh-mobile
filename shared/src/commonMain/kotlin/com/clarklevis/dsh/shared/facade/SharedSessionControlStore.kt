@@ -318,6 +318,7 @@ class SharedSessionControlStore {
                     previousCompletedRequestTargets = active.let {
                         state.previousCompletedRequestTargets + (kind to it)
                     },
+                    explicitSessionRequiredKinds = state.explicitSessionRequiredKinds - kind,
                     quarantinedRequestKinds = state.quarantinedRequestKinds + kind
                 ))
                 Transition(
@@ -358,10 +359,15 @@ class SharedSessionControlStore {
                 activeRequestTargets = base.activeRequestTargets + (target.kind to target),
                 queuedRequestTargets = base.queuedRequestTargets - target.kind,
                 explicitSessionRequiredKinds = if (
-                    target.sessionId != null && base.previousCompletedRequestTargets[target.kind] != null
+                    target.sessionId != null &&
+                    base.previousCompletedRequestTargets[target.kind]?.let { it != target } == true
                 ) {
                     base.explicitSessionRequiredKinds + target.kind
-                } else base.explicitSessionRequiredKinds
+                } else {
+                    // 同一 target 的正常刷新依赖 Gateway“每请求单终态响应”约束，允许旧版
+                    // Gateway 继续省略 sessionId；只有跨 target generation 才强制显式关联。
+                    base.explicitSessionRequiredKinds - target.kind
+                }
             )
         )
         return Transition(next, listOf(target.effect(token)), applied = true)

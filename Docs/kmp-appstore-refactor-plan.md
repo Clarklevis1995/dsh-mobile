@@ -3,7 +3,7 @@
 > 状态：进行中  
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
-> 最近更新：2026-08-26  
+> 最近更新：2026-08-27
 > 当前任务：暂停，等待阶段 9.1～9.4 iOS 人工核验；通过后执行阶段 9.5
 
 ## 使用说明
@@ -188,7 +188,7 @@ shared/src/commonMain/                  # 后续阶段创建
 
 验收标准：iOS UI、旧安装数据和 Gateway 请求语义保持不变；每个已切换子系统只有 KMP 一个业务状态来源；自动化测试与会话、问题、模型、权限人工回归通过。
 
-阶段 9.4 自动化验收结论：KMP `shared` 全量 42 项测试、iPhone 17 Pro（iOS 26.2 Simulator）全量 92 项测试和 Android 2 项单元测试均为 0 失败；Android Debug APK 与 iOS 无签名 Release Device 构建成功；`git diff --check` 通过。阶段 9.1～9.4 的人工核验清单见 `Docs/kmp-stage9-manual-verification.md`。
+阶段 9.4 自动化验收结论：首轮人工核验发现并修复同一 target 重复刷新与 legacy 无 `sessionId` 响应的关联回归；修复后 KMP `shared` 全量 44 项测试、iPhone 17（iOS 26.5 Simulator）全量 94 项测试和 Android 2 项单元测试均为 0 失败；Android Debug APK 与 iOS 无签名 Release Device 构建成功；`git diff --check` 通过。阶段 9.1～9.4 的人工核验清单见 `Docs/kmp-stage9-manual-verification.md`，当前等待重新人工核验。
 
 性能债务：当前 SessionControl 每次有状态变化仍跨 KMP/Swift 边界编解码全量 JSON snapshot（P3）。必须在阶段 10 开始前完成增量 patch 或结构化桥接方案评估，并在进入高频 Conversation/Trajectory 流式状态切换前落地适当方案，避免每个 token 复制完整状态。
 
@@ -287,6 +287,12 @@ xcodebuild test \
 - Android 真实 Gateway 接入涉及凭据、后台连接和附件文件，必须分别使用 Keystore、生命周期策略和受控缓存。
 
 ## 变更记录
+
+### 2026-08-27
+
+- 阶段 9.4 首轮真实 Gateway 人工核验发现回归：重复进入同一会话后，模型与权限响应可能省略 `sessionId`，KMP 将同 target 的第二代请求错误标记为必须显式关联并忽略响应；12 秒超时隔离时又残留 `explicitSessionRequiredKinds`，Swift 因快照中出现“无 active target 的显式关联 kind”而永久 fail-closed。模型和权限配置因此无法继续加载。
+- 修复同 target 正常刷新规则：仅当前后 target 不同时要求显式 session 关联；同 target 继续兼容 Gateway 省略 `sessionId` 的单终态响应。超时/quarantine 分支现在原子清理显式关联标记，避免生成无效快照。
+- 新增 Kotlin 与 Swift 回归测试，覆盖连续两次模型/权限刷新均省略 `sessionId`，以及跨 session generation 超时后快照仍满足 Swift/KMP 不变量。修复后 `:shared:allTests --rerun-tasks` 共 44 项、iPhone 17 / iOS 26.5 Simulator 全量 XCTest 共 94 项，均为 0 失败；Android 单测和 Debug APK、iPhoneOS Release 构建成功。当前继续等待阶段 9.1～9.4 人工复验，不进入 9.5。
 
 ### 2026-08-26
 
