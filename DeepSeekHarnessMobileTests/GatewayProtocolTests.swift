@@ -601,7 +601,9 @@ final class ConversationReactivationTests: XCTestCase {
     }
 
     func testTransientHistoryErrorReArmsInterruptionMarker() async {
-        let store = makeCoveredStore(running: true)
+        // running: false — hello captures NOTHING here, so the only thing
+        // that can arm the marker is the error-frame re-arm this test pins.
+        let store = makeCoveredStore()
         store.gateway.onFrame?(GatewayFrame(kind: "hello", protocol: 3, authenticated: true))
         store.gateway.onFrame?(GatewayFrame(
             kind: "error",

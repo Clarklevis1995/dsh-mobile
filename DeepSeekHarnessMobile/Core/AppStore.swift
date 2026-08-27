@@ -1594,10 +1594,14 @@ final class AppStore: ObservableObject {
         // the current frame's raw list. Filtering on the archived set alone
         // would let a stale set hide a session that was just un-archived.
         sessions.removeAll { archivedSessionIds.contains($0.id) && !presentSessionIds.contains($0.id) }
-        // Archived ids are definitively not pushable (the disposition pops
-        // them), so their interruption markers are dead weight — a session
-        // un-archived later is re-captured by the next hello if still running.
-        interruptedTurnSessionIds.subtract(archivedSessionIds)
+        // Interruption markers are deliberately NOT subtracted for archived
+        // ids here: `hello` is the only re-arming site, so a subtraction on
+        // every sessions frame would drop a still-meaningful marker for a
+        // session un-archived within the same transport generation (its
+        // missed tail would then never replay — the exact gap the marker
+        // exists to close). Archived sessions cannot be pushed (the
+        // disposition pops them), so an idle marker is harmless, and
+        // session-not-found clears markers for definitively deleted ones.
         sessions.sort { $0.lastActivity > $1.lastActivity }
     }
     /// A fresh session summary is the first authoritative signal that the open
