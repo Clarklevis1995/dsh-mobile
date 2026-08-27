@@ -95,18 +95,20 @@ enum ConversationReconciliation {
     /// Activation (conversation push, transport `hello`): the one path allowed
     /// to establish a first baseline for a session with no local content.
     ///
-    /// A transport-generation re-activation (reconnect after backgrounding)
-    /// additionally forces a reload for already-covered sessions: the host's
-    /// `updatedAt` only advances on creation or a new HUMAN PROMPT
+    /// A transport-generation re-activation (reconnect after backgrounding),
+    /// or a plain push of a session whose turn was interrupted by one, forces
+    /// a reload for already-covered sessions: the host's `updatedAt` only
+    /// advances on creation or a new HUMAN PROMPT
     /// (sessionListUpdatedAt = max(createdAt, lastPromptAt)), so a session
-    /// whose turn kept streaming while the app was backgrounded compares as
+    /// whose turn kept streaming while the app was disconnected compares as
     /// "in sync" against a watermark derived from the prompt's timestamp —
-    /// even though output produced after backgrounding was never received.
+    /// even though output produced after the disconnect was never received.
     /// Gaps can only form while the transport is down, and every transport
-    /// death ends with a fresh `hello`, so forcing the fetch here closes
-    /// every gap the watermark cannot see. The seq-deduplicating rebase
-    /// makes a redundant fetch invisible, and loadHistory's own in-flight
-    /// guard prevents stacking.
+    /// death ends with a fresh `hello`, so forcing the fetch at re-activation
+    /// (and for interrupted turns pushed later) closes every gap class the
+    /// watermark cannot see. The seq-deduplicating rebase makes a redundant
+    /// fetch invisible, and loadHistory's own in-flight guard prevents
+    /// stacking.
     static func activationShouldLoadHistory(_ decision: HistoryDecision, isTransportReactivation: Bool = false) -> Bool {
         isTransportReactivation || decision != .skipLoading
     }
@@ -270,6 +272,13 @@ final class AppStore: ObservableObject {
     /// to the watermark comparison. See
     /// ConversationReconciliation.activationShouldLoadHistory.
     private var activationIsTransportReactivation = false
+    /// Sessions whose turn was still running when the last transport
+    /// generation ended (captured at `hello` from the last-known live list).
+    /// Pushing one of these forces a history reload even as a plain
+    /// navigation: the activity watermark is blind to streamed output
+    /// (updatedAt only advances on human prompts), so a session that was
+    /// mid-turn across a disconnect must not trust `.skipLoading`.
+    private var interruptedTurnSessionIds: Set<String> = []
     private var conversationProjectionDrivers: [String: ConversationProjectionDriver] = [:]
     private var conversationTimelines: [String: ConversationTimeline] = [:]
     /// Invalidates an in-flight cold projection when a completed history
@@ -581,20 +590,32 @@ final class AppStore: ObservableObject {
             gateway.requestAgentPresets()
         }
 
-        if let sessionID,
-           let session = sessions.first(where: { $0.id == sessionID }),
-           ConversationReconciliation.activationShouldLoadHistory(
-               historyDecision(for: session),
-               isTransportReactivation: isTransportReactivation
-           ) {
-            loadHistory(for: sessionID)
-        } else if let sessionID, isTransportReactivation,
-                  sessions.first(where: { $0.id == sessionID }) == nil {
-            // The summary list has not arrived yet on this generation (or the
-            // session is genuinely gone). Reconcile on the sessions frame
-            // disambiguates deletion, but the forced reload cannot wait for
-            // the stale summary: fetch for a known-id session regardless.
-            loadHistory(for: sessionID)
+        if let sessionID {
+            // A transport re-activation, or a session whose turn was still
+            // running when the previous generation ended, must reload even
+            // when the watermark says current: `updatedAt` only advances on
+            // human prompts, so streamed output missed while disconnected is
+            // invisible to the comparison. The one-shot removal keeps a
+            // single forced fetch per interruption; a still-running turn is
+            // re-captured by the next `hello` if the transport drops again.
+            let turnWasInterrupted = interruptedTurnSessionIds.remove(sessionID) != nil
+            if let session = sessions.first(where: { $0.id == sessionID }) {
+                if ConversationReconciliation.activationShouldLoadHistory(
+                    historyDecision(for: session),
+                    isTransportReactivation: isTransportReactivation || turnWasInterrupted
+                ) {
+                    loadHistory(for: sessionID)
+                }
+            } else if isTransportReactivation || turnWasInterrupted {
+                // No local summary on this generation yet (the fresh list has
+                // not arrived). The server-side session store is
+                // authoritative, so fetch for the known id directly: a
+                // genuinely deleted session answers with an error frame,
+                // which the reconcile disposition and error handling already
+                // surface. Waiting for the stale summary would reopen the
+                // very gap this reload exists to close.
+                loadHistory(for: sessionID)
+            }
         }
 
         await Task.yield()
@@ -618,9 +639,6 @@ final class AppStore: ObservableObject {
         )
     }
 
-    private func shouldRefreshHistory(for session: SessionSummary) -> Bool {
-        ConversationReconciliation.activationShouldLoadHistory(historyDecision(for: session))
-    }
     func loadHistory(for sessionId: String, older: Bool = false) {
         guard gateway.state.isConnected else {
             lastError = String(localized: "WebSocket 尚未连接，无法加载历史记录")
@@ -869,12 +887,17 @@ final class AppStore: ObservableObject {
             for staleSessionId in Array(historyLoadingSessionIds) {
                 finishHistoryLoading(staleSessionId)
             }
+            // Capture mid-turn sessions from the last-known live list BEFORE
+            // the fresh summaries land: their streamed output is invisible to
+            // the watermark (updatedAt only advances on human prompts), so a
+            // later navigation push must still force a history reload. The
+            // open-conversation path below handles the immediate case.
+            interruptedTurnSessionIds.formUnion(sessions.filter(\.isRunning).map(\.id))
             if preparedConversationActivationKey != nil {
                 // Mark this as a transport-generation re-activation so the
                 // open conversation force-reloads history: the activity
                 // watermark cannot see output that streamed while the
-                // transport was down (updatedAt advances only on new human
-                // prompts on the host side).
+                // transport was down.
                 activationIsTransportReactivation = true
                 Task { [weak self] in
                     guard let self else { return }
@@ -1220,6 +1243,9 @@ final class AppStore: ObservableObject {
             total: frame.hasMore == true ? nil : pageEventOffset + rawEvents.count
         )
 
+        let baselineEventCountAtLoadStart = events[id]?.count ?? 0
+        let loadKind = historyBatchKinds[id] ?? .latest
+
         Task { [weak self] in
             let normalized = await Task.detached(priority: .userInitiated) {
                 rawEvents.map { $0.normalized(sessionId: id) }
@@ -1317,15 +1343,34 @@ final class AppStore: ObservableObject {
             // Loading the newest batch establishes a tail watermark even when
             // older pages still exist. Reopening the session can therefore use
             // the in-memory pages immediately and only refresh when the remote
-            // session has genuinely changed.
-            if self.historyBatchKinds[id] == .latest,
-               let activity = self.sessions.first(where: { $0.id == id })?.lastActivity {
-                self.historySyncedActivityDates[id] = activity
+            // session has genuinely changed. Anchor to the NEWEST COVERED
+            // activity — the rebased tail's last event date — not the summary's
+            // `updatedAt`, which is frozen at the last human prompt and would
+            // knowingly understate coverage for a mid-turn catch-up.
+            if self.historyBatchKinds[id] == .latest {
+                let summaryActivity = self.sessions.first(where: { $0.id == id })?.lastActivity
+                let tailActivity = self.events[id]?.last?.date
+                let covered = [summaryActivity, tailActivity].compactMap { $0 }.max()
+                if let covered { self.historySyncedActivityDates[id] = covered }
+            }
+            // An interrupted turn may resume streaming right after this
+            // reload; drop it from the interrupted set only when the turn is
+            // genuinely over per the freshest signal we have.
+            if self.sessions.first(where: { $0.id == id })?.isRunning != true {
+                self.interruptedTurnSessionIds.remove(id)
             }
             self.finishHistoryLoading(id)
-            let byteDetail = totalBytes > 0 ? " · \(ByteCountFormatter.string(fromByteCount: Int64(totalBytes), countStyle: .file))" : ""
-            let moreDetail = self.historyHasMore[id] == true ? String(localized: "history.swipe.up.hint", defaultValue: " · 向上滑动加载更早记录") : ""
-            self.notice(String(localized: "notice.history.loaded", defaultValue: "历史记录已加载"), String(localized: "history.loaded.detail", defaultValue: "\(totalEvents) 个事件\(byteDetail)\(moreDetail)"), sessionId: id)
+            // Forced reconnect reloads frequently change nothing (seq-dedup).
+            // Only surface a notice when new events actually landed or more
+            // history is available, so a background->foreground cycle stays
+            // silent instead of toasting on every reconnect.
+            let finalEventCount = self.events[id]?.count ?? 0
+            let addedEvents = finalEventCount - baselineEventCountAtLoadStart
+            if addedEvents > 0 || self.historyHasMore[id] == true || loadKind == .older {
+                let byteDetail = totalBytes > 0 ? " · \(ByteCountFormatter.string(fromByteCount: Int64(totalBytes), countStyle: .file))" : ""
+                let moreDetail = self.historyHasMore[id] == true ? String(localized: "history.swipe.up.hint", defaultValue: " · 向上滑动加载更早记录") : ""
+                self.notice(String(localized: "notice.history.loaded", defaultValue: "历史记录已加载"), String(localized: "history.loaded.detail", defaultValue: "\(totalEvents) 个事件\(byteDetail)\(moreDetail)"), sessionId: id)
+            }
         }
     }
     private func finishHistoryLoading(_ sessionId: String) {

@@ -290,8 +290,23 @@ final class GatewayClient: ObservableObject {
         ])
     }
 
+    /// Test seam: unit tests drive AppStore's frame pipeline without a real
+    /// socket; sends are silently dropped and the connected state is pinned
+    /// instead of failing on the missing transport.
+    #if DEBUG
+    var _testSuppressTransportFailures = false
+
+    func _testSimulateConnected() {
+        _testSuppressTransportFailures = true
+        state = .connected
+    }
+    #endif
+
     private func send(_ object: [String: Any]) {
         guard let socket else {
+            #if DEBUG
+            if _testSuppressTransportFailures { return }
+            #endif
             state = .failed(String(localized: "state.websocket.not-connected", defaultValue: "WebSocket 尚未连接"))
             return
         }

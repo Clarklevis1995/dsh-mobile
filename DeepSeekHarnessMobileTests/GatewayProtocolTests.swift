@@ -505,3 +505,77 @@ final class ConversationReconciliationTests: XCTestCase {
         XCTAssertEqual(disposition(selected: "s1"), .continueReconciling)
     }
 }
+
+/// Store-level regression tests for the transport-reactivation state machine:
+/// `hello` arms the forced reload, the re-activation consumes it, and the
+/// interrupted-turn set covers the list-then-push variant. These pin the
+/// integration behavior the pure-policy tests cannot reach (the original
+/// TestFlight regression was exactly here: watermark policy + missing
+/// forced reload).
+@MainActor
+final class ConversationReactivationTests: XCTestCase {
+    override func tearDown() {
+        UserDefaults.standard.removeObject(forKey: "gateway.sessions")
+        UserDefaults.standard.removeObject(forKey: "gateway.selectedWorkspaceId")
+    }
+
+    /// Covered session (local events newer than the summary's frozen
+    /// `updatedAt`-derived activity) so the watermark decision is .skipLoading.
+    private func makeCoveredStore(sessionID: String = "s1", running: Bool = false) -> AppStore {
+        let store = AppStore()
+        store.sessions = [SessionSummary(
+            id: sessionID,
+            title: "T",
+            lastActivity: Date(timeIntervalSince1970: 1_000),
+            isRunning: running,
+            hasUnread: false,
+            agentPreset: nil
+        )]
+        store.events[sessionID] = [SessionEvent(
+            sessionId: sessionID,
+            seq: 4,
+            time: 2_000,
+            event: GatewayEvent(type: "assistant/message", text: "tail")
+        )]
+        store.gateway._testSimulateConnected()
+        return store
+    }
+
+    func testHelloReactivationForcesHistoryReloadDespiteCurrentWatermark() async {
+        let store = makeCoveredStore()
+        store.prepareConversation(for: store.sessions[0])
+        store.gateway.onFrame?(GatewayFrame(kind: "hello", protocol: 3, capabilities: ["images"], authenticated: true))
+        // Let the spawned re-activation Task run through its yield points.
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertTrue(
+            store.historyLoadingSessionIds.contains("s1"),
+            "transport re-activation must reload history even when the watermark says current"
+        )
+    }
+
+    func testPlainPushKeepsWatermarkPolicy() async {
+        let store = makeCoveredStore()
+        store.prepareConversation(for: store.sessions[0])
+        await store.activatePreparedConversation(sessionID: "s1")
+        XCTAssertFalse(
+            store.historyLoadingSessionIds.contains("s1"),
+            "a plain navigation push with current coverage must not fetch (no flag leak from any prior generation)"
+        )
+    }
+
+    func testInterruptedTurnForcesReloadOnLaterPlainPush() async {
+        let store = makeCoveredStore(running: true)
+        // Reconnect with the workspace list showing (no conversation open):
+        // hello captures the mid-turn session into the interrupted set.
+        store.gateway.onFrame?(GatewayFrame(kind: "hello", protocol: 3, authenticated: true))
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        // The user now pushes the still-mid-turn session as a PLAIN
+        // navigation; the watermark is blind to its streamed tail.
+        store.prepareConversation(for: store.sessions[0])
+        await store.activatePreparedConversation(sessionID: "s1")
+        XCTAssertTrue(
+            store.historyLoadingSessionIds.contains("s1"),
+            "an interrupted turn must force a history reload on a later plain push"
+        )
+    }
+}
