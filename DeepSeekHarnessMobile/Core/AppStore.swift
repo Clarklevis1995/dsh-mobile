@@ -616,6 +616,16 @@ final class AppStore: ObservableObject {
                 // very gap this reload exists to close.
                 loadHistory(for: sessionID)
             }
+            if turnWasInterrupted || isTransportReactivation,
+               !historyLoadingSessionIds.contains(sessionID),
+               !historyLoadingOlderSessionIds.contains(sessionID) {
+                // The forced fetch did not start (loadHistory dropped it on a
+                // disconnected transport). Re-arm so the interruption is not
+                // silently lost — a still-running turn may finish during the
+                // outage, after which no `hello` can re-capture it. When a
+                // load IS in flight, that load itself covers the gap.
+                interruptedTurnSessionIds.insert(sessionID)
+            }
         }
 
         await Task.yield()
@@ -691,6 +701,10 @@ final class AppStore: ObservableObject {
             let hasUsableLocalContent = !self.events[sessionId, default: []].isEmpty
                 || !self.renderedConversationItems[sessionId, default: []].isEmpty
             self.finishHistoryLoading(sessionId)
+            // The forced/interrupted catch-up fetch never completed: coverage
+            // is uncertain, so re-arm the interruption for the next push
+            // (bounded — one redundant fetch at most).
+            self.interruptedTurnSessionIds.insert(sessionId)
             self.scheduleConversationProjection(for: sessionId)
             if hasUsableLocalContent {
                 self.notice(
@@ -1109,6 +1123,10 @@ final class AppStore: ObservableObject {
             }
             if frame.requestType == "history", let id = frame.sessionId ?? pendingHistorySessionId {
                 finishHistoryLoading(id)
+                // The fetch failed; coverage is uncertain. Re-arm so a later
+                // push forces the catch-up again (bounded: one redundant
+                // fetch at most per failure).
+                interruptedTurnSessionIds.insert(id)
             }
             let detail = [frame.code, frame.message].compactMap { $0 }.joined(separator: ": ")
             if let requestType = frame.requestType,
@@ -1353,10 +1371,13 @@ final class AppStore: ObservableObject {
                 let covered = [summaryActivity, tailActivity].compactMap { $0 }.max()
                 if let covered { self.historySyncedActivityDates[id] = covered }
             }
-            // An interrupted turn may resume streaming right after this
-            // reload; drop it from the interrupted set only when the turn is
-            // genuinely over per the freshest signal we have.
-            if self.sessions.first(where: { $0.id == id })?.isRunning != true {
+            // Only a completed LATEST-tail load that sees the turn finished
+            // clears the interruption marker: pagination-only loads do not
+            // establish the tail, and a still-running turn must keep the
+            // marker so a later disconnect+push still forces the catch-up.
+            // Failure and timeout paths re-arm instead of clearing.
+            if loadKind == .latest,
+               self.sessions.first(where: { $0.id == id })?.isRunning != true {
                 self.interruptedTurnSessionIds.remove(id)
             }
             self.finishHistoryLoading(id)

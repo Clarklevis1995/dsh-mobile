@@ -541,14 +541,27 @@ final class ConversationReactivationTests: XCTestCase {
         return store
     }
 
+    /// Bounded polling instead of a fixed sleep: the spawned re-activation
+    /// Task crosses yield points with no wall-clock guarantee under CI load.
+    private func waitFor(
+        _ condition: @MainActor () -> Bool,
+        timeout: TimeInterval = 2
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return true }
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        return condition()
+    }
+
     func testHelloReactivationForcesHistoryReloadDespiteCurrentWatermark() async {
         let store = makeCoveredStore()
         store.prepareConversation(for: store.sessions[0])
         store.gateway.onFrame?(GatewayFrame(kind: "hello", protocol: 3, capabilities: ["images"], authenticated: true))
-        // Let the spawned re-activation Task run through its yield points.
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        let loaded = await waitFor { store.historyLoadingSessionIds.contains("s1") }
         XCTAssertTrue(
-            store.historyLoadingSessionIds.contains("s1"),
+            loaded,
             "transport re-activation must reload history even when the watermark says current"
         )
     }
@@ -567,8 +580,9 @@ final class ConversationReactivationTests: XCTestCase {
         let store = makeCoveredStore(running: true)
         // Reconnect with the workspace list showing (no conversation open):
         // hello captures the mid-turn session into the interrupted set.
+        // The interrupted-turn capture is synchronous inside onFrame, so no
+        // wait is needed before the push.
         store.gateway.onFrame?(GatewayFrame(kind: "hello", protocol: 3, authenticated: true))
-        try? await Task.sleep(nanoseconds: 200_000_000)
         // The user now pushes the still-mid-turn session as a PLAIN
         // navigation; the watermark is blind to its streamed tail.
         store.prepareConversation(for: store.sessions[0])
