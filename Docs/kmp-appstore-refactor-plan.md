@@ -4,7 +4,7 @@
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
 > 最近更新：2026-08-27
-> 当前任务：暂停，等待阶段 9.1～9.4 iOS 人工核验；通过后执行阶段 9.5
+> 当前任务：阶段 9 已完成，等待用户决定是否进入阶段 10
 
 ## 使用说明
 
@@ -184,11 +184,11 @@ shared/src/commonMain/                  # 后续阶段创建
 - [x] 9.2 保持 `UserDefaultsAppPreferences` 为 iOS 持久化适配器，在 Swift snapshot 与既有持久化模型之间做显式映射。
 - [x] 9.3 将 Human Question 请求、校验、提交状态、响应和 resolved 流程切换到 KMP。
 - [x] 9.4 将模型、权限、Context Usage、Stats、Agent Presets 和默认配置状态切换到 KMP。
-- [ ] 9.5 每完成一个子系统，关闭该子系统的 Swift 写路径并保留一轮可回滚开关；人工验收通过后删除开关。
+- [x] 9.5 每完成一个子系统，关闭该子系统的 Swift 写路径并保留一轮可回滚开关；人工验收通过后删除开关。
 
 验收标准：iOS UI、旧安装数据和 Gateway 请求语义保持不变；每个已切换子系统只有 KMP 一个业务状态来源；自动化测试与会话、问题、模型、权限人工回归通过。
 
-阶段 9.4 自动化验收结论：两轮真实 Gateway 人工核验暴露了无 token/无 `sessionId` control 响应与严格隔离策略不兼容的问题；现已改为将无身份字段的响应绑定同 kind 唯一 active generation，显式 session 不匹配仍拒绝，超时后允许恢复重试。修复后 KMP `shared` 全量 44 项测试、iPhone 17（iOS 26.5 Simulator）全量 94 项测试和 Android 2 项单元测试均为 0 失败；Android Debug APK 与 iOS 无签名 Release Device 构建成功；`git diff --check` 通过。阶段 9.1～9.4 的人工核验清单见 `Docs/kmp-stage9-manual-verification.md`，当前等待再次人工核验。
+阶段 9 最终验收结论：2026-08-27 用户在 Android Studio 启动的 iPhone 17（iOS 26.5 Simulator）上连接真实 Mobile Gateway 完成人工清单；Gateway 使用已补齐 `commands/execute.images` 的本地修复版本。会话列表/持久化、Human Question、模型、权限、Context Usage、Stats、Agent Presets、默认配置、跨会话切换和断线恢复均通过。产品代码审计确认 SessionList、Human Question 和 SessionControl 只通过 KMP store 写入业务状态，没有运行时 Swift 回滚开关；Swift Reducer 仅供对等 XCTest 使用，按阶段 11.1 再统一删除。静态架构门禁会扫描三个旧 Reducer 类型符号在其定义文件以外的全部产品 Swift 引用，并以 `private(set)` 与源码审计标记约束已迁移 snapshot 的直接/复合赋值、常见容器原地变更和 `inout` 写边界；回滚开关检查属于基于 KMP/Swift 与切换语义组合词的启发式标识符审计，不宣称覆盖任意命名、反射或动态构造。收口后强制重跑 KMP 44 项与 Android 2 项测试，iPhone 17 / iOS 26.5 Simulator 全量 XCTest 96 项，均为 0 失败、0 跳过；`git diff --check` 通过。阶段 9 完成，阶段 10 尚未开始。
 
 性能债务：当前 SessionControl 每次有状态变化仍跨 KMP/Swift 边界编解码全量 JSON snapshot（P3）。必须在阶段 10 开始前完成增量 patch 或结构化桥接方案评估，并在进入高频 Conversation/Trajectory 流式状态切换前落地适当方案，避免每个 token 复制完整状态。
 
@@ -290,6 +290,9 @@ xcodebuild test \
 
 ### 2026-08-27
 
+- 用户确认阶段 9 最终人工核验通过：设备为 iPhone 17 / iOS 26.5 Simulator，Android Studio 启动 iOS App，连接真实 Mobile Gateway；Gateway 使用已安装到本机 `web` profile 的本地修复版本。此前模型/权限关联与 `commands/execute.images` 兼容问题均已消除，权限切换、控制配置、跨会话和断线恢复结果正常。
+- 完成阶段 9.5 产品写路径审计：`AppStore` 的 SessionList、Human Question、SessionControl mutation 分别只调用 `KMPSessionListStoreAdapter`、`KMPQuestionStoreAdapter`、`KMPSessionControlStoreAdapter`；产品代码在三个旧 Reducer 定义文件以外不引用其类型符号。已迁移的 `@Published` snapshot 属性统一收紧为 `private(set)`，源码审计标记门禁只允许初始化及对应 KMP snapshot 发布块执行直接/复合赋值、常见容器原地变更或 `inout` 写入。DEBUG `KMPShadowValidator` 仅做只读路由对比，不是状态回滚路径。
+- 保留三个 Swift Reducer 及其 DTO 作为 Swift/KMP 对等 XCTest 基准，产品路径不调用；根据阶段 11.1 再与重复 fixture 一并删除，避免阶段 9.5 扩大为阶段 11。新增静态架构门禁，覆盖 Reducer 类型别名、换行调用、直接/嵌套 snapshot 属性赋值、常见容器原地变更和 `inout` 写入等回流形式；回滚开关检查采用 KMP/Swift 与 use/enable/flag/fallback 等切换语义组合词的启发式标识符审计，不将其描述为可识别任意重命名。强制重跑 `:shared:allTests :androidApp:testDebugUnitTest --rerun-tasks`，KMP 44 项和 Android 2 项均通过；iPhone 17 / iOS 26.5 Simulator 全量 XCTest 96 项通过，0 失败、0 跳过；`git diff --check` 通过。阶段 9 已完成，等待用户决定是否进入阶段 10。
 - 第三轮人工核验确认模型/权限控制已进入真实请求链路，但切换权限被宿主拒绝：`commands/execute` 的新版参数 descriptor 要求必填 `images`。问题位于同级 `dsh-plugin-mobile-gateway`，并非 KMP Reducer/effect；Gateway 已在 `/permission` 调用中补充 `images: []`，其 53 个 dispatch 用例及鉴权、配对、LAN 全套测试通过，并已用本地 `file:` 源安装到本机 `web` profile。需完整重启实际 Gateway 后继续人工核验。
 - 第二轮真实 Gateway 核验继续出现 `models` 超时和 `response-correlation-quarantined: permission-options`。对照 `dsh-plugin-mobile-gateway` 实现确认：`models`、`permission-options` 成功帧不会回显客户端 request token 或 `sessionId`，因此永久 quarantine/跨 generation 强制 session 关联虽然能拒绝理论上的迟到帧，却会拒绝正常产品响应并让一次超时扩大为重连前持续不可用。
 - SessionControl 关联策略改为协议可实现的边界：每个 kind 仍只有一个 active generation；缺少身份字段的响应绑定该 active，请求明确携带错误 session 时拒绝；超时/失败原子结束当前 generation并允许 latest queued 或后续人工刷新继续，不再永久 quarantine。无 token 协议无法数学上区分极晚旧响应，依赖 Gateway“每请求单终态响应”约束，这是恢复功能与避免永久不可用之间的明确取舍。

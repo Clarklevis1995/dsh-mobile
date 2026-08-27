@@ -82,13 +82,13 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 final class AppStore: ObservableObject {
     static let ungroupedWorkspaceID = "__ungrouped__"
 
-    @Published var selectedSessionId: String?
-    @Published var sessions: [SessionSummary] = []
+    @Published private(set) var selectedSessionId: String?
+    @Published private(set) var sessions: [SessionSummary] = []
     @Published var workspaces: [GatewayWorkspace] = []
     @Published var selectedWorkspaceId: String? {
         didSet { preferences.selectedWorkspaceID = selectedWorkspaceId }
     }
-    @Published var archivedSessionIds: Set<String> = []
+    @Published private(set) var archivedSessionIds: Set<String> = []
     /// Raw protocol storage. UI updates are driven by the throttled compact
     /// conversation projection instead of invalidating every view for every
     /// token frame.
@@ -121,19 +121,19 @@ final class AppStore: ObservableObject {
     @Published var lastError: String?
     @Published var waitingForNewSession = false
     @Published var isRefreshing = false
-    @Published var modelCatalogs: [String: GatewayModelCatalog] = [:]
-    @Published var globalModelCatalog: GatewayModelCatalog?
-    @Published var sessionPermissions: [String: GatewaySessionPermissions] = [:]
-    @Published var contextSnapshots: [String: GatewayContextSnapshot] = [:]
-    @Published var sessionStatsSnapshots: [String: GatewaySessionStatsSnapshot] = [:]
-    @Published var sessionControlLoadingKinds: Set<String> = []
-    @Published var agentPresets: [GatewayAgentPreset] = []
-    @Published var agentPresetsAuthorable = false
-    @Published var agentPresetsHasDocument = false
-    @Published var agentPresetDefault: String?
-    @Published var permissionDefault: String?
-    @Published var defaultModelSelection: GatewayModelSelection?
-    @Published var defaultConfigurationLoadingKinds: Set<String> = []
+    @Published private(set) var modelCatalogs: [String: GatewayModelCatalog] = [:]
+    @Published private(set) var globalModelCatalog: GatewayModelCatalog?
+    @Published private(set) var sessionPermissions: [String: GatewaySessionPermissions] = [:]
+    @Published private(set) var contextSnapshots: [String: GatewayContextSnapshot] = [:]
+    @Published private(set) var sessionStatsSnapshots: [String: GatewaySessionStatsSnapshot] = [:]
+    @Published private(set) var sessionControlLoadingKinds: Set<String> = []
+    @Published private(set) var agentPresets: [GatewayAgentPreset] = []
+    @Published private(set) var agentPresetsAuthorable = false
+    @Published private(set) var agentPresetsHasDocument = false
+    @Published private(set) var agentPresetDefault: String?
+    @Published private(set) var permissionDefault: String?
+    @Published private(set) var defaultModelSelection: GatewayModelSelection?
+    @Published private(set) var defaultConfigurationLoadingKinds: Set<String> = []
     @Published private(set) var pendingQuestionRequests: [GatewayPendingQuestionRequest] = []
     @Published private(set) var questionRequestStatuses: [String: GatewayQuestionRequestStatus] = [:]
     @Published private(set) var supportsImages = false
@@ -216,11 +216,13 @@ final class AppStore: ObservableObject {
         appLanguage = AppLanguage.load()
         selectedWorkspaceId = preferences.selectedWorkspaceID
         endpoint = preferences.endpoint
+        // stage9-kmp-write-scope: initialization-begin
         selectedSessionId = kmpSessionListStore.snapshot.selectedSessionId
         sessions = kmpSessionListStore.snapshot.persistedSessions
         archivedSessionIds = kmpSessionListStore.snapshot.archivedSessionIDSet
         pendingQuestionRequests = kmpQuestionStore.snapshot.pendingRequests
         questionRequestStatuses = kmpQuestionStore.snapshot.platformStatuses
+        // stage9-kmp-write-scope: initialization-end
         applySessionControlSnapshot(kmpSessionControlStore.snapshot)
         if let error = kmpSessionListStore.initializationError {
             lastError = error.localizedDescription
@@ -1369,6 +1371,7 @@ final class AppStore: ObservableObject {
             lastError = error.localizedDescription
             return
         }
+        // stage9-kmp-write-scope: session-list-begin
         let mappedSessions = snapshot.persistedSessions
         if mappedSessions != sessions {
             sessions = mappedSessions
@@ -1381,6 +1384,7 @@ final class AppStore: ObservableObject {
         if snapshot.selectedSessionId != selectedSessionId {
             selectedSessionId = snapshot.selectedSessionId
         }
+        // stage9-kmp-write-scope: session-list-end
     }
     @discardableResult
     private func reduceQuestion(_ intent: KMPQuestionIntent) -> KMPQuestionTransition {
@@ -1389,11 +1393,13 @@ final class AppStore: ObservableObject {
             lastError = error.localizedDescription
             return transition
         }
+        // stage9-kmp-write-scope: question-begin
         if transition.snapshot.pendingRequests != pendingQuestionRequests {
             pendingQuestionRequests = transition.snapshot.pendingRequests
         }
         let statuses = transition.snapshot.platformStatuses
         if statuses != questionRequestStatuses { questionRequestStatuses = statuses }
+        // stage9-kmp-write-scope: question-end
         return transition
     }
     private func executeQuestionEffect(_ effect: KMPQuestionEffect?) {
@@ -1480,6 +1486,7 @@ final class AppStore: ObservableObject {
         return transition
     }
     private func applySessionControlSnapshot(_ state: KMPSessionControlSnapshot) {
+        // stage9-kmp-write-scope: session-control-begin
         if state.modelCatalogs != modelCatalogs { modelCatalogs = state.modelCatalogs }
         if state.globalModelCatalog != globalModelCatalog { globalModelCatalog = state.globalModelCatalog }
         if state.sessionPermissions != sessionPermissions { sessionPermissions = state.sessionPermissions }
@@ -1505,6 +1512,7 @@ final class AppStore: ObservableObject {
         isPendingGlobalModelsRequest = state.isPendingGlobalModelsRequest
         pendingModelSelectionSessionId = state.pendingModelSelectionSessionId
         pendingPermissionOptionsSessionId = state.pendingPermissionOptionsSessionId
+        // stage9-kmp-write-scope: session-control-end
     }
     private func cancelCompletedSessionControlTracker(
         _ kind: String,

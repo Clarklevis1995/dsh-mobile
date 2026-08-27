@@ -66,6 +66,53 @@ private enum GatewayShadowRouteFixtures {
     ]
 }
 
+private func swiftAuditRange(
+    from startMarker: String,
+    through endMarker: String,
+    in source: NSString
+) throws -> NSRange {
+    let startRange = source.range(of: startMarker)
+    guard startRange.location != NSNotFound else {
+        throw NSError(
+            domain: "Stage9SourceAudit",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "找不到源码审计起始标记：\(startMarker)"]
+        )
+    }
+    let searchRange = NSRange(
+        location: NSMaxRange(startRange),
+        length: source.length - NSMaxRange(startRange)
+    )
+    let endRange = source.range(of: endMarker, options: [], range: searchRange)
+    guard endRange.location != NSNotFound else {
+        throw NSError(
+            domain: "Stage9SourceAudit",
+            code: 2,
+            userInfo: [NSLocalizedDescriptionKey: "找不到源码审计结束标记：\(endMarker)"]
+        )
+    }
+    return NSRange(
+        location: startRange.location,
+        length: NSMaxRange(endRange) - startRange.location
+    )
+}
+
+private func stage9WriteMatches(for property: String, in source: String) throws -> [NSTextCheckingResult] {
+    let escapedProperty = NSRegularExpression.escapedPattern(for: property)
+    let nestedAccess = "(?:(?:\\s*\\[[^\\]\\n]+\\])|(?:\\s*[?!]?\\.\\s*[A-Za-z_][A-Za-z0-9_]*))*"
+    let writePatterns = [
+        "(?<![A-Za-z0-9_\\.])(?:self\\.)?\(escapedProperty)\(nestedAccess)\\s*(?:=|[+\\-*/%&|^]=)(?!=)",
+        "&\\s*(?:self\\.)?\(escapedProperty)\(nestedAccess)(?![A-Za-z0-9_])",
+        "(?<![A-Za-z0-9_\\.])(?:self\\.)?\(escapedProperty)\(nestedAccess)\\s*\\.\\s*(?:append|appendContentsOf|insert|popFirst|popLast|remove|removeAll|removeFirst|removeLast|removeSubrange|replaceSubrange|removeValue|updateValue|update|merge|swapAt|sort|reverse|shuffle|partition|reserveCapacity|formUnion|formIntersection|formSymmetricDifference|subtract|toggle|withUnsafeMutableBytes|withUnsafeMutablePointer|withUnsafeMutableBufferPointer|withContiguousMutableStorageIfAvailable)\\s*\\("
+    ]
+    return try writePatterns.flatMap { pattern in
+        try NSRegularExpression(pattern: pattern).matches(
+            in: source,
+            range: NSRange(source.startIndex..., in: source)
+        )
+    }
+}
+
 final class GatewayProtocolTests: XCTestCase {
     func testKMPSharedAdapterLinksFrameworkAndNormalizesFixture() {
         let adapter = KMPSharedAdapter()
@@ -77,6 +124,188 @@ final class GatewayProtocolTests: XCTestCase {
         )
         XCTAssertEqual(adapter.makeStore().loadManualTestFixture().sessions.count, 1)
         XCTAssertNil(adapter.decodeFrameKind("abc"))
+    }
+
+    func testStage9WriteAuditRecognizesDirectNestedInoutAndCollectionMutations() throws {
+        let defects: [(property: String, source: String)] = [
+            ("sessions", "sessions = replacement"),
+            ("sessions", "sessions += replacement"),
+            ("sessions", "sessions.append(candidate)"),
+            ("sessions", "sessions.popLast()"),
+            ("sessions", "sessions[0].title = replacement"),
+            ("modelCatalogs", "modelCatalogs[id]?.current = selection"),
+            ("modelCatalogs", "modelCatalogs[id]?.groups[0].models[0].name = replacement"),
+            ("modelCatalogs", "modelCatalogs.removeValue(forKey: id)"),
+            ("pendingQuestionRequests", "pendingQuestionRequests.swapAt(0, 1)"),
+            ("questionRequestStatuses", "consume(&questionRequestStatuses)"),
+            ("sessions", "consume(&sessions[0])"),
+            ("sessions", "mutate(&sessions[0].title)"),
+            ("modelCatalogs", "mutate(&self.modelCatalogs[id]!.groups[0])"),
+            ("pendingModelsSessionId", "pendingModelsSessionId = rogueSession"),
+            ("isPendingGlobalModelsRequest", "isPendingGlobalModelsRequest = true"),
+            ("pendingModelSelectionSessionId", "pendingModelSelectionSessionId = rogueSession"),
+            ("pendingPermissionOptionsSessionId", "pendingPermissionOptionsSessionId = rogueSession")
+        ]
+        for defect in defects {
+            XCTAssertFalse(
+                try stage9WriteMatches(for: defect.property, in: defect.source).isEmpty,
+                "静态写边界门禁必须识别：\(defect.source)"
+            )
+        }
+        XCTAssertTrue(
+            try stage9WriteMatches(for: "sessions", in: "let count = sessions.count").isEmpty,
+            "只读属性访问不得被误判为写入"
+        )
+    }
+
+    func testStage9ProductSourcesKeepKMPAsTheOnlyBasicDomainWriter() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let productRoot = repositoryRoot.appendingPathComponent("DeepSeekHarnessMobile")
+        let enumerator = try XCTUnwrap(
+            FileManager.default.enumerator(
+                at: productRoot,
+                includingPropertiesForKeys: nil
+            )
+        )
+        let sourceURLs = enumerator.compactMap { item -> URL? in
+            guard let url = item as? URL, url.pathExtension == "swift" else { return nil }
+            return url
+        }
+        XCTAssertFalse(sourceURLs.isEmpty)
+
+        let legacyReducerDefinitions = Set([
+            productRoot.appendingPathComponent("Core/SessionListReducer.swift").standardizedFileURL.path,
+            productRoot.appendingPathComponent("Core/QuestionReducer.swift").standardizedFileURL.path,
+            productRoot.appendingPathComponent("Core/SessionControlReducer.swift").standardizedFileURL.path
+        ])
+        let nonReducerSources = sourceURLs.filter {
+            !legacyReducerDefinitions.contains($0.standardizedFileURL.path)
+        }
+        for reducerSymbol in [
+            "SessionListReducer",
+            "QuestionReducer",
+            "SessionControlReducer"
+        ] {
+            let referencePattern = try NSRegularExpression(
+                pattern: "\\b\(NSRegularExpression.escapedPattern(for: reducerSymbol))\\b"
+            )
+            for sourceURL in nonReducerSources {
+                let source = try String(contentsOf: sourceURL, encoding: .utf8)
+                let fullRange = NSRange(source.startIndex..., in: source)
+                XCTAssertNil(
+                    referencePattern.firstMatch(in: source, range: fullRange),
+                    "阶段 9 已收口，除保留的 Reducer 定义外，产品 Swift 源不得引用 \(reducerSymbol)：\(sourceURL.path)"
+                )
+            }
+        }
+
+        let identifierPattern = try NSRegularExpression(pattern: "\\b[A-Za-z_][A-Za-z0-9_]*\\b")
+        let rollbackTerms = ["use", "enable", "disable", "prefer", "force", "flag", "fallback", "rollback", "legacy"]
+        for sourceURL in sourceURLs {
+            let source = try String(contentsOf: sourceURL, encoding: .utf8)
+            let fullRange = NSRange(source.startIndex..., in: source)
+            let suspiciousIdentifiers = identifierPattern.matches(in: source, range: fullRange).compactMap { match -> String? in
+                guard let range = Range(match.range, in: source) else { return nil }
+                let identifier = String(source[range])
+                let normalized = identifier.lowercased()
+                guard normalized.contains("kmp") || normalized.contains("swift") else { return nil }
+                return rollbackTerms.contains(where: normalized.contains) ? identifier : nil
+            }
+            XCTAssertTrue(
+                suspiciousIdentifiers.isEmpty,
+                "阶段 9 人工验收后不得引入疑似 KMP/Swift 运行时切换标识符：\(sourceURL.path) \(suspiciousIdentifiers)"
+            )
+        }
+
+        let appStoreSource = try String(
+            contentsOf: productRoot.appendingPathComponent("Core/AppStore.swift"),
+            encoding: .utf8
+        )
+        for requiredKMPWritePath in [
+            "kmpSessionListStore.reduce",
+            "kmpQuestionStore.reduce",
+            "kmpSessionControlStore.reduce"
+        ] {
+            XCTAssertTrue(
+                appStoreSource.contains(requiredKMPWritePath),
+                "AppStore 必须继续通过 KMP 提交基础领域状态：\(requiredKMPWritePath)"
+            )
+        }
+
+        let appStoreNSString = appStoreSource as NSString
+        let allowedAssignmentScopes = try Dictionary(
+            uniqueKeysWithValues: ["initialization", "session-list", "question", "session-control"].map { name in
+                (
+                    name,
+                    try swiftAuditRange(
+                        from: "// stage9-kmp-write-scope: \(name)-begin",
+                        through: "// stage9-kmp-write-scope: \(name)-end",
+                        in: appStoreNSString
+                    )
+                )
+            }
+        )
+        let migratedProperties: [String: Set<String>] = [
+            "selectedSessionId": ["initialization", "session-list"],
+            "sessions": ["initialization", "session-list"],
+            "archivedSessionIds": ["initialization", "session-list"],
+            "pendingQuestionRequests": ["initialization", "question"],
+            "questionRequestStatuses": ["initialization", "question"],
+            "modelCatalogs": ["session-control"],
+            "globalModelCatalog": ["session-control"],
+            "sessionPermissions": ["session-control"],
+            "contextSnapshots": ["session-control"],
+            "sessionStatsSnapshots": ["session-control"],
+            "sessionControlLoadingKinds": ["session-control"],
+            "agentPresets": ["session-control"],
+            "agentPresetsAuthorable": ["session-control"],
+            "agentPresetsHasDocument": ["session-control"],
+            "agentPresetDefault": ["session-control"],
+            "permissionDefault": ["session-control"],
+            "defaultModelSelection": ["session-control"],
+            "defaultConfigurationLoadingKinds": ["session-control"],
+            "pendingModelsSessionId": ["session-control"],
+            "isPendingGlobalModelsRequest": ["session-control"],
+            "pendingModelSelectionSessionId": ["session-control"],
+            "pendingPermissionOptionsSessionId": ["session-control"]
+        ]
+        let privateRoutingProperties: Set<String> = [
+            "pendingModelsSessionId",
+            "isPendingGlobalModelsRequest",
+            "pendingModelSelectionSessionId",
+            "pendingPermissionOptionsSessionId"
+        ]
+        for (property, allowedScopes) in migratedProperties {
+            if privateRoutingProperties.contains(property) {
+                XCTAssertTrue(
+                    appStoreSource.contains("private var \(property)"),
+                    "已迁移 SessionControl 路由字段必须保持私有：\(property)"
+                )
+            } else {
+                XCTAssertTrue(
+                    appStoreSource.contains("@Published private(set) var \(property)"),
+                    "已迁移 snapshot 属性必须使用 private(set) 限制外部写入：\(property)"
+                )
+            }
+            let writeMatches = try stage9WriteMatches(for: property, in: appStoreSource)
+            for match in writeMatches {
+                let lineRange = appStoreNSString.lineRange(for: match.range)
+                let line = appStoreNSString.substring(with: lineRange)
+                if line.contains("@Published private(set) var \(property)")
+                    || line.contains("private var \(property)") {
+                    continue
+                }
+                let enclosingScopes = allowedAssignmentScopes.compactMap { name, range in
+                    NSLocationInRange(match.range.location, range) ? name : nil
+                }
+                XCTAssertTrue(
+                    enclosingScopes.contains(where: allowedScopes.contains),
+                    "\(property) 只能在初始化或指定 KMP snapshot 发布函数写入，实际位置：\(line.trimmingCharacters(in: .whitespacesAndNewlines))"
+                )
+            }
+        }
     }
 
     @MainActor
