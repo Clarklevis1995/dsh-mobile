@@ -290,7 +290,7 @@ xcodebuild test \
 
 ### 2026-08-27
 
-- 第三轮人工核验确认模型/权限控制已进入真实请求链路，但切换权限被宿主拒绝：`commands/execute` 的新版参数 descriptor 要求必填 `images`。问题位于同级 `dsh-plugin-mobile-gateway`，并非 KMP Reducer/effect；Gateway 已在 `/permission` 调用中补充 `images: []`，其 53 个 dispatch 用例及鉴权、配对、LAN 全套测试通过。需重启实际 Gateway 后继续人工核验。
+- 第三轮人工核验确认模型/权限控制已进入真实请求链路，但切换权限被宿主拒绝：`commands/execute` 的新版参数 descriptor 要求必填 `images`。问题位于同级 `dsh-plugin-mobile-gateway`，并非 KMP Reducer/effect；Gateway 已在 `/permission` 调用中补充 `images: []`，其 53 个 dispatch 用例及鉴权、配对、LAN 全套测试通过，并已用本地 `file:` 源安装到本机 `web` profile。需完整重启实际 Gateway 后继续人工核验。
 - 第二轮真实 Gateway 核验继续出现 `models` 超时和 `response-correlation-quarantined: permission-options`。对照 `dsh-plugin-mobile-gateway` 实现确认：`models`、`permission-options` 成功帧不会回显客户端 request token 或 `sessionId`，因此永久 quarantine/跨 generation 强制 session 关联虽然能拒绝理论上的迟到帧，却会拒绝正常产品响应并让一次超时扩大为重连前持续不可用。
 - SessionControl 关联策略改为协议可实现的边界：每个 kind 仍只有一个 active generation；缺少身份字段的响应绑定该 active，请求明确携带错误 session 时拒绝；超时/失败原子结束当前 generation并允许 latest queued 或后续人工刷新继续，不再永久 quarantine。无 token 协议无法数学上区分极晚旧响应，依赖 Gateway“每请求单终态响应”约束，这是恢复功能与避免永久不可用之间的明确取舍。
 - 更新 Kotlin/Swift 回归用例，覆盖跨 session 切换后的 legacy nil-session 响应、显式旧 session 拒绝、timeout 后无需重连即可重试，以及无 token 错误立即结束 active 并展示真实原因。最终 KMP 44 项、iOS Simulator 94 项均为 0 失败，Android 单测/APK 与 iPhoneOS Release 构建成功；仍等待人工复验，不进入 9.5。
