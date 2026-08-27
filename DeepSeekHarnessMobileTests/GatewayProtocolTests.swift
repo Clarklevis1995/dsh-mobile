@@ -400,6 +400,39 @@ final class ConversationReconciliationTests: XCTestCase {
         XCTAssertEqual(ConversationReconciliation.reconcileShouldLoadHistory(.skipLoading), false)
     }
 
+    func testTransportReactivationForcesHistoryReload() {
+        // The host's updatedAt only advances on creation or a new human
+        // prompt, so a session whose turn streamed while the transport was
+        // down compares as "current" (.skipLoading) despite the missed
+        // output. A transport-generation re-activation must reload anyway;
+        // loadHistory's in-flight guard prevents stacking.
+        XCTAssertEqual(
+            ConversationReconciliation.activationShouldLoadHistory(
+                .skipLoading, isTransportReactivation: true
+            ),
+            true
+        )
+        XCTAssertEqual(
+            ConversationReconciliation.activationShouldLoadHistory(
+                .needsBaseline, isTransportReactivation: true
+            ),
+            true
+        )
+        XCTAssertEqual(
+            ConversationReconciliation.activationShouldLoadHistory(
+                .reloadHistory, isTransportReactivation: true
+            ),
+            true
+        )
+        // Plain navigation pushes keep the watermark policy.
+        XCTAssertEqual(
+            ConversationReconciliation.activationShouldLoadHistory(
+                .skipLoading, isTransportReactivation: false
+            ),
+            false
+        )
+    }
+
     // MARK: - Open-conversation disposition (archived pop / missing notice)
 
     private func disposition(

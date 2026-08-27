@@ -94,8 +94,21 @@ enum ConversationReconciliation {
 
     /// Activation (conversation push, transport `hello`): the one path allowed
     /// to establish a first baseline for a session with no local content.
-    static func activationShouldLoadHistory(_ decision: HistoryDecision) -> Bool {
-        decision != .skipLoading
+    ///
+    /// A transport-generation re-activation (reconnect after backgrounding)
+    /// additionally forces a reload for already-covered sessions: the host's
+    /// `updatedAt` only advances on creation or a new HUMAN PROMPT
+    /// (sessionListUpdatedAt = max(createdAt, lastPromptAt)), so a session
+    /// whose turn kept streaming while the app was backgrounded compares as
+    /// "in sync" against a watermark derived from the prompt's timestamp —
+    /// even though output produced after backgrounding was never received.
+    /// Gaps can only form while the transport is down, and every transport
+    /// death ends with a fresh `hello`, so forcing the fetch here closes
+    /// every gap the watermark cannot see. The seq-deduplicating rebase
+    /// makes a redundant fetch invisible, and loadHistory's own in-flight
+    /// guard prevents stacking.
+    static func activationShouldLoadHistory(_ decision: HistoryDecision, isTransportReactivation: Bool = false) -> Bool {
+        isTransportReactivation || decision != .skipLoading
     }
 
     /// Reconcile (every `sessions` frame): never fetches for a session it
@@ -250,6 +263,13 @@ final class AppStore: ObservableObject {
     /// and by resetOutstandingRequests on transport failure. Starts stale:
     /// cold launch has no archived knowledge at all.
     private var archivedSessionIdsStale = true
+    /// Set when a transport `hello` re-activates the prepared conversation.
+    /// The re-activation must reload history even for sessions the activity
+    /// watermark considers current: `updatedAt` only advances on new human
+    /// prompts, so streamed output missed while disconnected is invisible
+    /// to the watermark comparison. See
+    /// ConversationReconciliation.activationShouldLoadHistory.
+    private var activationIsTransportReactivation = false
     private var conversationProjectionDrivers: [String: ConversationProjectionDriver] = [:]
     private var conversationTimelines: [String: ConversationTimeline] = [:]
     /// Invalidates an in-flight cold projection when a completed history
@@ -541,6 +561,8 @@ final class AppStore: ObservableObject {
               gateway.state.isConnected else { return }
 
         activeConversationActivationKey = activationKey
+        let isTransportReactivation = activationIsTransportReactivation
+        activationIsTransportReactivation = false
         guard !Task.isCancelled else { return }
 
         if let sessionID {
@@ -561,7 +583,17 @@ final class AppStore: ObservableObject {
 
         if let sessionID,
            let session = sessions.first(where: { $0.id == sessionID }),
-           shouldRefreshHistory(for: session) {
+           ConversationReconciliation.activationShouldLoadHistory(
+               historyDecision(for: session),
+               isTransportReactivation: isTransportReactivation
+           ) {
+            loadHistory(for: sessionID)
+        } else if let sessionID, isTransportReactivation,
+                  sessions.first(where: { $0.id == sessionID }) == nil {
+            // The summary list has not arrived yet on this generation (or the
+            // session is genuinely gone). Reconcile on the sessions frame
+            // disambiguates deletion, but the forced reload cannot wait for
+            // the stale summary: fetch for a known-id session regardless.
             loadHistory(for: sessionID)
         }
 
@@ -838,6 +870,12 @@ final class AppStore: ObservableObject {
                 finishHistoryLoading(staleSessionId)
             }
             if preparedConversationActivationKey != nil {
+                // Mark this as a transport-generation re-activation so the
+                // open conversation force-reloads history: the activity
+                // watermark cannot see output that streamed while the
+                // transport was down (updatedAt advances only on new human
+                // prompts on the host side).
+                activationIsTransportReactivation = true
                 Task { [weak self] in
                     guard let self else { return }
                     await self.activatePreparedConversation(sessionID: self.selectedSessionId)
