@@ -24,6 +24,11 @@ data class SharedSessionControlEffect(
 )
 
 data class SharedSessionControlResult(
+    /**
+     * 初始化/显式 snapshot() 返回完整 SessionControlState；已提交事务返回
+     * SharedSessionControlPatch。未提交且无显式快照时为 null。Swift 必须根据 committed
+     * 选择解码器，不得将 patch 当作完整快照。
+     */
     val snapshotJson: String?,
     val effectsJson: String,
     val errorCode: String?,
@@ -38,6 +43,54 @@ data class SharedSessionControlResult(
 ) {
     val isSuccess: Boolean get() = errorCode == null
 }
+
+/** 请求关联状态较小，作为一个原子分片替换，避免局部字段组合成非法状态。 */
+@Serializable
+data class SharedSessionControlControlPatch(
+    val loadingKinds: Set<String>,
+    val defaultConfigurationLoadingKinds: Set<String>,
+    val pendingModelsSessionId: String?,
+    val isPendingGlobalModelsRequest: Boolean,
+    val pendingModelSelectionSessionId: String?,
+    val pendingPermissionOptionsSessionId: String?,
+    val requestTokens: Map<String, String>,
+    val activeRequestTargets: Map<String, SessionControlRequestTarget>,
+    val queuedRequestTargets: Map<String, SessionControlRequestTarget>,
+    val previousCompletedRequestTargets: Map<String, SessionControlRequestTarget>,
+    val explicitSessionRequiredKinds: Set<String>,
+    val drainingRequestKinds: Set<String>,
+    val quarantinedRequestKinds: Set<String>
+)
+
+/**
+ * SessionControl 跨边界 schema 2 增量协议。大 map 只传受影响 session；nullable 全局值用
+ * `*Changed` 区分“未变更”与“改为 null”。
+ */
+@Serializable
+data class SharedSessionControlPatch(
+    val schema: Int = 2,
+    val modelCatalogsUpsert: Map<String, GatewayModelCatalog> = emptyMap(),
+    val modelCatalogsRemove: Set<String> = emptySet(),
+    val sessionPermissionsUpsert: Map<String, GatewaySessionPermissions> = emptyMap(),
+    val sessionPermissionsRemove: Set<String> = emptySet(),
+    val contextSnapshotsUpsert: Map<String, GatewayContextSnapshot> = emptyMap(),
+    val contextSnapshotsRemove: Set<String> = emptySet(),
+    val sessionStatsSnapshotsUpsert: Map<String, GatewaySessionStatsSnapshot> = emptyMap(),
+    val sessionStatsSnapshotsRemove: Set<String> = emptySet(),
+    val globalModelCatalogChanged: Boolean = false,
+    val globalModelCatalog: GatewayModelCatalog? = null,
+    val agentPresetsChanged: Boolean = false,
+    val agentPresets: List<GatewayAgentPreset>? = null,
+    val agentPresetsAuthorable: Boolean? = null,
+    val agentPresetsHasDocument: Boolean? = null,
+    val agentPresetDefaultChanged: Boolean = false,
+    val agentPresetDefault: String? = null,
+    val permissionDefaultChanged: Boolean = false,
+    val permissionDefault: String? = null,
+    val defaultModelSelectionChanged: Boolean = false,
+    val defaultModelSelection: GatewayModelSelection? = null,
+    val control: SharedSessionControlControlPatch? = null
+)
 
 /**
  * SessionControl 唯一业务状态源。网关不回显 request token，因此同 kind 严格串行：
@@ -240,6 +293,44 @@ class SharedSessionControlStore {
         return reduce("merge-permission-projection", SessionControlAction.PermissionSelected(sessionId, value))
     }
 
+    fun clearSessionData(sessionId: String): SharedSessionControlResult = clearSessionsData(setOf(sessionId))
+
+    fun clearSessionsData(sessionIdsJson: String): SharedSessionControlResult = try {
+        clearSessionsData(wireJson.decodeFromString<List<String>>(sessionIdsJson).toSet())
+    } catch (error: Throwable) {
+        failure("clear-sessions-data", error)
+    }
+
+    /**
+     * 单事务批量清理业务分片。属于清理集合的 active generation 进入 drain，保留
+     * token/RequestTracker 等待其唯一终态；同批 queued target 先删除，绝不误启动。
+     */
+    private fun clearSessionsData(sessionIds: Set<String>): SharedSessionControlResult {
+        if (sessionIds.isEmpty() || sessionIds.any { it.isBlank() }) {
+            return rejected("invalid-session-ids", sessionIds.joinToString(","))
+        }
+        return mutate("clear-session-data") {
+            val newlyDrainingKinds = state.activeRequestTargets
+                .filterValues { it.sessionId in sessionIds }
+                .keys
+            val next = synchronizePendingTargets(
+                state.copy(
+                    modelCatalogs = state.modelCatalogs.filterKeys { it !in sessionIds },
+                    sessionPermissions = state.sessionPermissions.filterKeys { it !in sessionIds },
+                    contextSnapshots = state.contextSnapshots.filterKeys { it !in sessionIds },
+                    sessionStatsSnapshots = state.sessionStatsSnapshots.filterKeys { it !in sessionIds },
+                    queuedRequestTargets = state.queuedRequestTargets.filterValues { it.sessionId !in sessionIds },
+                    previousCompletedRequestTargets = state.previousCompletedRequestTargets
+                        .filterValues { it.sessionId !in sessionIds },
+                    // drain 必须接受真实协议中的 nil-session 终态，不能沿用 explicit 约束。
+                    explicitSessionRequiredKinds = state.explicitSessionRequiredKinds - newlyDrainingKinds,
+                    drainingRequestKinds = state.drainingRequestKinds + newlyDrainingKinds
+                )
+            )
+            Transition(next, applied = true)
+        }
+    }
+
     fun requestFinished(kind: String, isDefault: Boolean, requestToken: String?) =
         terminate(kind, isDefault, requestToken)
     fun requestTimedOut(kind: String, isDefault: Boolean, requestToken: String?) =
@@ -255,6 +346,7 @@ class SharedSessionControlStore {
             queuedRequestTargets = emptyMap(),
             previousCompletedRequestTargets = emptyMap(),
             explicitSessionRequiredKinds = emptySet(),
+            drainingRequestKinds = emptySet(),
             quarantinedRequestKinds = emptySet()
         )), applied = true)
     }
@@ -262,6 +354,7 @@ class SharedSessionControlStore {
     private fun request(target: SessionControlRequestTarget, isConnected: Boolean): SharedSessionControlResult {
         if (!isConnected) return rejected("not-connected", target.kind)
         if (!target.hasCompletePayload()) return rejected("invalid-request-target", target.kind)
+        if (target.kind in state.quarantinedRequestKinds) return rejected("request-quarantined", target.kind)
         val active = state.activeRequestTargets[target.kind]
         if (active != null) {
             if (active == target) {
@@ -294,6 +387,29 @@ class SharedSessionControlStore {
         if (active.isDefault != isDefault || requestToken == null || state.requestTokens[kind] != requestToken) {
             return unchanged()
         }
+        if (kind in state.drainingRequestKinds) {
+            return mutate("terminate-draining-$kind") {
+                val next = synchronizePendingTargets(
+                    state.copy(
+                        loadingKinds = state.loadingKinds - kind,
+                        defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds - kind,
+                        requestTokens = state.requestTokens - kind,
+                        activeRequestTargets = state.activeRequestTargets - kind,
+                        queuedRequestTargets = state.queuedRequestTargets - kind,
+                        previousCompletedRequestTargets = state.previousCompletedRequestTargets - kind,
+                        explicitSessionRequiredKinds = state.explicitSessionRequiredKinds - kind,
+                        drainingRequestKinds = state.drainingRequestKinds - kind,
+                        quarantinedRequestKinds = state.quarantinedRequestKinds + kind
+                    )
+                )
+                Transition(
+                    next,
+                    applied = true,
+                    completedKind = kind,
+                    completedRequestToken = requestToken
+                )
+            }
+        }
         return mutate("terminate-$kind") {
             // Mobile Gateway 的 control 响应不回显客户端 request token，models 与
             // permission-options 也不回显 sessionId。超时/失败只能结束当前 active
@@ -307,6 +423,12 @@ class SharedSessionControlStore {
         kind: String, explicitTarget: SessionControlRequestTarget?, action: SessionControlAction?
     ): SharedSessionControlResult {
         val active = state.activeRequestTargets[kind] ?: return unchanged()
+        if (kind in state.drainingRequestKinds) {
+            if (explicitTarget != null && !sameResponseTarget(active, explicitTarget)) return unchanged()
+            // tombstone 只消费旧 generation 终态，绝不把 payload 投影回已清理会话。
+            return mutate("drain-response-$kind") { complete(state, kind, null) }
+        }
+        if (kind in state.explicitSessionRequiredKinds && explicitTarget?.sessionId == null) return unchanged()
         if (explicitTarget != null && !sameResponseTarget(active, explicitTarget)) return unchanged()
         if (action == null) return unchanged()
         return mutate("response-$kind") { complete(state, kind, action) }
@@ -315,7 +437,7 @@ class SharedSessionControlStore {
     private inline fun decodeResponse(
         kind: String, explicitTarget: SessionControlRequestTarget?, action: () -> SessionControlAction?
     ): SharedSessionControlResult = try {
-        response(kind, explicitTarget, action())
+        response(kind, explicitTarget, if (kind in state.drainingRequestKinds) null else action())
     } catch (error: Throwable) { failure(kind, error) }
 
     private fun start(base: SessionControlState, target: SessionControlRequestTarget): Transition {
@@ -333,6 +455,7 @@ class SharedSessionControlStore {
                 // sessionId。每个 kind 只有一个 active generation，因此缺失的 sessionId
                 // 必须绑定 active target；显式回显且不匹配时仍由 response() 拒绝。
                 explicitSessionRequiredKinds = base.explicitSessionRequiredKinds - target.kind,
+                drainingRequestKinds = base.drainingRequestKinds - target.kind,
                 quarantinedRequestKinds = base.quarantinedRequestKinds - target.kind
             )
         )
@@ -346,6 +469,7 @@ class SharedSessionControlStore {
     ): Transition {
         val completedTarget = base.activeRequestTargets[kind] ?: return Transition(base)
         val completedToken = base.requestTokens[kind] ?: return Transition(base)
+        val wasDraining = kind in base.drainingRequestKinds
         val reduced = action?.let { SessionControlReducer.reduce(base, it) } ?: base
         val cleared = synchronizePendingTargets(
             reduced.copy(
@@ -353,9 +477,15 @@ class SharedSessionControlStore {
                 defaultConfigurationLoadingKinds = reduced.defaultConfigurationLoadingKinds - kind,
                 requestTokens = reduced.requestTokens - kind,
                 activeRequestTargets = reduced.activeRequestTargets - kind,
-                previousCompletedRequestTargets = reduced.previousCompletedRequestTargets +
-                    (kind to completedTarget),
-                explicitSessionRequiredKinds = reduced.explicitSessionRequiredKinds - kind
+                // drain 终态只用于消费已清理会话的 tombstone。不能把被清理的
+                // sessionId 再写回 previous target，否则清理后仍会保留陈旧关联。
+                previousCompletedRequestTargets = if (wasDraining) {
+                    reduced.previousCompletedRequestTargets - kind
+                } else {
+                    reduced.previousCompletedRequestTargets + (kind to completedTarget)
+                },
+                explicitSessionRequiredKinds = reduced.explicitSessionRequiredKinds - kind,
+                drainingRequestKinds = reduced.drainingRequestKinds - kind
             )
         )
         val queued = cleared.queuedRequestTargets[kind] ?: return Transition(
@@ -455,7 +585,11 @@ class SharedSessionControlStore {
         completedKind: String? = null,
         completedRequestToken: String? = null
     ): SharedSessionControlResult {
-        val snapshotJson = if (alwaysSnapshot) wireJson.encodeToString(next) else null
+        val snapshotJson = when {
+            !alwaysSnapshot -> null
+            commit && committed -> wireJson.encodeToString(state.patchTo(next))
+            else -> wireJson.encodeToString(next)
+        }
         val effectsJson = wireJson.encodeToString(effects)
         if (commit) state = next
         return SharedSessionControlResult(
@@ -477,6 +611,60 @@ class SharedSessionControlStore {
         val completedKind: String? = null,
         val completedRequestToken: String? = null
     )
+
+    private fun SessionControlState.patchTo(next: SessionControlState): SharedSessionControlPatch =
+        SharedSessionControlPatch(
+            modelCatalogsUpsert = changedEntries(modelCatalogs, next.modelCatalogs),
+            modelCatalogsRemove = removedKeys(modelCatalogs, next.modelCatalogs),
+            sessionPermissionsUpsert = changedEntries(sessionPermissions, next.sessionPermissions),
+            sessionPermissionsRemove = removedKeys(sessionPermissions, next.sessionPermissions),
+            contextSnapshotsUpsert = changedEntries(contextSnapshots, next.contextSnapshots),
+            contextSnapshotsRemove = removedKeys(contextSnapshots, next.contextSnapshots),
+            sessionStatsSnapshotsUpsert = changedEntries(sessionStatsSnapshots, next.sessionStatsSnapshots),
+            sessionStatsSnapshotsRemove = removedKeys(sessionStatsSnapshots, next.sessionStatsSnapshots),
+            globalModelCatalogChanged = globalModelCatalog != next.globalModelCatalog,
+            globalModelCatalog = next.globalModelCatalog.takeIf { globalModelCatalog != next.globalModelCatalog },
+            agentPresetsChanged = agentPresets != next.agentPresets,
+            agentPresets = next.agentPresets.takeIf { agentPresets != next.agentPresets },
+            agentPresetsAuthorable = next.agentPresetsAuthorable.takeIf {
+                agentPresetsAuthorable != next.agentPresetsAuthorable
+            },
+            agentPresetsHasDocument = next.agentPresetsHasDocument.takeIf {
+                agentPresetsHasDocument != next.agentPresetsHasDocument
+            },
+            agentPresetDefaultChanged = agentPresetDefault != next.agentPresetDefault,
+            agentPresetDefault = next.agentPresetDefault.takeIf { agentPresetDefault != next.agentPresetDefault },
+            permissionDefaultChanged = permissionDefault != next.permissionDefault,
+            permissionDefault = next.permissionDefault.takeIf { permissionDefault != next.permissionDefault },
+            defaultModelSelectionChanged = defaultModelSelection != next.defaultModelSelection,
+            defaultModelSelection = next.defaultModelSelection.takeIf {
+                defaultModelSelection != next.defaultModelSelection
+            },
+            control = next.controlPatch().takeIf { controlPatch() != it }
+        )
+
+    private fun SessionControlState.controlPatch() = SharedSessionControlControlPatch(
+        loadingKinds,
+        defaultConfigurationLoadingKinds,
+        pendingModelsSessionId,
+        isPendingGlobalModelsRequest,
+        pendingModelSelectionSessionId,
+        pendingPermissionOptionsSessionId,
+        requestTokens,
+        activeRequestTargets,
+        queuedRequestTargets,
+        previousCompletedRequestTargets,
+        explicitSessionRequiredKinds,
+        drainingRequestKinds,
+        quarantinedRequestKinds
+    )
+
+    private fun <T> changedEntries(before: Map<String, T>, after: Map<String, T>): Map<String, T> =
+        if (before === after) emptyMap() else after.filter { (key, value) -> before[key] != value }
+
+    private fun <T> removedKeys(before: Map<String, T>, after: Map<String, T>): Set<String> =
+        if (before === after) emptySet() else before.keys - after.keys
+
     private companion object {
         val supportedPermissionPresets = setOf("read-only", "workspace-write", "danger-full-access")
         val supportedDefaultPermissionPresets = supportedPermissionPresets + "ask"

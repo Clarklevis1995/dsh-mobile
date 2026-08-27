@@ -1364,6 +1364,8 @@ final class AppStore: ObservableObject {
         reduceSessionList(.markRead(id))
     }
     private func reduceSessionList(_ action: SessionListAction) {
+        let previousSessionIDs = Set(sessions.map(\.id))
+        let previousArchivedSessionIDs = archivedSessionIds
         let snapshot: KMPSessionListSnapshot
         do {
             snapshot = try kmpSessionListStore.reduce(action)
@@ -1385,6 +1387,12 @@ final class AppStore: ObservableObject {
             selectedSessionId = snapshot.selectedSessionId
         }
         // stage9-kmp-write-scope: session-list-end
+        let removedSessionIDs = previousSessionIDs.subtracting(mappedSessions.map(\.id))
+        let newlyArchivedSessionIDs = mappedArchivedSessionIDs.subtracting(previousArchivedSessionIDs)
+        let clearedSessionIDs = removedSessionIDs.union(newlyArchivedSessionIDs)
+        if !clearedSessionIDs.isEmpty {
+            dispatchSessionControl(.clearSessionsData(sessionIDs: clearedSessionIDs))
+        }
     }
     @discardableResult
     private func reduceQuestion(_ intent: KMPQuestionIntent) -> KMPQuestionTransition {
@@ -1481,37 +1489,76 @@ final class AppStore: ObservableObject {
     private func applySessionControlTransition(
         _ transition: KMPSessionControlTransition
     ) -> KMPSessionControlTransition {
-        applySessionControlSnapshot(transition.snapshot)
+        if let patch = transition.patch {
+            applySessionControlSnapshot(transition.snapshot, patch: patch)
+        }
         if let error = transition.error { lastError = error.localizedDescription }
         return transition
     }
-    private func applySessionControlSnapshot(_ state: KMPSessionControlSnapshot) {
+    private func applySessionControlSnapshot(
+        _ state: KMPSessionControlSnapshot,
+        patch: KMPSessionControlPatch? = nil
+    ) {
         // stage9-kmp-write-scope: session-control-begin
-        if state.modelCatalogs != modelCatalogs { modelCatalogs = state.modelCatalogs }
-        if state.globalModelCatalog != globalModelCatalog { globalModelCatalog = state.globalModelCatalog }
-        if state.sessionPermissions != sessionPermissions { sessionPermissions = state.sessionPermissions }
-        if state.contextSnapshots != contextSnapshots { contextSnapshots = state.contextSnapshots }
-        if state.sessionStatsSnapshots != sessionStatsSnapshots { sessionStatsSnapshots = state.sessionStatsSnapshots }
-        if state.agentPresets != agentPresets { agentPresets = state.agentPresets }
-        if state.agentPresetsAuthorable != agentPresetsAuthorable {
+        if patch == nil
+            || patch?.modelCatalogsUpsert.isEmpty == false
+            || patch?.modelCatalogsRemove.isEmpty == false {
+            modelCatalogs = state.modelCatalogs
+        }
+        if patch == nil || patch?.globalModelCatalogChanged == true {
+            globalModelCatalog = state.globalModelCatalog
+        }
+        if patch == nil
+            || patch?.sessionPermissionsUpsert.isEmpty == false
+            || patch?.sessionPermissionsRemove.isEmpty == false {
+            sessionPermissions = state.sessionPermissions
+        }
+        if patch == nil
+            || patch?.contextSnapshotsUpsert.isEmpty == false
+            || patch?.contextSnapshotsRemove.isEmpty == false {
+            contextSnapshots = state.contextSnapshots
+        }
+        if patch == nil
+            || patch?.sessionStatsSnapshotsUpsert.isEmpty == false
+            || patch?.sessionStatsSnapshotsRemove.isEmpty == false {
+            sessionStatsSnapshots = state.sessionStatsSnapshots
+        }
+        if patch == nil || patch?.agentPresetsChanged == true { agentPresets = state.agentPresets }
+        if patch == nil || patch?.agentPresetsAuthorable != nil {
             agentPresetsAuthorable = state.agentPresetsAuthorable
         }
-        if state.agentPresetsHasDocument != agentPresetsHasDocument {
+        if patch == nil || patch?.agentPresetsHasDocument != nil {
             agentPresetsHasDocument = state.agentPresetsHasDocument
         }
-        if state.agentPresetDefault != agentPresetDefault { agentPresetDefault = state.agentPresetDefault }
-        if state.permissionDefault != permissionDefault { permissionDefault = state.permissionDefault }
-        if state.defaultModelSelection != defaultModelSelection {
+        if patch == nil || patch?.agentPresetDefaultChanged == true {
+            agentPresetDefault = state.agentPresetDefault
+        }
+        if patch == nil || patch?.permissionDefaultChanged == true {
+            permissionDefault = state.permissionDefault
+        }
+        if patch == nil || patch?.defaultModelSelectionChanged == true {
             defaultModelSelection = state.defaultModelSelection
         }
-        if state.loadingKinds != sessionControlLoadingKinds { sessionControlLoadingKinds = state.loadingKinds }
-        if state.defaultConfigurationLoadingKinds != defaultConfigurationLoadingKinds {
-            defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds
+        if patch == nil || patch?.control != nil {
+            if sessionControlLoadingKinds != state.loadingKinds {
+                sessionControlLoadingKinds = state.loadingKinds
+            }
+            if defaultConfigurationLoadingKinds != state.defaultConfigurationLoadingKinds {
+                defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds
+            }
+            if pendingModelsSessionId != state.pendingModelsSessionId {
+                pendingModelsSessionId = state.pendingModelsSessionId
+            }
+            if isPendingGlobalModelsRequest != state.isPendingGlobalModelsRequest {
+                isPendingGlobalModelsRequest = state.isPendingGlobalModelsRequest
+            }
+            if pendingModelSelectionSessionId != state.pendingModelSelectionSessionId {
+                pendingModelSelectionSessionId = state.pendingModelSelectionSessionId
+            }
+            if pendingPermissionOptionsSessionId != state.pendingPermissionOptionsSessionId {
+                pendingPermissionOptionsSessionId = state.pendingPermissionOptionsSessionId
+            }
         }
-        pendingModelsSessionId = state.pendingModelsSessionId
-        isPendingGlobalModelsRequest = state.isPendingGlobalModelsRequest
-        pendingModelSelectionSessionId = state.pendingModelSelectionSessionId
-        pendingPermissionOptionsSessionId = state.pendingPermissionOptionsSessionId
         // stage9-kmp-write-scope: session-control-end
     }
     private func cancelCompletedSessionControlTracker(

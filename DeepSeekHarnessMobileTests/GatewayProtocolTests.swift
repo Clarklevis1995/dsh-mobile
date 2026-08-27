@@ -2104,6 +2104,413 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
+    func testKMPSessionControlPatchOnlyPublishesAffectedSessionAndSkipsUnchangedMutation() {
+        let adapter = KMPSessionControlStoreAdapter()
+        _ = adapter.reduce(.projection(.contextReceived(
+            sessionID: "session-a",
+            asOfSequence: 1,
+            tokenUsage: GatewayTokenUsage(uncachedInputTokens: 1),
+            pressure: nil,
+            breakdown: nil
+        )))
+        _ = adapter.reduce(.projection(.contextReceived(
+            sessionID: "session-b",
+            asOfSequence: 2,
+            tokenUsage: GatewayTokenUsage(uncachedInputTokens: 2),
+            pressure: nil,
+            breakdown: nil
+        )))
+
+        var transition = adapter.reduce(.projection(.contextReceived(
+            sessionID: "session-a",
+            asOfSequence: 3,
+            tokenUsage: nil,
+            pressure: GatewayContextPressure(pressureTokens: 30, contextWindow: 100),
+            breakdown: nil
+        )))
+        XCTAssertNil(transition.error)
+        XCTAssertEqual(
+            Set(transition.patch?.contextSnapshotsUpsert.keys.map { $0 } ?? []),
+            ["session-a"]
+        )
+        XCTAssertTrue(transition.patch?.sessionStatsSnapshotsUpsert.isEmpty == true)
+        XCTAssertEqual(transition.snapshot.contextSnapshots["session-b"]?.asOfSeq, 2)
+
+        transition = adapter.reduce(.projection(.contextReceived(
+            sessionID: "session-a",
+            asOfSequence: 3,
+            tokenUsage: nil,
+            pressure: GatewayContextPressure(pressureTokens: 30, contextWindow: 100),
+            breakdown: nil
+        )))
+        XCTAssertNil(transition.error)
+        XCTAssertTrue(transition.applied)
+        XCTAssertFalse(transition.committed)
+        XCTAssertNil(transition.patch)
+    }
+
+    @MainActor
+    func testKMPSessionControlClearDrainsOldNilTerminalThenStartsQueuedTarget() {
+        let adapter = KMPSessionControlStoreAdapter()
+        let active = adapter.reduce(.requestModels(sessionID: "session-a", isConnected: true))
+        _ = adapter.reduce(.requestModels(sessionID: "session-b", isConnected: true))
+
+        let cleared = adapter.reduce(.clearSessionData(sessionID: "session-a"))
+        XCTAssertNil(cleared.error)
+        XCTAssertTrue(cleared.retiredRequestKinds.isEmpty)
+        XCTAssertTrue(cleared.effects.isEmpty)
+        XCTAssertEqual(active.effects.count, 1)
+        XCTAssertEqual(cleared.snapshot.requestTokens["models"], active.effects.first?.requestToken)
+        XCTAssertEqual(cleared.snapshot.activeRequestTargets["models"]?.sessionId, "session-a")
+        XCTAssertEqual(cleared.snapshot.queuedRequestTargets["models"]?.sessionId, "session-b")
+        XCTAssertTrue(cleared.snapshot.drainingRequestKinds.contains("models"))
+
+        let drained = adapter.reduce(.action(.modelsReceived(
+            sessionID: nil, current: nil, routable: true, groups: [], isGlobalRequest: false
+        )))
+        XCTAssertTrue(drained.applied)
+        XCTAssertEqual(drained.effects.count, 1)
+        XCTAssertEqual(drained.effects.first?.sessionId, "session-b")
+        XCTAssertNil(drained.snapshot.modelCatalogs["session-a"])
+        XCTAssertFalse(drained.snapshot.drainingRequestKinds.contains("models"))
+        XCTAssertFalse(drained.snapshot.explicitSessionRequiredKinds.contains("models"))
+
+        let completed = adapter.reduce(.action(.modelsReceived(
+            sessionID: nil, current: nil, routable: true, groups: [], isGlobalRequest: false
+        )))
+        XCTAssertTrue(completed.applied)
+        XCTAssertNil(completed.snapshot.activeRequestTargets["models"])
+        XCTAssertNotNil(completed.snapshot.modelCatalogs["session-b"])
+    }
+
+    @MainActor
+    func testKMPSessionControlPermissionOptionsNilTerminalUsesSameDrainBoundary() {
+        let adapter = KMPSessionControlStoreAdapter()
+        _ = adapter.reduce(.requestPermissionOptions(sessionID: "session-a", isConnected: true))
+        _ = adapter.reduce(.requestPermissionOptions(sessionID: "session-b", isConnected: true))
+        _ = adapter.reduce(.clearSessionData(sessionID: "session-a"))
+        let permissions = GatewaySessionPermissions(
+            options: [], currentValue: "read-only"
+        )
+
+        let drained = adapter.reduce(.action(.permissionsReceived(
+            sessionID: nil, permissions: permissions
+        )))
+        XCTAssertEqual(drained.effects.first?.sessionId, "session-b")
+        XCTAssertNil(drained.snapshot.sessionPermissions["session-a"])
+        let completed = adapter.reduce(.action(.permissionsReceived(
+            sessionID: nil, permissions: permissions
+        )))
+        XCTAssertTrue(completed.applied)
+        XCTAssertEqual(completed.snapshot.sessionPermissions["session-b"]?.currentValue, "read-only")
+    }
+
+    @MainActor
+    func testKMPSessionControlDrainingTimeoutQuarantinesWithoutQueuedIO() {
+        let adapter = KMPSessionControlStoreAdapter()
+        let active = adapter.reduce(.requestModels(sessionID: "session-a", isConnected: true))
+        _ = adapter.reduce(.requestModels(sessionID: "session-b", isConnected: true))
+        _ = adapter.reduce(.clearSessionData(sessionID: "session-a"))
+        let token = active.effects.first!.requestToken
+
+        let timedOut = adapter.reduce(.requestTimedOut(
+            kind: "models", isDefault: false, requestToken: token
+        ))
+        XCTAssertNil(timedOut.error)
+        XCTAssertTrue(timedOut.effects.isEmpty)
+        XCTAssertNil(timedOut.snapshot.activeRequestTargets["models"])
+        XCTAssertNil(timedOut.snapshot.queuedRequestTargets["models"])
+        XCTAssertTrue(timedOut.snapshot.quarantinedRequestKinds.contains("models"))
+
+        for sessionID in [nil, "session-a"] as [String?] {
+            let late = adapter.reduce(.action(.modelsReceived(
+                sessionID: sessionID, current: nil, routable: true, groups: [], isGlobalRequest: false
+            )))
+            XCTAssertFalse(late.applied)
+            XCTAssertNil(late.snapshot.modelCatalogs["session-a"])
+            XCTAssertTrue(late.effects.isEmpty)
+        }
+        let retry = adapter.reduce(.requestModels(sessionID: "session-b", isConnected: true))
+        guard case .bridge(let code, _) = retry.error else {
+            return XCTFail("quarantine 中不得发送 queued/retry 请求")
+        }
+        XCTAssertEqual(code, "request-quarantined")
+        XCTAssertTrue(adapter.reduce(.requestsDisconnected).snapshot.quarantinedRequestKinds.isEmpty)
+    }
+
+    @MainActor
+    func testKMPSessionControlBatchClearDropsAlsoClearedQueuedTargetWithoutEffect() {
+        for sessionIDs in [Set(["session-a", "session-b"]), Set(["session-b", "session-a"])] {
+            let adapter = KMPSessionControlStoreAdapter()
+            _ = adapter.reduce(.requestModels(sessionID: "session-a", isConnected: true))
+            _ = adapter.reduce(.requestModels(sessionID: "session-b", isConnected: true))
+
+            let cleared = adapter.reduce(.clearSessionsData(sessionIDs: sessionIDs))
+            XCTAssertNil(cleared.error)
+            XCTAssertTrue(cleared.effects.isEmpty)
+            XCTAssertEqual(cleared.snapshot.activeRequestTargets["models"]?.sessionId, "session-a")
+            XCTAssertNil(cleared.snapshot.queuedRequestTargets["models"])
+            XCTAssertTrue(cleared.snapshot.drainingRequestKinds.contains("models"))
+
+            let drained = adapter.reduce(.action(.modelsReceived(
+                sessionID: nil, current: nil, routable: true, groups: [], isGlobalRequest: false
+            )))
+            XCTAssertTrue(drained.effects.isEmpty)
+            XCTAssertNil(drained.snapshot.activeRequestTargets["models"])
+        }
+    }
+
+    @MainActor
+    func testKMPSessionControlLegacyNoOpsDoNotRequestFullSnapshot() {
+        let bridge = MalformedSessionControlBridge()
+        let adapter = KMPSessionControlStoreAdapter(bridge: bridge)
+        XCTAssertEqual(bridge.snapshotCallCount, 1)
+
+        let resolved = adapter.reduce(.action(.modelSelectionResolved))
+        let missingFinish = adapter.reduce(.action(.requestFinished("models")))
+        XCTAssertNil(resolved.patch)
+        XCTAssertNil(missingFinish.patch)
+        XCTAssertFalse(resolved.committed)
+        XCTAssertFalse(missingFinish.committed)
+        XCTAssertEqual(bridge.snapshotCallCount, 1)
+    }
+
+    @MainActor
+    func testKMPSessionControlPatchAppliesRemovalAndMalformedPatchFailsAtomically() {
+        let adapter = KMPSessionControlStoreAdapter()
+        _ = adapter.reduce(.projection(.contextReceived(
+            sessionID: "session-a", asOfSequence: 1,
+            tokenUsage: nil, pressure: nil, breakdown: nil
+        )))
+        _ = adapter.reduce(.projection(.contextReceived(
+            sessionID: "session-b", asOfSequence: 2,
+            tokenUsage: nil, pressure: nil, breakdown: nil
+        )))
+        let removed = adapter.reduce(.clearSessionData(sessionID: "session-a"))
+        XCTAssertNil(removed.error)
+        XCTAssertNil(removed.snapshot.contextSnapshots["session-a"])
+        XCTAssertEqual(removed.snapshot.contextSnapshots["session-b"]?.asOfSeq, 2)
+        XCTAssertEqual(removed.patch?.contextSnapshotsRemove, ["session-a"])
+
+        var malformed = KMPSessionControlPatch.empty
+        malformed.contextSnapshotsUpsert = ["session-b": GatewayContextSnapshot(asOfSeq: 9)]
+        let malformedAdapter = KMPSessionControlStoreAdapter(
+            bridge: PatchQueueSessionControlBridge(patches: [malformed])
+        )
+        let original = malformedAdapter.snapshot
+        let failed = malformedAdapter.reduce(.projection(.contextReceived(
+            sessionID: "session-a", asOfSequence: nil,
+            tokenUsage: nil, pressure: nil, breakdown: nil
+        )))
+        guard case .invalidPatch = failed.error else {
+            return XCTFail("跨 session 注入必须以 invalidPatch fail-closed")
+        }
+        XCTAssertFalse(malformedAdapter.isOperational)
+        XCTAssertEqual(failed.snapshot, original)
+        XCTAssertTrue(failed.effects.isEmpty)
+    }
+
+    @MainActor
+    func testKMPSessionControlClearRejectsPatchThatOmitsExistingRemoval() {
+        let adapter = KMPSessionControlStoreAdapter(
+            bridge: ClearOmissionSessionControlBridge()
+        )
+        let original = adapter.snapshot
+
+        let transition = adapter.reduce(.clearSessionData(sessionID: "session-a"))
+
+        guard case .invalidPatch = transition.error else {
+            return XCTFail("clear patch 遗漏既有 session 数据 removal 必须 fail-closed")
+        }
+        XCTAssertEqual(transition.snapshot, original)
+        XCTAssertNotNil(transition.snapshot.contextSnapshots["session-a"])
+        XCTAssertTrue(transition.effects.isEmpty)
+        XCTAssertFalse(adapter.isOperational)
+    }
+
+    @MainActor
+    func testKMPSessionControlDrainRejectsBusinessProjectionFromTombstoneResponse() {
+        let adapter = KMPSessionControlStoreAdapter(
+            bridge: DrainBusinessInjectionSessionControlBridge()
+        )
+        let original = adapter.snapshot
+
+        let transition = adapter.reduce(.action(.modelsReceived(
+            sessionID: nil, current: nil, routable: true, groups: [], isGlobalRequest: false
+        )))
+
+        guard case .invalidPatch = transition.error else {
+            return XCTFail("drain tombstone 终态携带业务 upsert 必须 fail-closed")
+        }
+        XCTAssertEqual(transition.snapshot, original)
+        XCTAssertNil(transition.snapshot.modelCatalogs["session-a"])
+        XCTAssertTrue(transition.effects.isEmpty)
+        XCTAssertFalse(adapter.isOperational)
+    }
+
+    @MainActor
+    func testKMPSessionControlPatchRejectsUnknownSchemaAndUnknownFields() throws {
+        func encoded(_ patch: KMPSessionControlPatch, mutate: (inout [String: Any]) -> Void) throws -> String {
+            var object = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: JSONEncoder().encode(patch)) as? [String: Any]
+            )
+            mutate(&object)
+            return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        }
+        var valid = KMPSessionControlPatch.empty
+        valid.contextSnapshotsUpsert = ["session-a": GatewayContextSnapshot(asOfSeq: 1)]
+        let payloads = [
+            try encoded(valid) { $0["futureTopLevel"] = true },
+            try encoded(valid) { object in
+                var contexts = object["contextSnapshotsUpsert"] as! [String: Any]
+                var context = contexts["session-a"] as! [String: Any]
+                context["futureNested"] = 1
+                contexts["session-a"] = context
+                object["contextSnapshotsUpsert"] = contexts
+            },
+            try encoded({
+                var patch = valid
+                patch.schema = 3
+                return patch
+            }()) { _ in }
+        ]
+
+        for payload in payloads {
+            let adapter = KMPSessionControlStoreAdapter(
+                bridge: RawPatchSessionControlBridge(payload: payload)
+            )
+            let original = adapter.snapshot
+            let transition = adapter.reduce(.projection(.contextReceived(
+                sessionID: "session-a", asOfSequence: 1,
+                tokenUsage: nil, pressure: nil, breakdown: nil
+            )))
+            guard case .invalidPatch = transition.error else {
+                return XCTFail("未知 schema/字段必须以 invalidPatch fail-closed")
+            }
+            XCTAssertEqual(transition.snapshot, original)
+            XCTAssertTrue(transition.effects.isEmpty)
+            XCTAssertFalse(adapter.isOperational)
+        }
+    }
+
+    @MainActor
+    func testAppStoreArchiveClearsKMPControlStateAndRejectsLateResponse() throws {
+        let bridge = SharedSessionControlStore()
+        _ = bridge.mergeContextProjection(
+            sessionId: "session-a", asOfSequence: KotlinLong(longLong: 1),
+            tokenUsageJson: nil, pressureJson: nil, breakdownJson: nil
+        )
+        _ = bridge.requestModels(sessionId: "session-a", isConnected: true)
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: [SessionSummary(
+                    id: "session-a",
+                    title: "A",
+                    lastActivity: Date(timeIntervalSince1970: 1),
+                    isRunning: false,
+                    hasUnread: false
+                )]
+            ),
+            sessionControlBridge: bridge
+        )
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"workspaces","items":[],"archivedSessionIds":["session-a"]}"#.utf8
+        )))
+        var snapshot = try JSONDecoder().decode(
+            KMPSessionControlSnapshot.self,
+            from: Data(try XCTUnwrap(bridge.snapshot().snapshotJson).utf8)
+        )
+        XCTAssertNil(snapshot.contextSnapshots["session-a"])
+        XCTAssertEqual(snapshot.activeRequestTargets["models"]?.sessionId, "session-a")
+        XCTAssertNotNil(snapshot.requestTokens["models"])
+        XCTAssertTrue(snapshot.drainingRequestKinds.contains("models"))
+
+        _ = bridge.modelsReceived(
+            sessionId: nil, currentJson: nil, routable: true,
+            groupsJson: "[]", isGlobalRequest: false
+        )
+        snapshot = try JSONDecoder().decode(
+            KMPSessionControlSnapshot.self,
+            from: Data(try XCTUnwrap(bridge.snapshot().snapshotJson).utf8)
+        )
+        XCTAssertNil(snapshot.modelCatalogs["session-a"])
+        XCTAssertNil(snapshot.activeRequestTargets["models"])
+        XCTAssertFalse(snapshot.drainingRequestKinds.contains("models"))
+    }
+
+    @MainActor
+    func testAppStoreBatchArchiveDrainsBeforeRoutingReplacementEffect() throws {
+        let bridge = SharedSessionControlStore()
+        _ = bridge.requestModels(sessionId: "session-a", isConnected: true)
+        _ = bridge.requestModels(sessionId: "session-b", isConnected: true)
+        let executor = SessionControlEffectExecutorSpy()
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: [
+                    SessionSummary(id: "session-a", title: "A", lastActivity: .now, isRunning: false, hasUnread: false),
+                    SessionSummary(id: "session-b", title: "B", lastActivity: .now, isRunning: false, hasUnread: false)
+                ]
+            ),
+            sessionControlBridge: bridge,
+            sessionControlEffectExecutor: executor
+        )
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"workspaces","items":[],"archivedSessionIds":["session-a"]}"#.utf8
+        )))
+        XCTAssertTrue(executor.modelsTargets.isEmpty)
+
+        // A 的真实 nil-session 终态只解除 drain；随后才发送仍存活的 B。
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"models","groups":[],"routable":true}"#.utf8
+        )))
+        XCTAssertEqual(executor.modelsTargets, ["session-b"])
+        XCTAssertNil(store.modelCatalogs["session-a"])
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"models","groups":[],"routable":true}"#.utf8
+        )))
+        XCTAssertNotNil(store.modelCatalogs["session-b"])
+    }
+
+    @MainActor
+    func testAppStoreBatchArchiveDoesNotStartQueuedSessionAlsoInClearSet() throws {
+        let bridge = SharedSessionControlStore()
+        _ = bridge.requestModels(sessionId: "session-a", isConnected: true)
+        _ = bridge.requestModels(sessionId: "session-b", isConnected: true)
+        let executor = SessionControlEffectExecutorSpy()
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: [
+                    SessionSummary(id: "session-a", title: "A", lastActivity: .now, isRunning: false, hasUnread: false),
+                    SessionSummary(id: "session-b", title: "B", lastActivity: .now, isRunning: false, hasUnread: false)
+                ]
+            ),
+            sessionControlBridge: bridge,
+            sessionControlEffectExecutor: executor
+        )
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"workspaces","items":[],"archivedSessionIds":["session-b","session-a"]}"#.utf8
+        )))
+        XCTAssertTrue(executor.modelsTargets.isEmpty)
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"models","groups":[],"routable":true}"#.utf8
+        )))
+        XCTAssertTrue(executor.modelsTargets.isEmpty)
+        XCTAssertNil(bridge.snapshot().snapshotJson.flatMap { Data($0.utf8) }.flatMap {
+            try? JSONDecoder().decode(KMPSessionControlSnapshot.self, from: $0)
+        }?.activeRequestTargets["models"])
+    }
+
+    @MainActor
     func testKMPSessionControlRepeatedLegacyResponsesRemainOperational() {
         let adapter = KMPSessionControlStoreAdapter()
         let permissions = GatewaySessionPermissions(
@@ -2202,7 +2609,9 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertTrue(adapter.isOperational)
 
         var transition = adapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
-        XCTAssertNotNil(transition.error)
+        guard case .invalidPatch = transition.error else {
+            return XCTFail("结构缺失的已提交 payload 必须报 invalidPatch")
+        }
         XCTAssertTrue(transition.effects.isEmpty)
         XCTAssertFalse(adapter.isOperational)
         XCTAssertEqual(bridge.requestCallCount, 1)
@@ -2221,7 +2630,18 @@ final class GatewayProtocolTests: XCTestCase {
             let original = adapter.snapshot
 
             var transition = adapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
-            XCTAssertNotNil(transition.error, "\(defect)")
+            switch defect {
+            case .uncommittedSnapshotMutation, .committedWithoutMutation:
+                guard case .invalidPatch = transition.error else {
+                    XCTFail("\(defect) 必须报 invalidPatch")
+                    continue
+                }
+            case .effectWithoutApplied, .inconsistentCompletion:
+                guard case .invalidSnapshot = transition.error else {
+                    XCTFail("\(defect) 必须报 invalidSnapshot")
+                    continue
+                }
+            }
             XCTAssertTrue(transition.effects.isEmpty, "\(defect)")
             XCTAssertEqual(transition.snapshot, original, "\(defect)")
             XCTAssertFalse(adapter.isOperational, "\(defect)")
@@ -2254,7 +2674,9 @@ final class GatewayProtocolTests: XCTestCase {
 
         let invalidAdapter = KMPSessionControlStoreAdapter(bridge: SemanticInvalidSessionControlEffectBridge())
         let invalid = invalidAdapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
-        XCTAssertNotNil(invalid.error)
+        guard case .invalidEffect = invalid.error else {
+            return XCTFail("语义不匹配 effect 必须报 invalidEffect")
+        }
         XCTAssertTrue(invalid.effects.isEmpty)
         invalid.effects.forEach(appStore.executeSessionControlEffect)
         XCTAssertEqual(executor.modelsTargets, ["session-1"])
@@ -2265,14 +2687,18 @@ final class GatewayProtocolTests: XCTestCase {
         var transition = KMPSessionControlStoreAdapter(
             bridge: IntentSmugglingSessionControlBridge()
         ).reduce(.requestModels(sessionID: "session-1", isConnected: true))
-        XCTAssertNotNil(transition.error)
+        guard case .invalidEffect = transition.error else {
+            return XCTFail("跨 session 请求 effect 必须以 invalidEffect fail-closed")
+        }
         XCTAssertTrue(transition.effects.isEmpty)
 
         let selection = GatewayModelSelection(provider: "openai", model: "gpt-5")
         transition = KMPSessionControlStoreAdapter(
             bridge: MissingPayloadSessionControlBridge()
         ).reduce(.selectModel(sessionID: "session-1", selection: selection, isConnected: true))
-        XCTAssertNotNil(transition.error)
+        guard case .invalidEffect = transition.error else {
+            return XCTFail("缺失 intent payload 的 effect 必须以 invalidEffect fail-closed")
+        }
         XCTAssertTrue(transition.effects.isEmpty)
 
         transition = KMPSessionControlStoreAdapter(
@@ -2284,8 +2710,31 @@ final class GatewayProtocolTests: XCTestCase {
             pressure: nil,
             breakdown: nil
         )))
-        XCTAssertNotNil(transition.error)
+        guard case .invalidEffect = transition.error else {
+            return XCTFail("projection 携带平台 effect 必须以 invalidEffect fail-closed")
+        }
         XCTAssertTrue(transition.effects.isEmpty)
+    }
+
+    @MainActor
+    func testKMPSessionControlRejectsCrossKindControlInjectionBeforePublishAndIO() {
+        let bridge = ControlCrossKindSmugglingSessionControlBridge()
+        let adapter = KMPSessionControlStoreAdapter(bridge: bridge)
+        let original = adapter.snapshot
+        let executor = SessionControlEffectExecutorSpy()
+
+        let transition = adapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
+        guard case .invalidPatch = transition.error else {
+            return XCTFail("当前 models intent 不得修改 permission-options control 字段")
+        }
+        XCTAssertEqual(transition.snapshot, original)
+        XCTAssertEqual(adapter.snapshot, original)
+        XCTAssertTrue(transition.effects.isEmpty)
+        transition.effects.forEach { effect in
+            if effect.kind == "models" { executor.requestModels(sessionId: effect.sessionId) }
+        }
+        XCTAssertTrue(executor.modelsTargets.isEmpty)
+        XCTAssertFalse(adapter.isOperational)
     }
 
     @MainActor
@@ -2787,13 +3236,22 @@ private final class MissingPayloadSessionControlBridge: MalformedSessionControlB
         selectionJson: String,
         isConnected: Bool
     ) -> SharedSessionControlResult {
-        forgedRequestResult(target: .init(
-            kind: "select-model",
-            isDefault: false,
-            sessionId: sessionId,
-            provider: "openai",
-            model: nil
-        ))
+        forgedRequestResult(
+            target: .init(
+                kind: "select-model",
+                isDefault: false,
+                sessionId: sessionId,
+                provider: "openai",
+                model: "gpt-5"
+            ),
+            effectTarget: .init(
+                kind: "select-model",
+                isDefault: false,
+                sessionId: sessionId,
+                provider: "openai",
+                model: nil
+            )
+        )
     }
 }
 
@@ -2806,6 +3264,193 @@ private final class ProjectionSmugglingSessionControlBridge: MalformedSessionCon
         breakdownJson: String?
     ) -> SharedSessionControlResult {
         forgedRequestResult(target: .init(kind: "context-usage", isDefault: false, sessionId: sessionId))
+    }
+}
+
+private final class ControlCrossKindSmugglingSessionControlBridge: MalformedSessionControlBridge {
+    override func requestModels(sessionId: String?, isConnected: Bool) -> SharedSessionControlResult {
+        let models = KMPSessionControlRequestTarget(
+            kind: "models", isDefault: false, sessionId: sessionId
+        )
+        let permissions = KMPSessionControlRequestTarget(
+            kind: "permission-options", isDefault: false, sessionId: "session-2"
+        )
+        var snapshot = KMPSessionControlSnapshot.empty
+        snapshot.loadingKinds = ["models", "permission-options"]
+        snapshot.pendingModelsSessionId = sessionId
+        snapshot.pendingPermissionOptionsSessionId = "session-2"
+        snapshot.requestTokens = ["models": "models:1", "permission-options": "permission-options:1"]
+        snapshot.activeRequestTargets = ["models": models, "permission-options": permissions]
+        var patch = KMPSessionControlPatch.empty
+        patch.control = snapshot.controlPatch
+        let effect = KMPSessionControlEffect(
+            kind: "models", requestKey: "models", requestToken: "models:1",
+            sessionId: sessionId, provider: nil, model: nil, reasoningEffort: nil,
+            target: nil, value: nil
+        )
+        return SharedSessionControlResult(
+            snapshotJson: Self.encode(patch),
+            effectsJson: Self.encode([effect]),
+            errorCode: nil,
+            errorMessage: nil,
+            applied: true,
+            committed: true,
+            completedKind: nil,
+            completedRequestToken: nil
+        )
+    }
+}
+
+private final class PatchQueueSessionControlBridge: MalformedSessionControlBridge {
+    private var patches: [KMPSessionControlPatch]
+
+    init(patches: [KMPSessionControlPatch]) {
+        self.patches = patches
+    }
+
+    override func mergeContextProjection(
+        sessionId: String,
+        asOfSequence: KotlinLong?,
+        tokenUsageJson: String?,
+        pressureJson: String?,
+        breakdownJson: String?
+    ) -> SharedSessionControlResult {
+        guard !patches.isEmpty else { return unimplemented() }
+        return SharedSessionControlResult(
+            snapshotJson: Self.encode(patches.removeFirst()),
+            effectsJson: "[]",
+            errorCode: nil,
+            errorMessage: nil,
+            applied: true,
+            committed: true,
+            completedKind: nil,
+            completedRequestToken: nil
+        )
+    }
+}
+
+private final class ClearOmissionSessionControlBridge: MalformedSessionControlBridge {
+    private let initial: KMPSessionControlSnapshot = {
+        var snapshot = KMPSessionControlSnapshot.empty
+        let target = KMPSessionControlRequestTarget(
+            kind: "models", isDefault: false, sessionId: "session-a"
+        )
+        snapshot.contextSnapshots["session-a"] = GatewayContextSnapshot(asOfSeq: 1)
+        snapshot.loadingKinds = ["models"]
+        snapshot.pendingModelsSessionId = "session-a"
+        snapshot.requestTokens = ["models": "models:1"]
+        snapshot.activeRequestTargets = ["models": target]
+        return snapshot
+    }()
+
+    override func snapshot() -> SharedSessionControlResult {
+        SharedSessionControlResult(
+            snapshotJson: MalformedSessionControlBridge.encode(initial),
+            effectsJson: "[]", errorCode: nil, errorMessage: nil,
+            applied: false, committed: false,
+            completedKind: nil, completedRequestToken: nil
+        )
+    }
+
+    override func clearSessionData(sessionId: String) -> SharedSessionControlResult {
+        var next = initial
+        next.drainingRequestKinds = ["models"]
+        var patch = KMPSessionControlPatch.empty
+        // 故意遗漏 contextSnapshotsRemove，模拟损坏/不兼容 KMP bridge。
+        patch.control = next.controlPatch
+        return SharedSessionControlResult(
+            snapshotJson: MalformedSessionControlBridge.encode(patch),
+            effectsJson: "[]", errorCode: nil, errorMessage: nil,
+            applied: true, committed: true,
+            completedKind: nil, completedRequestToken: nil
+        )
+    }
+}
+
+private final class DrainBusinessInjectionSessionControlBridge: MalformedSessionControlBridge {
+    private let initial: KMPSessionControlSnapshot = {
+        var snapshot = KMPSessionControlSnapshot.empty
+        let active = KMPSessionControlRequestTarget(
+            kind: "models", isDefault: false, sessionId: "session-a"
+        )
+        let queued = KMPSessionControlRequestTarget(
+            kind: "models", isDefault: false, sessionId: "session-b"
+        )
+        snapshot.loadingKinds = ["models"]
+        snapshot.pendingModelsSessionId = "session-a"
+        snapshot.requestTokens = ["models": "models:1"]
+        snapshot.activeRequestTargets = ["models": active]
+        snapshot.queuedRequestTargets = ["models": queued]
+        snapshot.drainingRequestKinds = ["models"]
+        return snapshot
+    }()
+
+    override func snapshot() -> SharedSessionControlResult {
+        SharedSessionControlResult(
+            snapshotJson: MalformedSessionControlBridge.encode(initial),
+            effectsJson: "[]", errorCode: nil, errorMessage: nil,
+            applied: false, committed: false,
+            completedKind: nil, completedRequestToken: nil
+        )
+    }
+
+    override func modelsReceived(
+        sessionId: String?, currentJson: String?, routable: Bool,
+        groupsJson: String, isGlobalRequest: Bool
+    ) -> SharedSessionControlResult {
+        let replacement = KMPSessionControlRequestTarget(
+            kind: "models", isDefault: false, sessionId: "session-b"
+        )
+        var next = KMPSessionControlSnapshot.empty
+        next.loadingKinds = ["models"]
+        next.pendingModelsSessionId = "session-b"
+        next.requestTokens = ["models": "models:2"]
+        next.activeRequestTargets = ["models": replacement]
+        var patch = KMPSessionControlPatch.empty
+        // 故意在 tombstone 终态重新注入已清理 A 的业务数据。
+        patch.modelCatalogsUpsert["session-a"] = GatewayModelCatalog(
+            current: nil, routable: true, groups: []
+        )
+        patch.control = next.controlPatch
+        let effect = KMPSessionControlEffect(
+            kind: "models", requestKey: "models", requestToken: "models:2",
+            sessionId: "session-b", provider: nil, model: nil,
+            reasoningEffort: nil, target: nil, value: nil
+        )
+        return SharedSessionControlResult(
+            snapshotJson: MalformedSessionControlBridge.encode(patch),
+            effectsJson: MalformedSessionControlBridge.encode([effect]),
+            errorCode: nil, errorMessage: nil,
+            applied: true, committed: true,
+            completedKind: "models", completedRequestToken: "models:1"
+        )
+    }
+}
+
+private final class RawPatchSessionControlBridge: MalformedSessionControlBridge {
+    private let payload: String
+
+    init(payload: String) {
+        self.payload = payload
+    }
+
+    override func mergeContextProjection(
+        sessionId: String,
+        asOfSequence: KotlinLong?,
+        tokenUsageJson: String?,
+        pressureJson: String?,
+        breakdownJson: String?
+    ) -> SharedSessionControlResult {
+        SharedSessionControlResult(
+            snapshotJson: payload,
+            effectsJson: "[]",
+            errorCode: nil,
+            errorMessage: nil,
+            applied: true,
+            committed: true,
+            completedKind: nil,
+            completedRequestToken: nil
+        )
     }
 }
 
@@ -2827,6 +3472,8 @@ private final class SemanticInvalidSessionControlEffectBridge: MalformedSessionC
         snapshot.pendingModelsSessionId = sessionId
         snapshot.requestTokens = ["models": "models:1"]
         snapshot.activeRequestTargets = ["models": target]
+        var patch = KMPSessionControlPatch.empty
+        patch.control = snapshot.controlPatch
         let effect = KMPSessionControlEffect(
             kind: "models",
             requestKey: "models",
@@ -2839,7 +3486,7 @@ private final class SemanticInvalidSessionControlEffectBridge: MalformedSessionC
             value: nil
         )
         return SharedSessionControlResult(
-            snapshotJson: Self.encode(snapshot),
+            snapshotJson: Self.encode(patch),
             effectsJson: Self.encode([effect]),
             errorCode: nil,
             errorMessage: nil,
@@ -2895,7 +3542,7 @@ private final class InvalidSessionControlResultBridge: MalformedSessionControlBr
             )
         case .committedWithoutMutation:
             return SharedSessionControlResult(
-                snapshotJson: Self.encode(KMPSessionControlSnapshot.empty),
+                snapshotJson: Self.encode(KMPSessionControlPatch.empty),
                 effectsJson: "[]",
                 errorCode: nil,
                 errorMessage: nil,
@@ -2921,12 +3568,14 @@ private final class InvalidSessionControlResultBridge: MalformedSessionControlBr
 
 private class MalformedSessionControlBridge: KMPSessionControlStoreBridging {
     fileprivate(set) var requestCallCount = 0
+    fileprivate(set) var snapshotCallCount = 0
 
     fileprivate static func encode<T: Encodable>(_ value: T) -> String {
         String(decoding: try! JSONEncoder().encode(value), as: UTF8.self)
     }
 
     func snapshot() -> SharedSessionControlResult {
+        snapshotCallCount += 1
         let json = try! JSONEncoder().encode(KMPSessionControlSnapshot.empty)
         return SharedSessionControlResult(
             snapshotJson: String(decoding: json, as: UTF8.self),
@@ -2960,6 +3609,13 @@ private class MalformedSessionControlBridge: KMPSessionControlStoreBridging {
         isConnected: Bool
     ) -> SharedSessionControlResult { unimplemented() }
 
+    func clearSessionData(sessionId: String) -> SharedSessionControlResult { unimplemented() }
+
+    func modelsReceived(
+        sessionId: String?, currentJson: String?, routable: Bool,
+        groupsJson: String, isGlobalRequest: Bool
+    ) -> SharedSessionControlResult { unimplemented() }
+
     func mergeContextProjection(
         sessionId: String,
         asOfSequence: KotlinLong?,
@@ -2968,7 +3624,10 @@ private class MalformedSessionControlBridge: KMPSessionControlStoreBridging {
         breakdownJson: String?
     ) -> SharedSessionControlResult { unimplemented() }
 
-    fileprivate func forgedRequestResult(target: KMPSessionControlRequestTarget) -> SharedSessionControlResult {
+    fileprivate func forgedRequestResult(
+        target: KMPSessionControlRequestTarget,
+        effectTarget: KMPSessionControlRequestTarget? = nil
+    ) -> SharedSessionControlResult {
         let token = "\(target.kind):forged"
         var snapshot = KMPSessionControlSnapshot.empty
         if target.isDefault {
@@ -2984,19 +3643,22 @@ private class MalformedSessionControlBridge: KMPSessionControlStoreBridging {
         }
         if target.kind == "select-model" { snapshot.pendingModelSelectionSessionId = target.sessionId }
         if target.kind == "permission-options" { snapshot.pendingPermissionOptionsSessionId = target.sessionId }
+        var patch = KMPSessionControlPatch.empty
+        patch.control = snapshot.controlPatch
+        let effectTarget = effectTarget ?? target
         let effect = KMPSessionControlEffect(
-            kind: target.kind,
-            requestKey: target.kind,
+            kind: effectTarget.kind,
+            requestKey: effectTarget.kind,
             requestToken: token,
-            sessionId: target.sessionId,
-            provider: target.provider,
-            model: target.model,
-            reasoningEffort: target.reasoningEffort,
-            target: target.target,
-            value: target.value
+            sessionId: effectTarget.sessionId,
+            provider: effectTarget.provider,
+            model: effectTarget.model,
+            reasoningEffort: effectTarget.reasoningEffort,
+            target: effectTarget.target,
+            value: effectTarget.value
         )
         return SharedSessionControlResult(
-            snapshotJson: Self.encode(snapshot),
+            snapshotJson: Self.encode(patch),
             effectsJson: Self.encode([effect]),
             errorCode: nil,
             errorMessage: nil,
@@ -3030,6 +3692,8 @@ private extension KMPSessionControlStoreBridging {
     func setPermission(sessionId: String, value: String, isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
     func saveDefaultModel(selectionJson: String, isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
     func setDefault(target: String, value: String, isConnected: Bool) -> SharedSessionControlResult { unimplemented() }
+    func clearSessionData(sessionId: String) -> SharedSessionControlResult { unimplemented() }
+    func clearSessionsData(sessionIdsJson: String) -> SharedSessionControlResult { unimplemented() }
     func agentPresetsReceived(presetsJson: String, authorable: Bool, hasDocument: Bool) -> SharedSessionControlResult { unimplemented() }
     func defaultsReceived(agentPreset: String?, permission: String?) -> SharedSessionControlResult { unimplemented() }
     func defaultModelReceived(selectionJson: String?) -> SharedSessionControlResult { unimplemented() }

@@ -59,6 +59,11 @@ data class SessionControlState(
     val previousCompletedRequestTargets: Map<String, SessionControlRequestTarget> = emptyMap(),
     /** 超时/失败后的新 generation 只接受显式 sessionId，避免无 target 迟到响应污染。 */
     val explicitSessionRequiredKinds: Set<String> = emptySet(),
+    /**
+     * 会话清理时仍等待旧 generation 单终态的 kind。drain 期间保留 active/token，
+     * 收到终态只消费不投影；超时/传输失败则进入 quarantine。
+     */
+    val drainingRequestKinds: Set<String> = emptySet(),
     /** 无法在网关协议中唯一关联的 kind，在下一次连接代际前 fail closed。 */
     val quarantinedRequestKinds: Set<String> = emptySet()
 )

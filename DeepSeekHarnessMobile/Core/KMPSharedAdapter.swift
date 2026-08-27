@@ -576,6 +576,7 @@ struct KMPSessionControlSnapshot: Codable, Equatable {
     var queuedRequestTargets: [String: KMPSessionControlRequestTarget]
     var previousCompletedRequestTargets: [String: KMPSessionControlRequestTarget]
     var explicitSessionRequiredKinds: Set<String>
+    var drainingRequestKinds: Set<String>
     var quarantinedRequestKinds: Set<String>
 
     static let empty = KMPSessionControlSnapshot(
@@ -601,6 +602,7 @@ struct KMPSessionControlSnapshot: Codable, Equatable {
         queuedRequestTargets: [:],
         previousCompletedRequestTargets: [:],
         explicitSessionRequiredKinds: [],
+        drainingRequestKinds: [],
         quarantinedRequestKinds: []
     )
 
@@ -634,6 +636,9 @@ struct KMPSessionControlSnapshot: Codable, Equatable {
             && previousIsValid
             && explicitSessionRequiredKinds.isSubset(of: activeKinds)
             && explicitSessionRequiredKinds.allSatisfy { activeRequestTargets[$0]?.sessionId != nil }
+            && drainingRequestKinds.isSubset(of: activeKinds)
+            && drainingRequestKinds.isDisjoint(with: explicitSessionRequiredKinds)
+            && drainingRequestKinds.isDisjoint(with: quarantinedRequestKinds)
             && quarantinedRequestKinds.isDisjoint(with: activeKinds)
             && quarantinedRequestKinds.isDisjoint(with: Set(queuedRequestTargets.keys))
             && pendingModelsSessionId == models?.sessionId
@@ -641,6 +646,107 @@ struct KMPSessionControlSnapshot: Codable, Equatable {
             && pendingModelSelectionSessionId == activeRequestTargets["select-model"]?.sessionId
             && pendingPermissionOptionsSessionId == activeRequestTargets["permission-options"]?.sessionId
     }
+
+    var controlPatch: KMPSessionControlControlPatch {
+        KMPSessionControlControlPatch(
+            loadingKinds: loadingKinds,
+            defaultConfigurationLoadingKinds: defaultConfigurationLoadingKinds,
+            pendingModelsSessionId: pendingModelsSessionId,
+            isPendingGlobalModelsRequest: isPendingGlobalModelsRequest,
+            pendingModelSelectionSessionId: pendingModelSelectionSessionId,
+            pendingPermissionOptionsSessionId: pendingPermissionOptionsSessionId,
+            requestTokens: requestTokens,
+            activeRequestTargets: activeRequestTargets,
+            queuedRequestTargets: queuedRequestTargets,
+            previousCompletedRequestTargets: previousCompletedRequestTargets,
+            explicitSessionRequiredKinds: explicitSessionRequiredKinds,
+            drainingRequestKinds: drainingRequestKinds,
+            quarantinedRequestKinds: quarantinedRequestKinds
+        )
+    }
+
+    fileprivate mutating func apply(_ control: KMPSessionControlControlPatch) {
+        loadingKinds = control.loadingKinds
+        defaultConfigurationLoadingKinds = control.defaultConfigurationLoadingKinds
+        pendingModelsSessionId = control.pendingModelsSessionId
+        isPendingGlobalModelsRequest = control.isPendingGlobalModelsRequest
+        pendingModelSelectionSessionId = control.pendingModelSelectionSessionId
+        pendingPermissionOptionsSessionId = control.pendingPermissionOptionsSessionId
+        requestTokens = control.requestTokens
+        activeRequestTargets = control.activeRequestTargets
+        queuedRequestTargets = control.queuedRequestTargets
+        previousCompletedRequestTargets = control.previousCompletedRequestTargets
+        explicitSessionRequiredKinds = control.explicitSessionRequiredKinds
+        drainingRequestKinds = control.drainingRequestKinds
+        quarantinedRequestKinds = control.quarantinedRequestKinds
+    }
+}
+
+struct KMPSessionControlControlPatch: Codable, Equatable {
+    var loadingKinds: Set<String>
+    var defaultConfigurationLoadingKinds: Set<String>
+    var pendingModelsSessionId: String?
+    var isPendingGlobalModelsRequest: Bool
+    var pendingModelSelectionSessionId: String?
+    var pendingPermissionOptionsSessionId: String?
+    var requestTokens: [String: String]
+    var activeRequestTargets: [String: KMPSessionControlRequestTarget]
+    var queuedRequestTargets: [String: KMPSessionControlRequestTarget]
+    var previousCompletedRequestTargets: [String: KMPSessionControlRequestTarget]
+    var explicitSessionRequiredKinds: Set<String>
+    var drainingRequestKinds: Set<String>
+    var quarantinedRequestKinds: Set<String>
+}
+
+/// KMP SessionControl 跨边界增量协议。大字典只携带受影响 session 的分片。
+struct KMPSessionControlPatch: Codable, Equatable {
+    var schema: Int
+    var modelCatalogsUpsert: [String: GatewayModelCatalog]
+    var modelCatalogsRemove: Set<String>
+    var sessionPermissionsUpsert: [String: GatewaySessionPermissions]
+    var sessionPermissionsRemove: Set<String>
+    var contextSnapshotsUpsert: [String: GatewayContextSnapshot]
+    var contextSnapshotsRemove: Set<String>
+    var sessionStatsSnapshotsUpsert: [String: GatewaySessionStatsSnapshot]
+    var sessionStatsSnapshotsRemove: Set<String>
+    var globalModelCatalogChanged: Bool
+    var globalModelCatalog: GatewayModelCatalog?
+    var agentPresetsChanged: Bool
+    var agentPresets: [GatewayAgentPreset]?
+    var agentPresetsAuthorable: Bool?
+    var agentPresetsHasDocument: Bool?
+    var agentPresetDefaultChanged: Bool
+    var agentPresetDefault: String?
+    var permissionDefaultChanged: Bool
+    var permissionDefault: String?
+    var defaultModelSelectionChanged: Bool
+    var defaultModelSelection: GatewayModelSelection?
+    var control: KMPSessionControlControlPatch?
+
+    static let empty = KMPSessionControlPatch(
+        schema: 2,
+        modelCatalogsUpsert: [:],
+        modelCatalogsRemove: [],
+        sessionPermissionsUpsert: [:],
+        sessionPermissionsRemove: [],
+        contextSnapshotsUpsert: [:],
+        contextSnapshotsRemove: [],
+        sessionStatsSnapshotsUpsert: [:],
+        sessionStatsSnapshotsRemove: [],
+        globalModelCatalogChanged: false,
+        globalModelCatalog: nil,
+        agentPresetsChanged: false,
+        agentPresets: nil,
+        agentPresetsAuthorable: nil,
+        agentPresetsHasDocument: nil,
+        agentPresetDefaultChanged: false,
+        agentPresetDefault: nil,
+        permissionDefaultChanged: false,
+        permissionDefault: nil,
+        defaultModelSelectionChanged: false,
+        defaultModelSelection: nil,
+        control: nil
+    )
 }
 
 struct KMPSessionControlRequestTarget: Codable, Equatable {
@@ -733,6 +839,8 @@ enum KMPSessionControlIntent {
     case setPermission(sessionID: String, value: String, isConnected: Bool)
     case saveDefaultModel(selection: GatewayModelSelection, isConnected: Bool)
     case setDefault(target: String, value: String, isConnected: Bool)
+    case clearSessionData(sessionID: String)
+    case clearSessionsData(sessionIDs: Set<String>)
     case requestFinished(kind: String, isDefault: Bool, requestToken: String)
     case requestTimedOut(kind: String, isDefault: Bool, requestToken: String)
     case requestFailed(kind: String, isDefault: Bool, requestToken: String)
@@ -743,6 +851,7 @@ enum KMPSessionControlStoreError: LocalizedError, Equatable {
     case encoding(String)
     case bridge(code: String, message: String?)
     case invalidSnapshot(String)
+    case invalidPatch(String)
     case invalidEffect(String)
     case initializationFailed(String)
     case runtimeFailed(String)
@@ -752,6 +861,7 @@ enum KMPSessionControlStoreError: LocalizedError, Equatable {
         case .encoding(let message): "无法编码 iOS SessionControl 输入：\(message)"
         case .bridge(let code, let message): "KMP SessionControl 失败（\(code)）：\(message ?? "无详细信息")"
         case .invalidSnapshot(let message): "无法解码 KMP SessionControl 快照：\(message)"
+        case .invalidPatch(let message): "KMP SessionControl 增量 patch 无效：\(message)"
         case .invalidEffect(let message): "无法解码 KMP SessionControl effect：\(message)"
         case .initializationFailed(let message): "KMP SessionControl 初始化失败，已停止后续状态写入：\(message)"
         case .runtimeFailed(let message): "KMP SessionControl 运行期结果失效，已停止后续状态写入：\(message)"
@@ -772,6 +882,8 @@ protocol KMPSessionControlStoreBridging: AnyObject {
     func setPermission(sessionId: String, value: String, isConnected: Bool) -> SharedSessionControlResult
     func saveDefaultModel(selectionJson: String, isConnected: Bool) -> SharedSessionControlResult
     func setDefault(target: String, value: String, isConnected: Bool) -> SharedSessionControlResult
+    func clearSessionData(sessionId: String) -> SharedSessionControlResult
+    func clearSessionsData(sessionIdsJson: String) -> SharedSessionControlResult
     func agentPresetsReceived(presetsJson: String, authorable: Bool, hasDocument: Bool) -> SharedSessionControlResult
     func defaultsReceived(agentPreset: String?, permission: String?) -> SharedSessionControlResult
     func defaultModelReceived(selectionJson: String?) -> SharedSessionControlResult
@@ -816,11 +928,14 @@ extension SharedSessionControlStore: KMPSessionControlStoreBridging {}
 
 struct KMPSessionControlTransition {
     var snapshot: KMPSessionControlSnapshot
+    /// nil 表示本次没有业务状态提交；初始化快照由 AppStore init 单独发布。
+    var patch: KMPSessionControlPatch?
     var effects: [KMPSessionControlEffect]
     var applied: Bool
     var committed: Bool
     var completedKind: String?
     var completedRequestToken: String?
+    var retiredRequestKinds: Set<String>
     var error: KMPSessionControlStoreError?
 
     func completed(_ kind: String) -> Bool {
@@ -863,9 +978,15 @@ final class KMPSessionControlStoreAdapter {
         do {
             switch intent {
             case .action(let action):
-                result = try reduceAction(action, isProjection: false)
+                guard let reduced = try reduceAction(action, isProjection: false) else {
+                    return unchanged()
+                }
+                result = reduced
             case .projection(let action):
-                result = try reduceAction(action, isProjection: true)
+                guard let reduced = try reduceAction(action, isProjection: true) else {
+                    return unchanged()
+                }
+                result = reduced
             case .defaultModelSaved(let selection):
                 result = store.defaultModelSaved(selectionJson: try selection.map(encode))
             case .requestModels(let sessionID, let connected):
@@ -894,6 +1015,10 @@ final class KMPSessionControlStoreAdapter {
                 result = store.saveDefaultModel(selectionJson: try encode(selection), isConnected: connected)
             case .setDefault(let target, let value, let connected):
                 result = store.setDefault(target: target, value: value, isConnected: connected)
+            case .clearSessionData(let sessionID):
+                result = store.clearSessionData(sessionId: sessionID)
+            case .clearSessionsData(let sessionIDs):
+                result = store.clearSessionsData(sessionIdsJson: try encode(sessionIDs.sorted()))
             case .requestFinished(let kind, let isDefault, let token):
                 result = store.requestFinished(kind: kind, isDefault: isDefault, requestToken: token)
             case .requestTimedOut(let kind, let isDefault, let token):
@@ -912,7 +1037,7 @@ final class KMPSessionControlStoreAdapter {
     private func reduceAction(
         _ action: SessionControlAction,
         isProjection: Bool
-    ) throws -> SharedSessionControlResult {
+    ) throws -> SharedSessionControlResult? {
         switch action {
         case .agentPresetsReceived(let presets, let authorable, let hasDocument):
             return store.agentPresetsReceived(
@@ -987,23 +1112,23 @@ final class KMPSessionControlStoreAdapter {
         case .requestStarted:
             throw KMPSessionControlStoreError.encoding("Swift 不得直接启动 KMP 请求状态")
         case .requestFinished(let kind):
-            guard let token = snapshot.requestTokens[kind] else { return store.snapshot() }
+            guard let token = snapshot.requestTokens[kind] else { return nil }
             return store.requestFinished(kind: kind, isDefault: false, requestToken: token)
         case .requestTimedOut(let kind):
-            guard let token = snapshot.requestTokens[kind] else { return store.snapshot() }
+            guard let token = snapshot.requestTokens[kind] else { return nil }
             return store.requestTimedOut(kind: kind, isDefault: false, requestToken: token)
         case .defaultConfigurationRequestStarted:
             throw KMPSessionControlStoreError.encoding("Swift 不得直接启动 KMP 默认配置请求状态")
         case .defaultConfigurationRequestFinished(let kind):
-            guard let token = snapshot.requestTokens[kind] else { return store.snapshot() }
+            guard let token = snapshot.requestTokens[kind] else { return nil }
             return store.requestFinished(kind: kind, isDefault: true, requestToken: token)
         case .defaultConfigurationRequestTimedOut(let kind):
-            guard let token = snapshot.requestTokens[kind] else { return store.snapshot() }
+            guard let token = snapshot.requestTokens[kind] else { return nil }
             return store.requestTimedOut(kind: kind, isDefault: true, requestToken: token)
         case .modelsRequestTargeted, .modelSelectionTargeted, .permissionOptionsTargeted:
             throw KMPSessionControlStoreError.encoding("请求 target 必须与 KMP effect 在同一事务建立")
         case .modelSelectionResolved, .permissionOptionsResolved:
-            return store.snapshot()
+            return nil
         }
     }
 
@@ -1016,16 +1141,30 @@ final class KMPSessionControlStoreAdapter {
         requiresSnapshot: Bool,
         intent: KMPSessionControlIntent?
     ) -> KMPSessionControlTransition {
-        // P3 性能债务：目前每次有状态变化都跨 KMP 边界编解码全量 JSON snapshot。
-        // 数据量上升后改为增量 patch/结构化桥接；本阶段优先保证原子校验与 fail-closed。
         guard result.isSuccess else {
             return failed(.bridge(code: result.errorCode ?? "unknown-error", message: result.errorMessage))
         }
         let oldSnapshot = snapshot
         let nextSnapshot: KMPSessionControlSnapshot
-        if let json = result.snapshotJson {
+        let patch: KMPSessionControlPatch?
+        if result.committed, let json = result.snapshotJson {
             do {
+                try validatePatchEnvelope(Data(json.utf8))
+                let decoded = try decoder.decode(KMPSessionControlPatch.self, from: Data(json.utf8))
+                nextSnapshot = try apply(decoded, to: oldSnapshot)
+                patch = decoded
+            } catch {
+                return failClosed(.invalidPatch(error.localizedDescription))
+            }
+        } else if let json = result.snapshotJson {
+            do {
+                if !requiresSnapshot,
+                   let object = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+                   object["schema"] != nil {
+                    return failClosed(.invalidPatch("patch payload 缺少 committed 信号"))
+                }
                 nextSnapshot = try decoder.decode(KMPSessionControlSnapshot.self, from: Data(json.utf8))
+                patch = nil
             } catch {
                 return failClosed(.invalidSnapshot(error.localizedDescription))
             }
@@ -1036,6 +1175,7 @@ final class KMPSessionControlStoreAdapter {
             return failClosed(.invalidSnapshot("KMP 未返回初始化快照"))
         } else {
             nextSnapshot = snapshot
+            patch = nil
         }
 
         guard !result.committed || result.snapshotJson != nil else {
@@ -1055,8 +1195,12 @@ final class KMPSessionControlStoreAdapter {
 
         // result 的控制信号必须描述同一个原子事务。任何坏信号都会永久 fail closed，
         // 且在 snapshot 提交和 effect 暴露前返回，保证零平台 I/O。
-        if !requiresSnapshot, result.committed != (nextSnapshot != oldSnapshot) {
-            return failClosed(.invalidSnapshot("committed 与提交前后快照变化不一致"))
+        if result.committed != (patch != nil) {
+            return failClosed(.invalidPatch("committed 与增量 patch 必须同时存在"))
+        }
+        if !requiresSnapshot, !result.committed, result.snapshotJson != nil, nextSnapshot != oldSnapshot {
+            // 显式 snapshot() 只能用于无变化的诊断/兼容路径，不得绕过 patch 提交状态。
+            return failClosed(.invalidSnapshot("未 committed 的完整快照不得修改状态"))
         }
         guard result.applied || (!result.committed && effects.isEmpty && completedKind == nil) else {
             return failClosed(.invalidSnapshot("未 applied 的结果不得提交、完成 generation 或产生 effect"))
@@ -1064,7 +1208,6 @@ final class KMPSessionControlStoreAdapter {
         if !effects.isEmpty && (!result.applied || !result.committed || result.snapshotJson == nil) {
             return failClosed(.invalidEffect("非空 effect 必须来自 applied + committed 的同事务快照"))
         }
-
         let stableTokenKinds = Set(oldSnapshot.requestTokens.keys).intersection(nextSnapshot.requestTokens.keys)
         guard stableTokenKinds.allSatisfy({ kind in
             oldSnapshot.requestTokens[kind] != nextSnapshot.requestTokens[kind]
@@ -1087,12 +1230,21 @@ final class KMPSessionControlStoreAdapter {
                 return failClosed(.invalidSnapshot("completed generation 与提交前后快照不一致"))
             }
         } else if !retiredKinds.isEmpty {
-            // 连接代际重置可一次清空全部请求；普通事务退役 generation 必须明确回传 kind/token。
-            guard case .some(.requestsDisconnected) = intent, effects.isEmpty else {
+            let retirementIsValid: Bool
+            switch intent {
+            case .some(.requestsDisconnected):
+                retirementIsValid = effects.isEmpty
+            default:
+                retirementIsValid = false
+            }
+            // 断线或会话清理可一次退役多个 generation；其他事务必须明确回传 kind/token。
+            guard retirementIsValid else {
                 return failClosed(.invalidSnapshot("request token 已变化但缺少 completed generation 信号"))
             }
         }
-        guard effects.count <= 1,
+        let effectCountIsValid: Bool
+        effectCountIsValid = effects.count <= 1
+        guard effectCountIsValid,
               effects.allSatisfy({
                   effectIsSemanticallyValid(
                       $0,
@@ -1104,17 +1256,765 @@ final class KMPSessionControlStoreAdapter {
               }) else {
             return failClosed(.invalidEffect("effect 与快照、request token 或 intent 语义不一致"))
         }
+        if let patch, !patchIsSemanticallyValid(
+            patch,
+            intent: intent,
+            oldSnapshot: oldSnapshot,
+            nextSnapshot: nextSnapshot
+        ) {
+            return failClosed(.invalidPatch("patch 携带了当前 intent 不允许的 session 或字段"))
+        }
 
         snapshot = nextSnapshot
         return KMPSessionControlTransition(
             snapshot: snapshot,
+            patch: patch,
             effects: effects,
             applied: result.applied,
             committed: result.committed,
             completedKind: completedKind,
             completedRequestToken: completedToken,
+            retiredRequestKinds: retiredKinds,
             error: nil
         )
+    }
+
+    private func apply(
+        _ patch: KMPSessionControlPatch,
+        to old: KMPSessionControlSnapshot
+    ) throws -> KMPSessionControlSnapshot {
+        guard patch.schema == 2 else {
+            throw KMPSessionControlStoreError.invalidSnapshot("未知 patch schema: \(patch.schema)")
+        }
+        var next = old
+        var changed = false
+
+        func validateKeys<T>(
+            _ upserts: [String: T],
+            _ removals: Set<String>,
+            oldValues: [String: T],
+            equals: (T, T) -> Bool
+        ) throws where T: Equatable {
+            guard Set(upserts.keys).isDisjoint(with: removals),
+                  upserts.keys.allSatisfy({ !$0.isEmpty }),
+                  removals.allSatisfy({ !$0.isEmpty && oldValues[$0] != nil }),
+                  upserts.allSatisfy({ key, value in
+                      guard let oldValue = oldValues[key] else { return true }
+                      return !equals(oldValue, value)
+                  }) else {
+                throw KMPSessionControlStoreError.invalidSnapshot("patch upsert/remove 重叠、冗余或引用了不存在的 key")
+            }
+        }
+
+        try validateKeys(
+            patch.modelCatalogsUpsert, patch.modelCatalogsRemove,
+            oldValues: old.modelCatalogs, equals: ==
+        )
+        try validateKeys(
+            patch.sessionPermissionsUpsert, patch.sessionPermissionsRemove,
+            oldValues: old.sessionPermissions, equals: ==
+        )
+        try validateKeys(
+            patch.contextSnapshotsUpsert, patch.contextSnapshotsRemove,
+            oldValues: old.contextSnapshots, equals: ==
+        )
+        try validateKeys(
+            patch.sessionStatsSnapshotsUpsert, patch.sessionStatsSnapshotsRemove,
+            oldValues: old.sessionStatsSnapshots, equals: ==
+        )
+
+        if !patch.modelCatalogsUpsert.isEmpty || !patch.modelCatalogsRemove.isEmpty {
+            patch.modelCatalogsRemove.forEach { next.modelCatalogs.removeValue(forKey: $0) }
+            next.modelCatalogs.merge(patch.modelCatalogsUpsert) { _, new in new }
+            changed = true
+        }
+        if !patch.sessionPermissionsUpsert.isEmpty || !patch.sessionPermissionsRemove.isEmpty {
+            patch.sessionPermissionsRemove.forEach { next.sessionPermissions.removeValue(forKey: $0) }
+            next.sessionPermissions.merge(patch.sessionPermissionsUpsert) { _, new in new }
+            changed = true
+        }
+        if !patch.contextSnapshotsUpsert.isEmpty || !patch.contextSnapshotsRemove.isEmpty {
+            patch.contextSnapshotsRemove.forEach { next.contextSnapshots.removeValue(forKey: $0) }
+            next.contextSnapshots.merge(patch.contextSnapshotsUpsert) { _, new in new }
+            changed = true
+        }
+        if !patch.sessionStatsSnapshotsUpsert.isEmpty || !patch.sessionStatsSnapshotsRemove.isEmpty {
+            patch.sessionStatsSnapshotsRemove.forEach { next.sessionStatsSnapshots.removeValue(forKey: $0) }
+            next.sessionStatsSnapshots.merge(patch.sessionStatsSnapshotsUpsert) { _, new in new }
+            changed = true
+        }
+
+        guard patch.globalModelCatalogChanged || patch.globalModelCatalog == nil else {
+            throw KMPSessionControlStoreError.invalidSnapshot("globalModelCatalog payload 缺少 changed 标记")
+        }
+        if patch.globalModelCatalogChanged {
+            guard old.globalModelCatalog != patch.globalModelCatalog else {
+                throw KMPSessionControlStoreError.invalidSnapshot("globalModelCatalog patch 没有变化")
+            }
+            next.globalModelCatalog = patch.globalModelCatalog
+            changed = true
+        }
+        guard patch.agentPresetsChanged == (patch.agentPresets != nil) else {
+            throw KMPSessionControlStoreError.invalidSnapshot("agentPresets payload 与 changed 标记不一致")
+        }
+        if let presets = patch.agentPresets {
+            guard old.agentPresets != presets else {
+                throw KMPSessionControlStoreError.invalidSnapshot("agentPresets patch 没有变化")
+            }
+            next.agentPresets = presets
+            changed = true
+        }
+        if let value = patch.agentPresetsAuthorable {
+            guard old.agentPresetsAuthorable != value else {
+                throw KMPSessionControlStoreError.invalidSnapshot("agentPresetsAuthorable patch 没有变化")
+            }
+            next.agentPresetsAuthorable = value
+            changed = true
+        }
+        if let value = patch.agentPresetsHasDocument {
+            guard old.agentPresetsHasDocument != value else {
+                throw KMPSessionControlStoreError.invalidSnapshot("agentPresetsHasDocument patch 没有变化")
+            }
+            next.agentPresetsHasDocument = value
+            changed = true
+        }
+        try applyNullable(
+            changedFlag: patch.agentPresetDefaultChanged,
+            value: patch.agentPresetDefault,
+            oldValue: old.agentPresetDefault,
+            name: "agentPresetDefault",
+            assign: { next.agentPresetDefault = $0 },
+            changed: &changed
+        )
+        try applyNullable(
+            changedFlag: patch.permissionDefaultChanged,
+            value: patch.permissionDefault,
+            oldValue: old.permissionDefault,
+            name: "permissionDefault",
+            assign: { next.permissionDefault = $0 },
+            changed: &changed
+        )
+        try applyNullable(
+            changedFlag: patch.defaultModelSelectionChanged,
+            value: patch.defaultModelSelection,
+            oldValue: old.defaultModelSelection,
+            name: "defaultModelSelection",
+            assign: { next.defaultModelSelection = $0 },
+            changed: &changed
+        )
+        if let control = patch.control {
+            let oldControl = old.controlPatch
+            guard control != oldControl else {
+                throw KMPSessionControlStoreError.invalidSnapshot("control patch 没有变化")
+            }
+            next.apply(control)
+            changed = true
+        }
+
+        guard changed, next.hasValidWireValues else {
+            throw KMPSessionControlStoreError.invalidSnapshot("patch 为空或生成了非法状态")
+        }
+        return next
+    }
+
+    private enum PatchSection: Hashable {
+        case modelCatalogs, globalModelCatalog, sessionPermissions, contextSnapshots
+        case sessionStatsSnapshots, agentPresets, defaults, defaultModel, control
+    }
+
+    private func patchIsSemanticallyValid(
+        _ patch: KMPSessionControlPatch,
+        intent: KMPSessionControlIntent?,
+        oldSnapshot: KMPSessionControlSnapshot,
+        nextSnapshot: KMPSessionControlSnapshot
+    ) -> Bool {
+        guard controlChangeIsBound(
+            patch.control,
+            intent: intent,
+            oldSnapshot: oldSnapshot,
+            nextSnapshot: nextSnapshot
+        ) else { return false }
+        let touched = patchSections(patch)
+        func keysAreBound(_ keys: Set<String>, to sessionID: String?) -> Bool {
+            guard let sessionID, !sessionID.isEmpty else { return keys.isEmpty }
+            return keys.isSubset(of: [sessionID])
+        }
+        func modelKeysAreBound(to sessionID: String?) -> Bool {
+            keysAreBound(
+                Set(patch.modelCatalogsUpsert.keys).union(patch.modelCatalogsRemove),
+                to: sessionID
+            )
+        }
+        func permissionKeysAreBound(to sessionID: String?) -> Bool {
+            keysAreBound(
+                Set(patch.sessionPermissionsUpsert.keys).union(patch.sessionPermissionsRemove),
+                to: sessionID
+            )
+        }
+        func contextKeysAreBound(to sessionID: String?) -> Bool {
+            keysAreBound(
+                Set(patch.contextSnapshotsUpsert.keys).union(patch.contextSnapshotsRemove),
+                to: sessionID
+            )
+        }
+        func statsKeysAreBound(to sessionID: String?) -> Bool {
+            keysAreBound(
+                Set(patch.sessionStatsSnapshotsUpsert.keys).union(patch.sessionStatsSnapshotsRemove),
+                to: sessionID
+            )
+        }
+        func validateAction(_ action: SessionControlAction, projection: Bool) -> Bool {
+            let control: Set<PatchSection> = projection ? [] : [.control]
+            let responseKind: String? = switch action {
+            case .modelsReceived: "models"
+            case .modelSelected: "select-model"
+            case .permissionsReceived: "permission-options"
+            case .permissionSelected: "permission"
+            case .contextReceived: "context-usage"
+            case .statsReceived: "session-stats"
+            default: nil
+            }
+            // draining response 只是被清理 generation 的 tombstone 终态：允许它
+            // 完成 control 代际并产生 queued effect，但绝不允许重新投影业务数据。
+            if let responseKind, oldSnapshot.drainingRequestKinds.contains(responseKind) {
+                return !projection && touched.isSubset(of: [.control])
+            }
+            switch action {
+            case .agentPresetsReceived:
+                return touched.isSubset(of: control.union([.agentPresets, .defaults]))
+            case .defaultsReceived, .globalDefaultApplied:
+                return touched.isSubset(of: control.union([.defaults]))
+            case .defaultModelReceived:
+                return touched.isSubset(of: control.union([.defaultModel]))
+            case .modelsReceived(let sessionID, _, _, _, let global):
+                let bound = sessionID ?? oldSnapshot.activeRequestTargets["models"]?.sessionId
+                let allowed: Set<PatchSection> = global || bound == nil
+                    ? control.union([.globalModelCatalog])
+                    : control.union([.modelCatalogs])
+                return touched.isSubset(of: allowed) && modelKeysAreBound(to: bound)
+            case .modelSelected(let sessionID, _):
+                let bound = sessionID ?? oldSnapshot.activeRequestTargets["select-model"]?.sessionId
+                return touched.isSubset(of: control.union([.modelCatalogs]))
+                    && modelKeysAreBound(to: bound)
+            case .permissionsReceived(let sessionID, _):
+                let bound = sessionID ?? oldSnapshot.activeRequestTargets["permission-options"]?.sessionId
+                return touched.isSubset(of: control.union([.sessionPermissions]))
+                    && permissionKeysAreBound(to: bound)
+            case .permissionSelected(let sessionID, _):
+                let bound = sessionID ?? oldSnapshot.activeRequestTargets["permission"]?.sessionId
+                return touched.isSubset(of: control.union([.sessionPermissions]))
+                    && permissionKeysAreBound(to: bound)
+            case .contextReceived(let sessionID, _, _, _, _):
+                let bound = sessionID ?? oldSnapshot.activeRequestTargets["context-usage"]?.sessionId
+                return touched.isSubset(of: control.union([.contextSnapshots]))
+                    && contextKeysAreBound(to: bound)
+            case .statsReceived(let sessionID, _, _, _, _):
+                let bound = sessionID ?? oldSnapshot.activeRequestTargets["session-stats"]?.sessionId
+                return touched.isSubset(of: control.union([.sessionStatsSnapshots]))
+                    && statsKeysAreBound(to: bound)
+            case .requestStarted, .requestFinished, .requestTimedOut,
+                 .defaultConfigurationRequestStarted, .defaultConfigurationRequestFinished,
+                 .defaultConfigurationRequestTimedOut, .modelsRequestTargeted,
+                 .modelSelectionTargeted, .modelSelectionResolved,
+                 .permissionOptionsTargeted, .permissionOptionsResolved:
+                return touched.isSubset(of: control)
+            }
+        }
+
+        switch intent {
+        case .action(let action):
+            return validateAction(action, projection: false)
+        case .projection(let action):
+            return validateAction(action, projection: true)
+        case .defaultModelSaved:
+            return touched.isSubset(of: [.defaultModel, .control])
+        case .requestModels, .requestPermissionOptions, .requestContextUsage,
+             .requestSessionStats, .requestAgentPresets, .requestDefaults,
+             .requestDefaultModel, .selectModel, .setPermission, .saveDefaultModel,
+             .setDefault, .requestFinished, .requestTimedOut, .requestFailed,
+             .requestsDisconnected:
+            return touched.isSubset(of: [.control])
+        case .clearSessionData(let sessionID):
+            return clearPatchIsBound(
+                patch, to: [sessionID], touched: touched,
+                oldSnapshot: oldSnapshot, nextSnapshot: nextSnapshot
+            )
+        case .clearSessionsData(let sessionIDs):
+            return clearPatchIsBound(
+                patch, to: sessionIDs, touched: touched,
+                oldSnapshot: oldSnapshot, nextSnapshot: nextSnapshot
+            )
+        case .none:
+            return false
+        }
+    }
+
+    private func clearPatchIsBound(
+        _ patch: KMPSessionControlPatch,
+        to sessionIDs: Set<String>,
+        touched: Set<PatchSection>,
+        oldSnapshot: KMPSessionControlSnapshot,
+        nextSnapshot: KMPSessionControlSnapshot
+    ) -> Bool {
+        let allowed: Set<PatchSection> = [
+            .modelCatalogs, .sessionPermissions, .contextSnapshots,
+            .sessionStatsSnapshots, .control
+        ]
+        func expectedRemovals<T>(_ values: [String: T]) -> Set<String> {
+            Set(values.keys).intersection(sessionIDs)
+        }
+        let expectedModelRemovals = expectedRemovals(oldSnapshot.modelCatalogs)
+        let expectedPermissionRemovals = expectedRemovals(oldSnapshot.sessionPermissions)
+        let expectedContextRemovals = expectedRemovals(oldSnapshot.contextSnapshots)
+        let expectedStatsRemovals = expectedRemovals(oldSnapshot.sessionStatsSnapshots)
+        let nextContainsClearedSession =
+            !Set(nextSnapshot.modelCatalogs.keys).isDisjoint(with: sessionIDs)
+            || !Set(nextSnapshot.sessionPermissions.keys).isDisjoint(with: sessionIDs)
+            || !Set(nextSnapshot.contextSnapshots.keys).isDisjoint(with: sessionIDs)
+            || !Set(nextSnapshot.sessionStatsSnapshots.keys).isDisjoint(with: sessionIDs)
+        return touched.isSubset(of: allowed)
+            && patch.modelCatalogsUpsert.isEmpty
+            && patch.sessionPermissionsUpsert.isEmpty
+            && patch.contextSnapshotsUpsert.isEmpty
+            && patch.sessionStatsSnapshotsUpsert.isEmpty
+            && patch.modelCatalogsRemove == expectedModelRemovals
+            && patch.sessionPermissionsRemove == expectedPermissionRemovals
+            && patch.contextSnapshotsRemove == expectedContextRemovals
+            && patch.sessionStatsSnapshotsRemove == expectedStatsRemovals
+            && !nextContainsClearedSession
+    }
+
+    private func controlChangeIsBound(
+        _ control: KMPSessionControlControlPatch?,
+        intent: KMPSessionControlIntent?,
+        oldSnapshot: KMPSessionControlSnapshot,
+        nextSnapshot: KMPSessionControlSnapshot
+    ) -> Bool {
+        guard control != nil else { return true }
+
+        func changedKeys<T: Equatable>(_ old: [String: T], _ next: [String: T]) -> Set<String> {
+            Set(old.keys).union(next.keys).filter { old[$0] != next[$0] }
+        }
+        var changedKinds = oldSnapshot.loadingKinds.symmetricDifference(nextSnapshot.loadingKinds)
+        changedKinds.formUnion(
+            oldSnapshot.defaultConfigurationLoadingKinds.symmetricDifference(
+                nextSnapshot.defaultConfigurationLoadingKinds
+            )
+        )
+        changedKinds.formUnion(changedKeys(oldSnapshot.requestTokens, nextSnapshot.requestTokens))
+        changedKinds.formUnion(changedKeys(
+            oldSnapshot.activeRequestTargets,
+            nextSnapshot.activeRequestTargets
+        ))
+        changedKinds.formUnion(changedKeys(
+            oldSnapshot.queuedRequestTargets,
+            nextSnapshot.queuedRequestTargets
+        ))
+        changedKinds.formUnion(changedKeys(
+            oldSnapshot.previousCompletedRequestTargets,
+            nextSnapshot.previousCompletedRequestTargets
+        ))
+        changedKinds.formUnion(
+            oldSnapshot.explicitSessionRequiredKinds.symmetricDifference(
+                nextSnapshot.explicitSessionRequiredKinds
+            )
+        )
+        changedKinds.formUnion(
+            oldSnapshot.drainingRequestKinds.symmetricDifference(
+                nextSnapshot.drainingRequestKinds
+            )
+        )
+        changedKinds.formUnion(
+            oldSnapshot.quarantinedRequestKinds.symmetricDifference(
+                nextSnapshot.quarantinedRequestKinds
+            )
+        )
+        if oldSnapshot.pendingModelsSessionId != nextSnapshot.pendingModelsSessionId
+            || oldSnapshot.isPendingGlobalModelsRequest != nextSnapshot.isPendingGlobalModelsRequest {
+            changedKinds.insert("models")
+        }
+        if oldSnapshot.pendingModelSelectionSessionId != nextSnapshot.pendingModelSelectionSessionId {
+            changedKinds.insert("select-model")
+        }
+        if oldSnapshot.pendingPermissionOptionsSessionId != nextSnapshot.pendingPermissionOptionsSessionId {
+            changedKinds.insert("permission-options")
+        }
+
+        func responseKind(_ action: SessionControlAction) -> String? {
+            switch action {
+            case .agentPresetsReceived: "agent-presets"
+            case .defaultsReceived: "defaults"
+            case .defaultModelReceived: "default-model"
+            case .globalDefaultApplied: "set-default"
+            case .modelsReceived: "models"
+            case .modelSelected: "select-model"
+            case .permissionsReceived: "permission-options"
+            case .permissionSelected: "permission"
+            case .contextReceived: "context-usage"
+            case .statsReceived: "session-stats"
+            case .requestFinished(let kind), .requestTimedOut(let kind): kind
+            case .defaultConfigurationRequestFinished(let kind),
+                 .defaultConfigurationRequestTimedOut(let kind): kind
+            case .requestStarted, .defaultConfigurationRequestStarted,
+                 .modelsRequestTargeted, .modelSelectionTargeted, .modelSelectionResolved,
+                 .permissionOptionsTargeted, .permissionOptionsResolved:
+                nil
+            }
+        }
+
+        if let target = directRequestTarget(for: intent) {
+            guard changedKinds.isSubset(of: [target.kind]) else { return false }
+            let newTargets = [
+                nextSnapshot.activeRequestTargets[target.kind],
+                nextSnapshot.queuedRequestTargets[target.kind]
+            ].compactMap { $0 }
+            return newTargets.allSatisfy {
+                $0 == target || $0 == oldSnapshot.activeRequestTargets[target.kind]
+            }
+        }
+
+        switch intent {
+        case .action(let action):
+            guard let kind = responseKind(action) else { return false }
+            return changedKinds.isSubset(of: [kind])
+        case .projection:
+            return false
+        case .defaultModelSaved:
+            return changedKinds.isSubset(of: ["save-default-model"])
+        case .requestFinished(let kind, _, _), .requestTimedOut(let kind, _, _),
+             .requestFailed(let kind, _, _):
+            return changedKinds.isSubset(of: [kind])
+        case .requestsDisconnected:
+            return nextSnapshot.loadingKinds.isEmpty
+                && nextSnapshot.defaultConfigurationLoadingKinds.isEmpty
+                && nextSnapshot.requestTokens.isEmpty
+                && nextSnapshot.activeRequestTargets.isEmpty
+                && nextSnapshot.queuedRequestTargets.isEmpty
+                && nextSnapshot.previousCompletedRequestTargets.isEmpty
+                && nextSnapshot.explicitSessionRequiredKinds.isEmpty
+                && nextSnapshot.drainingRequestKinds.isEmpty
+                && nextSnapshot.quarantinedRequestKinds.isEmpty
+                && nextSnapshot.pendingModelsSessionId == nil
+                && !nextSnapshot.isPendingGlobalModelsRequest
+                && nextSnapshot.pendingModelSelectionSessionId == nil
+                && nextSnapshot.pendingPermissionOptionsSessionId == nil
+        case .clearSessionData(let sessionID):
+            return drainControlIsBound(
+                sessionIDs: [sessionID], changedKinds: changedKinds,
+                oldSnapshot: oldSnapshot, nextSnapshot: nextSnapshot
+            )
+        case .clearSessionsData(let sessionIDs):
+            return drainControlIsBound(
+                sessionIDs: sessionIDs, changedKinds: changedKinds,
+                oldSnapshot: oldSnapshot, nextSnapshot: nextSnapshot
+            )
+        case .requestModels, .requestPermissionOptions, .requestContextUsage,
+             .requestSessionStats, .requestAgentPresets, .requestDefaults,
+             .requestDefaultModel, .selectModel, .setPermission, .saveDefaultModel,
+             .setDefault, .none:
+            // disconnected request 不应产生已提交 patch；connected request 已由 directTarget 分支处理。
+            return false
+        }
+    }
+
+    private func drainControlIsBound(
+        sessionIDs: Set<String>,
+        changedKinds: Set<String>,
+        oldSnapshot: KMPSessionControlSnapshot,
+        nextSnapshot: KMPSessionControlSnapshot
+    ) -> Bool {
+        let relatedKinds = Set(
+            oldSnapshot.activeRequestTargets.filter { $0.value.sessionId.map(sessionIDs.contains) == true }.keys
+        ).union(
+            oldSnapshot.queuedRequestTargets.filter { $0.value.sessionId.map(sessionIDs.contains) == true }.keys
+        ).union(
+            oldSnapshot.previousCompletedRequestTargets.filter {
+                $0.value.sessionId.map(sessionIDs.contains) == true
+            }.keys
+        )
+        guard changedKinds.isSubset(of: relatedKinds) else { return false }
+        var expected = oldSnapshot
+        let newlyDraining = Set(
+            oldSnapshot.activeRequestTargets.filter { $0.value.sessionId.map(sessionIDs.contains) == true }.keys
+        )
+        expected.queuedRequestTargets = expected.queuedRequestTargets.filter {
+            $0.value.sessionId.map(sessionIDs.contains) != true
+        }
+        expected.previousCompletedRequestTargets = expected.previousCompletedRequestTargets.filter {
+            $0.value.sessionId.map(sessionIDs.contains) != true
+        }
+        expected.explicitSessionRequiredKinds.subtract(newlyDraining)
+        expected.drainingRequestKinds.formUnion(newlyDraining)
+        return nextSnapshot.controlPatch == expected.controlPatch
+    }
+
+    private func patchSections(_ patch: KMPSessionControlPatch) -> Set<PatchSection> {
+        var sections: Set<PatchSection> = []
+        if !patch.modelCatalogsUpsert.isEmpty || !patch.modelCatalogsRemove.isEmpty {
+            sections.insert(.modelCatalogs)
+        }
+        if patch.globalModelCatalogChanged { sections.insert(.globalModelCatalog) }
+        if !patch.sessionPermissionsUpsert.isEmpty || !patch.sessionPermissionsRemove.isEmpty {
+            sections.insert(.sessionPermissions)
+        }
+        if !patch.contextSnapshotsUpsert.isEmpty || !patch.contextSnapshotsRemove.isEmpty {
+            sections.insert(.contextSnapshots)
+        }
+        if !patch.sessionStatsSnapshotsUpsert.isEmpty || !patch.sessionStatsSnapshotsRemove.isEmpty {
+            sections.insert(.sessionStatsSnapshots)
+        }
+        if patch.agentPresetsChanged
+            || patch.agentPresetsAuthorable != nil
+            || patch.agentPresetsHasDocument != nil {
+            sections.insert(.agentPresets)
+        }
+        if patch.agentPresetDefaultChanged || patch.permissionDefaultChanged {
+            sections.insert(.defaults)
+        }
+        if patch.defaultModelSelectionChanged { sections.insert(.defaultModel) }
+        if patch.control != nil { sections.insert(.control) }
+        return sections
+    }
+
+    /// JSONDecoder 会忽略未知字段；patch 是可执行状态协议，因此必须在解码前严格检查层级字段。
+    private func validatePatchEnvelope(_ data: Data) throws {
+        let raw = try JSONSerialization.jsonObject(with: data)
+        guard let patch = raw as? [String: Any] else {
+            throw KMPSessionControlStoreError.invalidPatch("patch 顶层必须是 object")
+        }
+
+        func object(_ value: Any, _ path: String) throws -> [String: Any] {
+            guard let result = value as? [String: Any] else {
+                throw KMPSessionControlStoreError.invalidPatch("\(path) 必须是 object")
+            }
+            return result
+        }
+        func array(_ value: Any, _ path: String) throws -> [Any] {
+            guard let result = value as? [Any] else {
+                throw KMPSessionControlStoreError.invalidPatch("\(path) 必须是 array")
+            }
+            return result
+        }
+        func allow(_ value: Any, keys: Set<String>, path: String) throws -> [String: Any] {
+            let result = try object(value, path)
+            let unknown = Set(result.keys).subtracting(keys)
+            guard unknown.isEmpty else {
+                throw KMPSessionControlStoreError.invalidPatch(
+                    "\(path) 包含未知字段 \(unknown.sorted())；新语义必须升级 schema"
+                )
+            }
+            return result
+        }
+        func ifPresent(_ value: Any?, _ body: (Any) throws -> Void) rethrows {
+            guard let value, !(value is NSNull) else { return }
+            try body(value)
+        }
+        func validateSelection(_ value: Any, _ path: String) throws {
+            _ = try allow(value, keys: ["provider", "model", "reasoningEffort"], path: path)
+        }
+        func validatePressure(_ value: Any, _ path: String) throws {
+            _ = try allow(
+                value,
+                keys: ["pressureTokens", "projectedTokens", "contextWindow"],
+                path: path
+            )
+        }
+        func validateTotals(_ value: Any, _ path: String) throws {
+            _ = try allow(
+                value,
+                keys: ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "reasoningTokens"],
+                path: path
+            )
+        }
+        func validateCatalog(_ value: Any, _ path: String) throws {
+            let catalog = try allow(value, keys: ["current", "routable", "groups"], path: path)
+            try ifPresent(catalog["current"]) { try validateSelection($0, "\(path).current") }
+            try ifPresent(catalog["groups"]) { groupsValue in
+                for (groupIndex, groupValue) in try array(groupsValue, "\(path).groups").enumerated() {
+                    let groupPath = "\(path).groups[\(groupIndex)]"
+                    let group = try allow(groupValue, keys: ["id", "name", "models"], path: groupPath)
+                    try ifPresent(group["models"]) { modelsValue in
+                        for (modelIndex, modelValue) in try array(modelsValue, "\(groupPath).models").enumerated() {
+                            let modelPath = "\(groupPath).models[\(modelIndex)]"
+                            let model = try allow(modelValue, keys: ["id", "name", "reasoning"], path: modelPath)
+                            try ifPresent(model["reasoning"]) { reasoningValue in
+                                let reasoningPath = "\(modelPath).reasoning"
+                                let reasoning = try allow(
+                                    reasoningValue,
+                                    keys: ["efforts", "defaultEffort"],
+                                    path: reasoningPath
+                                )
+                                try ifPresent(reasoning["efforts"]) { effortsValue in
+                                    for (index, effort) in try array(
+                                        effortsValue,
+                                        "\(reasoningPath).efforts"
+                                    ).enumerated() {
+                                        _ = try allow(
+                                            effort,
+                                            keys: ["id", "name"],
+                                            path: "\(reasoningPath).efforts[\(index)]"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        func validatePermission(_ value: Any, _ path: String) throws {
+            let permission = try allow(
+                value,
+                keys: ["options", "currentValue", "preset", "sandbox", "approval"],
+                path: path
+            )
+            try ifPresent(permission["options"]) { options in
+                for (index, option) in try array(options, "\(path).options").enumerated() {
+                    _ = try allow(option, keys: ["value", "name"], path: "\(path).options[\(index)]")
+                }
+            }
+        }
+        func validateContext(_ value: Any, _ path: String) throws {
+            let context = try allow(
+                value,
+                keys: ["asOfSeq", "tokenUsage", "pressure", "breakdown"],
+                path: path
+            )
+            try ifPresent(context["tokenUsage"]) { usageValue in
+                let usagePath = "\(path).tokenUsage"
+                let usage = try allow(
+                    usageValue,
+                    keys: ["uncachedInputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "totals"],
+                    path: usagePath
+                )
+                try ifPresent(usage["totals"]) { try validateTotals($0, "\(usagePath).totals") }
+            }
+            try ifPresent(context["pressure"]) { try validatePressure($0, "\(path).pressure") }
+            try ifPresent(context["breakdown"]) {
+                _ = try allow(
+                    $0,
+                    keys: ["systemTokens", "toolsTokens", "messageTokens"],
+                    path: "\(path).breakdown"
+                )
+            }
+        }
+        func validateStats(_ value: Any, _ path: String) throws {
+            let snapshot = try allow(
+                value,
+                keys: ["asOfSeq", "stats", "tokenUsage", "contextPressure"],
+                path: path
+            )
+            try ifPresent(snapshot["stats"]) {
+                _ = try allow(
+                    $0,
+                    keys: [
+                        "turns", "steps", "llmMs", "toolMs", "ttftMs", "ttftSteps",
+                        "decodeMs", "decodeTokens", "lastTurn", "openStep", "pendingCalls"
+                    ],
+                    path: "\(path).stats"
+                )
+                // pendingCalls 是协议中的 JSONValue，其子树字段由 Gateway 业务语义管理。
+            }
+            try ifPresent(snapshot["tokenUsage"]) { usageValue in
+                let usage = try allow(usageValue, keys: ["totals"], path: "\(path).tokenUsage")
+                try ifPresent(usage["totals"]) { try validateTotals($0, "\(path).tokenUsage.totals") }
+            }
+            try ifPresent(snapshot["contextPressure"]) {
+                try validatePressure($0, "\(path).contextPressure")
+            }
+        }
+        func validateTarget(_ value: Any, _ path: String) throws {
+            _ = try allow(
+                value,
+                keys: ["kind", "isDefault", "sessionId", "provider", "model", "reasoningEffort", "target", "value"],
+                path: path
+            )
+        }
+        func validateObjectMap(
+            _ value: Any?,
+            path: String,
+            validator: (Any, String) throws -> Void
+        ) throws {
+            try ifPresent(value) { mapValue in
+                for (key, item) in try object(mapValue, path) {
+                    try validator(item, "\(path).\(key)")
+                }
+            }
+        }
+
+        let topKeys: Set<String> = [
+            "schema", "modelCatalogsUpsert", "modelCatalogsRemove",
+            "sessionPermissionsUpsert", "sessionPermissionsRemove",
+            "contextSnapshotsUpsert", "contextSnapshotsRemove",
+            "sessionStatsSnapshotsUpsert", "sessionStatsSnapshotsRemove",
+            "globalModelCatalogChanged", "globalModelCatalog",
+            "agentPresetsChanged", "agentPresets", "agentPresetsAuthorable",
+            "agentPresetsHasDocument", "agentPresetDefaultChanged", "agentPresetDefault",
+            "permissionDefaultChanged", "permissionDefault", "defaultModelSelectionChanged",
+            "defaultModelSelection", "control"
+        ]
+        let strictPatch = try allow(patch, keys: topKeys, path: "$")
+        try validateObjectMap(strictPatch["modelCatalogsUpsert"], path: "$.modelCatalogsUpsert", validator: validateCatalog)
+        try validateObjectMap(strictPatch["sessionPermissionsUpsert"], path: "$.sessionPermissionsUpsert", validator: validatePermission)
+        try validateObjectMap(strictPatch["contextSnapshotsUpsert"], path: "$.contextSnapshotsUpsert", validator: validateContext)
+        try validateObjectMap(strictPatch["sessionStatsSnapshotsUpsert"], path: "$.sessionStatsSnapshotsUpsert", validator: validateStats)
+        try ifPresent(strictPatch["globalModelCatalog"]) { try validateCatalog($0, "$.globalModelCatalog") }
+        try ifPresent(strictPatch["agentPresets"]) { presetsValue in
+            for (index, presetValue) in try array(presetsValue, "$.agentPresets").enumerated() {
+                _ = try allow(
+                    presetValue,
+                    keys: ["id", "trust", "isDefault", "name", "description", "broken"],
+                    path: "$.agentPresets[\(index)]"
+                )
+                // trust 是显式 JSONValue 信任边界，不对其业务子树做未知字段判定。
+            }
+        }
+        try ifPresent(strictPatch["defaultModelSelection"]) {
+            try validateSelection($0, "$.defaultModelSelection")
+        }
+        try ifPresent(strictPatch["control"]) { controlValue in
+            let controlPath = "$.control"
+            let control = try allow(
+                controlValue,
+                keys: [
+                    "loadingKinds", "defaultConfigurationLoadingKinds", "pendingModelsSessionId",
+                    "isPendingGlobalModelsRequest", "pendingModelSelectionSessionId",
+                    "pendingPermissionOptionsSessionId", "requestTokens", "activeRequestTargets",
+                    "queuedRequestTargets", "previousCompletedRequestTargets",
+                    "explicitSessionRequiredKinds", "drainingRequestKinds",
+                    "quarantinedRequestKinds"
+                ],
+                path: controlPath
+            )
+            for mapName in ["activeRequestTargets", "queuedRequestTargets", "previousCompletedRequestTargets"] {
+                try validateObjectMap(
+                    control[mapName],
+                    path: "\(controlPath).\(mapName)",
+                    validator: validateTarget
+                )
+            }
+        }
+    }
+
+    private func applyNullable<T: Equatable>(
+        changedFlag: Bool,
+        value: T?,
+        oldValue: T?,
+        name: String,
+        assign: (T?) -> Void,
+        changed: inout Bool
+    ) throws {
+        guard changedFlag else {
+            guard value == nil else {
+                throw KMPSessionControlStoreError.invalidSnapshot("\(name) payload 缺少 changed 标记")
+            }
+            return
+        }
+        guard oldValue != value else {
+            throw KMPSessionControlStoreError.invalidSnapshot("\(name) patch 没有变化")
+        }
+        assign(value)
+        changed = true
     }
 
     private func effectIsSemanticallyValid(
@@ -1141,7 +2041,6 @@ final class KMPSessionControlStoreAdapter {
         if let directTarget = directRequestTarget(for: intent) {
             return completedKind == nil && directTarget == active
         }
-
         // response/failure/timeout 只能启动提交前已经存在的 queued target；projection 和普通
         // 无 queued response 不能借 KMP 异常结果偷渡网络 I/O。
         guard let completedKind,
@@ -1153,7 +2052,8 @@ final class KMPSessionControlStoreAdapter {
         case .projection, .requestsDisconnected, .none,
              .requestModels, .requestPermissionOptions, .requestContextUsage, .requestSessionStats,
              .requestAgentPresets, .requestDefaults, .requestDefaultModel, .selectModel,
-             .setPermission, .saveDefaultModel, .setDefault:
+             .setPermission, .saveDefaultModel, .setDefault, .clearSessionData,
+             .clearSessionsData:
             return false
         }
     }
@@ -1231,12 +2131,28 @@ final class KMPSessionControlStoreAdapter {
     private func failed(_ error: KMPSessionControlStoreError) -> KMPSessionControlTransition {
         KMPSessionControlTransition(
             snapshot: snapshot,
+            patch: nil,
             effects: [],
             applied: false,
             committed: false,
             completedKind: nil,
             completedRequestToken: nil,
+            retiredRequestKinds: [],
             error: error
+        )
+    }
+
+    private func unchanged() -> KMPSessionControlTransition {
+        KMPSessionControlTransition(
+            snapshot: snapshot,
+            patch: nil,
+            effects: [],
+            applied: false,
+            committed: false,
+            completedKind: nil,
+            completedRequestToken: nil,
+            retiredRequestKinds: [],
+            error: nil
         )
     }
 

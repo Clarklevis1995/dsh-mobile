@@ -4,7 +4,7 @@
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
 > 最近更新：2026-08-27
-> 当前任务：阶段 9 已完成，等待用户决定是否进入阶段 10
+> 当前任务：阶段 9 性能债务已收口；下一步执行 9.6 推送式 MVI 事件契约
 
 ## 使用说明
 
@@ -190,7 +190,30 @@ shared/src/commonMain/                  # 后续阶段创建
 
 阶段 9 最终验收结论：2026-08-27 用户在 Android Studio 启动的 iPhone 17（iOS 26.5 Simulator）上连接真实 Mobile Gateway 完成人工清单；Gateway 使用已补齐 `commands/execute.images` 的本地修复版本。会话列表/持久化、Human Question、模型、权限、Context Usage、Stats、Agent Presets、默认配置、跨会话切换和断线恢复均通过。产品代码审计确认 SessionList、Human Question 和 SessionControl 只通过 KMP store 写入业务状态，没有运行时 Swift 回滚开关；Swift Reducer 仅供对等 XCTest 使用，按阶段 11.1 再统一删除。静态架构门禁会扫描三个旧 Reducer 类型符号在其定义文件以外的全部产品 Swift 引用，并以 `private(set)` 与源码审计标记约束已迁移 snapshot 的直接/复合赋值、常见容器原地变更和 `inout` 写边界；回滚开关检查属于基于 KMP/Swift 与切换语义组合词的启发式标识符审计，不宣称覆盖任意命名、反射或动态构造。收口后强制重跑 KMP 44 项与 Android 2 项测试，iPhone 17 / iOS 26.5 Simulator 全量 XCTest 96 项，均为 0 失败、0 跳过；`git diff --check` 通过。阶段 9 完成，阶段 10 尚未开始。
 
-性能债务：当前 SessionControl 每次有状态变化仍跨 KMP/Swift 边界编解码全量 JSON snapshot（P3）。必须在阶段 10 开始前完成增量 patch 或结构化桥接方案评估，并在进入高频 Conversation/Trajectory 流式状态切换前落地适当方案，避免每个 token 复制完整状态。
+性能债务（已收口范围）：SessionControl 原先每次状态变化都跨 KMP/Swift 边界编解码全量 JSON snapshot（P3）；现已在阶段 10 前改为 schema 化增量 patch，清偿的是跨边界全量序列化和 `MainActor` 全量解码/比较成本。Kotlin 不可变 Map 更新及 Swift Dictionary 的低频 CoW 仍是平台内局部成本，不在本次协议优化范围；Conversation/Trajectory 的高频 token 流必须使用专用增量投影，严禁复用 SessionControl snapshot/patch 桥接模式。
+
+#### 阶段 9 性能债务收口（阶段 10 前置）
+
+- [x] P3.1 将 SessionControl 的已提交结果改为 schema 化增量 patch；全量 snapshot 仅用于初始化/显式诊断。
+- [x] P3.2 session map 仅携带受影响 session 的 upsert/remove 分片，全局状态仅在发生变化时携带，请求关联信息作为小型原子 control 分片提交。
+- [x] P3.3 Swift 在 `MainActor` 上先解码 patch 到临时快照并完成结构/effect/代际语义校验，全部通过后才原子发布；坏 patch 不更新 UI、不执行 I/O 并永久 fail-closed。
+- [x] P3.4 补齐多会话分片、删除/清理、无变化零跨桥 payload 与坏 patch 原子失败的 Kotlin/Swift 回归测试。
+- [x] P3.5 通过 KMP 相关测试、iOS 定向 XCTest 与 `git diff --check`，并明确阶段 10 的 token 流式路径禁止复用全量 snapshot 模式。
+
+验收标准：KMP 仍是 SessionControl 唯一状态源；同一事务的 patch、generation 完成信号与 effect 保持原子语义；修改一个 session 不编码其他 session 的目录/Context/Stats/权限；无状态变化不传快照或 patch；删除和断线清理可正确收敛；任何缺字段、未知 schema、重复 upsert/remove 或语义不一致的 patch 都必须在 Swift 发布及平台 I/O 前 fail-closed。
+
+Schema 演进与信任边界：schema 2 的 patch 顶层及所有业务 DTO 均采用字段白名单；本次为 drain/tombstone 控制语义新增 `drainingRequestKinds`，已按契约由 schema 1 提升到 schema 2。继续增加语义字段必须再次提升 schema，旧 Swift 客户端遇到未知 schema 或未知字段会在发布/I/O 前 fail-closed。`trust` 与 `pendingCalls` 是显式声明的透传 JSON 子树，不套用业务 DTO 白名单。Swift 的 `JSONSerialization` 会在结构预检前规范化对象，因此不宣称独立识别原始 JSON 重复 key；该 patch 仅由同进程、受信任的 KMP producer 生成，外部 Gateway 数据必须先经过现有协议解码/校验，不能直接作为 patch 注入。桥接 ABI 暂保留 `SharedSessionControlResult.snapshotJson` 名称：`committed == true` 时其 payload 是 `SharedSessionControlPatch`，初始化或显式诊断时才是完整 `SessionControlState`；patch 错误使用独立 `invalidPatch` 类别，后续 ABI 大版本可再统一重命名为 `payloadJson`。
+
+性能债务验收结论：`SharedSessionControlStore` 仅在初始化/显式 `snapshot()` 返回全量快照；legacy/no-token/resolved no-op 返回空 payload，不调用 `snapshot()`。已提交事务返回 schema 2 patch，四类 session map 采用 upsert/remove，未变化 map 通过引用相等快速跳过 diff 扫描，全局字段按 changed 标记携带，generation/target/token 作为小型 control 分片。批量删除/归档采用单事务 `clearSessionsData`：被清 active 保留 generation 并进入 drain，真实 nil-session 单终态只消费不投影，再启动仍存活 queued；timeout/transport failure 清理 generation 并 quarantine 到断线；同批 queued 不会启动。Swift 对 clear patch 强制校验旧数据 removal 完整性，drain 终态只允许 control 变化，坏 bridge 不能遗漏删除或重新注入已清 session。100 与 1000 个无关 session 的单 session 更新 payload 大小保持一致。最终 `./gradlew :shared:allTests --rerun-tasks` 通过（iOS Simulator 52 项，0 失败；iOS x64 在 Apple Silicon 上按 Gradle 目标配置跳过），Android 单测 2 项通过；iPhone 17 / iOS 26.5 Simulator `GatewayProtocolTests` 105 项、全量 XCTest 110 项通过，均为 0 失败、0 跳过；无签名 iPhoneOS Release 构建与 `git diff --check` 通过。阶段 10 尚未启动。
+
+#### 阶段 9.6～9.9：推送式 MVI 收口（阶段 10 前置）
+
+- [ ] 9.6 在 `commonMain` 定义稳定的 `Intent → Store → Event` 契约：Intent 只向 KMP 派发，KMP 以带递增序号和事务 ID 的 Event envelope 主动推送 state patch 与一次性 effect；dispatch 只返回接收/结构化错误，不再把业务状态作为返回值交给 Swift 拉取。
+- [ ] 9.7 先将 SessionControl 产品路径切换到订阅式事件：KMP 提交状态后广播 patch/effect，Swift `@MainActor` adapter 只订阅、校验顺序并发布 UI 投影；覆盖订阅建立、取消、重连、重复/乱序 event、观察者释放和 effect 恰好一次。
+- [ ] 9.8 将 SessionList 与 Human Question 切换到同一推送契约，删除产品路径对同步 mutation snapshot/result 的依赖；持久化和 Gateway I/O 继续由 Swift effect/persistence adapter 执行。
+- [ ] 9.9 增加静态架构门禁：产品 Swift 只能 `dispatch Intent` 和订阅 `Event`，不得从 mutation 返回值发布业务状态；执行 KMP/Android/iOS 全量自动化与真实 Gateway 人工回归后，再进入阶段 10。
+
+推送式 MVI 验收标准：KMP 是唯一业务状态源；Swift 只持有可重建、只读的 UI 投影，不包含业务 Reducer；同一 KMP 事务的 state patch 与 effect 使用同一 envelope 保序，订阅取消后不得回调；初始化可发送一次 snapshot event，后续只发送增量 event；任何丢序、重复、未知 schema 或语义不一致 event 必须在 Swift UI 发布和平台 I/O 前 fail-closed。Kotlin `StateFlow/SharedFlow` 可以作为内部实现，但 Swift 桥接使用粗粒度可取消订阅接口，避免直接暴露复杂 Flow ABI。Conversation token 流在阶段 10 使用专用高频增量 event，不复用 SessionControl 的低频字典 patch。
 
 ### 阶段 10：iOS Conversation、Trajectory 与 History 切换
 
@@ -290,6 +313,8 @@ xcodebuild test \
 
 ### 2026-08-27
 
+- 收口阶段 9 SessionControl 跨桥性能债务：已提交事务改为 schema 2 增量 patch，全量 snapshot 仅初始化/诊断；四类 session map 按 upsert/remove 分片，无变化零 payload，100/1000 无关 session 的单 session payload 保持恒定。批量 clear 使用 drain/tombstone 消费真实 nil-session 终态，严格拒绝遗漏 removal、跨 session/跨 kind 注入以及 drain 业务回写。最终 KMP 52 项、Android 2 项、iOS 全量 XCTest 110 项通过，iPhoneOS Release 构建成功。
+- 用户确认后续架构采用推送式 MVI：Swift 只向 KMP dispatch Intent，KMP 以保序 Event envelope 主动推送 state patch/effect，Swift 只保留可重建 UI 投影。新增 9.6～9.9 前置阶段，完成三个基础领域订阅式迁移和架构门禁后再进入阶段 10。
 - 用户确认阶段 9 最终人工核验通过：设备为 iPhone 17 / iOS 26.5 Simulator，Android Studio 启动 iOS App，连接真实 Mobile Gateway；Gateway 使用已安装到本机 `web` profile 的本地修复版本。此前模型/权限关联与 `commands/execute.images` 兼容问题均已消除，权限切换、控制配置、跨会话和断线恢复结果正常。
 - 完成阶段 9.5 产品写路径审计：`AppStore` 的 SessionList、Human Question、SessionControl mutation 分别只调用 `KMPSessionListStoreAdapter`、`KMPQuestionStoreAdapter`、`KMPSessionControlStoreAdapter`；产品代码在三个旧 Reducer 定义文件以外不引用其类型符号。已迁移的 `@Published` snapshot 属性统一收紧为 `private(set)`，源码审计标记门禁只允许初始化及对应 KMP snapshot 发布块执行直接/复合赋值、常见容器原地变更或 `inout` 写入。DEBUG `KMPShadowValidator` 仅做只读路由对比，不是状态回滚路径。
 - 保留三个 Swift Reducer 及其 DTO 作为 Swift/KMP 对等 XCTest 基准，产品路径不调用；根据阶段 11.1 再与重复 fixture 一并删除，避免阶段 9.5 扩大为阶段 11。新增静态架构门禁，覆盖 Reducer 类型别名、换行调用、直接/嵌套 snapshot 属性赋值、常见容器原地变更和 `inout` 写入等回流形式；回滚开关检查采用 KMP/Swift 与 use/enable/flag/fallback 等切换语义组合词的启发式标识符审计，不将其描述为可识别任意重命名。强制重跑 `:shared:allTests :androidApp:testDebugUnitTest --rerun-tasks`，KMP 44 项和 Android 2 项均通过；iPhone 17 / iOS 26.5 Simulator 全量 XCTest 96 项通过，0 失败、0 跳过；`git diff --check` 通过。阶段 9 已完成，等待用户决定是否进入阶段 10。
