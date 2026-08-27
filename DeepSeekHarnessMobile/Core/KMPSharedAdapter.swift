@@ -396,6 +396,441 @@ final class KMPConversationStoreAdapter {
     }
 }
 
+// MARK: - Trajectory incremental MVI
+
+private struct KMPTrajectoryBootstrap: Decodable { let schema: Int }
+
+private struct KMPTrajectoryUsageSnapshot: Decodable {
+    let uncachedInput: Int
+    let cachedInput: Int
+    let output: Int
+    let reasoning: Int
+
+    var usage: RequestTokenUsage {
+        RequestTokenUsage(
+            uncachedInput: uncachedInput,
+            cachedInput: cachedInput,
+            output: output,
+            reasoning: reasoning
+        )
+    }
+}
+
+private struct KMPTrajectoryRequestSnapshot: Decodable {
+    let number: Int
+    let turn: Int?
+    let step: Int?
+    let provider: String?
+    let model: String?
+    let options: JSONValue?
+    let usage: KMPTrajectoryUsageSnapshot
+    let cumulativeUsage: KMPTrajectoryUsageSnapshot
+    let toolCalls: Int
+    let subtoolCalls: Int
+
+    var request: TrajectoryRequest {
+        TrajectoryRequest(
+            number: number,
+            turn: turn,
+            step: step,
+            provider: provider,
+            model: model,
+            options: options,
+            usage: usage.usage,
+            cumulativeUsage: cumulativeUsage.usage,
+            toolCalls: toolCalls,
+            subtoolCalls: subtoolCalls
+        )
+    }
+}
+
+private struct KMPTrajectoryToolSnapshot: Decodable {
+    let hierarchy: String
+    let schema: JSONValue?
+    var tool: TrajectoryTool { TrajectoryTool(hierarchy: hierarchy, schema: schema) }
+}
+
+private struct KMPTrajectoryNodeSnapshot: Decodable {
+    let id: String
+    let kind: String
+    let title: String
+    let subtitle: String
+    let startSequence: Int
+    let endSequence: Int
+    let startEpochSeconds: Double
+    let endEpochSeconds: Double
+    let records: [SessionEvent]
+    let request: KMPTrajectoryRequestSnapshot?
+    let tool: KMPTrajectoryToolSnapshot?
+
+    var node: TrajectoryNode? {
+        guard !id.isEmpty,
+              startSequence <= endSequence,
+              startEpochSeconds.isFinite,
+              endEpochSeconds.isFinite,
+              let kind = TrajectoryNode.Kind(kmpWireValue: kind) else { return nil }
+        return TrajectoryNode(
+            id: id,
+            kind: kind,
+            title: title,
+            subtitle: subtitle,
+            startSeq: startSequence,
+            endSeq: endSequence,
+            start: Date(timeIntervalSince1970: startEpochSeconds),
+            end: Date(timeIntervalSince1970: endEpochSeconds),
+            records: records,
+            request: request?.request,
+            tool: tool?.tool
+        )
+    }
+}
+
+private extension TrajectoryNode.Kind {
+    init?(kmpWireValue: String) {
+        switch kmpWireValue {
+        case "INPUT": self = .input
+        case "CONTEXT": self = .context
+        case "REQUEST": self = .request
+        case "ASSISTANT": self = .assistant
+        case "TOOL": self = .tool
+        case "SUBTOOL": self = .subtool
+        default: return nil
+        }
+    }
+}
+
+private struct KMPTrajectoryOperation: Decodable {
+    let kind: String
+    let item: KMPTrajectoryNodeSnapshot?
+    let itemId: String?
+    let index: Int?
+    let subtitleDelta: String?
+    let endSequence: Int?
+    let endEpochSeconds: Double?
+    let appendedRecords: [SessionEvent]
+}
+
+private struct KMPTrajectoryPatch: Decodable {
+    let schema: Int
+    let sessionId: String
+    let operations: [KMPTrajectoryOperation]
+    let replacesAll: Bool
+    let replacementNodes: [KMPTrajectoryNodeSnapshot]?
+    let lastSequence: Int
+}
+
+enum KMPTrajectoryStoreError: LocalizedError, Equatable {
+    case encoding(String)
+    case bridge(code: String, message: String?)
+    case invalidEvent(String)
+    case runtimeFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .encoding(let message): "无法编码 iOS Trajectory 输入：\(message)"
+        case .bridge(let code, let message): "KMP Trajectory 失败（\(code)）：\(message ?? "无详细信息")"
+        case .invalidEvent(let message): "KMP Trajectory 增量事件无效：\(message)"
+        case .runtimeFailed(let message): "KMP Trajectory 事件流已停止：\(message)"
+        }
+    }
+}
+
+protocol KMPTrajectoryStoreBridging: AnyObject {
+    func receiveEvent(eventJson: String) -> SharedMviDispatchResult
+    func receiveEvents(eventsJson: String) -> SharedMviDispatchResult
+    func replaceSession(sessionId: String, eventsJson: String) -> SharedMviDispatchResult
+    func clearSession(sessionId: String) -> SharedMviDispatchResult
+}
+
+extension SharedTrajectoryStore: KMPTrajectoryStoreBridging {}
+
+protocol KMPTrajectoryEventBridging: AnyObject {
+    func observeTrajectoryEvents(_ handler: @escaping (SharedMviEvent) -> Void) -> () -> Void
+}
+
+extension SharedTrajectoryStore: KMPTrajectoryEventBridging {
+    func observeTrajectoryEvents(_ handler: @escaping (SharedMviEvent) -> Void) -> () -> Void {
+        let observer = KMPSharedMviEventObserver(handler: handler)
+        let subscription = subscribe(observer: observer)
+        return {
+            _ = observer
+            subscription.cancel()
+        }
+    }
+}
+
+private enum KMPTrajectoryIntent {
+    case event(sessionID: String, sequence: Int)
+    case replace(sessionID: String, lastSequence: Int)
+    case clear(sessionID: String)
+}
+
+struct KMPTrajectoryChange {
+    let sessionID: String
+    let nodes: [TrajectoryNode]
+    let replacesAll: Bool
+}
+
+@MainActor
+final class KMPTrajectoryStoreAdapter {
+    private let store: any KMPTrajectoryStoreBridging
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+    private var cancelEventSubscription: (() -> Void)?
+    private var pendingIntent: KMPTrajectoryIntent?
+    private var pushedError: KMPTrajectoryStoreError?
+    private(set) var nodesBySessionID: [String: [TrajectoryNode]] = [:]
+    private(set) var lastEventSequence: Int64?
+    private(set) var runtimeError: KMPTrajectoryStoreError?
+    var onChange: ((KMPTrajectoryChange) -> Void)?
+    var onError: ((KMPTrajectoryStoreError) -> Void)?
+    var isOperational: Bool { runtimeError == nil }
+
+    init(
+        bridge: (any KMPTrajectoryStoreBridging)? = nil,
+        facade: SharedMobileFacade = SharedMobileFacade()
+    ) {
+        store = bridge ?? facade.makeTrajectoryStore()
+        guard let eventStore = store as? any KMPTrajectoryEventBridging else {
+            failClosed(.runtimeFailed("Trajectory bridge 不支持 MVI event stream"))
+            return
+        }
+        cancelEventSubscription = eventStore.observeTrajectoryEvents { [weak self] event in
+            MainActor.assumeIsolated { self?.receive(event) }
+        }
+    }
+
+    func nodes(for sessionID: String) -> [TrajectoryNode] {
+        nodesBySessionID[sessionID] ?? []
+    }
+
+    func receive(_ event: SessionEvent) throws {
+        try dispatch(.event(sessionID: event.sessionId, sequence: event.seq)) {
+            store.receiveEvent(eventJson: try encode(event))
+        }
+    }
+
+    func receive(_ events: [SessionEvent]) throws {
+        guard let first = events.first, let last = events.last else { return }
+        guard events.allSatisfy({ $0.sessionId == first.sessionId }) else {
+            throw KMPTrajectoryStoreError.encoding("Trajectory batch 包含多个 session")
+        }
+        try dispatch(.event(sessionID: first.sessionId, sequence: last.seq)) {
+            store.receiveEvents(eventsJson: try encode(events))
+        }
+    }
+
+    func replace(sessionID: String, events: [SessionEvent]) throws {
+        try dispatch(.replace(sessionID: sessionID, lastSequence: events.map(\.seq).max() ?? -1)) {
+            store.replaceSession(sessionId: sessionID, eventsJson: try encode(events))
+        }
+    }
+
+    func clear(sessionID: String) throws {
+        try dispatch(.clear(sessionID: sessionID)) {
+            store.clearSession(sessionId: sessionID)
+        }
+    }
+
+    private func dispatch(
+        _ intent: KMPTrajectoryIntent,
+        operation: () throws -> SharedMviDispatchResult
+    ) throws {
+        if let runtimeError { throw KMPTrajectoryStoreError.runtimeFailed(runtimeError.localizedDescription) }
+        pendingIntent = intent
+        pushedError = nil
+        defer { pendingIntent = nil }
+        let result: SharedMviDispatchResult
+        do { result = try operation() }
+        catch { throw KMPTrajectoryStoreError.encoding(error.localizedDescription) }
+        if let pushedError { throw pushedError }
+        guard result.accepted else {
+            throw KMPTrajectoryStoreError.bridge(
+                code: result.errorCode ?? "unknown-error",
+                message: result.errorMessage
+            )
+        }
+    }
+
+    private func receive(_ event: SharedMviEvent) {
+        guard event.schema == 2,
+              event.domain == "trajectory",
+              !event.transactionId.isEmpty else {
+            failClosed(.invalidEvent("MVI 信封无效"))
+            return
+        }
+        if event.kind == "snapshot" {
+            guard lastEventSequence == nil,
+                  let payload = event.statePayloadJson,
+                  let bootstrap = try? decoder.decode(KMPTrajectoryBootstrap.self, from: Data(payload.utf8)),
+                  bootstrap.schema == 1 else {
+                failClosed(.invalidEvent("订阅基线无效"))
+                return
+            }
+            lastEventSequence = event.sequence
+            return
+        }
+        guard let previous = lastEventSequence, event.sequence == previous + 1 else {
+            failClosed(.runtimeFailed("MVI event sequence 不连续"))
+            return
+        }
+        lastEventSequence = event.sequence
+        switch event.kind {
+        case "error":
+            let error = KMPTrajectoryStoreError.bridge(
+                code: event.errorCode ?? "unknown-error",
+                message: event.errorMessage
+            )
+            pushedError = error
+            onError?(error)
+        case "transition":
+            guard let payload = event.statePayloadJson else {
+                failClosed(.invalidEvent("transition 缺少 patch"))
+                return
+            }
+            do {
+                let patch = try decoder.decode(KMPTrajectoryPatch.self, from: Data(payload.utf8))
+                onChange?(try apply(patch, intent: pendingIntent))
+            } catch let error as KMPTrajectoryStoreError {
+                failClosed(error)
+            } catch {
+                failClosed(.invalidEvent(error.localizedDescription))
+            }
+        default:
+            failClosed(.runtimeFailed("未知 MVI event kind：\(event.kind)"))
+        }
+    }
+
+    private func apply(
+        _ patch: KMPTrajectoryPatch,
+        intent: KMPTrajectoryIntent?
+    ) throws -> KMPTrajectoryChange {
+        guard patch.schema == 1, !patch.sessionId.isEmpty else {
+            throw KMPTrajectoryStoreError.invalidEvent("patch schema 或 sessionId 无效")
+        }
+        switch intent {
+        case .event(let sessionID, let sequence):
+            guard patch.sessionId == sessionID,
+                  patch.lastSequence == sequence,
+                  !patch.replacesAll,
+                  patch.replacementNodes == nil,
+                  !patch.operations.isEmpty else {
+                throw KMPTrajectoryStoreError.invalidEvent("live patch 与 event intent 不一致")
+            }
+        case .replace(let sessionID, let lastSequence):
+            guard patch.sessionId == sessionID,
+                  patch.lastSequence == lastSequence,
+                  patch.replacesAll,
+                  patch.replacementNodes != nil,
+                  patch.operations.isEmpty else {
+                throw KMPTrajectoryStoreError.invalidEvent("replace patch 与 intent 不一致")
+            }
+        case .clear(let sessionID):
+            guard patch.sessionId == sessionID,
+                  patch.lastSequence == -1,
+                  patch.replacesAll,
+                  patch.replacementNodes?.isEmpty == true,
+                  patch.operations.isEmpty else {
+                throw KMPTrajectoryStoreError.invalidEvent("clear patch 与 intent 不一致")
+            }
+        case nil:
+            throw KMPTrajectoryStoreError.invalidEvent("transition 缺少对应 intent")
+        }
+
+        var next = nodesBySessionID[patch.sessionId] ?? []
+        if patch.replacesAll {
+            next = try (patch.replacementNodes ?? []).map { snapshot in
+                guard let node = snapshot.node else {
+                    throw KMPTrajectoryStoreError.invalidEvent("replacement node wire value 无效")
+                }
+                return node
+            }
+            guard Set(next.map(\.id)).count == next.count else {
+                throw KMPTrajectoryStoreError.invalidEvent("replacement node id 重复")
+            }
+        } else {
+            for operation in patch.operations {
+                try apply(operation, to: &next)
+            }
+        }
+        nodesBySessionID[patch.sessionId] = next
+        return KMPTrajectoryChange(
+            sessionID: patch.sessionId,
+            nodes: next,
+            replacesAll: patch.replacesAll
+        )
+    }
+
+    private func apply(
+        _ operation: KMPTrajectoryOperation,
+        to nodes: inout [TrajectoryNode]
+    ) throws {
+        switch operation.kind {
+        case "insert":
+            guard let node = operation.item?.node,
+                  let index = operation.index,
+                  (0...nodes.count).contains(index),
+                  operation.itemId == nil,
+                  !nodes.contains(where: { $0.id == node.id }) else {
+                throw KMPTrajectoryStoreError.invalidEvent("insert operation 无效")
+            }
+            nodes.insert(node, at: index)
+        case "remove":
+            guard operation.item == nil,
+                  let itemID = operation.itemId,
+                  let index = nodes.firstIndex(where: { $0.id == itemID }) else {
+                throw KMPTrajectoryStoreError.invalidEvent("remove operation 无效")
+            }
+            nodes.remove(at: index)
+        case "move":
+            guard operation.item == nil,
+                  let itemID = operation.itemId,
+                  let source = nodes.firstIndex(where: { $0.id == itemID }),
+                  let target = operation.index,
+                  nodes.indices.contains(target) else {
+                throw KMPTrajectoryStoreError.invalidEvent("move operation 无效")
+            }
+            let node = nodes.remove(at: source)
+            nodes.insert(node, at: target)
+        case "replace":
+            guard let node = operation.item?.node,
+                  operation.itemId == node.id,
+                  let index = nodes.firstIndex(where: { $0.id == node.id }) else {
+                throw KMPTrajectoryStoreError.invalidEvent("replace operation 无效")
+            }
+            nodes[index] = node
+        case "update":
+            guard operation.item == nil,
+                  let itemID = operation.itemId,
+                  let index = nodes.firstIndex(where: { $0.id == itemID }),
+                  let subtitleDelta = operation.subtitleDelta,
+                  let endSequence = operation.endSequence,
+                  let endEpochSeconds = operation.endEpochSeconds,
+                  endEpochSeconds.isFinite,
+                  endSequence >= nodes[index].endSeq,
+                  (!subtitleDelta.isEmpty || !operation.appendedRecords.isEmpty || endSequence > nodes[index].endSeq) else {
+                throw KMPTrajectoryStoreError.invalidEvent("update operation 无效")
+            }
+            nodes[index].subtitle += subtitleDelta
+            nodes[index].endSeq = endSequence
+            nodes[index].end = Date(timeIntervalSince1970: endEpochSeconds)
+            nodes[index].records.append(contentsOf: operation.appendedRecords)
+        default:
+            throw KMPTrajectoryStoreError.invalidEvent("未知 operation：\(operation.kind)")
+        }
+    }
+
+    private func encode<T: Encodable>(_ value: T) throws -> String {
+        String(decoding: try encoder.encode(value), as: UTF8.self)
+    }
+
+    private func failClosed(_ error: KMPTrajectoryStoreError) {
+        if runtimeError == nil { runtimeError = error }
+        pushedError = error
+        onError?(error)
+    }
+}
+
 struct KMPSessionSummarySnapshot: Codable, Equatable {
     var id: String
     var title: String

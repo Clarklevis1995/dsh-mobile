@@ -2,9 +2,12 @@ package com.clarklevis.dsh.shared.projection
 
 import com.clarklevis.dsh.shared.protocol.JsonValue
 import com.clarklevis.dsh.shared.protocol.SessionEvent
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class TrajectoryNodeKind { INPUT, CONTEXT, REQUEST, ASSISTANT, TOOL, SUBTOOL }
 
+@Serializable
 data class RequestTokenUsage(
     val uncachedInput: Int = 0,
     val cachedInput: Int = 0,
@@ -27,6 +30,7 @@ data class RequestTokenUsage(
     )
 }
 
+@Serializable
 data class TrajectoryRequest(
     val number: Int,
     val turn: Int?,
@@ -40,8 +44,10 @@ data class TrajectoryRequest(
     val subtoolCalls: Int
 )
 
+@Serializable
 data class TrajectoryTool(val hierarchy: String, val schema: JsonValue?)
 
+@Serializable
 data class TrajectoryNode(
     val id: String,
     val kind: TrajectoryNodeKind,

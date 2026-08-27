@@ -201,6 +201,8 @@ class SharedMobileFacade {
 
     fun makeSessionControlStore(): SharedSessionControlStore = SharedSessionControlStore()
 
+    fun makeTrajectoryStore(): SharedTrajectoryStore = SharedTrajectoryStore()
+
     fun makeConversationStore(
         userMessage: String,
         context: String,

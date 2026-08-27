@@ -1,19 +1,23 @@
 import SwiftUI
 
+/// 仅轨迹页订阅的展示通道，避免高频节点 patch 触发整个 AppStore/ConversationView。
+@MainActor
+final class TrajectoryTimeline: ObservableObject {
+    @Published private(set) var nodes: [TrajectoryNode] = []
+
+    func publish(_ nodes: [TrajectoryNode]) {
+        self.nodes = nodes
+    }
+}
+
 struct TrajectoryView: View {
     let sessionId: String?
-    let events: [SessionEvent]
+    @ObservedObject var timeline: TrajectoryTimeline
     let isActive: Bool
+    @EnvironmentObject private var store: AppStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var selected: TrajectoryNode?
     @State private var highlightedID: String?
-    @State private var nodes: [TrajectoryNode] = []
-    @State private var projectedSessionId: String?
-    @State private var projectedDataVersion: String?
-    @State private var isProjecting = false
-    @State private var duration: TimeInterval = 0
-    @State private var turnCount = 0
-    @State private var toolCount = 0
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -28,7 +32,7 @@ struct TrajectoryView: View {
                 }
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        if isProjecting {
+                        if isActive && nodes.isEmpty {
                             HStack(spacing: 9) {
                                 ProgressView().tint(DSHColor.ocean)
                                 Text(nodes.isEmpty ? String(localized: "trajectory.generating", defaultValue: "正在生成轨迹…") : String(localized: "trajectory.backfilling", defaultValue: "正在补齐较早的轨迹记录…"))
@@ -59,14 +63,11 @@ struct TrajectoryView: View {
             }
         }
         .sheet(item: $selected) { EventDetailSheet(node: $0) }
-        .task(id: projectionTaskVersion) {
-            guard isActive else { return }
-            let version = dataVersion
-            // The pager keeps this view mounted. Returning to the trajectory
-            // tab must reveal the already projected rows immediately instead
-            // of replaying the staged projection for identical source data.
-            guard projectedDataVersion != version else { return }
-            await projectTrajectory(version: version)
+        .task(id: "\(sessionId ?? "none")-\(isActive)") {
+            store.setTrajectoryProjectionActive(sessionID: sessionId, isActive: isActive)
+        }
+        .onDisappear {
+            store.setTrajectoryProjectionActive(sessionID: sessionId, isActive: false)
         }
     }
 
@@ -109,6 +110,18 @@ struct TrajectoryView: View {
         colorScheme == .dark ? .white.opacity(0.14) : .black.opacity(0.10)
     }
 
+    private var nodes: [TrajectoryNode] { timeline.nodes }
+    private var duration: TimeInterval {
+        nodes.lazy.filter { $0.kind != .request }.reduce(0) { partial, node in
+            partial + max(0, node.end.timeIntervalSince(node.start))
+        }
+    }
+    private var turnCount: Int {
+        Set(nodes.flatMap(\.records).compactMap(\.event.turn)).count
+    }
+    private var toolCount: Int {
+        nodes.lazy.filter { $0.kind == .tool || $0.kind == .subtool }.count
+    }
     private var durationText: String { String(format: "%.2f s", duration) }
     private var visibleNodes: [TrajectoryNode] { nodes.filter { $0.kind != .request } }
 
@@ -145,73 +158,6 @@ struct TrajectoryView: View {
                 startsTurn: startsTurn
             )
         }
-    }
-    private var dataVersion: String {
-        return "\(sessionId ?? "none")-\(events.count)-\(events.last?.seq ?? -1)"
-    }
-
-    /// Activation is only a scheduling signal. It is deliberately excluded
-    /// from `dataVersion`, so changing tabs cannot invalidate cached output.
-    private var projectionTaskVersion: String {
-        "\(isActive ? "active" : "inactive")-\(dataVersion)"
-    }
-
-    @MainActor
-    private func projectTrajectory(version: String) async {
-        let targetSessionId = sessionId
-        if projectedSessionId != targetSessionId {
-            projectedSessionId = targetSessionId
-            projectedDataVersion = nil
-            nodes = []
-        }
-        isProjecting = true
-        let source = events
-        // Coalesce bursty assistant chunks before starting another full
-        // projection, and cancel the detached worker when this task is replaced.
-        try? await Task.sleep(for: .milliseconds(nodes.isEmpty ? 20 : 60))
-        guard !Task.isCancelled else { return }
-
-        let worker = Task.detached(priority: .userInitiated) {
-            let nodes = TrajectoryProjection.make(from: source)
-            // Match WebUI's compressed execution timeline: idle wall-clock gaps
-            // between frames do not contribute to the displayed duration.
-            let duration = nodes.lazy.filter { $0.kind != .request }.reduce(0) { partial, node in
-                partial + max(0, node.end.timeIntervalSince(node.start))
-            }
-            return TrajectoryProjectionResult(
-                nodes: nodes,
-                duration: duration,
-                turnCount: Set(source.compactMap(\.event.turn)).count,
-                toolCount: nodes.lazy.filter { $0.kind == .tool || $0.kind == .subtool }.count
-            )
-        }
-        let projection = await withTaskCancellationHandler {
-            await worker.value
-        } onCancel: {
-            worker.cancel()
-        }
-        guard !Task.isCancelled, projectedSessionId == targetSessionId else { return }
-
-        duration = projection.duration
-        turnCount = projection.turnCount
-        toolCount = projection.toolCount
-
-        var start = max(0, projection.nodes.count - 30)
-        if projection.nodes.isEmpty {
-            nodes = []
-        } else {
-            nodes = Array(projection.nodes[start..<projection.nodes.count])
-        }
-        await Task.yield()
-
-        while start > 0 {
-            guard !Task.isCancelled, projectedSessionId == targetSessionId else { return }
-            start = max(0, start - 120)
-            nodes = Array(projection.nodes[start..<projection.nodes.count])
-            try? await Task.sleep(for: .milliseconds(12))
-        }
-        projectedDataVersion = version
-        isProjecting = false
     }
 }
 
@@ -310,13 +256,6 @@ private struct TimelineOverviewCanvas: View {
         if fraction > entry.endFraction { return fraction - entry.endFraction }
         return 0
     }
-}
-
-private struct TrajectoryProjectionResult: Sendable {
-    let nodes: [TrajectoryNode]
-    let duration: TimeInterval
-    let turnCount: Int
-    let toolCount: Int
 }
 
 private struct TrajectoryDisplayRow: Identifiable {

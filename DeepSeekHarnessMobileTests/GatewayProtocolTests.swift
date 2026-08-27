@@ -242,6 +242,105 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(kmp.map(\.date), swiftBaseline.map(\.date))
     }
 
+    @MainActor
+    func testKMPTrajectoryAdapterProjectsNodesAndTokenUsage() throws {
+        let usage: JSONValue = .object([
+            "inputTokens": .number(10),
+            "cacheReadTokens": .number(4),
+            "outputTokens": .number(8),
+            "reasoningTokens": .number(3)
+        ])
+        let records = [
+            SessionEvent(
+                sessionId: "s1", seq: 1, time: 1,
+                event: GatewayEvent(type: "user/message", text: "执行", source: "user")
+            ),
+            SessionEvent(
+                sessionId: "s1", seq: 2, time: 2,
+                event: GatewayEvent(
+                    type: "assistant/message", turn: 1, step: 1,
+                    text: "完成", usage: usage
+                )
+            ),
+            SessionEvent(
+                sessionId: "s1", seq: 3, time: 3,
+                event: GatewayEvent(
+                    type: "tool/call", turn: 1, step: 1,
+                    callId: "c1", name: "Read"
+                )
+            )
+        ]
+        let swiftBaseline = TrajectoryProjection.make(from: records)
+        let adapter = KMPTrajectoryStoreAdapter()
+        var changes: [KMPTrajectoryChange] = []
+        adapter.onChange = { changes.append($0) }
+
+        try adapter.replace(sessionID: "s1", events: records)
+        let kmp = adapter.nodes(for: "s1")
+
+        XCTAssertFalse(
+            kmp.isEmpty,
+            "KMP Trajectory 为空：error=\(String(describing: adapter.runtimeError)), changes=\(changes.map { ($0.sessionID, $0.nodes.count) })"
+        )
+        XCTAssertEqual(kmp.map(\.id), swiftBaseline.map(\.id))
+        XCTAssertEqual(kmp.map(\.kind), swiftBaseline.map(\.kind))
+        XCTAssertEqual(kmp.map(\.subtitle), swiftBaseline.map(\.subtitle))
+        let request = try XCTUnwrap(kmp.first(where: { $0.kind == .request })?.request)
+        XCTAssertEqual(request.usage.uncachedInput, 10)
+        XCTAssertEqual(request.usage.cachedInput, 4)
+        XCTAssertEqual(request.usage.output, 8)
+        XCTAssertEqual(request.usage.reasoning, 3)
+        XCTAssertEqual(request.usage.content, 5)
+    }
+
+    @MainActor
+    func testKMPTrajectoryAdapterFailsClosedBeforeMalformedUpdatePublishes() {
+        let bridge = MalformedTrajectoryEventBridge()
+        let adapter = KMPTrajectoryStoreAdapter(bridge: bridge)
+        var publishCount = 0
+        adapter.onChange = { _ in publishCount += 1 }
+
+        XCTAssertThrowsError(try adapter.receive(SessionEvent(
+            sessionId: "s1", seq: 1, time: 1,
+            event: GatewayEvent(
+                type: "assistant/chunk", turn: 1, step: 1,
+                text: "x", chunkType: "text-delta"
+            )
+        )))
+        XCTAssertFalse(adapter.isOperational)
+        XCTAssertEqual(publishCount, 0)
+        XCTAssertTrue(adapter.nodes(for: "s1").isEmpty)
+    }
+
+    @MainActor
+    func testAppStoreActivatesTrajectoryProjectionOnlyForVisiblePage() {
+        let store = AppStore(preferences: AppPreferencesSpy(
+            endpoint: "ws://127.0.0.1:3080/ws/mobile",
+            selectedWorkspaceID: nil,
+            sessions: []
+        ))
+        store.events["s1"] = [
+            SessionEvent(
+                sessionId: "s1", seq: 1, time: 1,
+                event: GatewayEvent(type: "user/message", text: "one", source: "user")
+            )
+        ]
+        let timeline = store.trajectoryTimeline(for: "s1")
+        XCTAssertTrue(timeline.nodes.isEmpty)
+
+        store.setTrajectoryProjectionActive(sessionID: "s1", isActive: true)
+        XCTAssertEqual(timeline.nodes.map(\.subtitle), ["one"])
+
+        store.setTrajectoryProjectionActive(sessionID: "s1", isActive: false)
+        store.events["s1"]?.append(SessionEvent(
+            sessionId: "s1", seq: 2, time: 2,
+            event: GatewayEvent(type: "user/message", text: "two", source: "user")
+        ))
+        XCTAssertEqual(timeline.nodes.map(\.subtitle), ["one"])
+        store.setTrajectoryProjectionActive(sessionID: "s1", isActive: true)
+        XCTAssertEqual(timeline.nodes.map(\.subtitle), ["one", "two"])
+    }
+
     func testStage9WriteAuditRecognizesDirectNestedInoutAndCollectionMutations() throws {
         let defects: [(property: String, source: String)] = [
             ("sessions", "sessions = replacement"),
@@ -507,13 +606,24 @@ final class GatewayProtocolTests: XCTestCase {
         for required in [
             "kmpConversationStore.onChange",
             "kmpConversationStore.receive(record)",
-            "kmpConversationStore.replace(sessionID:"
+            "kmpConversationStore.replace(sessionID:",
+            "kmpTrajectoryStore.onChange",
+            "kmpTrajectoryStore.receive(records)",
+            "kmpTrajectoryStore.replace(sessionID:"
         ] {
             XCTAssertTrue(appStoreSource.contains(required), "Conversation 产品路径缺少 KMP Intent/Event：\(required)")
         }
         XCTAssertFalse(
             appStoreSource.contains("conversationProjectors"),
             "AppStore 不得继续持有 Swift Conversation projector 状态"
+        )
+        let trajectoryViewSource = try String(
+            contentsOf: productRoot.appendingPathComponent("Views/TrajectoryView.swift"),
+            encoding: .utf8
+        )
+        XCTAssertFalse(
+            trajectoryViewSource.contains("TrajectoryProjection.make("),
+            "TrajectoryView 不得继续执行 Swift Trajectory 业务投影"
         )
     }
 
@@ -4442,6 +4552,62 @@ private final class MalformedConversationEventBridge:
             errorCode: nil,
             errorMessage: nil
         )
+    }
+
+    func replaceSession(sessionId: String, eventsJson: String) -> SharedMviDispatchResult {
+        SharedMviDispatchResult(
+            accepted: false, transactionId: nil, eventSequence: nil,
+            errorCode: "unsupported", errorMessage: nil
+        )
+    }
+
+    func clearSession(sessionId: String) -> SharedMviDispatchResult {
+        SharedMviDispatchResult(
+            accepted: false, transactionId: nil, eventSequence: nil,
+            errorCode: "unsupported", errorMessage: nil
+        )
+    }
+}
+
+private final class MalformedTrajectoryEventBridge:
+    KMPTrajectoryStoreBridging,
+    KMPTrajectoryEventBridging
+{
+    private var handler: ((SharedMviEvent) -> Void)?
+
+    func observeTrajectoryEvents(
+        _ handler: @escaping (SharedMviEvent) -> Void
+    ) -> () -> Void {
+        self.handler = handler
+        handler(SharedMviEvent(
+            schema: 2, sequence: 0,
+            transactionId: "snapshot:trajectory:0",
+            domain: "trajectory", kind: "snapshot",
+            statePayloadJson: #"{"schema":1}"#,
+            effectsJson: "[]", metadataJson: nil,
+            errorCode: nil, errorMessage: nil
+        ))
+        return { [weak self] in self?.handler = nil }
+    }
+
+    func receiveEvent(eventJson: String) -> SharedMviDispatchResult {
+        handler?(SharedMviEvent(
+            schema: 2, sequence: 1,
+            transactionId: "trajectory-event:1",
+            domain: "trajectory", kind: "transition",
+            statePayloadJson: #"{"schema":1,"sessionId":"s1","operations":[{"kind":"update","itemId":"missing","subtitleDelta":"x","endSequence":1,"endEpochSeconds":1,"appendedRecords":[]}],"replacesAll":false,"lastSequence":1}"#,
+            effectsJson: "[]", metadataJson: nil,
+            errorCode: nil, errorMessage: nil
+        ))
+        return SharedMviDispatchResult(
+            accepted: true, transactionId: "trajectory-event:1",
+            eventSequence: KotlinLong(longLong: 1),
+            errorCode: nil, errorMessage: nil
+        )
+    }
+
+    func receiveEvents(eventsJson: String) -> SharedMviDispatchResult {
+        receiveEvent(eventJson: eventsJson)
     }
 
     func replaceSession(sessionId: String, eventsJson: String) -> SharedMviDispatchResult {

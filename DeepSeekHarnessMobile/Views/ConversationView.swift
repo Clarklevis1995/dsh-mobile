@@ -40,7 +40,7 @@ struct ConversationView: View {
                 } trajectory: {
                     TrajectoryView(
                         sessionId: store.selectedSessionId,
-                        events: store.selectedEvents,
+                        timeline: store.trajectoryTimeline(for: store.selectedSessionId),
                         isActive: activeView == 1
                     )
                 }

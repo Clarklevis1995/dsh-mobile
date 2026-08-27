@@ -150,6 +150,8 @@ final class AppStore: ObservableObject {
     private let sessionControlEffectExecutor: any GatewaySessionControlEffectExecuting
     /// Conversation projector 的唯一业务状态来源；Swift 只在屏幕刷新节奏发布 KMP patch 镜像。
     private let kmpConversationStore: KMPConversationStoreAdapter
+    /// Trajectory 仅在页面活跃时由 KMP 增量计算，避免后台 token 产生无用工作。
+    private let kmpTrajectoryStore: KMPTrajectoryStoreAdapter
     private var historyState = HistoryState()
     private let historySyncEngine = HistorySyncEngine()
     /// The remote session activity timestamp covered by a completed history load.
@@ -157,6 +159,10 @@ final class AppStore: ObservableObject {
     /// across launches, so a fresh process must fetch history again.
     private var conversationProjectionDrivers: [String: ConversationProjectionDriver] = [:]
     private var conversationTimelines: [String: ConversationTimeline] = [:]
+    private var trajectoryTimelines: [String: TrajectoryTimeline] = [:]
+    private var activeTrajectorySessionIDs: Set<String> = []
+    private var trajectoryProjectionDrivers: [String: ConversationProjectionDriver] = [:]
+    private var pendingTrajectoryEvents: [String: [SessionEvent]] = [:]
     /// Invalidates an in-flight cold projection when a completed history
     /// baseline is atomically installed for the same session.
     private var conversationProjectionEpochs: [String: Int] = [:]
@@ -193,6 +199,7 @@ final class AppStore: ObservableObject {
         questionBridge: (any KMPQuestionStoreBridging)? = nil,
         sessionControlBridge: (any KMPSessionControlStoreBridging)? = nil,
         conversationBridge: (any KMPConversationStoreBridging)? = nil,
+        trajectoryBridge: (any KMPTrajectoryStoreBridging)? = nil,
         questionEffectExecutor: (any GatewayQuestionEffectExecuting)? = nil,
         sessionControlEffectExecutor: (any GatewaySessionControlEffectExecuting)? = nil,
         backgroundExecutionController: AgentBackgroundExecutionController? = nil
@@ -212,6 +219,8 @@ final class AppStore: ObservableObject {
         self.kmpSessionControlStore = kmpSessionControlStore
         let kmpConversationStore = KMPConversationStoreAdapter(bridge: conversationBridge)
         self.kmpConversationStore = kmpConversationStore
+        let kmpTrajectoryStore = KMPTrajectoryStoreAdapter(bridge: trajectoryBridge)
+        self.kmpTrajectoryStore = kmpTrajectoryStore
         self.sessionControlEffectExecutor = sessionControlEffectExecutor ?? gateway
         appLanguage = AppLanguage.load()
         selectedWorkspaceId = preferences.selectedWorkspaceID
@@ -247,6 +256,12 @@ final class AppStore: ObservableObject {
             self?.scheduleConversationProjection(for: change.sessionID)
         }
         kmpConversationStore.onError = { [weak self] error in
+            self?.lastError = error.localizedDescription
+        }
+        kmpTrajectoryStore.onChange = { [weak self] change in
+            self?.trajectoryTimeline(for: change.sessionID).publish(change.nodes)
+        }
+        kmpTrajectoryStore.onError = { [weak self] error in
             self?.lastError = error.localizedDescription
         }
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
@@ -289,6 +304,34 @@ final class AppStore: ObservableObject {
             timeline.publish(items)
         }
         return timeline
+    }
+    func trajectoryTimeline(for sessionId: String?) -> TrajectoryTimeline {
+        let timelineID = sessionId ?? "__no-session__"
+        if let timeline = trajectoryTimelines[timelineID] { return timeline }
+        let timeline = TrajectoryTimeline()
+        trajectoryTimelines[timelineID] = timeline
+        let nodes = sessionId.map(kmpTrajectoryStore.nodes(for:)) ?? []
+        if !nodes.isEmpty { timeline.publish(nodes) }
+        return timeline
+    }
+    func setTrajectoryProjectionActive(sessionID: String?, isActive: Bool) {
+        guard let sessionID else { return }
+        if isActive {
+            guard activeTrajectorySessionIDs.insert(sessionID).inserted else { return }
+            pendingTrajectoryEvents[sessionID] = nil
+            do {
+                try kmpTrajectoryStore.replace(
+                    sessionID: sessionID,
+                    events: events[sessionID, default: []]
+                )
+            } catch {
+                lastError = error.localizedDescription
+            }
+        } else {
+            activeTrajectorySessionIDs.remove(sessionID)
+            pendingTrajectoryEvents[sessionID] = nil
+            trajectoryProjectionDrivers[sessionID]?.stop()
+        }
     }
     var activeWorkspace: GatewayWorkspace? {
         guard !isUngroupedWorkspaceSelected else { return nil }
@@ -1094,6 +1137,11 @@ final class AppStore: ObservableObject {
                 self.conversationProjectionEpochs[id, default: 0] &+= 1
                 do {
                     try self.kmpConversationStore.replace(sessionID: id, events: rebasedEvents)
+                    if self.activeTrajectorySessionIDs.contains(id) {
+                        self.pendingTrajectoryEvents[id] = nil
+                        self.trajectoryProjectionDrivers[id]?.stop()
+                        try self.kmpTrajectoryStore.replace(sessionID: id, events: rebasedEvents)
+                    }
                 } catch {
                     self.lastError = error.localizedDescription
                     return
@@ -1143,12 +1191,21 @@ final class AppStore: ObservableObject {
             conversationProjectionEpochs[sessionId, default: 0] &+= 1
             do {
                 try kmpConversationStore.replace(sessionID: sessionId, events: sessionEvents)
+                if activeTrajectorySessionIDs.contains(sessionId) {
+                    pendingTrajectoryEvents[sessionId] = nil
+                    trajectoryProjectionDrivers[sessionId]?.stop()
+                    try kmpTrajectoryStore.replace(sessionID: sessionId, events: sessionEvents)
+                }
             } catch {
                 lastError = error.localizedDescription
             }
         } else {
             do {
                 try kmpConversationStore.receive(record)
+                if activeTrajectorySessionIDs.contains(sessionId) {
+                    pendingTrajectoryEvents[sessionId, default: []].append(record)
+                    scheduleTrajectoryProjection(for: sessionId)
+                }
             } catch {
                 lastError = error.localizedDescription
             }
@@ -1221,6 +1278,31 @@ final class AppStore: ObservableObject {
             conversationProjectionDrivers[sessionId] = driver
         }
         driver.invalidate()
+    }
+    private func scheduleTrajectoryProjection(for sessionId: String) {
+        let driver: ConversationProjectionDriver
+        if let existing = trajectoryProjectionDrivers[sessionId] {
+            driver = existing
+        } else {
+            driver = ConversationProjectionDriver { [weak self] in
+                self?.flushTrajectoryProjection(for: sessionId)
+            }
+            trajectoryProjectionDrivers[sessionId] = driver
+        }
+        driver.invalidate()
+    }
+    private func flushTrajectoryProjection(for sessionId: String) {
+        guard activeTrajectorySessionIDs.contains(sessionId) else {
+            pendingTrajectoryEvents[sessionId] = nil
+            return
+        }
+        let records = pendingTrajectoryEvents.removeValue(forKey: sessionId) ?? []
+        guard !records.isEmpty else { return }
+        do {
+            try kmpTrajectoryStore.receive(records)
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
     /// KMP 已同步应用所有 token patch；display link 只负责把最新镜像按一帧最多
     /// 一次发布给 UIKit timeline，避免高频 token 让 SwiftUI 根视图失效。
@@ -1417,6 +1499,10 @@ final class AppStore: ObservableObject {
             for sessionID in clearedSessionIDs {
                 do {
                     try kmpConversationStore.clear(sessionID: sessionID)
+                    try kmpTrajectoryStore.clear(sessionID: sessionID)
+                    activeTrajectorySessionIDs.remove(sessionID)
+                    pendingTrajectoryEvents[sessionID] = nil
+                    trajectoryProjectionDrivers[sessionID]?.stop()
                 } catch {
                     lastError = error.localizedDescription
                 }
