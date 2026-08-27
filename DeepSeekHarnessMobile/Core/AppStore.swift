@@ -238,11 +238,17 @@ final class AppStore: ObservableObject {
     /// handler re-runs the open-conversation disposition against this —
     /// the two responses of a reconnect's paired requests race.
     private var lastSessionsFramePresenceIds: Set<String> = []
-    /// True between a paired workspaces+sessions request and the workspaces
-    /// response, while the archived set may lag the summaries. The
-    /// missing-session notice is deferred while stale because the pending
-    /// workspaces frame disambiguates archived (pop) from deleted (notice).
-    /// Starts stale: cold launch has no archived knowledge at all.
+    /// True between a sessions request and the workspaces response that
+    /// pairs with it, while the archived set may lag the summaries. Armed
+    /// whenever sessions are requested — refreshRemoteState's paired
+    /// requests AND handleSent's unpaired follow-up — because the archived
+    /// set's freshness relative to an incoming summary list is otherwise
+    /// unknowable. The missing-session notice is deferred while stale
+    /// because the pending workspaces frame disambiguates archived (pop)
+    /// from deleted (notice). Cleared by a workspaces frame, by a gateway
+    /// error naming the workspaces request (its response will never come),
+    /// and by resetOutstandingRequests on transport failure. Starts stale:
+    /// cold launch has no archived knowledge at all.
     private var archivedSessionIdsStale = true
     private var conversationProjectionDrivers: [String: ConversationProjectionDriver] = [:]
     private var conversationTimelines: [String: ConversationTimeline] = [:]
@@ -862,7 +868,6 @@ final class AppStore: ObservableObject {
             notice(String(localized: "notice.workspaces.synced", defaultValue: "工作区已同步"), String(localized: "workspaces.count", defaultValue: "\(workspaces.count) 个工作区"))
         case "sessions":
             let remoteSummaries = decodeItems(frame.items, as: GatewaySessionSummary.self)
-            applyRemoteSessions(remoteSummaries)
             // The frame's raw id set is the authoritative presence signal —
             // the upsert-only local list cannot detect hard deletions. It is
             // deliberately NOT filtered through the (independently
@@ -871,6 +876,7 @@ final class AppStore: ObservableObject {
             // by construction, and filtering here would let a stale archived
             // set read an un-archived session as archived.
             let presentSessionIds = Set(remoteSummaries.map(\.sessionId))
+            applyRemoteSessions(remoteSummaries, presentSessionIds: presentSessionIds)
             lastSessionsFramePresenceIds = presentSessionIds
             unconfirmedLocallyCreatedSessionIds.subtract(presentSessionIds)
             isRefreshing = false
@@ -1025,6 +1031,12 @@ final class AppStore: ObservableObject {
         case "error":
             waitingForNewSession = false
             if frame.requestType == "directories" { directoryIsLoading = false }
+            if frame.requestType == "workspaces" {
+                // The paired workspaces response will never arrive; un-stick
+                // the staleness flag so missing-notices are not deferred
+                // until the next refresh cycle.
+                archivedSessionIdsStale = false
+            }
             if frame.requestType == "directory-create" {
                 directoryCreationIsLoading = false
                 pendingDirectoryCreationParentPath = nil
@@ -1140,6 +1152,11 @@ final class AppStore: ObservableObject {
         }
         notice(frame.command == nil ? String(localized: "消息已发送") : String(localized: "命令已执行"), frame.command?.displayText ?? String(localized: "session.preview.id", defaultValue: "\(id.prefix(12))…"), sessionId: id)
         gateway.subscribe(sessionId: id)
+        // This unpaired sessions request cannot know whether the archived
+        // set is still current; arm the staleness flag so the reconcile
+        // defers a missing-notice (which could be a live archive) until a
+        // workspaces frame lands or the flag is otherwise cleared.
+        archivedSessionIdsStale = true
         gateway.requestSessions()
         refreshSessionControls(for: id)
     }
@@ -1432,7 +1449,7 @@ final class AppStore: ObservableObject {
             conversationContentSessionIds.insert(sessionId)
         }
     }
-    private func applyRemoteSessions(_ remote: [GatewaySessionSummary]) {
+    private func applyRemoteSessions(_ remote: [GatewaySessionSummary], presentSessionIds: Set<String>) {
         for item in remote where !archivedSessionIds.contains(item.sessionId) {
             let fallback = item.cwd.map { URL(fileURLWithPath: $0).lastPathComponent }.flatMap { $0.isEmpty ? nil : $0 }
             let title = item.projectedTitle ?? fallback ?? L10n.remoteSessionTitle(item.sessionId.prefix(8))
@@ -1453,7 +1470,11 @@ final class AppStore: ObservableObject {
                 ))
             }
         }
-        sessions.removeAll { archivedSessionIds.contains($0.id) }
+        // Same combined invariant the open-conversation disposition uses:
+        // only drop a session when it is archived AND genuinely absent from
+        // the current frame's raw list. Filtering on the archived set alone
+        // would let a stale set hide a session that was just un-archived.
+        sessions.removeAll { archivedSessionIds.contains($0.id) && !presentSessionIds.contains($0.id) }
         sessions.sort { $0.lastActivity > $1.lastActivity }
     }
     /// A fresh session summary is the first authoritative signal that the open
@@ -1669,6 +1690,10 @@ final class AppStore: ObservableObject {
         for kind in Array(sessionControlLoadingKinds) { finishSessionControlRequest(kind) }
         for kind in Array(defaultConfigurationLoadingKinds) { finishDefaultConfigurationRequest(kind) }
         for id in Array(historyLoadingSessionIds) { finishHistoryLoading(id) }
+        // The transport generation that armed the staleness flag is gone;
+        // its workspaces response will never land. The next successful
+        // connection re-arms the flag via refreshRemoteState.
+        archivedSessionIdsStale = false
         directoryIsLoading = false
         directoryCreationIsLoading = false
         pendingDirectoryCreationParentPath = nil
