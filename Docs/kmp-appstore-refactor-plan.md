@@ -4,7 +4,7 @@
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
 > 最近更新：2026-08-27
-> 当前任务：阶段 10.1～10.5 已完成；等待阶段 10.6 长会话、滚动、重连与实时尾部人工回归
+> 当前任务：阶段 11 已完成；等待确认后开始阶段 12 Android 真实 Gateway 与平台服务
 
 ## 使用说明
 
@@ -228,7 +228,13 @@ Schema 演进与信任边界：schema 2 的 patch 顶层及所有业务 DTO 均�
 - [x] 10.3 将 Trajectory request/assistant/tool/subtool 和 Token Usage 投影切换到 KMP。
 - [x] 10.4 将历史分页状态、cursor 检测、history/live tail 去重和同步水位切换到 KMP。
 - [x] 10.5 iOS 继续拥有网络 Task、超时触发、UIKit viewport 和后台执行；KMP 只计算状态与下一步 effect。
-- [ ] 10.6 对长会话执行性能、内存、滚动位置、重连和实时尾部人工回归。
+- [x] 10.6 对长会话执行性能、内存、滚动位置、重连和实时尾部人工回归。
+  - [x] 10.6.1 消除 KMP Event/UI Intent 同步重入 SwiftUI view update 时产生的 `Publishing changes from within view updates is not allowed`，保持 Event 顺序和一次性 effect 语义。
+  - [x] 10.6.2 修复 Trajectory 详情页 page-style `TabView` 在 sheet detent/安全区变化期间产生的 `UICollectionViewFlowLayoutBreakForInvalidSizes`。
+  - [x] 10.6.3 调整 Agent 后台保活生命周期：前台不提前占用 `UIBackgroundTask`，进入后台时按活动 turn/question 申请，完成、回前台或过期后及时结束。
+  - [x] 10.6.4 修复 `CFBundleDevelopmentRegion` 类型与可复现的越界颜色分量；区分并忽略 CandidateGeneration、无可见 context menu 等系统噪声。
+
+10.6 Console 验收门禁：真实 Gateway 长回答过程中不得出现 KMP schema/sequence/fail-closed 错误、SwiftUI view-update 发布警告、分页布局非法尺寸或后台任务超过 30 秒警告；自动化测试、iPhoneOS Release 构建及 `git diff --check` 通过后，重新执行人工清单。
 
 验收标准：流式过程不重复、不回退、不闪烁，也不会每个 token 全量发布 AppStore；历史加载期间实时尾部不停顿，滚动位置不跳变，性能无明显回退。
 
@@ -238,15 +244,19 @@ Schema 演进与信任边界：schema 2 的 patch 顶层及所有业务 DTO 均�
 
 10.4～10.5 实现结论：新增推送式 `SharedHistoryStore`，KMP 按 session 持有分页状态和有序 raw event 集合；`start/processing/page/live/timeout/cancel/clear` Intent 统一进入 KMP，下一页 `request-page` effect 与对应 state/event patch 在同一 MVI transaction 中发布。History page 与实时尾部按 sequence 去重，重复 seq 由 live lane 胜出；实时事件使用 `append/upsert`，分页基线使用显式 `replace`，同步水位只在 KMP 中推进。Swift `HistorySyncEngine` 继续拥有 20 秒 timeout 与 processing generation，`GatewayClient` 继续执行 WebSocket 请求，UIKit timeline/viewport、图片加载和后台任务均未下放。Adapter 严格校验 schema、sequence、Intent/session、event 顺序、outcome 与 effect，坏 patch 在 raw/UI 发布和网络 effect 前 fail-closed；四个 History UI 属性收紧为 `private(set)`，源码门禁只允许 KMP change 发布块写入。自动化结果：KMP 71 项、Android JVM 2 项、iPhone 17 / iOS 26.5 Simulator XCTest 124 项均 0 失败；等待 10.6 人工回归。
 
+10.6.1～10.6.4 实现结论：KMP Event 继续同步进入 Swift Adapter 完成原子校验，但 AppStore 的 UI 镜像与同事务 effect 改由下一次 MainActor FIFO drain 发布，避免 UI Intent 与 SwiftUI view update 同栈重入；测试等待同一生产队列，不提供同步旁路。Trajectory 详情页三个 page-style `TabView` 改为原生条件页签，移除 UIKit `PagingLayout` 非法尺寸来源；`TrajectoryTimeline` 以 backing `Published` 初始化基线，不在 View body 首次获取时发布。Agent 前台仅维护 turn/question 活动计数，真正进入后台时才申请 `UIBackgroundTask`，回前台、完成或过期即释放。Info.plist 显式输出字符串 `CFBundleDevelopmentRegion=en`，动画粒子颜色/alpha 在构造前钳制到 `0...1`。强制重跑 KMP 71 项、Android 2 项、iPhone 17 / iOS 26.5 Simulator XCTest 125 项，均 0 失败、0 跳过；iPhoneOS Release 无签名构建、产物 Info.plist 类型检查与 `git diff --check` 通过。用户随后确认真实 Gateway 业务操作与 Console 复验均未发现其他问题，阶段 10 正式完成。
+
 ### 阶段 11：iOS 重复实现清理与架构收口
 
-- [ ] 11.1 删除已被 KMP 取代的 Swift DTO、Reducer、Projection、History 纯逻辑及其重复 fixture。
-- [ ] 11.2 保留 Swift 平台层：ObservableObject/SwiftUI、UserDefaults、Keychain、WebSocket、文件、图片、UIKit 和后台任务。
-- [ ] 11.3 将 `AppStore` 收敛为 snapshot 发布、用户 intent 转发和平台 effect 执行器。
-- [ ] 11.4 清理迁移开关、影子比较代码和过渡映射，更新架构文档与依赖图。
-- [ ] 11.5 执行 iOS 全量自动化、完整人工回归以及 Release Device framework 构建。
+- [x] 11.1 删除已被 KMP 取代的 Swift DTO、Reducer、Projection、History 纯逻辑及其重复 fixture。
+- [x] 11.2 保留 Swift 平台层：ObservableObject/SwiftUI、UserDefaults、Keychain、WebSocket、文件、图片、UIKit 和后台任务。
+- [x] 11.3 将 `AppStore` 收敛为 snapshot 发布、用户 intent 转发和平台 effect 执行器。
+- [x] 11.4 清理迁移开关、影子比较代码和过渡映射，更新架构文档与依赖图。
+- [x] 11.5 执行 iOS 全量自动化、完整人工回归以及 Release Device framework 构建。
 
 验收标准：iOS 产品业务逻辑以 KMP 为唯一来源，Swift 不再维护对应的平行实现。
+
+11.1～11.5 实现结论：删除 Swift `SessionListReducer`/`QuestionReducer`/`SessionControlReducer`/`HistoryReducer`、Conversation/Trajectory 领域投影和重复对等 fixture；删除 `SharedShadowFacade`/`KMPShadowValidator` 及 AppStore 的 `usesEventStream` 产品分支。Swift 仅保留 UI DTO/Timeline、Intent 值、Event 校验/发布和平台 I/O；不支持 Event 订阅的 bridge 仅作为 Adapter 故障注入测试 seam，不进入 AppStore 产品分支。`ARCHITECTURE.md` 和 `Docs/kmp-development.md` 已更新为 Intent→KMP→Event/effect 单向 MVI。阶段 11 人工回归发现并最终修复延迟 Session Event 与同步导航竞态：导航等待 UI 镜像提交后再 push，viewport 以 Session ID 硬隔离，冷加载层保持不透明并在对应 diffable snapshot 完成后撤下。最终门禁：KMP 67 项、Android JVM 2 项、iPhone 17 / iOS 26.5 Simulator XCTest 106 项均为 0 失败；Android Debug APK 与 iPhoneOS Release 无签名构建成功，`git diff --check` 通过。用户确认真实 Gateway 人工验收通过，阶段 11 正式完成。
 
 ### 阶段 12：Android 真实 Gateway 与平台服务
 
@@ -299,9 +309,9 @@ xcodebuild test \
 ./gradlew :androidApp:testDebugUnitTest
 ```
 
-阶段 8 起，每个 iOS 子系统切换还必须执行：
+阶段 11 起，iOS 领域验证必须执行：
 
-- 对等 fixture 的 Swift/KMP 影子差异测试；
+- KMP `commonTest` 与平台 Adapter 协议/fail-closed 测试，不得恢复 Swift 平行实现或影子差异路径；
 - iOS 全量 XCTest；
 - `shared:allTests` 与 Android JVM 单测；
 - 对应子系统的 iOS 人工回归。
@@ -310,13 +320,9 @@ xcodebuild test \
 
 ## 当前已知风险
 
-- `sessions` 当前通过 `didSet` 高频同步写入 UserDefaults，拆分时要避免漏存或重复存储。
-- `AppStore` 是 `@MainActor`，将纯逻辑移出后要明确状态提交线程。
-- history rebase 与 live tail 存在并发窗口，阶段 5 前不顺手重写其算法。
 - Conversation timeline 使用 UIKit 直接订阅优化，不能退化为每 token 发布整个 AppStore。
 - iOS 后台任务和 Gateway 重连相互影响，必须留在平台/effect 层。
 - Swift 与 Kotlin Flow/异常的互操作需要粗粒度 facade，避免直接暴露复杂内部 API。
-- Swift/Kotlin 双实现并存期间容易产生静默漂移，必须用只读影子比较缩短并存时间。
 - Kotlin/Native 未声明并捕获的异常跨越 Swift 边界可能导致进程终止，facade 必须返回显式错误结果。
 - Conversation 流式投影若跨桥接层频繁复制完整列表，会引入卡顿和内存峰值，必须保留增量接口。
 - Android 真实 Gateway 接入涉及凭据、后台连接和附件文件，必须分别使用 Keystore、生命周期策略和受控缓存。
@@ -325,6 +331,12 @@ xcodebuild test \
 
 ### 2026-08-27
 
+- 完成阶段 11.5：用户确认第二轮历史遮罩与 Session 闪帧修复人工验收通过，阶段 11 清单全部收口。最终强制门禁为 KMP 67 项、Android JVM 2 项、iOS Simulator XCTest 106 项，均 0 失败；Android Debug APK、iPhoneOS Release 无签名构建和 `git diff --check` 通过。阶段 12 尚未开始。
+- 阶段 11 首轮历史遮罩与 Session 闪帧修复经人工复验确认无效，原记录撤回。进一步对比阶段 10 checkpoint 后定位到阶段 11 延迟 Event 发布与同步导航之间的竞态：KMP 已选择新 Session，但 Swift UI 镜像尚在下一 MainActor turn 排队，目标页面首帧因而读取旧 Session。第二轮改为导航等待选择 Event 提交成功后再 push；Conversation viewport 以 Session ID 硬隔离 controller，冷加载层保持不透明，且只在对应 Session 的 diffable snapshot 完成后报告内容可见。新增导航提交屏障与 viewport 可见性两项测试；iPhone 17 / iOS 26.5 Simulator 全量 XCTest 106 项通过，iPhoneOS Release 无签名构建与 `git diff --check` 通过。仍等待真实历史 Session 人工复验，不提前标记通过。
+- 阶段 11 人工回归发现 Session 切换时，新 Timeline 的 diffable snapshot 提交前会短暂保留上一 Session cell。Viewport 现在在 Session ID 变化的同一调用栈内隐藏旧 snapshot，以 `sessionGeneration` 屏蔽旧异步 completion，仅当当前 Session snapshot 原子提交后再显示。定向 XCTest 覆盖身份屏障与新 snapshot 解锁，等待快速切换人工复验。
+- 阶段 11 人工回归发现历史 Session 首批 Timeline 已由 UIKit 直接显示时，外层 SwiftUI 未感知空/非空边界，导致全屏加载遮罩滞留并与内容重叠。`ConversationViewport` 现在只在空↔非空变化时上报 session-scoped 边缘事件，首批内容可见即撤除全屏遮罩，后续 token 不会重绘整页。新增定向 XCTest 通过，等待真实历史 Session 人工复验。
+- 完成阶段 11.1～11.4 与 11.5 自动化：删除 iOS 重复 Reducer/Projection/History fixture、KMP Shadow facade/validator 和 AppStore Event 迁移分支；AppStore 只转发 Intent、发布 KMP Event UI 镜像和执行平台 effect。更新架构/开发文档并新增 `Docs/kmp-stage11-manual-verification.md`。KMP 67、Android 2、iOS Simulator 104 项测试全绿，Android APK 和 iPhoneOS Release 构建成功；等待人工验收勾选 11.5，不进入阶段 12。
+- 完成阶段 10.6 Console 阻断项代码修复与自动化门禁：KMP→AppStore UI Event/effect 延迟到下一 MainActor FIFO drain；移除 Trajectory 详情 `PagingLayout`；后台任务改为按真实后台生命周期申请；修复 DevelopmentRegion 类型并钳制动画颜色。KMP 71、Android 2、iOS 125 项测试及 iPhoneOS Release 全绿，等待真实 Gateway 再次人工观察 Console 后勾选 10.6。
 - 完成阶段 10.4～10.5：History 分页 Reducer、cursor/循环检测、history/live tail 去重和同步水位切换到 KMP 推送式 MVI；Swift 保留 Gateway、超时/代际、UIKit、图片和后台执行。KMP 71 项、Android 2 项、iOS 124 项全绿，进入阶段 10.6 人工回归。
 - 完成阶段 10.3：Trajectory request/assistant/tool/subtool 与 Token Usage 已切换到 KMP 唯一投影；跨桥只推送节点增量 operation，实时事件在页面可见时按帧批处理，Swift 只维护可重建 `TrajectoryTimeline` UI 镜像。KMP 67 项及 iOS 四项定向门禁通过；继续阶段 10.4 History。
 - 完成阶段 10.1～10.2：Conversation 高频路径采用 KMP `insert/append-text(delta)/remove/replace` 推送协议，AppStore 已移除 Swift projector 状态与产品调用；WebSocket 事件及历史基线均以 Intent 进入 KMP，Swift 只校验 patch 并按 display link 节奏发布 UIKit timeline。自动化覆盖 payload 恒长、最终消息替换、历史/乱序、图片/工具投影对等、坏 patch fail-closed 与源码门禁；继续阶段 10.3。

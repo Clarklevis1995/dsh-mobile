@@ -13,11 +13,8 @@
 		5ED39F22065A71FC54D755AC /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61A1F439244BA594BF547C92 /* AppStore.swift */; };
 		A9F100000000000000000001 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F100000000000000000002 /* AppPreferences.swift */; };
 		A9F200000000000000000001 /* PairingPayloadParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F200000000000000000002 /* PairingPayloadParser.swift */; };
-		A9F300000000000000000001 /* SessionListReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F300000000000000000002 /* SessionListReducer.swift */; };
-		A9F400000000000000000001 /* QuestionReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F400000000000000000002 /* QuestionReducer.swift */; };
-		A9F500000000000000000001 /* SessionControlReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F500000000000000000002 /* SessionControlReducer.swift */; };
+		A9F300000000000000000001 /* KMPDomainIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F300000000000000000002 /* KMPDomainIntents.swift */; };
 		A9F600000000000000000001 /* RequestTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F600000000000000000002 /* RequestTracker.swift */; };
-		A9F700000000000000000001 /* HistoryReducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F700000000000000000002 /* HistoryReducer.swift */; };
 		A9F800000000000000000001 /* HistorySyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F800000000000000000002 /* HistorySyncEngine.swift */; };
 		A9F900000000000000000001 /* AttachmentLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F900000000000000000002 /* AttachmentLoader.swift */; };
 		A9FA00000000000000000001 /* AgentBackgroundExecutionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */; };
@@ -37,7 +34,7 @@
 		8891D9FBE23CCC096061416E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A37B43613D712F252BA91D7 /* RootView.swift */; };
 		991D4FD90B81F84A0B8B79AD /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12863E736F832D8F502B94A0 /* Theme.swift */; };
 		A0C0FFEE0000000000000001 /* ConversationViewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000002 /* ConversationViewport.swift */; };
-		A0C0FFEE0000000000000003 /* ConversationProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000004 /* ConversationProjection.swift */; };
+		A0C0FFEE0000000000000003 /* ConversationTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000004 /* ConversationTimeline.swift */; };
 		AFAE90EEB4462AD84169D356 /* GatewayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */; };
 		B0C0FFEE0000000000000001 /* HarnessAnimatedBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C0FFEE0000000000000002 /* HarnessAnimatedBackground.swift */; };
 		B0C0FFEE0000000000000003 /* HarnessBackground.metal in Sources */ = {isa = PBXBuildFile; fileRef = B0C0FFEE0000000000000004 /* HarnessBackground.metal */; };
@@ -75,11 +72,8 @@
 		61A1F439244BA594BF547C92 /* AppStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		A9F100000000000000000002 /* AppPreferences.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
 		A9F200000000000000000002 /* PairingPayloadParser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairingPayloadParser.swift; sourceTree = "<group>"; };
-		A9F300000000000000000002 /* SessionListReducer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionListReducer.swift; sourceTree = "<group>"; };
-		A9F400000000000000000002 /* QuestionReducer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuestionReducer.swift; sourceTree = "<group>"; };
-		A9F500000000000000000002 /* SessionControlReducer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionControlReducer.swift; sourceTree = "<group>"; };
+		A9F300000000000000000002 /* KMPDomainIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KMPDomainIntents.swift; sourceTree = "<group>"; };
 		A9F600000000000000000002 /* RequestTracker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RequestTracker.swift; sourceTree = "<group>"; };
-		A9F700000000000000000002 /* HistoryReducer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryReducer.swift; sourceTree = "<group>"; };
 		A9F800000000000000000002 /* HistorySyncEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistorySyncEngine.swift; sourceTree = "<group>"; };
 		A9F900000000000000000002 /* AttachmentLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AttachmentLoader.swift; sourceTree = "<group>"; };
 		A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentBackgroundExecutionController.swift; sourceTree = "<group>"; };
@@ -90,7 +84,7 @@
 		65009160A0642089906B54DF /* TrajectoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrajectoryView.swift; sourceTree = "<group>"; };
 		954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayModels.swift; sourceTree = "<group>"; };
 		A0C0FFEE0000000000000002 /* ConversationViewport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationViewport.swift; sourceTree = "<group>"; };
-		A0C0FFEE0000000000000004 /* ConversationProjection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationProjection.swift; sourceTree = "<group>"; };
+		A0C0FFEE0000000000000004 /* ConversationTimeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationTimeline.swift; sourceTree = "<group>"; };
 		B0C0FFEE0000000000000002 /* HarnessAnimatedBackground.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HarnessAnimatedBackground.swift; sourceTree = "<group>"; };
 		B0C0FFEE0000000000000004 /* HarnessBackground.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; path = HarnessBackground.metal; sourceTree = "<group>"; };
 		B64F29E9B8346B9A678CA487 /* DeepSeekHarnessMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeepSeekHarnessMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -129,11 +123,8 @@
 			children = (
 				A9F100000000000000000002 /* AppPreferences.swift */,
 				A9F200000000000000000002 /* PairingPayloadParser.swift */,
-				A9F300000000000000000002 /* SessionListReducer.swift */,
-				A9F400000000000000000002 /* QuestionReducer.swift */,
-				A9F500000000000000000002 /* SessionControlReducer.swift */,
+				A9F300000000000000000002 /* KMPDomainIntents.swift */,
 				A9F600000000000000000002 /* RequestTracker.swift */,
-				A9F700000000000000000002 /* HistoryReducer.swift */,
 				A9F800000000000000000002 /* HistorySyncEngine.swift */,
 				A9F900000000000000000002 /* AttachmentLoader.swift */,
 				A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */,
@@ -142,7 +133,7 @@
 				61A1F439244BA594BF547C92 /* AppStore.swift */,
 				CA11E0000000000000000002 /* ImageAttachmentCache.swift */,
 				CA11E0000000000000000004 /* ImagePreprocessor.swift */,
-				A0C0FFEE0000000000000004 /* ConversationProjection.swift */,
+				A0C0FFEE0000000000000004 /* ConversationTimeline.swift */,
 				E61E231D0CD3E07857F861B0 /* GatewayClient.swift */,
 				954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */,
 				CA11E000000000000000000A /* L10n.swift */,
@@ -394,11 +385,8 @@
 				D3A40BFC0B9C8D4B1C8FAA95 /* DeepSeekHarnessMobileApp.swift in Sources */,
 				A9F100000000000000000001 /* AppPreferences.swift in Sources */,
 				A9F200000000000000000001 /* PairingPayloadParser.swift in Sources */,
-				A9F300000000000000000001 /* SessionListReducer.swift in Sources */,
-				A9F400000000000000000001 /* QuestionReducer.swift in Sources */,
-				A9F500000000000000000001 /* SessionControlReducer.swift in Sources */,
+				A9F300000000000000000001 /* KMPDomainIntents.swift in Sources */,
 				A9F600000000000000000001 /* RequestTracker.swift in Sources */,
-				A9F700000000000000000001 /* HistoryReducer.swift in Sources */,
 				A9F800000000000000000001 /* HistorySyncEngine.swift in Sources */,
 				A9F900000000000000000001 /* AttachmentLoader.swift in Sources */,
 				A9FA00000000000000000001 /* AgentBackgroundExecutionController.swift in Sources */,
@@ -407,7 +395,7 @@
 				5ED39F22065A71FC54D755AC /* AppStore.swift in Sources */,
 				CA11E0000000000000000001 /* ImageAttachmentCache.swift in Sources */,
 				CA11E0000000000000000003 /* ImagePreprocessor.swift in Sources */,
-				A0C0FFEE0000000000000003 /* ConversationProjection.swift in Sources */,
+				A0C0FFEE0000000000000003 /* ConversationTimeline.swift in Sources */,
 				80E777AC0855635BC3D12EA7 /* GatewayClient.swift in Sources */,
 				AFAE90EEB4462AD84169D356 /* GatewayModels.swift in Sources */,
 				CA11E0000000000000000009 /* L10n.swift in Sources */,

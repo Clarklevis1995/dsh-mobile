@@ -132,11 +132,13 @@ private struct HarnessWhaleField: View {
                     width: dotSize,
                     height: dotSize
                 )
-                let alpha = (0.10 + particle.luminance * 0.38) * shimmer
+                let boundedLuminance = min(1, max(0, particle.luminance))
+                let boundedLight = min(1, max(0, particle.light))
+                let alpha = min(1, max(0, (0.10 + boundedLuminance * 0.38) * shimmer))
                 let color = Color(
-                    red: 0.73 + 0.15 * particle.light,
-                    green: 0.79 + 0.12 * particle.light,
-                    blue: 0.92 + 0.08 * particle.light
+                    red: min(1, max(0, 0.73 + 0.15 * boundedLight)),
+                    green: min(1, max(0, 0.79 + 0.12 * boundedLight)),
+                    blue: min(1, max(0, 0.92 + 0.08 * boundedLight))
                 )
                 context.fill(Path(roundedRect: rect, cornerRadius: dotSize * 0.18), with: .color(color.opacity(alpha)))
             }

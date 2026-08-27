@@ -71,12 +71,14 @@ struct ConversationViewport: UIViewControllerRepresentable {
     let makeEntries: ([ConversationItem]) -> [ConversationViewportEntry]
     let bottomInset: CGFloat
     let scrollToBottomToken: Int
+    let onContentAvailabilityChanged: (String?, Bool) -> Void
     let onPinnedToBottomChanged: (Bool) -> Void
     let onBottomAlignmentCompleted: () -> Void
     let onApproachingTop: () -> Void
 
     func makeUIViewController(context: Context) -> ConversationViewportController {
         let controller = ConversationViewportController(
+            onContentAvailabilityChanged: onContentAvailabilityChanged,
             onPinnedToBottomChanged: onPinnedToBottomChanged,
             onBottomAlignmentCompleted: onBottomAlignmentCompleted,
             onApproachingTop: onApproachingTop
@@ -86,6 +88,7 @@ struct ConversationViewport: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: ConversationViewportController, context: Context) {
+        controller.onContentAvailabilityChanged = onContentAvailabilityChanged
         controller.onPinnedToBottomChanged = onPinnedToBottomChanged
         controller.onBottomAlignmentCompleted = onBottomAlignmentCompleted
         controller.onApproachingTop = onApproachingTop
@@ -140,6 +143,7 @@ final class ConversationViewportProxy {
 
 final class ConversationViewportController: UIViewController, UICollectionViewDelegate {
     weak var proxyOwner: ConversationViewportProxy?
+    var onContentAvailabilityChanged: (String?, Bool) -> Void
     var onPinnedToBottomChanged: (Bool) -> Void
     var onBottomAlignmentCompleted: () -> Void
     var onApproachingTop: () -> Void
@@ -163,19 +167,30 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     /// tail-follow intent captured before the insertion began.
     private var userInteractionGeneration = 0
     private var lastAppliedRevision = -1
+    private var lastReportedContentAvailability: Bool?
+    /// Diffable snapshot 的 completion 是异步的。Session 切换时递增代际，
+    /// 防止旧 session 的 completion 解锁新 session 的 viewport。
+    private var sessionGeneration = 0
     private weak var timeline: ConversationTimeline?
     private var timelineObserverID: UUID?
     private var supplementalEntries: [ConversationViewportEntry] = []
     private var makeEntries: (([ConversationItem]) -> [ConversationViewportEntry])?
     private var bottomInset: CGFloat = 0
-    private var pendingApply: (entries: [ConversationViewportEntry], revision: Int, bottomInset: CGFloat)?
+    private var pendingApply: (
+        entries: [ConversationViewportEntry],
+        revision: Int,
+        bottomInset: CGFloat,
+        hasConversationContent: Bool
+    )?
     private var cellHeightCache: [CellMeasurementKey: CGFloat] = [:]
 
     init(
+        onContentAvailabilityChanged: @escaping (String?, Bool) -> Void,
         onPinnedToBottomChanged: @escaping (Bool) -> Void,
         onBottomAlignmentCompleted: @escaping () -> Void,
         onApproachingTop: @escaping () -> Void
     ) {
+        self.onContentAvailabilityChanged = onContentAvailabilityChanged
         self.onPinnedToBottomChanged = onPinnedToBottomChanged
         self.onBottomAlignmentCompleted = onBottomAlignmentCompleted
         self.onApproachingTop = onApproachingTop
@@ -221,20 +236,27 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     }
 
     private func receive(_ snapshot: ConversationTimeline.Snapshot) {
+        let hasContent = !snapshot.items.isEmpty
         guard let makeEntries else { return }
         apply(
             entries: supplementalEntries + makeEntries(snapshot.items),
             revision: snapshot.revision,
-            bottomInset: bottomInset
+            bottomInset: bottomInset,
+            hasConversationContent: hasContent
         )
     }
 
     func setSessionID(_ newSessionID: String?) {
         guard newSessionID != sessionID else { return }
+        sessionGeneration &+= 1
         sessionID = newSessionID
+        // 在新 timeline snapshot 原子提交前隐藏旧 cell，
+        // 禁止上一个 session 的内容在切换期间闪现一帧。
+        collectionView.isHidden = true
+        lastReportedContentAvailability = nil
+        reportContentAvailability(false)
         hasPlacedInitialPosition = false
         hasAppliedSnapshot = false
-        isApplyingSnapshot = false
         isPinnedToBottom = false
         setPinned(true)
         needsInitialBottomPlacement = false
@@ -401,7 +423,12 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         alignBottomIfNeeded()
     }
 
-    func apply(entries: [ConversationViewportEntry], revision: Int, bottomInset: CGFloat) {
+    func apply(
+        entries: [ConversationViewportEntry],
+        revision: Int,
+        bottomInset: CGFloat,
+        hasConversationContent: Bool
+    ) {
         collectionView.contentInset.bottom = bottomInset
         collectionView.verticalScrollIndicatorInsets.bottom = bottomInset
         let ids = entries.map(\.id)
@@ -411,14 +438,19 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         prewarmUserMessageHeights(in: entries)
         let changed = entries.compactMap { previousRevisions[$0.id] == $0.revision ? nil : $0.id }
         let hasStructureChange = dataSource.snapshot().itemIdentifiers != ids
-        guard hasStructureChange || !changed.isEmpty else { return }
+        guard hasStructureChange || !changed.isEmpty else {
+            hasAppliedSnapshot = true
+            collectionView.isHidden = false
+            reportContentAvailability(hasConversationContent)
+            return
+        }
 
         // UICollectionView forbids nested diffable applies. Keep exactly one
         // latest pending state: a fast stream can never create a main-queue
         // backlog, and the next apply always contains every packet folded so
         // far.
         guard !isApplyingSnapshot else {
-            pendingApply = (entries, revision, bottomInset)
+            pendingApply = (entries, revision, bottomInset, hasConversationContent)
             return
         }
         let streamingChanged = changed.filter { id in
@@ -459,6 +491,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             return
         }
         isApplyingSnapshot = true
+        let applyingSessionGeneration = sessionGeneration
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
         snapshot.appendSections([0])
         snapshot.appendItems(ids)
@@ -468,8 +501,26 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         let wasEmpty = !hasAppliedSnapshot
         dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
             guard let self else { return }
-            self.hasAppliedSnapshot = true
             self.isApplyingSnapshot = false
+            guard self.sessionGeneration == applyingSessionGeneration else {
+                // 旧 session 的 apply 已经完成，但 viewport 仍保持隐藏。
+                // 立即提交切换期间收到的最新 session snapshot。
+                if let pending = self.pendingApply {
+                    self.pendingApply = nil
+                    self.apply(
+                        entries: pending.entries,
+                        revision: pending.revision,
+                        bottomInset: pending.bottomInset,
+                        hasConversationContent: pending.hasConversationContent
+                    )
+                }
+                return
+            }
+            self.hasAppliedSnapshot = true
+            self.collectionView.isHidden = false
+            // 只有 diffable snapshot 已经真正提交、cell 可以显示以后，才允许
+            // SwiftUI 撤下冷加载遮罩。
+            self.reportContentAvailability(hasConversationContent)
             if let prependAnchor, !keepTail {
                 self.restore(prependAnchor)
             }
@@ -488,10 +539,17 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                 self.apply(
                     entries: pending.entries,
                     revision: pending.revision,
-                    bottomInset: pending.bottomInset
+                    bottomInset: pending.bottomInset,
+                    hasConversationContent: pending.hasConversationContent
                 )
             }
         }
+    }
+
+    private func reportContentAvailability(_ hasContent: Bool) {
+        guard hasContent != lastReportedContentAvailability else { return }
+        lastReportedContentAvailability = hasContent
+        onContentAvailabilityChanged(sessionID, hasContent)
     }
 
     private func updateVisibleStreamingCells(_ ids: [String]) {

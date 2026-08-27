@@ -67,6 +67,8 @@ Xcode target 的 `Build KMP Framework` phase 会根据 Debug/Release、Simulator
 ## 后续迁移规则
 
 1. 先在 `commonMain` 建立平台无关模型和 Reducer，再由 Android UI 接入。
-2. Swift 现有实现继续作为行为基线，迁移一组逻辑就同步建立 `commonTest` fixture。
+2. 已迁移领域的 KMP 实现是唯一行为基线；用 `commonTest` 和平台 Adapter 测试验证协议，不再保留 Swift 重复 Reducer/Projection。
 3. 网络、磁盘、Keychain、后台任务和 UI 生命周期不得直接进入 `commonMain`。
 4. Swift 通过 `KMPSharedAdapter` 访问粗粒度 facade；不要从 SwiftUI 直接操作 Kotlin Reducer 或复杂协程类型。
+5. UI Intent 向下进入 KMP，KMP Event 向上发布增量 state patch/effect；Swift 镜像只允许在对应 Event 发布作用域中写入。
+6. 新功能不得恢复 Swift/KMP 双 Reducer、运行时迁移开关或只读 shadow 对比路径。

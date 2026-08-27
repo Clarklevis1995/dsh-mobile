@@ -3,7 +3,11 @@ import SwiftUI
 /// 仅轨迹页订阅的展示通道，避免高频节点 patch 触发整个 AppStore/ConversationView。
 @MainActor
 final class TrajectoryTimeline: ObservableObject {
-    @Published private(set) var nodes: [TrajectoryNode] = []
+    @Published private(set) var nodes: [TrajectoryNode]
+
+    init(initialNodes: [TrajectoryNode] = []) {
+        _nodes = Published(initialValue: initialNodes)
+    }
 
     func publish(_ nodes: [TrajectoryNode]) {
         self.nodes = nodes
@@ -338,295 +342,6 @@ struct RequestTokenUsage: Sendable {
     }
 }
 
-enum TrajectoryProjection {
-    static func make(from source: [SessionEvent]) -> [TrajectoryNode] {
-        let events = source.sorted { $0.seq < $1.seq }
-        let completedSteps = Set(events.filter { $0.event.type == "assistant/message" }.map(stepKey))
-        let assistantChunks = Dictionary(grouping: events.filter {
-            $0.event.type == "assistant/chunk" &&
-            ["reasoning-delta", "text-delta", "tool-call-delta", "block-start", "block-end", "usage", "finish"].contains($0.event.chunkType)
-        }, by: stepKey)
-        var nodes: [TrajectoryNode] = []
-        var assistantIndexes: [String: Int] = [:]
-        var requestIndexes: [String: Int] = [:]
-        var toolIndexes: [String: Int] = [:]
-        var subtoolIndexes: [String: Int] = [:]
-        let requestMetadataRecords = events.filter { ["request/header", "request/context"].contains($0.event.type) }
-        let requestOptions = requestMetadataRecords.first { $0.event.type == "request/header" }?.event.raw?["header"]?["config"]
-        let requestContext = requestMetadataRecords.first { $0.event.type == "request/context" }?.event.raw
-        let toolDefinitions = requestMetadataRecords.first { $0.event.type == "request/header" }?.event.raw?["header"]?["tools"]?.arrayValue ?? []
-        var requestNumber = 0
-        var cumulativeUsage = RequestTokenUsage()
-
-        for record in events {
-            if Task.isCancelled { return [] }
-            let event = record.event
-            let key = stepKey(record)
-            switch event.type {
-            case "user/message" where event.source == nil || event.source == "user":
-                guard let text = event.text, !text.isEmpty else { continue }
-                nodes.append(node(id: "input-\(record.id)", kind: .input, title: "User", subtitle: text, record: record))
-
-            case "user/message":
-                guard let text = event.text, !text.isEmpty else { continue }
-                nodes.append(node(
-                    id: "context-\(record.id)",
-                    kind: .context,
-                    title: contextSourceName(event),
-                    subtitle: text,
-                    record: record
-                ))
-
-            case "assistant/chunk" where !completedSteps.contains(key):
-                guard ["reasoning-delta", "text-delta"].contains(event.chunkType), let text = event.text, !text.isEmpty else { continue }
-                if requestIndexes[key] == nil {
-                    requestNumber += 1
-                    let usage = requestUsage(from: event.usage)
-                    cumulativeUsage = cumulativeUsage + usage
-                    requestIndexes[key] = nodes.count
-                    nodes.append(requestNode(
-                        number: requestNumber,
-                        key: key,
-                        startRecord: record,
-                        endRecord: record,
-                        records: requestMetadataRecords + [record],
-                        options: requestOptions,
-                        context: requestContext,
-                        usage: usage,
-                        cumulativeUsage: cumulativeUsage,
-                        finalEvent: nil,
-                        allEvents: events
-                    ))
-                } else if let requestIndex = requestIndexes[key] {
-                    nodes[requestIndex].endSeq = record.seq
-                    nodes[requestIndex].end = record.date
-                    nodes[requestIndex].records.append(record)
-                }
-                if let index = assistantIndexes[key] {
-                    nodes[index].subtitle += text
-                    nodes[index].endSeq = record.seq
-                    nodes[index].end = record.date
-                    nodes[index].records.append(record)
-                } else {
-                    assistantIndexes[key] = nodes.count
-                    nodes.append(node(id: "assistant-stream-\(key)", kind: .assistant, title: "Assistant", subtitle: text, record: record))
-                }
-
-            case "assistant/message":
-                let chunks = assistantChunks[key] ?? []
-                let startRecord = chunks.first ?? record
-                let usage = requestUsage(from: event.usage ?? event.raw?["usage"])
-                if let requestIndex = requestIndexes[key] {
-                    let oldUsage = nodes[requestIndex].request?.usage ?? RequestTokenUsage()
-                    cumulativeUsage = cumulativeUsage + usage + RequestTokenUsage(
-                        uncachedInput: -oldUsage.uncachedInput,
-                        cachedInput: -oldUsage.cachedInput,
-                        output: -oldUsage.output,
-                        reasoning: -oldUsage.reasoning
-                    )
-                    nodes[requestIndex] = requestNode(
-                        number: nodes[requestIndex].request?.number ?? requestNumber,
-                        key: key,
-                        startRecord: startRecord,
-                        endRecord: record,
-                        records: requestMetadataRecords + chunks + [record],
-                        options: requestOptions,
-                        context: requestContext,
-                        usage: usage,
-                        cumulativeUsage: cumulativeUsage,
-                        finalEvent: event,
-                        allEvents: events
-                    )
-                } else {
-                    requestNumber += 1
-                    cumulativeUsage = cumulativeUsage + usage
-                    requestIndexes[key] = nodes.count
-                    nodes.append(requestNode(
-                        number: requestNumber,
-                        key: key,
-                        startRecord: startRecord,
-                        endRecord: record,
-                        records: requestMetadataRecords + chunks + [record],
-                        options: requestOptions,
-                        context: requestContext,
-                        usage: usage,
-                        cumulativeUsage: cumulativeUsage,
-                        finalEvent: event,
-                        allEvents: events
-                    ))
-                }
-                let subtitle = nonEmpty(event.reasoning) ?? nonEmpty(event.text) ?? "(tool call only)"
-                nodes.append(TrajectoryNode(
-                    id: "assistant-\(record.id)", kind: .assistant, title: "Assistant", subtitle: subtitle,
-                    startSeq: startRecord.seq, endSeq: record.seq, start: startRecord.date, end: record.date,
-                    records: chunks + [record], request: nil, tool: nil
-                ))
-
-            case "tool/call":
-                let callKey = event.callId ?? record.id
-                let arguments = event.arguments?.jsonDisplayText.replacingOccurrences(of: "\n", with: " ") ?? ""
-                toolIndexes[callKey] = nodes.count
-                var toolNode = node(id: "tool-\(callKey)", kind: .tool, title: event.name?.lowercased() ?? "tool", subtitle: arguments, record: record)
-                toolNode.tool = TrajectoryTool(
-                    hierarchy: "Assistant Message",
-                    schema: toolDefinitions.first { $0["name"]?.stringValue == event.name }
-                )
-                nodes.append(toolNode)
-
-            case "tool/result":
-                let callKey = event.callId ?? record.id
-                if let index = toolIndexes[callKey] {
-                    let result = event.preview ?? ""
-                    if !result.isEmpty {
-                        nodes[index].subtitle += (nodes[index].subtitle.isEmpty ? "" : "  →  ") + result.replacingOccurrences(of: "\n", with: " ")
-                    }
-                    nodes[index].endSeq = record.seq
-                    nodes[index].end = record.date
-                    nodes[index].records.append(record)
-                } else {
-                    nodes.append(node(id: "tool-result-\(record.id)", kind: .tool, title: event.isError == true ? "tool error" : "tool result", subtitle: event.preview ?? "", record: record))
-                }
-
-            case "tool/code-dispatch-start":
-                let callKey = event.subCallId ?? record.id
-                let arguments = event.arguments?.jsonDisplayText.replacingOccurrences(of: "\n", with: " ") ?? ""
-                let parentTitle = event.parentCallId.flatMap { parentId in
-                    toolIndexes[parentId].map { nodes[$0].title }
-                } ?? "Tool"
-                subtoolIndexes[callKey] = nodes.count
-                var subtoolNode = node(
-                    id: "subtool-\(callKey)",
-                    kind: .subtool,
-                    title: event.name?.lowercased() ?? "subtool",
-                    subtitle: arguments,
-                    record: record
-                )
-                subtoolNode.tool = TrajectoryTool(hierarchy: parentTitle, schema: nil)
-                nodes.append(subtoolNode)
-
-            case "tool/code-dispatch":
-                let callKey = event.subCallId ?? record.id
-                if let index = subtoolIndexes[callKey] {
-                    let result = event.preview ?? ""
-                    if !result.isEmpty {
-                        nodes[index].subtitle += (nodes[index].subtitle.isEmpty ? "" : "  →  ") + result.replacingOccurrences(of: "\n", with: " ")
-                    }
-                    nodes[index].endSeq = record.seq
-                    nodes[index].end = record.date
-                    nodes[index].records.append(record)
-                } else {
-                    var subtoolNode = node(
-                        id: "subtool-result-\(record.id)",
-                        kind: .subtool,
-                        title: event.name?.lowercased() ?? "subtool",
-                        subtitle: event.preview ?? "",
-                        record: record
-                    )
-                    subtoolNode.tool = TrajectoryTool(hierarchy: "Tool", schema: nil)
-                    nodes.append(subtoolNode)
-                }
-
-            default:
-                continue
-            }
-        }
-        return nodes.sorted {
-            if $0.startSeq != $1.startSeq { return $0.startSeq < $1.startSeq }
-            return sortPriority($0.kind) < sortPriority($1.kind)
-        }
-    }
-
-    private static func node(id: String, kind: TrajectoryNode.Kind, title: String, subtitle: String, record: SessionEvent) -> TrajectoryNode {
-        TrajectoryNode(id: id, kind: kind, title: title, subtitle: subtitle, startSeq: record.seq, endSeq: record.seq, start: record.date, end: record.date, records: [record], request: nil, tool: nil)
-    }
-
-    private static func requestNode(
-        number: Int,
-        key: String,
-        startRecord: SessionEvent,
-        endRecord: SessionEvent,
-        records: [SessionEvent],
-        options: JSONValue?,
-        context: JSONValue?,
-        usage: RequestTokenUsage,
-        cumulativeUsage: RequestTokenUsage,
-        finalEvent: GatewayEvent?,
-        allEvents: [SessionEvent]
-    ) -> TrajectoryNode {
-        let source = finalEvent?.raw?["message"]?["source"]
-        let provider = source?["provider"]?.stringValue ?? context?["provider"]?.stringValue ?? options?["provider"]?.stringValue
-        let model = source?["model"]?.stringValue ?? context?["model"]?.stringValue ?? options?["model"]?.stringValue
-        let turn = finalEvent?.turn ?? startRecord.event.turn
-        let step = finalEvent?.step ?? startRecord.event.step
-        let toolCalls = finalEvent?.toolCalls?.count ?? 0
-        let callIds = Set(finalEvent?.toolCalls?.map(\.id) ?? [])
-        let subtoolCalls = allEvents.filter {
-            $0.event.type == "tool/code-dispatch" &&
-            ($0.event.rootCallId.map(callIds.contains) == true || $0.event.parentCallId.map(callIds.contains) == true)
-        }.count
-        let subtitle = [
-            turn.map { "Turn \($0)" },
-            step.map { "Step \($0)" },
-            provider,
-            model
-        ].compactMap { $0 }.joined(separator: " · ")
-        return TrajectoryNode(
-            id: "request-\(key)",
-            kind: .request,
-            title: "Request #\(number)",
-            subtitle: subtitle,
-            startSeq: startRecord.seq,
-            endSeq: endRecord.seq,
-            start: startRecord.date,
-            end: endRecord.date,
-            records: records,
-            request: TrajectoryRequest(
-                number: number,
-                turn: turn,
-                step: step,
-                provider: provider,
-                model: model,
-                options: options,
-                usage: usage,
-                cumulativeUsage: cumulativeUsage,
-                toolCalls: toolCalls,
-                subtoolCalls: subtoolCalls
-            ),
-            tool: nil
-        )
-    }
-
-    private static func requestUsage(from value: JSONValue?) -> RequestTokenUsage {
-        RequestTokenUsage(
-            uncachedInput: value?.firstInteger(for: ["inputTokens", "input_tokens", "uncachedInputTokens"]) ?? 0,
-            cachedInput: value?.firstInteger(for: ["cacheReadTokens", "cachedInputTokens", "cached_tokens"]) ?? 0,
-            output: value?.firstInteger(for: ["outputTokens", "output_tokens", "completionTokens"]) ?? 0,
-            reasoning: value?.firstInteger(for: ["reasoningTokens", "reasoning_tokens"]) ?? 0
-        )
-    }
-    private static func stepKey(_ record: SessionEvent) -> String { "\(record.event.turn ?? -1)-\(record.event.step ?? -1)" }
-    private static func sortPriority(_ kind: TrajectoryNode.Kind) -> Int {
-        switch kind {
-        case .input: 0
-        case .context: 1
-        case .request: 2
-        case .assistant: 3
-        case .tool: 4
-        case .subtool: 5
-        }
-    }
-    private static func contextSourceName(_ event: GatewayEvent) -> String {
-        if let plugin = event.raw?["source"]?["plugin"]?.stringValue, !plugin.isEmpty {
-            return plugin
-        }
-        return event.source ?? "context"
-    }
-    private static func nonEmpty(_ value: String?) -> String? {
-        guard let value, !value.isEmpty else { return nil }
-        return value
-    }
-}
-
 private struct TrajectoryRow: View {
     let node: TrajectoryNode
     let requestNode: TrajectoryNode?
@@ -792,12 +507,7 @@ private struct EventDetailSheet: View {
                 } else {
                     detailTabs
                     Divider()
-                    TabView(selection: $tab) {
-                        scrollPage(summaryView).tag(Tab.summary)
-                        scrollPage(previewView).tag(Tab.preview)
-                        scrollPage(rawView).tag(Tab.raw)
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    selectedDetailPage
                 }
             }
             .navigationTitle(node.title)
@@ -838,6 +548,15 @@ private struct EventDetailSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var selectedDetailPage: some View {
+        switch tab {
+        case .summary: scrollPage(summaryView)
+        case .preview: scrollPage(previewView)
+        case .raw: scrollPage(rawView)
+        }
+    }
+
     private var requestDetailContent: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -849,13 +568,17 @@ private struct EventDetailSheet: View {
             }
             .padding(.top, 8)
             Divider()
-            TabView(selection: $requestTab) {
-                scrollPage(requestSummaryView).tag(RequestTab.summary)
-                scrollPage(requestOptionsView).tag(RequestTab.options)
-                scrollPage(requestUsageView).tag(RequestTab.usage)
-                scrollPage(requestTimingView).tag(RequestTab.timing)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            selectedRequestPage
+        }
+    }
+
+    @ViewBuilder
+    private var selectedRequestPage: some View {
+        switch requestTab {
+        case .summary: scrollPage(requestSummaryView)
+        case .options: scrollPage(requestOptionsView)
+        case .usage: scrollPage(requestUsageView)
+        case .timing: scrollPage(requestTimingView)
         }
     }
 
@@ -871,14 +594,20 @@ private struct EventDetailSheet: View {
             }
             .padding(.top, 8)
             Divider()
-            TabView(selection: $toolTab) {
-                scrollPage(toolSummaryView).tag(ToolTab.summary)
-                scrollPage(toolPayloadView).tag(ToolTab.payload)
-                scrollPage(toolResultView).tag(ToolTab.result)
-                if node.kind == .tool { scrollPage(toolSchemaView).tag(ToolTab.schema) }
-                scrollPage(toolTimingView).tag(ToolTab.timing)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            selectedToolPage
+        }
+    }
+
+    @ViewBuilder
+    private var selectedToolPage: some View {
+        switch toolTab {
+        case .summary: scrollPage(toolSummaryView)
+        case .payload: scrollPage(toolPayloadView)
+        case .result: scrollPage(toolResultView)
+        case .schema:
+            if node.kind == .tool { scrollPage(toolSchemaView) }
+            else { scrollPage(toolSummaryView) }
+        case .timing: scrollPage(toolTimingView)
         }
     }
 

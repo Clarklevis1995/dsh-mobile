@@ -32,13 +32,19 @@ private struct RootNavigationHost: View, Equatable {
             WorkspaceView(
                 onOpenSession: { session in
                     let header = conversationHeader(for: session)
-                    store.prepareConversation(for: session)
-                    navigate(to: .conversation(header))
+                    Task { @MainActor in
+                        guard await store.prepareConversation(for: session),
+                              !Task.isCancelled else { return }
+                        navigate(to: .conversation(header))
+                    }
                 },
                 onNewSession: {
                     let header = conversationHeader(for: nil)
-                    store.prepareNewConversation()
-                    navigate(to: .conversation(header))
+                    Task { @MainActor in
+                        guard await store.prepareNewConversation(),
+                              !Task.isCancelled else { return }
+                        navigate(to: .conversation(header))
+                    }
                 },
                 onSettings: {
                     navigate(to: .settings)

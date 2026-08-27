@@ -229,5 +229,4 @@ class SharedMobileFacade {
         )
     )
 
-    fun makeShadowFacade(): SharedShadowFacade = SharedShadowFacade()
 }

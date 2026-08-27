@@ -35,7 +35,8 @@ final class AgentBackgroundExecutionController {
     var onBackgroundAllowanceExpired: (() -> Void)?
 
     var keepsConnectionAlive: Bool {
-        isAgentWorkActive && taskIdentifier != .invalid
+        guard isAgentWorkActive else { return false }
+        return !applicationIsInBackground || taskIdentifier != .invalid
     }
 
     var isAgentWorkActive: Bool {
@@ -52,10 +53,14 @@ final class AgentBackgroundExecutionController {
 
     func applicationDidBecomeActive() {
         applicationIsInBackground = false
+        // 前台运行不需要 UIApplication 后台额度。业务 turn 计数继续保留，
+        // 下次进入后台时若仍在执行会重新申请。
+        endTask()
     }
 
     func applicationDidEnterBackground() {
         applicationIsInBackground = true
+        if isAgentWorkActive { beginTaskIfNeeded() }
     }
 
     func begin(sessionID: String?, startsNewTurn: Bool) {
@@ -70,7 +75,7 @@ final class AgentBackgroundExecutionController {
         } else if outstandingTurns == 0 {
             unassociatedOutstandingTurns = 1
         }
-        beginTaskIfNeeded()
+        if applicationIsInBackground { beginTaskIfNeeded() }
     }
 
     /// Human Question answer 在服务端确认前拥有独立的临时保活额度，
@@ -78,7 +83,7 @@ final class AgentBackgroundExecutionController {
     func beginQuestionAnswer(rpcID: String, sessionID: String) {
         guard !rpcID.isEmpty, !sessionID.isEmpty else { return }
         questionAllowanceSessionIDs[rpcID] = sessionID
-        beginTaskIfNeeded()
+        if applicationIsInBackground { beginTaskIfNeeded() }
     }
 
     /// accepted 表示 Agent 将继续执行：有现存 turn 时只释放临时额度，

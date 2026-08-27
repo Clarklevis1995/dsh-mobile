@@ -154,6 +154,12 @@ final class AppStore: ObservableObject {
     private let kmpTrajectoryStore: KMPTrajectoryStoreAdapter
     /// History pagination、cursor、水位与 raw event 去重的唯一业务状态来源。
     private let kmpHistoryStore: KMPHistoryStoreAdapter
+    /// KMP Store 会在 dispatch Intent 的同一 MainActor 调用栈内同步推送 Event。
+    /// SwiftUI 的 `.task`/`.onChange` 或控件 Binding 可能仍处于 view update；直接
+    /// 修改 `@Published` 会触发未定义行为。这里保持 FIFO，并统一在下一次
+    /// MainActor 调度中发布 UI 镜像和执行同事务 effect。
+    private var pendingKMPEventDeliveries: [@MainActor () -> Void] = []
+    private var isKMPEventDeliveryScheduled = false
     private let historySyncEngine = HistorySyncEngine()
     /// The remote session activity timestamp covered by a completed history load.
     /// This intentionally remains an in-memory cache: events are not persisted
@@ -185,10 +191,6 @@ final class AppStore: ObservableObject {
     private var presentsNextConnectionFailureAsAlert = true
     private var hasHandledColdLaunchConnection = false
     private let backgroundExecutionController: AgentBackgroundExecutionController
-#if DEBUG
-    /// 只记录路由差异；影子 effect 永远不执行，也不参与产品状态写入。
-    private let kmpShadowValidator = KMPShadowValidator()
-#endif
     private static let defaultConfigurationRequestKinds: Set<String> = [
         "agent-presets", "defaults", "default-model", "set-default", "save-default-model"
     ]
@@ -248,31 +250,49 @@ final class AppStore: ObservableObject {
         }
         preferences.performMigrations()
         kmpSessionListStore.onSnapshot = { [weak self] snapshot, error in
-            self?.handleSessionListEvent(snapshot: snapshot, error: error)
+            self?.enqueueKMPEventDelivery { [weak self] in
+                self?.handleSessionListEvent(snapshot: snapshot, error: error)
+            }
         }
         kmpQuestionStore.onTransition = { [weak self] transition in
-            self?.handleQuestionEvent(transition)
+            self?.enqueueKMPEventDelivery { [weak self] in
+                self?.handleQuestionEvent(transition)
+            }
         }
         kmpSessionControlStore.onTransition = { [weak self] transition in
-            self?.handleSessionControlEvent(transition)
+            self?.enqueueKMPEventDelivery { [weak self] in
+                self?.handleSessionControlEvent(transition)
+            }
         }
         kmpConversationStore.onChange = { [weak self] change in
-            self?.scheduleConversationProjection(for: change.sessionID)
+            self?.enqueueKMPEventDelivery { [weak self] in
+                self?.scheduleConversationProjection(for: change.sessionID)
+            }
         }
         kmpConversationStore.onError = { [weak self] error in
-            self?.lastError = error.localizedDescription
+            self?.enqueueKMPEventDelivery { [weak self] in
+                self?.lastError = error.localizedDescription
+            }
         }
         kmpTrajectoryStore.onChange = { [weak self] change in
-            self?.trajectoryTimeline(for: change.sessionID).publish(change.nodes)
+            self?.enqueueKMPEventDelivery { [weak self] in
+                self?.trajectoryTimeline(for: change.sessionID).publish(change.nodes)
+            }
         }
         kmpTrajectoryStore.onError = { [weak self] error in
-            self?.lastError = error.localizedDescription
+            self?.enqueueKMPEventDelivery { [weak self] in
+                self?.lastError = error.localizedDescription
+            }
         }
         kmpHistoryStore.onChange = { [weak self] change in
-            self?.handleHistoryChange(change)
+            self?.enqueueKMPEventDelivery { [weak self] in
+                self?.handleHistoryChange(change)
+            }
         }
         kmpHistoryStore.onError = { [weak self] error in
-            self?.lastError = error.localizedDescription
+            self?.enqueueKMPEventDelivery { [weak self] in
+                self?.lastError = error.localizedDescription
+            }
         }
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
         gateway.onConnectionFailure = { [weak self] detail in
@@ -318,12 +338,43 @@ final class AppStore: ObservableObject {
     func trajectoryTimeline(for sessionId: String?) -> TrajectoryTimeline {
         let timelineID = sessionId ?? "__no-session__"
         if let timeline = trajectoryTimelines[timelineID] { return timeline }
-        let timeline = TrajectoryTimeline()
-        trajectoryTimelines[timelineID] = timeline
         let nodes = sessionId.map(kmpTrajectoryStore.nodes(for:)) ?? []
-        if !nodes.isEmpty { timeline.publish(nodes) }
+        let timeline = TrajectoryTimeline(initialNodes: nodes)
+        trajectoryTimelines[timelineID] = timeline
         return timeline
     }
+
+    private func enqueueKMPEventDelivery(_ delivery: @escaping @MainActor () -> Void) {
+        pendingKMPEventDeliveries.append(delivery)
+        guard !isKMPEventDeliveryScheduled else { return }
+        isKMPEventDeliveryScheduled = true
+        Task { @MainActor [weak self] in
+            // 明确越过当前 SwiftUI transaction，而不只是在同一个 MainActor
+            // executor turn 的尾部重入发布。
+            await Task.yield()
+            self?.drainKMPEventDeliveries()
+        }
+    }
+
+    private func drainKMPEventDeliveries() {
+        // 不在 action 之间 suspend；同一批及 drain 期间继续产生的 KMP Event
+        // 都按订阅回调顺序提交，避免 state patch 与 effect 被其他 Intent 穿插。
+        while !pendingKMPEventDeliveries.isEmpty {
+            let deliveries = pendingKMPEventDeliveries
+            pendingKMPEventDeliveries.removeAll(keepingCapacity: true)
+            deliveries.forEach { $0() }
+        }
+        isKMPEventDeliveryScheduled = false
+    }
+
+#if DEBUG
+    /// XCTest 只等待生产使用的同一延迟交付队列，不提供同步发布旁路。
+    func awaitPendingKMPEventDeliveriesForTesting() async {
+        while isKMPEventDeliveryScheduled || !pendingKMPEventDeliveries.isEmpty {
+            await Task.yield()
+        }
+    }
+#endif
     func setTrajectoryProjectionActive(sessionID: String?, isActive: Bool) {
         guard let sessionID else { return }
         if isActive {
@@ -458,18 +509,30 @@ final class AppStore: ObservableObject {
             isConnected: true
         ))
     }
-    func prepareNewConversation() {
-        reduceSessionList(.select(nil))
+    func prepareNewConversation() async -> Bool {
+        guard dispatchSessionListIntent(.select(nil)) else { return false }
         waitingForNewSession = false
         preparedConversationActivationKey = Self.newConversationActivationKey
         activeConversationActivationKey = nil
+        await commitPendingKMPEventsAfterViewUpdate()
+        return selectedSessionId == nil
     }
 
-    func prepareConversation(for session: SessionSummary) {
-        reduceSessionList(.select(session.id))
+    func prepareConversation(for session: SessionSummary) async -> Bool {
+        guard dispatchSessionListIntent(.select(session.id)) else { return false }
         waitingForNewSession = false
         preparedConversationActivationKey = session.id
         activeConversationActivationKey = nil
+        await commitPendingKMPEventsAfterViewUpdate()
+        return selectedSessionId == session.id
+    }
+
+    /// UI Intent 可能来自 SwiftUI 正在更新的调用栈，因此 KMP Event 仍延迟
+    /// 到下一次 MainActor turn 发布；导航必须等待该发布完成，避免目标页面首帧
+    /// 读取上一个 Session 的 UI 镜像。
+    private func commitPendingKMPEventsAfterViewUpdate() async {
+        await Task.yield()
+        drainKMPEventDeliveries()
     }
 
     /// Activates the already-pushed conversation. The yield points separate
@@ -478,7 +541,10 @@ final class AppStore: ObservableObject {
         let activationKey = sessionID ?? Self.newConversationActivationKey
         guard preparedConversationActivationKey == activationKey,
               activeConversationActivationKey != activationKey,
-              sessionID == selectedSessionId,
+              // UI mirror deliberately publishes on the next MainActor turn;
+              // navigation activation must compare against the authoritative
+              // KMP state so it cannot lose the destination `.task` race.
+              sessionID == kmpSessionListStore.snapshot.selectedSessionId,
               gateway.state.isConnected else { return }
 
         activeConversationActivationKey = activationKey
@@ -581,7 +647,7 @@ final class AppStore: ObservableObject {
     func addKnownSession(_ id: String) {
         let normalized = id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
-        reduceSessionList(.knownSessionAdded(normalized))
+        dispatchSessionListIntent(.knownSessionAdded(normalized))
     }
     func search(_ query: String) {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -669,7 +735,7 @@ final class AppStore: ObservableObject {
     }
 
     func answerQuestion(_ request: GatewayPendingQuestionRequest, answers: [GatewayQuestionAnswer]) {
-        let transition = reduceQuestion(.submitAnswer(
+        let transition = dispatchQuestionIntent(.submitAnswer(
             rpcID: request.rpcId,
             answers: answers,
             isConnected: gateway.state.isConnected
@@ -681,7 +747,7 @@ final class AppStore: ObservableObject {
     }
 
     func cancelQuestion(_ request: GatewayPendingQuestionRequest) {
-        let transition = reduceQuestion(.submitCancel(
+        let transition = dispatchQuestionIntent(.submitCancel(
             rpcID: request.rpcId,
             isConnected: gateway.state.isConnected
         ))
@@ -699,9 +765,6 @@ final class AppStore: ObservableObject {
             pendingPermissionOptionsSessionID: pendingPermissionOptionsSessionId
         )
         let route = GatewayFrameRouter.route(frame, context: context)
-#if DEBUG
-        kmpShadowValidator.validate(frame: frame, context: context, swiftRoute: route)
-#endif
         handle(route)
     }
 
@@ -730,7 +793,7 @@ final class AppStore: ObservableObject {
             // 再发送本代 refresh，避免旧 token 或迟到响应跨连接污染新请求。
             resetOutstandingRequests()
             backgroundExecutionController.releaseAllQuestionAnswers()
-            reduceQuestion(.reset)
+            dispatchQuestionIntent(.reset)
             supportsImages = payload.protocolVersion >= 3 && payload.capabilities.contains("images")
             attachmentLoader.reset()
             presentsNextConnectionFailureAsAlert = true
@@ -787,13 +850,13 @@ final class AppStore: ObservableObject {
             ) {
                 selectedWorkspaceId = workspaces.first?.id ?? Self.ungroupedWorkspaceID
             }
-            reduceSessionList(.setArchivedSessionIDs(archivedSessionIDs))
+            dispatchSessionListIntent(.setArchivedSessionIDs(archivedSessionIDs))
             notice(
                 String(localized: "notice.workspaces.synced", defaultValue: "工作区已同步"),
                 String(localized: "workspaces.count", defaultValue: "\(workspaces.count) 个工作区")
             )
         case .sessions(let received):
-            reduceSessionList(.remoteSessionsReceived(received))
+            dispatchSessionListIntent(.remoteSessionsReceived(received))
             isRefreshing = false
             notice(
                 String(localized: "notice.sessions.synced", defaultValue: "会话列表已同步"),
@@ -824,7 +887,7 @@ final class AppStore: ObservableObject {
     private func handleControlRoute(_ route: GatewayControlRoute) {
         switch route {
         case .action(let action, let finishRequest):
-            let transition = reduceSessionControl(action)
+            let transition = dispatchSessionControlAction(action)
             // KMP 响应事务已原子完成 active 并可能启动 queued；
             // 这里不能再按 kind finish，否则会误结束新 generation。
             if let finishRequest { cancelCompletedSessionControlTracker(finishRequest, transition: transition) }
@@ -847,7 +910,7 @@ final class AppStore: ObservableObject {
             }
         case .setDefault(let applied, let target, let value):
             if applied, let target, let value {
-                let transition = reduceSessionControl(.globalDefaultApplied(target: target, value: value))
+                let transition = dispatchSessionControlAction(.globalDefaultApplied(target: target, value: value))
                 cancelCompletedSessionControlTracker("set-default", transition: transition)
                 if transition.completed("set-default") {
                     notice(
@@ -871,7 +934,7 @@ final class AppStore: ObservableObject {
             if let selection {
                 let targetSessionID = sessionID
                     ?? kmpSessionControlStore.snapshot.activeRequestTargets["select-model"]?.sessionId
-                let transition = reduceSessionControl(.modelSelected(sessionID: sessionID, selection: selection))
+                let transition = dispatchSessionControlAction(.modelSelected(sessionID: sessionID, selection: selection))
                 cancelCompletedSessionControlTracker("select-model", transition: transition)
                 if transition.completed("select-model"), let targetSessionID {
                     notice(
@@ -887,7 +950,7 @@ final class AppStore: ObservableObject {
             }
         case .permissionOptions(let sessionID, let permissions):
             if let permissions {
-                let transition = reduceSessionControl(.permissionsReceived(sessionID: sessionID, permissions: permissions))
+                let transition = dispatchSessionControlAction(.permissionsReceived(sessionID: sessionID, permissions: permissions))
                 cancelCompletedSessionControlTracker("permission-options", transition: transition)
             } else {
                 if failSessionControlRequest("permission-options", responseSessionID: sessionID) {
@@ -898,7 +961,7 @@ final class AppStore: ObservableObject {
             if let value {
                 let targetSessionID = sessionID
                     ?? kmpSessionControlStore.snapshot.activeRequestTargets["permission"]?.sessionId
-                let transition = reduceSessionControl(.permissionSelected(sessionID: sessionID, value: value))
+                let transition = dispatchSessionControlAction(.permissionSelected(sessionID: sessionID, value: value))
                 cancelCompletedSessionControlTracker("permission", transition: transition)
                 if transition.completed("permission"), let targetSessionID {
                     notice(String(localized: "权限已切换"), value, sessionId: targetSessionID)
@@ -957,7 +1020,7 @@ final class AppStore: ObservableObject {
     private func handleQuestionRoute(_ route: GatewayQuestionRoute) {
         switch route {
         case .requested(let request, let sessionID, let preview, let replay):
-            reduceQuestion(.requestReceived(request))
+            dispatchQuestionIntent(.requestReceived(request))
             notice(
                 replay ? String(localized: "待回答问题已恢复") : String(localized: "Agent 正在等待回答"),
                 preview.isEmpty ? String(localized: "请回答 Agent 的问题") : preview,
@@ -979,7 +1042,7 @@ final class AppStore: ObservableObject {
                     sessionId: request.sessionId
                 )
             }
-            reduceQuestion(.responseReceived(
+            dispatchQuestionIntent(.responseReceived(
                 rpcID: rpcID,
                 action: action,
                 accepted: accepted,
@@ -995,7 +1058,7 @@ final class AppStore: ObservableObject {
         case .resolved(let rpcID, let sessionID, let cancelled):
             let pendingSessionID = pendingQuestionRequests.first { $0.rpcId == rpcID }?.sessionId
             let wasAnswerInFlight = questionRequestStatuses[rpcID]?.isAnswerInFlight == true
-            reduceQuestion(.resolved(rpcID: rpcID))
+            dispatchQuestionIntent(.resolved(rpcID: rpcID))
             if wasAnswerInFlight && !cancelled {
                 backgroundExecutionController.questionAnswerAccepted(rpcID: rpcID)
             } else {
@@ -1031,12 +1094,12 @@ final class AppStore: ObservableObject {
         if let requestType = payload.requestType,
            ["question-answer", "question-cancel"].contains(requestType) {
             if let rpcID = payload.rpcID {
-                reduceQuestion(.requestFailed(rpcID: rpcID, message: detail))
+                dispatchQuestionIntent(.requestFailed(rpcID: rpcID, message: detail))
                 backgroundExecutionController.releaseQuestionAnswer(rpcID: rpcID)
             } else if let sessionID = payload.sessionID {
                 // 旧网关可能省略 rpcId；此时按 session 原子失败全部相关请求，
                 // 不能从多个 pending request 中猜测任意一个 rpcId。
-                reduceQuestion(.sessionRequestsFailed(sessionID: sessionID, message: detail))
+                dispatchQuestionIntent(.sessionRequestsFailed(sessionID: sessionID, message: detail))
                 backgroundExecutionController.releaseQuestionAnswers(sessionID: sessionID)
             }
         }
@@ -1076,7 +1139,7 @@ final class AppStore: ObservableObject {
     private func handleSent(sessionID: String, command: JSONValue?) {
         backgroundExecutionController.associateSessionIfNeeded(sessionID)
         waitingForNewSession = false
-        reduceSessionList(.messageSent(sessionID: sessionID, agentPreset: agentPresetDefault))
+        dispatchSessionListIntent(.messageSent(sessionID: sessionID, agentPreset: agentPresetDefault))
         notice(
             command == nil ? String(localized: "消息已发送") : String(localized: "命令已执行"),
             command?.displayText
@@ -1142,7 +1205,7 @@ final class AppStore: ObservableObject {
     }
     private func applyHistoryProjections(_ projections: JSONValue?, sessionId: String) {
         guard let values = projections?["values"] else { return }
-        reduceSessionControlProjection(.contextReceived(
+        dispatchSessionControlProjection(.contextReceived(
             sessionID: sessionId,
             asOfSequence: projections?["asOfSeq"]?.doubleValue.map(Int.init),
             tokenUsage: values["tokenUsage"]?.decode(GatewayTokenUsage.self),
@@ -1150,7 +1213,7 @@ final class AppStore: ObservableObject {
             breakdown: values["contextBreakdown"]?.decode(GatewayContextBreakdown.self)
         ))
         if let permissions = values["permissions"]?.decode(GatewaySessionPermissions.self) {
-            reduceSessionControlProjection(.permissionsReceived(sessionID: sessionId, permissions: permissions))
+            dispatchSessionControlProjection(.permissionsReceived(sessionID: sessionId, permissions: permissions))
         }
     }
     private func merge(_ record: SessionEvent) {
@@ -1279,13 +1342,13 @@ final class AppStore: ObservableObject {
         }
         if event.type == "permission/preset",
            let preset = event.raw?["preset"]?.stringValue ?? event.raw?["name"]?.stringValue {
-            reduceSessionControlProjection(.permissionSelected(sessionID: record.sessionId, value: preset))
+            dispatchSessionControlProjection(.permissionSelected(sessionID: record.sessionId, value: preset))
         }
         if event.type == "request/header", let config = event.raw?["header"]?["config"] {
             let provider = config["provider"]?.stringValue
             let model = config["model"]?.stringValue
             if let provider, let model {
-                reduceSessionControlProjection(.modelSelected(
+                dispatchSessionControlProjection(.modelSelected(
                     sessionID: record.sessionId,
                     selection: GatewayModelSelection(
                     provider: provider,
@@ -1299,7 +1362,7 @@ final class AppStore: ObservableObject {
         // timeline. Updating this @Published array for every packet used to
         // invalidate the complete app hierarchy, re-sort the sidebar, encode
         // it and write UserDefaults while the user was trying to scroll.
-        reduceSessionList(.eventReceived(record))
+        dispatchSessionListIntent(.eventReceived(record))
     }
     private func notice(_ title: String, _ text: String, sessionId: String? = nil, isError: Bool = false) {
         protocolNotices.append(GatewayNotice(sessionId: sessionId, title: title, text: text, isError: isError))
@@ -1394,18 +1457,16 @@ final class AppStore: ObservableObject {
             .first { value.localizedCaseInsensitiveContains($0) }
     }
     private func markRead(_ id: String) {
-        reduceSessionList(.markRead(id))
+        dispatchSessionListIntent(.markRead(id))
     }
-    private func reduceSessionList(_ action: SessionListAction) {
-        let snapshot: KMPSessionListSnapshot
+    @discardableResult
+    private func dispatchSessionListIntent(_ action: KMPSessionListIntent) -> Bool {
         do {
-            snapshot = try kmpSessionListStore.reduce(action)
+            try kmpSessionListStore.reduce(action)
+            return true
         } catch {
             lastError = error.localizedDescription
-            return
-        }
-        if !kmpSessionListStore.usesEventStream {
-            handleSessionListEvent(snapshot: snapshot, error: nil)
+            return false
         }
     }
     private func handleSessionListEvent(
@@ -1454,11 +1515,8 @@ final class AppStore: ObservableObject {
         }
     }
     @discardableResult
-    private func reduceQuestion(_ intent: KMPQuestionIntent) -> KMPQuestionTransition {
+    private func dispatchQuestionIntent(_ intent: KMPQuestionIntent) -> KMPQuestionTransition {
         let transition = kmpQuestionStore.reduce(intent)
-        if !kmpQuestionStore.usesEventStream {
-            handleQuestionEvent(transition)
-        }
         return transition
     }
     private func handleQuestionEvent(_ transition: KMPQuestionTransition) {
@@ -1585,11 +1643,11 @@ final class AppStore: ObservableObject {
         }
     }
     @discardableResult
-    private func reduceSessionControl(_ action: SessionControlAction) -> KMPSessionControlTransition {
+    private func dispatchSessionControlAction(_ action: KMPSessionControlAction) -> KMPSessionControlTransition {
         submitSessionControlIntent(.action(action))
     }
     @discardableResult
-    private func reduceSessionControlProjection(_ action: SessionControlAction) -> KMPSessionControlTransition {
+    private func dispatchSessionControlProjection(_ action: KMPSessionControlAction) -> KMPSessionControlTransition {
         submitSessionControlIntent(.projection(action))
     }
     private func dispatchSessionControl(_ intent: KMPSessionControlIntent) {
@@ -1600,10 +1658,6 @@ final class AppStore: ObservableObject {
         _ intent: KMPSessionControlIntent
     ) -> KMPSessionControlTransition {
         let transition = kmpSessionControlStore.reduce(intent)
-        // 生产 store 只通过订阅 event 发布状态与 effect；无订阅测试桩保留兼容路径。
-        if !kmpSessionControlStore.usesEventStream {
-            handleSessionControlEvent(transition)
-        }
         return transition
     }
     private func handleSessionControlEvent(_ transition: KMPSessionControlTransition) {
@@ -1691,7 +1745,7 @@ final class AppStore: ObservableObject {
         _ kind: String,
         transition: KMPSessionControlTransition
     ) {
-        // queued B 的 effect 在 reduceSessionControl 内已用 tracker.begin 替换了 A；
+        // queued B 的 effect 在 dispatchSessionControlAction 内已用 tracker.begin 替换了 A；
         // 只在没有新 generation 时取消旧 timeout，避免迟到 A 误取消 B。
         guard transition.completedKind == kind else { return }
         guard transition.effects.isEmpty else { return }

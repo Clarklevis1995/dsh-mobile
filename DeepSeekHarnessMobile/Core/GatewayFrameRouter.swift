@@ -67,7 +67,7 @@ enum GatewayContentRoute {
 }
 
 enum GatewayControlRoute {
-    case action(SessionControlAction, finishRequest: String?)
+    case action(KMPSessionControlAction, finishRequest: String?)
     case saveDefaultModel(GatewayModelSelection?)
     case setDefault(applied: Bool, target: String?, value: String?)
     case modelSelected(sessionID: String?, selection: GatewayModelSelection?)

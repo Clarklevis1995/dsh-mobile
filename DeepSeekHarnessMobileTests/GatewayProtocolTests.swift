@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import SwiftUI
 import ImageIO
 import UniformTypeIdentifiers
 import class DeepSeekHarnessShared.SharedQuestionResult
@@ -19,55 +20,6 @@ private enum GatewayProtocolParityFixtures {
     static let replayedQuestionRequest = #"{"kind":"question-requested","rpcId":"rpc-1","sessionId":"s1","replay":true,"questions":[{"id":"direction","header":"研究方向","question":"你想研究哪个方向？","detail":"请选择最感兴趣的方向","options":[{"label":"核心架构 (推荐)","description":"了解插件分层"},{"label":"移动端"}],"multiSelect":true},{"id":"notes","question":"还有什么要求？","multiSelect":false}]}"#
     static let imageAttachment = #"{"kind":"attachment","sessionId":"s1","attachment":{"attachmentId":"att-1","mediaType":"image/png","bytes":8,"width":1,"height":1},"data":"iVBORw0K"}"#
     static let historyImage = #"{"kind":"history","events":[{"type":"user/message","seq":1,"time":1786937352,"data":{"content":[{"type":"image","attachment":{"attachmentId":"att-history","mediaType":"image/webp","bytes":42,"width":100,"height":80,"name":"image.webp"}}],"source":{"kind":"user"}}}],"hasMore":false}"#
-}
-
-private enum GatewayShadowRouteFixtures {
-    struct Fixture {
-        var json: String
-        var category: String
-        var route: String
-    }
-
-    // 与 shared/commonTest/GatewayProtocolFixtures.ALL_ROUTES 逐项保持一致。
-    static let all = [
-        Fixture(json: #"{"kind":"paired"}"#, category: "connection", route: "paired"),
-        Fixture(json: #"{"kind":"hello","protocol":3,"capabilities":["images"],"authenticated":true,"clients":2}"#, category: "connection", route: "hello"),
-        Fixture(json: #"{"kind":"pong","at":1000}"#, category: "connection", route: "pong"),
-        Fixture(json: #"{"kind":"subscribed","sessionId":"s1"}"#, category: "connection", route: "subscribed"),
-        Fixture(json: #"{"kind":"sent","sessionId":"s1"}"#, category: "content", route: "sent"),
-        Fixture(json: #"{"kind":"event","sessionId":"s1","seq":1,"time":1000,"event":{"type":"assistant/message","text":"done"}}"#, category: "content", route: "live-event"),
-        Fixture(json: #"{"kind":"workspaces","items":[],"archivedSessionIds":[]}"#, category: "content", route: "workspaces"),
-        Fixture(json: #"{"kind":"sessions","items":[]}"#, category: "content", route: "sessions"),
-        Fixture(json: #"{"kind":"history","events":[],"hasMore":false}"#, category: "content", route: "history"),
-        Fixture(json: #"{"kind":"attachment","sessionId":"s1","attachment":{"attachmentId":"a1","mediaType":"image/png","bytes":1,"width":1,"height":1}}"#, category: "content", route: "attachment"),
-        Fixture(json: #"{"kind":"search","items":[],"hasMore":true}"#, category: "content", route: "search"),
-        Fixture(json: #"{"kind":"host","version":"1.0"}"#, category: "content", route: "host"),
-        Fixture(json: #"{"kind":"agent-presets","presets":[],"authorable":false,"hasDocument":false}"#, category: "control", route: "agent-presets"),
-        Fixture(json: #"{"kind":"defaults","agentPresetDefault":"standard","permissionDefault":"ask"}"#, category: "control", route: "defaults"),
-        Fixture(json: #"{"kind":"default-model","selection":{"provider":"openai","model":"gpt-5"}}"#, category: "control", route: "default-model"),
-        Fixture(json: #"{"kind":"save-default-model","saved":{"provider":"openai","model":"gpt-5"}}"#, category: "control", route: "save-default-model"),
-        Fixture(json: #"{"kind":"set-default","applied":true,"target":"permission","value":"ask"}"#, category: "control", route: "set-default"),
-        Fixture(json: #"{"kind":"models","groups":[],"routable":true}"#, category: "control", route: "models"),
-        Fixture(json: #"{"kind":"select-model","selected":{"provider":"openai","model":"gpt-5"}}"#, category: "control", route: "select-model"),
-        Fixture(json: #"{"kind":"permission-options","sessionPermissions":{"options":[]}}"#, category: "control", route: "permission-options"),
-        Fixture(json: #"{"kind":"permission","set":"workspace-write"}"#, category: "control", route: "permission"),
-        Fixture(json: #"{"kind":"context-usage","asOfSeq":8}"#, category: "control", route: "context-usage"),
-        Fixture(json: #"{"kind":"session-stats","asOfSeq":8}"#, category: "control", route: "session-stats"),
-        Fixture(json: #"{"kind":"directories","entries":[],"crumbs":[]}"#, category: "workspace", route: "directories"),
-        Fixture(json: #"{"kind":"directory-create","path":"/tmp/new"}"#, category: "workspace", route: "directory-create"),
-        Fixture(json: #"{"kind":"workspace-create","created":false}"#, category: "workspace", route: "workspace-create"),
-        Fixture(json: #"{"kind":"question-requested","rpcId":"rpc-1","sessionId":"s1","replay":true,"questions":[{"id":"q1","question":"继续？"}]}"#, category: "question", route: "requested"),
-        Fixture(json: #"{"kind":"question-response","rpcId":"rpc-1","action":"cancel","accepted":false,"reason":"not-pending"}"#, category: "question", route: "response"),
-        Fixture(json: #"{"kind":"question-resolved","rpcId":"rpc-1","sessionId":"s1","outcome":"cancelled"}"#, category: "question", route: "resolved"),
-        Fixture(json: #"{"kind":"error","requestType":"history","code":"failed","sessionId":"s1","rpcId":"rpc-1"}"#, category: "failure", route: "error"),
-        Fixture(json: #"{"kind":"future-frame"}"#, category: "unknown", route: "future-frame"),
-        Fixture(json: #"{"kind":"sent"}"#, category: "ignored", route: "sent"),
-        Fixture(json: #"{"kind":"event"}"#, category: "ignored", route: "event"),
-        Fixture(json: #"{"kind":"attachment"}"#, category: "ignored", route: "attachment"),
-        Fixture(json: #"{"kind":"question-requested","sessionId":"s1","questions":[]}"#, category: "question", route: "invalid-request"),
-        Fixture(json: #"{"kind":"question-response"}"#, category: "ignored", route: "question-response"),
-        Fixture(json: #"{"kind":"question-resolved"}"#, category: "ignored", route: "question-resolved")
-    ]
 }
 
 private func swiftAuditRange(
@@ -118,16 +70,140 @@ private func stage9WriteMatches(for property: String, in source: String) throws 
 }
 
 final class GatewayProtocolTests: XCTestCase {
-    func testKMPSharedAdapterLinksFrameworkAndNormalizesFixture() {
-        let adapter = KMPSharedAdapter()
+    @MainActor
+    private func flushDeferredKMPEvents(in store: AppStore) async {
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+    }
 
-        XCTAssertEqual(adapter.moduleSummary, "DeepSeekHarnessShared · schema 1")
-        XCTAssertEqual(
-            adapter.decodeFrameKind(GatewayProtocolParityFixtures.liveEventWithoutKind),
-            "event"
+    @MainActor
+    func testConversationViewportReportsOnlyEmptyContentBoundaries() async throws {
+        let timeline = ConversationTimeline()
+        var availability: [String] = []
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { sessionID, hasContent in
+                availability.append("\(sessionID ?? "nil"):\(hasContent)")
+            },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
         )
-        XCTAssertEqual(adapter.makeStore().loadManualTestFixture().sessions.count, 1)
-        XCTAssertNil(adapter.decodeFrameKind("abc"))
+        controller.configure(
+            sessionID: "history-session",
+            timeline: timeline,
+            supplementalEntries: [],
+            makeEntries: { items in
+                items.map {
+                    ConversationViewportEntry(
+                        id: $0.id,
+                        revision: 0,
+                        content: AnyView(EmptyView())
+                    )
+                }
+            },
+            bottomInset: 0
+        )
+        XCTAssertEqual(availability, ["history-session:false"])
+
+        let item = ConversationItem(
+            id: "message-1",
+            kind: .assistant,
+            title: "DeepSeek",
+            text: "first page",
+            isError: false,
+            date: Date(timeIntervalSince1970: 1)
+        )
+        let secondItem = ConversationItem(
+            id: "message-2",
+            kind: .assistant,
+            title: "DeepSeek",
+            text: "second page",
+            isError: false,
+            date: Date(timeIntervalSince1970: 2)
+        )
+        timeline.publish([item])
+        timeline.publish([item, secondItem])
+
+        // 内容可用事件必须晚于 diffable snapshot completion，不能在 cell
+        // 真正显示前提前撤掉不透明加载层。
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(
+            availability,
+            ["history-session:false", "history-session:true"],
+            "Timeline 仅在空/非空边界通知 SwiftUI，流式 token 不得重绘整页"
+        )
+
+        let nextTimeline = ConversationTimeline()
+        nextTimeline.publish([ConversationItem(
+            id: "next-message",
+            kind: .user,
+            title: "You",
+            text: "next session",
+            isError: false,
+            date: Date(timeIntervalSince1970: 3)
+        )])
+        controller.configure(
+            sessionID: "next-session",
+            timeline: nextTimeline,
+            supplementalEntries: [],
+            makeEntries: { items in
+                items.map {
+                    ConversationViewportEntry(
+                        id: $0.id,
+                        revision: 0,
+                        content: AnyView(EmptyView())
+                    )
+                }
+            },
+            bottomInset: 0
+        )
+        let collectionView = try XCTUnwrap(
+            controller.view.subviews.compactMap { $0 as? UICollectionView }.first
+        )
+        XCTAssertTrue(collectionView.isHidden, "新 session snapshot 提交前必须隐藏旧 cell")
+
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertFalse(collectionView.isHidden, "新 session snapshot 提交后应恢复显示")
+        XCTAssertEqual(
+            Array(availability.suffix(2)),
+            ["next-session:false", "next-session:true"],
+            "新 Session 必须先报告不可见，自己的 snapshot 提交后才能报告可见"
+        )
+    }
+
+    @MainActor
+    func testConversationPreparationCommitsDeferredSelectionBeforeNavigation() async {
+        let first = SessionSummary(
+            id: "first-session",
+            title: "First",
+            lastActivity: Date(timeIntervalSince1970: 1),
+            isRunning: false,
+            hasUnread: false
+        )
+        let second = SessionSummary(
+            id: "second-session",
+            title: "Second",
+            lastActivity: Date(timeIntervalSince1970: 2),
+            isRunning: false,
+            hasUnread: false
+        )
+        let store = AppStore(preferences: AppPreferencesSpy(
+            endpoint: "ws://127.0.0.1:3080/ws/mobile",
+            selectedWorkspaceID: nil,
+            sessions: [first, second]
+        ))
+
+        let preparedFirst = await store.prepareConversation(for: first)
+        XCTAssertTrue(preparedFirst)
+        XCTAssertEqual(store.selectedSessionId, first.id)
+
+        let preparedSecond = await store.prepareConversation(for: second)
+        XCTAssertTrue(preparedSecond)
+        XCTAssertEqual(
+            store.selectedSessionId,
+            second.id,
+            "prepare 返回时目标 Session 的延迟 KMP Event 必须已经发布，导航不能看到旧 ID"
+        )
     }
 
     @MainActor
@@ -197,7 +273,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testKMPConversationProjectionMatchesSwiftMigrationFixture() throws {
+    func testKMPConversationProjectionProducesExpectedPlatformItems() throws {
         let image = GatewayImageAttachment(
             attachmentId: "image-1", mediaType: "image/png", bytes: 4,
             width: 1, height: 1, name: "pixel.png"
@@ -226,22 +302,42 @@ final class GatewayProtocolTests: XCTestCase {
                 type: "tool/result", callId: "call-1", isError: false, preview: "内容"
             ))
         ]
-        let swiftBaseline = ConversationItem.make(from: records)
         let adapter = KMPConversationStoreAdapter()
 
         try adapter.replace(sessionID: "s1", events: records)
         let kmp = adapter.items(for: "s1")
 
-        XCTAssertEqual(kmp.map(\.id), swiftBaseline.map(\.id))
-        XCTAssertEqual(kmp.map(\.kind), swiftBaseline.map(\.kind))
-        XCTAssertEqual(kmp.map(\.title), swiftBaseline.map(\.title))
-        for (kmpItem, swiftItem) in zip(kmp, swiftBaseline) where kmpItem.kind != .tool {
-            XCTAssertEqual(kmpItem.text, swiftItem.text)
-        }
+        XCTAssertEqual(kmp.map(\.id), [
+            records[0].id,
+            records[1].id,
+            records[3].id + "-reason",
+            records[3].id,
+            records[4].id,
+            records[5].id
+        ])
+        XCTAssertEqual(kmp.map(\.kind), [.context, .user, .reasoning, .assistant, .tool, .toolResult])
+        XCTAssertEqual(kmp.map(\.title), [
+            L10n.contextInjectionTitle("skill"),
+            L10n.userMessageTitle,
+            "Think",
+            "DeepSeek",
+            "Read",
+            L10n.toolResultDoneTitle
+        ])
+        XCTAssertEqual(kmp.filter { $0.kind != .tool }.map(\.text), [
+            "上下文", "看图", "思考", "完成", "内容"
+        ])
         XCTAssertTrue(kmp.first(where: { $0.kind == .tool })?.text.contains("README.md") == true)
-        XCTAssertEqual(kmp.map(\.images), swiftBaseline.map(\.images))
-        XCTAssertEqual(kmp.map(\.isError), swiftBaseline.map(\.isError))
-        XCTAssertEqual(kmp.map(\.date), swiftBaseline.map(\.date))
+        XCTAssertEqual(kmp.map(\.images), [[], [image], [], [], [], []])
+        XCTAssertEqual(kmp.map(\.isError), [false, false, false, false, false, false])
+        XCTAssertEqual(kmp.map(\.date), [
+            records[0].date,
+            records[1].date,
+            records[3].date,
+            records[3].date,
+            records[4].date,
+            records[5].date
+        ])
     }
 
     @MainActor
@@ -272,7 +368,6 @@ final class GatewayProtocolTests: XCTestCase {
                 )
             )
         ]
-        let swiftBaseline = TrajectoryProjection.make(from: records)
         let adapter = KMPTrajectoryStoreAdapter()
         var changes: [KMPTrajectoryChange] = []
         adapter.onChange = { changes.append($0) }
@@ -284,9 +379,9 @@ final class GatewayProtocolTests: XCTestCase {
             kmp.isEmpty,
             "KMP Trajectory 为空：error=\(String(describing: adapter.runtimeError)), changes=\(changes.map { ($0.sessionID, $0.nodes.count) })"
         )
-        XCTAssertEqual(kmp.map(\.id), swiftBaseline.map(\.id))
-        XCTAssertEqual(kmp.map(\.kind), swiftBaseline.map(\.kind))
-        XCTAssertEqual(kmp.map(\.subtitle), swiftBaseline.map(\.subtitle))
+        XCTAssertEqual(kmp.map(\.kind), [.input, .request, .assistant, .tool])
+        XCTAssertEqual(kmp.first?.subtitle, "执行")
+        XCTAssertEqual(kmp.first(where: { $0.kind == .assistant })?.subtitle, "完成")
         let request = try XCTUnwrap(kmp.first(where: { $0.kind == .request })?.request)
         XCTAssertEqual(request.usage.uncachedInput, 10)
         XCTAssertEqual(request.usage.cachedInput, 4)
@@ -315,7 +410,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testAppStoreActivatesTrajectoryProjectionOnlyForVisiblePage() {
+    func testAppStoreActivatesTrajectoryProjectionOnlyForVisiblePage() async {
         let store = AppStore(preferences: AppPreferencesSpy(
             endpoint: "ws://127.0.0.1:3080/ws/mobile",
             selectedWorkspaceID: nil,
@@ -331,6 +426,7 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertTrue(timeline.nodes.isEmpty)
 
         store.setTrajectoryProjectionActive(sessionID: "s1", isActive: true)
+        await flushDeferredKMPEvents(in: store)
         XCTAssertEqual(timeline.nodes.map(\.subtitle), ["one"])
 
         store.setTrajectoryProjectionActive(sessionID: "s1", isActive: false)
@@ -340,6 +436,7 @@ final class GatewayProtocolTests: XCTestCase {
         ))
         XCTAssertEqual(timeline.nodes.map(\.subtitle), ["one"])
         store.setTrajectoryProjectionActive(sessionID: "s1", isActive: true)
+        await flushDeferredKMPEvents(in: store)
         XCTAssertEqual(timeline.nodes.map(\.subtitle), ["one", "two"])
     }
 
@@ -437,7 +534,7 @@ final class GatewayProtocolTests: XCTestCase {
         )
     }
 
-    func testStage9ProductSourcesKeepKMPAsTheOnlyBasicDomainWriter() throws {
+    func testStage11ProductSourcesContainNoParallelBasicDomainImplementation() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -454,28 +551,49 @@ final class GatewayProtocolTests: XCTestCase {
         }
         XCTAssertFalse(sourceURLs.isEmpty)
 
-        let legacyReducerDefinitions = Set([
-            productRoot.appendingPathComponent("Core/SessionListReducer.swift").standardizedFileURL.path,
-            productRoot.appendingPathComponent("Core/QuestionReducer.swift").standardizedFileURL.path,
-            productRoot.appendingPathComponent("Core/SessionControlReducer.swift").standardizedFileURL.path
-        ])
-        let nonReducerSources = sourceURLs.filter {
-            !legacyReducerDefinitions.contains($0.standardizedFileURL.path)
+        for removedFile in [
+            "Core/SessionListReducer.swift",
+            "Core/QuestionReducer.swift",
+            "Core/SessionControlReducer.swift",
+            "Core/HistoryReducer.swift"
+        ] {
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: productRoot.appendingPathComponent(removedFile).path),
+                "阶段 11 不得恢复已由 KMP 取代的 Swift 文件：\(removedFile)"
+            )
         }
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: productRoot.appendingPathComponent("Core/KMPDomainIntents.swift").path
+            ),
+            "平台输入 DTO 必须与 Swift Reducer 解耦"
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: repositoryRoot.appendingPathComponent(
+                    "shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/SharedShadowFacade.kt"
+                ).path
+            ),
+            "阶段 11 必须删除迁移期只读影子 Facade"
+        )
+
         for reducerSymbol in [
             "SessionListReducer",
             "QuestionReducer",
-            "SessionControlReducer"
+            "SessionControlReducer",
+            "QuestionState",
+            "SessionControlState",
+            "SessionListState"
         ] {
             let referencePattern = try NSRegularExpression(
                 pattern: "\\b\(NSRegularExpression.escapedPattern(for: reducerSymbol))\\b"
             )
-            for sourceURL in nonReducerSources {
+            for sourceURL in sourceURLs {
                 let source = try String(contentsOf: sourceURL, encoding: .utf8)
                 let fullRange = NSRange(source.startIndex..., in: source)
                 XCTAssertNil(
                     referencePattern.firstMatch(in: source, range: fullRange),
-                    "阶段 9 已收口，除保留的 Reducer 定义外，产品 Swift 源不得引用 \(reducerSymbol)：\(sourceURL.path)"
+                    "阶段 11 已删除 Swift 平行领域实现，产品 Swift 源不得引用 \(reducerSymbol)：\(sourceURL.path)"
                 )
             }
         }
@@ -587,7 +705,7 @@ final class GatewayProtocolTests: XCTestCase {
         }
     }
 
-    func testStage9ProductBasicDomainsUseIntentDispatchAndEventSubscription() throws {
+    func testStage11ProductBasicDomainsUseIntentDispatchAndEventSubscription() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -627,34 +745,22 @@ final class GatewayProtocolTests: XCTestCase {
             1,
             "Question effect 只能在 KMP Event 订阅回调中执行一次"
         )
-        XCTAssertTrue(
-            appStoreSource.contains("if !kmpSessionListStore.usesEventStream")
-                && appStoreSource.contains("if !kmpQuestionStore.usesEventStream")
-                && appStoreSource.contains("if !kmpSessionControlStore.usesEventStream"),
-            "同步结果仅允许作为无订阅测试 bridge 的兼容路径"
-        )
+        XCTAssertFalse(appStoreSource.contains("KMPShadowValidator"))
+        XCTAssertFalse(adapterSource.contains("SharedShadowFacade"))
     }
 
-    func testStage10ConversationProductPathUsesOnlyKMPProjection() throws {
+    func testStage11ProductSourcesContainNoParallelProjectionOrHistoryImplementation() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let productRoot = repositoryRoot.appendingPathComponent("DeepSeekHarnessMobile")
-        let legacyDefinition = productRoot
-            .appendingPathComponent("Core/ConversationProjection.swift")
-            .standardizedFileURL.path
-        let legacyHistoryDefinition = productRoot
-            .appendingPathComponent("Core/HistoryReducer.swift")
-            .standardizedFileURL.path
         let enumerator = try XCTUnwrap(FileManager.default.enumerator(
             at: productRoot,
             includingPropertiesForKeys: nil
         ))
         let productSources = enumerator.compactMap { item -> URL? in
             guard let url = item as? URL,
-                  url.pathExtension == "swift",
-                  url.standardizedFileURL.path != legacyDefinition,
-                  url.standardizedFileURL.path != legacyHistoryDefinition else { return nil }
+                  url.pathExtension == "swift" else { return nil }
             return url
         }
         for symbol in [
@@ -669,6 +775,12 @@ final class GatewayProtocolTests: XCTestCase {
                 )
             }
         }
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: productRoot.appendingPathComponent("Core/ConversationProjection.swift").path
+            ),
+            "旧 ConversationProjection 文件必须删除或收敛为纯平台 Timeline"
+        )
 
         let appStoreSource = try String(
             contentsOf: productRoot.appendingPathComponent("Core/AppStore.swift"),
@@ -721,30 +833,6 @@ final class GatewayProtocolTests: XCTestCase {
                 "History UI 镜像只允许在 KMP History change 发布块内写入：\(property)"
             )
         }
-    }
-
-    @MainActor
-    func testKMPShadowRoutesAllKnownAndMalformedFramesWithoutDifferences() throws {
-        let context = GatewayFrameRoutingContext(
-            selectedSessionID: "selected",
-            pendingHistorySessionID: "history-session",
-            pendingModelsSessionID: "models-session",
-            isPendingGlobalModelsRequest: false,
-            pendingModelSelectionSessionID: "selection-session",
-            pendingPermissionOptionsSessionID: "permission-session"
-        )
-        let validator = KMPShadowValidator()
-
-        for fixture in GatewayShadowRouteFixtures.all {
-            let frame = try GatewayWireDecoder.decode(Data(fixture.json.utf8))
-            let swiftRoute = GatewayFrameRouter.route(frame, context: context)
-            let result = validator.validate(frame: frame, context: context, swiftRoute: swiftRoute)
-
-            XCTAssertNil(result.difference, "\(fixture.route): \(String(describing: result.difference))")
-            XCTAssertEqual(result.fingerprint?.category, fixture.category, fixture.route)
-            XCTAssertEqual(result.fingerprint?.route, fixture.route, fixture.route)
-        }
-        XCTAssertTrue(validator.differences.isEmpty)
     }
 
     func testDecodesDirectoryCreateResponse() throws {
@@ -891,9 +979,10 @@ final class GatewayProtocolTests: XCTestCase {
         controller.begin(sessionID: "s1", startsNewTurn: true)
         XCTAssertTrue(controller.keepsConnectionAlive)
         XCTAssertEqual(controller.outstandingTurns, 2)
-        XCTAssertEqual(application.beginCallCount, 1)
+        XCTAssertEqual(application.beginCallCount, 0, "前台不应提前占用后台任务额度")
 
         controller.applicationDidEnterBackground()
+        XCTAssertEqual(application.beginCallCount, 1)
         controller.turnEnded(sessionID: "s1")
         XCTAssertEqual(controller.outstandingTurns, 1)
         controller.turnEnded(sessionID: "s1")
@@ -918,7 +1007,7 @@ final class GatewayProtocolTests: XCTestCase {
 
         controller.turnEnded(sessionID: "s1")
         XCTAssertFalse(controller.isAgentWorkActive)
-        XCTAssertEqual(application.endedIdentifiers.count, 1)
+        XCTAssertEqual(application.endedIdentifiers.count, 0)
 
         controller.beginQuestionAnswer(rpcID: "rpc-restored", sessionID: "s2")
         XCTAssertEqual(controller.outstandingTurns, 0)
@@ -929,7 +1018,7 @@ final class GatewayProtocolTests: XCTestCase {
 
         controller.turnEnded(sessionID: "s2")
         XCTAssertFalse(controller.isAgentWorkActive)
-        XCTAssertEqual(application.endedIdentifiers.count, 2)
+        XCTAssertEqual(application.endedIdentifiers.count, 0)
     }
 
     @MainActor
@@ -946,7 +1035,7 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(controller.outstandingTurnsBySessionID, ["s1": 1, "s2": 1])
         XCTAssertEqual(controller.outstandingTurns, 2)
         XCTAssertNil(controller.sessionID)
-        XCTAssertEqual(application.beginCallCount, 1)
+        XCTAssertEqual(application.beginCallCount, 0)
 
         controller.turnEnded(sessionID: "s1")
         XCTAssertEqual(controller.outstandingTurnsBySessionID, ["s2": 1])
@@ -955,7 +1044,7 @@ final class GatewayProtocolTests: XCTestCase {
 
         controller.turnEnded(sessionID: "s2")
         XCTAssertFalse(controller.isAgentWorkActive)
-        XCTAssertEqual(application.endedIdentifiers.count, 1)
+        XCTAssertEqual(application.endedIdentifiers.count, 0)
     }
 
     @MainActor
@@ -977,7 +1066,31 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(controller.unassociatedOutstandingTurns, 0)
         XCTAssertTrue(controller.questionAllowanceSessionIDs.isEmpty)
         XCTAssertFalse(controller.keepsConnectionAlive)
+        XCTAssertEqual(application.endedIdentifiers.count, 0)
+    }
+
+    @MainActor
+    func testBackgroundAllowanceStartsOnlyInBackgroundAndRestartsAcrossForeground() {
+        let application = BackgroundTaskApplicationSpy()
+        let controller = AgentBackgroundExecutionController(application: application)
+
+        controller.begin(sessionID: "s1", startsNewTurn: true)
+        XCTAssertEqual(application.beginCallCount, 0)
+
+        controller.applicationDidEnterBackground()
+        XCTAssertEqual(application.beginCallCount, 1)
+        XCTAssertTrue(controller.keepsConnectionAlive)
+
+        controller.applicationDidBecomeActive()
         XCTAssertEqual(application.endedIdentifiers.count, 1)
+        XCTAssertTrue(controller.isAgentWorkActive)
+        XCTAssertTrue(controller.keepsConnectionAlive)
+
+        controller.applicationDidEnterBackground()
+        XCTAssertEqual(application.beginCallCount, 2)
+        controller.turnEnded(sessionID: "s1")
+        XCTAssertEqual(application.endedIdentifiers.count, 2)
+        XCTAssertFalse(controller.keepsConnectionAlive)
     }
 
     @MainActor
@@ -1054,7 +1167,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testAppStoreLoadsInjectedPreferencesAndPersistsEachSessionChangeOnce() {
+    func testAppStoreLoadsInjectedPreferencesAndPersistsEachSessionChangeOnce() async {
         let initialSession = SessionSummary(
             id: "existing",
             title: "已有会话",
@@ -1077,10 +1190,17 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(preferences.savedSessionSnapshots, [])
 
         store.addKnownSession("new-session")
+        XCTAssertEqual(
+            preferences.savedSessionSnapshots,
+            [],
+            "KMP Event 不得在 UI Intent 的同一调用栈内发布 Swift 镜像"
+        )
+        await flushDeferredKMPEvents(in: store)
         XCTAssertEqual(preferences.savedSessionSnapshots.count, 1)
         XCTAssertEqual(preferences.savedSessionSnapshots.last?.map(\.id), ["new-session", "existing"])
 
         store.addKnownSession("new-session")
+        await flushDeferredKMPEvents(in: store)
         XCTAssertEqual(preferences.savedSessionSnapshots.count, 1)
     }
 
@@ -1219,7 +1339,8 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(frame.event?.text, "thinking")
     }
 
-    func testConversationShowsPluginPromptsAsCompactContextRows() {
+    @MainActor
+    func testKMPConversationShowsPluginPromptsAsCompactContextRows() throws {
         let records = [
             SessionEvent(sessionId: "s1", seq: 1, time: 1, event: GatewayEvent(type: "permission/preset")),
             SessionEvent(sessionId: "s1", seq: 2, time: 2, event: GatewayEvent(type: "user/message", text: "runtime", source: "plugin")),
@@ -1227,7 +1348,9 @@ final class GatewayProtocolTests: XCTestCase {
             SessionEvent(sessionId: "s1", seq: 4, time: 4, event: GatewayEvent(type: "assistant/message", text: "你好！", reasoning: "思考")),
             SessionEvent(sessionId: "s1", seq: 5, time: 5, event: GatewayEvent(type: "tool/call", name: "Read"))
         ]
-        let items = ConversationItem.make(from: records)
+        let adapter = KMPConversationStoreAdapter()
+        try adapter.replace(sessionID: "s1", events: records)
+        let items = adapter.items(for: "s1")
         // Expected titles resolve through the same localized constants the
         // projection uses, so this passes under any test locale.
         XCTAssertEqual(items.map(\.title), [
@@ -1239,45 +1362,8 @@ final class GatewayProtocolTests: XCTestCase {
         ])
     }
 
-    func testHistoryRebaseKeepsLiveTailAndDeduplicatesOverlap() throws {
-        let history = [
-            SessionEvent(sessionId: "s1", seq: 1, time: 1, event: GatewayEvent(type: "user/message", text: "开始", source: "user")),
-            SessionEvent(sessionId: "s1", seq: 2, time: 2, event: GatewayEvent(type: "assistant/chunk", turn: 1, step: 1, text: "旧", chunkType: "text-delta"))
-        ]
-        let liveAtBuildStart = [
-            SessionEvent(sessionId: "s1", seq: 2, time: 2, event: GatewayEvent(type: "assistant/chunk", turn: 1, step: 1, text: "A", chunkType: "text-delta")),
-            SessionEvent(sessionId: "s1", seq: 3, time: 3, event: GatewayEvent(type: "assistant/chunk", turn: 1, step: 1, text: "B", chunkType: "text-delta"))
-        ]
-
-        var rebase = ConversationHistoryRebase.build(history: history, current: liveAtBuildStart)
-        XCTAssertEqual(rebase.events.map(\.seq), [1, 2, 3])
-        XCTAssertEqual(try XCTUnwrap(rebase.projector.items.last).text, "AB")
-
-        let liveAfterBuild = liveAtBuildStart + [
-            SessionEvent(sessionId: "s1", seq: 4, time: 4, event: GatewayEvent(type: "assistant/chunk", turn: 1, step: 1, text: "C", chunkType: "text-delta"))
-        ]
-        rebase.appendLiveTail(from: liveAfterBuild)
-
-        XCTAssertEqual(rebase.events.map(\.seq), [1, 2, 3, 4])
-        XCTAssertEqual(try XCTUnwrap(rebase.projector.items.last).text, "ABC")
-    }
-
-    func testHistoryRebaseLetsCompletedLiveMessageSupersedePartialHistory() throws {
-        let history = [
-            SessionEvent(sessionId: "s1", seq: 1, time: 1, event: GatewayEvent(type: "assistant/chunk", turn: 2, step: 1, text: "partial", chunkType: "text-delta"))
-        ]
-        let live = [
-            SessionEvent(sessionId: "s1", seq: 2, time: 2, event: GatewayEvent(type: "assistant/message", turn: 2, step: 1, text: "final"))
-        ]
-
-        let rebase = ConversationHistoryRebase.build(history: history, current: live)
-
-        XCTAssertEqual(rebase.projector.items.count, 1)
-        XCTAssertEqual(try XCTUnwrap(rebase.projector.items.first).title, "DeepSeek")
-        XCTAssertEqual(try XCTUnwrap(rebase.projector.items.first).text, "final")
-    }
-
-    func testRunCodeUsesJSONToolRendering() {
+    @MainActor
+    func testKMPConversationRunCodeUsesJSONToolRendering() throws {
         let payload: JSONValue = .string(#"{"language":"python","code":"print(1)"}"#)
         let record = SessionEvent(
             sessionId: "s1",
@@ -1285,13 +1371,17 @@ final class GatewayProtocolTests: XCTestCase {
             time: 1,
             event: GatewayEvent(type: "tool/call", name: "run_code", arguments: payload)
         )
-        let item = ConversationItem.make(from: [record]).first
+        let adapter = KMPConversationStoreAdapter()
+        try adapter.replace(sessionID: "s1", events: [record])
+        let item = adapter.items(for: "s1").first
         XCTAssertEqual(item?.title, "run_code")
         XCTAssertEqual(item?.kind, .jsonTool)
-        XCTAssertTrue(item?.text.contains("\"language\" : \"python\"") == true)
+        XCTAssertTrue(item?.text.contains("\"language\"") == true)
+        XCTAssertTrue(item?.text.contains("\"python\"") == true)
     }
 
-    func testTrajectoryAggregatesChunksAndPairsToolResult() {
+    @MainActor
+    func testKMPTrajectoryAggregatesChunksAndPairsToolResult() throws {
         let events = [
             SessionEvent(sessionId: "s1", seq: 0, time: 1, event: GatewayEvent(type: "permission/preset")),
             SessionEvent(sessionId: "s1", seq: 1, time: 2, event: GatewayEvent(type: "user/message", text: "查文件", source: "user")),
@@ -1301,7 +1391,9 @@ final class GatewayProtocolTests: XCTestCase {
             SessionEvent(sessionId: "s1", seq: 5, time: 6, event: GatewayEvent(type: "tool/call", turn: 1, step: 1, callId: "c1", name: "Read", arguments: .object(["path": .string("a.swift")]))),
             SessionEvent(sessionId: "s1", seq: 6, time: 7, event: GatewayEvent(type: "tool/result", turn: 1, step: 1, callId: "c1", isError: false, preview: "contents"))
         ]
-        let nodes = TrajectoryProjection.make(from: events)
+        let adapter = KMPTrajectoryStoreAdapter()
+        try adapter.replace(sessionID: "s1", events: events)
+        let nodes = adapter.nodes(for: "s1")
         XCTAssertEqual(nodes.map(\.kind), [.input, .request, .assistant, .tool])
         XCTAssertEqual(nodes[1].request?.number, 1)
         XCTAssertEqual(nodes[2].subtitle, "先读取")
@@ -1309,7 +1401,8 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(nodes[3].records.count, 2)
     }
 
-    func testTrajectoryProjectsRequestUsageAndSubtool() throws {
+    @MainActor
+    func testKMPTrajectoryProjectsRequestUsageAndSubtool() throws {
         let headerData: JSONValue = .object([
             "header": .object([
                 "config": .object([
@@ -1340,7 +1433,9 @@ final class GatewayProtocolTests: XCTestCase {
             SessionEvent(sessionId: "s1", seq: 5, time: 5, event: GatewayEvent(type: "tool/code-dispatch-start", name: "bash", arguments: .object(["command": .string("pwd")]), rootCallId: "c1", parentCallId: "c1", subCallId: "c1:code:1")),
             SessionEvent(sessionId: "s1", seq: 6, time: 6, event: GatewayEvent(type: "tool/code-dispatch", name: "bash", arguments: .object(["command": .string("pwd")]), isError: false, preview: "/tmp", rootCallId: "c1", parentCallId: "c1", subCallId: "c1:code:1"))
         ]
-        let nodes = TrajectoryProjection.make(from: events)
+        let adapter = KMPTrajectoryStoreAdapter()
+        try adapter.replace(sessionID: "s1", events: events)
+        let nodes = adapter.nodes(for: "s1")
         XCTAssertEqual(nodes.map(\.kind), [.request, .assistant, .tool, .subtool])
         XCTAssertEqual(nodes[0].request?.usage.totalInput, 9543)
         XCTAssertEqual(nodes[0].request?.usage.content, 115)
@@ -1367,11 +1462,14 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(event.event.text, "历史消息")
     }
 
-    func testNormalizesRawHistoryImageReferenceAndProjectsPureImageMessage() throws {
+    @MainActor
+    func testNormalizesRawHistoryImageReferenceAndProjectsWithKMP() throws {
         let json = GatewayProtocolParityFixtures.historyImage
         let frame = try GatewayWireDecoder.decode(Data(json.utf8))
         let event = try XCTUnwrap(frame.events?.first?.normalized(sessionId: "s1"))
-        let item = try XCTUnwrap(ConversationItem.make(from: [event]).first)
+        let adapter = KMPConversationStoreAdapter()
+        try adapter.replace(sessionID: "s1", events: [event])
+        let item = try XCTUnwrap(adapter.items(for: "s1").first)
 
         XCTAssertEqual(event.event.images?.first?.attachmentId, "att-history")
         XCTAssertEqual(item.kind, .user)
@@ -1491,76 +1589,6 @@ final class GatewayProtocolTests: XCTestCase {
         }
     }
 
-    func testSessionListReducerMergesSortsAndFiltersRemoteSessions() {
-        var state = SessionListState(
-            sessions: [SessionSummary(
-                id: "existing",
-                title: "旧标题",
-                lastActivity: Date(timeIntervalSince1970: 10),
-                isRunning: false,
-                hasUnread: true,
-                agentPreset: "keep-if-missing"
-            )],
-            archivedSessionIDs: ["archived"]
-        )
-        let remote = [
-            GatewaySessionSummary(sessionId: "existing", updatedAt: 2_000, running: true, blank: false, cwd: "/tmp/existing"),
-            GatewaySessionSummary(sessionId: "new", updatedAt: 3_000_000, running: false, blank: false, cwd: "/tmp/new", agentPreset: "standard"),
-            GatewaySessionSummary(sessionId: "archived", updatedAt: 4_000, running: false, blank: false, cwd: "/tmp/archived")
-        ]
-
-        SessionListReducer.reduce(state: &state, action: .remoteSessionsReceived(remote))
-
-        XCTAssertEqual(state.sessions.map(\.id), ["new", "existing"])
-        XCTAssertEqual(state.sessions.first?.title, "new")
-        XCTAssertEqual(state.sessions.first?.agentPreset, "standard")
-        XCTAssertEqual(state.sessions.last?.title, "existing")
-        XCTAssertEqual(state.sessions.last?.isRunning, true)
-        XCTAssertEqual(state.sessions.last?.hasUnread, true)
-        XCTAssertEqual(state.sessions.last?.agentPreset, "keep-if-missing")
-    }
-
-    func testSessionListReducerUpdatesRunningUnreadTitleAndReadState() {
-        var state = SessionListState(selectedSessionID: "selected")
-        let title = "这是一个超过二十八个字符的会话标题，用来验证标题截断逻辑是否保持不变"
-        let userEvent = SessionEvent(
-            sessionId: "other",
-            seq: 1,
-            time: 100,
-            event: GatewayEvent(type: "user/message", text: title, source: "user")
-        )
-        SessionListReducer.reduce(state: &state, action: .eventReceived(userEvent))
-        XCTAssertEqual(state.sessions.first?.title, String(title.prefix(28)))
-        XCTAssertEqual(state.sessions.first?.hasUnread, true)
-
-        let turnStart = SessionEvent(sessionId: "other", seq: 2, time: 101, event: GatewayEvent(type: "turn/start"))
-        SessionListReducer.reduce(state: &state, action: .eventReceived(turnStart))
-        XCTAssertEqual(state.sessions.first?.isRunning, true)
-
-        let turnEnd = SessionEvent(sessionId: "other", seq: 3, time: 102, event: GatewayEvent(type: "turn/end"))
-        SessionListReducer.reduce(state: &state, action: .eventReceived(turnEnd))
-        XCTAssertEqual(state.sessions.first?.isRunning, false)
-
-        SessionListReducer.reduce(state: &state, action: .markRead("other"))
-        XCTAssertEqual(state.sessions.first?.hasUnread, false)
-    }
-
-    func testSessionListReducerMessageSentSelectsOnlyWhenNeededAndKeepsSingleSession() {
-        var state = SessionListState()
-        SessionListReducer.reduce(state: &state, action: .messageSent(sessionID: "created", agentPreset: "standard"))
-        XCTAssertEqual(state.selectedSessionID, "created")
-        XCTAssertEqual(state.sessions.map(\.id), ["created"])
-        XCTAssertEqual(state.sessions.first?.agentPreset, "standard")
-
-        SessionListReducer.reduce(state: &state, action: .messageSent(sessionID: "created", agentPreset: "updated"))
-        XCTAssertEqual(state.sessions.count, 1)
-        XCTAssertEqual(state.sessions.first?.agentPreset, "updated")
-
-        SessionListReducer.reduce(state: &state, action: .select("existing-selection"))
-        SessionListReducer.reduce(state: &state, action: .messageSent(sessionID: "second", agentPreset: nil))
-        XCTAssertEqual(state.selectedSessionID, "existing-selection")
-    }
-
     @MainActor
     func testKMPSessionListAdapterPublishesChangedSnapshotThroughEventStream() throws {
         let adapter = KMPSessionListStoreAdapter(sessions: [])
@@ -1579,7 +1607,7 @@ final class GatewayProtocolTests: XCTestCase {
             now: Date(timeIntervalSince1970: 100)
         )
 
-        XCTAssertTrue(adapter.usesEventStream)
+        XCTAssertNotNil(adapter.lastEventSequence)
         XCTAssertEqual(snapshots.count, 1)
         XCTAssertEqual(snapshots.first?.sessions.first?.id, "session-event")
     }
@@ -1785,38 +1813,31 @@ final class GatewayProtocolTests: XCTestCase {
             isConnected: true
         ))
 
-        XCTAssertTrue(adapter.usesEventStream)
+        XCTAssertNotNil(adapter.lastEventSequence)
         XCTAssertEqual(pushed.count, 2)
         XCTAssertEqual(pushed.last?.snapshot, returned.snapshot)
         XCTAssertEqual(pushed.last?.effect?.action, "answer")
     }
 
     @MainActor
-    func testKMPQuestionAdapterMatchesSwiftFixtureAndEmitsEffectOnce() {
+    func testKMPQuestionAdapterOwnsStateAndEmitsEffectOnce() {
         let request = questionRequest()
         let answers = [
             GatewayQuestionAnswer(id: "direction", selected: ["架构"]),
             GatewayQuestionAnswer(id: "notes", selected: [], custom: "保持原生 UI")
         ]
         let adapter = KMPQuestionStoreAdapter()
-        var swiftState = QuestionState()
-
         var transition = adapter.reduce(.requestReceived(request))
-        QuestionReducer.reduce(state: &swiftState, action: .requestReceived(request))
         XCTAssertNil(transition.error)
-        XCTAssertEqual(transition.snapshot.pendingRequests, swiftState.pendingRequests)
-        XCTAssertEqual(transition.snapshot.platformStatuses, swiftState.requestStatuses)
+        XCTAssertEqual(transition.snapshot.pendingRequests, [request])
+        XCTAssertEqual(transition.snapshot.platformStatuses[request.rpcId], .idle)
 
         transition = adapter.reduce(.submitAnswer(
             rpcID: request.rpcId,
             answers: answers,
             isConnected: true
         ))
-        QuestionReducer.reduce(
-            state: &swiftState,
-            action: .submit(request: request, submission: .answer(answers), isConnected: true)
-        )
-        XCTAssertEqual(transition.snapshot.platformStatuses, swiftState.requestStatuses)
+        XCTAssertEqual(transition.snapshot.platformStatuses[request.rpcId], .submitting(.answer))
         XCTAssertEqual(transition.effect?.action, "answer")
         XCTAssertEqual(transition.effect?.answers, answers)
 
@@ -1834,23 +1855,17 @@ final class GatewayProtocolTests: XCTestCase {
             accepted: true,
             reason: nil
         ))
-        QuestionReducer.reduce(
-            state: &swiftState,
-            action: .responseReceived(rpcID: request.rpcId, action: .answer, accepted: true, reason: nil)
-        )
-        XCTAssertEqual(transition.snapshot.platformStatuses, swiftState.requestStatuses)
+        XCTAssertEqual(transition.snapshot.platformStatuses[request.rpcId], .accepted(.answer))
 
         var replay = request
         replay.replay = true
         transition = adapter.reduce(.requestReceived(replay))
-        QuestionReducer.reduce(state: &swiftState, action: .requestReceived(replay))
-        XCTAssertEqual(transition.snapshot.pendingRequests, swiftState.pendingRequests)
-        XCTAssertEqual(transition.snapshot.platformStatuses, swiftState.requestStatuses)
+        XCTAssertEqual(transition.snapshot.pendingRequests, [replay])
+        XCTAssertEqual(transition.snapshot.platformStatuses[request.rpcId], .accepted(.answer))
 
         transition = adapter.reduce(.resolved(rpcID: request.rpcId))
-        QuestionReducer.reduce(state: &swiftState, action: .resolved(rpcID: request.rpcId))
-        XCTAssertEqual(transition.snapshot.pendingRequests, swiftState.pendingRequests)
-        XCTAssertEqual(transition.snapshot.platformStatuses, swiftState.requestStatuses)
+        XCTAssertTrue(transition.snapshot.pendingRequests.isEmpty)
+        XCTAssertNil(transition.snapshot.platformStatuses[request.rpcId])
     }
 
     @MainActor
@@ -1872,7 +1887,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testAppStoreNeverExecutesSemanticallyMismatchedQuestionEffects() {
+    func testAppStoreNeverExecutesSemanticallyMismatchedQuestionEffects() async {
         let request = questionRequest()
         let answers = [
             GatewayQuestionAnswer(id: "direction", selected: ["架构"]),
@@ -1896,6 +1911,7 @@ final class GatewayProtocolTests: XCTestCase {
             )
 
             store.answerQuestion(request, answers: answers)
+            await flushDeferredKMPEvents(in: store)
 
             XCTAssertEqual(executor.answerCalls.count, 0, "\(mismatch)")
             XCTAssertEqual(executor.cancelCallCount, 0, "\(mismatch)")
@@ -1911,8 +1927,8 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testAppStoreCoordinatesQuestionAllowanceAcrossTerminalRoutes() throws {
-        func makeStore() -> (
+    func testAppStoreCoordinatesQuestionAllowanceAcrossTerminalRoutes() async throws {
+        func makeStore() async -> (
             store: AppStore,
             controller: AgentBackgroundExecutionController,
             executor: GatewayQuestionEffectExecutorSpy,
@@ -1935,6 +1951,7 @@ final class GatewayProtocolTests: XCTestCase {
                 GatewayQuestionAnswer(id: "direction", selected: ["架构"]),
                 GatewayQuestionAnswer(id: "notes", selected: [], custom: "保持原生 UI")
             ])
+            await flushDeferredKMPEvents(in: store)
             XCTAssertEqual(executor.answerCalls.count, 1)
             XCTAssertEqual(controller.questionAllowanceSessionIDs[request.rpcId], request.sessionId)
             XCTAssertEqual(controller.outstandingTurns, 0)
@@ -1942,52 +1959,58 @@ final class GatewayProtocolTests: XCTestCase {
         }
 
         do {
-            let fixture = makeStore()
+            let fixture = await makeStore()
             fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
                 #"{"kind":"question-response","rpcId":"rpc-question","action":"answer","accepted":false,"reason":"not-pending"}"#.utf8
             )))
+            await flushDeferredKMPEvents(in: fixture.store)
             XCTAssertFalse(fixture.controller.isAgentWorkActive)
             XCTAssertEqual(fixture.controller.outstandingTurns, 0)
         }
 
         do {
-            let fixture = makeStore()
+            let fixture = await makeStore()
             fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
                 #"{"kind":"question-response","rpcId":"rpc-question","action":"answer","accepted":false,"reason":"bad-response"}"#.utf8
             )))
+            await flushDeferredKMPEvents(in: fixture.store)
             XCTAssertFalse(fixture.controller.isAgentWorkActive)
             XCTAssertEqual(fixture.controller.outstandingTurns, 0)
         }
 
         do {
-            let fixture = makeStore()
+            let fixture = await makeStore()
             fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
                 #"{"kind":"error","requestType":"question-answer","rpcId":"rpc-question","sessionId":"session-question","code":"failed"}"#.utf8
             )))
+            await flushDeferredKMPEvents(in: fixture.store)
             XCTAssertFalse(fixture.controller.isAgentWorkActive)
             XCTAssertEqual(fixture.controller.outstandingTurns, 0)
         }
 
         do {
-            let fixture = makeStore()
+            let fixture = await makeStore()
             fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
                 #"{"kind":"hello","protocol":3,"capabilities":[],"authenticated":true,"clients":1}"#.utf8
             )))
+            await flushDeferredKMPEvents(in: fixture.store)
             XCTAssertFalse(fixture.controller.isAgentWorkActive)
             XCTAssertEqual(fixture.controller.outstandingTurns, 0)
         }
 
         do {
-            let fixture = makeStore()
+            let fixture = await makeStore()
             fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
                 #"{"kind":"question-response","rpcId":"rpc-question","action":"answer","accepted":true}"#.utf8
             )))
+            await flushDeferredKMPEvents(in: fixture.store)
             XCTAssertTrue(fixture.controller.questionAllowanceSessionIDs.isEmpty)
             XCTAssertEqual(fixture.controller.outstandingTurns, 1)
 
             fixture.store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
                 #"{"kind":"question-resolved","rpcId":"rpc-question","sessionId":"session-question","outcome":"answered"}"#.utf8
             )))
+            await flushDeferredKMPEvents(in: fixture.store)
             XCTAssertEqual(fixture.controller.outstandingTurns, 1)
             fixture.controller.turnEnded(sessionID: fixture.request.sessionId)
             XCTAssertFalse(fixture.controller.isAgentWorkActive)
@@ -1995,7 +2018,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testQuestionFailureWithoutRpcIDFailsAndReleasesAllRequestsInSession() throws {
+    func testQuestionFailureWithoutRpcIDFailsAndReleasesAllRequestsInSession() async throws {
         let controller = AgentBackgroundExecutionController(application: BackgroundTaskApplicationSpy())
         let store = AppStore(
             preferences: AppPreferencesSpy(
@@ -2015,6 +2038,7 @@ final class GatewayProtocolTests: XCTestCase {
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"error","requestType":"question-answer","sessionId":"s1","code":"failed"}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: store)
 
         XCTAssertEqual(store.questionRequestStatuses["rpc-s1-a"], .rejected("failed"))
         XCTAssertEqual(store.questionRequestStatuses["rpc-s1-b"], .rejected("failed"))
@@ -2024,7 +2048,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testAppStoreQuestionRoutePublishesKMPStateAndHelloResetsIt() throws {
+    func testAppStoreQuestionRoutePublishesKMPStateAndHelloResetsIt() async throws {
         let store = AppStore(preferences: AppPreferencesSpy(
             endpoint: "wss://injected.example/ws/mobile",
             selectedWorkspaceID: nil,
@@ -2034,10 +2058,12 @@ final class GatewayProtocolTests: XCTestCase {
             #"{"kind":"question-requested","rpcId":"rpc-app","sessionId":"s-app","questions":[{"id":"q1","question":"继续？","options":[{"label":"是"}]}]}"#.utf8
         ))
         store.gateway.onFrame?(requested)
+        await flushDeferredKMPEvents(in: store)
         let request = try XCTUnwrap(store.pendingQuestionRequests.first)
         XCTAssertEqual(store.questionRequestStatuses[request.rpcId], .idle)
 
         store.answerQuestion(request, answers: [GatewayQuestionAnswer(id: "q1", selected: ["是"])])
+        await flushDeferredKMPEvents(in: store)
         XCTAssertEqual(
             store.questionRequestStatuses[request.rpcId],
             .rejected(String(localized: "q.rejected.ws.disconnected.answer", defaultValue: "WebSocket 已断开，重连后再提交答案。"))
@@ -2047,398 +2073,19 @@ final class GatewayProtocolTests: XCTestCase {
             #"{"kind":"question-response","rpcId":"rpc-app","action":"answer","accepted":false,"reason":"not-pending"}"#.utf8
         ))
         store.gateway.onFrame?(notPending)
+        await flushDeferredKMPEvents(in: store)
         XCTAssertTrue(store.pendingQuestionRequests.isEmpty)
         XCTAssertNil(store.questionRequestStatuses[request.rpcId])
 
         store.gateway.onFrame?(requested)
+        await flushDeferredKMPEvents(in: store)
         let hello = try GatewayWireDecoder.decode(Data(
             #"{"kind":"hello","protocol":3,"capabilities":[],"authenticated":true,"clients":1}"#.utf8
         ))
         store.gateway.onFrame?(hello)
+        await flushDeferredKMPEvents(in: store)
         XCTAssertTrue(store.pendingQuestionRequests.isEmpty)
         XCTAssertTrue(store.questionRequestStatuses.isEmpty)
-    }
-
-    func testQuestionReducerAddsRequestAndReplayPreservesSubmissionStatus() {
-        let request = questionRequest()
-        var state = QuestionState()
-
-        QuestionReducer.reduce(state: &state, action: .requestReceived(request))
-        XCTAssertEqual(state.pendingRequests, [request])
-        XCTAssertEqual(state.requestStatuses[request.rpcId], .idle)
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .submit(
-                request: request,
-                submission: .answer([
-                    GatewayQuestionAnswer(id: "direction", selected: ["架构"]),
-                    GatewayQuestionAnswer(id: "notes", selected: [], custom: "保持原生 UI")
-                ]),
-                isConnected: true
-            )
-        )
-        XCTAssertEqual(state.requestStatuses[request.rpcId], .submitting(.answer))
-
-        var replay = request
-        replay.replay = true
-        QuestionReducer.reduce(state: &state, action: .requestReceived(replay))
-        XCTAssertEqual(state.pendingRequests, [replay])
-        XCTAssertEqual(state.requestStatuses[request.rpcId], .submitting(.answer))
-    }
-
-    func testQuestionReducerRejectsDisconnectedAnswerAndCancel() {
-        let request = questionRequest()
-        var state = QuestionState(pendingRequests: [request])
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .submit(request: request, submission: .answer([]), isConnected: false)
-        )
-        XCTAssertEqual(
-            state.requestStatuses[request.rpcId],
-            .rejected(String(localized: "q.rejected.ws.disconnected.answer", defaultValue: "WebSocket 已断开，重连后再提交答案。"))
-        )
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .submit(request: request, submission: .cancel, isConnected: false)
-        )
-        XCTAssertEqual(
-            state.requestStatuses[request.rpcId],
-            .rejected(String(localized: "q.rejected.ws.disconnected.skip", defaultValue: "WebSocket 已断开，重连后再跳过问题。"))
-        )
-    }
-
-    func testQuestionReducerValidatesAnswerOrderOptionsAndSingleSelection() {
-        let request = questionRequest()
-        var state = QuestionState(pendingRequests: [request])
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .submit(
-                request: request,
-                submission: .answer([GatewayQuestionAnswer(id: "notes", selected: [])]),
-                isConnected: true
-            )
-        )
-        XCTAssertEqual(
-            state.requestStatuses[request.rpcId],
-            .rejected(String(localized: "答案必须按原顺序覆盖整组问题。"))
-        )
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .submit(
-                request: request,
-                submission: .answer([
-                    GatewayQuestionAnswer(id: "direction", selected: ["不存在"]),
-                    GatewayQuestionAnswer(id: "notes", selected: [])
-                ]),
-                isConnected: true
-            )
-        )
-        XCTAssertEqual(
-            state.requestStatuses[request.rpcId],
-            .rejected(String(
-                format: String(localized: "q.rejected.bad-options"),
-                "研究方向"
-            ))
-        )
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .submit(
-                request: request,
-                submission: .answer([
-                    GatewayQuestionAnswer(id: "direction", selected: ["架构", "架构"]),
-                    GatewayQuestionAnswer(id: "notes", selected: [])
-                ]),
-                isConnected: true
-            )
-        )
-        XCTAssertEqual(
-            state.requestStatuses[request.rpcId],
-            .rejected(String(
-                format: String(localized: "q.rejected.bad-options"),
-                "研究方向"
-            ))
-        )
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .submit(
-                request: request,
-                submission: .answer([
-                    GatewayQuestionAnswer(id: "direction", selected: ["架构"]),
-                    GatewayQuestionAnswer(id: "notes", selected: ["简洁"], custom: "也要完整")
-                ]),
-                isConnected: true
-            )
-        )
-        XCTAssertEqual(
-            state.requestStatuses[request.rpcId],
-            .rejected(String(localized: "单选题只能选择一个选项，且不能同时填写自定义答案。"))
-        )
-    }
-
-    func testQuestionReducerHandlesAcceptedRejectedAndNotPendingResponses() {
-        let request = questionRequest()
-        var state = QuestionState(
-            pendingRequests: [request],
-            requestStatuses: [request.rpcId: .submitting(.answer)]
-        )
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .responseReceived(
-                rpcID: request.rpcId,
-                action: .answer,
-                accepted: true,
-                reason: nil
-            )
-        )
-        XCTAssertEqual(state.requestStatuses[request.rpcId], .accepted(.answer))
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .responseReceived(
-                rpcID: request.rpcId,
-                action: .answer,
-                accepted: false,
-                reason: "bad-response"
-            )
-        )
-        XCTAssertEqual(
-            state.requestStatuses[request.rpcId],
-            .rejected(String(
-                format: String(localized: "q.rejected.server-refused"),
-                "bad-response"
-            ))
-        )
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .responseReceived(
-                rpcID: request.rpcId,
-                action: .answer,
-                accepted: false,
-                reason: "not-pending"
-            )
-        )
-        XCTAssertTrue(state.pendingRequests.isEmpty)
-        XCTAssertNil(state.requestStatuses[request.rpcId])
-    }
-
-    func testQuestionReducerHandlesFailureResolutionAndReset() {
-        let request = questionRequest()
-        var state = QuestionState(
-            pendingRequests: [request],
-            requestStatuses: [request.rpcId: .submitting(.cancel)]
-        )
-
-        QuestionReducer.reduce(
-            state: &state,
-            action: .requestFailed(rpcID: request.rpcId, message: "")
-        )
-        XCTAssertEqual(
-            state.requestStatuses[request.rpcId],
-            .rejected(String(localized: "服务端拒绝了问题响应。"))
-        )
-
-        QuestionReducer.reduce(state: &state, action: .resolved(rpcID: request.rpcId))
-        XCTAssertTrue(state.pendingRequests.isEmpty)
-        XCTAssertNil(state.requestStatuses[request.rpcId])
-
-        QuestionReducer.reduce(state: &state, action: .requestReceived(request))
-        QuestionReducer.reduce(state: &state, action: .reset)
-        XCTAssertEqual(state, QuestionState())
-    }
-
-    func testSessionControlReducerTracksRequestLifecycles() {
-        var state = SessionControlState()
-
-        SessionControlReducer.reduce(state: &state, action: .requestStarted("models"))
-        SessionControlReducer.reduce(state: &state, action: .requestStarted("context-usage"))
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .defaultConfigurationRequestStarted("defaults")
-        )
-        XCTAssertEqual(state.loadingKinds, ["models", "context-usage"])
-        XCTAssertEqual(state.defaultConfigurationLoadingKinds, ["defaults"])
-
-        SessionControlReducer.reduce(state: &state, action: .requestFinished("context-usage"))
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .defaultConfigurationRequestFinished("defaults")
-        )
-        XCTAssertEqual(state.loadingKinds, ["models"])
-        XCTAssertTrue(state.defaultConfigurationLoadingKinds.isEmpty)
-
-        SessionControlReducer.reduce(state: &state, action: .requestTimedOut("models"))
-        XCTAssertTrue(state.loadingKinds.isEmpty)
-    }
-
-    func testSessionControlReducerCorrelatesSessionAndGlobalRequests() {
-        var state = SessionControlState()
-
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .modelsRequestTargeted(sessionID: "session-1")
-        )
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .modelSelectionTargeted(sessionID: "session-1")
-        )
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .permissionOptionsTargeted(sessionID: "session-1")
-        )
-        XCTAssertEqual(state.pendingModelsSessionID, "session-1")
-        XCTAssertFalse(state.isPendingGlobalModelsRequest)
-        XCTAssertEqual(state.pendingModelSelectionSessionID, "session-1")
-        XCTAssertEqual(state.pendingPermissionOptionsSessionID, "session-1")
-
-        SessionControlReducer.reduce(state: &state, action: .modelSelectionResolved)
-        SessionControlReducer.reduce(state: &state, action: .permissionOptionsResolved)
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .modelsRequestTargeted(sessionID: nil)
-        )
-        XCTAssertNil(state.pendingModelSelectionSessionID)
-        XCTAssertNil(state.pendingPermissionOptionsSessionID)
-        XCTAssertNil(state.pendingModelsSessionID)
-        XCTAssertTrue(state.isPendingGlobalModelsRequest)
-
-        SessionControlReducer.reduce(state: &state, action: .requestFinished("models"))
-        XCTAssertFalse(state.isPendingGlobalModelsRequest)
-        XCTAssertNil(state.pendingModelsSessionID)
-    }
-
-    func testSessionControlReducerUpdatesModelsAndDefaults() {
-        var state = SessionControlState()
-        let selected = GatewayModelSelection(provider: "openai", model: "gpt-5", reasoningEffort: "high")
-
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .modelsReceived(
-                sessionID: "session-1",
-                current: nil,
-                routable: true,
-                groups: [],
-                isGlobalRequest: false
-            )
-        )
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .modelSelected(sessionID: "session-1", selection: selected)
-        )
-        XCTAssertEqual(state.modelCatalogs["session-1"]?.current, selected)
-        XCTAssertEqual(state.modelCatalogs["session-1"]?.routable, true)
-
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .modelsReceived(
-                sessionID: nil,
-                current: selected,
-                routable: true,
-                groups: [],
-                isGlobalRequest: true
-            )
-        )
-        XCTAssertNotNil(state.globalModelCatalog)
-        XCTAssertNil(state.globalModelCatalog?.current)
-
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .defaultsReceived(agentPreset: "standard", permission: "read-only")
-        )
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .globalDefaultApplied(target: "permission", value: "workspace-write")
-        )
-        SessionControlReducer.reduce(state: &state, action: .defaultModelReceived(selected))
-        XCTAssertEqual(state.agentPresetDefault, "standard")
-        XCTAssertEqual(state.permissionDefault, "workspace-write")
-        XCTAssertEqual(state.defaultModelSelection, selected)
-    }
-
-    func testSessionControlReducerFiltersPermissionsAndMergesContextSnapshots() {
-        var state = SessionControlState()
-        let permissions = GatewaySessionPermissions(
-            options: [
-                GatewayPermissionOption(value: "read-only", name: "只读"),
-                GatewayPermissionOption(value: "unsupported", name: "未知")
-            ],
-            currentValue: "read-only"
-        )
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .permissionsReceived(sessionID: "session-1", permissions: permissions)
-        )
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .permissionSelected(sessionID: "session-1", value: "workspace-write")
-        )
-        XCTAssertEqual(state.sessionPermissions["session-1"]?.options?.map(\.value), ["read-only"])
-        XCTAssertEqual(state.sessionPermissions["session-1"]?.currentValue, "workspace-write")
-        XCTAssertEqual(state.sessionPermissions["session-1"]?.preset, "workspace-write")
-
-        let usage = GatewayTokenUsage(uncachedInputTokens: 10, outputTokens: 3)
-        let breakdown = GatewayContextBreakdown(systemTokens: 1, toolsTokens: 2, messageTokens: 3)
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .contextReceived(
-                sessionID: "session-1",
-                asOfSequence: 20,
-                tokenUsage: usage,
-                pressure: nil,
-                breakdown: nil
-            )
-        )
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .contextReceived(
-                sessionID: "session-1",
-                asOfSequence: nil,
-                tokenUsage: nil,
-                pressure: nil,
-                breakdown: breakdown
-            )
-        )
-        XCTAssertEqual(state.contextSnapshots["session-1"]?.asOfSeq, 20)
-        XCTAssertEqual(state.contextSnapshots["session-1"]?.tokenUsage, usage)
-        XCTAssertEqual(state.contextSnapshots["session-1"]?.breakdown, breakdown)
-    }
-
-    func testSessionControlReducerMergesSessionStatsWithoutDiscardingExistingValues() {
-        var state = SessionControlState()
-        let totals = GatewaySessionTokenUsageTotals(inputTokens: 100, outputTokens: 20)
-        let pressure = GatewayContextPressure(pressureTokens: 80, projectedTokens: 90, contextWindow: 1_000)
-
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .statsReceived(
-                sessionID: "session-1",
-                asOfSequence: 30,
-                stats: nil,
-                tokenUsageTotals: totals,
-                contextPressure: nil
-            )
-        )
-        SessionControlReducer.reduce(
-            state: &state,
-            action: .statsReceived(
-                sessionID: "session-1",
-                asOfSequence: nil,
-                stats: nil,
-                tokenUsageTotals: nil,
-                contextPressure: pressure
-            )
-        )
-        XCTAssertEqual(state.sessionStatsSnapshots["session-1"]?.asOfSeq, 30)
-        XCTAssertEqual(state.sessionStatsSnapshots["session-1"]?.tokenUsage?.totals, totals)
-        XCTAssertEqual(state.sessionStatsSnapshots["session-1"]?.contextPressure, pressure)
     }
 
     @MainActor
@@ -2452,7 +2099,7 @@ final class GatewayProtocolTests: XCTestCase {
             isConnected: true
         ))
 
-        XCTAssertTrue(adapter.usesEventStream)
+        XCTAssertNotNil(adapter.lastEventSequence)
         XCTAssertEqual(adapter.lastEventSequence, 1)
         XCTAssertEqual(pushed.count, 1)
         XCTAssertEqual(pushed.first?.snapshot, returned.snapshot)
@@ -2493,9 +2140,8 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testKMPSessionControlAdapterMatchesSwiftFixtureAndEmitsRequestEffectOnce() {
+    func testKMPSessionControlAdapterOwnsStateAndEmitsRequestEffectOnce() {
         let adapter = KMPSessionControlStoreAdapter()
-        var swiftState = SessionControlState()
 
         var transition = adapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
         XCTAssertNil(transition.error)
@@ -2515,7 +2161,7 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(transition.snapshot.queuedRequestTargets["models"]?.sessionId, "session-2")
 
         let selected = GatewayModelSelection(provider: "openai", model: "gpt-5", reasoningEffort: "high")
-        let modelsAction = SessionControlAction.modelsReceived(
+        let modelsAction = KMPSessionControlAction.modelsReceived(
             sessionID: "session-1",
             current: selected,
             routable: true,
@@ -2523,8 +2169,8 @@ final class GatewayProtocolTests: XCTestCase {
             isGlobalRequest: false
         )
         transition = adapter.reduce(.action(modelsAction))
-        SessionControlReducer.reduce(state: &swiftState, action: modelsAction)
-        XCTAssertEqual(transition.snapshot.modelCatalogs, swiftState.modelCatalogs)
+        XCTAssertEqual(transition.snapshot.modelCatalogs["session-1"]?.current, selected)
+        XCTAssertEqual(transition.snapshot.modelCatalogs["session-1"]?.routable, true)
         XCTAssertEqual(transition.effects.first?.sessionId, "session-2")
         XCTAssertEqual(transition.snapshot.pendingModelsSessionId, "session-2")
         XCTAssertFalse(transition.snapshot.explicitSessionRequiredKinds.contains("models"))
@@ -2547,14 +2193,13 @@ final class GatewayProtocolTests: XCTestCase {
             ],
             currentValue: "read-only"
         )
-        let permissionsAction = SessionControlAction.permissionsReceived(
+        let permissionsAction = KMPSessionControlAction.permissionsReceived(
             sessionID: "session-1",
             permissions: permissions
         )
         _ = adapter.reduce(.requestPermissionOptions(sessionID: "session-1", isConnected: true))
         transition = adapter.reduce(.action(permissionsAction))
-        SessionControlReducer.reduce(state: &swiftState, action: permissionsAction)
-        XCTAssertEqual(transition.snapshot.sessionPermissions, swiftState.sessionPermissions)
+        XCTAssertEqual(transition.snapshot.sessionPermissions["session-1"]?.currentValue, "read-only")
         XCTAssertEqual(
             transition.snapshot.sessionPermissions["session-1"]?.options?.map(\.value),
             ["read-only"]
@@ -2912,7 +2557,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testAppStoreArchiveClearsKMPControlStateAndRejectsLateResponse() throws {
+    func testAppStoreArchiveClearsKMPControlStateAndRejectsLateResponse() async throws {
         let bridge = SharedSessionControlStore()
         _ = bridge.mergeContextProjection(
             sessionId: "session-a", asOfSequence: KotlinLong(longLong: 1),
@@ -2937,6 +2582,7 @@ final class GatewayProtocolTests: XCTestCase {
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"workspaces","items":[],"archivedSessionIds":["session-a"]}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: store)
         var snapshot = try JSONDecoder().decode(
             KMPSessionControlSnapshot.self,
             from: Data(try XCTUnwrap(bridge.snapshot().snapshotJson).utf8)
@@ -2960,7 +2606,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testAppStoreBatchArchiveDrainsBeforeRoutingReplacementEffect() throws {
+    func testAppStoreBatchArchiveDrainsBeforeRoutingReplacementEffect() async throws {
         let bridge = SharedSessionControlStore()
         _ = bridge.requestModels(sessionId: "session-a", isConnected: true)
         _ = bridge.requestModels(sessionId: "session-b", isConnected: true)
@@ -2981,23 +2627,26 @@ final class GatewayProtocolTests: XCTestCase {
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"workspaces","items":[],"archivedSessionIds":["session-a"]}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: store)
         XCTAssertTrue(executor.modelsTargets.isEmpty)
 
         // A 的真实 nil-session 终态只解除 drain；随后才发送仍存活的 B。
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"models","groups":[],"routable":true}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: store)
         XCTAssertEqual(executor.modelsTargets, ["session-b"])
         XCTAssertNil(store.modelCatalogs["session-a"])
 
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"models","groups":[],"routable":true}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: store)
         XCTAssertNotNil(store.modelCatalogs["session-b"])
     }
 
     @MainActor
-    func testAppStoreBatchArchiveDoesNotStartQueuedSessionAlsoInClearSet() throws {
+    func testAppStoreBatchArchiveDoesNotStartQueuedSessionAlsoInClearSet() async throws {
         let bridge = SharedSessionControlStore()
         _ = bridge.requestModels(sessionId: "session-a", isConnected: true)
         _ = bridge.requestModels(sessionId: "session-b", isConnected: true)
@@ -3018,10 +2667,12 @@ final class GatewayProtocolTests: XCTestCase {
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"workspaces","items":[],"archivedSessionIds":["session-b","session-a"]}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: store)
         XCTAssertTrue(executor.modelsTargets.isEmpty)
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"models","groups":[],"routable":true}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: store)
         XCTAssertTrue(executor.modelsTargets.isEmpty)
         XCTAssertNil(bridge.snapshot().snapshotJson.flatMap { Data($0.utf8) }.flatMap {
             try? JSONDecoder().decode(KMPSessionControlSnapshot.self, from: $0)
@@ -3256,7 +2907,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testNegativeControlResponseImmediatelyCompletesCurrentGeneration() throws {
+    func testNegativeControlResponseImmediatelyCompletesCurrentGeneration() async throws {
         let bridge = SharedSessionControlStore()
         let selection = GatewayModelSelection(provider: "openai", model: "gpt-5")
         _ = bridge.selectModel(
@@ -3277,6 +2928,7 @@ final class GatewayProtocolTests: XCTestCase {
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"select-model","sessionId":"session-1"}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: store)
 
         XCTAssertFalse(store.sessionControlLoadingKinds.contains("select-model"))
         let snapshot = try JSONDecoder().decode(
@@ -3363,7 +3015,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testCorrelatedNegativeDefaultResponseFinishesWithoutWaitingForTimeout() throws {
+    func testCorrelatedNegativeDefaultResponseFinishesWithoutWaitingForTimeout() async throws {
         let bridge = SharedSessionControlStore()
         _ = bridge.setDefault(target: "permission", value: "read-only", isConnected: true)
         _ = bridge.globalDefaultApplied(target: "permission", value: "read-only")
@@ -3381,6 +3033,7 @@ final class GatewayProtocolTests: XCTestCase {
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"set-default","applied":false,"target":"permission","value":"workspace-write"}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: store)
 
         XCTAssertFalse(store.defaultConfigurationLoadingKinds.contains("set-default"))
         XCTAssertNotNil(store.lastError)
@@ -3393,7 +3046,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testTokenlessNegativeDefaultResponsesFinishTheOnlyActiveGeneration() throws {
+    func testTokenlessNegativeDefaultResponsesFinishTheOnlyActiveGeneration() async throws {
         let selection = GatewayModelSelection(provider: "openai", model: "gpt-5")
         let selectionJSON = String(decoding: try JSONEncoder().encode(selection), as: UTF8.self)
 
@@ -3412,6 +3065,7 @@ final class GatewayProtocolTests: XCTestCase {
         saveStore.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"save-default-model"}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: saveStore)
         XCTAssertFalse(saveStore.defaultConfigurationLoadingKinds.contains("save-default-model"))
         XCTAssertNotNil(saveStore.lastError)
         XCTAssertEqual(saveStore.protocolNotices.last?.isError, true)
@@ -3431,6 +3085,7 @@ final class GatewayProtocolTests: XCTestCase {
         defaultStore.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"set-default","applied":false,"target":"permission","value":"read-only"}"#.utf8
         )))
+        await flushDeferredKMPEvents(in: defaultStore)
         XCTAssertFalse(defaultStore.defaultConfigurationLoadingKinds.contains("set-default"))
         XCTAssertNotNil(defaultStore.lastError)
         XCTAssertEqual(defaultStore.protocolNotices.last?.isError, true)
@@ -3497,158 +3152,6 @@ final class GatewayProtocolTests: XCTestCase {
 
         XCTAssertEqual(timeoutCount, 0)
         XCTAssertTrue(tracker.activeKeys.isEmpty)
-    }
-
-    func testHistoryReducerLoadsTwoPageBatchAndKeepsPaginationCursor() {
-        var state = HistoryState()
-        XCTAssertEqual(
-            HistoryReducer.reduce(
-                state: &state,
-                action: .start(
-                    sessionID: "session-1",
-                    older: false,
-                    hasLocalEvents: true,
-                    earliestLocalSequence: 100
-                )
-            ),
-            .requestPage(beforeSequence: nil)
-        )
-        XCTAssertEqual(
-            HistoryReducer.reduce(
-                state: &state,
-                action: .pageCommitted(
-                    sessionID: "session-1",
-                    eventCount: 60,
-                    byteCount: 1_000,
-                    hasMore: true,
-                    nextBeforeSequence: 50,
-                    earliestLocalSequence: 100,
-                    remoteActivityTimestamp: nil
-                )
-            ),
-            .requestPage(beforeSequence: 50)
-        )
-
-        let activity = Date(timeIntervalSince1970: 500)
-        XCTAssertEqual(
-            HistoryReducer.reduce(
-                state: &state,
-                action: .pageCommitted(
-                    sessionID: "session-1",
-                    eventCount: 40,
-                    byteCount: 500,
-                    hasMore: true,
-                    nextBeforeSequence: 10,
-                    earliestLocalSequence: 50,
-                    remoteActivityTimestamp: activity.timeIntervalSince1970
-                )
-            ),
-            .completed(eventCount: 100, byteCount: 1_500, hasMore: true)
-        )
-        XCTAssertEqual(state.sessions["session-1"]?.nextBeforeSequence, 50)
-        XCTAssertEqual(
-            state.sessions["session-1"]?.syncedActivityTimestamp,
-            activity.timeIntervalSince1970
-        )
-        XCTAssertEqual(state.sessions["session-1"]?.isLoading, false)
-    }
-
-    func testHistoryReducerStopsOlderLoadWithoutCursorAndRejectsInvalidPagination() {
-        var noCursorState = HistoryState(sessions: ["session-1": HistorySessionState(hasMore: true)])
-        XCTAssertEqual(
-            HistoryReducer.reduce(
-                state: &noCursorState,
-                action: .start(
-                    sessionID: "session-1",
-                    older: true,
-                    hasLocalEvents: false,
-                    earliestLocalSequence: nil
-                )
-            ),
-            .stopped
-        )
-        XCTAssertEqual(noCursorState.sessions["session-1"]?.hasMore, false)
-
-        var missingCursorState = HistoryState()
-        _ = HistoryReducer.reduce(
-            state: &missingCursorState,
-            action: .start(
-                sessionID: "session-1",
-                older: false,
-                hasLocalEvents: false,
-                earliestLocalSequence: nil
-            )
-        )
-        XCTAssertEqual(
-            HistoryReducer.reduce(
-                state: &missingCursorState,
-                action: .pageCommitted(
-                    sessionID: "session-1",
-                    eventCount: 1,
-                    byteCount: 0,
-                    hasMore: true,
-                    nextBeforeSequence: nil,
-                    earliestLocalSequence: 1,
-                    remoteActivityTimestamp: nil
-                )
-            ),
-            .failed(String(localized: "history.pagination.stopped.hasmore", defaultValue: "网关返回 hasMore:true，但缺少 nextBeforeSeq，已停止自动续页。"))
-        )
-    }
-
-    func testHistoryReducerRejectsRepeatedCursor() {
-        var session = HistorySessionState(hasMore: true)
-        session.nextBeforeSequence = 100
-        var state = HistoryState(sessions: ["session-1": session])
-        _ = HistoryReducer.reduce(
-            state: &state,
-            action: .start(
-                sessionID: "session-1",
-                older: true,
-                hasLocalEvents: true,
-                earliestLocalSequence: 100
-            )
-        )
-        let result = HistoryReducer.reduce(
-            state: &state,
-            action: .pageCommitted(
-                sessionID: "session-1",
-                eventCount: 10,
-                byteCount: 10,
-                hasMore: true,
-                nextBeforeSequence: 100,
-                earliestLocalSequence: 100,
-                remoteActivityTimestamp: nil
-            )
-        )
-        guard case .failed(let message) = result else {
-            return XCTFail("重复历史游标必须停止分页并返回失败")
-        }
-        XCTAssertTrue(message.contains("100"))
-        XCTAssertFalse(state.sessions["session-1"]?.isLoading ?? true)
-    }
-
-    func testHistoryEventMergerAppendsInOrderAndReplacesDuplicateSequence() {
-        func event(_ sequence: Int, _ text: String) -> SessionEvent {
-            SessionEvent(
-                sessionId: "session-1",
-                seq: sequence,
-                time: Double(sequence),
-                event: GatewayEvent(type: "assistant/message", text: text)
-            )
-        }
-        var events = [event(1, "one"), event(3, "old-three")]
-        XCTAssertTrue(
-            HistoryEventMerger.merge(event(2, "two"), into: &events).replacedOrInsertedOutOfOrder
-        )
-        XCTAssertTrue(
-            HistoryEventMerger.merge(event(3, "new-three"), into: &events).replacedOrInsertedOutOfOrder
-        )
-        XCTAssertFalse(
-            HistoryEventMerger.merge(event(4, "four"), into: &events).replacedOrInsertedOutOfOrder
-        )
-        XCTAssertEqual(events.map(\.seq), [1, 2, 3, 4])
-        XCTAssertEqual(events[2].event.text, "new-three")
     }
 
     @MainActor

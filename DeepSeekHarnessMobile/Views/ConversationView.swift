@@ -20,6 +20,7 @@ struct ConversationView: View {
     @State private var viewportProxy = ConversationViewportProxy()
     @State private var isPreparingHistoryPresentation = false
     @State private var historyPresentationSessionID: String?
+    @State private var viewportHasConversationContent = false
     @State private var bottomSafeAreaInset: CGFloat = 0
     @FocusState private var composerIsFocused: Bool
     private let conversationBottomClearance: CGFloat = 22
@@ -83,17 +84,24 @@ struct ConversationView: View {
     }
 
     private var chat: some View {
-        ZStack(alignment: .bottom) {
+        let sessionID = store.selectedSessionId
+        return ZStack(alignment: .bottom) {
             ConversationViewport(
                 proxy: viewportProxy,
-                sessionID: store.selectedSessionId,
-                timeline: store.conversationTimeline(for: store.selectedSessionId ?? "__empty__"),
+                sessionID: sessionID,
+                timeline: store.conversationTimeline(for: sessionID ?? "__empty__"),
                 supplementalEntries: supplementalViewportEntries,
                 makeEntries: { items in
                     makeConversationViewportEntries(from: items)
                 },
                 bottomInset: composerHeight + conversationBottomClearance,
                 scrollToBottomToken: viewportScrollToBottomToken,
+                onContentAvailabilityChanged: { sessionID, hasContent in
+                    Task { @MainActor in
+                        guard sessionID == store.selectedSessionId else { return }
+                        viewportHasConversationContent = hasContent
+                    }
+                },
                 onPinnedToBottomChanged: { pinned in
                     isPinnedToBottom = pinned
                 },
@@ -110,16 +118,19 @@ struct ConversationView: View {
                     store.loadHistory(for: sessionID, older: true)
                 }
             )
+            // Session 是 UIKit viewport 的身份边界。切换时直接销毁旧
+            // controller，不能让上一 Session 的 diffable snapshot 参与新页面首帧。
+            .id(sessionID ?? "__empty__")
             .padding(.horizontal, 20)
             .padding(.top, 8)
-            .opacity(isPreparingHistoryPresentation ? 0 : 1)
+            .opacity(shouldShowHistoryPresentationMask ? 0 : 1)
 
-            if isPreparingHistoryPresentation {
+            if shouldShowHistoryPresentationMask {
                 historyPresentationMask
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.bottom, composerHeight)
                     .zIndex(1)
-            } else if conversationItems.isEmpty {
+            } else if !hasVisibleConversationContent {
                 Group {
                     if isLoadingSelectedHistory { historyLoadingState }
                     else { emptyState }
@@ -241,18 +252,38 @@ struct ConversationView: View {
         !isPreparingHistoryPresentation && !conversationItems.isEmpty && !isPinnedToBottom
     }
 
-    private var historyLoadingState: some View {
-        VStack(spacing: 14) {
-            ProgressView()
-                .controlSize(.large)
-                .tint(DSHColor.ocean)
-            Text("正在加载历史记录").font(.title3.weight(.semibold))
-            Text(historyProgressText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    /// Timeline 的高频发布直接进入 UIKit，不会让整个 SwiftUI View
+    /// 在每个 token 重算。Viewport 只在空/非空边界通知这里，
+    /// 确保首批历史行可见时立即撤掉全屏遮罩。
+    private var hasVisibleConversationContent: Bool {
+        guard historyPresentationSessionID == store.selectedSessionId else {
+            // Session 身份刚切换时，不得沿用上一个 viewport 的可用性。
+            return !conversationItems.isEmpty
         }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 28)
+        return viewportHasConversationContent || !conversationItems.isEmpty
+    }
+
+    private var shouldShowHistoryPresentationMask: Bool {
+        isPreparingHistoryPresentation && !hasVisibleConversationContent
+    }
+
+    private var historyLoadingState: some View {
+        ZStack {
+            // 加载态必须是完整不透明的呈现层；即使 SwiftUI/UIKit 的边缘
+            // 通知相差一个 layout pass，也不允许它与旧 cell 同时可见。
+            conversationBackground
+            VStack(spacing: 14) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(DSHColor.ocean)
+                Text("正在加载历史记录").font(.title3.weight(.semibold))
+                Text(historyProgressText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 28)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var historyPresentationMask: some View {
