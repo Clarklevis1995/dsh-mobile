@@ -44,6 +44,15 @@ data class SharedSessionControlResult(
     val isSuccess: Boolean get() = errorCode == null
 }
 
+@Serializable
+data class SharedSessionControlEventMetadata(
+    val schema: Int = 1,
+    val applied: Boolean,
+    val committed: Boolean,
+    val completedKind: String? = null,
+    val completedRequestToken: String? = null
+)
+
 /** 请求关联状态较小，作为一个原子分片替换，避免局部字段组合成非法状态。 */
 @Serializable
 data class SharedSessionControlControlPatch(
@@ -103,6 +112,17 @@ data class SharedSessionControlPatch(
 class SharedSessionControlStore {
     private var state = SessionControlState()
     private var nextRequestOrdinal = 0L
+    private val events = SharedMviEventEmitter("session-control")
+
+    fun subscribe(observer: SharedMviEventObserver): SharedMviSubscription = try {
+        events.subscribe(observer, wireJson.encodeToString(state))
+    } catch (error: Throwable) {
+        events.subscribeError(
+            observer,
+            "session-control-subscribe-failed",
+            error.message ?: error::class.simpleName ?: "unknown-error"
+        )
+    }
 
     fun snapshot(): SharedSessionControlResult = try {
         success(state, emptyList(), alwaysSnapshot = true, commit = false)
@@ -572,7 +592,8 @@ class SharedSessionControlStore {
             applied = transition.applied,
             committed = committed,
             completedKind = transition.completedKind,
-            completedRequestToken = transition.completedRequestToken
+            completedRequestToken = transition.completedRequestToken,
+            eventTransactionId = operation
         )
     } catch (error: Throwable) { failure(operation, error) }
     private fun success(
@@ -583,7 +604,8 @@ class SharedSessionControlStore {
         applied: Boolean = false,
         committed: Boolean = false,
         completedKind: String? = null,
-        completedRequestToken: String? = null
+        completedRequestToken: String? = null,
+        eventTransactionId: String? = null
     ): SharedSessionControlResult {
         val snapshotJson = when {
             !alwaysSnapshot -> null
@@ -591,18 +613,40 @@ class SharedSessionControlStore {
             else -> wireJson.encodeToString(next)
         }
         val effectsJson = wireJson.encodeToString(effects)
-        if (commit) state = next
-        return SharedSessionControlResult(
+        val result = SharedSessionControlResult(
             snapshotJson, effectsJson, null, null,
             applied, committed, completedKind, completedRequestToken
         )
+        if (commit) {
+            state = next
+            if (committed || effects.isNotEmpty()) {
+                val metadata = SharedSessionControlEventMetadata(
+                    applied = applied,
+                    committed = committed,
+                    completedKind = completedKind,
+                    completedRequestToken = completedRequestToken
+                )
+                events.emitTransition(
+                    transactionId = "${eventTransactionId ?: "transition"}:${events.currentSequence + 1}",
+                    statePayloadJson = snapshotJson,
+                    effectsJson = effectsJson,
+                    metadataJson = wireJson.encodeToString(metadata)
+                )
+            }
+        }
+        return result
     }
     private fun unchanged() = SharedSessionControlResult(null, "[]", null, null)
-    private fun rejected(code: String, argument: String) = SharedSessionControlResult(null, "[]", code, argument)
-    private fun failure(operation: String, error: Throwable) = SharedSessionControlResult(
-        null, "[]", "session-control-$operation-failed",
-        error.message ?: error::class.simpleName ?: "unknown-error"
-    )
+    private fun rejected(code: String, argument: String): SharedSessionControlResult {
+        events.emitError("$code:${events.currentSequence + 1}", code, argument)
+        return SharedSessionControlResult(null, "[]", code, argument)
+    }
+    private fun failure(operation: String, error: Throwable): SharedSessionControlResult {
+        val code = "session-control-$operation-failed"
+        val message = error.message ?: error::class.simpleName ?: "unknown-error"
+        events.emitError("$code:${events.currentSequence + 1}", code, message)
+        return SharedSessionControlResult(null, "[]", code, message)
+    }
 
     private data class Transition(
         val state: SessionControlState,

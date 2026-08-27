@@ -2,6 +2,9 @@ package com.clarklevis.dsh.shared
 
 import com.clarklevis.dsh.shared.domain.SessionControlState
 import com.clarklevis.dsh.shared.facade.SharedSessionControlEffect
+import com.clarklevis.dsh.shared.facade.SharedMviEvent
+import com.clarklevis.dsh.shared.facade.SharedMviEventObserver
+import com.clarklevis.dsh.shared.facade.SharedSessionControlEventMetadata
 import com.clarklevis.dsh.shared.facade.SharedSessionControlPatch
 import com.clarklevis.dsh.shared.facade.SharedSessionControlStore
 import com.clarklevis.dsh.shared.protocol.wireJson
@@ -14,6 +17,35 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SharedSessionControlStoreTest {
+    @Test
+    fun subscriptionPushesCommittedPatchMetadataAndEffectExactlyOnce() {
+        val store = SharedSessionControlStore()
+        val events = mutableListOf<SharedMviEvent>()
+        val subscription = store.subscribe(SharedMviEventObserver(events::add))
+
+        val result = store.requestModels("session-push", isConnected = true)
+        store.requestModels("session-push", isConnected = true)
+
+        assertEquals(listOf("snapshot", "transition"), events.map { it.kind })
+        assertEquals(listOf(0L, 1L), events.map { it.sequence })
+        val transition = events.last()
+        assertEquals("session-control", transition.domain)
+        assertEquals(result.snapshotJson, transition.statePayloadJson)
+        assertEquals(result.effectsJson, transition.effectsJson)
+        val metadata = wireJson.decodeFromString<SharedSessionControlEventMetadata>(
+            assertNotNull(transition.metadataJson)
+        )
+        assertTrue(metadata.applied)
+        assertTrue(metadata.committed)
+        assertEquals(1, wireJson.decodeFromString<List<SharedSessionControlEffect>>(
+            transition.effectsJson
+        ).size)
+
+        subscription.cancel()
+        store.setPermission("session-push", "unsupported", isConnected = true)
+        assertEquals(2, events.size)
+    }
+
     @Test
     fun sameKindRequestsAreSerializedAndLatestDifferentTargetIsQueued() {
         val store = SharedSessionControlStore()

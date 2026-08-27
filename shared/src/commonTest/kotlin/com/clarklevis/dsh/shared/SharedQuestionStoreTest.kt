@@ -3,6 +3,8 @@ package com.clarklevis.dsh.shared
 import com.clarklevis.dsh.shared.facade.SharedQuestionEffect
 import com.clarklevis.dsh.shared.facade.SharedQuestionSnapshot
 import com.clarklevis.dsh.shared.facade.SharedQuestionStore
+import com.clarklevis.dsh.shared.facade.SharedMviEvent
+import com.clarklevis.dsh.shared.facade.SharedMviEventObserver
 import com.clarklevis.dsh.shared.protocol.GatewayPendingQuestionRequest
 import com.clarklevis.dsh.shared.protocol.GatewayQuestion
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
@@ -17,6 +19,32 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SharedQuestionStoreTest {
+    @Test
+    fun subscriptionPushesStateAndEffectInOneTransaction() {
+        val store = SharedQuestionStore()
+        val events = mutableListOf<SharedMviEvent>()
+        store.subscribe(SharedMviEventObserver(events::add))
+        val request = request()
+        store.requestReceived(wireJson.encodeToString(request))
+        val answers = listOf(
+            GatewayQuestionAnswer("direction", listOf("架构")),
+            GatewayQuestionAnswer("notes", emptyList(), "原生 UI")
+        )
+        store.submitAnswer(request.rpcId, wireJson.encodeToString(answers), true)
+        store.submitAnswer(request.rpcId, wireJson.encodeToString(answers), true)
+
+        assertEquals(listOf(0L, 1L, 2L), events.map { it.sequence })
+        val submitted = events.last()
+        assertEquals("transition", submitted.kind)
+        assertEquals(
+            "submitting",
+            snapshot(submitted.statePayloadJson).requestStatuses.getValue(request.rpcId).kind
+        )
+        val effects = wireJson.decodeFromString<List<SharedQuestionEffect>>(submitted.effectsJson)
+        assertEquals(1, effects.size)
+        assertEquals("answer", effects.single().action)
+    }
+
     @Test
     fun requestReplayAndAnswerProduceOneOrderedEffect() {
         val store = SharedQuestionStore()

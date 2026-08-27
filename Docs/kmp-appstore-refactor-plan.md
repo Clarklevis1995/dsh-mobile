@@ -4,7 +4,7 @@
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
 > 最近更新：2026-08-27
-> 当前任务：9.6 推送式 MVI 事件契约已完成；下一步执行 9.7 SessionControl 订阅式迁移
+> 当前任务：9.7～9.9 代码与自动化门禁已完成；等待 `kmp-stage9-mvi-manual-verification.md` 人工验收后勾选 9.9
 
 ## 使用说明
 
@@ -209,13 +209,17 @@ Schema 演进与信任边界：schema 2 的 patch 顶层及所有业务 DTO 均�
 #### 阶段 9.6～9.9：推送式 MVI 收口（阶段 10 前置）
 
 - [x] 9.6 在 `commonMain` 定义稳定的 `Intent → Store → Event` 契约：Intent 只向 KMP 派发，KMP 以带递增序号和事务 ID 的 Event envelope 主动推送 state patch 与一次性 effect；dispatch 只返回接收/结构化错误，不再把业务状态作为返回值交给 Swift 拉取。
-- [ ] 9.7 先将 SessionControl 产品路径切换到订阅式事件：KMP 提交状态后广播 patch/effect，Swift `@MainActor` adapter 只订阅、校验顺序并发布 UI 投影；覆盖订阅建立、取消、重连、重复/乱序 event、观察者释放和 effect 恰好一次。
-- [ ] 9.8 将 SessionList 与 Human Question 切换到同一推送契约，删除产品路径对同步 mutation snapshot/result 的依赖；持久化和 Gateway I/O 继续由 Swift effect/persistence adapter 执行。
+- [x] 9.7 先将 SessionControl 产品路径切换到订阅式事件：KMP 提交状态后广播 patch/effect，Swift `@MainActor` adapter 只订阅、校验顺序并发布 UI 投影；覆盖订阅建立、取消、重连、重复/乱序 event、观察者释放和 effect 恰好一次。
+- [x] 9.8 将 SessionList 与 Human Question 切换到同一推送契约，删除产品路径对同步 mutation snapshot/result 的依赖；持久化和 Gateway I/O 继续由 Swift effect/persistence adapter 执行。
 - [ ] 9.9 增加静态架构门禁：产品 Swift 只能 `dispatch Intent` 和订阅 `Event`，不得从 mutation 返回值发布业务状态；执行 KMP/Android/iOS 全量自动化与真实 Gateway 人工回归后，再进入阶段 10。
 
 推送式 MVI 验收标准：KMP 是唯一业务状态源；Swift 只持有可重建、只读的 UI 投影，不包含业务 Reducer；同一 KMP 事务的 state patch 与 effect 使用同一 envelope 保序，订阅取消后不得回调；初始化可发送一次 snapshot event，后续只发送增量 event；任何丢序、重复、未知 schema 或语义不一致 event 必须在 Swift UI 发布和平台 I/O 前 fail-closed。Kotlin `StateFlow/SharedFlow` 可以作为内部实现，但 Swift 桥接使用粗粒度可取消订阅接口，避免直接暴露复杂 Flow ABI。Conversation token 流在阶段 10 使用专用高频增量 event，不复用 SessionControl 的低频字典 patch。
 
 9.6 验收结论：新增 `SharedMviEvent`、`SharedMviEventObserver`、可幂等取消的 `SharedMviSubscription` 与不携带业务状态的 `SharedMviDispatchResult`。内部 emitter 对初始化 snapshot 建立 sequence 基线，transition/error 使用单调序号和显式 transactionId；重入发布排队到当前事件完成后再投递，平台 observer 异常不会跨 Kotlin/Native 边界或阻断其他 observer。4 项契约测试覆盖 snapshot→transition 顺序、取消、重入保序和 observer 异常隔离；KMP iOS Simulator 测试集共 56 项通过，Debug Simulator 与 Release Device framework 均成功导出 observer/subscription ABI。9.7 之前产品 Store 尚未切换，现有同步路径保持不变。
+
+9.7～9.8 实现结论：三个 KMP Store 均提供可取消订阅并主动发布 schema 2 Event；SessionControl 使用同一 envelope 携带增量 patch、事务 metadata 和 effect，Question 同一 envelope 携带状态与一次性 effect，SessionList 仅在实际变化时推送快照。Swift Adapter 在 `MainActor` 上校验 domain/schema/transactionId/连续 sequence 及既有领域语义不变量，任何重复、丢序或坏 payload 均在 UI 发布与平台 I/O 前永久 fail-closed。产品 AppStore 通过回调订阅发布 UI 投影，mutation 返回值只保留给无订阅测试 bridge 的兼容路径。
+
+9.9 自动化结论：新增产品源码门禁，要求三个 KMP Event 订阅入口持续存在，并禁止 AppStore 恢复“mutation 返回值 → 状态发布/effect”的产品路径；同步 result 仅允许携带无业务 payload 的 dispatch ack 或服务无订阅测试 bridge。强制重跑 KMP iOS Simulator 59 项、Android JVM 2 项，均 0 失败；Android Debug APK 构建成功（12,257,751 bytes）；iPhone 17 / iOS 26.5 Simulator 全量 XCTest 115 项通过，0 失败、0 跳过；iPhoneOS Release 无签名构建和 `git diff --check` 通过。9.9 仍等待真实 Gateway 人工清单确认，不提前勾选。
 
 ### 阶段 10：iOS Conversation、Trajectory 与 History 切换
 
@@ -315,6 +319,7 @@ xcodebuild test \
 
 ### 2026-08-27
 
+- 完成阶段 9.7～9.9 的推送式 MVI 代码与自动化门禁：SessionList、Question、SessionControl 的产品状态/effect 改由 KMP schema 2 Event 主动推送，Swift 只 dispatch Intent、校验 Event 并发布可重建 UI 投影。覆盖订阅基线、去重、取消、事务 effect、重复 sequence fail-closed 和源码架构门禁；KMP 59 项、Android 2 项、iOS 115 项全绿，Android APK 与 iPhoneOS Release 构建成功。新增 `kmp-stage9-mvi-manual-verification.md`，等待真实 Gateway 人工验收后再勾选 9.9。
 - 收口阶段 9 SessionControl 跨桥性能债务：已提交事务改为 schema 2 增量 patch，全量 snapshot 仅初始化/诊断；四类 session map 按 upsert/remove 分片，无变化零 payload，100/1000 无关 session 的单 session payload 保持恒定。批量 clear 使用 drain/tombstone 消费真实 nil-session 终态，严格拒绝遗漏 removal、跨 session/跨 kind 注入以及 drain 业务回写。最终 KMP 52 项、Android 2 项、iOS 全量 XCTest 110 项通过，iPhoneOS Release 构建成功。
 - 用户确认后续架构采用推送式 MVI：Swift 只向 KMP dispatch Intent，KMP 以保序 Event envelope 主动推送 state patch/effect，Swift 只保留可重建 UI 投影。新增 9.6～9.9 前置阶段，完成三个基础领域订阅式迁移和架构门禁后再进入阶段 10。
 - 完成 9.6 推送事件契约：新增 KMP Event/Observer/Subscription/DispatchResult 与同步保序 emitter，覆盖初始化基线、事务序号、重入队列、幂等取消和平台异常隔离；KMP 56 项测试及 iOS Debug/Release framework 导出通过。下一步将 SessionControl 产品路径从同步 mutation result 切到订阅 Event。

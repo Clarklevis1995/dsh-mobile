@@ -60,6 +60,17 @@ class SharedSessionListStore(
         blankSessionPrefix = blankSessionPrefix
     )
     private var state = SessionListState()
+    private val events = SharedMviEventEmitter("session-list")
+
+    fun subscribe(observer: SharedMviEventObserver): SharedMviSubscription = try {
+        events.subscribe(observer, wireJson.encodeToString(state.toSnapshot()))
+    } catch (error: Throwable) {
+        events.subscribeError(
+            observer,
+            "session-list-subscribe-failed",
+            error.message ?: error::class.simpleName ?: "unknown-error"
+        )
+    }
 
     fun snapshot(): SharedSessionListResult = try {
         snapshotResult(state)
@@ -139,6 +150,10 @@ class SharedSessionListStore(
             // 先完成可能失败的序列化，再提交状态，保证桥接写入具备原子性。
             val result = snapshotResult(next)
             state = next
+            events.emitTransition(
+                transactionId = "$operation:${events.currentSequence + 1}",
+                statePayloadJson = result.snapshotJson
+            )
             result
         } else {
             unchanged()
@@ -153,12 +168,16 @@ class SharedSessionListStore(
         errorMessage = null
     )
 
-    private fun failure(operation: String, error: Throwable): SharedSessionListResult =
-        SharedSessionListResult(
+    private fun failure(operation: String, error: Throwable): SharedSessionListResult {
+        val code = "session-list-$operation-failed"
+        val message = error.message ?: error::class.simpleName ?: "unknown-error"
+        events.emitError("$code:${events.currentSequence + 1}", code, message)
+        return SharedSessionListResult(
             snapshotJson = null,
-            errorCode = "session-list-$operation-failed",
-            errorMessage = error.message ?: error::class.simpleName ?: "unknown-error"
+            errorCode = code,
+            errorMessage = message
         )
+    }
 
     private fun unchanged(): SharedSessionListResult = SharedSessionListResult(
         snapshotJson = null,

@@ -108,12 +108,25 @@ protocol KMPSessionListStoreBridging: AnyObject {
 
 extension SharedSessionListStore: KMPSessionListStoreBridging {}
 
+private protocol KMPSessionListEventBridging: AnyObject {
+    func subscribe(observer: SharedMviEventObserver) -> SharedMviSubscription
+}
+
+extension SharedSessionListStore: KMPSessionListEventBridging {}
+
 /// AppStore 的 MainActor 是唯一串行入口；本适配器只映射稳定 JSON 值并调用 KMP。
 @MainActor
 final class KMPSessionListStoreAdapter {
     private let store: any KMPSessionListStoreBridging
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var eventObserver: KMPSharedMviEventObserver?
+    private var eventSubscription: SharedMviSubscription?
+    private var pushedSnapshot: KMPSessionListSnapshot?
+    private var pushedError: KMPSessionListStoreError?
+    private(set) var lastEventSequence: Int64?
+    private(set) var usesEventStream = false
+    var onSnapshot: ((KMPSessionListSnapshot?, KMPSessionListStoreError?) -> Void)?
 
     private(set) var snapshot: KMPSessionListSnapshot
     private(set) var initializationError: KMPSessionListStoreError?
@@ -150,6 +163,15 @@ final class KMPSessionListStoreAdapter {
             let mapped = KMPSessionListStoreError.invalidSnapshot(error.localizedDescription)
             initializationError = mapped
         }
+        if initializationError == nil,
+           let eventStore = store as? any KMPSessionListEventBridging {
+            usesEventStream = true
+            let observer = KMPSharedMviEventObserver { [weak self] event in
+                MainActor.assumeIsolated { self?.receive(event) }
+            }
+            eventObserver = observer
+            eventSubscription = eventStore.subscribe(observer: observer)
+        }
     }
 
     @discardableResult
@@ -164,6 +186,8 @@ final class KMPSessionListStoreAdapter {
                 runtimeError.localizedDescription
             )
         }
+        pushedSnapshot = nil
+        pushedError = nil
         let result: SharedSessionListResult
         switch action {
         case .select(let sessionID):
@@ -191,6 +215,16 @@ final class KMPSessionListStoreAdapter {
         case .markRead(let sessionID):
             result = store.markRead(sessionId: sessionID)
         }
+        if usesEventStream {
+            if let pushedError { throw pushedError }
+            if let pushedSnapshot { return pushedSnapshot }
+            if result.isSuccess, result.snapshotJson == nil { return snapshot }
+            let error = KMPSessionListStoreError.runtimeFailed(
+                "KMP mutation 未发布对应的 MVI event"
+            )
+            runtimeError = error
+            throw error
+        }
         do {
             snapshot = try decode(result)
         } catch let error as KMPSessionListStoreError {
@@ -202,6 +236,66 @@ final class KMPSessionListStoreAdapter {
             throw error
         }
         return snapshot
+    }
+
+    func receive(_ event: SharedMviEvent) {
+        guard event.schema == 2,
+              event.domain == "session-list",
+              !event.transactionId.isEmpty else {
+            publish(error: .runtimeFailed("KMP SessionList event 信封无效"))
+            return
+        }
+        if event.kind == "snapshot" {
+            guard lastEventSequence == nil,
+                  let payload = event.statePayloadJson,
+                  let baseline = try? decoder.decode(
+                      KMPSessionListSnapshot.self,
+                      from: Data(payload.utf8)
+                  ),
+                  baseline == snapshot else {
+                publish(error: .invalidSnapshot("订阅基线与初始化快照不一致"))
+                return
+            }
+            lastEventSequence = event.sequence
+            return
+        }
+        guard let previous = lastEventSequence,
+              event.sequence == previous + 1 else {
+            publish(error: .runtimeFailed("KMP SessionList event sequence 不连续"))
+            return
+        }
+        lastEventSequence = event.sequence
+        if event.kind == "error" {
+            publish(error: .bridge(
+                code: event.errorCode ?? "unknown-error",
+                message: event.errorMessage
+            ))
+            return
+        }
+        guard event.kind == "transition" else {
+            publish(error: .runtimeFailed("未知 SessionList event kind：\(event.kind)"))
+            return
+        }
+        do {
+            let next = try decode(SharedSessionListResult(
+                snapshotJson: event.statePayloadJson,
+                errorCode: nil,
+                errorMessage: nil
+            ))
+            snapshot = next
+            pushedSnapshot = next
+            onSnapshot?(next, nil)
+        } catch let error as KMPSessionListStoreError {
+            publish(error: error)
+        } catch {
+            publish(error: .invalidSnapshot(error.localizedDescription))
+        }
+    }
+
+    private func publish(error: KMPSessionListStoreError) {
+        runtimeError = error
+        pushedError = error
+        onSnapshot?(nil, error)
     }
 
     private func encode<T: Encodable>(_ value: T) throws -> String {
@@ -375,6 +469,12 @@ protocol KMPQuestionStoreBridging: AnyObject {
 
 extension SharedQuestionStore: KMPQuestionStoreBridging {}
 
+private protocol KMPQuestionEventBridging: AnyObject {
+    func subscribe(observer: SharedMviEventObserver) -> SharedMviSubscription
+}
+
+extension SharedQuestionStore: KMPQuestionEventBridging {}
+
 struct KMPQuestionTransition {
     var snapshot: KMPQuestionSnapshot
     var effect: KMPQuestionEffect?
@@ -387,6 +487,13 @@ final class KMPQuestionStoreAdapter {
     private let store: any KMPQuestionStoreBridging
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var eventObserver: KMPSharedMviEventObserver?
+    private var eventSubscription: SharedMviSubscription?
+    private var pendingIntent: KMPQuestionIntent?
+    private var pushedTransition: KMPQuestionTransition?
+    private(set) var lastEventSequence: Int64?
+    private(set) var usesEventStream = false
+    var onTransition: ((KMPQuestionTransition) -> Void)?
 
     private(set) var snapshot: KMPQuestionSnapshot = .empty
     private(set) var initializationError: KMPQuestionStoreError?
@@ -401,6 +508,15 @@ final class KMPQuestionStoreAdapter {
         let transition = decode(store.snapshot(), requiresSnapshot: true, intent: nil)
         snapshot = transition.snapshot
         initializationError = transition.error
+        if initializationError == nil,
+           let eventStore = store as? any KMPQuestionEventBridging {
+            usesEventStream = true
+            let observer = KMPSharedMviEventObserver { [weak self] event in
+                MainActor.assumeIsolated { self?.receive(event) }
+            }
+            eventObserver = observer
+            eventSubscription = eventStore.subscribe(observer: observer)
+        }
     }
 
     /// 非抛出入口。成功快照和 effect 必须同时可解码，否则永久 fail closed 且不执行 I/O。
@@ -413,6 +529,9 @@ final class KMPQuestionStoreAdapter {
             return failed(.runtimeFailed(runtimeError.localizedDescription))
         }
 
+        pendingIntent = intent
+        pushedTransition = nil
+        defer { pendingIntent = nil }
         let result: SharedQuestionResult
         do {
             switch intent {
@@ -445,7 +564,89 @@ final class KMPQuestionStoreAdapter {
         } catch {
             return failed(.encoding(error.localizedDescription))
         }
+        if usesEventStream {
+            if let pushedTransition { return pushedTransition }
+            if result.isSuccess, result.snapshotJson == nil, result.effectJson == nil {
+                return KMPQuestionTransition(snapshot: snapshot, effect: nil, error: nil)
+            }
+            return failClosed(.runtimeFailed("KMP mutation 未发布对应的 MVI event"))
+        }
         return decode(result, requiresSnapshot: false, intent: intent)
+    }
+
+    func receive(_ event: SharedMviEvent) {
+        guard event.schema == 2,
+              event.domain == "question",
+              !event.transactionId.isEmpty else {
+            publish(failClosed(.runtimeFailed("KMP Question event 信封无效")))
+            return
+        }
+        if event.kind == "snapshot" {
+            guard lastEventSequence == nil,
+                  let payload = event.statePayloadJson,
+                  let baseline = try? decoder.decode(
+                      KMPQuestionSnapshot.self,
+                      from: Data(payload.utf8)
+                  ),
+                  baseline.hasValidWireValues,
+                  baseline == snapshot else {
+                publish(failClosed(.invalidSnapshot("订阅基线与初始化快照不一致")))
+                return
+            }
+            lastEventSequence = event.sequence
+            return
+        }
+        guard let previous = lastEventSequence,
+              event.sequence == previous + 1 else {
+            publish(failClosed(.runtimeFailed("KMP Question event sequence 不连续")))
+            return
+        }
+        lastEventSequence = event.sequence
+        if event.kind == "error" {
+            let transition = failed(.bridge(
+                code: event.errorCode ?? "unknown-error",
+                message: event.errorMessage
+            ))
+            pushedTransition = transition
+            onTransition?(transition)
+            return
+        }
+        guard event.kind == "transition" else {
+            publish(failClosed(.runtimeFailed("未知 Question event kind：\(event.kind)")))
+            return
+        }
+        let effectJson: String?
+        do {
+            let effects = try decoder.decode(
+                [KMPQuestionEffect].self,
+                from: Data(event.effectsJson.utf8)
+            )
+            guard effects.count <= 1 else {
+                publish(failClosed(.invalidEffect("Question event 至多包含一个 effect")))
+                return
+            }
+            effectJson = try effects.first.map(encode)
+        } catch {
+            publish(failClosed(.invalidEffect(error.localizedDescription)))
+            return
+        }
+        let transition = decode(
+            SharedQuestionResult(
+                snapshotJson: event.statePayloadJson,
+                effectJson: effectJson,
+                errorCode: nil,
+                errorMessage: nil
+            ),
+            requiresSnapshot: false,
+            intent: pendingIntent
+        )
+        pushedTransition = transition
+        onTransition?(transition)
+    }
+
+    private func publish(_ transition: KMPQuestionTransition) {
+        pushedTransition = transition
+        onTransition?(transition)
     }
 
     private func encode<T: Encodable>(_ value: T) throws -> String {
@@ -926,6 +1127,33 @@ protocol KMPSessionControlStoreBridging: AnyObject {
 
 extension SharedSessionControlStore: KMPSessionControlStoreBridging {}
 
+/// 生产 KMP store 提供推送事件；旧测试 bridge 仍可只实现同步结果协议。
+private protocol KMPSessionControlEventBridging: AnyObject {
+    func subscribe(observer: SharedMviEventObserver) -> SharedMviSubscription
+}
+
+extension SharedSessionControlStore: KMPSessionControlEventBridging {}
+
+private final class KMPSharedMviEventObserver: NSObject, SharedMviEventObserver {
+    private let handler: (SharedMviEvent) -> Void
+
+    init(handler: @escaping (SharedMviEvent) -> Void) {
+        self.handler = handler
+    }
+
+    func onEvent(event: SharedMviEvent) {
+        handler(event)
+    }
+}
+
+private struct KMPSessionControlEventMetadata: Decodable {
+    let schema: Int
+    let applied: Bool
+    let committed: Bool
+    let completedKind: String?
+    let completedRequestToken: String?
+}
+
 struct KMPSessionControlTransition {
     var snapshot: KMPSessionControlSnapshot
     /// nil 表示本次没有业务状态提交；初始化快照由 AppStore init 单独发布。
@@ -949,6 +1177,13 @@ final class KMPSessionControlStoreAdapter {
     private let store: any KMPSessionControlStoreBridging
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var eventObserver: KMPSharedMviEventObserver?
+    private var eventSubscription: SharedMviSubscription?
+    private var pendingIntent: KMPSessionControlIntent?
+    private var pushedTransition: KMPSessionControlTransition?
+    private(set) var lastEventSequence: Int64?
+    private(set) var usesEventStream = false
+    var onTransition: ((KMPSessionControlTransition) -> Void)?
 
     private(set) var snapshot: KMPSessionControlSnapshot = .empty
     private(set) var initializationError: KMPSessionControlStoreError?
@@ -963,6 +1198,17 @@ final class KMPSessionControlStoreAdapter {
         let transition = decode(store.snapshot(), requiresSnapshot: true, intent: nil)
         snapshot = transition.snapshot
         initializationError = transition.error
+        if initializationError == nil,
+           let eventStore = store as? any KMPSessionControlEventBridging {
+            usesEventStream = true
+            let observer = KMPSharedMviEventObserver { [weak self] event in
+                MainActor.assumeIsolated {
+                    self?.receive(event)
+                }
+            }
+            eventObserver = observer
+            eventSubscription = eventStore.subscribe(observer: observer)
+        }
     }
 
     @discardableResult
@@ -975,6 +1221,9 @@ final class KMPSessionControlStoreAdapter {
         }
 
         let result: SharedSessionControlResult
+        pendingIntent = intent
+        pushedTransition = nil
+        defer { pendingIntent = nil }
         do {
             switch intent {
             case .action(let action):
@@ -1031,7 +1280,97 @@ final class KMPSessionControlStoreAdapter {
         } catch {
             return failed(.encoding(error.localizedDescription))
         }
+        if usesEventStream {
+            if let pushedTransition { return pushedTransition }
+            if result.isSuccess,
+               result.snapshotJson == nil,
+               result.effectsJson == "[]" {
+                // 无业务变化时 KMP 不推送 event；同步返回值只保留 dispatch ack，
+                // 不携带/发布业务状态，也不执行平台 effect。
+                return KMPSessionControlTransition(
+                    snapshot: snapshot,
+                    patch: nil,
+                    effects: [],
+                    applied: result.applied,
+                    committed: result.committed,
+                    completedKind: result.completedKind,
+                    completedRequestToken: result.completedRequestToken,
+                    retiredRequestKinds: [],
+                    error: nil
+                )
+            }
+            return failClosed(.runtimeFailed("KMP mutation 未发布对应的 MVI event"))
+        }
         return decode(result, requiresSnapshot: false, intent: intent)
+    }
+
+    func receive(_ event: SharedMviEvent) {
+        guard event.schema == 2,
+              event.domain == "session-control",
+              !event.transactionId.isEmpty else {
+            publish(failClosed(.runtimeFailed("KMP MVI event 信封无效")))
+            return
+        }
+        if event.kind == "snapshot" {
+            guard lastEventSequence == nil,
+                  let payload = event.statePayloadJson,
+                  let baseline = try? decoder.decode(
+                      KMPSessionControlSnapshot.self,
+                      from: Data(payload.utf8)
+                  ),
+                  baseline.hasValidWireValues,
+                  baseline == snapshot else {
+                publish(failClosed(.invalidSnapshot("订阅基线与初始化快照不一致")))
+                return
+            }
+            lastEventSequence = event.sequence
+            return
+        }
+        guard let previous = lastEventSequence,
+              event.sequence == previous + 1 else {
+            publish(failClosed(.runtimeFailed("KMP MVI event sequence 不连续")))
+            return
+        }
+        lastEventSequence = event.sequence
+        switch event.kind {
+        case "error":
+            let transition = failed(.bridge(
+                code: event.errorCode ?? "unknown-error",
+                message: event.errorMessage
+            ))
+            pushedTransition = transition
+            onTransition?(transition)
+        case "transition":
+            guard let metadataJson = event.metadataJson,
+                  let metadata = try? decoder.decode(
+                      KMPSessionControlEventMetadata.self,
+                      from: Data(metadataJson.utf8)
+                  ),
+                  metadata.schema == 1 else {
+                publish(failClosed(.invalidPatch("SessionControl event metadata 无效")))
+                return
+            }
+            let result = SharedSessionControlResult(
+                snapshotJson: event.statePayloadJson,
+                effectsJson: event.effectsJson,
+                errorCode: nil,
+                errorMessage: nil,
+                applied: metadata.applied,
+                committed: metadata.committed,
+                completedKind: metadata.completedKind,
+                completedRequestToken: metadata.completedRequestToken
+            )
+            let transition = decode(result, requiresSnapshot: false, intent: pendingIntent)
+            pushedTransition = transition
+            onTransition?(transition)
+        default:
+            publish(failClosed(.runtimeFailed("未知 KMP MVI event kind：\(event.kind)")))
+        }
+    }
+
+    private func publish(_ transition: KMPSessionControlTransition) {
+        pushedTransition = transition
+        onTransition?(transition)
     }
 
     private func reduceAction(

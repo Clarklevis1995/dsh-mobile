@@ -52,6 +52,17 @@ data class SharedQuestionResult(
 /** iOS Human Question 的唯一业务状态来源；网络发送和后台任务仍由平台 effect 层执行。 */
 class SharedQuestionStore {
     private var state = QuestionState()
+    private val events = SharedMviEventEmitter("question")
+
+    fun subscribe(observer: SharedMviEventObserver): SharedMviSubscription = try {
+        events.subscribe(observer, wireJson.encodeToString(state.toSnapshot()))
+    } catch (error: Throwable) {
+        events.subscribeError(
+            observer,
+            "question-subscribe-failed",
+            error.message ?: error::class.simpleName ?: "unknown-error"
+        )
+    }
 
     fun snapshot(): SharedQuestionResult = try {
         success(state, effect = null, alwaysSnapshot = true, commit = false)
@@ -150,7 +161,9 @@ class SharedQuestionStore {
     private inline fun mutate(operation: String, transform: () -> Transition): SharedQuestionResult = try {
         val transition = transform()
         transition.errorCode?.let {
-            return SharedQuestionResult(null, null, it, "No pending question for the supplied rpcId")
+            val message = "No pending question for the supplied rpcId"
+            events.emitError("$it:${events.currentSequence + 1}", it, message)
+            return SharedQuestionResult(null, null, it, message)
         }
         success(
             next = transition.state,
@@ -170,16 +183,25 @@ class SharedQuestionStore {
     ): SharedQuestionResult {
         val snapshotJson = if (alwaysSnapshot) wireJson.encodeToString(next.toSnapshot()) else null
         val effectJson = effect?.let { wireJson.encodeToString(it) }
-        if (commit) state = next
+        if (commit) {
+            state = next
+            if (snapshotJson != null || effectJson != null) {
+                events.emitTransition(
+                    transactionId = "question:${events.currentSequence + 1}",
+                    statePayloadJson = snapshotJson,
+                    effectsJson = effectJson?.let { "[$it]" } ?: "[]"
+                )
+            }
+        }
         return SharedQuestionResult(snapshotJson, effectJson, null, null)
     }
 
-    private fun failure(operation: String, error: Throwable): SharedQuestionResult = SharedQuestionResult(
-        snapshotJson = null,
-        effectJson = null,
-        errorCode = "question-$operation-failed",
-        errorMessage = error.message ?: error::class.simpleName ?: "unknown-error"
-    )
+    private fun failure(operation: String, error: Throwable): SharedQuestionResult {
+        val code = "question-$operation-failed"
+        val message = error.message ?: error::class.simpleName ?: "unknown-error"
+        events.emitError("$code:${events.currentSequence + 1}", code, message)
+        return SharedQuestionResult(null, null, code, message)
+    }
 
     private data class Transition(
         val state: QuestionState,

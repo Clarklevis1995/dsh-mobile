@@ -3,6 +3,8 @@ package com.clarklevis.dsh.shared
 import com.clarklevis.dsh.shared.facade.SharedSessionListSnapshot
 import com.clarklevis.dsh.shared.facade.SharedSessionListStore
 import com.clarklevis.dsh.shared.facade.SharedSessionSummarySnapshot
+import com.clarklevis.dsh.shared.facade.SharedMviEvent
+import com.clarklevis.dsh.shared.facade.SharedMviEventObserver
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -19,6 +21,24 @@ class SharedSessionListStoreTest {
         remoteSessionPrefix = "远端会话 ",
         blankSessionPrefix = "空白会话 "
     )
+
+    @Test
+    fun subscriptionPushesOnlyChangedSessionListSnapshots() {
+        val store = makeStore()
+        val events = mutableListOf<SharedMviEvent>()
+        store.subscribe(SharedMviEventObserver(events::add))
+
+        store.addKnownSession("push-session", 100.0)
+        store.addKnownSession("push-session", 100.0)
+
+        assertEquals(listOf("snapshot", "transition"), events.map { it.kind })
+        assertEquals(listOf(0L, 1L), events.map { it.sequence })
+        assertEquals(
+            "push-session",
+            decode(events.last().statePayloadJson).sessions.single().id
+        )
+        assertEquals("[]", events.last().effectsJson)
+    }
 
     @Test
     fun restoredPersistenceAndAllSessionIntentsUseOneKmpState() {

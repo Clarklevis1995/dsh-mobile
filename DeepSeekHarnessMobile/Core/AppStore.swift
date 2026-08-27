@@ -234,6 +234,15 @@ final class AppStore: ObservableObject {
             lastError = error.localizedDescription
         }
         preferences.performMigrations()
+        kmpSessionListStore.onSnapshot = { [weak self] snapshot, error in
+            self?.handleSessionListEvent(snapshot: snapshot, error: error)
+        }
+        kmpQuestionStore.onTransition = { [weak self] transition in
+            self?.handleQuestionEvent(transition)
+        }
+        kmpSessionControlStore.onTransition = { [weak self] transition in
+            self?.handleSessionControlEvent(transition)
+        }
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
         gateway.onConnectionFailure = { [weak self] detail in
             self?.handleConnectionFailure(detail)
@@ -604,7 +613,6 @@ final class AppStore: ObservableObject {
             answers: answers,
             isConnected: gateway.state.isConnected
         ))
-        executeQuestionEffect(transition.effect)
         if transition.effect == nil,
            questionRequestStatuses[request.rpcId]?.isAnswerInFlight != true {
             backgroundExecutionController.releaseQuestionAnswer(rpcID: request.rpcId)
@@ -616,7 +624,7 @@ final class AppStore: ObservableObject {
             rpcID: request.rpcId,
             isConnected: gateway.state.isConnected
         ))
-        executeQuestionEffect(transition.effect)
+        _ = transition
     }
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
@@ -761,8 +769,7 @@ final class AppStore: ObservableObject {
             if let finishRequest { cancelCompletedSessionControlTracker(finishRequest, transition: transition) }
         case .saveDefaultModel(let saved):
             if let saved {
-                let transition = applySessionControlTransition(kmpSessionControlStore.reduce(.defaultModelSaved(saved)))
-                transition.effects.forEach(executeSessionControlEffect)
+                let transition = submitSessionControlIntent(.defaultModelSaved(saved))
                 cancelCompletedSessionControlTracker("save-default-model", transition: transition)
                 if transition.completed("save-default-model") {
                     notice(
@@ -1294,7 +1301,7 @@ final class AppStore: ObservableObject {
         backgroundExecutionController.releaseAllQuestionAnswers()
         for kind in Array(sessionControlLoadingKinds) { sessionControlRequestTracker.finish(kind) }
         for kind in Array(defaultConfigurationLoadingKinds) { defaultConfigurationRequestTracker.finish(kind) }
-        applySessionControlTransition(kmpSessionControlStore.reduce(.requestsDisconnected))
+        submitSessionControlIntent(.requestsDisconnected)
         for id in Array(historyLoadingSessionIds) { finishHistoryLoading(id) }
         directoryIsLoading = false
         directoryCreationIsLoading = false
@@ -1309,12 +1316,11 @@ final class AppStore: ObservableObject {
         guard let token = kmpSessionControlStore.snapshot.requestTokens[kind],
               let active = kmpSessionControlStore.snapshot.activeRequestTargets[kind],
               responseSessionID == nil || responseSessionID == active.sessionId else { return false }
-        let transition = applySessionControlTransition(kmpSessionControlStore.reduce(.requestFailed(
+        let transition = submitSessionControlIntent(.requestFailed(
             kind: kind, isDefault: false, requestToken: token
-        )))
+        ))
         guard transition.applied else { return false }
         sessionControlRequestTracker.finish(kind)
-        transition.effects.forEach(executeSessionControlEffect)
         return true
     }
 
@@ -1338,12 +1344,11 @@ final class AppStore: ObservableObject {
                   responseTarget == nil || responseTarget == active.target,
                   responseValue == nil || responseValue == active.value else { return false }
         }
-        let transition = applySessionControlTransition(kmpSessionControlStore.reduce(.requestFailed(
+        let transition = submitSessionControlIntent(.requestFailed(
             kind: kind, isDefault: true, requestToken: token
-        )))
+        ))
         guard transition.applied else { return false }
         defaultConfigurationRequestTracker.finish(kind)
-        transition.effects.forEach(executeSessionControlEffect)
         return true
     }
 
@@ -1364,8 +1369,6 @@ final class AppStore: ObservableObject {
         reduceSessionList(.markRead(id))
     }
     private func reduceSessionList(_ action: SessionListAction) {
-        let previousSessionIDs = Set(sessions.map(\.id))
-        let previousArchivedSessionIDs = archivedSessionIds
         let snapshot: KMPSessionListSnapshot
         do {
             snapshot = try kmpSessionListStore.reduce(action)
@@ -1373,6 +1376,21 @@ final class AppStore: ObservableObject {
             lastError = error.localizedDescription
             return
         }
+        if !kmpSessionListStore.usesEventStream {
+            handleSessionListEvent(snapshot: snapshot, error: nil)
+        }
+    }
+    private func handleSessionListEvent(
+        snapshot: KMPSessionListSnapshot?,
+        error: KMPSessionListStoreError?
+    ) {
+        if let error {
+            lastError = error.localizedDescription
+            return
+        }
+        guard let snapshot else { return }
+        let previousSessionIDs = Set(sessions.map(\.id))
+        let previousArchivedSessionIDs = archivedSessionIds
         // stage9-kmp-write-scope: session-list-begin
         let mappedSessions = snapshot.persistedSessions
         if mappedSessions != sessions {
@@ -1397,9 +1415,15 @@ final class AppStore: ObservableObject {
     @discardableResult
     private func reduceQuestion(_ intent: KMPQuestionIntent) -> KMPQuestionTransition {
         let transition = kmpQuestionStore.reduce(intent)
+        if !kmpQuestionStore.usesEventStream {
+            handleQuestionEvent(transition)
+        }
+        return transition
+    }
+    private func handleQuestionEvent(_ transition: KMPQuestionTransition) {
         if let error = transition.error {
             lastError = error.localizedDescription
-            return transition
+            return
         }
         // stage9-kmp-write-scope: question-begin
         if transition.snapshot.pendingRequests != pendingQuestionRequests {
@@ -1408,7 +1432,7 @@ final class AppStore: ObservableObject {
         let statuses = transition.snapshot.platformStatuses
         if statuses != questionRequestStatuses { questionRequestStatuses = statuses }
         // stage9-kmp-write-scope: question-end
-        return transition
+        executeQuestionEffect(transition.effect)
     }
     private func executeQuestionEffect(_ effect: KMPQuestionEffect?) {
         guard let effect else { return }
@@ -1472,16 +1496,28 @@ final class AppStore: ObservableObject {
     }
     @discardableResult
     private func reduceSessionControl(_ action: SessionControlAction) -> KMPSessionControlTransition {
-        let transition = applySessionControlTransition(kmpSessionControlStore.reduce(.action(action)))
-        transition.effects.forEach(executeSessionControlEffect)
-        return transition
+        submitSessionControlIntent(.action(action))
     }
     @discardableResult
     private func reduceSessionControlProjection(_ action: SessionControlAction) -> KMPSessionControlTransition {
-        applySessionControlTransition(kmpSessionControlStore.reduce(.projection(action)))
+        submitSessionControlIntent(.projection(action))
     }
     private func dispatchSessionControl(_ intent: KMPSessionControlIntent) {
-        let transition = applySessionControlTransition(kmpSessionControlStore.reduce(intent))
+        submitSessionControlIntent(intent)
+    }
+    @discardableResult
+    private func submitSessionControlIntent(
+        _ intent: KMPSessionControlIntent
+    ) -> KMPSessionControlTransition {
+        let transition = kmpSessionControlStore.reduce(intent)
+        // 生产 store 只通过订阅 event 发布状态与 effect；无订阅测试桩保留兼容路径。
+        if !kmpSessionControlStore.usesEventStream {
+            handleSessionControlEvent(transition)
+        }
+        return transition
+    }
+    private func handleSessionControlEvent(_ transition: KMPSessionControlTransition) {
+        applySessionControlTransition(transition)
         guard transition.error == nil else { return }
         transition.effects.forEach(executeSessionControlEffect)
     }
@@ -1582,12 +1618,11 @@ final class AppStore: ObservableObject {
                   self.kmpSessionControlStore.snapshot.requestTokens[effect.requestKey] == effect.requestToken else {
                 return
             }
-            let transition = self.applySessionControlTransition(self.kmpSessionControlStore.reduce(.requestTimedOut(
+            _ = self.submitSessionControlIntent(.requestTimedOut(
                 kind: effect.requestKey,
                 isDefault: isDefault,
                 requestToken: effect.requestToken
-            )))
-            transition.effects.forEach(self.executeSessionControlEffect)
+            ))
             self.lastError = isDefault
                 ? String(localized: "control.request.timeout.v0111", defaultValue: "\(effect.requestKey) 请求超时，请检查 Mobile Gateway v0.1.11。")
                 : String(localized: "control.request.timeout", defaultValue: "\(effect.requestKey) 请求超时，请检查 Mobile Gateway。")

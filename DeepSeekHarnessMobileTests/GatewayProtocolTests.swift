@@ -3,6 +3,7 @@ import UIKit
 import ImageIO
 import UniformTypeIdentifiers
 import class DeepSeekHarnessShared.SharedQuestionResult
+import class DeepSeekHarnessShared.SharedMviEvent
 import class DeepSeekHarnessShared.SharedSessionControlResult
 import class DeepSeekHarnessShared.SharedSessionControlStore
 import class DeepSeekHarnessShared.SharedSessionListResult
@@ -306,6 +307,54 @@ final class GatewayProtocolTests: XCTestCase {
                 )
             }
         }
+    }
+
+    func testStage9ProductBasicDomainsUseIntentDispatchAndEventSubscription() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let appStoreSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("DeepSeekHarnessMobile/Core/AppStore.swift"),
+            encoding: .utf8
+        )
+        let adapterSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("DeepSeekHarnessMobile/Core/KMPSharedAdapter.swift"),
+            encoding: .utf8
+        )
+        for callback in [
+            "kmpSessionListStore.onSnapshot",
+            "kmpQuestionStore.onTransition",
+            "kmpSessionControlStore.onTransition"
+        ] {
+            XCTAssertTrue(appStoreSource.contains(callback), "产品必须订阅 KMP Event：\(callback)")
+        }
+        for subscription in [
+            "extension SharedSessionListStore: KMPSessionListEventBridging",
+            "extension SharedQuestionStore: KMPQuestionEventBridging",
+            "extension SharedSessionControlStore: KMPSessionControlEventBridging"
+        ] {
+            XCTAssertTrue(adapterSource.contains(subscription), "Adapter 必须接入可取消订阅：\(subscription)")
+        }
+        for forbidden in [
+            "applySessionControlTransition(kmpSessionControlStore.reduce",
+            "applySessionControlTransition(self.kmpSessionControlStore.reduce"
+        ] {
+            XCTAssertFalse(
+                appStoreSource.contains(forbidden),
+                "产品不得从 mutation 返回值发布状态或执行 effect：\(forbidden)"
+            )
+        }
+        XCTAssertEqual(
+            appStoreSource.components(separatedBy: "executeQuestionEffect(transition.effect)").count - 1,
+            1,
+            "Question effect 只能在 KMP Event 订阅回调中执行一次"
+        )
+        XCTAssertTrue(
+            appStoreSource.contains("if !kmpSessionListStore.usesEventStream")
+                && appStoreSource.contains("if !kmpQuestionStore.usesEventStream")
+                && appStoreSource.contains("if !kmpSessionControlStore.usesEventStream"),
+            "同步结果仅允许作为无订阅测试 bridge 的兼容路径"
+        )
     }
 
     @MainActor
@@ -1147,6 +1196,29 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
+    func testKMPSessionListAdapterPublishesChangedSnapshotThroughEventStream() throws {
+        let adapter = KMPSessionListStoreAdapter(sessions: [])
+        var snapshots: [KMPSessionListSnapshot] = []
+        adapter.onSnapshot = { snapshot, error in
+            XCTAssertNil(error)
+            if let snapshot { snapshots.append(snapshot) }
+        }
+
+        _ = try adapter.reduce(
+            .knownSessionAdded("session-event"),
+            now: Date(timeIntervalSince1970: 100)
+        )
+        _ = try adapter.reduce(
+            .knownSessionAdded("session-event"),
+            now: Date(timeIntervalSince1970: 100)
+        )
+
+        XCTAssertTrue(adapter.usesEventStream)
+        XCTAssertEqual(snapshots.count, 1)
+        XCTAssertEqual(snapshots.first?.sessions.first?.id, "session-event")
+    }
+
+    @MainActor
     func testKMPSessionListAdapterMapsPersistenceAndOwnsSessionStateTransitions() throws {
         let persisted = SessionSummary(
             id: "existing",
@@ -1322,6 +1394,35 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(store.sessions, [persisted])
         XCTAssertEqual(preferences.savedSessionSnapshots, [])
         XCTAssertEqual(bridge.mutationCallCount, 1)
+    }
+
+    @MainActor
+    func testKMPQuestionAdapterPublishesStateAndEffectThroughEventStream() {
+        let request = questionRequest()
+        let answers = [
+            GatewayQuestionAnswer(id: "direction", selected: ["架构"]),
+            GatewayQuestionAnswer(id: "notes", selected: [], custom: "保持原生 UI")
+        ]
+        let adapter = KMPQuestionStoreAdapter()
+        var pushed: [KMPQuestionTransition] = []
+        adapter.onTransition = { pushed.append($0) }
+
+        _ = adapter.reduce(.requestReceived(request))
+        let returned = adapter.reduce(.submitAnswer(
+            rpcID: request.rpcId,
+            answers: answers,
+            isConnected: true
+        ))
+        _ = adapter.reduce(.submitAnswer(
+            rpcID: request.rpcId,
+            answers: answers,
+            isConnected: true
+        ))
+
+        XCTAssertTrue(adapter.usesEventStream)
+        XCTAssertEqual(pushed.count, 2)
+        XCTAssertEqual(pushed.last?.snapshot, returned.snapshot)
+        XCTAssertEqual(pushed.last?.effect?.action, "answer")
     }
 
     @MainActor
@@ -1972,6 +2073,57 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(state.sessionStatsSnapshots["session-1"]?.asOfSeq, 30)
         XCTAssertEqual(state.sessionStatsSnapshots["session-1"]?.tokenUsage?.totals, totals)
         XCTAssertEqual(state.sessionStatsSnapshots["session-1"]?.contextPressure, pressure)
+    }
+
+    @MainActor
+    func testKMPSessionControlAdapterPublishesMutationThroughEventStream() {
+        let adapter = KMPSessionControlStoreAdapter()
+        var pushed: [KMPSessionControlTransition] = []
+        adapter.onTransition = { pushed.append($0) }
+
+        let returned = adapter.reduce(.requestModels(
+            sessionID: "session-event",
+            isConnected: true
+        ))
+
+        XCTAssertTrue(adapter.usesEventStream)
+        XCTAssertEqual(adapter.lastEventSequence, 1)
+        XCTAssertEqual(pushed.count, 1)
+        XCTAssertEqual(pushed.first?.snapshot, returned.snapshot)
+        XCTAssertEqual(pushed.first?.effects.first?.sessionId, "session-event")
+
+        _ = adapter.reduce(.requestModels(sessionID: "session-event", isConnected: true))
+        XCTAssertEqual(pushed.count, 1, "unchanged intent 不得重复推送 UI event")
+    }
+
+    @MainActor
+    func testKMPPushAdaptersFailClosedBeforePublishingDuplicateSequence() {
+        let sessionList = KMPSessionListStoreAdapter(sessions: [])
+        let question = KMPQuestionStoreAdapter()
+        let control = KMPSessionControlStoreAdapter()
+
+        sessionList.receive(SharedMviEvent(
+            schema: 2, sequence: sessionList.lastEventSequence ?? 0,
+            transactionId: "duplicate-list", domain: "session-list", kind: "transition",
+            statePayloadJson: nil, effectsJson: "[]", metadataJson: nil,
+            errorCode: nil, errorMessage: nil
+        ))
+        question.receive(SharedMviEvent(
+            schema: 2, sequence: question.lastEventSequence ?? 0,
+            transactionId: "duplicate-question", domain: "question", kind: "transition",
+            statePayloadJson: nil, effectsJson: "[]", metadataJson: nil,
+            errorCode: nil, errorMessage: nil
+        ))
+        control.receive(SharedMviEvent(
+            schema: 2, sequence: control.lastEventSequence ?? 0,
+            transactionId: "duplicate-control", domain: "session-control", kind: "transition",
+            statePayloadJson: nil, effectsJson: "[]", metadataJson: nil,
+            errorCode: nil, errorMessage: nil
+        ))
+
+        XCTAssertFalse(sessionList.isOperational)
+        XCTAssertFalse(question.isOperational)
+        XCTAssertFalse(control.isOperational)
     }
 
     @MainActor

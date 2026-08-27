@@ -8,13 +8,15 @@ package com.clarklevis.dsh.shared.facade
  * 初始化 snapshot 使用当前 sequence 作为订阅基线，不占用新的事务序号。
  */
 data class SharedMviEvent(
-    val schema: Int = 1,
+    val schema: Int = 2,
     val sequence: Long,
     val transactionId: String,
     val domain: String,
     val kind: String,
     val statePayloadJson: String?,
     val effectsJson: String = "[]",
+    /** 领域事务信号；必须由对应 adapter 使用严格 schema 解码。 */
+    val metadataJson: String? = null,
     val errorCode: String? = null,
     val errorMessage: String? = null
 )
@@ -80,10 +82,33 @@ internal class SharedMviEventEmitter(
         return SharedMviSubscription { observers.remove(observerId) }
     }
 
+    fun subscribeError(
+        observer: SharedMviEventObserver,
+        errorCode: String,
+        errorMessage: String?
+    ): SharedMviSubscription {
+        val observerId = ++nextObserverId
+        observers[observerId] = observer
+        deliverSafely(
+            observer,
+            SharedMviEvent(
+                sequence = nextSequence,
+                transactionId = "snapshot-error:$domain:$nextSequence",
+                domain = domain,
+                kind = "error",
+                statePayloadJson = null,
+                errorCode = errorCode,
+                errorMessage = errorMessage
+            )
+        )
+        return SharedMviSubscription { observers.remove(observerId) }
+    }
+
     fun emitTransition(
         transactionId: String,
         statePayloadJson: String?,
-        effectsJson: String = "[]"
+        effectsJson: String = "[]",
+        metadataJson: String? = null
     ): SharedMviEvent {
         require(transactionId.isNotBlank()) { "transactionId must not be blank" }
         val event = SharedMviEvent(
@@ -92,7 +117,8 @@ internal class SharedMviEventEmitter(
             domain = domain,
             kind = "transition",
             statePayloadJson = statePayloadJson,
-            effectsJson = effectsJson
+            effectsJson = effectsJson,
+            metadataJson = metadataJson
         )
         enqueue(event)
         return event
