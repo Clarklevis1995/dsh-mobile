@@ -148,6 +148,8 @@ final class AppStore: ObservableObject {
     /// SessionControl 的唯一业务状态来源；Swift 属性只发布 KMP 快照。
     private let kmpSessionControlStore: KMPSessionControlStoreAdapter
     private let sessionControlEffectExecutor: any GatewaySessionControlEffectExecuting
+    /// Conversation projector 的唯一业务状态来源；Swift 只在屏幕刷新节奏发布 KMP patch 镜像。
+    private let kmpConversationStore: KMPConversationStoreAdapter
     private var historyState = HistoryState()
     private let historySyncEngine = HistorySyncEngine()
     /// The remote session activity timestamp covered by a completed history load.
@@ -158,11 +160,6 @@ final class AppStore: ObservableObject {
     /// Invalidates an in-flight cold projection when a completed history
     /// baseline is atomically installed for the same session.
     private var conversationProjectionEpochs: [String: Int] = [:]
-    /// Incremental per-session projector state. Kept alive across live
-    /// updates so most projection ticks only fold the handful of events that
-    /// arrived since the previous tick, instead of replaying the whole
-    /// session; see `projectIncrementally(for:)`.
-    private var conversationProjectors: [String: ConversationProjector] = [:]
     /// Decoded bytes live outside the raw/history message models. A bounded
     /// memory layer fronts a seven-day, purgeable on-disk cache.
     private let imageAttachmentCache = ImageAttachmentCache()
@@ -195,6 +192,7 @@ final class AppStore: ObservableObject {
         sessionListBridge: (any KMPSessionListStoreBridging)? = nil,
         questionBridge: (any KMPQuestionStoreBridging)? = nil,
         sessionControlBridge: (any KMPSessionControlStoreBridging)? = nil,
+        conversationBridge: (any KMPConversationStoreBridging)? = nil,
         questionEffectExecutor: (any GatewayQuestionEffectExecuting)? = nil,
         sessionControlEffectExecutor: (any GatewaySessionControlEffectExecuting)? = nil,
         backgroundExecutionController: AgentBackgroundExecutionController? = nil
@@ -212,6 +210,8 @@ final class AppStore: ObservableObject {
         self.kmpQuestionStore = kmpQuestionStore
         let kmpSessionControlStore = KMPSessionControlStoreAdapter(bridge: sessionControlBridge)
         self.kmpSessionControlStore = kmpSessionControlStore
+        let kmpConversationStore = KMPConversationStoreAdapter(bridge: conversationBridge)
+        self.kmpConversationStore = kmpConversationStore
         self.sessionControlEffectExecutor = sessionControlEffectExecutor ?? gateway
         appLanguage = AppLanguage.load()
         selectedWorkspaceId = preferences.selectedWorkspaceID
@@ -242,6 +242,12 @@ final class AppStore: ObservableObject {
         }
         kmpSessionControlStore.onTransition = { [weak self] transition in
             self?.handleSessionControlEvent(transition)
+        }
+        kmpConversationStore.onChange = { [weak self] change in
+            self?.scheduleConversationProjection(for: change.sessionID)
+        }
+        kmpConversationStore.onError = { [weak self] error in
+            self?.lastError = error.localizedDescription
         }
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
         gateway.onConnectionFailure = { [weak self] detail in
@@ -1048,17 +1054,19 @@ final class AppStore: ObservableObject {
             }.value
             guard let self, self.historySyncEngine.isCurrent(processingToken, sessionID: id) else { return }
 
-            // Build history beside the installed live projector. If a rare
-            // out-of-order live event lands below the candidate watermark while
-            // this background work runs, rebuild against the newer snapshot.
-            // Normal strictly ascending chunks take the fast path: they are
-            // folded into the candidate once, immediately before commit.
+            // Raw history reconciliation remains a platform persistence concern
+            // in 10.2. Conversation projection itself is rebuilt only by KMP.
+            // If an out-of-order live mutation lands during this detached merge,
+            // retry against the newer source before dispatching the baseline.
             var sourceEpoch = self.conversationProjectionEpochs[id, default: 0]
             var sourceEvents = self.events[id, default: []]
             while true {
                 let rebaseSource = sourceEvents
-                var rebase = await Task.detached(priority: .userInitiated) {
-                    ConversationHistoryRebase.build(history: normalized, current: rebaseSource)
+                var rebasedEvents = await Task.detached(priority: .userInitiated) {
+                    var records: [Int: SessionEvent] = [:]
+                    normalized.forEach { records[$0.seq] = $0 }
+                    rebaseSource.forEach { records[$0.seq] = $0 }
+                    return records.values.sorted { $0.seq < $1.seq }
                 }.value
                 guard self.historySyncEngine.isCurrent(processingToken, sessionID: id) else { return }
 
@@ -1072,16 +1080,26 @@ final class AppStore: ObservableObject {
                     continue
                 }
 
-                rebase.appendLiveTail(from: self.events[id, default: []])
+                // Prefer the live lane for duplicates and include the tail that
+                // arrived while the detached history merge was running.
+                let latest = self.events[id, default: []]
+                var records: [Int: SessionEvent] = [:]
+                rebasedEvents.forEach { records[$0.seq] = $0 }
+                latest.forEach { records[$0.seq] = $0 }
+                rebasedEvents = records.values.sorted { $0.seq < $1.seq }
 
                 // The commit is one main-actor transaction. Invalidate any
-                // cold projection that started from the pre-history snapshot,
-                // then publish the rebased baseline with the caught-up tail.
+                // older candidate, then let KMP atomically replace its projector
+                // and push a presentation baseline back to Swift.
                 self.conversationProjectionEpochs[id, default: 0] &+= 1
-                self.events[id] = rebase.events
-                self.conversationProjectors[id] = rebase.projector
-                self.publishConversationItems(rebase.projector.items, for: id)
-                self.enqueueImageAttachments(in: rebase.events, sessionId: id)
+                do {
+                    try self.kmpConversationStore.replace(sessionID: id, events: rebasedEvents)
+                } catch {
+                    self.lastError = error.localizedDescription
+                    return
+                }
+                self.events[id] = rebasedEvents
+                self.enqueueImageAttachments(in: rebasedEvents, sessionId: id)
                 break
             }
 
@@ -1120,10 +1138,20 @@ final class AppStore: ObservableObject {
         let mergeResult = HistoryEventMerger.merge(record, into: &sessionEvents)
         events[sessionId] = sessionEvents
         if mergeResult.replacedOrInsertedOutOfOrder {
-            // A duplicate or out-of-order frame may fall behind lastSeq and
-            // therefore cannot be folded safely into the append-only cache.
-            conversationProjectors[sessionId] = nil
+            // A duplicate or out-of-order frame cannot enter KMP's append-only
+            // live lane; replace its baseline in one explicit transaction.
             conversationProjectionEpochs[sessionId, default: 0] &+= 1
+            do {
+                try kmpConversationStore.replace(sessionID: sessionId, events: sessionEvents)
+            } catch {
+                lastError = error.localizedDescription
+            }
+        } else {
+            do {
+                try kmpConversationStore.receive(record)
+            } catch {
+                lastError = error.localizedDescription
+            }
         }
         applyEvent(record)
         // Once the cache has been fully established, subscribed live events are
@@ -1133,7 +1161,6 @@ final class AppStore: ObservableObject {
             sessionID: sessionId,
             activityTimestamp: record.date.timeIntervalSince1970
         ))
-        scheduleConversationProjection(for: sessionId)
     }
 
     private func enqueueImageAttachments(in records: [SessionEvent], sessionId: String) {
@@ -1195,34 +1222,11 @@ final class AppStore: ObservableObject {
         }
         driver.invalidate()
     }
-    /// Projects the compact conversation timeline for `sessionId`. Reuses
-    /// the session's `ConversationProjector` across ticks: once it has been
-    /// seeded (cold rebuild, paid at most once per session per process), a
-    /// tick during active streaming only folds the events that arrived since
-    /// the previous tick — a handful of chunks — instead of replaying the
-    /// entire event log. This is what keeps rendering from falling further
-    /// and further behind the WebSocket as a session grows, which is what
-    /// happened with the previous "rebuild everything every tick" approach.
+    /// KMP 已同步应用所有 token patch；display link 只负责把最新镜像按一帧最多
+    /// 一次发布给 UIKit timeline，避免高频 token 让 SwiftUI 根视图失效。
     private func projectIncrementally(for sessionId: String) async {
-        let epoch = conversationProjectionEpochs[sessionId, default: 0]
-        let all = events[sessionId, default: []]
-        let projector = conversationProjectors[sessionId] ?? ConversationProjector()
-        if projector.lastSeq < 0 {
-            let items = await Task.detached(priority: .userInitiated) {
-                projector.rebuild(from: all)
-                return projector.items
-            }.value
-            guard !Task.isCancelled,
-                  conversationProjectionEpochs[sessionId, default: 0] == epoch else { return }
-            conversationProjectors[sessionId] = projector
-            publishConversationItems(items, for: sessionId)
-            return
-        }
-        let startIndex = ConversationProjector.firstIndexAfter(projector.lastSeq, in: all)
-        guard startIndex < all.count else { return }
-        projector.fold(Array(all[startIndex...]))
-        conversationProjectors[sessionId] = projector
-        publishConversationItems(projector.items, for: sessionId)
+        guard !Task.isCancelled else { return }
+        publishConversationItems(kmpConversationStore.items(for: sessionId), for: sessionId)
     }
     private func publishConversationItems(_ items: [ConversationItem], for sessionId: String) {
         let previouslyHadContent = conversationContentSessionIds.contains(sessionId)
@@ -1410,6 +1414,13 @@ final class AppStore: ObservableObject {
         let clearedSessionIDs = removedSessionIDs.union(newlyArchivedSessionIDs)
         if !clearedSessionIDs.isEmpty {
             dispatchSessionControl(.clearSessionsData(sessionIDs: clearedSessionIDs))
+            for sessionID in clearedSessionIDs {
+                do {
+                    try kmpConversationStore.clear(sessionID: sessionID)
+                } catch {
+                    lastError = error.localizedDescription
+                }
+            }
         }
     }
     @discardableResult

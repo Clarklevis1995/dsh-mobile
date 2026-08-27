@@ -4,7 +4,7 @@
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
 > 最近更新：2026-08-27
-> 当前任务：阶段 9 推送式 MVI 已完成并通过人工验收；开始阶段 10.1 高频 Conversation 增量事件接口
+> 当前任务：阶段 10.1～10.2 Conversation 增量投影已接入 iOS 产品路径；继续阶段 10.3 Trajectory 与 Token Usage
 
 ## 使用说明
 
@@ -223,14 +223,16 @@ Schema 演进与信任边界：schema 2 的 patch 顶层及所有业务 DTO 均�
 
 ### 阶段 10：iOS Conversation、Trajectory 与 History 切换
 
-- [ ] 10.1 为 Swift 暴露增量 Conversation 投影接口，避免每个 token 跨语言复制完整消息数组。
-- [ ] 10.2 将流式 chunk 拼接、最终消息替换、工具调用和图片引用投影切换到 KMP。
+- [x] 10.1 为 Swift 暴露增量 Conversation 投影接口，避免每个 token 跨语言复制完整消息数组。
+- [x] 10.2 将流式 chunk 拼接、最终消息替换、工具调用和图片引用投影切换到 KMP。
 - [ ] 10.3 将 Trajectory request/assistant/tool/subtool 和 Token Usage 投影切换到 KMP。
 - [ ] 10.4 将历史分页状态、cursor 检测、history/live tail 去重和同步水位切换到 KMP。
 - [ ] 10.5 iOS 继续拥有网络 Task、超时触发、UIKit viewport 和后台执行；KMP 只计算状态与下一步 effect。
 - [ ] 10.6 对长会话执行性能、内存、滚动位置、重连和实时尾部人工回归。
 
 验收标准：流式过程不重复、不回退、不闪烁，也不会每个 token 全量发布 AppStore；历史加载期间实时尾部不停顿，滚动位置不跳变，性能无明显回退。
+
+10.1～10.2 实现结论：新增高频专用 `SharedConversationStore`，KMP 按 session 持有唯一 projector；实时事件仅推送有序 `insert`、`append-text(delta)`、`remove` operation，历史/乱序修正才推送显式 replace baseline。Swift Adapter 在 `MainActor` 校验 schema、连续 event sequence、Intent/session/record sequence、operation shape 与目标 item，坏 patch 在 UI 发布前永久 fail-closed。AppStore 不再持有或调用 Swift `ConversationProjector`/`ConversationHistoryRebase`；WebSocket 原始事件作为 Intent 进入 KMP，KMP patch 镜像仍由 display link 一帧最多发布一次给 UIKit timeline。KMP 测试覆盖 delta-only payload、累计 4096 字符后 payload 恒长、最终消息替换、历史 replace、乱序拒绝、clear 与订阅取消；iOS 测试覆盖真实 KMP 订阅、坏 patch 零发布、图片/上下文/final/tool 投影对等和产品源码门禁。
 
 ### 阶段 11：iOS 重复实现清理与架构收口
 
@@ -319,6 +321,7 @@ xcodebuild test \
 
 ### 2026-08-27
 
+- 完成阶段 10.1～10.2：Conversation 高频路径采用 KMP `insert/append-text(delta)/remove/replace` 推送协议，AppStore 已移除 Swift projector 状态与产品调用；WebSocket 事件及历史基线均以 Intent 进入 KMP，Swift 只校验 patch 并按 display link 节奏发布 UIKit timeline。自动化覆盖 payload 恒长、最终消息替换、历史/乱序、图片/工具投影对等、坏 patch fail-closed 与源码门禁；继续阶段 10.3。
 - 用户确认 9.7～9.9 推送式 MVI 真实 Gateway 人工验收全部通过；SessionList、Human Question、SessionControl 及完整 Intent→Event 链路无重复 I/O、无 sequence/patch/effect fail-closed。9.9 已勾选，阶段 9 正式完成，开始阶段 10.1。
 - 完成阶段 9.7～9.9 的推送式 MVI 代码与自动化门禁：SessionList、Question、SessionControl 的产品状态/effect 改由 KMP schema 2 Event 主动推送，Swift 只 dispatch Intent、校验 Event 并发布可重建 UI 投影。覆盖订阅基线、去重、取消、事务 effect、重复 sequence fail-closed 和源码架构门禁；KMP 59 项、Android 2 项、iOS 115 项全绿，Android APK 与 iPhoneOS Release 构建成功。新增 `kmp-stage9-mvi-manual-verification.md`，等待真实 Gateway 人工验收后再勾选 9.9。
 - 收口阶段 9 SessionControl 跨桥性能债务：已提交事务改为 schema 2 增量 patch，全量 snapshot 仅初始化/诊断；四类 session map 按 upsert/remove 分片，无变化零 payload，100/1000 无关 session 的单 session payload 保持恒定。批量 clear 使用 drain/tombstone 消费真实 nil-session 终态，严格拒绝遗漏 removal、跨 session/跨 kind 注入以及 drain 业务回写。最终 KMP 52 项、Android 2 项、iOS 全量 XCTest 110 项通过，iPhoneOS Release 构建成功。

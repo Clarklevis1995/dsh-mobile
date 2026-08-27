@@ -10,6 +10,7 @@ import com.clarklevis.dsh.shared.domain.SessionListState
 import com.clarklevis.dsh.shared.domain.SessionSummary
 import com.clarklevis.dsh.shared.domain.normalizeEpochSeconds
 import com.clarklevis.dsh.shared.projection.ConversationItem
+import com.clarklevis.dsh.shared.projection.ConversationProjectionLabels
 import com.clarklevis.dsh.shared.projection.ConversationProjector
 import com.clarklevis.dsh.shared.protocol.GatewayPendingQuestionRequest
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAction
@@ -199,6 +200,30 @@ class SharedMobileFacade {
     fun makeQuestionStore(): SharedQuestionStore = SharedQuestionStore()
 
     fun makeSessionControlStore(): SharedSessionControlStore = SharedSessionControlStore()
+
+    fun makeConversationStore(
+        userMessage: String,
+        context: String,
+        streamingAssistant: String,
+        streamingReasoning: String,
+        finalAssistant: String,
+        finalReasoning: String,
+        assemblingTool: String,
+        toolResultDone: String,
+        toolResultFailed: String
+    ): SharedConversationStore = SharedConversationStore(
+        ConversationProjectionLabels(
+            userMessage = userMessage,
+            context = context,
+            streamingAssistant = streamingAssistant,
+            streamingReasoning = streamingReasoning,
+            finalAssistant = finalAssistant,
+            finalReasoning = finalReasoning,
+            assemblingTool = assemblingTool,
+            toolResultDone = toolResultDone,
+            toolResultFailed = toolResultFailed
+        )
+    )
 
     fun makeShadowFacade(): SharedShadowFacade = SharedShadowFacade()
 }

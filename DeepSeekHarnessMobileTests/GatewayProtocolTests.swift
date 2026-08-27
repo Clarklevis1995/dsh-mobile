@@ -4,6 +4,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import class DeepSeekHarnessShared.SharedQuestionResult
 import class DeepSeekHarnessShared.SharedMviEvent
+import class DeepSeekHarnessShared.SharedMviDispatchResult
 import class DeepSeekHarnessShared.SharedSessionControlResult
 import class DeepSeekHarnessShared.SharedSessionControlStore
 import class DeepSeekHarnessShared.SharedSessionListResult
@@ -125,6 +126,120 @@ final class GatewayProtocolTests: XCTestCase {
         )
         XCTAssertEqual(adapter.makeStore().loadManualTestFixture().sessions.count, 1)
         XCTAssertNil(adapter.decodeFrameKind("abc"))
+    }
+
+    @MainActor
+    func testKMPConversationAdapterConsumesIncrementalPushEvents() throws {
+        let adapter = KMPConversationStoreAdapter()
+        var publishedTexts: [[String]] = []
+        adapter.onChange = { change in
+            publishedTexts.append(change.items.map(\.text))
+        }
+
+        try adapter.receive(SessionEvent(
+            sessionId: "s1", seq: 1, time: 1,
+            event: GatewayEvent(
+                type: "assistant/chunk", turn: 1, step: 1,
+                text: "Hel", chunkType: "text-delta"
+            )
+        ))
+        try adapter.receive(SessionEvent(
+            sessionId: "s1", seq: 2, time: 2,
+            event: GatewayEvent(
+                type: "assistant/chunk", turn: 1, step: 1,
+                text: "lo", chunkType: "text-delta"
+            )
+        ))
+
+        XCTAssertTrue(adapter.isOperational)
+        XCTAssertEqual(adapter.items(for: "s1").map(\.text), ["Hello"])
+        XCTAssertEqual(publishedTexts, [["Hel"], ["Hello"]])
+
+        let baseline = [
+            SessionEvent(
+                sessionId: "s1", seq: 3, time: 3,
+                event: GatewayEvent(type: "user/message", text: "新基线", source: "user")
+            )
+        ]
+        try adapter.replace(sessionID: "s1", events: baseline)
+        XCTAssertEqual(adapter.items(for: "s1").map(\.text), ["新基线"])
+
+        try adapter.clear(sessionID: "s1")
+        XCTAssertTrue(adapter.items(for: "s1").isEmpty)
+    }
+
+    @MainActor
+    func testKMPConversationAdapterFailsClosedBeforeMalformedPatchPublishes() {
+        let bridge = MalformedConversationEventBridge()
+        let adapter = KMPConversationStoreAdapter(bridge: bridge)
+        var publishCount = 0
+        adapter.onChange = { _ in publishCount += 1 }
+
+        XCTAssertThrowsError(try adapter.receive(SessionEvent(
+            sessionId: "s1", seq: 1, time: 1,
+            event: GatewayEvent(
+                type: "assistant/chunk", turn: 1, step: 1,
+                text: "x", chunkType: "text-delta"
+            )
+        )))
+        XCTAssertFalse(adapter.isOperational)
+        XCTAssertEqual(publishCount, 0)
+        XCTAssertTrue(adapter.items(for: "s1").isEmpty)
+        XCTAssertEqual(bridge.receiveCallCount, 1)
+
+        XCTAssertThrowsError(try adapter.receive(SessionEvent(
+            sessionId: "s1", seq: 2, time: 2,
+            event: GatewayEvent(type: "user/message", text: "不会进入 KMP", source: "user")
+        )))
+        XCTAssertEqual(bridge.receiveCallCount, 1)
+    }
+
+    @MainActor
+    func testKMPConversationProjectionMatchesSwiftMigrationFixture() throws {
+        let image = GatewayImageAttachment(
+            attachmentId: "image-1", mediaType: "image/png", bytes: 4,
+            width: 1, height: 1, name: "pixel.png"
+        )
+        let records = [
+            SessionEvent(sessionId: "s1", seq: 1, time: 1, event: GatewayEvent(
+                type: "user/message", text: "上下文", source: "plugin",
+                raw: .object(["source": .object(["plugin": .string("skill")])])
+            )),
+            SessionEvent(sessionId: "s1", seq: 2, time: 2, event: GatewayEvent(
+                type: "user/message", text: "看图", source: "user", images: [image]
+            )),
+            SessionEvent(sessionId: "s1", seq: 3, time: 3, event: GatewayEvent(
+                type: "assistant/chunk", turn: 1, step: 1,
+                text: "临时", chunkType: "text-delta"
+            )),
+            SessionEvent(sessionId: "s1", seq: 4, time: 4, event: GatewayEvent(
+                type: "assistant/message", turn: 1, step: 1,
+                text: "完成", reasoning: "思考"
+            )),
+            SessionEvent(sessionId: "s1", seq: 5, time: 5, event: GatewayEvent(
+                type: "tool/call", callId: "call-1", name: "Read",
+                arguments: .object(["path": .string("README.md")])
+            )),
+            SessionEvent(sessionId: "s1", seq: 6, time: 6, event: GatewayEvent(
+                type: "tool/result", callId: "call-1", isError: false, preview: "内容"
+            ))
+        ]
+        let swiftBaseline = ConversationItem.make(from: records)
+        let adapter = KMPConversationStoreAdapter()
+
+        try adapter.replace(sessionID: "s1", events: records)
+        let kmp = adapter.items(for: "s1")
+
+        XCTAssertEqual(kmp.map(\.id), swiftBaseline.map(\.id))
+        XCTAssertEqual(kmp.map(\.kind), swiftBaseline.map(\.kind))
+        XCTAssertEqual(kmp.map(\.title), swiftBaseline.map(\.title))
+        for (kmpItem, swiftItem) in zip(kmp, swiftBaseline) where kmpItem.kind != .tool {
+            XCTAssertEqual(kmpItem.text, swiftItem.text)
+        }
+        XCTAssertTrue(kmp.first(where: { $0.kind == .tool })?.text.contains("README.md") == true)
+        XCTAssertEqual(kmp.map(\.images), swiftBaseline.map(\.images))
+        XCTAssertEqual(kmp.map(\.isError), swiftBaseline.map(\.isError))
+        XCTAssertEqual(kmp.map(\.date), swiftBaseline.map(\.date))
     }
 
     func testStage9WriteAuditRecognizesDirectNestedInoutAndCollectionMutations() throws {
@@ -354,6 +469,51 @@ final class GatewayProtocolTests: XCTestCase {
                 && appStoreSource.contains("if !kmpQuestionStore.usesEventStream")
                 && appStoreSource.contains("if !kmpSessionControlStore.usesEventStream"),
             "同步结果仅允许作为无订阅测试 bridge 的兼容路径"
+        )
+    }
+
+    func testStage10ConversationProductPathUsesOnlyKMPProjection() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let productRoot = repositoryRoot.appendingPathComponent("DeepSeekHarnessMobile")
+        let legacyDefinition = productRoot
+            .appendingPathComponent("Core/ConversationProjection.swift")
+            .standardizedFileURL.path
+        let enumerator = try XCTUnwrap(FileManager.default.enumerator(
+            at: productRoot,
+            includingPropertiesForKeys: nil
+        ))
+        let productSources = enumerator.compactMap { item -> URL? in
+            guard let url = item as? URL,
+                  url.pathExtension == "swift",
+                  url.standardizedFileURL.path != legacyDefinition else { return nil }
+            return url
+        }
+        for symbol in ["ConversationProjector", "ConversationHistoryRebase", "ConversationItem.fold"] {
+            for sourceURL in productSources {
+                let source = try String(contentsOf: sourceURL, encoding: .utf8)
+                XCTAssertFalse(
+                    source.contains(symbol),
+                    "阶段 10.2 后产品 Swift 不得恢复 Conversation 领域投影：\(symbol) @ \(sourceURL.path)"
+                )
+            }
+        }
+
+        let appStoreSource = try String(
+            contentsOf: productRoot.appendingPathComponent("Core/AppStore.swift"),
+            encoding: .utf8
+        )
+        for required in [
+            "kmpConversationStore.onChange",
+            "kmpConversationStore.receive(record)",
+            "kmpConversationStore.replace(sessionID:"
+        ] {
+            XCTAssertTrue(appStoreSource.contains(required), "Conversation 产品路径缺少 KMP Intent/Event：\(required)")
+        }
+        XCTAssertFalse(
+            appStoreSource.contains("conversationProjectors"),
+            "AppStore 不得继续持有 Swift Conversation projector 状态"
         )
     }
 
@@ -4232,6 +4392,70 @@ private final class AppPreferencesSpy: AppPreferences {
 
     func performMigrations() {
         performMigrationsCallCount += 1
+    }
+}
+
+private final class MalformedConversationEventBridge:
+    KMPConversationStoreBridging,
+    KMPConversationEventBridging
+{
+    private var handler: ((SharedMviEvent) -> Void)?
+    private(set) var receiveCallCount = 0
+
+    func observeConversationEvents(
+        _ handler: @escaping (SharedMviEvent) -> Void
+    ) -> () -> Void {
+        self.handler = handler
+        handler(SharedMviEvent(
+            schema: 2,
+            sequence: 0,
+            transactionId: "snapshot:conversation:0",
+            domain: "conversation",
+            kind: "snapshot",
+            statePayloadJson: #"{"schema":1}"#,
+            effectsJson: "[]",
+            metadataJson: nil,
+            errorCode: nil,
+            errorMessage: nil
+        ))
+        return { [weak self] in self?.handler = nil }
+    }
+
+    func receiveEvent(eventJson: String) -> SharedMviDispatchResult {
+        receiveCallCount += 1
+        handler?(SharedMviEvent(
+            schema: 2,
+            sequence: 1,
+            transactionId: "conversation-event:1",
+            domain: "conversation",
+            kind: "transition",
+            statePayloadJson: #"{"schema":1,"sessionId":"s1","operations":[{"kind":"append-text","itemId":"missing","delta":"x","epochSeconds":1}],"replacesAll":false,"lastSequence":1}"#,
+            effectsJson: "[]",
+            metadataJson: nil,
+            errorCode: nil,
+            errorMessage: nil
+        ))
+        return SharedMviDispatchResult(
+            accepted: true,
+            transactionId: "conversation-event:1",
+            eventSequence: KotlinLong(longLong: 1),
+            errorCode: nil,
+            errorMessage: nil
+        )
+    }
+
+    func replaceSession(sessionId: String, eventsJson: String) -> SharedMviDispatchResult {
+        SharedMviDispatchResult(
+            accepted: false, transactionId: nil, eventSequence: nil,
+            errorCode: "unsupported", errorMessage: nil
+        )
+    }
+
+    func clearSession(sessionId: String) -> SharedMviDispatchResult {
+        SharedMviDispatchResult(
+            accepted: false, transactionId: nil, eventSequence: nil,
+            errorCode: "unsupported", errorMessage: nil
+        )
     }
 }
 

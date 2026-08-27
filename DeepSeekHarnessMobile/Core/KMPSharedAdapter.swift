@@ -17,6 +17,385 @@ struct KMPSharedAdapter {
     func makeShadowFacade() -> SharedShadowFacade { facade.makeShadowFacade() }
 }
 
+// MARK: - Conversation incremental MVI
+
+private struct KMPConversationBootstrap: Decodable {
+    let schema: Int
+}
+
+private struct KMPConversationItemSnapshot: Decodable {
+    let id: String
+    let kind: String
+    let title: String
+    let text: String
+    let images: [GatewayImageAttachment]
+    let isError: Bool
+    let epochSeconds: Double
+
+    var item: ConversationItem? {
+        guard !id.isEmpty,
+              epochSeconds.isFinite,
+              let mappedKind = ConversationItem.Kind(kmpWireValue: kind) else { return nil }
+        return ConversationItem(
+            id: id,
+            kind: mappedKind,
+            title: title,
+            text: text,
+            images: images,
+            isError: isError,
+            date: Date(timeIntervalSince1970: epochSeconds)
+        )
+    }
+}
+
+private extension ConversationItem.Kind {
+    init?(kmpWireValue: String) {
+        switch kmpWireValue {
+        case "USER": self = .user
+        case "CONTEXT": self = .context
+        case "ASSISTANT": self = .assistant
+        case "REASONING": self = .reasoning
+        case "TOOL": self = .tool
+        case "JSON_TOOL": self = .jsonTool
+        case "TOOL_RESULT": self = .toolResult
+        case "STATUS": self = .status
+        case "SYSTEM": self = .system
+        default: return nil
+        }
+    }
+}
+
+private struct KMPConversationOperation: Decodable {
+    let kind: String
+    let item: KMPConversationItemSnapshot?
+    let itemId: String?
+    let delta: String?
+    let epochSeconds: Double?
+}
+
+private struct KMPConversationPatch: Decodable {
+    let schema: Int
+    let sessionId: String
+    let operations: [KMPConversationOperation]
+    let replacesAll: Bool
+    let replacementItems: [KMPConversationItemSnapshot]?
+    let lastSequence: Int
+}
+
+enum KMPConversationStoreError: LocalizedError, Equatable {
+    case encoding(String)
+    case bridge(code: String, message: String?)
+    case invalidEvent(String)
+    case runtimeFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .encoding(let message):
+            "无法编码 iOS Conversation 输入：\(message)"
+        case .bridge(let code, let message):
+            "KMP Conversation 失败（\(code)）：\(message ?? "无详细信息")"
+        case .invalidEvent(let message):
+            "KMP Conversation 增量事件无效：\(message)"
+        case .runtimeFailed(let message):
+            "KMP Conversation 事件流已停止：\(message)"
+        }
+    }
+}
+
+protocol KMPConversationStoreBridging: AnyObject {
+    func receiveEvent(eventJson: String) -> SharedMviDispatchResult
+    func replaceSession(sessionId: String, eventsJson: String) -> SharedMviDispatchResult
+    func clearSession(sessionId: String) -> SharedMviDispatchResult
+}
+
+extension SharedConversationStore: KMPConversationStoreBridging {}
+
+protocol KMPConversationEventBridging: AnyObject {
+    func observeConversationEvents(
+        _ handler: @escaping (SharedMviEvent) -> Void
+    ) -> () -> Void
+}
+
+extension SharedConversationStore: KMPConversationEventBridging {
+    func observeConversationEvents(
+        _ handler: @escaping (SharedMviEvent) -> Void
+    ) -> () -> Void {
+        let observer = KMPSharedMviEventObserver(handler: handler)
+        let subscription = subscribe(observer: observer)
+        return {
+            _ = observer
+            subscription.cancel()
+        }
+    }
+}
+
+private enum KMPConversationIntent {
+    case event(sessionID: String, sequence: Int)
+    case replace(sessionID: String, lastSequence: Int)
+    case clear(sessionID: String)
+}
+
+struct KMPConversationChange {
+    let sessionID: String
+    let items: [ConversationItem]
+    let replacesAll: Bool
+}
+
+/// 高频 Conversation 状态只存在于 KMP projector；Swift 按有序 patch 维护 UI 镜像，
+/// 不再自行执行领域 fold。MainActor 保证 dispatch、event 与 UI 发布严格串行。
+@MainActor
+final class KMPConversationStoreAdapter {
+    private let store: any KMPConversationStoreBridging
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+    private var cancelEventSubscription: (() -> Void)?
+    private var pendingIntent: KMPConversationIntent?
+    private var pushedError: KMPConversationStoreError?
+    private(set) var itemsBySessionID: [String: [ConversationItem]] = [:]
+    private(set) var lastSequenceBySessionID: [String: Int] = [:]
+    private(set) var lastEventSequence: Int64?
+    private(set) var runtimeError: KMPConversationStoreError?
+    var onChange: ((KMPConversationChange) -> Void)?
+    var onError: ((KMPConversationStoreError) -> Void)?
+    var isOperational: Bool { runtimeError == nil }
+
+    init(
+        bridge: (any KMPConversationStoreBridging)? = nil,
+        facade: SharedMobileFacade = SharedMobileFacade()
+    ) {
+        store = bridge ?? facade.makeConversationStore(
+            userMessage: L10n.userMessageTitle,
+            context: L10n.contextInjectionTitle(""),
+            streamingAssistant: L10n.streamingAssistantTitle,
+            streamingReasoning: L10n.streamingReasoningTitle,
+            finalAssistant: "DeepSeek",
+            finalReasoning: "Think",
+            assemblingTool: L10n.assemblingToolTitle,
+            toolResultDone: L10n.toolResultDoneTitle,
+            toolResultFailed: L10n.toolResultFailedTitle
+        )
+        guard let eventStore = store as? any KMPConversationEventBridging else {
+            failClosed(.runtimeFailed("Conversation bridge 不支持 MVI event stream"))
+            return
+        }
+        cancelEventSubscription = eventStore.observeConversationEvents { [weak self] event in
+            MainActor.assumeIsolated { self?.receive(event) }
+        }
+    }
+
+    func items(for sessionID: String) -> [ConversationItem] {
+        itemsBySessionID[sessionID] ?? []
+    }
+
+    func receive(_ event: SessionEvent) throws {
+        try dispatch(.event(sessionID: event.sessionId, sequence: event.seq)) {
+            store.receiveEvent(eventJson: try encode(event))
+        }
+    }
+
+    func replace(sessionID: String, events: [SessionEvent]) throws {
+        let lastSequence = events.map(\.seq).max() ?? -1
+        try dispatch(.replace(sessionID: sessionID, lastSequence: lastSequence)) {
+            store.replaceSession(sessionId: sessionID, eventsJson: try encode(events))
+        }
+    }
+
+    func clear(sessionID: String) throws {
+        try dispatch(.clear(sessionID: sessionID)) {
+            store.clearSession(sessionId: sessionID)
+        }
+    }
+
+    private func dispatch(
+        _ intent: KMPConversationIntent,
+        operation: () throws -> SharedMviDispatchResult
+    ) throws {
+        if let runtimeError {
+            throw KMPConversationStoreError.runtimeFailed(runtimeError.localizedDescription)
+        }
+        pendingIntent = intent
+        pushedError = nil
+        defer { pendingIntent = nil }
+        let result: SharedMviDispatchResult
+        do {
+            result = try operation()
+        } catch {
+            throw KMPConversationStoreError.encoding(error.localizedDescription)
+        }
+        if let pushedError { throw pushedError }
+        guard result.accepted else {
+            throw KMPConversationStoreError.bridge(
+                code: result.errorCode ?? "unknown-error",
+                message: result.errorMessage
+            )
+        }
+    }
+
+    private func receive(_ event: SharedMviEvent) {
+        guard event.schema == 2,
+              event.domain == "conversation",
+              !event.transactionId.isEmpty else {
+            failClosed(.invalidEvent("MVI 信封 schema、domain 或 transactionId 无效"))
+            return
+        }
+        if event.kind == "snapshot" {
+            guard lastEventSequence == nil,
+                  let payload = event.statePayloadJson,
+                  let bootstrap = try? decoder.decode(KMPConversationBootstrap.self, from: Data(payload.utf8)),
+                  bootstrap.schema == 1 else {
+                failClosed(.invalidEvent("订阅基线无效"))
+                return
+            }
+            lastEventSequence = event.sequence
+            return
+        }
+        guard let previous = lastEventSequence,
+              event.sequence == previous + 1 else {
+            failClosed(.runtimeFailed("MVI event sequence 不连续"))
+            return
+        }
+        lastEventSequence = event.sequence
+        switch event.kind {
+        case "error":
+            let error = KMPConversationStoreError.bridge(
+                code: event.errorCode ?? "unknown-error",
+                message: event.errorMessage
+            )
+            pushedError = error
+            onError?(error)
+        case "transition":
+            guard let payload = event.statePayloadJson else {
+                failClosed(.invalidEvent("transition 缺少 patch"))
+                return
+            }
+            do {
+                let patch = try decoder.decode(KMPConversationPatch.self, from: Data(payload.utf8))
+                let change = try apply(patch, intent: pendingIntent)
+                onChange?(change)
+            } catch let error as KMPConversationStoreError {
+                failClosed(error)
+            } catch {
+                failClosed(.invalidEvent(error.localizedDescription))
+            }
+        default:
+            failClosed(.runtimeFailed("未知 MVI event kind：\(event.kind)"))
+        }
+    }
+
+    private func apply(
+        _ patch: KMPConversationPatch,
+        intent: KMPConversationIntent?
+    ) throws -> KMPConversationChange {
+        guard patch.schema == 1, !patch.sessionId.isEmpty else {
+            throw KMPConversationStoreError.invalidEvent("patch schema 或 sessionId 无效")
+        }
+        switch intent {
+        case .event(let sessionID, let sequence):
+            guard patch.sessionId == sessionID,
+                  patch.lastSequence == sequence,
+                  !patch.replacesAll,
+                  patch.replacementItems == nil,
+                  !patch.operations.isEmpty else {
+                throw KMPConversationStoreError.invalidEvent("live patch 与当前 event intent 不一致")
+            }
+        case .replace(let sessionID, let lastSequence):
+            guard patch.sessionId == sessionID,
+                  patch.lastSequence == lastSequence,
+                  patch.replacesAll,
+                  patch.replacementItems != nil,
+                  patch.operations.isEmpty else {
+                throw KMPConversationStoreError.invalidEvent("replace patch 与当前 intent 不一致")
+            }
+        case .clear(let sessionID):
+            guard patch.sessionId == sessionID,
+                  patch.lastSequence == -1,
+                  patch.replacesAll,
+                  patch.replacementItems?.isEmpty == true,
+                  patch.operations.isEmpty else {
+                throw KMPConversationStoreError.invalidEvent("clear patch 与当前 intent 不一致")
+            }
+        case nil:
+            throw KMPConversationStoreError.invalidEvent("transition 缺少对应 UI intent")
+        }
+
+        var next = itemsBySessionID[patch.sessionId] ?? []
+        if patch.replacesAll {
+            guard let replacementItems = patch.replacementItems else {
+                throw KMPConversationStoreError.invalidEvent("replace patch 缺少 replacementItems")
+            }
+            next = try replacementItems.map { snapshot in
+                guard let item = snapshot.item else {
+                    throw KMPConversationStoreError.invalidEvent("replacement item wire value 无效")
+                }
+                return item
+            }
+            guard Set(next.map(\.id)).count == next.count else {
+                throw KMPConversationStoreError.invalidEvent("replacement item id 重复")
+            }
+        } else {
+            for operation in patch.operations {
+                switch operation.kind {
+                case "insert":
+                    guard let item = operation.item?.item,
+                          operation.itemId == nil,
+                          operation.delta == nil,
+                          operation.epochSeconds == nil,
+                          !next.contains(where: { $0.id == item.id }) else {
+                        throw KMPConversationStoreError.invalidEvent("insert operation 无效")
+                    }
+                    next.append(item)
+                case "append-text":
+                    guard operation.item == nil,
+                          let itemID = operation.itemId, !itemID.isEmpty,
+                          let delta = operation.delta, !delta.isEmpty,
+                          let epochSeconds = operation.epochSeconds, epochSeconds.isFinite,
+                          let index = next.firstIndex(where: { $0.id == itemID }) else {
+                        throw KMPConversationStoreError.invalidEvent("append-text operation 无效")
+                    }
+                    let old = next[index]
+                    next[index] = ConversationItem(
+                        id: old.id,
+                        kind: old.kind,
+                        title: old.title,
+                        text: old.text + delta,
+                        images: old.images,
+                        isError: old.isError,
+                        date: Date(timeIntervalSince1970: epochSeconds)
+                    )
+                case "remove":
+                    guard operation.item == nil,
+                          let itemID = operation.itemId, !itemID.isEmpty,
+                          operation.delta == nil,
+                          operation.epochSeconds == nil,
+                          let index = next.firstIndex(where: { $0.id == itemID }) else {
+                        throw KMPConversationStoreError.invalidEvent("remove operation 无效")
+                    }
+                    next.remove(at: index)
+                default:
+                    throw KMPConversationStoreError.invalidEvent("未知 operation：\(operation.kind)")
+                }
+            }
+        }
+        itemsBySessionID[patch.sessionId] = next
+        lastSequenceBySessionID[patch.sessionId] = patch.lastSequence
+        return KMPConversationChange(
+            sessionID: patch.sessionId,
+            items: next,
+            replacesAll: patch.replacesAll
+        )
+    }
+
+    private func encode<T: Encodable>(_ value: T) throws -> String {
+        String(decoding: try encoder.encode(value), as: UTF8.self)
+    }
+
+    private func failClosed(_ error: KMPConversationStoreError) {
+        if runtimeError == nil { runtimeError = error }
+        pushedError = error
+        onError?(error)
+    }
+}
+
 struct KMPSessionSummarySnapshot: Codable, Equatable {
     var id: String
     var title: String
