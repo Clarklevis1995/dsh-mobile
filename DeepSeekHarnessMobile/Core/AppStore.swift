@@ -1306,13 +1306,7 @@ final class AppStore: ObservableObject {
     private func failSessionControlRequest(_ kind: String, responseSessionID: String? = nil) -> Bool {
         guard let token = kmpSessionControlStore.snapshot.requestTokens[kind],
               let active = kmpSessionControlStore.snapshot.activeRequestTargets[kind],
-              !(kmpSessionControlStore.snapshot.explicitSessionRequiredKinds.contains(kind) && responseSessionID == nil),
-              responseSessionID == nil || responseSessionID == active.sessionId,
-              sessionControlFailureCanCorrelate(
-                  kind: kind,
-                  active: active,
-                  responseSessionID: responseSessionID
-              ) else { return false }
+              responseSessionID == nil || responseSessionID == active.sessionId else { return false }
         let transition = applySessionControlTransition(kmpSessionControlStore.reduce(.requestFailed(
             kind: kind, isDefault: false, requestToken: token
         )))
@@ -1337,11 +1331,10 @@ final class AppStore: ObservableObject {
         responseValue: String? = nil
     ) -> Bool {
         guard let token = kmpSessionControlStore.snapshot.requestTokens[kind] else { return false }
-        if let previous = kmpSessionControlStore.snapshot.previousCompletedRequestTargets[kind] {
+        if responseTarget != nil || responseValue != nil {
             guard let active = kmpSessionControlStore.snapshot.activeRequestTargets[kind],
-                  responseTarget == active.target,
-                  responseValue == active.value,
-                  responseTarget != previous.target || responseValue != previous.value else { return false }
+                  responseTarget == nil || responseTarget == active.target,
+                  responseValue == nil || responseValue == active.value else { return false }
         }
         let transition = applySessionControlTransition(kmpSessionControlStore.reduce(.requestFailed(
             kind: kind, isDefault: true, requestToken: token
@@ -1359,20 +1352,6 @@ final class AppStore: ObservableObject {
         )
         lastError = message
         notice(String(localized: "控制请求失败"), message, sessionId: sessionID, isError: true)
-    }
-
-    private func sessionControlFailureCanCorrelate(
-        kind: String,
-        active: KMPSessionControlRequestTarget,
-        responseSessionID: String?
-    ) -> Bool {
-        guard let previous = kmpSessionControlStore.snapshot.previousCompletedRequestTargets[kind] else {
-            return true
-        }
-        // error 帧无 request token/业务 payload。只有显式 sessionId 同时匹配 active 且排除
-        // 上一代 session 时才可立即失败；其余情况宁可等待 timeout，也不能结束新 generation。
-        guard let responseSessionID else { return false }
-        return responseSessionID == active.sessionId && responseSessionID != previous.sessionId
     }
 
     private func sessionControlKind(from value: String) -> String? {

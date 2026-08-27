@@ -55,4 +55,5 @@
 
 - 2026-08-27 首轮人工核验未通过：Android Studio 启动的 iPhone 17 / iOS 26.5 Simulator 中，重复进入同一会话后出现 `KMP SessionControl 运行期结果失效`，随后模型和权限配置无法加载，`permission-options` 进入 12 秒超时。
 - 根因：同一 target 的正常第二次刷新被错误标记为必须显式携带 `sessionId`；兼容 Gateway 省略该字段时响应被忽略。超时隔离分支又遗漏清理 `explicitSessionRequiredKinds`，形成无 active target 的无效快照并触发永久 fail-closed。
-- 已修复并通过自动化门禁：KMP 44 项、iOS Simulator 94 项均为 0 失败；Android 单测/APK 与 iPhoneOS Release 构建成功。等待重新执行本清单第 3、4 节，人工结果仍保持“待核验”。
+- 2026-08-27 第二轮人工核验仍未通过：模型请求持续超时，权限刷新随后直接收到 `response-correlation-quarantined`。进一步对照实际 `dsh-plugin-mobile-gateway` 后确认，`models` 和 `permission-options` 成功帧按协议本来就不回显客户端 request token 或 `sessionId`；永久 quarantine 与强制显式 session 关联均无法兼容真实协议。
+- 已改为按 kind 的唯一 active generation 关联：无 `sessionId` 的成功/错误帧绑定当前 active 请求；显式回显但 session 不匹配的帧仍拒绝；超时只结束当前 generation，并允许直接重试或启动 latest queued target，不再要求断线重连。自动化门禁再次通过：KMP 44 项、iOS Simulator 94 项均为 0 失败；Android 单测/APK 与 iPhoneOS Release 构建成功。等待重新执行本清单第 3、4 节，人工结果仍保持“待核验”。

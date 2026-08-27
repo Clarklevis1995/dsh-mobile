@@ -241,11 +241,11 @@ class SharedSessionControlStore {
     }
 
     fun requestFinished(kind: String, isDefault: Boolean, requestToken: String?) =
-        terminate(kind, isDefault, requestToken, abnormal = false)
+        terminate(kind, isDefault, requestToken)
     fun requestTimedOut(kind: String, isDefault: Boolean, requestToken: String?) =
-        terminate(kind, isDefault, requestToken, abnormal = true)
+        terminate(kind, isDefault, requestToken)
     fun requestFailed(kind: String, isDefault: Boolean, requestToken: String?) =
-        terminate(kind, isDefault, requestToken, abnormal = true)
+        terminate(kind, isDefault, requestToken)
     fun requestsDisconnected(): SharedSessionControlResult = mutate("requests-disconnected") {
         Transition(synchronizePendingTargets(state.copy(
             loadingKinds = emptySet(),
@@ -262,9 +262,6 @@ class SharedSessionControlStore {
     private fun request(target: SessionControlRequestTarget, isConnected: Boolean): SharedSessionControlResult {
         if (!isConnected) return rejected("not-connected", target.kind)
         if (!target.hasCompletePayload()) return rejected("invalid-request-target", target.kind)
-        if (target.kind in state.quarantinedRequestKinds) {
-            return rejected("response-correlation-quarantined", target.kind)
-        }
         val active = state.activeRequestTargets[target.kind]
         if (active != null) {
             if (active == target) {
@@ -291,43 +288,18 @@ class SharedSessionControlStore {
     private fun terminate(
         kind: String,
         isDefault: Boolean,
-        requestToken: String?,
-        abnormal: Boolean
+        requestToken: String?
     ): SharedSessionControlResult {
         val active = state.activeRequestTargets[kind] ?: return unchanged()
         if (active.isDefault != isDefault || requestToken == null || state.requestTokens[kind] != requestToken) {
             return unchanged()
         }
         return mutate("terminate-$kind") {
-            if (!abnormal) return@mutate complete(state, kind, null)
-            val queued = state.queuedRequestTargets[kind]
-            val canRequireExplicitSession = active.sessionId != null && queued?.sessionId != null &&
-                active.sessionId != queued.sessionId
-            if (canRequireExplicitSession) {
-                val base = state.copy(explicitSessionRequiredKinds = state.explicitSessionRequiredKinds + kind)
-                complete(base, kind, null, clearExplicitRequirement = false)
-            } else {
-                // 网关不回显 token，且 nil/相同 target 无法区分迟到 A 和新 B。
-                // 丢弃 queued 并封锁该 kind 到重连，优先保证不污染状态。
-                val cleared = synchronizePendingTargets(state.copy(
-                    loadingKinds = state.loadingKinds - kind,
-                    defaultConfigurationLoadingKinds = state.defaultConfigurationLoadingKinds - kind,
-                    requestTokens = state.requestTokens - kind,
-                    activeRequestTargets = state.activeRequestTargets - kind,
-                    queuedRequestTargets = state.queuedRequestTargets - kind,
-                    previousCompletedRequestTargets = active.let {
-                        state.previousCompletedRequestTargets + (kind to it)
-                    },
-                    explicitSessionRequiredKinds = state.explicitSessionRequiredKinds - kind,
-                    quarantinedRequestKinds = state.quarantinedRequestKinds + kind
-                ))
-                Transition(
-                    cleared,
-                    applied = true,
-                    completedKind = kind,
-                    completedRequestToken = requestToken
-                )
-            }
+            // Mobile Gateway 的 control 响应不回显客户端 request token，models 与
+            // permission-options 也不回显 sessionId。超时/失败只能结束当前 active
+            // generation；永久 quarantine 会把一次失败放大成重连前始终不可用。
+            // 若用户已切换到 queued target，则在同一事务启动最新 target。
+            complete(state, kind, null)
         }
     }
 
@@ -335,7 +307,6 @@ class SharedSessionControlStore {
         kind: String, explicitTarget: SessionControlRequestTarget?, action: SessionControlAction?
     ): SharedSessionControlResult {
         val active = state.activeRequestTargets[kind] ?: return unchanged()
-        if (kind in state.explicitSessionRequiredKinds && explicitTarget?.sessionId == null) return unchanged()
         if (explicitTarget != null && !sameResponseTarget(active, explicitTarget)) return unchanged()
         if (action == null) return unchanged()
         return mutate("response-$kind") { complete(state, kind, action) }
@@ -358,16 +329,11 @@ class SharedSessionControlStore {
                 requestTokens = base.requestTokens + (target.kind to token),
                 activeRequestTargets = base.activeRequestTargets + (target.kind to target),
                 queuedRequestTargets = base.queuedRequestTargets - target.kind,
-                explicitSessionRequiredKinds = if (
-                    target.sessionId != null &&
-                    base.previousCompletedRequestTargets[target.kind]?.let { it != target } == true
-                ) {
-                    base.explicitSessionRequiredKinds + target.kind
-                } else {
-                    // 同一 target 的正常刷新依赖 Gateway“每请求单终态响应”约束，允许旧版
-                    // Gateway 继续省略 sessionId；只有跨 target generation 才强制显式关联。
-                    base.explicitSessionRequiredKinds - target.kind
-                }
+                // 真实 Mobile Gateway 的 models / permission-options 成功帧不会回显
+                // sessionId。每个 kind 只有一个 active generation，因此缺失的 sessionId
+                // 必须绑定 active target；显式回显且不匹配时仍由 response() 拒绝。
+                explicitSessionRequiredKinds = base.explicitSessionRequiredKinds - target.kind,
+                quarantinedRequestKinds = base.quarantinedRequestKinds - target.kind
             )
         )
         return Transition(next, listOf(target.effect(token)), applied = true)
@@ -376,8 +342,7 @@ class SharedSessionControlStore {
     private fun complete(
         base: SessionControlState,
         kind: String,
-        action: SessionControlAction?,
-        clearExplicitRequirement: Boolean = true
+        action: SessionControlAction?
     ): Transition {
         val completedTarget = base.activeRequestTargets[kind] ?: return Transition(base)
         val completedToken = base.requestTokens[kind] ?: return Transition(base)
@@ -390,9 +355,7 @@ class SharedSessionControlStore {
                 activeRequestTargets = reduced.activeRequestTargets - kind,
                 previousCompletedRequestTargets = reduced.previousCompletedRequestTargets +
                     (kind to completedTarget),
-                explicitSessionRequiredKinds = if (clearExplicitRequirement) {
-                    reduced.explicitSessionRequiredKinds - kind
-                } else reduced.explicitSessionRequiredKinds
+                explicitSessionRequiredKinds = reduced.explicitSessionRequiredKinds - kind
             )
         )
         val queued = cleared.queuedRequestTargets[kind] ?: return Transition(
@@ -401,22 +364,7 @@ class SharedSessionControlStore {
             completedKind = kind,
             completedRequestToken = completedToken
         )
-        if (completedTarget != queued && queued.sessionId == null && kind == "models") {
-            // global models 响应天然缺少 sessionId/token；不能在旧 session models 后安全启动。
-            return Transition(
-                cleared.copy(
-                    queuedRequestTargets = cleared.queuedRequestTargets - kind,
-                    quarantinedRequestKinds = cleared.quarantinedRequestKinds + kind
-                ),
-                applied = true,
-                completedKind = kind,
-                completedRequestToken = completedToken
-            )
-        }
-        val safeBase = if (completedTarget != queued && queued.sessionId != null) {
-            cleared.copy(explicitSessionRequiredKinds = cleared.explicitSessionRequiredKinds + kind)
-        } else cleared
-        val started = start(safeBase, queued)
+        val started = start(cleared, queued)
         return started.copy(completedKind = kind, completedRequestToken = completedToken)
     }
 

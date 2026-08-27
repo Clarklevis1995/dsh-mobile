@@ -38,16 +38,15 @@ class SharedSessionControlStoreTest {
         assertEquals("session-2", retryState.pendingModelsSessionId)
         assertEquals(retryEffect.requestToken, retryState.requestTokens["models"])
         assertTrue(retryEffect.requestToken != effect.requestToken)
-        assertTrue("models" in retryState.explicitSessionRequiredKinds)
+        assertFalse("models" in retryState.explicitSessionRequiredKinds)
 
-        // A 的迟到响应不得提交到 B，也不得结束 B。
-        val ambiguousLate = store.modelsReceived(null, null, true, "[]", false)
-        assertNull(ambiguousLate.snapshotJson)
+        // 显式回显的旧 session 仍不得提交到 B。
         val late = store.modelsReceived("session-1", null, true, "[]", false)
         assertNull(late.snapshotJson)
         assertEquals(retryEffect.requestToken, store.snapshot().state().requestTokens["models"])
 
-        val completed = store.modelsReceived("session-2", null, true, "[]", false).state()
+        // Gateway 的 models 成功帧不回显 sessionId，绑定唯一 active generation。
+        val completed = store.modelsReceived(null, null, true, "[]", false).state()
         assertFalse("models" in completed.loadingKinds)
         assertNull(completed.requestTokens["models"])
         assertNull(completed.pendingModelsSessionId)
@@ -71,21 +70,20 @@ class SharedSessionControlStoreTest {
     }
 
     @Test
-    fun normalGenerationRejectsLateNilResponseAndOldTokenFailure() {
+    fun normalGenerationAcceptsLegacyNilResponseAndRejectsExplicitOldSession() {
         val store = SharedSessionControlStore()
         val first = store.requestModels("session-a", true).effects().single()
         store.modelsReceived("session-a", null, true, "[]", false)
 
         val second = store.requestModels("session-b", true).effects().single()
-        assertTrue("models" in store.snapshot().state().explicitSessionRequiredKinds)
+        assertFalse("models" in store.snapshot().state().explicitSessionRequiredKinds)
 
-        // Gateway 不回显 token；后续 session-bound generation 必须显式携带 sessionId。
-        assertFalse(store.modelsReceived(null, null, true, "[]", false).applied)
+        // 显式旧 session 和旧 token 不能结束当前 generation。
         assertFalse(store.modelsReceived("session-a", null, true, "[]", false).applied)
         assertFalse(store.requestFailed("models", false, first.requestToken).applied)
         assertEquals(second.requestToken, store.snapshot().state().requestTokens["models"])
 
-        val completed = store.modelsReceived("session-b", null, true, "[]", false)
+        val completed = store.modelsReceived(null, null, true, "[]", false)
         assertTrue(completed.applied)
         assertTrue(completed.committed)
         assertEquals(second.requestToken, completed.completedRequestToken)
@@ -156,13 +154,13 @@ class SharedSessionControlStoreTest {
     }
 
     @Test
-    fun abnormalTerminationClearsExplicitSessionRequirementBeforeQuarantine() {
+    fun abnormalTerminationClearsActiveStateAndAllowsRetryWithoutReconnect() {
         val store = SharedSessionControlStore()
         store.requestModels("session-a", true)
         store.modelsReceived("session-a", null, true, "[]", false)
 
         val second = store.requestModels("session-b", true)
-        assertTrue("models" in second.state().explicitSessionRequiredKinds)
+        assertFalse("models" in second.state().explicitSessionRequiredKinds)
         val timedOut = store.requestTimedOut(
             "models",
             isDefault = false,
@@ -170,9 +168,25 @@ class SharedSessionControlStoreTest {
         )
 
         assertTrue(timedOut.applied)
-        assertTrue("models" in timedOut.state().quarantinedRequestKinds)
+        assertFalse("models" in timedOut.state().quarantinedRequestKinds)
         assertFalse("models" in timedOut.state().explicitSessionRequiredKinds)
         assertFalse("models" in timedOut.state().activeRequestTargets)
+        assertEquals(1, store.requestModels("session-b", true).effects().size)
+
+        val firstPermission = store.requestPermissionOptions("session-b", true).effects().single()
+        val permissionTimeout = store.requestTimedOut(
+            "permission-options",
+            isDefault = false,
+            firstPermission.requestToken
+        ).state()
+        assertFalse("permission-options" in permissionTimeout.quarantinedRequestKinds)
+        assertEquals(1, store.requestPermissionOptions("session-b", true).effects().size)
+        val completedPermission = store.permissionsReceived(
+            null,
+            """{"options":[{"value":"read-only","name":"Read"}],"currentValue":"read-only"}"""
+        )
+        assertTrue(completedPermission.applied)
+        assertFalse("permission-options" in completedPermission.state().loadingKinds)
     }
 
     @Test
@@ -282,19 +296,14 @@ class SharedSessionControlStoreTest {
     }
 
     @Test
-    fun ambiguousTargetIsQuarantinedAfterTimeoutUntilDisconnect() {
+    fun timedOutRequestCanBeRetriedWithoutReconnect() {
         val store = SharedSessionControlStore()
         val first = store.requestAgentPresets(true).effects().single()
         val timedOut = store.requestTimedOut("agent-presets", true, first.requestToken).state()
-        assertTrue("agent-presets" in timedOut.quarantinedRequestKinds)
-        assertEquals(
-            "response-correlation-quarantined",
-            store.requestAgentPresets(true).errorCode
-        )
-        assertNull(store.agentPresetsReceived("[]", false, false).snapshotJson)
-
-        store.requestsDisconnected()
-        assertEquals(1, store.requestAgentPresets(true).effects().size)
+        assertFalse("agent-presets" in timedOut.quarantinedRequestKinds)
+        val retried = store.requestAgentPresets(true)
+        assertEquals(1, retried.effects().size)
+        assertTrue(store.agentPresetsReceived("[]", false, false).applied)
     }
 
     @Test

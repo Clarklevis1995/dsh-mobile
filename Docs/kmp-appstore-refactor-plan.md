@@ -188,7 +188,7 @@ shared/src/commonMain/                  # 后续阶段创建
 
 验收标准：iOS UI、旧安装数据和 Gateway 请求语义保持不变；每个已切换子系统只有 KMP 一个业务状态来源；自动化测试与会话、问题、模型、权限人工回归通过。
 
-阶段 9.4 自动化验收结论：首轮人工核验发现并修复同一 target 重复刷新与 legacy 无 `sessionId` 响应的关联回归；修复后 KMP `shared` 全量 44 项测试、iPhone 17（iOS 26.5 Simulator）全量 94 项测试和 Android 2 项单元测试均为 0 失败；Android Debug APK 与 iOS 无签名 Release Device 构建成功；`git diff --check` 通过。阶段 9.1～9.4 的人工核验清单见 `Docs/kmp-stage9-manual-verification.md`，当前等待重新人工核验。
+阶段 9.4 自动化验收结论：两轮真实 Gateway 人工核验暴露了无 token/无 `sessionId` control 响应与严格隔离策略不兼容的问题；现已改为将无身份字段的响应绑定同 kind 唯一 active generation，显式 session 不匹配仍拒绝，超时后允许恢复重试。修复后 KMP `shared` 全量 44 项测试、iPhone 17（iOS 26.5 Simulator）全量 94 项测试和 Android 2 项单元测试均为 0 失败；Android Debug APK 与 iOS 无签名 Release Device 构建成功；`git diff --check` 通过。阶段 9.1～9.4 的人工核验清单见 `Docs/kmp-stage9-manual-verification.md`，当前等待再次人工核验。
 
 性能债务：当前 SessionControl 每次有状态变化仍跨 KMP/Swift 边界编解码全量 JSON snapshot（P3）。必须在阶段 10 开始前完成增量 patch 或结构化桥接方案评估，并在进入高频 Conversation/Trajectory 流式状态切换前落地适当方案，避免每个 token 复制完整状态。
 
@@ -290,6 +290,9 @@ xcodebuild test \
 
 ### 2026-08-27
 
+- 第二轮真实 Gateway 核验继续出现 `models` 超时和 `response-correlation-quarantined: permission-options`。对照 `dsh-plugin-mobile-gateway` 实现确认：`models`、`permission-options` 成功帧不会回显客户端 request token 或 `sessionId`，因此永久 quarantine/跨 generation 强制 session 关联虽然能拒绝理论上的迟到帧，却会拒绝正常产品响应并让一次超时扩大为重连前持续不可用。
+- SessionControl 关联策略改为协议可实现的边界：每个 kind 仍只有一个 active generation；缺少身份字段的响应绑定该 active，请求明确携带错误 session 时拒绝；超时/失败原子结束当前 generation并允许 latest queued 或后续人工刷新继续，不再永久 quarantine。无 token 协议无法数学上区分极晚旧响应，依赖 Gateway“每请求单终态响应”约束，这是恢复功能与避免永久不可用之间的明确取舍。
+- 更新 Kotlin/Swift 回归用例，覆盖跨 session 切换后的 legacy nil-session 响应、显式旧 session 拒绝、timeout 后无需重连即可重试，以及无 token 错误立即结束 active 并展示真实原因。最终 KMP 44 项、iOS Simulator 94 项均为 0 失败，Android 单测/APK 与 iPhoneOS Release 构建成功；仍等待人工复验，不进入 9.5。
 - 阶段 9.4 首轮真实 Gateway 人工核验发现回归：重复进入同一会话后，模型与权限响应可能省略 `sessionId`，KMP 将同 target 的第二代请求错误标记为必须显式关联并忽略响应；12 秒超时隔离时又残留 `explicitSessionRequiredKinds`，Swift 因快照中出现“无 active target 的显式关联 kind”而永久 fail-closed。模型和权限配置因此无法继续加载。
 - 修复同 target 正常刷新规则：仅当前后 target 不同时要求显式 session 关联；同 target 继续兼容 Gateway 省略 `sessionId` 的单终态响应。超时/quarantine 分支现在原子清理显式关联标记，避免生成无效快照。
 - 新增 Kotlin 与 Swift 回归测试，覆盖连续两次模型/权限刷新均省略 `sessionId`，以及跨 session generation 超时后快照仍满足 Swift/KMP 不变量。修复后 `:shared:allTests --rerun-tasks` 共 44 项、iPhone 17 / iOS 26.5 Simulator 全量 XCTest 共 94 项，均为 0 失败；Android 单测和 Debug APK、iPhoneOS Release 构建成功。当前继续等待阶段 9.1～9.4 人工复验，不进入 9.5。
@@ -298,7 +301,7 @@ xcodebuild test \
 
 - 完成阶段 9.4：新增有状态 `SharedSessionControlStore`，模型、权限、Context Usage、Stats、Agent Presets、默认模型与默认配置统一由 KMP 单写；Swift `AppStore` 只发布 KMP snapshot 并执行经过语义校验的显式 effect，旧 Swift SessionControl 写路径已关闭。
 - SessionControl 对同 kind 请求采用 `active + queued(latest-wins)` 串行模型，KMP 在同一事务内维护 request target、generation token、完成信号与下一 effect；Swift 桥接校验 `applied`、`committed`、`completedKind/completedRequestToken`、snapshot 和 effect 不变量，任何坏结果均在状态提交和平台 I/O 前 fail-closed。序列号统一使用 `Long/KotlinLong`，覆盖超过 Int32 的 Gateway sequence。
-- Gateway 响应不回显 request token，因此正常成功依赖“每个请求只有一个终态响应”的协议边界；超时、失败和跨 session 切换会要求显式 session 关联或隔离该 kind，迟到、缺少关联或 target 不匹配的响应不会提交到新 generation。断线/新 `hello` 会清除上一连接代际的 active、queued、token 与隔离状态。
+- Gateway 响应不回显 request token，`models`/`permission-options` 也不回显 `sessionId`，因此正常成功依赖“每个请求只有一个终态响应”的协议边界。每个 kind 只维护一个 active generation；缺少身份字段的响应绑定 active，显式 session/target 不匹配时拒绝；超时或失败后可直接重试。断线/新 `hello` 仍会清除上一连接代际的 active、queued 与 token 状态。
 - 阶段 9.4 自动化门禁通过：KMP `:shared:allTests --rerun-tasks` 共 42 项测试、0 失败；iPhone 17 Pro（iOS 26.2 Simulator）`xcodebuild test` 共 92 项测试、0 失败；Android 单测 2 项、0 失败且 Debug APK 构建成功（约 12 MB）；iOS 无签名 Release Device 构建成功；`git diff --check` 通过。当前暂停，等待阶段 9.1～9.4 iOS 人工核验，通过后执行阶段 9.5。
 - 记录 P3 性能债务：SessionControl 当前仍跨桥接层传递全量 JSON snapshot。阶段 10 前必须评估增量 patch/结构化桥接，并在高频流式迁移前采用合适方案，禁止把全量 snapshot 模式直接扩展到逐 token 路径。
 - 完成阶段 9.3：新增有状态 `SharedQuestionStore`，iOS Human Question 的请求、答案校验、提交/取消状态、Gateway 响应、resolved 与失败恢复统一改为 KMP 单写；Swift `pendingQuestionRequests` 和 `questionRequestStatuses` 仅发布 KMP 快照，旧 Swift Reducer 写路径已关闭。

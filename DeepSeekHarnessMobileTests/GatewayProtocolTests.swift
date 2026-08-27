@@ -1780,7 +1780,7 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(transition.snapshot.modelCatalogs, swiftState.modelCatalogs)
         XCTAssertEqual(transition.effects.first?.sessionId, "session-2")
         XCTAssertEqual(transition.snapshot.pendingModelsSessionId, "session-2")
-        XCTAssertTrue(transition.snapshot.explicitSessionRequiredKinds.contains("models"))
+        XCTAssertFalse(transition.snapshot.explicitSessionRequiredKinds.contains("models"))
 
         transition = adapter.reduce(.action(.modelsReceived(
             sessionID: "session-2",
@@ -1914,7 +1914,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testKMPSessionControlTimeoutKeepsSnapshotInvariantValid() {
+    func testKMPSessionControlTimeoutKeepsSnapshotInvariantValidAndAllowsRetry() {
         let adapter = KMPSessionControlStoreAdapter()
         _ = adapter.reduce(.requestModels(sessionID: "session-a", isConnected: true))
         _ = adapter.reduce(.action(.modelsReceived(
@@ -1926,7 +1926,7 @@ final class GatewayProtocolTests: XCTestCase {
         )))
         let started = adapter.reduce(.requestModels(sessionID: "session-b", isConnected: true))
         let token = try! XCTUnwrap(started.snapshot.requestTokens["models"])
-        XCTAssertTrue(started.snapshot.explicitSessionRequiredKinds.contains("models"))
+        XCTAssertFalse(started.snapshot.explicitSessionRequiredKinds.contains("models"))
 
         let timedOut = adapter.reduce(.requestTimedOut(
             kind: "models",
@@ -1935,9 +1935,35 @@ final class GatewayProtocolTests: XCTestCase {
         ))
         XCTAssertNil(timedOut.error)
         XCTAssertTrue(adapter.isOperational)
-        XCTAssertTrue(timedOut.snapshot.quarantinedRequestKinds.contains("models"))
+        XCTAssertFalse(timedOut.snapshot.quarantinedRequestKinds.contains("models"))
         XCTAssertFalse(timedOut.snapshot.explicitSessionRequiredKinds.contains("models"))
         XCTAssertNil(timedOut.snapshot.activeRequestTargets["models"])
+
+        let retried = adapter.reduce(.requestModels(sessionID: "session-b", isConnected: true))
+        XCTAssertNil(retried.error)
+        XCTAssertEqual(retried.effects.first?.sessionId, "session-b")
+
+        let permissionStarted = adapter.reduce(
+            .requestPermissionOptions(sessionID: "session-b", isConnected: true)
+        )
+        let permissionToken = try! XCTUnwrap(
+            permissionStarted.snapshot.requestTokens["permission-options"]
+        )
+        let permissionTimedOut = adapter.reduce(.requestTimedOut(
+            kind: "permission-options",
+            isDefault: false,
+            requestToken: permissionToken
+        ))
+        XCTAssertFalse(
+            permissionTimedOut.snapshot.quarantinedRequestKinds.contains("permission-options")
+        )
+        XCTAssertEqual(
+            adapter.reduce(.requestPermissionOptions(
+                sessionID: "session-b",
+                isConnected: true
+            )).effects.first?.sessionId,
+            "session-b"
+        )
     }
 
     @MainActor
@@ -2095,7 +2121,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testLateNilResponseAndTokenlessErrorDoNotFinishNewNormalGeneration() throws {
+    func testLegacyNilResponseFinishesOnlyTheCurrentNormalGeneration() throws {
         let bridge = SharedSessionControlStore()
         _ = bridge.requestModels(sessionId: "session-a", isConnected: true)
         _ = bridge.modelsReceived(
@@ -2119,22 +2145,19 @@ final class GatewayProtocolTests: XCTestCase {
             sessionControlBridge: bridge
         )
 
-        for json in [
-            #"{"kind":"models","groups":[]}"#,
-            #"{"kind":"error","requestType":"models","message":"late-a"}"#
-        ] {
-            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(json.utf8)))
-        }
-        XCTAssertNil(store.lastError)
-        XCTAssertTrue(store.protocolNotices.isEmpty)
+        // 显式回显的旧 session 不能结束当前 generation。
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"models","sessionId":"session-a","groups":[]}"#.utf8
+        )))
         var snapshot = try JSONDecoder().decode(
             KMPSessionControlSnapshot.self,
             from: Data(bridge.snapshot().snapshotJson!.utf8)
         )
         XCTAssertEqual(snapshot.requestTokens["models"], secondToken)
 
+        // 真实 Gateway 的 models 帧不回显 sessionId，绑定当前唯一 active request。
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
-            #"{"kind":"models","sessionId":"session-b","groups":[]}"#.utf8
+            #"{"kind":"models","groups":[]}"#.utf8
         )))
         snapshot = try JSONDecoder().decode(
             KMPSessionControlSnapshot.self,
@@ -2174,7 +2197,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testAmbiguousRepeatedNegativeDefaultResponsesDoNotShowFalseErrors() throws {
+    func testTokenlessNegativeDefaultResponsesFinishTheOnlyActiveGeneration() throws {
         let selection = GatewayModelSelection(provider: "openai", model: "gpt-5")
         let selectionJSON = String(decoding: try JSONEncoder().encode(selection), as: UTF8.self)
 
@@ -2193,9 +2216,9 @@ final class GatewayProtocolTests: XCTestCase {
         saveStore.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"save-default-model"}"#.utf8
         )))
-        XCTAssertTrue(saveStore.defaultConfigurationLoadingKinds.contains("save-default-model"))
-        XCTAssertNil(saveStore.lastError)
-        XCTAssertTrue(saveStore.protocolNotices.isEmpty)
+        XCTAssertFalse(saveStore.defaultConfigurationLoadingKinds.contains("save-default-model"))
+        XCTAssertNotNil(saveStore.lastError)
+        XCTAssertEqual(saveStore.protocolNotices.last?.isError, true)
 
         let defaultBridge = SharedSessionControlStore()
         _ = defaultBridge.setDefault(target: "permission", value: "read-only", isConnected: true)
@@ -2212,9 +2235,9 @@ final class GatewayProtocolTests: XCTestCase {
         defaultStore.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
             #"{"kind":"set-default","applied":false,"target":"permission","value":"read-only"}"#.utf8
         )))
-        XCTAssertTrue(defaultStore.defaultConfigurationLoadingKinds.contains("set-default"))
-        XCTAssertNil(defaultStore.lastError)
-        XCTAssertTrue(defaultStore.protocolNotices.isEmpty)
+        XCTAssertFalse(defaultStore.defaultConfigurationLoadingKinds.contains("set-default"))
+        XCTAssertNotNil(defaultStore.lastError)
+        XCTAssertEqual(defaultStore.protocolNotices.last?.isError, true)
     }
 
     @MainActor
