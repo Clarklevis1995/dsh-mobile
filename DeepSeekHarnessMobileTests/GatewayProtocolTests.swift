@@ -576,6 +576,47 @@ final class ConversationReactivationTests: XCTestCase {
         )
     }
 
+    /// The error-frame path distinguishes definitive deletion from
+    /// transient failure: `session-not-found` clears the interruption
+    /// marker (no tail can ever be re-captured — a re-armed marker would
+    /// doom every later activation to a failing fetch), while other history
+    /// errors re-arm it. Observable via push behavior: the watermark in
+    /// these fixtures says .skipLoading, so a forced load can only come
+    /// from the marker.
+    func testSessionNotFoundErrorClearsInterruptionMarker() async {
+        let store = makeCoveredStore(running: true)
+        store.gateway.onFrame?(GatewayFrame(kind: "hello", protocol: 3, authenticated: true))
+        store.gateway.onFrame?(GatewayFrame(
+            kind: "error",
+            sessionId: "s1",
+            code: "session-not-found",
+            requestType: "history"
+        ))
+        store.prepareConversation(for: store.sessions[0])
+        await store.activatePreparedConversation(sessionID: "s1")
+        XCTAssertFalse(
+            store.historyLoadingSessionIds.contains("s1"),
+            "a definitively deleted session must not re-arm: no doomed fetch on later pushes"
+        )
+    }
+
+    func testTransientHistoryErrorReArmsInterruptionMarker() async {
+        let store = makeCoveredStore(running: true)
+        store.gateway.onFrame?(GatewayFrame(kind: "hello", protocol: 3, authenticated: true))
+        store.gateway.onFrame?(GatewayFrame(
+            kind: "error",
+            sessionId: "s1",
+            code: "upstream-unavailable",
+            requestType: "history"
+        ))
+        store.prepareConversation(for: store.sessions[0])
+        await store.activatePreparedConversation(sessionID: "s1")
+        XCTAssertTrue(
+            store.historyLoadingSessionIds.contains("s1"),
+            "a transient tail-fetch failure must re-arm so the next push retries the catch-up"
+        )
+    }
+
     func testInterruptedTurnForcesReloadOnLaterPlainPush() async {
         let store = makeCoveredStore(running: true)
         // Reconnect with the workspace list showing (no conversation open):

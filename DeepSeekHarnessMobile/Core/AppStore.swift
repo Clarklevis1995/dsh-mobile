@@ -700,11 +700,14 @@ final class AppStore: ObservableObject {
             guard let self, self.historyRequestTokens[sessionId] == token else { return }
             let hasUsableLocalContent = !self.events[sessionId, default: []].isEmpty
                 || !self.renderedConversationItems[sessionId, default: []].isEmpty
+            let timedOutLoadKind = self.historyBatchKinds[sessionId]
             self.finishHistoryLoading(sessionId)
-            // The forced/interrupted catch-up fetch never completed: coverage
-            // is uncertain, so re-arm the interruption for the next push
-            // (bounded — one redundant fetch at most).
-            self.interruptedTurnSessionIds.insert(sessionId)
+            if timedOutLoadKind != .older {
+                // The tail fetch never completed; coverage is uncertain, so
+                // re-arm for the next push (bounded — one redundant fetch).
+                // Pagination timeouts leave the tail baseline untouched.
+                self.interruptedTurnSessionIds.insert(sessionId)
+            }
             self.scheduleConversationProjection(for: sessionId)
             if hasUsableLocalContent {
                 self.notice(
@@ -1122,11 +1125,23 @@ final class AppStore: ObservableObject {
                 finishDefaultConfigurationRequest(requestType)
             }
             if frame.requestType == "history", let id = frame.sessionId ?? pendingHistorySessionId {
+                // Capture the kind before finishHistoryLoading nils it.
+                let failedLoadKind = historyBatchKinds[id]
                 finishHistoryLoading(id)
-                // The fetch failed; coverage is uncertain. Re-arm so a later
-                // push forces the catch-up again (bounded: one redundant
-                // fetch at most per failure).
-                interruptedTurnSessionIds.insert(id)
+                if frame.code == "session-not-found" {
+                    // The session is gone; no tail exists to re-capture.
+                    // Clear instead of re-arming, or every later activation
+                    // of the (deleted) session repeats a doomed fetch.
+                    interruptedTurnSessionIds.remove(id)
+                } else if failedLoadKind != .older {
+                    // The tail fetch failed; coverage is uncertain. Re-arm so
+                    // a later push forces the catch-up again. Pagination-only
+                    // (.older) failures leave the tail baseline untouched and
+                    // must not re-arm. Accepted widening: a routine baseline
+                    // failure also re-arms — bounded to one redundant fetch
+                    // on the next push.
+                    interruptedTurnSessionIds.insert(id)
+                }
             }
             let detail = [frame.code, frame.message].compactMap { $0 }.joined(separator: ": ")
             if let requestType = frame.requestType,
@@ -1579,6 +1594,10 @@ final class AppStore: ObservableObject {
         // the current frame's raw list. Filtering on the archived set alone
         // would let a stale set hide a session that was just un-archived.
         sessions.removeAll { archivedSessionIds.contains($0.id) && !presentSessionIds.contains($0.id) }
+        // Archived ids are definitively not pushable (the disposition pops
+        // them), so their interruption markers are dead weight — a session
+        // un-archived later is re-captured by the next hello if still running.
+        interruptedTurnSessionIds.subtract(archivedSessionIds)
         sessions.sort { $0.lastActivity > $1.lastActivity }
     }
     /// A fresh session summary is the first authoritative signal that the open
