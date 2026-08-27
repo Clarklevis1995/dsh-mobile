@@ -98,10 +98,10 @@ final class AppStore: ObservableObject {
     /// cannot invalidate the header, pager, composer, or trajectory page.
     private(set) var renderedConversationItems: [String: [ConversationItem]] = [:]
     @Published private(set) var conversationContentSessionIds: Set<String> = []
-    @Published var historyHasMore: [String: Bool] = [:]
-    @Published var historyLoadingSessionIds: Set<String> = []
-    @Published var historyLoadingOlderSessionIds: Set<String> = []
-    @Published var historyLoadProgress: [String: HistoryLoadProgress] = [:]
+    @Published private(set) var historyHasMore: [String: Bool] = [:]
+    @Published private(set) var historyLoadingSessionIds: Set<String> = []
+    @Published private(set) var historyLoadingOlderSessionIds: Set<String> = []
+    @Published private(set) var historyLoadProgress: [String: HistoryLoadProgress] = [:]
     @Published var searchResults: [GatewaySearchItem] = []
     @Published var hostSnapshot: GatewayHostSnapshot?
     @Published var directoryPath: String?
@@ -152,7 +152,8 @@ final class AppStore: ObservableObject {
     private let kmpConversationStore: KMPConversationStoreAdapter
     /// Trajectory 仅在页面活跃时由 KMP 增量计算，避免后台 token 产生无用工作。
     private let kmpTrajectoryStore: KMPTrajectoryStoreAdapter
-    private var historyState = HistoryState()
+    /// History pagination、cursor、水位与 raw event 去重的唯一业务状态来源。
+    private let kmpHistoryStore: KMPHistoryStoreAdapter
     private let historySyncEngine = HistorySyncEngine()
     /// The remote session activity timestamp covered by a completed history load.
     /// This intentionally remains an in-memory cache: events are not persisted
@@ -200,6 +201,7 @@ final class AppStore: ObservableObject {
         sessionControlBridge: (any KMPSessionControlStoreBridging)? = nil,
         conversationBridge: (any KMPConversationStoreBridging)? = nil,
         trajectoryBridge: (any KMPTrajectoryStoreBridging)? = nil,
+        historyBridge: (any KMPHistoryStoreBridging)? = nil,
         questionEffectExecutor: (any GatewayQuestionEffectExecuting)? = nil,
         sessionControlEffectExecutor: (any GatewaySessionControlEffectExecuting)? = nil,
         backgroundExecutionController: AgentBackgroundExecutionController? = nil
@@ -221,6 +223,8 @@ final class AppStore: ObservableObject {
         self.kmpConversationStore = kmpConversationStore
         let kmpTrajectoryStore = KMPTrajectoryStoreAdapter(bridge: trajectoryBridge)
         self.kmpTrajectoryStore = kmpTrajectoryStore
+        let kmpHistoryStore = KMPHistoryStoreAdapter(bridge: historyBridge)
+        self.kmpHistoryStore = kmpHistoryStore
         self.sessionControlEffectExecutor = sessionControlEffectExecutor ?? gateway
         appLanguage = AppLanguage.load()
         selectedWorkspaceId = preferences.selectedWorkspaceID
@@ -262,6 +266,12 @@ final class AppStore: ObservableObject {
             self?.trajectoryTimeline(for: change.sessionID).publish(change.nodes)
         }
         kmpTrajectoryStore.onError = { [weak self] error in
+            self?.lastError = error.localizedDescription
+        }
+        kmpHistoryStore.onChange = { [weak self] change in
+            self?.handleHistoryChange(change)
+        }
+        kmpHistoryStore.onError = { [weak self] error in
             self?.lastError = error.localizedDescription
         }
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
@@ -509,7 +519,7 @@ final class AppStore: ObservableObject {
 
     private func shouldRefreshHistory(for session: SessionSummary) -> Bool {
         guard !historyLoadingSessionIds.contains(session.id) else { return false }
-        guard let syncedTimestamp = historyState.sessions[session.id]?.syncedActivityTimestamp else { return true }
+        guard let syncedTimestamp = kmpHistoryStore.syncedActivityTimestamp(for: session.id) else { return true }
         let syncedActivity = Date(timeIntervalSince1970: syncedTimestamp)
         // A completed history baseline may subsequently be extended by the
         // subscribed live tail. Both sources are already present locally, so
@@ -524,14 +534,15 @@ final class AppStore: ObservableObject {
             lastError = String(localized: "WebSocket 尚未连接，无法加载历史记录")
             return
         }
-        let result = reduceHistory(.start(
-            sessionID: sessionId,
-            older: older,
-            hasLocalEvents: !events[sessionId, default: []].isEmpty,
-            earliestLocalSequence: events[sessionId]?.first?.seq
-        ))
-        if case .requestPage(let beforeSequence) = result {
-            requestHistoryPage(for: sessionId, beforeSeq: beforeSequence)
+        do {
+            try kmpHistoryStore.start(
+                sessionID: sessionId,
+                older: older,
+                hasLocalEvents: !events[sessionId, default: []].isEmpty,
+                earliestLocalSequence: events[sessionId]?.first?.seq
+            )
+        } catch {
+            lastError = error.localizedDescription
         }
     }
 
@@ -540,7 +551,8 @@ final class AppStore: ObservableObject {
             guard let self else { return }
             let hasUsableLocalContent = !self.events[sessionId, default: []].isEmpty
                 || !self.renderedConversationItems[sessionId, default: []].isEmpty
-            _ = self.reduceHistory(.timedOut(sessionID: sessionId))
+            do { try self.kmpHistoryStore.timedOut(sessionID: sessionId) }
+            catch { self.lastError = error.localizedDescription }
             self.scheduleConversationProjection(for: sessionId)
             if hasUsableLocalContent {
                 self.notice(
@@ -680,7 +692,7 @@ final class AppStore: ObservableObject {
     private func handle(_ frame: GatewayFrame) {
         let context = GatewayFrameRoutingContext(
             selectedSessionID: selectedSessionId,
-            pendingHistorySessionID: historyState.pendingSessionID,
+            pendingHistorySessionID: kmpHistoryStore.pendingSessionID,
             pendingModelsSessionID: pendingModelsSessionId,
             isPendingGlobalModelsRequest: isPendingGlobalModelsRequest,
             pendingModelSelectionSessionID: pendingModelSelectionSessionId,
@@ -1012,7 +1024,7 @@ final class AppStore: ObservableObject {
             correlatedControlFailure = failDefaultConfigurationRequest(requestType)
         }
         if payload.requestType == "history",
-           let sessionID = payload.sessionID ?? historyState.pendingSessionID {
+           let sessionID = payload.sessionID ?? kmpHistoryStore.pendingSessionID {
             finishHistoryLoading(sessionID)
         }
         let detail = [payload.code, payload.message].compactMap { $0 }.joined(separator: ": ")
@@ -1085,87 +1097,48 @@ final class AppStore: ObservableObject {
         let rawEvents = payload.rawEvents
         // Invalidate the network timeout; processing now has its own token.
         let processingToken = historySyncEngine.beginProcessing(sessionID: id)
-        _ = reduceHistory(.processingStarted(
-            sessionID: id,
-            rawEventCount: rawEvents.count,
-            hasMore: payload.hasMore
-        ))
+        do {
+            try kmpHistoryStore.processingStarted(
+                sessionID: id,
+                rawEventCount: rawEvents.count,
+                hasMore: payload.hasMore
+            )
+        } catch {
+            let primaryError = error.localizedDescription
+            lastError = primaryError
+            historySyncEngine.finish(sessionID: id)
+            do { try kmpHistoryStore.cancel(sessionID: id) }
+            catch { lastError = "\(primaryError)\n\(error.localizedDescription)" }
+            return
+        }
 
         Task { [weak self] in
             let normalized = await Task.detached(priority: .userInitiated) {
                 rawEvents.map { $0.normalized(sessionId: id) }
             }.value
             guard let self, self.historySyncEngine.isCurrent(processingToken, sessionID: id) else { return }
-
-            // Raw history reconciliation remains a platform persistence concern
-            // in 10.2. Conversation projection itself is rebuilt only by KMP.
-            // If an out-of-order live mutation lands during this detached merge,
-            // retry against the newer source before dispatching the baseline.
-            var sourceEpoch = self.conversationProjectionEpochs[id, default: 0]
-            var sourceEvents = self.events[id, default: []]
-            while true {
-                let rebaseSource = sourceEvents
-                var rebasedEvents = await Task.detached(priority: .userInitiated) {
-                    var records: [Int: SessionEvent] = [:]
-                    normalized.forEach { records[$0.seq] = $0 }
-                    rebaseSource.forEach { records[$0.seq] = $0 }
-                    return records.values.sorted { $0.seq < $1.seq }
-                }.value
-                guard self.historySyncEngine.isCurrent(processingToken, sessionID: id) else { return }
-
-                // Only duplicate/out-of-order live mutations advance this
-                // epoch. Normal chunks append concurrently without invalidating
-                // the history build and are picked up below by binary-searching
-                // the candidate watermark.
-                if self.conversationProjectionEpochs[id, default: 0] != sourceEpoch {
-                    sourceEpoch = self.conversationProjectionEpochs[id, default: 0]
-                    sourceEvents = self.events[id, default: []]
-                    continue
-                }
-
-                // Prefer the live lane for duplicates and include the tail that
-                // arrived while the detached history merge was running.
-                let latest = self.events[id, default: []]
-                var records: [Int: SessionEvent] = [:]
-                rebasedEvents.forEach { records[$0.seq] = $0 }
-                latest.forEach { records[$0.seq] = $0 }
-                rebasedEvents = records.values.sorted { $0.seq < $1.seq }
-
-                // The commit is one main-actor transaction. Invalidate any
-                // older candidate, then let KMP atomically replace its projector
-                // and push a presentation baseline back to Swift.
-                self.conversationProjectionEpochs[id, default: 0] &+= 1
-                do {
-                    try self.kmpConversationStore.replace(sessionID: id, events: rebasedEvents)
-                    if self.activeTrajectorySessionIDs.contains(id) {
-                        self.pendingTrajectoryEvents[id] = nil
-                        self.trajectoryProjectionDrivers[id]?.stop()
-                        try self.kmpTrajectoryStore.replace(sessionID: id, events: rebasedEvents)
-                    }
-                } catch {
-                    self.lastError = error.localizedDescription
-                    return
-                }
-                self.events[id] = rebasedEvents
-                self.enqueueImageAttachments(in: rebasedEvents, sessionId: id)
-                break
+            do {
+                try self.kmpHistoryStore.pageReceived(
+                    sessionID: id,
+                    events: normalized,
+                    byteCount: payload.byteCount,
+                    hasMore: payload.hasMore,
+                    nextBeforeSequence: payload.nextBeforeSequence,
+                    remoteActivityTimestamp: self.sessions.first(where: { $0.id == id })?.lastActivity.timeIntervalSince1970
+                )
+            } catch {
+                let primaryError = error.localizedDescription
+                self.lastError = primaryError
+                self.historySyncEngine.finish(sessionID: id)
+                do { try self.kmpHistoryStore.cancel(sessionID: id) }
+                catch { self.lastError = "\(primaryError)\n\(error.localizedDescription)" }
             }
-
-            let result = self.reduceHistory(.pageCommitted(
-                sessionID: id,
-                eventCount: normalized.count,
-                byteCount: payload.byteCount,
-                hasMore: payload.hasMore,
-                nextBeforeSequence: payload.nextBeforeSequence,
-                earliestLocalSequence: self.events[id]?.first?.seq,
-                remoteActivityTimestamp: self.sessions.first(where: { $0.id == id })?.lastActivity.timeIntervalSince1970
-            ))
-            self.handleHistoryResult(result, sessionID: id)
         }
     }
     private func finishHistoryLoading(_ sessionId: String) {
         historySyncEngine.finish(sessionID: sessionId)
-        _ = reduceHistory(.cancelled(sessionID: sessionId))
+        do { try kmpHistoryStore.cancel(sessionID: sessionId) }
+        catch { lastError = error.localizedDescription }
     }
     private func applyHistoryProjections(_ projections: JSONValue?, sessionId: String) {
         guard let values = projections?["values"] else { return }
@@ -1181,43 +1154,12 @@ final class AppStore: ObservableObject {
         }
     }
     private func merge(_ record: SessionEvent) {
-        let sessionId = record.sessionId
-        var sessionEvents = events[sessionId, default: []]
-        let mergeResult = HistoryEventMerger.merge(record, into: &sessionEvents)
-        events[sessionId] = sessionEvents
-        if mergeResult.replacedOrInsertedOutOfOrder {
-            // A duplicate or out-of-order frame cannot enter KMP's append-only
-            // live lane; replace its baseline in one explicit transaction.
-            conversationProjectionEpochs[sessionId, default: 0] &+= 1
-            do {
-                try kmpConversationStore.replace(sessionID: sessionId, events: sessionEvents)
-                if activeTrajectorySessionIDs.contains(sessionId) {
-                    pendingTrajectoryEvents[sessionId] = nil
-                    trajectoryProjectionDrivers[sessionId]?.stop()
-                    try kmpTrajectoryStore.replace(sessionID: sessionId, events: sessionEvents)
-                }
-            } catch {
-                lastError = error.localizedDescription
-            }
-        } else {
-            do {
-                try kmpConversationStore.receive(record)
-                if activeTrajectorySessionIDs.contains(sessionId) {
-                    pendingTrajectoryEvents[sessionId, default: []].append(record)
-                    scheduleTrajectoryProjection(for: sessionId)
-                }
-            } catch {
-                lastError = error.localizedDescription
-            }
+        do { try kmpHistoryStore.receive(record) }
+        catch {
+            lastError = error.localizedDescription
+            return
         }
         applyEvent(record)
-        // Once the cache has been fully established, subscribed live events are
-        // already the newest local content. Advance the watermark so reopening
-        // the session does not download the same history again.
-        _ = reduceHistory(.liveEventReceived(
-            sessionID: sessionId,
-            activityTimestamp: record.date.timeIntervalSince1970
-        ))
     }
 
     private func enqueueImageAttachments(in records: [SessionEvent], sessionId: String) {
@@ -1498,6 +1440,8 @@ final class AppStore: ObservableObject {
             dispatchSessionControl(.clearSessionsData(sessionIDs: clearedSessionIDs))
             for sessionID in clearedSessionIDs {
                 do {
+                    historySyncEngine.finish(sessionID: sessionID)
+                    try kmpHistoryStore.clear(sessionID: sessionID)
                     try kmpConversationStore.clear(sessionID: sessionID)
                     try kmpTrajectoryStore.clear(sessionID: sessionID)
                     activeTrajectorySessionIDs.remove(sessionID)
@@ -1551,44 +1495,93 @@ final class AppStore: ObservableObject {
             lastError = "KMP Question 返回未知 effect：\(effect.action)"
         }
     }
-    @discardableResult
-    private func reduceHistory(_ action: HistoryAction) -> HistoryResult {
-        let result = HistoryReducer.reduce(state: &historyState, action: action)
-        let hasMore = historyState.sessions.mapValues(\.hasMore)
-        let loading = Set(historyState.sessions.compactMap { $0.value.isLoading ? $0.key : nil })
-        let loadingOlder = Set(historyState.sessions.compactMap { $0.value.isLoadingOlder ? $0.key : nil })
-        let progress = Dictionary(uniqueKeysWithValues: historyState.sessions.compactMap { key, value in
-            value.progress.map { (key, $0) }
-        })
-        if hasMore != historyHasMore { historyHasMore = hasMore }
-        if loading != historyLoadingSessionIds { historyLoadingSessionIds = loading }
-        if loadingOlder != historyLoadingOlderSessionIds { historyLoadingOlderSessionIds = loadingOlder }
-        if progress != historyLoadProgress { historyLoadProgress = progress }
-        return result
-    }
-    private func handleHistoryResult(_ result: HistoryResult, sessionID: String) {
-        switch result {
-        case .none:
+    private func handleHistoryChange(_ change: KMPHistoryChange) {
+        // stage10-kmp-write-scope: history-begin
+        if change.hasMore != historyHasMore { historyHasMore = change.hasMore }
+        if change.loadingSessionIDs != historyLoadingSessionIds {
+            historyLoadingSessionIds = change.loadingSessionIDs
+        }
+        if change.loadingOlderSessionIDs != historyLoadingOlderSessionIds {
+            historyLoadingOlderSessionIds = change.loadingOlderSessionIDs
+        }
+        if change.progress != historyLoadProgress { historyLoadProgress = change.progress }
+        // stage10-kmp-write-scope: history-end
+
+        if let patchKind = change.eventPatchKind {
+            events[change.sessionID] = change.events
+            do {
+                if patchKind == "append", let record = change.eventRecord {
+                    try kmpConversationStore.receive(record)
+                    if activeTrajectorySessionIDs.contains(change.sessionID) {
+                        pendingTrajectoryEvents[change.sessionID, default: []].append(record)
+                        scheduleTrajectoryProjection(for: change.sessionID)
+                    }
+                } else {
+                    conversationProjectionEpochs[change.sessionID, default: 0] &+= 1
+                    try kmpConversationStore.replace(sessionID: change.sessionID, events: change.events)
+                    if activeTrajectorySessionIDs.contains(change.sessionID) {
+                        pendingTrajectoryEvents[change.sessionID] = nil
+                        trajectoryProjectionDrivers[change.sessionID]?.stop()
+                        try kmpTrajectoryStore.replace(sessionID: change.sessionID, events: change.events)
+                    }
+                }
+            } catch {
+                lastError = error.localizedDescription
+                return
+            }
+            if patchKind != "append" {
+                enqueueImageAttachments(in: change.events, sessionId: change.sessionID)
+            }
+        }
+
+        if let effect = change.effect {
+            guard effect.action == "request-page" else {
+                lastError = "KMP History 返回未知 effect：\(effect.action)"
+                return
+            }
+            requestHistoryPage(for: effect.sessionId, beforeSeq: effect.beforeSequence)
+        }
+
+        switch change.outcome {
+        case "none", "request-page":
             break
-        case .requestPage(let beforeSequence):
-            requestHistoryPage(for: sessionID, beforeSeq: beforeSequence)
-        case .stopped:
-            historySyncEngine.finish(sessionID: sessionID)
-        case .failed(let message):
-            historySyncEngine.finish(sessionID: sessionID)
+        case "stopped":
+            historySyncEngine.finish(sessionID: change.sessionID)
+        case "failed":
+            historySyncEngine.finish(sessionID: change.sessionID)
+            let message: String
+            switch change.failureCode {
+            case "MISSING_NEXT_CURSOR":
+                message = String(localized: "history.pagination.stopped.hasmore", defaultValue: "网关返回 hasMore:true，但缺少 nextBeforeSeq，已停止自动续页。")
+            case "REPEATED_CURSOR":
+                message = String(localized: "history.cursor.loop", defaultValue: "网关重复返回历史游标，已停止自动续页以避免循环。")
+            default:
+                message = "KMP History 分页失败（\(change.failureCode ?? "unknown")）"
+            }
             lastError = message
-            notice(String(localized: "notice.history.pagination-failed", defaultValue: "历史记录分页失败"), message, sessionId: sessionID, isError: true)
-        case .completed(let eventCount, let byteCount, let hasMore):
-            historySyncEngine.finish(sessionID: sessionID)
+            notice(
+                String(localized: "notice.history.pagination-failed", defaultValue: "历史记录分页失败"),
+                message,
+                sessionId: change.sessionID,
+                isError: true
+            )
+        case "completed":
+            historySyncEngine.finish(sessionID: change.sessionID)
+            let eventCount = change.completedEventCount ?? 0
+            let byteCount = change.completedByteCount ?? 0
             let byteDetail = byteCount > 0
                 ? " · \(ByteCountFormatter.string(fromByteCount: Int64(byteCount), countStyle: .file))"
                 : ""
-            let moreDetail = hasMore ? String(localized: "history.swipe.up.hint", defaultValue: " · 向上滑动加载更早记录") : ""
+            let moreDetail = change.completedHasMore == true
+                ? String(localized: "history.swipe.up.hint", defaultValue: " · 向上滑动加载更早记录")
+                : ""
             notice(
                 String(localized: "notice.history.loaded", defaultValue: "历史记录已加载"),
                 String(localized: "history.loaded.detail", defaultValue: "\(eventCount) 个事件\(byteDetail)\(moreDetail)"),
-                sessionId: sessionID
+                sessionId: change.sessionID
             )
+        default:
+            lastError = "KMP History 返回未知 outcome：\(change.outcome)"
         }
     }
     @discardableResult

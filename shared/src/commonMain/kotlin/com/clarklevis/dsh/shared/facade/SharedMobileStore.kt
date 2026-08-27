@@ -203,6 +203,8 @@ class SharedMobileFacade {
 
     fun makeTrajectoryStore(): SharedTrajectoryStore = SharedTrajectoryStore()
 
+    fun makeHistoryStore(): SharedHistoryStore = SharedHistoryStore()
+
     fun makeConversationStore(
         userMessage: String,
         context: String,

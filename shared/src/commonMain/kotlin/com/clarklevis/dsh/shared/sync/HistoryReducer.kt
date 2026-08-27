@@ -1,17 +1,20 @@
 package com.clarklevis.dsh.shared.sync
 
 import com.clarklevis.dsh.shared.protocol.SessionEvent
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class HistorySyncConfiguration(
     val pageMessageLimit: Int = 60,
     val pageByteBudget: Int = 4 * 1024 * 1024,
     val pagesPerBatch: Int = 2
 )
 
-data class HistoryLoadProgress(val loaded: Int, val total: Int?)
-enum class HistoryBatchKind { LATEST, OLDER }
-enum class HistoryFailureCode { MISSING_NEXT_CURSOR, REPEATED_CURSOR }
+@Serializable data class HistoryLoadProgress(val loaded: Int, val total: Int?)
+@Serializable enum class HistoryBatchKind { LATEST, OLDER }
+@Serializable enum class HistoryFailureCode { MISSING_NEXT_CURSOR, REPEATED_CURSOR }
 
+@Serializable
 data class HistorySessionState(
     val hasMore: Boolean = false,
     val isLoading: Boolean = false,
@@ -26,6 +29,7 @@ data class HistorySessionState(
     val syncedActivityTimestamp: Double? = null
 )
 
+@Serializable
 data class HistoryState(
     val sessions: Map<String, HistorySessionState> = emptyMap(),
     val pendingSessionId: String? = null

@@ -831,6 +831,519 @@ final class KMPTrajectoryStoreAdapter {
     }
 }
 
+// MARK: - History incremental MVI
+
+private struct KMPHistoryLoadProgressSnapshot: Decodable {
+    let loaded: Int
+    let total: Int?
+}
+
+private struct KMPHistorySessionSnapshot: Decodable {
+    let hasMore: Bool
+    let isLoading: Bool
+    let isLoadingOlder: Bool
+    let progress: KMPHistoryLoadProgressSnapshot?
+    let seenCursors: [Int]
+    let nextBeforeSequence: Int?
+    let pageCount: Int
+    let batchKind: String?
+    let loadedEventCount: Int
+    let loadedByteCount: Int
+    let syncedActivityTimestamp: Double?
+
+    var isValid: Bool {
+        pageCount >= 0 && loadedEventCount >= 0 && loadedByteCount >= 0
+            && (!isLoadingOlder || isLoading)
+            && (syncedActivityTimestamp?.isFinite ?? true)
+            && (progress.map { progress in
+                progress.loaded >= 0 && (progress.total.map { $0 >= progress.loaded } ?? true)
+            } ?? true)
+            && (batchKind == nil || batchKind == "LATEST" || batchKind == "OLDER")
+    }
+
+    var uiProgress: HistoryLoadProgress? {
+        progress.map { HistoryLoadProgress(loaded: $0.loaded, total: $0.total) }
+    }
+}
+
+private struct KMPHistoryStateSnapshot: Decodable {
+    let sessions: [String: KMPHistorySessionSnapshot]
+    let pendingSessionId: String?
+}
+
+private struct KMPHistoryBootstrap: Decodable {
+    let schema: Int
+    let state: KMPHistoryStateSnapshot
+    let eventsBySession: [String: [SessionEvent]]
+}
+
+private struct KMPHistoryEventPatch: Decodable {
+    let kind: String
+    let record: SessionEvent?
+    let index: Int?
+    let replacementEvents: [SessionEvent]?
+}
+
+private struct KMPHistoryPatch: Decodable {
+    let schema: Int
+    let sessionId: String
+    let session: KMPHistorySessionSnapshot?
+    let pendingSessionId: String?
+    let pendingSessionChanged: Bool
+    let eventPatch: KMPHistoryEventPatch?
+    let outcome: String
+    let failureCode: String?
+    let completedEventCount: Int?
+    let completedByteCount: Int?
+    let completedHasMore: Bool?
+}
+
+struct KMPHistoryEffect: Decodable, Equatable {
+    let action: String
+    let sessionId: String
+    let beforeSequence: Int?
+}
+
+enum KMPHistoryStoreError: LocalizedError, Equatable {
+    case encoding(String)
+    case bridge(code: String, message: String?)
+    case invalidEvent(String)
+    case runtimeFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .encoding(let message): "无法编码 iOS History 输入：\(message)"
+        case .bridge(let code, let message): "KMP History 失败（\(code)）：\(message ?? "无详细信息")"
+        case .invalidEvent(let message): "KMP History 增量事件无效：\(message)"
+        case .runtimeFailed(let message): "KMP History 事件流已停止：\(message)"
+        }
+    }
+}
+
+protocol KMPHistoryStoreBridging: AnyObject {
+    func start(
+        sessionId: String,
+        older: Bool,
+        hasLocalEvents: Bool,
+        earliestLocalSequence: KotlinInt?
+    ) -> SharedMviDispatchResult
+    func processingStarted(sessionId: String, rawEventCount: Int32, hasMore: Bool) -> SharedMviDispatchResult
+    func pageReceived(
+        sessionId: String,
+        eventsJson: String,
+        byteCount: Int32,
+        hasMore: Bool,
+        nextBeforeSequence: KotlinInt?,
+        remoteActivityTimestamp: KotlinDouble?
+    ) -> SharedMviDispatchResult
+    func liveEventReceived(eventJson: String) -> SharedMviDispatchResult
+    func timedOut(sessionId: String) -> SharedMviDispatchResult
+    func cancelled(sessionId: String) -> SharedMviDispatchResult
+    func clearSession(sessionId: String) -> SharedMviDispatchResult
+}
+
+extension SharedHistoryStore: KMPHistoryStoreBridging {}
+
+protocol KMPHistoryEventBridging: AnyObject {
+    func observeHistoryEvents(_ handler: @escaping (SharedMviEvent) -> Void) -> () -> Void
+}
+
+extension SharedHistoryStore: KMPHistoryEventBridging {
+    func observeHistoryEvents(_ handler: @escaping (SharedMviEvent) -> Void) -> () -> Void {
+        let observer = KMPSharedMviEventObserver(handler: handler)
+        let subscription = subscribe(observer: observer)
+        return {
+            _ = observer
+            subscription.cancel()
+        }
+    }
+}
+
+private enum KMPHistoryIntent {
+    case start(sessionID: String)
+    case processing(sessionID: String)
+    case page(sessionID: String)
+    case live(sessionID: String, sequence: Int)
+    case timeout(sessionID: String)
+    case cancel(sessionID: String)
+    case clear(sessionID: String)
+
+    var sessionID: String {
+        switch self {
+        case .start(let id), .processing(let id), .page(let id), .live(let id, _),
+             .timeout(let id), .cancel(let id), .clear(let id): id
+        }
+    }
+}
+
+struct KMPHistoryChange {
+    let sessionID: String
+    let events: [SessionEvent]
+    let eventPatchKind: String?
+    let eventRecord: SessionEvent?
+    let hasMore: [String: Bool]
+    let loadingSessionIDs: Set<String>
+    let loadingOlderSessionIDs: Set<String>
+    let progress: [String: HistoryLoadProgress]
+    let outcome: String
+    let failureCode: String?
+    let completedEventCount: Int?
+    let completedByteCount: Int?
+    let completedHasMore: Bool?
+    let effect: KMPHistoryEffect?
+}
+
+@MainActor
+final class KMPHistoryStoreAdapter {
+    private let store: any KMPHistoryStoreBridging
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+    private var cancelEventSubscription: (() -> Void)?
+    private var pendingIntent: KMPHistoryIntent?
+    private var pushedError: KMPHistoryStoreError?
+    private var sessions: [String: KMPHistorySessionSnapshot] = [:]
+    private(set) var eventsBySessionID: [String: [SessionEvent]] = [:]
+    private(set) var pendingSessionID: String?
+    private(set) var lastEventSequence: Int64?
+    private(set) var runtimeError: KMPHistoryStoreError?
+    var onChange: ((KMPHistoryChange) -> Void)?
+    var onError: ((KMPHistoryStoreError) -> Void)?
+    var isOperational: Bool { runtimeError == nil }
+
+    init(
+        bridge: (any KMPHistoryStoreBridging)? = nil,
+        facade: SharedMobileFacade = SharedMobileFacade()
+    ) {
+        store = bridge ?? facade.makeHistoryStore()
+        guard let eventStore = store as? any KMPHistoryEventBridging else {
+            failClosed(.runtimeFailed("History bridge 不支持 MVI event stream"))
+            return
+        }
+        cancelEventSubscription = eventStore.observeHistoryEvents { [weak self] event in
+            MainActor.assumeIsolated { self?.receive(event) }
+        }
+    }
+
+    func events(for sessionID: String) -> [SessionEvent] { eventsBySessionID[sessionID] ?? [] }
+    func syncedActivityTimestamp(for sessionID: String) -> Double? { sessions[sessionID]?.syncedActivityTimestamp }
+
+    func start(sessionID: String, older: Bool, hasLocalEvents: Bool, earliestLocalSequence: Int?) throws {
+        try dispatch(.start(sessionID: sessionID)) {
+            store.start(
+                sessionId: sessionID,
+                older: older,
+                hasLocalEvents: hasLocalEvents,
+                earliestLocalSequence: try kotlinInt(earliestLocalSequence)
+            )
+        }
+    }
+
+    func processingStarted(sessionID: String, rawEventCount: Int, hasMore: Bool) throws {
+        try dispatch(.processing(sessionID: sessionID)) {
+            store.processingStarted(
+                sessionId: sessionID,
+                rawEventCount: try int32(rawEventCount),
+                hasMore: hasMore
+            )
+        }
+    }
+
+    func pageReceived(
+        sessionID: String,
+        events: [SessionEvent],
+        byteCount: Int,
+        hasMore: Bool,
+        nextBeforeSequence: Int?,
+        remoteActivityTimestamp: Double?
+    ) throws {
+        try dispatch(.page(sessionID: sessionID)) {
+            store.pageReceived(
+                sessionId: sessionID,
+                eventsJson: try encode(events),
+                byteCount: try int32(byteCount),
+                hasMore: hasMore,
+                nextBeforeSequence: try kotlinInt(nextBeforeSequence),
+                remoteActivityTimestamp: remoteActivityTimestamp.map { KotlinDouble(double: $0) }
+            )
+        }
+    }
+
+    func receive(_ event: SessionEvent) throws {
+        try dispatch(.live(sessionID: event.sessionId, sequence: event.seq)) {
+            store.liveEventReceived(eventJson: try encode(event))
+        }
+    }
+
+    func timedOut(sessionID: String) throws {
+        try dispatch(.timeout(sessionID: sessionID)) { store.timedOut(sessionId: sessionID) }
+    }
+
+    func cancel(sessionID: String) throws {
+        try dispatch(.cancel(sessionID: sessionID)) { store.cancelled(sessionId: sessionID) }
+    }
+
+    func clear(sessionID: String) throws {
+        try dispatch(.clear(sessionID: sessionID)) { store.clearSession(sessionId: sessionID) }
+    }
+
+    private func dispatch(
+        _ intent: KMPHistoryIntent,
+        operation: () throws -> SharedMviDispatchResult
+    ) throws {
+        if let runtimeError { throw KMPHistoryStoreError.runtimeFailed(runtimeError.localizedDescription) }
+        pendingIntent = intent
+        pushedError = nil
+        defer { pendingIntent = nil }
+        let result: SharedMviDispatchResult
+        do { result = try operation() }
+        catch { throw KMPHistoryStoreError.encoding(error.localizedDescription) }
+        if let pushedError { throw pushedError }
+        guard result.accepted else {
+            throw KMPHistoryStoreError.bridge(
+                code: result.errorCode ?? "unknown-error",
+                message: result.errorMessage
+            )
+        }
+    }
+
+    private func receive(_ event: SharedMviEvent) {
+        guard event.schema == 2, event.domain == "history", !event.transactionId.isEmpty else {
+            failClosed(.invalidEvent("MVI 信封无效"))
+            return
+        }
+        if event.kind == "snapshot" {
+            guard lastEventSequence == nil,
+                  let payload = event.statePayloadJson,
+                  let bootstrap = try? decoder.decode(KMPHistoryBootstrap.self, from: Data(payload.utf8)),
+                  bootstrap.schema == 1,
+                  bootstrap.state.sessions.values.allSatisfy(\.isValid),
+                  bootstrap.eventsBySession.allSatisfy({ key, records in
+                      records.allSatisfy { $0.sessionId == key }
+                          && records.map(\.seq) == records.map(\.seq).sorted()
+                          && Set(records.map(\.seq)).count == records.count
+                  }) else {
+                failClosed(.invalidEvent("订阅基线无效"))
+                return
+            }
+            sessions = bootstrap.state.sessions
+            pendingSessionID = bootstrap.state.pendingSessionId
+            eventsBySessionID = bootstrap.eventsBySession
+            lastEventSequence = event.sequence
+            return
+        }
+        guard let previous = lastEventSequence, event.sequence == previous + 1 else {
+            failClosed(.runtimeFailed("MVI event sequence 不连续"))
+            return
+        }
+        lastEventSequence = event.sequence
+        switch event.kind {
+        case "error":
+            let error = KMPHistoryStoreError.bridge(
+                code: event.errorCode ?? "unknown-error",
+                message: event.errorMessage
+            )
+            pushedError = error
+            onError?(error)
+        case "transition":
+            guard let payload = event.statePayloadJson else {
+                failClosed(.invalidEvent("transition 缺少 patch"))
+                return
+            }
+            do {
+                let patch = try decoder.decode(KMPHistoryPatch.self, from: Data(payload.utf8))
+                let effects = try decoder.decode([KMPHistoryEffect].self, from: Data(event.effectsJson.utf8))
+                guard effects.count <= 1 else { throw KMPHistoryStoreError.invalidEvent("effect 数量无效") }
+                onChange?(try apply(patch, effect: effects.first, intent: pendingIntent))
+            } catch let error as KMPHistoryStoreError {
+                failClosed(error)
+            } catch {
+                failClosed(.invalidEvent(error.localizedDescription))
+            }
+        default:
+            failClosed(.runtimeFailed("未知 MVI event kind：\(event.kind)"))
+        }
+    }
+
+    private func apply(
+        _ patch: KMPHistoryPatch,
+        effect: KMPHistoryEffect?,
+        intent: KMPHistoryIntent?
+    ) throws -> KMPHistoryChange {
+        guard patch.schema == 1,
+              !patch.sessionId.isEmpty,
+              let intent,
+              intent.sessionID == patch.sessionId,
+              patch.session?.isValid ?? true,
+              patch.pendingSessionChanged || patch.pendingSessionId == pendingSessionID,
+              ["none", "request-page", "stopped", "completed", "failed"].contains(patch.outcome),
+              (patch.outcome == "failed") == (patch.failureCode != nil),
+              (patch.outcome == "completed") == (patch.completedEventCount != nil),
+              (patch.outcome == "completed") == (patch.completedByteCount != nil),
+              (patch.outcome == "completed") == (patch.completedHasMore != nil),
+              (patch.completedEventCount.map { $0 >= 0 } ?? true),
+              (patch.completedByteCount.map { $0 >= 0 } ?? true) else {
+            throw KMPHistoryStoreError.invalidEvent("patch 与 intent 或 wire state 不一致")
+        }
+        if let effect {
+            guard effect.action == "request-page",
+                  effect.sessionId == patch.sessionId,
+                  patch.outcome == "request-page",
+                  intentMatchesRequestEffect(intent) else {
+                throw KMPHistoryStoreError.invalidEvent("effect 与同事务 intent/state 不一致")
+            }
+        } else if patch.outcome == "request-page" {
+            throw KMPHistoryStoreError.invalidEvent("request-page 缺少 effect")
+        }
+
+        var nextSessions = sessions
+        if let session = patch.session { nextSessions[patch.sessionId] = session }
+        else { nextSessions.removeValue(forKey: patch.sessionId) }
+        let nextPending = patch.pendingSessionChanged ? patch.pendingSessionId : pendingSessionID
+        var nextEvents = eventsBySessionID[patch.sessionId] ?? []
+        if let eventPatch = patch.eventPatch {
+            try apply(eventPatch, sessionID: patch.sessionId, intent: intent, to: &nextEvents)
+        } else if case .live = intent {
+            throw KMPHistoryStoreError.invalidEvent("live intent 缺少 event patch")
+        }
+
+        sessions = nextSessions
+        pendingSessionID = nextPending
+        if nextEvents.isEmpty { eventsBySessionID.removeValue(forKey: patch.sessionId) }
+        else { eventsBySessionID[patch.sessionId] = nextEvents }
+        return makeChange(
+            sessionID: patch.sessionId,
+            events: nextEvents,
+            eventPatchKind: patch.eventPatch?.kind,
+            eventRecord: patch.eventPatch?.record,
+            outcome: patch.outcome,
+            failureCode: patch.failureCode,
+            completedEventCount: patch.completedEventCount,
+            completedByteCount: patch.completedByteCount,
+            completedHasMore: patch.completedHasMore,
+            effect: effect
+        )
+    }
+
+    private func apply(
+        _ patch: KMPHistoryEventPatch,
+        sessionID: String,
+        intent: KMPHistoryIntent,
+        to records: inout [SessionEvent]
+    ) throws {
+        switch patch.kind {
+        case "append":
+            guard case .live(let expectedSession, let expectedSequence) = intent,
+                  expectedSession == sessionID,
+                  let record = patch.record,
+                  record.sessionId == sessionID,
+                  record.seq == expectedSequence,
+                  patch.index == records.count,
+                  patch.replacementEvents == nil,
+                  record.seq > (records.last?.seq ?? -1) else {
+                throw KMPHistoryStoreError.invalidEvent("append event patch 无效")
+            }
+            records.append(record)
+        case "upsert":
+            guard case .live(let expectedSession, let expectedSequence) = intent,
+                  expectedSession == sessionID,
+                  let record = patch.record,
+                  record.sessionId == sessionID,
+                  record.seq == expectedSequence,
+                  let index = patch.index,
+                  (0...records.count).contains(index),
+                  patch.replacementEvents == nil else {
+                throw KMPHistoryStoreError.invalidEvent("upsert event patch 无效")
+            }
+            if index < records.count, records[index].seq == record.seq { records[index] = record }
+            else { records.insert(record, at: index) }
+            guard records.map(\.seq) == records.map(\.seq).sorted(),
+                  Set(records.map(\.seq)).count == records.count else {
+                throw KMPHistoryStoreError.invalidEvent("upsert 后事件顺序无效")
+            }
+        case "replace":
+            guard isPageOrClear(intent),
+                  patch.record == nil,
+                  patch.index == nil,
+                  let replacement = patch.replacementEvents,
+                  replacement.allSatisfy({ $0.sessionId == sessionID }),
+                  replacement.map(\.seq) == replacement.map(\.seq).sorted(),
+                  Set(replacement.map(\.seq)).count == replacement.count else {
+                throw KMPHistoryStoreError.invalidEvent("replace event patch 无效")
+            }
+            records = replacement
+        default:
+            throw KMPHistoryStoreError.invalidEvent("未知 event patch：\(patch.kind)")
+        }
+    }
+
+    private func makeChange(
+        sessionID: String,
+        events: [SessionEvent],
+        eventPatchKind: String?,
+        eventRecord: SessionEvent?,
+        outcome: String,
+        failureCode: String?,
+        completedEventCount: Int?,
+        completedByteCount: Int?,
+        completedHasMore: Bool?,
+        effect: KMPHistoryEffect?
+    ) -> KMPHistoryChange {
+        KMPHistoryChange(
+            sessionID: sessionID,
+            events: events,
+            eventPatchKind: eventPatchKind,
+            eventRecord: eventRecord,
+            hasMore: sessions.mapValues(\.hasMore),
+            loadingSessionIDs: Set(sessions.compactMap { $0.value.isLoading ? $0.key : nil }),
+            loadingOlderSessionIDs: Set(sessions.compactMap { $0.value.isLoadingOlder ? $0.key : nil }),
+            progress: Dictionary(uniqueKeysWithValues: sessions.compactMap { key, value in
+                value.uiProgress.map { (key, $0) }
+            }),
+            outcome: outcome,
+            failureCode: failureCode,
+            completedEventCount: completedEventCount,
+            completedByteCount: completedByteCount,
+            completedHasMore: completedHasMore,
+            effect: effect
+        )
+    }
+
+    private func intentMatchesRequestEffect(_ intent: KMPHistoryIntent) -> Bool {
+        switch intent { case .start, .page: true; default: false }
+    }
+
+    private func isClear(_ intent: KMPHistoryIntent) -> Bool {
+        if case .clear = intent { return true }
+        return false
+    }
+
+    private func isPageOrClear(_ intent: KMPHistoryIntent) -> Bool {
+        switch intent {
+        case .page, .clear: true
+        default: false
+        }
+    }
+
+    private func int32(_ value: Int) throws -> Int32 {
+        guard let exact = Int32(exactly: value) else { throw KMPHistoryStoreError.encoding("Int 超出 KMP Int 范围") }
+        return exact
+    }
+
+    private func kotlinInt(_ value: Int?) throws -> KotlinInt? {
+        try value.map { KotlinInt(int: try int32($0)) }
+    }
+
+    private func encode<T: Encodable>(_ value: T) throws -> String {
+        String(decoding: try encoder.encode(value), as: UTF8.self)
+    }
+
+    private func failClosed(_ error: KMPHistoryStoreError) {
+        if runtimeError == nil { runtimeError = error }
+        pushedError = error
+        onError?(error)
+    }
+}
+
 struct KMPSessionSummarySnapshot: Codable, Equatable {
     var id: String
     var title: String

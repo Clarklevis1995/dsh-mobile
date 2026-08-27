@@ -9,6 +9,8 @@ import class DeepSeekHarnessShared.SharedSessionControlResult
 import class DeepSeekHarnessShared.SharedSessionControlStore
 import class DeepSeekHarnessShared.SharedSessionListResult
 import class DeepSeekHarnessShared.KotlinLong
+import class DeepSeekHarnessShared.KotlinInt
+import class DeepSeekHarnessShared.KotlinDouble
 @testable import DeepSeekHarnessMobile
 
 private enum GatewayProtocolParityFixtures {
@@ -341,6 +343,68 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(timeline.nodes.map(\.subtitle), ["one", "two"])
     }
 
+    @MainActor
+    func testKMPHistoryAdapterOwnsPaginationWatermarkAndLiveTailMerge() throws {
+        let adapter = KMPHistoryStoreAdapter()
+        var changes: [KMPHistoryChange] = []
+        adapter.onChange = { changes.append($0) }
+
+        try adapter.start(
+            sessionID: "s1",
+            older: false,
+            hasLocalEvents: false,
+            earliestLocalSequence: nil
+        )
+        XCTAssertEqual(changes.last?.effect, KMPHistoryEffect(action: "request-page", sessionId: "s1", beforeSequence: nil))
+        XCTAssertTrue(changes.last?.loadingSessionIDs.contains("s1") == true)
+
+        try adapter.processingStarted(sessionID: "s1", rawEventCount: 2, hasMore: false)
+        let live = SessionEvent(
+            sessionId: "s1", seq: 2, time: 2,
+            event: GatewayEvent(type: "assistant/message", text: "live-final")
+        )
+        try adapter.receive(live)
+        try adapter.pageReceived(
+            sessionID: "s1",
+            events: [
+                SessionEvent(
+                    sessionId: "s1", seq: 1, time: 1,
+                    event: GatewayEvent(type: "user/message", text: "history")
+                ),
+                SessionEvent(
+                    sessionId: "s1", seq: 2, time: 2,
+                    event: GatewayEvent(type: "assistant/message", text: "stale-history")
+                )
+            ],
+            byteCount: 32,
+            hasMore: false,
+            nextBeforeSequence: nil,
+            remoteActivityTimestamp: 2
+        )
+
+        XCTAssertEqual(adapter.events(for: "s1").map(\.seq), [1, 2])
+        XCTAssertEqual(adapter.events(for: "s1").last?.event.text, "live-final")
+        XCTAssertEqual(adapter.syncedActivityTimestamp(for: "s1"), 2)
+        XCTAssertEqual(changes.last?.outcome, "completed")
+        XCTAssertEqual(changes.last?.completedEventCount, 2)
+        XCTAssertFalse(changes.last?.loadingSessionIDs.contains("s1") == true)
+    }
+
+    @MainActor
+    func testKMPHistoryAdapterFailsClosedBeforeMalformedEventPatchPublishes() {
+        let adapter = KMPHistoryStoreAdapter(bridge: MalformedHistoryEventBridge())
+        var publishCount = 0
+        adapter.onChange = { _ in publishCount += 1 }
+
+        XCTAssertThrowsError(try adapter.receive(SessionEvent(
+            sessionId: "s1", seq: 1, time: 1,
+            event: GatewayEvent(type: "assistant/message", text: "one")
+        )))
+        XCTAssertFalse(adapter.isOperational)
+        XCTAssertEqual(publishCount, 0)
+        XCTAssertTrue(adapter.events(for: "s1").isEmpty)
+    }
+
     func testStage9WriteAuditRecognizesDirectNestedInoutAndCollectionMutations() throws {
         let defects: [(property: String, source: String)] = [
             ("sessions", "sessions = replacement"),
@@ -579,6 +643,9 @@ final class GatewayProtocolTests: XCTestCase {
         let legacyDefinition = productRoot
             .appendingPathComponent("Core/ConversationProjection.swift")
             .standardizedFileURL.path
+        let legacyHistoryDefinition = productRoot
+            .appendingPathComponent("Core/HistoryReducer.swift")
+            .standardizedFileURL.path
         let enumerator = try XCTUnwrap(FileManager.default.enumerator(
             at: productRoot,
             includingPropertiesForKeys: nil
@@ -586,10 +653,14 @@ final class GatewayProtocolTests: XCTestCase {
         let productSources = enumerator.compactMap { item -> URL? in
             guard let url = item as? URL,
                   url.pathExtension == "swift",
-                  url.standardizedFileURL.path != legacyDefinition else { return nil }
+                  url.standardizedFileURL.path != legacyDefinition,
+                  url.standardizedFileURL.path != legacyHistoryDefinition else { return nil }
             return url
         }
-        for symbol in ["ConversationProjector", "ConversationHistoryRebase", "ConversationItem.fold"] {
+        for symbol in [
+            "ConversationProjector", "ConversationHistoryRebase", "ConversationItem.fold",
+            "HistoryReducer", "HistoryEventMerger"
+        ] {
             for sourceURL in productSources {
                 let source = try String(contentsOf: sourceURL, encoding: .utf8)
                 XCTAssertFalse(
@@ -609,7 +680,10 @@ final class GatewayProtocolTests: XCTestCase {
             "kmpConversationStore.replace(sessionID:",
             "kmpTrajectoryStore.onChange",
             "kmpTrajectoryStore.receive(records)",
-            "kmpTrajectoryStore.replace(sessionID:"
+            "kmpTrajectoryStore.replace(sessionID:",
+            "kmpHistoryStore.onChange",
+            "kmpHistoryStore.receive(record)",
+            "kmpHistoryStore.pageReceived("
         ] {
             XCTAssertTrue(appStoreSource.contains(required), "Conversation 产品路径缺少 KMP Intent/Event：\(required)")
         }
@@ -625,6 +699,28 @@ final class GatewayProtocolTests: XCTestCase {
             trajectoryViewSource.contains("TrajectoryProjection.make("),
             "TrajectoryView 不得继续执行 Swift Trajectory 业务投影"
         )
+
+        let appStoreNSString = appStoreSource as NSString
+        let historyPublishScope = try swiftAuditRange(
+            from: "// stage10-kmp-write-scope: history-begin",
+            through: "// stage10-kmp-write-scope: history-end",
+            in: appStoreNSString
+        )
+        for property in [
+            "historyHasMore", "historyLoadingSessionIds",
+            "historyLoadingOlderSessionIds", "historyLoadProgress"
+        ] {
+            XCTAssertTrue(
+                appStoreSource.contains("@Published private(set) var \(property)"),
+                "History UI 镜像必须对 AppStore 外部只读：\(property)"
+            )
+            let writes = try stage9WriteMatches(for: property, in: appStoreSource)
+            XCTAssertFalse(writes.isEmpty, "History UI 镜像必须由 KMP event 发布：\(property)")
+            XCTAssertTrue(
+                writes.allSatisfy { NSLocationInRange($0.range.location, historyPublishScope) },
+                "History UI 镜像只允许在 KMP History change 发布块内写入：\(property)"
+            )
+        }
     }
 
     @MainActor
@@ -4618,6 +4714,66 @@ private final class MalformedTrajectoryEventBridge:
     }
 
     func clearSession(sessionId: String) -> SharedMviDispatchResult {
+        SharedMviDispatchResult(
+            accepted: false, transactionId: nil, eventSequence: nil,
+            errorCode: "unsupported", errorMessage: nil
+        )
+    }
+}
+
+private final class MalformedHistoryEventBridge:
+    KMPHistoryStoreBridging,
+    KMPHistoryEventBridging
+{
+    private var handler: ((SharedMviEvent) -> Void)?
+
+    func observeHistoryEvents(_ handler: @escaping (SharedMviEvent) -> Void) -> () -> Void {
+        self.handler = handler
+        handler(SharedMviEvent(
+            schema: 2, sequence: 0,
+            transactionId: "snapshot:history:0",
+            domain: "history", kind: "snapshot",
+            statePayloadJson: #"{"schema":1,"state":{"sessions":{},"pendingSessionId":null},"eventsBySession":{}}"#,
+            effectsJson: "[]", metadataJson: nil,
+            errorCode: nil, errorMessage: nil
+        ))
+        return { [weak self] in self?.handler = nil }
+    }
+
+    func liveEventReceived(eventJson: String) -> SharedMviDispatchResult {
+        handler?(SharedMviEvent(
+            schema: 2, sequence: 1,
+            transactionId: "history-live:1",
+            domain: "history", kind: "transition",
+            statePayloadJson: #"{"schema":1,"sessionId":"s1","session":null,"pendingSessionId":null,"pendingSessionChanged":false,"eventPatch":{"kind":"append","record":{"sessionId":"s1","seq":1,"time":1,"event":{"type":"assistant/message","text":"one"}},"index":9,"replacementEvents":null},"outcome":"none","failureCode":null,"completedEventCount":null,"completedByteCount":null,"completedHasMore":null}"#,
+            effectsJson: "[]", metadataJson: nil,
+            errorCode: nil, errorMessage: nil
+        ))
+        return accepted("history-live:1")
+    }
+
+    func start(sessionId: String, older: Bool, hasLocalEvents: Bool, earliestLocalSequence: KotlinInt?) -> SharedMviDispatchResult { unsupported() }
+    func processingStarted(sessionId: String, rawEventCount: Int32, hasMore: Bool) -> SharedMviDispatchResult { unsupported() }
+    func pageReceived(
+        sessionId: String,
+        eventsJson: String,
+        byteCount: Int32,
+        hasMore: Bool,
+        nextBeforeSequence: KotlinInt?,
+        remoteActivityTimestamp: KotlinDouble?
+    ) -> SharedMviDispatchResult { unsupported() }
+    func timedOut(sessionId: String) -> SharedMviDispatchResult { unsupported() }
+    func cancelled(sessionId: String) -> SharedMviDispatchResult { unsupported() }
+    func clearSession(sessionId: String) -> SharedMviDispatchResult { unsupported() }
+
+    private func accepted(_ transactionID: String) -> SharedMviDispatchResult {
+        SharedMviDispatchResult(
+            accepted: true, transactionId: transactionID,
+            eventSequence: KotlinLong(longLong: 1), errorCode: nil, errorMessage: nil
+        )
+    }
+
+    private func unsupported() -> SharedMviDispatchResult {
         SharedMviDispatchResult(
             accepted: false, transactionId: nil, eventSequence: nil,
             errorCode: "unsupported", errorMessage: nil
