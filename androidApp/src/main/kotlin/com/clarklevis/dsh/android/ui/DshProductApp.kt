@@ -35,14 +35,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -185,7 +181,8 @@ private fun WorkspaceScreen(
     onSettings: () -> Unit
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
-    var showGateway by rememberSaveable { mutableStateOf(false) }
+    var showManualPairing by rememberSaveable { mutableStateOf(false) }
+    var showQrScanner by rememberSaveable { mutableStateOf(false) }
     var showWorkspaces by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(stateHolder.gatewayState.connection) { stateHolder.refreshProductState() }
     LaunchedEffect(searchQuery) {
@@ -232,7 +229,15 @@ private fun WorkspaceScreen(
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     WorkspaceHeader(
-                        onGateway = { showGateway = true },
+                        state = stateHolder.gatewayState,
+                        onScan = {
+                            stateHolder.clearPlatformError()
+                            showQrScanner = true
+                        },
+                        onManualEntry = {
+                            stateHolder.clearPlatformError()
+                            showManualPairing = true
+                        },
                         onSettings = onSettings
                     )
                     Spacer(Modifier.height(90.dp))
@@ -269,8 +274,21 @@ private fun WorkspaceScreen(
         }
     }
 
-    if (showGateway) {
-        GatewaySheet(stateHolder) { showGateway = false }
+    if (showQrScanner) {
+        GatewayQrScannerScreen(
+            onCode = { payload ->
+                showQrScanner = false
+                stateHolder.pair(payload)
+            },
+            onCancel = { showQrScanner = false },
+            onFailure = { message ->
+                showQrScanner = false
+                stateHolder.showPlatformError(message)
+            }
+        )
+    }
+    if (showManualPairing) {
+        ManualGatewayPairingSheet(stateHolder) { showManualPairing = false }
     }
     if (showWorkspaces) {
         WorkspacePicker(
@@ -287,18 +305,20 @@ private fun WorkspaceScreen(
 
 @Composable
 private fun WorkspaceHeader(
-    onGateway: () -> Unit,
+    state: GatewayRuntimeState,
+    onScan: () -> Unit,
+    onManualEntry: () -> Unit,
     onSettings: () -> Unit
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         HarnessMark()
         Spacer(Modifier.weight(1f))
-        GlassCircleButton(
-            iconRes = R.drawable.ic_gateway_auth,
-            description = "Mobile Gateway",
-            onClick = onGateway
+        GatewayAuthenticationMenu(
+            state = state,
+            onScan = onScan,
+            onManualEntry = onManualEntry
         )
-        Spacer(Modifier.width(9.dp))
+        Spacer(Modifier.width(12.dp))
         GlassCircleButton(R.drawable.ic_settings, "设置", onSettings)
     }
 }
@@ -336,9 +356,9 @@ internal fun WhaleIcon(
 }
 
 @Composable
-private fun GlassCircleButton(iconRes: Int, description: String, onClick: () -> Unit) {
+internal fun GlassCircleButton(iconRes: Int, description: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(48.dp)
+        Modifier.size(52.dp)
             .dshLiquidGlass(CircleShape, DshGlassStyle.CONTROL)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
@@ -347,7 +367,7 @@ private fun GlassCircleButton(iconRes: Int, description: String, onClick: () -> 
         Image(
             painter = painterResource(iconRes),
             contentDescription = null,
-            modifier = Modifier.size(21.dp),
+            modifier = Modifier.size(22.dp),
             colorFilter = ColorFilter.tint(Color.White)
         )
     }
@@ -546,52 +566,6 @@ private fun ConnectionStatusText(state: GatewayRuntimeState) {
         },
         fontSize = 12.sp
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun GatewaySheet(stateHolder: AndroidSharedStateHolder, onDismiss: () -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text("Mobile Gateway", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            ConnectionStatusTextDark(stateHolder.gatewayState)
-            OutlinedTextField(
-                value = stateHolder.endpoint,
-                onValueChange = { stateHolder.endpoint = it },
-                label = { Text("ws:// 或 wss:// 地址") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            OutlinedTextField(
-                value = stateHolder.pairingPayload,
-                onValueChange = { stateHolder.pairingPayload = it },
-                label = { Text("配对二维码中的 Base64URL 字符串") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = stateHolder::connect) { Text("连接") }
-                OutlinedButton(onClick = stateHolder::pair, enabled = stateHolder.pairingPayload.isNotBlank()) { Text("配对") }
-                TextButton(onClick = stateHolder::disconnect) { Text("断开") }
-            }
-            stateHolder.platformError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
-            Spacer(Modifier.height(10.dp))
-        }
-    }
-}
-
-@Composable
-private fun ConnectionStatusTextDark(state: GatewayRuntimeState) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ConnectionDot(state)
-        Text("状态：${state.connection.name}", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f))
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
