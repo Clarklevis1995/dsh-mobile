@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DeepSeek Harness</string>
+    <string name="gateway_notification_channel">Agent 连接</string>
+    <string name="gateway_notification_channel_description">在 Agent 回合执行期间保持 Mobile Gateway 连接</string>
+    <string name="gateway_active_notification_title">DeepSeek Harness Agent 正在运行</string>
+    <string name="gateway_active_notification_text">保持 Gateway 连接，直到当前回合完成</string>
+    <string name="gateway_disconnect_action">断开</string>
 </resources>

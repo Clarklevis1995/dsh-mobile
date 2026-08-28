@@ -76,7 +76,11 @@ data class GatewayFrame(
     val outcome: String? = null,
     val attachment: GatewayImageAttachment? = null,
     val data: String? = null
-)
+) {
+    override fun toString(): String =
+        "GatewayFrame(kind=$kind, sessionId=$sessionId, seq=$seq, requestType=$requestType, " +
+            "rpcId=<redacted>, token=<redacted>, data=<redacted>, message=<redacted>)"
+}
 
 @Serializable data class GatewayDevice(val id: String, val name: String? = null, val createdAt: Double? = null)
 
@@ -86,7 +90,11 @@ data class GatewayPairingPayload(
     val publicUrl: String,
     val pairingCode: String,
     val expiresAt: Double
-)
+) {
+    override fun toString(): String =
+        "GatewayPairingPayload(version=$version, publicUrl=<redacted>, " +
+            "pairingCode=<redacted>, expiresAt=$expiresAt)"
+}
 
 @Serializable
 data class GatewayImageAttachment(
@@ -96,7 +104,11 @@ data class GatewayImageAttachment(
     val width: Int,
     val height: Int,
     val name: String? = null
-)
+) {
+    override fun toString(): String =
+        "GatewayImageAttachment(attachmentId=$attachmentId, mediaType=$mediaType, bytes=$bytes, " +
+            "width=$width, height=$height, name=<redacted>)"
+}
 
 @Serializable data class GatewayQuestionOption(val label: String, val description: String? = null)
 @Serializable data class GatewayQuestionIntent(val kind: String, val approve: String? = null)
@@ -111,6 +123,9 @@ data class GatewayQuestion(
     val multiSelect: Boolean? = null,
     val intent: GatewayQuestionIntent? = null
 ) {
+    override fun toString(): String =
+        "GatewayQuestion(id=$id, question=<redacted>, detail=<redacted>, options=<redacted>)"
+
     val allowsMultipleSelections: Boolean get() = multiSelect == true
 }
 
@@ -120,7 +135,11 @@ data class GatewayPendingQuestionRequest(
     val sessionId: String,
     val questions: List<GatewayQuestion>,
     val replay: Boolean
-)
+) {
+    override fun toString(): String =
+        "GatewayPendingQuestionRequest(rpcId=<redacted>, sessionId=$sessionId, " +
+            "questions=<redacted>, replay=$replay)"
+}
 
 @Serializable
 data class GatewayQuestionAnswer(
@@ -128,6 +147,9 @@ data class GatewayQuestionAnswer(
     val selected: List<String>,
     val custom: String? = null
 ) {
+    override fun toString(): String =
+        "GatewayQuestionAnswer(id=$id, selected=<redacted>, custom=<redacted>)"
+
     val normalizedCustom: String? get() = custom?.trim()?.takeIf(String::isNotEmpty)
 }
 
@@ -273,12 +295,24 @@ data class GatewayEvent(
     val parentCallId: String? = null,
     val subCallId: String? = null,
     val raw: JsonValue? = null
-)
+) {
+    override fun toString(): String =
+        "GatewayEvent(type=$type, turn=$turn, step=$step, text=<redacted>, tool=<redacted>, " +
+            "reasoning=<redacted>, toolCalls=<redacted>, arguments=<redacted>, " +
+            "preview=<redacted>, reason=<redacted>, raw=<redacted>)"
+}
 
-@Serializable data class SessionEvent(val sessionId: String, val seq: Int, val time: Double, val event: GatewayEvent)
+@Serializable
+data class SessionEvent(val sessionId: String, val seq: Int, val time: Double, val event: GatewayEvent) {
+    override fun toString(): String =
+        "SessionEvent(sessionId=$sessionId, seq=$seq, time=$time, event=$event)"
+}
 
 @Serializable
 data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val data: JsonValue) {
+    override fun toString(): String =
+        "RawSessionEvent(type=$type, seq=$seq, time=$time, data=<redacted>)"
+
     fun normalized(sessionId: String): SessionEvent = SessionEvent(sessionId, seq, time, normalizedEvent())
 
     private fun normalizedEvent(): GatewayEvent {
