@@ -15,6 +15,7 @@ import com.clarklevis.dsh.android.platform.BoundedLruCache
 import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
 import com.clarklevis.dsh.shared.facade.SharedMobileStore
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
+import com.clarklevis.dsh.shared.gateway.GatewayPairingPayloadException
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
@@ -435,14 +436,31 @@ class AndroidSharedStateHolder(
     }
 
     fun pair() {
+        pair(pairingPayload)
+    }
+
+    fun pair(
+        payload: String,
+        reportFailureGlobally: Boolean = true,
+        onFailure: (String) -> Unit = {}
+    ) {
         val appGraph = graph ?: return
         appGraph.diagnostics.intent(GatewayDiagnosticAction.PAIR)
         platformError = null
-        val payload = pairingPayload
         appGraph.gatewayScope.launch {
             val result = runCatching { appGraph.gatewayRuntime.pair(payload) }
             withContext(Dispatchers.Main.immediate) {
-                if (result.isSuccess) pairingPayload = "" else platformError = "pair-failed"
+                if (result.isSuccess) {
+                    if (pairingPayload == payload) pairingPayload = ""
+                } else {
+                    val message = if (result.exceptionOrNull() is GatewayPairingPayloadException) {
+                        result.exceptionOrNull()?.message ?: "配对信息无效"
+                    } else {
+                        "无法提交配对信息，请稍后重试。"
+                    }
+                    if (reportFailureGlobally) platformError = message
+                    onFailure(message)
+                }
             }
         }
     }
@@ -569,6 +587,10 @@ class AndroidSharedStateHolder(
 
     fun clearPlatformError() {
         platformError = null
+    }
+
+    fun showPlatformError(message: String) {
+        platformError = message
     }
 
     fun updateVisibleAttachments(attachmentIds: Set<String>) {
