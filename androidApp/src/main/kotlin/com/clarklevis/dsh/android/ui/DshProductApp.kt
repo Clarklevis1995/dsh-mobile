@@ -95,7 +95,8 @@ import com.clarklevis.dsh.shared.domain.SessionSummary
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
-import java.util.concurrent.TimeUnit
+import java.util.Calendar
+import java.util.TimeZone
 import kotlinx.coroutines.delay
 
 private const val ROUTE_WORKSPACE = "workspace"
@@ -482,16 +483,31 @@ private fun SessionList(
 @Composable
 private fun SessionRow(session: SessionSummary, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 10.dp)
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 6.dp)
             .testTag("workspace-session-${session.id}"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp)
     ) {
         val dot = if (session.isRunning) DshColors.Success else if (session.hasUnread) DshColors.Ocean else Color.White.copy(alpha = 0.35f)
         Box(Modifier.size(7.dp).background(dot, CircleShape))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(session.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-            Text(session.id.take(16), color = Color.White.copy(alpha = 0.42f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = session.title,
+                color = Color.White,
+                fontSize = 14.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+            )
+            Text(
+                text = session.id.take(16),
+                color = Color.White.copy(alpha = 0.42f),
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                fontFamily = FontFamily.Monospace,
+                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+            )
         }
         Text(
             if (session.isRunning) "运行中" else relativeTime(session.lastActivityEpochSeconds),
@@ -619,14 +635,32 @@ private fun WorkspaceChoice(title: String, subtitle: String, selected: Boolean, 
     }
 }
 
-private fun relativeTime(epochSeconds: Double): String {
-    val elapsed = (System.currentTimeMillis() / 1_000 - epochSeconds.toLong()).coerceAtLeast(0)
+internal fun relativeTime(
+    epochSeconds: Double,
+    nowMillis: Long = System.currentTimeMillis(),
+    timeZone: TimeZone = TimeZone.getDefault()
+): String {
+    val eventMillis = (epochSeconds * 1_000).toLong().coerceAtMost(nowMillis)
+    val elapsed = ((nowMillis - eventMillis) / 1_000).coerceAtLeast(0)
+    val dayDifference = localDayIndex(nowMillis, timeZone) - localDayIndex(eventMillis, timeZone)
     return when {
+        dayDifference == 1L -> "昨天"
+        dayDifference == 2L -> "前天"
+        dayDifference > 2L -> "$dayDifference 天前"
         elapsed < 60 -> "刚刚"
         elapsed < 3_600 -> "${elapsed / 60} 分钟前"
-        elapsed < 86_400 -> "${elapsed / 3_600} 小时前"
-        else -> "${elapsed / 86_400} 天前"
+        else -> "${elapsed / 3_600} 小时前"
     }
+}
+
+private fun localDayIndex(epochMillis: Long, timeZone: TimeZone): Long {
+    val calendar = Calendar.getInstance(timeZone).apply { timeInMillis = epochMillis }
+    val previousYear = calendar.get(Calendar.YEAR).toLong() - 1
+    return previousYear * 365 +
+        previousYear / 4 -
+        previousYear / 100 +
+        previousYear / 400 +
+        calendar.get(Calendar.DAY_OF_YEAR)
 }
 
 private const val UNGROUPED = "__ungrouped__"

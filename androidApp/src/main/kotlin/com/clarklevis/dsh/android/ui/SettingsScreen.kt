@@ -47,6 +47,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clarklevis.dsh.android.AndroidSharedStateHolder
+import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import java.util.Locale
 
@@ -63,14 +64,12 @@ internal fun SettingsScreen(stateHolder: AndroidSharedStateHolder, onBack: () ->
             CenterAlignedTopAppBar(
                 title = { Text("设置", fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    Box(
-                        Modifier.padding(start = 8.dp).size(44.dp)
-                            .background(MaterialTheme.colorScheme.surface, CircleShape)
-                            .clickable(onClick = onBack),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("‹", fontSize = 32.sp, lineHeight = 32.sp)
-                    }
+                    TopBarCircleButton(
+                        iconRes = R.drawable.ic_back_chevron,
+                        description = "返回",
+                        onClick = onBack,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = pageBackground)
             )
@@ -159,7 +158,7 @@ internal fun SettingsScreen(stateHolder: AndroidSharedStateHolder, onBack: () ->
                 )
                 when (active) {
                     SettingsPicker.PRESET -> stateHolder.snapshot.agentPresets.filter { it.broken != true }.forEach { preset ->
-                        PickerRow(preset.name ?: preset.id, preset.description, preset.id == stateHolder.snapshot.agentPresetDefault) {
+                        PickerRow(agentPresetDisplayName(preset.id, preset.name), preset.description, preset.id == stateHolder.snapshot.agentPresetDefault) {
                             stateHolder.setDefault("agent-preset", preset.id)
                             picker = null
                         }
@@ -357,7 +356,8 @@ private fun isConnected(holder: AndroidSharedStateHolder) = holder.gatewayState.
 
 private fun selectedPreset(holder: AndroidSharedStateHolder): String {
     val id = holder.snapshot.agentPresetDefault ?: return "未读取"
-    return holder.snapshot.agentPresets.firstOrNull { it.id == id }?.name ?: id
+    val gatewayName = holder.snapshot.agentPresets.firstOrNull { it.id == id }?.name
+    return agentPresetDisplayName(id, gatewayName)
 }
 
 private fun selectedModel(holder: AndroidSharedStateHolder): String {
