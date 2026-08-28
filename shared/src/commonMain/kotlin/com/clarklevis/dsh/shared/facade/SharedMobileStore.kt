@@ -13,8 +13,17 @@ import com.clarklevis.dsh.shared.projection.ConversationItem
 import com.clarklevis.dsh.shared.projection.ConversationProjectionLabels
 import com.clarklevis.dsh.shared.projection.ConversationProjector
 import com.clarklevis.dsh.shared.protocol.GatewayPendingQuestionRequest
+import com.clarklevis.dsh.shared.protocol.GatewayAgentPreset
+import com.clarklevis.dsh.shared.protocol.GatewayContextSnapshot
+import com.clarklevis.dsh.shared.protocol.GatewayHostSnapshot
+import com.clarklevis.dsh.shared.protocol.GatewayModelCatalog
+import com.clarklevis.dsh.shared.protocol.GatewayModelSelection
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAction
+import com.clarklevis.dsh.shared.protocol.GatewaySessionPermissions
+import com.clarklevis.dsh.shared.protocol.GatewaySessionStatsSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewaySessionSummary
+import com.clarklevis.dsh.shared.protocol.GatewaySearchItem
+import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import com.clarklevis.dsh.shared.protocol.SessionEvent
 import com.clarklevis.dsh.shared.protocol.wireJson
@@ -23,9 +32,23 @@ import kotlin.time.Clock
 
 data class SharedMobileSnapshot(
     val sessions: List<SessionSummary> = emptyList(),
+    val workspaces: List<GatewayWorkspace> = emptyList(),
+    val searchResultSessionIds: List<String> = emptyList(),
     val selectedSessionId: String? = null,
     val conversation: List<ConversationItem> = emptyList(),
+    val pendingQuestions: List<GatewayPendingQuestionRequest> = emptyList(),
     val pendingQuestionCount: Int = 0,
+    val agentPresets: List<GatewayAgentPreset> = emptyList(),
+    val agentPresetDefault: String? = null,
+    val permissionDefault: String? = null,
+    val defaultModel: GatewayModelSelection? = null,
+    val modelCatalog: GatewayModelCatalog? = null,
+    val permissions: GatewaySessionPermissions? = null,
+    val contextSnapshot: GatewayContextSnapshot? = null,
+    val statsSnapshot: GatewaySessionStatsSnapshot? = null,
+    val hostSnapshot: GatewayHostSnapshot? = null,
+    val selectedHistoryHasMore: Boolean = false,
+    val selectedHistoryEarliestSequence: Int? = null,
     val lastFrameKind: String? = null,
     val lastError: String? = null
 )
@@ -44,6 +67,17 @@ class SharedMobileStore(
     private var sessionListState = SessionListState()
     private var questionState = QuestionState()
     private val eventsBySession = mutableMapOf<String, List<SessionEvent>>()
+    private var workspaces = emptyList<GatewayWorkspace>()
+    private var searchResultSessionIds = emptyList<String>()
+    private var agentPresets = emptyList<GatewayAgentPreset>()
+    private var agentPresetDefault: String? = null
+    private var permissionDefault: String? = null
+    private var defaultModel: GatewayModelSelection? = null
+    private var modelCatalog: GatewayModelCatalog? = null
+    private var permissions: GatewaySessionPermissions? = null
+    private var contextSnapshot: GatewayContextSnapshot? = null
+    private var statsSnapshot: GatewaySessionStatsSnapshot? = null
+    private var hostSnapshot: GatewayHostSnapshot? = null
     private var lastFrameKind: String? = null
     private var lastError: String? = null
 
@@ -74,6 +108,61 @@ class SharedMobileStore(
                         SessionListAction.RemoteSessionsReceived(sessions)
                     )
                 }
+                "workspaces" -> {
+                    workspaces = frame.items.orEmpty().mapNotNull { item ->
+                        runCatching {
+                            wireJson.decodeFromJsonElement(GatewayWorkspace.serializer(), item.toJsonElement())
+                        }.getOrNull()
+                    }
+                }
+                "search" -> {
+                    searchResultSessionIds = frame.items.orEmpty().mapNotNull { item ->
+                        runCatching {
+                            wireJson.decodeFromJsonElement(GatewaySearchItem.serializer(), item.toJsonElement())
+                        }.getOrNull()?.sessionId
+                    }
+                }
+                "agent-presets" -> {
+                    agentPresets = frame.presets.orEmpty()
+                    agentPresetDefault = frame.agentPresetDefault
+                        ?: agentPresets.firstOrNull { it.isDefault }?.id
+                }
+                "defaults" -> {
+                    agentPresetDefault = frame.agentPresetDefault ?: agentPresetDefault
+                    permissionDefault = frame.permissionDefault ?: permissionDefault
+                }
+                "default-model", "save-default-model" -> {
+                    defaultModel = frame.current ?: frame.selection ?: frame.saved ?: defaultModel
+                }
+                "models" -> modelCatalog = GatewayModelCatalog(
+                    current = frame.current,
+                    routable = frame.routable != false,
+                    groups = frame.groups.orEmpty()
+                )
+                "permission-options", "permission" -> {
+                    permissions = frame.sessionPermissions ?: permissions
+                }
+                "context-usage" -> contextSnapshot = GatewayContextSnapshot(
+                    asOfSeq = frame.asOfSeq,
+                    tokenUsage = frame.tokenUsage,
+                    pressure = frame.contextPressure
+                )
+                "session-stats" -> statsSnapshot = GatewaySessionStatsSnapshot(
+                    asOfSeq = frame.asOfSeq,
+                    stats = frame.sessionStats,
+                    tokenUsage = frame.tokenUsage?.let { usage ->
+                        com.clarklevis.dsh.shared.protocol.GatewaySessionTokenUsage(usage.totals)
+                    },
+                    contextPressure = frame.contextPressure
+                )
+                "host" -> hostSnapshot = GatewayHostSnapshot(
+                    version = frame.version,
+                    cwd = frame.cwd,
+                    provider = frame.provider,
+                    model = frame.model,
+                    attachedSessions = frame.attachedSessions,
+                    canOpenPath = frame.canOpenPath
+                )
                 "event" -> {
                     val event = frame.event
                     val sessionId = frame.sessionId
@@ -150,6 +239,17 @@ class SharedMobileStore(
         sessionListState = SessionListState()
         questionState = QuestionState()
         eventsBySession.clear()
+        workspaces = emptyList()
+        searchResultSessionIds = emptyList()
+        agentPresets = emptyList()
+        agentPresetDefault = null
+        permissionDefault = null
+        defaultModel = null
+        modelCatalog = null
+        permissions = null
+        contextSnapshot = null
+        statsSnapshot = null
+        hostSnapshot = null
         lastFrameKind = null
         lastError = null
         return makeSnapshot()
@@ -169,9 +269,21 @@ class SharedMobileStore(
         val selected = sessionListState.selectedSessionId
         return SharedMobileSnapshot(
             sessions = sessionListState.sessions,
+            workspaces = workspaces,
+            searchResultSessionIds = searchResultSessionIds,
             selectedSessionId = selected,
             conversation = selected?.let { ConversationProjector.make(eventsBySession[it].orEmpty()) }.orEmpty(),
+            pendingQuestions = questionState.pendingRequests,
             pendingQuestionCount = questionState.pendingRequests.size,
+            agentPresets = agentPresets,
+            agentPresetDefault = agentPresetDefault,
+            permissionDefault = permissionDefault,
+            defaultModel = defaultModel,
+            modelCatalog = modelCatalog,
+            permissions = permissions,
+            contextSnapshot = contextSnapshot,
+            statsSnapshot = statsSnapshot,
+            hostSnapshot = hostSnapshot,
             lastFrameKind = lastFrameKind,
             lastError = lastError
         )

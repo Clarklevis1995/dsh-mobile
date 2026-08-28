@@ -56,4 +56,42 @@ class SharedMobileStoreTest {
             snapshot.sessions.first { it.id == "stream" }.lastActivityEpochSeconds
         )
     }
+
+    @Test
+    fun productFramesPopulateWorkspaceSearchAndControlUiState() {
+        val store = SharedMobileStore()
+        var snapshot = store.acceptFrame(
+            """{"kind":"workspaces","items":[{"workspaceId":"w1","path":"/work","title":"Work","sessionIds":["s1"],"createdAt":"now","updatedAt":"now"}]}"""
+        )
+        assertEquals("Work", snapshot.workspaces.single().title)
+
+        snapshot = store.acceptFrame(
+            """{"kind":"search","items":[{"sessionId":"s1","snippet":"match"}]}"""
+        )
+        assertEquals(listOf("s1"), snapshot.searchResultSessionIds)
+
+        snapshot = store.acceptFrame(
+            """{"kind":"agent-presets","agentPresetDefault":"standard","presets":[{"id":"standard","isDefault":true,"name":"Standard"}]}"""
+        )
+        assertEquals("standard", snapshot.agentPresetDefault)
+        assertEquals("Standard", snapshot.agentPresets.single().name)
+
+        snapshot = store.acceptFrame(
+            """{"kind":"models","current":{"provider":"deepseek","model":"deepseek-chat"},"routable":true,"groups":[{"id":"deepseek","name":"DeepSeek","models":[{"id":"deepseek-chat","name":"DeepSeek Chat"}]}]}"""
+        )
+        assertEquals("deepseek-chat", snapshot.modelCatalog?.current?.model)
+
+        snapshot = store.acceptFrame(
+            """{"kind":"session-stats","asOfSeq":4,"sessionStats":{"turns":2,"steps":3},"contextPressure":{"pressureTokens":100,"contextWindow":1000}}"""
+        )
+        assertEquals(2, snapshot.statsSnapshot?.stats?.turns)
+        assertEquals(1_000, snapshot.statsSnapshot?.contextPressure?.contextWindow)
+
+        snapshot = store.acceptFrame(
+            """{"kind":"host","version":"0.1.11","cwd":"/work","provider":"deepseek-official","model":"deepseek-v4","attachedSessions":12,"canOpenPath":true}"""
+        )
+        assertEquals("0.1.11", snapshot.hostSnapshot?.version)
+        assertEquals("deepseek-official", snapshot.hostSnapshot?.provider)
+        assertEquals(12, snapshot.hostSnapshot?.attachedSessions)
+    }
 }

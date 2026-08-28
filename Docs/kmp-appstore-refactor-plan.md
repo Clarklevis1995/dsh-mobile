@@ -3,8 +3,8 @@
 > 状态：进行中  
 > 当前分支：`feature/kmm`  
 > 创建日期：2026-08-24  
-> 最近更新：2026-08-27
-> 当前任务：阶段 11 已完成；等待确认后开始阶段 12 Android 真实 Gateway 与平台服务
+> 最近更新：2026-08-28
+> 当前任务：阶段 12 remediation 自动化门禁已通过；等待真实 Android 设备与 Mobile Gateway 人工冒烟验收
 
 ## 使用说明
 
@@ -260,25 +260,31 @@ Schema 演进与信任边界：schema 2 的 patch 顶层及所有业务 DTO 均�
 
 ### 阶段 12：Android 真实 Gateway 与平台服务
 
-- [ ] 12.1 定义共享 Gateway transport、preferences、credential、attachment cache 和 clock 接口。
-- [ ] 12.2 在 Android 实现 OkHttp WebSocket、重连、认证/配对、请求关联和网络状态处理。
-- [ ] 12.3 使用 Android Keystore/DataStore 实现凭据与配置持久化，敏感信息不得进入日志或普通 preferences。
-- [ ] 12.4 实现 Android 图片选择、预处理、附件缓存和上传/下载 effect。
-- [ ] 12.5 接入 Android 生命周期、前后台连接策略和必要的前台服务/通知策略。
+- [x] 12.1 定义共享 Gateway transport、preferences、credential、attachment cache 和 clock 接口。
+- [x] 12.2 在 Android 实现 OkHttp WebSocket、重连、认证/配对、请求关联和网络状态处理。
+- [x] 12.3 使用 Android Keystore/DataStore 实现凭据与配置持久化，敏感信息不得进入日志或普通 preferences。
+- [x] 12.4 实现 Android 图片选择、预处理、附件缓存和上传/下载 effect。
+- [x] 12.5 接入 Android 生命周期、前后台连接策略和必要的前台服务/通知策略。
 - [ ] 12.6 建立 fake transport 集成测试和真实 Gateway 开发环境冒烟测试。
+  - [x] 12.6.1 commonTest 与 Android JVM fake transport 集成测试。
+  - [ ] 12.6.2 按 `Docs/kmp-stage12-android-gateway-verification.md` 完成真实设备/Gateway 冒烟。
 
 验收标准：Android 能完成配对、重连、会话拉取、消息收发、流式事件和历史加载，断网恢复不丢状态。
 
+12.1～12.6.1 实现结论：`commonMain` 新增 transport、非敏感 preferences、安全 credential、attachment cache、network monitor 和 clock 边界，以及统一串行化的 `GatewayRuntime`。Android OkHttp 复制既有 iOS 已验证的协议字段；frame/failure 共用有序且溢出显式失败的 transport 通道，文本帧用无副本 UTF-8 长度计算并限制为单帧 16 MiB、8 帧、累计 24 MiB，connection/request generation 与 timeout 隔离晚到响应。Runtime 到平台投影改为单消费者真实背压队列，同时限制 8 个事件和 48 MiB 估算保留量；附件落盘后只发布移除 Base64 data 的清洗 frame，避免第二级事件流继续持有大附件。请求 lane 按协议语义分流：message/question 忙时明确拒绝并保留 UI 输入，attachment 使用真正 FIFO deque，history/session 等可幂等读取 active + latest queued；hello 自动恢复会按 response kind 与 deferred 回放去重，替换、超时、取消和请求失败均携带目标并通知共享 Store 结束 loading。发送消息先在 Main 捕获不可变 session/draft/images/input generation，accepted 后仅在 generation、内容和 session 仍一致时清空，因此点击后继续编辑、换图或切 session 不会误发/误清。可恢复断网在有界窗口保留活动 turn/后台保活并自动重连；恢复超时会关闭 transport、废弃 generation，后台最后一个 `turn/end` 或 message timeout 会立即废弃连接并进入 `SUSPENDED`，前台再自动重连；401/4003 等不可恢复失败会阻断自动重连，直到新用户连接意图；`WAITING_FOR_NETWORK` 的同 endpoint stored-connect 保持幂等且不取消恢复期限。普通配置进入 DataStore，token/device id 经 Android Keystore AES-GCM 后进入独立 no-backup DataStore；connection spec 先完成凭据快照再分配 generation，读取失败关闭旧 transport；paired token 在事件发布前剥离，敏感 DTO 的 `toString` 均脱敏。Android 用 `SharedHistoryStore` / `SharedConversationStore` 合并分页 history 与 live 增量；MVI adapter 先严格解码并在临时状态验证 domain/schema/sequence/transaction/patch/operation/effect，另外维护 per-session history/conversation 水位，非显式 clear 的 history replace 也不得回退 tail；全部成功后才一次提交并执行 effect，坏 payload、回退或非法重复均零状态/零 I/O 且永久 fail-closed，transaction 去重窗口有界为 64。attachmentId 未经协议证明全局唯一，缓存、终态和 UI 内部均使用 `sessionId + attachmentId` 复合键；附件成功提交 7 天/32 MiB LRU cache 后才回读。UI 由 LazyColumn 实际可见项驱动请求，仅持有 16 MiB 访问型缩略图 LRU 和最多 256 项状态；淘汰 key 会同步为 `DEFERRED` 且只允许显式重试，避免同屏超预算抖动，采样尺寸使用 `LocalWindowInfo.containerSize` 的实际像素宽与 240dp 显示高度，不保留附件原始 ByteArray。图片输入、数量、总字节与 Base64 均有硬上限，并在 IO dispatcher 完成 bounds/sample decode。Application graph 现在同时持有单例 Runtime、Projection 和 StateHolder，Activity ViewModel 仅作为 UI facade；所有 Frame、select、fixture、reset、history terminal 的 Projection mutation 与对应 Main snapshot publish 都进入同一 `AndroidProjectionActor` 有序提交，旧计算不能晚发布覆盖新 selection。Gateway decode/MVI 使用单线程后台 dispatcher，后台错误只切 Main 发布 Compose state，Activity finish/reopen 不丢 replay 间隙状态，重复 stored-connect 不重开 socket或清 turn；活动 turn 使用 `connectedDevice` 前台服务。release 禁止 cleartext，仅 debug 允许 LAN `ws://` 开发冒烟。fake/JVM/instrumentation 测试与构建结果不替代真实 Gateway 人工验收。
+
 ### 阶段 13：Android 原生产品 UI
 
-- [ ] 13.1 建立 Compose Navigation、应用级 State Holder 和窗口尺寸适配。
-- [ ] 13.2 实现配对/连接、Workspace、Session 列表和 Settings 页面。
-- [ ] 13.3 实现 Conversation、流式消息、Markdown、图片附件、工具结果和输入区。
-- [ ] 13.4 实现 Human Question、模型选择、权限、Context Usage、Stats 和 Agent Preset UI。
-- [ ] 13.5 实现 History 分页、Trajectory、未读、归档、搜索和错误恢复交互。
-- [ ] 13.6 建立 Compose UI 测试、截图测试和关键无障碍语义。
+- [x] 13.1 建立 Compose Navigation、应用级 State Holder 和窗口尺寸适配。
+- [x] 13.2 实现配对/连接、Workspace、Session 列表和 Settings 页面。
+- [x] 13.3 实现 Conversation、流式消息、Markdown、图片附件、工具结果和输入区。
+- [x] 13.4 实现 Human Question、模型选择、权限、Context Usage、Stats 和 Agent Preset UI。
+- [x] 13.5 实现 History 分页、Trajectory、未读、归档、搜索和错误恢复交互。
+- [x] 13.6 建立 Compose UI 测试、截图测试和关键无障碍语义。
 
 验收标准：Android 关键产品流程与 iOS 协议语义一致，同时保持 Android 原生交互和生命周期设计。
+
+13.1～13.6 实现结论：Android 产品入口已从阶段 12 的 Gateway 开发冒烟页切换为 Compose Navigation 驱动的 Workspace、Conversation 与 Settings 三层页面，复用 Application 级 State Holder/Projection，并按窗口宽度限制内容列。UI 以 iOS `RootView`、`WorkspaceView`、`ConversationView`、`SettingsView`、`HumanQuestionView`、`TrajectoryView`、`Theme`、`Glass` 和 `HarnessAnimatedBackground` 源码为逐项基准：还原品牌头、Workspace 选择与会话列表、会话/轨迹分段、消息类型、Markdown、工具与推理状态、图片、输入器、Human Question、模型/权限/Agent Preset、Context Usage、Stats、分页、搜索、归档和错误恢复。主页背景把 Metal 流体公式翻译为 API 33+ AGSL RuntimeShader，并复用同一鲸鱼 SVG 路径、60×60 粒子采样、漂移/尾迹/闪烁公式、技术网格与底部渐变；API 24～32 使用受控降级，动画遵循生命周期与系统动画缩放。Compose 设备测试覆盖主页关键语义和离线新建会话；动态背景与液态玻璃使用最终 APK 的真实前台连续截图及卡片内部区域哈希验证，避免 instrumentation 测试时钟冻结实时协程后产生假阴性。API 35 模拟器另外人工截图核对主页、工作区面板、会话页和设置页的明暗系统栏、可读性与层级。阶段 13 自动化和截图证据不替代阶段 12.6.2 的真实 Gateway 全业务人工冒烟。
 
 ### 阶段 14：双端一致性、性能与发布准备
 
@@ -328,6 +334,17 @@ xcodebuild test \
 - Android 真实 Gateway 接入涉及凭据、后台连接和附件文件，必须分别使用 Keystore、生命周期策略和受控缓存。
 
 ## 变更记录
+
+### 2026-08-28
+
+- 修正并细化阶段 13 Android 鲸鱼点阵：Android `Path`/Compose 同为 Y 轴向下坐标，不再照搬 iOS `CGContext` 像素行翻转；进一步对照 DeepSeek Harness 官网运行代码，把完整 `24×18` SVG 等比放入抗锯齿 `60×60` 位图采样画布，按 0.2 亮度阈值生成粒子并使用奇偶填充保留腹部、鳃部等内部轮廓，不再把外轮廓分别拉满正方形。工作区选择卡、主按钮和圆形控制同步增强 Backdrop 曝光/饱和度、定向高光、折射、内阴影与亮边。新增设备回归验证 24:18 比例和腹部空洞；最终 Android JVM 24 项、API 35 设备 8 项均 0 失败，Lint 0 issue，assemble 与 `git diff --check` 通过，Debug APK 为 14,379,644 bytes。
+- 阶段 13 追加 Android 液态玻璃：参考 `Kyant0/AndroidLiquidGlass`，接入与当前 Kotlin/Compose 同代的 Apache-2.0 `Backdrop 1.0.6`，由 `DshLiquidGlassHost` 单独录制主页动画背景；Workspace 卡片、新建按钮、顶栏圆形按钮、搜索框和空状态统一使用真实背景采样、vibrancy、blur、高光/阴影，并在 API 33+ 增加 lens、depth 和轻微色散，API 24～30 保留安全降级。动态背景 30fps 同步生成 20fps 纯 DrawModifier 失效信号，不进入业务 Composition；最终 APK 前台连续截图中玻璃卡片内部两帧哈希不同。强制门禁为 KMP 89 项、Android JVM 24 项、API 35 设备测试 7 项均 0 失败，Lint 0 issue，Debug APK 14,379,644 bytes，`git diff --check` 通过；第三方声明见 `Docs/third-party-notices.md`。
+- 完成阶段 13 Android 原生产品 UI：以 iOS SwiftUI、Theme、Glass、鲸鱼 SVG 和 Metal shader 源码为基准，Compose 一比一还原 Workspace、Conversation、Settings、Human Question、Trajectory 及主页动画，产品入口切换为 Navigation 三层结构；补齐 Workspace/Session 搜索归档、History 分页、Markdown/图片/工具、模型/权限/Context/Stats/Agent Preset 和错误恢复交互。主页在 API 33+ 使用 AGSL 复刻流体公式，并保留同源 60×60 鲸鱼粒子、网格、尾迹、闪烁、生命周期/移除动画适配及 API 24～32 降级。Pixel 9 AVD / Android 15 / API 35 最终强制门禁为 KMP 89 项、Android JVM 24 项、设备测试 8 项均 0 失败，Lint 0 issue，Debug APK 14,281,340 bytes，`git diff --check` 通过；人工截图核对主页、工作区面板、会话页、设置页并修复面板明暗可读性。阶段 12.6.2 真实 Gateway 全业务人工冒烟仍独立保持未完成。
+- 阶段 12 真实设备验收补充 Debug 安全诊断日志：统一 Tag `DshGateway` 覆盖用户 intent、transport open/send/frame/failure、Runtime state/frame/request 生命周期以及前后台/前台服务事件；只记录状态、协议 kind、请求类型、generation、关闭码、字节数和布尔关联标记，API 不接受 endpoint、凭据、正文或任何 Session/附件 ID，未知协议值统一显示 `unknown`。Release 通过 debuggable 标志关闭诊断器。新增脱敏回归后 Android JVM 共 24 项，Lint 0 issue，当前 Debug APK 13,785,523 bytes；OnePlus 8 / Android 真机已验证 application→bearer opening→open→hello→workspaces→sessions→CONNECTED 日志可见且不含敏感字段。
+- 阶段 12 真实 Gateway 首轮人工操作发现点击“连接”后 `AndroidGatewayClock.delay()` 因成员函数与导入的协程函数同名而递归调用，触发 `StackOverflowError`。现已改为完全限定调用 `kotlinx.coroutines.delay`，并新增直接调用真实 Clock 的 JVM 回归测试。Android JVM 23 项、Lint、Debug APK 构建均通过；Pixel 9 AVD 点击连接后进程存活，错误级 Logcat 无输出。宿主 Gateway 仅监听 `127.0.0.1:3080`，为模拟器配置 `adb reverse tcp:3080 tcp:3080` 后已通过保存凭据进入 `CONNECTED`、收到 `sessions` 并展示真实会话列表。首次配对、历史/消息、断网/后台及附件业务验收仍待继续，12.6.2 未勾选。
+- 完成阶段 12 第五轮 remediation：Android Projection mutation 与 Main snapshot publish 收口到同一 actor，增加输入 generation 条件清理、后台 message timeout idle suspension、history replace tail 防回退，并以 `LocalWindowInfo.containerSize` 消除 Configuration screen size Lint 警告。统一门禁为 shared 89 项、Android JVM 22 项、API 35 instrumentation 5 项均 0 失败，Lint 0 issue，release merged manifest 禁止 cleartext，Debug APK 13,769,139 bytes；最终安装和冷启动成功。真实 Gateway 12.6.2 仍未执行。
+- 完成阶段 12 第四轮 remediation：Runtime 事件队列加入事件数/字节双边界和真实背压，attachment event 清除 Base64；Android Gateway decode/MVI 移至单线程后台 dispatcher，Application graph 持有单例 Projection/StateHolder；补齐后台最后 turn 挂起、WAITING 幂等、凭据失败关闭、per-session MVI 水位、复合附件键、缩略图淘汰状态同步和可注入产品组合测试。统一门禁为 shared 88 项、Android JVM 19 项、API 35 instrumentation 5 项均 0 失败，Lint 0 issue，Debug APK 13,769,139 bytes；最终安装和冷启动成功。真实 Gateway 12.6.2 仍未执行。
+- 完成阶段 12 第三轮 remediation 自动化门禁：统一 `--rerun-tasks` 的 `:shared:allTests` iOS Simulator 84 项、Android JVM 17 项均 0 失败；API 35 instrumentation 高分辨率压缩图缩略与 Activity 配置重建测试 2 项通过；Android Lint 0 issue，Debug APK 构建成功（本次 13,736,371 bytes），`git diff --check`、manifest 和敏感信息源码扫描通过。Pixel 9 AVD / Android 15 / API 35 成功安装并冷启动本轮最终 APK；这不是实际 Mobile Gateway 结果。12.6.2 仍须按 `Docs/kmp-stage12-android-gateway-verification.md` 人工执行。
 
 ### 2026-08-27
 
