@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -107,8 +108,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -193,7 +198,12 @@ internal fun ConversationScreen(
             )
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .consumeWindowInsets(padding)
+        ) {
             SegmentedControl(pagerState.currentPage) { target -> scope.launch { pagerState.animateScrollToPage(target) } }
             HorizontalPager(
                 state = pagerState,
@@ -1158,18 +1168,28 @@ private fun ComposerPopupMenu(
     val density = LocalDensity.current
     val windowHeight = with(density) { LocalWindowInfo.current.containerSize.height.toDp() }
     val maxSurfaceHeight = (windowHeight - 180.dp).coerceIn(240.dp, 560.dp)
-    Popup(
-        alignment = alignment,
-        offset = with(density) {
-            IntOffset(
-                x = horizontalCompensation.roundToPx(),
-                y = 20.dp.roundToPx()
-            )
-        },
-        onDismissRequest = onDismissRequest,
-        properties = PopupProperties(focusable = true, clippingEnabled = false)
+    val horizontalCompensationPx = with(density) { horizontalCompensation.roundToPx() }
+    val screenMarginPx = with(density) { 8.dp.roundToPx() }
+    val anchorGapPx = with(density) { 4.dp.roundToPx() }
+    val positionProvider = remember(
+        alignment,
+        horizontalCompensationPx,
+        screenMarginPx,
+        anchorGapPx
     ) {
-        Box(Modifier.padding(start = 28.dp, top = 28.dp, end = 28.dp, bottom = 48.dp)) {
+        ComposerPopupPositionProvider(
+            alignToEnd = alignment == Alignment.BottomEnd,
+            horizontalCompensationPx = horizontalCompensationPx,
+            screenMarginPx = screenMarginPx,
+            anchorGapPx = anchorGapPx
+        )
+    }
+    Popup(
+        popupPositionProvider = positionProvider,
+        onDismissRequest = onDismissRequest,
+        properties = PopupProperties(focusable = true, clippingEnabled = true)
+    ) {
+        Box(Modifier.padding(20.dp)) {
             Surface(
                 modifier = Modifier.width(width).heightIn(max = maxSurfaceHeight).dropShadow(
                     shape = RoundedCornerShape(24.dp),
@@ -1191,6 +1211,44 @@ private fun ComposerPopupMenu(
                 )
             }
         }
+    }
+}
+
+private class ComposerPopupPositionProvider(
+    private val alignToEnd: Boolean,
+    private val horizontalCompensationPx: Int,
+    private val screenMarginPx: Int,
+    private val anchorGapPx: Int
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize
+    ): IntOffset {
+        val maximumX = (windowSize.width - popupContentSize.width - screenMarginPx).coerceAtLeast(0)
+        val minimumX = screenMarginPx.coerceAtMost(maximumX)
+        val preferredX = if (alignToEnd) {
+            anchorBounds.right - popupContentSize.width
+        } else {
+            anchorBounds.left
+        } + horizontalCompensationPx
+
+        val maximumY = (windowSize.height - popupContentSize.height - screenMarginPx).coerceAtLeast(0)
+        val minimumY = screenMarginPx.coerceAtMost(maximumY)
+        val aboveAnchor = anchorBounds.top - popupContentSize.height - anchorGapPx
+        val belowAnchor = anchorBounds.bottom + anchorGapPx
+        val preferredY = when {
+            aboveAnchor >= minimumY -> aboveAnchor
+            belowAnchor <= maximumY -> belowAnchor
+            anchorBounds.top >= windowSize.height - anchorBounds.bottom -> aboveAnchor
+            else -> belowAnchor
+        }
+
+        return IntOffset(
+            x = preferredX.coerceIn(minimumX, maximumX),
+            y = preferredY.coerceIn(minimumY, maximumY)
+        )
     }
 }
 

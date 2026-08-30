@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.android
 
+import android.view.WindowManager
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -7,6 +8,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,6 +17,15 @@ import org.junit.runner.RunWith
 class AndroidUiParityDeviceTest {
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun activityUsesResizeInsteadOfPanningTheConversationAboveTheIme() {
+        val adjustMode = compose.activity.window.attributes.softInputMode and
+            WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST
+
+        assertEquals(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE, adjustMode)
+    }
 
     @Test
     fun workspaceChromeMatchesTheIosSourceAndExposesAccessibilitySemantics() {

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- 仅 debug 允许连接开发机/LAN 的 ws:// Gateway；release 强制 wss://。 -->
+    <!-- 内网构建允许连接开发机/LAN 的 ws:// Gateway。 -->
     <application
         android:usesCleartextTraffic="true"
         tools:replace="android:usesCleartextTraffic" />

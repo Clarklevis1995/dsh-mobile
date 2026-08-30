@@ -19,13 +19,14 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:usesCleartextTraffic="false"
+        android:usesCleartextTraffic="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.DeepSeekHarness">
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.DeepSeekHarness.Starting">
+            android:theme="@style/Theme.DeepSeekHarness.Starting"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
