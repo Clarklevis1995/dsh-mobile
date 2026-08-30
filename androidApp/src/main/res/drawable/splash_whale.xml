@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 自适应图标使用 108dp 方形画布；完整鲸鱼必须位于 66dp 遮罩安全区内。 -->
+    <!-- Android 12+ 会遮罩启动图标；方形透明画布可避免非正方形鲸鱼被居中裁切。 -->
     <item>
         <shape android:shape="rectangle">
             <size
@@ -10,8 +10,8 @@
         </shape>
     </item>
     <item
-        android:width="60dp"
-        android:height="45dp"
+        android:width="64dp"
+        android:height="48dp"
         android:drawable="@drawable/deepseek_whale"
         android:gravity="center" />
 </layer-list>

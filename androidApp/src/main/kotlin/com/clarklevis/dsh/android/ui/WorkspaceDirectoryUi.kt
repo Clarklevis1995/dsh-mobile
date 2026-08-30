@@ -551,7 +551,6 @@ private fun DirectoryCreateWorkspaceBar(
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color.Black)
                 .clickable(enabled = enabled, role = Role.Button) { path?.let(onCreateWorkspace) }
-                .alpha(if (enabled) 1f else 0.48f)
                 .testTag("create-workspace"),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
