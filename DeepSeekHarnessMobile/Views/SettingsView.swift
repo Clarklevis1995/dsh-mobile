@@ -11,7 +11,7 @@ struct SettingsView: View {
 
     private var selectedPermissionName: String {
         guard let id = store.permissionDefault else { return String(localized: "未读取") }
-        return DefaultPermissionChoice.option(id: id)?.title ?? id
+        return DefaultPermissionChoice.option(id: id)?.title ?? String(localized: "未读取")
     }
 
     private var defaultsAreLoading: Bool {
@@ -217,7 +217,6 @@ private struct DefaultPermissionChoice: Identifiable, Hashable {
     let description: String
 
     static let options = [
-        DefaultPermissionChoice(id: "ask", title: L10n.permissionName(for: "ask"), description: String(localized: "需要写入或执行敏感操作时请求确认")),
         DefaultPermissionChoice(id: "read-only", title: L10n.permissionName(for: "read-only"), description: String(localized: "允许读取工作区，不允许修改文件")),
         DefaultPermissionChoice(id: "workspace-write", title: L10n.permissionName(for: "workspace-write"), description: String(localized: "允许在当前工作区内读取和写入")),
         DefaultPermissionChoice(id: "danger-full-access", title: L10n.permissionName(for: "danger-full-access"), description: String(localized: "允许不受沙箱限制地访问宿主环境"))

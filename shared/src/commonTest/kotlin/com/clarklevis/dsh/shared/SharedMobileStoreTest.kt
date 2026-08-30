@@ -77,6 +77,16 @@ class SharedMobileStoreTest {
         assertEquals("Standard", snapshot.agentPresets.single().name)
 
         snapshot = store.acceptFrame(
+            """{"kind":"set-default","target":"agent-preset","value":"cordis","applied":true}"""
+        )
+        assertEquals("cordis", snapshot.agentPresetDefault)
+
+        snapshot = store.acceptFrame(
+            """{"kind":"set-default","target":"permission","value":"workspace-write","applied":true}"""
+        )
+        assertEquals("workspace-write", snapshot.permissionDefault)
+
+        snapshot = store.acceptFrame(
             """{"kind":"models","current":{"provider":"deepseek","model":"deepseek-chat"},"routable":true,"groups":[{"id":"deepseek","name":"DeepSeek","models":[{"id":"deepseek-chat","name":"DeepSeek Chat"}]}]}"""
         )
         assertEquals("deepseek-chat", snapshot.modelCatalog?.current?.model)

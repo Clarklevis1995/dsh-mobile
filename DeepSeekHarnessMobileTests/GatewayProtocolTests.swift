@@ -3104,12 +3104,12 @@ final class GatewayProtocolTests: XCTestCase {
         )
         let frames = [
             #"{"kind":"agent-presets","presets":[{"id":"standard","isDefault":true}],"authorable":true,"hasDocument":true}"#,
-            #"{"kind":"defaults","agentPresetDefault":"standard","permissionDefault":"ask"}"#,
+            #"{"kind":"defaults","agentPresetDefault":"standard","permissionDefault":"workspace-write"}"#,
             #"{"kind":"models","sessionId":"session-1","current":{"provider":"openai","model":"gpt-5"},"routable":true,"groups":[]}"#,
             #"{"kind":"permission-options","sessionId":"session-1","sessionPermissions":{"options":[{"value":"read-only","name":"Read"},{"value":"future","name":"Future"}],"currentValue":"read-only"}}"#,
             #"{"kind":"context-usage","sessionId":"session-1","asOfSeq":10,"tokenUsage":{"uncachedInputTokens":12}}"#,
             #"{"kind":"session-stats","sessionId":"session-1","asOfSeq":20,"sessionStats":{"turns":2},"tokenUsage":{"totals":{"inputTokens":100}}}"#,
-            #"{"kind":"set-default","applied":true,"target":"permission","value":"ask"}"#
+            #"{"kind":"set-default","applied":true,"target":"permission","value":"workspace-write"}"#
         ]
         for json in frames {
             store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(json.utf8)))

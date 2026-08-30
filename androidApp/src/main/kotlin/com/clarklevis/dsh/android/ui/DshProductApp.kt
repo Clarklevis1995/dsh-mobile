@@ -35,14 +35,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -95,12 +91,15 @@ import com.clarklevis.dsh.shared.domain.SessionSummary
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
-import java.util.concurrent.TimeUnit
+import java.util.Calendar
+import java.util.TimeZone
 import kotlinx.coroutines.delay
 
 private const val ROUTE_WORKSPACE = "workspace"
 private const val ROUTE_CONVERSATION = "conversation"
 private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_SETTINGS_AGENT_PRESETS = "settings/agent-presets"
+private const val ROUTE_SETTINGS_DEFAULT_MODEL = "settings/default-model"
 
 @Composable
 internal fun DshProductApp(
@@ -154,7 +153,18 @@ internal fun DshProductApp(
             ConversationScreen(stateHolder, onPickImage, navController::popBackStack)
         }
         composable(ROUTE_SETTINGS) {
-            SettingsScreen(stateHolder, navController::popBackStack)
+            SettingsScreen(
+                stateHolder = stateHolder,
+                onBack = navController::popBackStack,
+                onOpenAgentPresets = { navController.navigate(ROUTE_SETTINGS_AGENT_PRESETS) },
+                onOpenDefaultModel = { navController.navigate(ROUTE_SETTINGS_DEFAULT_MODEL) }
+            )
+        }
+        composable(ROUTE_SETTINGS_AGENT_PRESETS) {
+            AgentPresetSelectionScreen(stateHolder, navController::popBackStack)
+        }
+        composable(ROUTE_SETTINGS_DEFAULT_MODEL) {
+            DefaultModelSelectionScreen(stateHolder, navController::popBackStack)
         }
     }
     stateHolder.platformError?.let { error ->
@@ -184,7 +194,8 @@ private fun WorkspaceScreen(
     onSettings: () -> Unit
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
-    var showGateway by rememberSaveable { mutableStateOf(false) }
+    var showManualPairing by rememberSaveable { mutableStateOf(false) }
+    var showQrScanner by rememberSaveable { mutableStateOf(false) }
     var showWorkspaces by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(stateHolder.gatewayState.connection) { stateHolder.refreshProductState() }
     LaunchedEffect(searchQuery) {
@@ -231,7 +242,15 @@ private fun WorkspaceScreen(
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     WorkspaceHeader(
-                        onGateway = { showGateway = true },
+                        state = stateHolder.gatewayState,
+                        onScan = {
+                            stateHolder.clearPlatformError()
+                            showQrScanner = true
+                        },
+                        onManualEntry = {
+                            stateHolder.clearPlatformError()
+                            showManualPairing = true
+                        },
                         onSettings = onSettings
                     )
                     Spacer(Modifier.height(90.dp))
@@ -268,8 +287,21 @@ private fun WorkspaceScreen(
         }
     }
 
-    if (showGateway) {
-        GatewaySheet(stateHolder) { showGateway = false }
+    if (showQrScanner) {
+        GatewayQrScannerScreen(
+            onCode = { payload ->
+                showQrScanner = false
+                stateHolder.pair(payload)
+            },
+            onCancel = { showQrScanner = false },
+            onFailure = { message ->
+                showQrScanner = false
+                stateHolder.showPlatformError(message)
+            }
+        )
+    }
+    if (showManualPairing) {
+        ManualGatewayPairingSheet(stateHolder) { showManualPairing = false }
     }
     if (showWorkspaces) {
         WorkspacePicker(
@@ -286,18 +318,20 @@ private fun WorkspaceScreen(
 
 @Composable
 private fun WorkspaceHeader(
-    onGateway: () -> Unit,
+    state: GatewayRuntimeState,
+    onScan: () -> Unit,
+    onManualEntry: () -> Unit,
     onSettings: () -> Unit
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         HarnessMark()
         Spacer(Modifier.weight(1f))
-        GlassCircleButton(
-            iconRes = R.drawable.ic_gateway_auth,
-            description = "Mobile Gateway",
-            onClick = onGateway
+        GatewayAuthenticationMenu(
+            state = state,
+            onScan = onScan,
+            onManualEntry = onManualEntry
         )
-        Spacer(Modifier.width(9.dp))
+        Spacer(Modifier.width(12.dp))
         GlassCircleButton(R.drawable.ic_settings, "设置", onSettings)
     }
 }
@@ -335,9 +369,9 @@ internal fun WhaleIcon(
 }
 
 @Composable
-private fun GlassCircleButton(iconRes: Int, description: String, onClick: () -> Unit) {
+internal fun GlassCircleButton(iconRes: Int, description: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(48.dp)
+        Modifier.size(52.dp)
             .dshLiquidGlass(CircleShape, DshGlassStyle.CONTROL)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
@@ -346,7 +380,7 @@ private fun GlassCircleButton(iconRes: Int, description: String, onClick: () -> 
         Image(
             painter = painterResource(iconRes),
             contentDescription = null,
-            modifier = Modifier.size(21.dp),
+            modifier = Modifier.size(22.dp),
             colorFilter = ColorFilter.tint(Color.White)
         )
     }
@@ -489,14 +523,29 @@ private fun SessionRow(session: SessionSummary, onClick: () -> Unit) {
     ) {
         val dot = if (session.isRunning) DshColors.Success else if (session.hasUnread) DshColors.Ocean else Color.White.copy(alpha = 0.35f)
         Box(Modifier.size(7.dp).background(dot, CircleShape))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(session.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-            Text(session.id.take(16), color = Color.White.copy(alpha = 0.42f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = session.title,
+                color = Color.White,
+                fontSize = 15.sp,
+                lineHeight = 17.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+            )
+            Text(
+                text = session.id.take(16),
+                color = Color.White.copy(alpha = 0.42f),
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
+                fontFamily = FontFamily.Monospace,
+                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+            )
         }
         Text(
             if (session.isRunning) "运行中" else relativeTime(session.lastActivityEpochSeconds),
             color = if (session.isRunning) Color(0xFF68A0FF) else Color.White.copy(alpha = 0.48f),
-            fontSize = 12.sp
+            fontSize = 13.sp
         )
     }
 }
@@ -530,52 +579,6 @@ private fun ConnectionStatusText(state: GatewayRuntimeState) {
         },
         fontSize = 12.sp
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun GatewaySheet(stateHolder: AndroidSharedStateHolder, onDismiss: () -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 22.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text("Mobile Gateway", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            ConnectionStatusTextDark(stateHolder.gatewayState)
-            OutlinedTextField(
-                value = stateHolder.endpoint,
-                onValueChange = { stateHolder.endpoint = it },
-                label = { Text("ws:// 或 wss:// 地址") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            OutlinedTextField(
-                value = stateHolder.pairingPayload,
-                onValueChange = { stateHolder.pairingPayload = it },
-                label = { Text("配对二维码中的 Base64URL 字符串") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = stateHolder::connect) { Text("连接") }
-                OutlinedButton(onClick = stateHolder::pair, enabled = stateHolder.pairingPayload.isNotBlank()) { Text("配对") }
-                TextButton(onClick = stateHolder::disconnect) { Text("断开") }
-            }
-            stateHolder.platformError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
-            Spacer(Modifier.height(10.dp))
-        }
-    }
-}
-
-@Composable
-private fun ConnectionStatusTextDark(state: GatewayRuntimeState) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ConnectionDot(state)
-        Text("状态：${state.connection.name}", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f))
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -619,14 +622,32 @@ private fun WorkspaceChoice(title: String, subtitle: String, selected: Boolean, 
     }
 }
 
-private fun relativeTime(epochSeconds: Double): String {
-    val elapsed = (System.currentTimeMillis() / 1_000 - epochSeconds.toLong()).coerceAtLeast(0)
+internal fun relativeTime(
+    epochSeconds: Double,
+    nowMillis: Long = System.currentTimeMillis(),
+    timeZone: TimeZone = TimeZone.getDefault()
+): String {
+    val eventMillis = (epochSeconds * 1_000).toLong().coerceAtMost(nowMillis)
+    val elapsed = ((nowMillis - eventMillis) / 1_000).coerceAtLeast(0)
+    val dayDifference = localDayIndex(nowMillis, timeZone) - localDayIndex(eventMillis, timeZone)
     return when {
+        dayDifference == 1L -> "昨天"
+        dayDifference == 2L -> "前天"
+        dayDifference > 2L -> "$dayDifference 天前"
         elapsed < 60 -> "刚刚"
         elapsed < 3_600 -> "${elapsed / 60} 分钟前"
-        elapsed < 86_400 -> "${elapsed / 3_600} 小时前"
-        else -> "${elapsed / 86_400} 天前"
+        else -> "${elapsed / 3_600} 小时前"
     }
+}
+
+private fun localDayIndex(epochMillis: Long, timeZone: TimeZone): Long {
+    val calendar = Calendar.getInstance(timeZone).apply { timeInMillis = epochMillis }
+    val previousYear = calendar.get(Calendar.YEAR).toLong() - 1
+    return previousYear * 365 +
+        previousYear / 4 -
+        previousYear / 100 +
+        previousYear / 400 +
+        calendar.get(Calendar.DAY_OF_YEAR)
 }
 
 private const val UNGROUPED = "__ungrouped__"

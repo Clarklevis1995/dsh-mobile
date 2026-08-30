@@ -346,25 +346,21 @@ class GatewayRuntime(
         val lane = pendingLanes.remove(responseKind) ?: return
         lane.active.timeoutJob.cancel()
         val queued = lane.queued.removeFirstOrNull() ?: return
-        if (lane.active.request.correlationId != null && queued.correlationId != null) {
-            if (mutableState.value.connection == GatewayConnectionState.CONNECTED) {
-                if (sendAsActiveLocked(queued)) {
-                    val nextLane = pendingLanes[responseKind]
-                    while (lane.queued.isNotEmpty()) {
-                        nextLane?.queued?.addLast(lane.queued.removeFirst())
-                    }
-                } else {
-                    while (lane.queued.isNotEmpty()) deferredRequests.addLast(lane.queued.removeFirst())
-                    recycleConnectionForDeferredLocked()
+        // 正常响应已经确定 active 请求结束；下一请求必须沿用当前 socket 串行发送。
+        // generation 回收只留给 timeout/transport failure，否则 hello 后的重复快照会形成重连闭环。
+        if (mutableState.value.connection == GatewayConnectionState.CONNECTED) {
+            if (sendAsActiveLocked(queued)) {
+                val nextLane = pendingLanes[responseKind]
+                while (lane.queued.isNotEmpty()) {
+                    nextLane?.queued?.addLast(lane.queued.removeFirst())
                 }
             } else {
-                deferredRequests.addLast(queued)
                 while (lane.queued.isNotEmpty()) deferredRequests.addLast(lane.queued.removeFirst())
+                recycleConnectionForDeferredLocked()
             }
         } else {
+            deferredRequests.addLast(queued)
             while (lane.queued.isNotEmpty()) deferredRequests.addLast(lane.queued.removeFirst())
-            deferredRequests.addFirst(queued)
-            recycleConnectionForDeferredLocked()
         }
     }
 

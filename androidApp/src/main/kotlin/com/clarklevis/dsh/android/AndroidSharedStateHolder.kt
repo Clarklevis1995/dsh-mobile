@@ -15,6 +15,7 @@ import com.clarklevis.dsh.android.platform.BoundedLruCache
 import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
 import com.clarklevis.dsh.shared.facade.SharedMobileStore
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
+import com.clarklevis.dsh.shared.gateway.GatewayPairingPayloadException
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
@@ -106,6 +107,12 @@ class AndroidSharedStateHolder(
         private set
     var platformError: String? by mutableStateOf(null)
         private set
+    var defaultConfigurationLoadingKinds: Set<String> by mutableStateOf(emptySet())
+        private set
+    var agentPresetsAuthorable: Boolean by mutableStateOf(false)
+        private set
+    var agentPresetsHasDocument: Boolean by mutableStateOf(false)
+        private set
 
     init {
         graph?.let { appGraph ->
@@ -121,6 +128,12 @@ class AndroidSharedStateHolder(
                         appGraph.diagnostics.runtimeState(state)
                         withContext(Dispatchers.Main.immediate) {
                             gatewayState = state
+                            if (state.connection != GatewayConnectionState.CONNECTED &&
+                                state.connection != GatewayConnectionState.CONNECTING &&
+                                state.connection != GatewayConnectionState.AUTHENTICATING
+                            ) {
+                                defaultConfigurationLoadingKinds = emptySet()
+                            }
                             if (
                                 state.connection == GatewayConnectionState.CONNECTED &&
                                 lastObservedConnection != GatewayConnectionState.CONNECTED &&
@@ -151,6 +164,14 @@ class AndroidSharedStateHolder(
                                         }
                                     }
                                 }
+                                withContext(Dispatchers.Main.immediate) {
+                                    defaultConfigurationLoadingKinds =
+                                        defaultConfigurationLoadingKinds - event.frame.kind
+                                    if (event.frame.kind == "agent-presets") {
+                                        agentPresetsAuthorable = event.frame.authorable == true
+                                        agentPresetsHasDocument = event.frame.hasDocument == true
+                                    }
+                                }
                                 if (trajectoryIsActive) publishTrajectory()
                             }
                             is GatewayRuntimeEvent.AttachmentCached -> withContext(Dispatchers.Main.immediate) {
@@ -158,6 +179,10 @@ class AndroidSharedStateHolder(
                             }
                             is GatewayRuntimeEvent.RequestQueued -> Unit
                             is GatewayRuntimeEvent.RequestCancelled -> {
+                                withContext(Dispatchers.Main.immediate) {
+                                    defaultConfigurationLoadingKinds =
+                                        defaultConfigurationLoadingKinds - event.requestType
+                                }
                                 event.targetSessionId?.takeIf { event.requestType == "history" }
                                     ?.let { projectionActor.historyCancelled(it) }
                                 if (event.requestType == "attachment") {
@@ -167,6 +192,10 @@ class AndroidSharedStateHolder(
                                 }
                             }
                             is GatewayRuntimeEvent.RequestTimedOut -> {
+                                withContext(Dispatchers.Main.immediate) {
+                                    defaultConfigurationLoadingKinds =
+                                        defaultConfigurationLoadingKinds - event.requestType
+                                }
                                 event.targetSessionId?.takeIf { event.requestType == "history" }
                                     ?.let { projectionActor.historyTimedOut(it) }
                                 if (event.requestType == "attachment") {
@@ -177,6 +206,8 @@ class AndroidSharedStateHolder(
                             }
                             is GatewayRuntimeEvent.RequestRejected -> {
                                 withContext(Dispatchers.Main.immediate) {
+                                    defaultConfigurationLoadingKinds =
+                                        defaultConfigurationLoadingKinds - event.requestType
                                     platformError = "${event.requestType}: ${event.reason}"
                                 }
                                 event.targetSessionId?.takeIf { event.requestType == "history" }
@@ -249,6 +280,7 @@ class AndroidSharedStateHolder(
         } else {
             appGraph.gatewayScope.launch {
                 projectionActor.selectSession(sessionId, afterPublish)
+                if (trajectoryIsActive) publishTrajectory()
                 if (gatewayState.connection == GatewayConnectionState.CONNECTED) {
                     appGraph.gatewayRuntime.subscribe(sessionId)
                 }
@@ -267,6 +299,7 @@ class AndroidSharedStateHolder(
         if (appGraph == null) projectionActor.selectSessionImmediate(null, afterPublish)
         else appGraph.gatewayScope.launch {
             projectionActor.selectSession(null, afterPublish)
+            if (trajectoryIsActive) publishTrajectory()
             if (gatewayState.connection == GatewayConnectionState.CONNECTED) {
                 appGraph.gatewayRuntime.subscribe(null)
             }
@@ -280,6 +313,12 @@ class AndroidSharedStateHolder(
     fun refreshProductState() {
         val appGraph = graph ?: return
         if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
+        defaultConfigurationLoadingKinds = defaultConfigurationLoadingKinds + setOf(
+            "agent-presets",
+            "defaults",
+            "default-model",
+            "models"
+        )
         appGraph.gatewayScope.launch {
             appGraph.gatewayRuntime.sendRequest(GatewayRequests.simple("workspaces"))
             appGraph.gatewayRuntime.requestSessions()
@@ -291,10 +330,51 @@ class AndroidSharedStateHolder(
         }
     }
 
+    fun refreshDefaultConfiguration() {
+        val appGraph = graph ?: return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
+        defaultConfigurationLoadingKinds = defaultConfigurationLoadingKinds + setOf(
+            "agent-presets",
+            "defaults",
+            "default-model"
+        )
+        appGraph.gatewayScope.launch {
+            appGraph.gatewayRuntime.sendRequest(GatewayRequests.simple("agent-presets"))
+            appGraph.gatewayRuntime.sendRequest(GatewayRequests.simple("defaults"))
+            appGraph.gatewayRuntime.sendRequest(GatewayRequests.simple("default-model"))
+        }
+    }
+
+    fun ensureDefaultModelConfiguration() {
+        val appGraph = graph ?: return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
+        defaultConfigurationLoadingKinds =
+            defaultConfigurationLoadingKinds + setOf("models", "default-model")
+        appGraph.gatewayScope.launch {
+            appGraph.gatewayRuntime.sendRequest(GatewayRequests.simple("models"))
+            appGraph.gatewayRuntime.sendRequest(GatewayRequests.simple("default-model"))
+        }
+    }
+
     fun pingGateway() {
         val appGraph = graph ?: return
         if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
         appGraph.gatewayScope.launch { appGraph.gatewayRuntime.sendRequest(GatewayRequests.ping()) }
+    }
+
+    fun reloadSelectedHistory() {
+        val sessionId = snapshot.selectedSessionId ?: return
+        val appGraph = graph ?: return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
+        appGraph.gatewayScope.launch {
+            appGraph.gatewayRuntime.requestHistory(
+                sessionId = sessionId,
+                beforeSequence = null,
+                maxMessages = 50,
+                maxBytes = 4 * 1_024 * 1_024,
+                view = "mobile"
+            )
+        }
     }
 
     fun search(query: String) {
@@ -340,21 +420,26 @@ class AndroidSharedStateHolder(
     }
 
     fun setDefault(target: String, value: String) {
-        graph?.let { appGraph ->
-            appGraph.gatewayScope.launch {
-                appGraph.gatewayRuntime.sendRequest(GatewayRequests.setDefault(target, value))
-                refreshProductState()
+        val appGraph = graph ?: return
+        defaultConfigurationLoadingKinds = defaultConfigurationLoadingKinds + "set-default"
+        appGraph.gatewayScope.launch {
+            val accepted = appGraph.gatewayRuntime.sendRequest(GatewayRequests.setDefault(target, value))
+            if (!accepted) withContext(Dispatchers.Main.immediate) {
+                defaultConfigurationLoadingKinds = defaultConfigurationLoadingKinds - "set-default"
             }
         }
     }
 
     fun saveDefaultModel(provider: String, model: String, reasoningEffort: String?) {
-        graph?.let { appGraph ->
-            appGraph.gatewayScope.launch {
-                appGraph.gatewayRuntime.sendRequest(
-                    GatewayRequests.saveDefaultModel(provider, model, reasoningEffort)
-                )
-                refreshProductState()
+        val appGraph = graph ?: return
+        defaultConfigurationLoadingKinds = defaultConfigurationLoadingKinds + "save-default-model"
+        appGraph.gatewayScope.launch {
+            val accepted = appGraph.gatewayRuntime.sendRequest(
+                GatewayRequests.saveDefaultModel(provider, model, reasoningEffort)
+            )
+            if (!accepted) withContext(Dispatchers.Main.immediate) {
+                defaultConfigurationLoadingKinds =
+                    defaultConfigurationLoadingKinds - "save-default-model"
             }
         }
     }
@@ -435,14 +520,31 @@ class AndroidSharedStateHolder(
     }
 
     fun pair() {
+        pair(pairingPayload)
+    }
+
+    fun pair(
+        payload: String,
+        reportFailureGlobally: Boolean = true,
+        onFailure: (String) -> Unit = {}
+    ) {
         val appGraph = graph ?: return
         appGraph.diagnostics.intent(GatewayDiagnosticAction.PAIR)
         platformError = null
-        val payload = pairingPayload
         appGraph.gatewayScope.launch {
             val result = runCatching { appGraph.gatewayRuntime.pair(payload) }
             withContext(Dispatchers.Main.immediate) {
-                if (result.isSuccess) pairingPayload = "" else platformError = "pair-failed"
+                if (result.isSuccess) {
+                    if (pairingPayload == payload) pairingPayload = ""
+                } else {
+                    val message = if (result.exceptionOrNull() is GatewayPairingPayloadException) {
+                        result.exceptionOrNull()?.message ?: "配对信息无效"
+                    } else {
+                        "无法提交配对信息，请稍后重试。"
+                    }
+                    if (reportFailureGlobally) platformError = message
+                    onFailure(message)
+                }
             }
         }
     }
@@ -569,6 +671,10 @@ class AndroidSharedStateHolder(
 
     fun clearPlatformError() {
         platformError = null
+    }
+
+    fun showPlatformError(message: String) {
+        platformError = message
     }
 
     fun updateVisibleAttachments(attachmentIds: Set<String>) {
