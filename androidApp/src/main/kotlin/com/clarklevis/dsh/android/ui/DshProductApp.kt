@@ -98,6 +98,8 @@ import kotlinx.coroutines.delay
 private const val ROUTE_WORKSPACE = "workspace"
 private const val ROUTE_CONVERSATION = "conversation"
 private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_SETTINGS_AGENT_PRESETS = "settings/agent-presets"
+private const val ROUTE_SETTINGS_DEFAULT_MODEL = "settings/default-model"
 
 @Composable
 internal fun DshProductApp(
@@ -151,7 +153,18 @@ internal fun DshProductApp(
             ConversationScreen(stateHolder, onPickImage, navController::popBackStack)
         }
         composable(ROUTE_SETTINGS) {
-            SettingsScreen(stateHolder, navController::popBackStack)
+            SettingsScreen(
+                stateHolder = stateHolder,
+                onBack = navController::popBackStack,
+                onOpenAgentPresets = { navController.navigate(ROUTE_SETTINGS_AGENT_PRESETS) },
+                onOpenDefaultModel = { navController.navigate(ROUTE_SETTINGS_DEFAULT_MODEL) }
+            )
+        }
+        composable(ROUTE_SETTINGS_AGENT_PRESETS) {
+            AgentPresetSelectionScreen(stateHolder, navController::popBackStack)
+        }
+        composable(ROUTE_SETTINGS_DEFAULT_MODEL) {
+            DefaultModelSelectionScreen(stateHolder, navController::popBackStack)
         }
     }
     stateHolder.platformError?.let { error ->
@@ -503,7 +516,7 @@ private fun SessionList(
 @Composable
 private fun SessionRow(session: SessionSummary, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 6.dp)
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 10.dp)
             .testTag("workspace-session-${session.id}"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp)
@@ -514,8 +527,8 @@ private fun SessionRow(session: SessionSummary, onClick: () -> Unit) {
             Text(
                 text = session.title,
                 color = Color.White,
-                fontSize = 14.sp,
-                lineHeight = 16.sp,
+                fontSize = 15.sp,
+                lineHeight = 17.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
@@ -523,8 +536,8 @@ private fun SessionRow(session: SessionSummary, onClick: () -> Unit) {
             Text(
                 text = session.id.take(16),
                 color = Color.White.copy(alpha = 0.42f),
-                fontSize = 11.sp,
-                lineHeight = 13.sp,
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
                 fontFamily = FontFamily.Monospace,
                 style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
             )
@@ -532,7 +545,7 @@ private fun SessionRow(session: SessionSummary, onClick: () -> Unit) {
         Text(
             if (session.isRunning) "运行中" else relativeTime(session.lastActivityEpochSeconds),
             color = if (session.isRunning) Color(0xFF68A0FF) else Color.White.copy(alpha = 0.48f),
-            fontSize = 12.sp
+            fontSize = 13.sp
         )
     }
 }

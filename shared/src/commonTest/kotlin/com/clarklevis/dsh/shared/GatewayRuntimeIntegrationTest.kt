@@ -269,7 +269,6 @@ class GatewayRuntimeIntegrationTest {
             it is GatewayRuntimeEvent.RequestCancelled &&
                 it.targetSessionId == "session-b" && it.reason == "request-coalesced"
         })
-        val oldGeneration = transport.connectionSpecs.last().generation
         transport.receive("""{"kind":"history","events":[],"hasMore":false,"bytes":0}""")
         runCurrent()
         assertEquals(
@@ -277,13 +276,8 @@ class GatewayRuntimeIntegrationTest {
             events.filterIsInstance<GatewayRuntimeEvent.Frame>().last { it.frame.kind == "history" }
                 .correlatedSessionId
         )
-        assertEquals(2, transport.connectionSpecs.size)
-        transport.receiveAt(oldGeneration, """{"kind":"history","events":[],"hasMore":false,"bytes":0}""")
-        transport.opened()
-        transport.receive("""{"kind":"hello","authenticated":true}""")
-        transport.receive("""{"kind":"workspaces","items":[]}""")
-        transport.receive("""{"kind":"sessions","items":[]}""")
-        runCurrent()
+        assertEquals(1, transport.connectionSpecs.size)
+        assertEquals(0, transport.closeCount)
         assertEquals(2, transport.sentTypes.count { it == "history" })
         transport.receive("""{"kind":"history","events":[],"hasMore":false,"bytes":0}""")
         runCurrent()
@@ -292,6 +286,47 @@ class GatewayRuntimeIntegrationTest {
             events.filterIsInstance<GatewayRuntimeEvent.Frame>().last { it.frame.kind == "history" }
                 .correlatedSessionId
         )
+    }
+
+    @Test
+    fun duplicateBootstrapSnapshotsCompleteSequentiallyWithoutReconnectLoop() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport)
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
+        runCurrent()
+
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+
+        // hello 已发送 workspaces/sessions；Android 页面进入 CONNECTED 后还会请求一次产品快照。
+        runtime.sendRequest(GatewayRequests.simple("workspaces"))
+        runtime.requestSessions()
+        runtime.sendRequest(GatewayRequests.simple("default-model"))
+        runtime.sendRequest(GatewayRequests.simple("default-model"))
+        runCurrent()
+
+        transport.receive("""{"kind":"workspaces","items":[]}""")
+        transport.receive("""{"kind":"sessions","items":[]}""")
+        transport.receive("""{"kind":"default-model","provider":"deepseek-official","model":"deepseek-v4-flash-vision-exp","reasoningEffort":"low"}""")
+        runCurrent()
+        assertEquals(2, transport.sentTypes.count { it == "workspaces" })
+        assertEquals(2, transport.sentTypes.count { it == "sessions" })
+        assertEquals(2, transport.sentTypes.count { it == "default-model" })
+
+        transport.receive("""{"kind":"workspaces","items":[]}""")
+        transport.receive("""{"kind":"sessions","items":[]}""")
+        transport.receive("""{"kind":"default-model","provider":"deepseek-official","model":"deepseek-v4-flash-vision-exp","reasoningEffort":"low"}""")
+        runCurrent()
+
+        assertEquals(GatewayConnectionState.CONNECTED, runtime.state.value.connection)
+        assertEquals(1, transport.connectionSpecs.size)
+        assertEquals(0, transport.closeCount)
+        assertFalse(events.filterIsInstance<GatewayRuntimeEvent.RequestCancelled>().any {
+            it.reason == "connection-recycled"
+        })
     }
 
     @Test
@@ -566,30 +601,22 @@ class GatewayRuntimeIntegrationTest {
         assertTrue(runtime.subscribe("session-b"))
         transport.receive("""{"kind":"subscribed"}""")
         runCurrent()
-        assertEquals(2, transport.connectionSpecs.size)
-        transport.opened()
-        transport.receive("""{"kind":"hello","authenticated":true}""")
-        runCurrent()
+        assertEquals(1, transport.connectionSpecs.size)
         assertEquals(2, transport.sentTypes.count { it == "subscribe" })
-        transport.receive("""{"kind":"workspaces","items":[]}""")
-        transport.receive("""{"kind":"sessions","items":[]}""")
         transport.receive("""{"kind":"subscribed"}""")
         runCurrent()
-        assertEquals(2, transport.connectionSpecs.size)
+        assertEquals(1, transport.connectionSpecs.size)
 
         assertTrue(runtime.requestSessions())
         assertTrue(runtime.requestSessions())
         transport.receive("""{"kind":"sessions","items":[]}""")
         runCurrent()
-        assertEquals(3, transport.connectionSpecs.size)
-        transport.opened()
-        transport.receive("""{"kind":"hello","authenticated":true}""")
-        runCurrent()
-        transport.receive("""{"kind":"workspaces","items":[]}""")
+        assertEquals(1, transport.connectionSpecs.size)
+        assertEquals(3, transport.sentTypes.count { it == "sessions" })
         transport.receive("""{"kind":"sessions","items":[]}""")
-        transport.receive("""{"kind":"subscribed"}""")
         runCurrent()
-        assertEquals(3, transport.connectionSpecs.size)
+        assertEquals(1, transport.connectionSpecs.size)
+        assertEquals(0, transport.closeCount)
     }
 
     @Test

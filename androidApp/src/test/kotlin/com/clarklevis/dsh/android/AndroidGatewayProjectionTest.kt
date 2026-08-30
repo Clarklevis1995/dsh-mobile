@@ -50,9 +50,35 @@ class AndroidGatewayProjectionTest {
             onHistoryPageRequested = { sessionId, before -> requested += sessionId to before }
         )
         projection.selectSession("session-a")
+        assertTrue(projection.snapshot().selectedHistoryIsLoading)
+        assertFalse(projection.snapshot().selectedHistoryIsLoadingOlder)
         projection.historyCancelled("session-a")
+        assertFalse(projection.snapshot().selectedHistoryIsLoading)
         projection.selectSession("session-a")
         assertEquals(listOf("session-a" to null, "session-a" to null), requested)
+        projection.close()
+    }
+
+    @Test
+    fun initialHistoryProgressPublishesUntilTheFinalPageCompletes() {
+        val projection = AndroidGatewayProjection()
+        projection.selectSession("session-a")
+        assertTrue(projection.snapshot().selectedHistoryIsLoading)
+        assertEquals(0, projection.snapshot().selectedHistoryLoadedEventCount)
+        assertEquals(null, projection.snapshot().selectedHistoryTotalEventCount)
+
+        val firstPage =
+            """{"kind":"history","events":[{"type":"user/message","seq":1,"time":100,"data":{"content":[{"type":"text","text":"history"}],"source":{"kind":"user"}}}],"hasMore":true,"nextBeforeSeq":0,"bytes":64}"""
+        projection.acceptFrame(firstPage, GatewayWireDecoder.decode(firstPage), "session-a")
+        assertTrue(projection.snapshot().selectedHistoryIsLoading)
+        assertEquals(1, projection.snapshot().selectedHistoryLoadedEventCount)
+        assertEquals(null, projection.snapshot().selectedHistoryTotalEventCount)
+
+        val finalPage = """{"kind":"history","events":[],"hasMore":false,"bytes":0}"""
+        projection.acceptFrame(finalPage, GatewayWireDecoder.decode(finalPage), "session-a")
+        assertFalse(projection.snapshot().selectedHistoryIsLoading)
+        assertEquals(0, projection.snapshot().selectedHistoryLoadedEventCount)
+        assertEquals(null, projection.snapshot().selectedHistoryTotalEventCount)
         projection.close()
     }
 
