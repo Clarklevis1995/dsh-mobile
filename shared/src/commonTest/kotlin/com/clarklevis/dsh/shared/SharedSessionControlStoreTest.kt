@@ -162,7 +162,7 @@ class SharedSessionControlStoreTest {
         store.statsReceived("session-1", 2, null, null, null)
 
         store.requestDefaults(true)
-        store.defaultsReceived("standard", "ask")
+        store.defaultsReceived("standard", "workspace-write")
         assertEquals("defaults", store.requestDefaults(true).effects().single().kind)
         assertTrue(store.currentState().quarantinedRequestKinds.isEmpty())
     }
@@ -293,15 +293,19 @@ class SharedSessionControlStoreTest {
             hasDocument = true
         )
         store.requestDefaults(isConnected = true)
-        store.defaultsReceived("standard", "ask")
+        store.defaultsReceived("standard", "workspace-write")
         var state = store.currentState()
         assertEquals("standard", state.agentPresetDefault)
-        assertEquals("ask", state.permissionDefault)
+        assertEquals("workspace-write", state.permissionDefault)
         assertTrue(state.agentPresetsAuthorable)
 
         val setDefault = store.setDefault("agent-preset", "standard", isConnected = true)
         assertEquals("set-default", setDefault.effects().single().kind)
         assertEquals("invalid-agent-preset", store.setDefault("agent-preset", "broken", true).errorCode)
+        assertEquals(
+            "unsupported-default-permission",
+            store.setDefault("permission", "ask", isConnected = true).errorCode
+        )
 
         store.requestSessionStats("session-1", true)
         store.statsReceived(

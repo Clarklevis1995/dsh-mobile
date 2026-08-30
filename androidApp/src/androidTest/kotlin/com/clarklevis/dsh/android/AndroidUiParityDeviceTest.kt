@@ -24,7 +24,7 @@ class AndroidUiParityDeviceTest {
         compose.onNode(hasText("新建会话")).assertIsDisplayed()
         compose.onNode(hasTestTag("workspace-session-search")).assertIsDisplayed()
         compose.onNode(hasText("归档")).assertDoesNotExist()
-        compose.onNode(hasContentDescription("Mobile Gateway")).assertIsDisplayed()
+        compose.onNode(hasContentDescription("设备认证", substring = true)).assertIsDisplayed()
         compose.onNode(hasContentDescription("设置")).assertIsDisplayed().performClick()
         compose.onNode(hasText("新会话默认配置", substring = true)).assertIsDisplayed()
     }

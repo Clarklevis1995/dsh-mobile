@@ -172,7 +172,7 @@ class SharedSessionControlStore {
 
     fun setDefault(target: String, value: String, isConnected: Boolean): SharedSessionControlResult {
         when (target) {
-            "permission" -> if (value !in supportedDefaultPermissionPresets) {
+            "permission" -> if (value !in supportedPermissionPresets) {
                 return rejected("unsupported-default-permission", value)
             }
             "agent-preset" -> if (state.agentPresets.none { it.id == value && it.broken != true }) {
@@ -711,6 +711,5 @@ class SharedSessionControlStore {
 
     private companion object {
         val supportedPermissionPresets = setOf("read-only", "workspace-write", "danger-full-access")
-        val supportedDefaultPermissionPresets = supportedPermissionPresets + "ask"
     }
 }

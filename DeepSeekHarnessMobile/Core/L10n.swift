@@ -78,7 +78,6 @@ enum L10n {
 
     static func permissionName(for id: String) -> String {
         switch id {
-        case "ask": String(localized: "每次询问")
         case "read-only": String(localized: "只读")
         case "workspace-write": String(localized: "工作区写入")
         case "danger-full-access": String(localized: "完全访问")

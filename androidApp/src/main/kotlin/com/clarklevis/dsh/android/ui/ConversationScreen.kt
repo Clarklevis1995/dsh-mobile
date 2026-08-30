@@ -3,13 +3,25 @@ package com.clarklevis.dsh.android.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,8 +34,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,25 +52,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +78,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.dropShadow
@@ -73,7 +87,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -84,7 +100,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,6 +110,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import com.clarklevis.dsh.android.AndroidSharedStateHolder
 import com.clarklevis.dsh.android.AttachmentLoadState
 import com.clarklevis.dsh.android.R
@@ -152,7 +170,7 @@ internal fun ConversationScreen(
                 },
                 actions = {
                     Row(
-                        modifier = Modifier.padding(end = 8.dp),
+                        modifier = Modifier.padding(start = 12.dp, end = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -162,10 +180,12 @@ internal fun ConversationScreen(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             fontSize = 12.sp
                         )
-                        TopBarCircleButton(
-                            iconRes = R.drawable.ic_more_horizontal,
-                            description = "更多",
-                            onClick = { showStats = true }
+                        ConversationMoreMenu(
+                            canReloadHistory = stateHolder.snapshot.selectedSessionId != null &&
+                                stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED,
+                            canPing = stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED,
+                            onReloadHistory = stateHolder::reloadSelectedHistory,
+                            onPing = stateHolder::pingGateway
                         )
                     }
                 },
@@ -180,12 +200,23 @@ internal fun ConversationScreen(
                 modifier = Modifier.fillMaxSize(),
                 beyondViewportPageCount = 1
             ) { page ->
-                if (page == 0) ConversationPage(stateHolder, onPickImage)
-                else TrajectoryPage(stateHolder.trajectoryNodes)
+                if (page == 0) {
+                    ConversationPage(
+                        stateHolder = stateHolder,
+                        onPickImage = onPickImage,
+                        onShowFullStats = { showStats = true }
+                    )
+                }
+                else TrajectoryPage(
+                    nodes = stateHolder.trajectoryNodes,
+                    isActive = pagerState.currentPage == 1
+                )
             }
         }
     }
-    if (showStats) SessionStatsSheet(stateHolder) { showStats = false }
+    if (showStats) {
+        SessionStatsSheet(stateHolder.snapshot.statsSnapshot) { showStats = false }
+    }
 }
 
 @Composable
@@ -226,6 +257,83 @@ internal fun TopBarCircleButton(
             tint = MaterialTheme.colorScheme.onSurface
         )
     }
+}
+
+@Composable
+internal fun ConversationMoreMenu(
+    canReloadHistory: Boolean,
+    canPing: Boolean,
+    onReloadHistory: () -> Unit,
+    onPing: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TopBarCircleButton(
+            iconRes = R.drawable.ic_more_horizontal,
+            description = "更多",
+            onClick = { expanded = true }
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(228.dp).testTag("conversation-more-menu"),
+            offset = DpOffset(x = (-220).dp, y = 8.dp),
+            shape = RoundedCornerShape(26.dp),
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+            tonalElevation = 0.dp,
+            shadowElevation = 10.dp,
+            border = androidx.compose.foundation.BorderStroke(
+                0.7.dp,
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.055f)
+            )
+        ) {
+            ConversationMoreMenuItem(
+                title = "重新加载历史",
+                iconRes = R.drawable.ic_history_reload,
+                enabled = canReloadHistory
+            ) {
+                expanded = false
+                onReloadHistory()
+            }
+            ConversationMoreMenuItem(
+                title = "发送 Ping",
+                iconRes = R.drawable.ic_ping_waves,
+                enabled = canPing
+            ) {
+                expanded = false
+                onPing()
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConversationMoreMenuItem(
+    title: String,
+    iconRes: Int,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    DropdownMenuItem(
+        text = {
+            Text(
+                title,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium
+            )
+        },
+        leadingIcon = {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(22.dp)
+            )
+        },
+        modifier = Modifier.height(58.dp),
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        onClick = onClick
+    )
 }
 
 @Composable
@@ -270,13 +378,59 @@ private fun SegmentedControl(selected: Int, onSelect: (Int) -> Unit) {
 }
 
 @Composable
-private fun ConversationPage(stateHolder: AndroidSharedStateHolder, onPickImage: () -> Unit) {
+private fun ConversationPage(
+    stateHolder: AndroidSharedStateHolder,
+    onPickImage: () -> Unit,
+    onShowFullStats: () -> Unit
+) {
     val density = LocalDensity.current
+    val sessionId = stateHolder.snapshot.selectedSessionId
     var bottomContentHeight by remember { mutableStateOf(160.dp) }
+    var imagePreview by remember(sessionId) { mutableStateOf<ConversationImagePreviewRequest?>(null) }
+    var isPinnedToBottom by remember(sessionId) { mutableStateOf(true) }
+    var scrollToBottomToken by remember(sessionId) { mutableIntStateOf(0) }
+    val isColdHistoryLoad = stateHolder.snapshot.selectedHistoryIsLoading &&
+        !stateHolder.snapshot.selectedHistoryIsLoadingOlder &&
+        stateHolder.snapshot.conversation.isEmpty()
+    var coldHistoryLoadStarted by remember(sessionId) { mutableStateOf(isColdHistoryLoad) }
+    LaunchedEffect(sessionId, isColdHistoryLoad, stateHolder.snapshot.selectedHistoryIsLoading) {
+        when {
+            isColdHistoryLoad -> coldHistoryLoadStarted = true
+            !stateHolder.snapshot.selectedHistoryIsLoading -> coldHistoryLoadStarted = false
+        }
+    }
     Box(Modifier.fillMaxSize()) {
-        val sessionId = stateHolder.snapshot.selectedSessionId
         androidx.compose.runtime.key(sessionId) {
-            ConversationTimeline(stateHolder)
+            ConversationTimeline(
+                stateHolder = stateHolder,
+                bottomContentHeight = bottomContentHeight,
+                scrollToBottomToken = scrollToBottomToken,
+                onPinnedToBottomChanged = { isPinnedToBottom = it },
+                onPreviewImages = { attachments, initialIndex ->
+                    imagePreview = ConversationImagePreviewRequest(attachments, initialIndex)
+                }
+            )
+        }
+        val showInitialHistoryOverlay = shouldShowInitialHistoryOverlay(
+            isLoading = stateHolder.snapshot.selectedHistoryIsLoading,
+            isLoadingOlder = stateHolder.snapshot.selectedHistoryIsLoadingOlder,
+            hasLocalContent = stateHolder.snapshot.conversation.isNotEmpty(),
+            coldLoadStarted = coldHistoryLoadStarted
+        )
+        AnimatedVisibility(
+            visible = showInitialHistoryOverlay,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxSize()
+                .padding(bottom = bottomContentHeight)
+                .zIndex(1f),
+            enter = fadeIn(tween(120)),
+            exit = fadeOut(tween(120))
+        ) {
+            HistoryLoadingOverlay(
+                loadedEventCount = stateHolder.snapshot.selectedHistoryLoadedEventCount,
+                totalEventCount = stateHolder.snapshot.selectedHistoryTotalEventCount
+            )
         }
         ConversationBottomFade(
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -291,6 +445,26 @@ private fun ConversationPage(stateHolder: AndroidSharedStateHolder, onPickImage:
                 .imePadding()
                 .navigationBarsPadding()
         ) {
+            AnimatedVisibility(
+                visible = stateHolder.snapshot.conversation.isNotEmpty() && !isPinnedToBottom,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.85f),
+                exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.85f)
+            ) {
+                ScrollToBottomButton(
+                    isGenerating = stateHolder.snapshot.sessions
+                        .firstOrNull { it.id == sessionId }
+                        ?.isRunning == true,
+                    onClick = { scrollToBottomToken += 1 }
+                )
+            }
+            stateHolder.snapshot.statsSnapshot?.let { snapshot ->
+                SessionStatsBanner(
+                    snapshot = snapshot,
+                    sessionId = sessionId,
+                    onViewFullStats = onShowFullStats
+                )
+            }
             val question = stateHolder.snapshot.pendingQuestions.firstOrNull {
                 stateHolder.snapshot.selectedSessionId == null || it.sessionId == stateHolder.snapshot.selectedSessionId
             }
@@ -303,6 +477,65 @@ private fun ConversationPage(stateHolder: AndroidSharedStateHolder, onPickImage:
             } else {
                 Composer(stateHolder, onPickImage)
             }
+        }
+    }
+    imagePreview?.let { request ->
+        ConversationImagePreviewDialog(
+            request = request,
+            thumbnails = stateHolder.attachmentThumbnails,
+            onDismiss = { imagePreview = null }
+        )
+    }
+}
+
+internal fun shouldShowInitialHistoryOverlay(
+    isLoading: Boolean,
+    isLoadingOlder: Boolean,
+    hasLocalContent: Boolean,
+    coldLoadStarted: Boolean = false
+): Boolean = isLoading && !isLoadingOlder && (coldLoadStarted || !hasLocalContent)
+
+internal fun historyLoadingProgressText(loadedEventCount: Int, totalEventCount: Int?): String = when {
+    totalEventCount != null -> "正在加载历史记录 · $loadedEventCount/$totalEventCount"
+    loadedEventCount > 0 -> "正在自动加载更早记录 · 已同步 $loadedEventCount 个事件"
+    else -> "正在从 Mobile Gateway 同步会话内容…"
+}
+
+@Composable
+internal fun HistoryLoadingOverlay(
+    loadedEventCount: Int,
+    totalEventCount: Int?
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .testTag("history-loading-overlay"),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(44.dp),
+                strokeWidth = 4.dp,
+                color = DshColors.Ocean,
+                trackColor = DshColors.Ocean.copy(alpha = 0.20f)
+            )
+            Text(
+                "正在加载历史记录",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                historyLoadingProgressText(loadedEventCount, totalEventCount),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.50f),
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -330,15 +563,28 @@ private fun ConversationBottomFade(
 }
 
 @Composable
-private fun ConversationTimeline(stateHolder: AndroidSharedStateHolder) {
+private fun ConversationTimeline(
+    stateHolder: AndroidSharedStateHolder,
+    bottomContentHeight: Dp,
+    scrollToBottomToken: Int,
+    onPinnedToBottomChanged: (Boolean) -> Unit,
+    onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit
+) {
     val items = stateHolder.snapshot.conversation
     val displayEntries = remember(items) { makeConversationDisplayEntries(items) }
     val itemsById = remember(items) { items.associateBy(ConversationItem::id) }
     val hasInitialContent = displayEntries.isNotEmpty()
+    val hasHistoryLoadingRow = stateHolder.snapshot.selectedSessionId in
+        stateHolder.historyPagingSessionIds
+    val lastTimelineIndex = (
+        displayEntries.lastIndex + if (hasHistoryLoadingRow) 1 else 0
+    ).coerceAtLeast(0)
     val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = displayEntries.lastIndex.coerceAtLeast(0)
+        initialFirstVisibleItemIndex = lastTimelineIndex
     )
-    var initialPositionApplied by remember { mutableStateOf(hasInitialContent) }
+    var initialPositionApplied by remember { mutableStateOf(false) }
+    var isPinnedToBottom by remember { mutableStateOf(true) }
+    var programmaticScrollCount by remember { mutableIntStateOf(0) }
     val windowInfo = LocalWindowInfo.current
     val density = LocalDensity.current
     val targetHeight = with(density) { 240.dp.roundToPx() }
@@ -354,14 +600,54 @@ private fun ConversationTimeline(stateHolder: AndroidSharedStateHolder) {
     }
     LaunchedEffect(hasInitialContent) {
         if (!initialPositionApplied && hasInitialContent) {
-            listState.scrollToItem(displayEntries.lastIndex)
-            initialPositionApplied = true
+            programmaticScrollCount += 1
+            try {
+                listState.scrollToTimelineBottom(lastTimelineIndex, animated = false)
+                initialPositionApplied = true
+            } finally {
+                programmaticScrollCount -= 1
+            }
         }
     }
     LaunchedEffect(displayEntries.size, items.lastOrNull()?.text?.length, initialPositionApplied) {
-        if (initialPositionApplied && displayEntries.isNotEmpty()) {
-            listState.animateScrollToItem(displayEntries.lastIndex)
+        if (initialPositionApplied && isPinnedToBottom && displayEntries.isNotEmpty()) {
+            programmaticScrollCount += 1
+            try {
+                listState.scrollToTimelineBottom(lastTimelineIndex, animated = true)
+            } finally {
+                programmaticScrollCount -= 1
+            }
         }
+    }
+    LaunchedEffect(scrollToBottomToken) {
+        if (scrollToBottomToken > 0 && displayEntries.isNotEmpty()) {
+            programmaticScrollCount += 1
+            try {
+                listState.scrollToTimelineBottom(lastTimelineIndex, animated = true)
+            } finally {
+                programmaticScrollCount -= 1
+            }
+        }
+    }
+    LaunchedEffect(listState, initialPositionApplied) {
+        if (!initialPositionApplied) return@LaunchedEffect
+        snapshotFlow {
+            Triple(
+                listState.isScrollInProgress,
+                listState.isPinnedToBottom(),
+                programmaticScrollCount > 0
+            )
+        }
+            .distinctUntilChanged()
+            .collect { (isScrolling, pinned, isProgrammaticScroll) ->
+                // A new streamed row briefly makes the old last row stop being the
+                // final item before auto-scroll runs. Only a real user scroll may
+                // unpin; automatic movement must not flash the jump button.
+                if (shouldPublishPinnedState(isScrolling, pinned, isProgrammaticScroll)) {
+                    isPinnedToBottom = pinned
+                    onPinnedToBottomChanged(pinned)
+                }
+            }
     }
     LaunchedEffect(listState, stateHolder.snapshot.selectedHistoryHasMore, initialPositionApplied) {
         if (!initialPositionApplied) return@LaunchedEffect
@@ -381,9 +667,12 @@ private fun ConversationTimeline(stateHolder: AndroidSharedStateHolder) {
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
                 .alpha(if (hasInitialContent && !initialPositionApplied) 0f else 1f),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 190.dp)
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                top = 8.dp,
+                bottom = bottomContentHeight + 22.dp
+            )
         ) {
-            if (stateHolder.snapshot.selectedSessionId in stateHolder.historyPagingSessionIds) {
+            if (hasHistoryLoadingRow) {
                 item("history-loading") {
                     Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -398,10 +687,110 @@ private fun ConversationTimeline(stateHolder: AndroidSharedStateHolder) {
                         item = entry.item,
                         thumbnails = stateHolder.attachmentThumbnails,
                         attachmentStates = stateHolder.attachmentStates,
-                        onRetryAttachment = stateHolder::retryAttachment
+                        onRetryAttachment = stateHolder::retryAttachment,
+                        onPreviewImages = onPreviewImages
                     )
                     is ConversationDisplayEntry.Process -> ConversationProcessRow(entry.group)
                 }
+            }
+        }
+    }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListState.isPinnedToBottom(): Boolean {
+    return isTimelinePinnedToBottom(
+        totalItems = layoutInfo.totalItemsCount,
+        canScrollForward = canScrollForward
+    )
+}
+
+internal fun timelineBottomScrollDelta(
+    lastItemOffset: Int,
+    lastItemSize: Int,
+    viewportEndOffset: Int,
+    afterContentPadding: Int
+): Float = (
+    lastItemOffset + lastItemSize + afterContentPadding - viewportEndOffset
+).coerceAtLeast(0).toFloat()
+
+internal suspend fun androidx.compose.foundation.lazy.LazyListState.scrollToTimelineBottom(
+    lastItemIndex: Int,
+    animated: Boolean
+) {
+    if (layoutInfo.visibleItemsInfo.none { it.index == lastItemIndex }) {
+        if (animated) animateScrollToItem(lastItemIndex) else scrollToItem(lastItemIndex)
+    }
+    fun remainingDistance(): Float {
+        val lastItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == lastItemIndex }
+            ?: return 0f
+        return timelineBottomScrollDelta(
+            lastItemOffset = lastItem.offset,
+            lastItemSize = lastItem.size,
+            viewportEndOffset = layoutInfo.viewportEndOffset,
+            afterContentPadding = layoutInfo.afterContentPadding
+        )
+    }
+    val distance = remainingDistance()
+    if (distance > 0f) {
+        if (animated) animateScrollBy(distance) else scrollBy(distance)
+    }
+    // The last row can remeasure while Markdown, images, or the composer are
+    // settling. End with an exact correction so the list has no forward range.
+    val correction = remainingDistance()
+    if (correction > 0f) scrollBy(correction)
+}
+
+internal fun isTimelinePinnedToBottom(
+    totalItems: Int,
+    canScrollForward: Boolean
+): Boolean = totalItems == 0 || !canScrollForward
+
+internal fun shouldPublishPinnedState(
+    isScrolling: Boolean,
+    pinned: Boolean,
+    isProgrammaticScroll: Boolean
+): Boolean = pinned || (isScrolling && !isProgrammaticScroll)
+
+@Composable
+internal fun ScrollToBottomButton(isGenerating: Boolean, onClick: () -> Unit) {
+    val shape = CircleShape
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.padding(bottom = 4.dp).size(48.dp)
+            .dropShadow(
+                shape = shape,
+                shadow = Shadow(
+                    radius = 12.dp,
+                    spread = 0.dp,
+                    color = Color.Black.copy(alpha = 0.10f),
+                    offset = DpOffset(0.dp, 4.dp)
+                )
+            )
+            .semantics {
+                contentDescription = if (isGenerating) "正在生成，滚动到最新消息" else "滚动到最新消息"
+            }
+            .testTag("scroll-to-bottom"),
+        shape = shape,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        border = androidx.compose.foundation.BorderStroke(
+            0.7.dp,
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)
+        )
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (isGenerating) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = DshColors.Ocean
+                )
+            } else {
+                Icon(
+                    painter = painterResource(R.drawable.ic_arrow_down),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }
@@ -426,14 +815,8 @@ private fun EmptyConversation(modifier: Modifier = Modifier) {
 private fun Composer(stateHolder: AndroidSharedStateHolder, onPickImage: () -> Unit) {
     val shape = RoundedCornerShape(24.dp)
     val isDark = isSystemInDarkTheme()
-    val shadowColor = Color.Black.copy(alpha = if (isDark) 0.20f else 0.08f)
-    val glassEdge = Brush.verticalGradient(
-        colorStops = arrayOf(
-            0f to Color.White.copy(alpha = if (isDark) 0.21f else 0.72f),
-            0.48f to Color.White.copy(alpha = if (isDark) 0.12f else 0.52f),
-            1f to Color.White.copy(alpha = if (isDark) 0.15f else 0.62f)
-        )
-    )
+    val shadowColor = dshFloatingSurfaceShadow(isDark)
+    val glassEdge = dshGlassEdge(isDark)
     val composerHasContent = stateHolder.messageDraft.trim().isNotEmpty() || stateHolder.preparedImages.isNotEmpty()
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)
@@ -524,6 +907,17 @@ private fun Composer(stateHolder: AndroidSharedStateHolder, onPickImage: () -> U
         }
     }
 }
+
+internal fun dshFloatingSurfaceShadow(isDark: Boolean): Color =
+    Color.Black.copy(alpha = if (isDark) 0.20f else 0.08f)
+
+internal fun dshGlassEdge(isDark: Boolean): Brush = Brush.verticalGradient(
+    colorStops = arrayOf(
+        0f to Color.White.copy(alpha = if (isDark) 0.21f else 0.72f),
+        0.48f to Color.White.copy(alpha = if (isDark) 0.12f else 0.52f),
+        1f to Color.White.copy(alpha = if (isDark) 0.15f else 0.62f)
+    )
+)
 
 @Composable
 private fun ComposerIconButton(iconRes: Int, description: String, onClick: () -> Unit) {
@@ -675,15 +1069,7 @@ private fun ModelControl(
                 overflow = TextOverflow.Ellipsis
             )
             effort?.let {
-                Text(
-                    it,
-                    modifier = Modifier.background(DshColors.Purple.copy(alpha = 0.16f), CircleShape)
-                        .padding(horizontal = 6.dp, vertical = 3.dp),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
+                ReasoningEffortTag(it)
             }
             Icon(
                 painter = painterResource(R.drawable.ic_chevrons_vertical),
@@ -738,6 +1124,25 @@ private fun ModelControl(
             }
         }
     }
+}
+
+@Composable
+internal fun ReasoningEffortTag(title: String) {
+    Text(
+        title,
+        modifier = Modifier
+            .testTag("reasoning-effort-tag")
+            .background(
+                DshColors.Purple.copy(alpha = 0.16f),
+                RoundedCornerShape(7.dp)
+            )
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        color = MaterialTheme.colorScheme.onSurface,
+        fontSize = 10.sp,
+        lineHeight = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1
+    )
 }
 
 @Composable
@@ -812,10 +1217,17 @@ private fun ConversationRow(
     item: ConversationItem,
     thumbnails: Map<String, ImageBitmap>,
     attachmentStates: Map<String, AttachmentLoadState>,
-    onRetryAttachment: (String) -> Unit
+    onRetryAttachment: (String) -> Unit,
+    onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit
 ) {
     when (item.kind) {
-        ConversationItemKind.USER -> UserMessage(item, thumbnails, attachmentStates, onRetryAttachment)
+        ConversationItemKind.USER -> UserMessage(
+            item,
+            thumbnails,
+            attachmentStates,
+            onRetryAttachment,
+            onPreviewImages
+        )
         ConversationItemKind.ASSISTANT -> AssistantMessage(item, thumbnails, attachmentStates, onRetryAttachment)
         ConversationItemKind.STATUS -> StatusRow(item)
         ConversationItemKind.SYSTEM -> SystemRow(item)
@@ -1029,7 +1441,8 @@ private fun UserMessage(
     item: ConversationItem,
     thumbnails: Map<String, ImageBitmap>,
     states: Map<String, AttachmentLoadState>,
-    onRetry: (String) -> Unit
+    onRetry: (String) -> Unit,
+    onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
     val bubbleFill = DshColors.Ocean.copy(alpha = if (isDark) 0.24f else 0.11f)
@@ -1037,19 +1450,308 @@ private fun UserMessage(
     Column(
         Modifier.fillMaxWidth().padding(start = 34.dp, top = 12.dp, bottom = 12.dp),
         horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(
-            Modifier.background(bubbleFill, RoundedCornerShape(15.dp))
-                .border(0.7.dp, bubbleEdge, RoundedCornerShape(15.dp))
-                .padding(10.dp),
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AttachmentGrid(item.images, thumbnails, states, onRetry)
-            if (item.text.isNotEmpty()) Text(item.text, fontSize = 16.sp)
+        UserAttachmentPreview(item.images, thumbnails, states, onRetry, onPreviewImages)
+        if (item.text.isNotEmpty()) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Text(
+                    text = item.text,
+                    modifier = Modifier
+                        .background(bubbleFill, RoundedCornerShape(15.dp))
+                        .border(0.7.dp, bubbleEdge, RoundedCornerShape(15.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .testTag("user-text-bubble"),
+                    fontSize = 16.sp
+                )
+                CopyButton(item.text)
+            }
         }
-        CopyButton(item.text)
+    }
+}
+
+internal data class UserAttachmentPreviewSize(val width: Dp, val height: Dp)
+
+internal fun userSingleAttachmentPreviewSize(
+    sourceWidth: Int,
+    sourceHeight: Int,
+    availableWidth: Dp
+): UserAttachmentPreviewSize {
+    val safeWidth = sourceWidth.coerceAtLeast(1).toFloat()
+    val safeHeight = sourceHeight.coerceAtLeast(1).toFloat()
+    val maximumWidth = minOf(320.dp, availableWidth)
+    val maximumHeight = 320.dp
+    val scale = minOf(
+        1f,
+        maximumWidth.value / safeWidth,
+        maximumHeight.value / safeHeight
+    )
+    return UserAttachmentPreviewSize(
+        width = (safeWidth * scale).dp,
+        height = (safeHeight * scale).dp
+    )
+}
+
+@Composable
+private fun UserAttachmentPreview(
+    attachments: List<GatewayImageAttachment>,
+    thumbnails: Map<String, ImageBitmap>,
+    states: Map<String, AttachmentLoadState>,
+    onRetry: (String) -> Unit,
+    onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit
+) {
+    if (attachments.isEmpty()) return
+    BoxWithConstraints(Modifier.testTag("user-image-bubble")) {
+        if (attachments.size == 1) {
+            val attachment = attachments.first()
+            val previewSize = userSingleAttachmentPreviewSize(
+                sourceWidth = attachment.width,
+                sourceHeight = attachment.height,
+                availableWidth = maxWidth
+            )
+            UserAttachmentImage(
+                attachment = attachment,
+                image = thumbnails[attachment.attachmentId],
+                state = states[attachment.attachmentId],
+                onRetry = onRetry,
+                onPreview = { onPreviewImages(attachments, 0) },
+                modifier = Modifier.size(previewSize.width, previewSize.height),
+                cornerRadius = 11.dp,
+                borderWidth = 0.dp
+            )
+        } else {
+            val visibleAttachments = attachments.take(3)
+            val cardOffset = 12.dp
+            val cardSide = minOf(
+                164.dp,
+                (maxWidth - cardOffset * (visibleAttachments.size - 1)).coerceAtLeast(96.dp)
+            )
+            val previewSide = cardSide + cardOffset * (visibleAttachments.size - 1)
+            Box(Modifier.size(previewSide)) {
+                visibleAttachments.indices.reversed().forEach { index ->
+                    val attachment = visibleAttachments[index]
+                    UserAttachmentImage(
+                        attachment = attachment,
+                        image = thumbnails[attachment.attachmentId],
+                        state = states[attachment.attachmentId],
+                        onRetry = onRetry,
+                        onPreview = { onPreviewImages(attachments, index) },
+                        modifier = Modifier
+                            .offset(
+                                x = cardOffset * index,
+                                y = cardOffset * (visibleAttachments.lastIndex - index)
+                            )
+                            .size(cardSide),
+                        cornerRadius = 18.dp,
+                        borderWidth = 2.dp
+                    )
+                }
+                Text(
+                    text = "${attachments.size}张",
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                        .background(Color.Black.copy(alpha = 0.58f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserAttachmentImage(
+    attachment: GatewayImageAttachment,
+    image: ImageBitmap?,
+    state: AttachmentLoadState?,
+    onRetry: (String) -> Unit,
+    onPreview: () -> Unit,
+    modifier: Modifier,
+    cornerRadius: Dp,
+    borderWidth: Dp
+) {
+    val shape = RoundedCornerShape(cornerRadius)
+    val retryable = state in setOf(AttachmentLoadState.FAILED, AttachmentLoadState.DEFERRED)
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+            .then(
+                if (borderWidth > 0.dp) Modifier.border(borderWidth, MaterialTheme.colorScheme.surface, shape)
+                else Modifier
+            )
+            .clickable {
+                if (retryable) onRetry(attachment.attachmentId) else onPreview()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        if (image != null) {
+            Image(
+                bitmap = image,
+                contentDescription = attachment.name ?: "图片附件",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Text(
+                text = when (state) {
+                    AttachmentLoadState.FAILED -> "加载失败 · 点击重试"
+                    AttachmentLoadState.DEFERRED -> "已释放 · 点击重载"
+                    else -> "正在加载图片…"
+                },
+                modifier = Modifier.padding(10.dp),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+        }
+    }
+}
+
+internal data class ConversationImagePreviewRequest(
+    val attachments: List<GatewayImageAttachment>,
+    val initialIndex: Int
+)
+
+internal fun imagePreviewInitialPage(imageCount: Int, requestedIndex: Int): Int =
+    requestedIndex.coerceIn(0, (imageCount - 1).coerceAtLeast(0))
+
+@Composable
+internal fun ConversationImagePreviewDialog(
+    request: ConversationImagePreviewRequest,
+    thumbnails: Map<String, ImageBitmap>,
+    onDismiss: () -> Unit
+) {
+    if (request.attachments.isEmpty()) return
+    val pagerState = rememberPagerState(
+        initialPage = imagePreviewInitialPage(request.attachments.size, request.initialIndex),
+        pageCount = request.attachments::size
+    )
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .testTag("conversation-image-preview")
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                val attachment = request.attachments[page]
+                ZoomablePreviewImage(
+                    image = thumbnails[attachment.attachmentId],
+                    contentDescription = attachment.name ?: "图片"
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .semantics { contentDescription = "关闭图片预览" },
+                    shape = RoundedCornerShape(19.dp),
+                    color = Color.White.copy(alpha = 0.16f)
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_close),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = Color.White
+                        )
+                    }
+                }
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${request.attachments.size}",
+                    modifier = Modifier.weight(1f),
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.size(38.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZoomablePreviewImage(
+    image: ImageBitmap?,
+    contentDescription: String
+) {
+    var scale by remember(image) { mutableFloatStateOf(1f) }
+    var translation by remember(image) { mutableStateOf(Offset.Zero) }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(image) {
+                awaitEachGesture {
+                    var event = awaitPointerEvent()
+                    while (event.changes.any { it.pressed }) {
+                        val pressedCount = event.changes.count { it.pressed }
+                        if (pressedCount >= 2 || scale > 1f) {
+                            val nextScale = (scale * event.calculateZoom()).coerceIn(1f, 5f)
+                            if (nextScale == 1f) {
+                                translation = Offset.Zero
+                            } else {
+                                val maximumX = size.width * (nextScale - 1f) / 2f
+                                val maximumY = size.height * (nextScale - 1f) / 2f
+                                val pan = event.calculatePan()
+                                translation = Offset(
+                                    x = (translation.x + pan.x).coerceIn(-maximumX, maximumX),
+                                    y = (translation.y + pan.y).coerceIn(-maximumY, maximumY)
+                                )
+                            }
+                            scale = nextScale
+                            event.changes.forEach { it.consume() }
+                        }
+                        event = awaitPointerEvent()
+                    }
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        if (image != null) {
+            Image(
+                bitmap = image,
+                contentDescription = contentDescription,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = translation.x
+                        translationY = translation.y
+                    },
+                contentScale = ContentScale.Fit
+            )
+        } else {
+            Icon(
+                painter = painterResource(R.drawable.ic_photo_stack),
+                contentDescription = contentDescription,
+                modifier = Modifier.size(54.dp),
+                tint = Color.White.copy(alpha = 0.42f)
+            )
+        }
     }
 }
 
@@ -1171,68 +1873,6 @@ private fun MarkdownLikeText(text: String) {
 }
 
 @Composable
-private fun TrajectoryPage(nodes: List<TrajectoryNode>) {
-    if (nodes.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("暂无轨迹", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f))
-        }
-        return
-    }
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp)) {
-        items(nodes, key = { "trajectory:${it.id}" }) { node ->
-            Row(Modifier.fillMaxWidth().heightIn(min = 68.dp)) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.size(12.dp).background(trajectoryColor(node.kind), CircleShape))
-                    Box(Modifier.width(2.dp).weight(1f).background(trajectoryColor(node.kind).copy(alpha = 0.25f)))
-                }
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f).padding(bottom = 14.dp)) {
-                    Text(node.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text(node.subtitle.replace('\n', ' '), maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f), fontSize = 12.sp)
-                }
-            }
-        }
-    }
-}
-
-private fun trajectoryColor(kind: TrajectoryNodeKind) = when (kind) {
-    TrajectoryNodeKind.INPUT -> DshColors.Ocean
-    TrajectoryNodeKind.ASSISTANT -> DshColors.Success
-    TrajectoryNodeKind.REQUEST -> DshColors.Purple
-    TrajectoryNodeKind.TOOL, TrajectoryNodeKind.SUBTOOL -> DshColors.Orange
-    else -> Color.Gray
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SessionStatsSheet(stateHolder: AndroidSharedStateHolder, onDismiss: () -> Unit) {
-    val snapshot = stateHolder.snapshot.statsSnapshot
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("会话统计", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            StatRow("Turns", snapshot?.stats?.turns?.toString() ?: "—")
-            StatRow("Steps", snapshot?.stats?.steps?.toString() ?: "—")
-            StatRow("LLM", snapshot?.stats?.llmMs?.let { "${it.toInt()} ms" } ?: "—")
-            StatRow("Tools", snapshot?.stats?.toolMs?.let { "${it.toInt()} ms" } ?: "—")
-            StatRow("TTFT", snapshot?.stats?.ttftMs?.let { "${it.toInt()} ms" } ?: "—")
-            HorizontalDivider()
-            StatRow("Input tokens", snapshot?.tokenUsage?.totals?.inputTokens?.toString() ?: "—")
-            StatRow("Output tokens", snapshot?.tokenUsage?.totals?.outputTokens?.toString() ?: "—")
-            Spacer(Modifier.height(10.dp))
-        }
-    }
-}
-
-@Composable
-private fun StatRow(title: String, value: String) {
-    Row(Modifier.fillMaxWidth()) {
-        Text(title, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-        Spacer(Modifier.weight(1f))
-        Text(value, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
 private fun SmallConnectionDot(state: GatewayConnectionState) {
     val color = when (state) {
         GatewayConnectionState.CONNECTED -> DshColors.Success
@@ -1244,7 +1884,6 @@ private fun SmallConnectionDot(state: GatewayConnectionState) {
 }
 
 private fun permissionTitle(value: String?) = when (value) {
-    "ask" -> "每次询问"
     "read-only" -> "只读"
     "workspace-write" -> "工作区写入"
     "danger-full-access" -> "完全访问"

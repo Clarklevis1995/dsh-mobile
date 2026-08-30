@@ -15,6 +15,7 @@ import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.projection.TrajectoryProjection
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.SessionEvent
+import com.clarklevis.dsh.shared.sync.HistorySessionState
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -35,6 +36,8 @@ internal class AndroidGatewayProjection(
     private val historyEvents = mutableMapOf<String, List<SessionEvent>>()
     private val historyLastSequences = mutableMapOf<String, Int>()
     private val historyHasMore = mutableMapOf<String, Boolean>()
+    private val historySessionStates = mutableMapOf<String, HistorySessionState>()
+    private var historyPendingSessionId: String? = null
     private val conversationItems = mutableMapOf<String, List<ConversationItem>>()
     private val conversationLastSequences = mutableMapOf<String, Int>()
     private var controlSnapshot = mobileStore.snapshot()
@@ -50,6 +53,14 @@ internal class AndroidGatewayProjection(
         selectedHistoryHasMore = controlSnapshot.selectedSessionId?.let(historyHasMore::get) == true,
         selectedHistoryEarliestSequence = controlSnapshot.selectedSessionId
             ?.let(historyEvents::get)?.firstOrNull()?.seq,
+        selectedHistoryIsLoading = controlSnapshot.selectedSessionId
+            ?.let(historySessionStates::get)?.isLoading == true,
+        selectedHistoryIsLoadingOlder = controlSnapshot.selectedSessionId
+            ?.let(historySessionStates::get)?.isLoadingOlder == true,
+        selectedHistoryLoadedEventCount = controlSnapshot.selectedSessionId
+            ?.let(historySessionStates::get)?.progress?.loaded ?: 0,
+        selectedHistoryTotalEventCount = controlSnapshot.selectedSessionId
+            ?.let(historySessionStates::get)?.progress?.total,
         lastFrameKind = lastFrameKind ?: controlSnapshot.lastFrameKind,
         lastError = lastError ?: controlSnapshot.lastError
     )
@@ -87,6 +98,8 @@ internal class AndroidGatewayProjection(
         historyEvents.clear()
         historyLastSequences.clear()
         historyHasMore.clear()
+        historySessionStates.clear()
+        historyPendingSessionId = null
         conversationItems.clear()
         conversationLastSequences.clear()
         controlSnapshot = mobileStore.reset()
@@ -187,6 +200,9 @@ internal class AndroidGatewayProjection(
         historyEvents.putAll(plan.eventsBySession)
         historyLastSequences.clear()
         historyLastSequences.putAll(plan.lastSequencesBySession)
+        historySessionStates.clear()
+        historySessionStates.putAll(plan.sessionStatesBySession)
+        historyPendingSessionId = plan.pendingSessionId
         historyEnvelope.commit(event)
         if (event.kind == "error") lastError = event.errorCode ?: "history-store-error"
         plan.effects.forEach { effect ->
@@ -199,7 +215,13 @@ internal class AndroidGatewayProjection(
         if (event.kind == "error") {
             require(event.statePayloadJson == null && decodeHistoryEffects(event).isEmpty())
             require(!event.errorCode.isNullOrBlank())
-            return HistoryPlan(historyEvents.toMap(), historyLastSequences.toMap(), emptyList())
+            return HistoryPlan(
+                historyEvents.toMap(),
+                historyLastSequences.toMap(),
+                historySessionStates.toMap(),
+                historyPendingSessionId,
+                emptyList()
+            )
         }
         if (event.kind == "snapshot") {
             val bootstrap = adapterJson.decodeFromString<SharedHistoryBootstrap>(
@@ -213,6 +235,8 @@ internal class AndroidGatewayProjection(
             return HistoryPlan(
                 bootstrap.eventsBySession,
                 bootstrap.eventsBySession.mapValues { it.value.lastOrNull()?.seq ?: -1 },
+                bootstrap.state.sessions,
+                bootstrap.state.pendingSessionId,
                 emptyList()
             )
         }
@@ -227,6 +251,13 @@ internal class AndroidGatewayProjection(
         require((patch.outcome == "request-page") == (effects.size == 1))
         val next = historyEvents.toMutableMap()
         val nextSequences = historyLastSequences.toMutableMap()
+        val nextSessionStates = historySessionStates.toMutableMap()
+        patch.session?.let { nextSessionStates[patch.sessionId] = it }
+        val nextPendingSessionId = if (patch.pendingSessionChanged) {
+            patch.pendingSessionId
+        } else {
+            historyPendingSessionId
+        }
         patch.eventPatch?.let { eventPatch ->
             val old = next[patch.sessionId].orEmpty()
             next[patch.sessionId] = when (eventPatch.kind) {
@@ -261,7 +292,13 @@ internal class AndroidGatewayProjection(
                 else -> error("unknown history patch kind")
             }
         }
-        return HistoryPlan(next, nextSequences, effects)
+        return HistoryPlan(
+            next,
+            nextSequences,
+            nextSessionStates,
+            nextPendingSessionId,
+            effects
+        )
     }
 
     private fun decodeHistoryEffects(event: SharedMviEvent): List<SharedHistoryEffect> =
@@ -352,6 +389,8 @@ internal class AndroidGatewayProjection(
     private data class HistoryPlan(
         val eventsBySession: Map<String, List<SessionEvent>>,
         val lastSequencesBySession: Map<String, Int>,
+        val sessionStatesBySession: Map<String, HistorySessionState>,
+        val pendingSessionId: String?,
         val effects: List<SharedHistoryEffect>
     )
 

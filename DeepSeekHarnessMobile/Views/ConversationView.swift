@@ -881,7 +881,6 @@ struct ConversationView: View {
     }
     private func permissionIcon(_ value: String) -> String {
         switch value {
-        case "ask": "questionmark.shield"
         case "read-only": "checkmark.shield"
         case "workspace-write": "pencil.and.outline"
         case "danger-full-access": "exclamationmark.shield"

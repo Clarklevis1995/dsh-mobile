@@ -49,6 +49,10 @@ data class SharedMobileSnapshot(
     val hostSnapshot: GatewayHostSnapshot? = null,
     val selectedHistoryHasMore: Boolean = false,
     val selectedHistoryEarliestSequence: Int? = null,
+    val selectedHistoryIsLoading: Boolean = false,
+    val selectedHistoryIsLoadingOlder: Boolean = false,
+    val selectedHistoryLoadedEventCount: Int = 0,
+    val selectedHistoryTotalEventCount: Int? = null,
     val lastFrameKind: String? = null,
     val lastError: String? = null
 )
@@ -130,6 +134,12 @@ class SharedMobileStore(
                 "defaults" -> {
                     agentPresetDefault = frame.agentPresetDefault ?: agentPresetDefault
                     permissionDefault = frame.permissionDefault ?: permissionDefault
+                }
+                "set-default" -> if (frame.applied != false) {
+                    when (frame.target) {
+                        "agent-preset" -> agentPresetDefault = frame.value ?: agentPresetDefault
+                        "permission" -> permissionDefault = frame.value ?: permissionDefault
+                    }
                 }
                 "default-model", "save-default-model" -> {
                     defaultModel = frame.current ?: frame.selection ?: frame.saved ?: defaultModel
