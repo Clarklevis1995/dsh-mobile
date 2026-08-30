@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.DeepSeekHarness" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">@color/whale_foreground</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="Theme.DeepSeekHarness.Starting" parent="Theme.DeepSeekHarness">
+        <item name="android:windowBackground">@drawable/splash_screen</item>
+        <item name="android:windowDisablePreview">false</item>
+    </style>
+</resources>

@@ -20,7 +20,10 @@ import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.gateway.gatewayAttachmentCacheKey
+import com.clarklevis.dsh.shared.protocol.GatewayDirectoryItem
+import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
+import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import java.util.TimeZone
@@ -62,6 +65,10 @@ class AndroidSharedStateHolder(
     private var thumbnailTargetWidthPixels = DEFAULT_THUMBNAIL_TARGET_PIXELS
     private var thumbnailTargetHeightPixels = DEFAULT_THUMBNAIL_TARGET_PIXELS
     private var lastObservedConnection = GatewayConnectionState.DISCONNECTED
+    private var workspacePreferenceLoaded = false
+    private var hasReceivedWorkspaces = false
+    private var pendingDirectoryCreationParentPath: String? = null
+    private var recentlyCreatedWorkspace: GatewayWorkspace? by mutableStateOf(null)
     private var inputGeneration = 0L
     private var pendingSelectedSessionId: String? = null
     private val thumbnailCache = BoundedLruCache<String, ImageBitmap>(MAXIMUM_THUMBNAIL_BYTES) {
@@ -77,6 +84,24 @@ class AndroidSharedStateHolder(
     var endpoint: String by mutableStateOf(AndroidGatewayPreferences.DEFAULT_ENDPOINT)
     var pairingPayload: String by mutableStateOf("")
     var selectedWorkspaceId: String? by mutableStateOf(null)
+        private set
+    var directoryPath: String? by mutableStateOf(null)
+        private set
+    var directoryHome: String? by mutableStateOf(null)
+        private set
+    var directoryCrumbs: List<GatewayDirectoryItem> by mutableStateOf(emptyList())
+        private set
+    var directoryEntries: List<GatewayDirectoryItem> by mutableStateOf(emptyList())
+        private set
+    var directoryIsLoading: Boolean by mutableStateOf(false)
+        private set
+    var directoryCreationIsLoading: Boolean by mutableStateOf(false)
+        private set
+    var workspaceCreationIsLoading: Boolean by mutableStateOf(false)
+        private set
+    var createdDirectoryPathToReveal: String? by mutableStateOf(null)
+        private set
+    var workspaceCreationCompletedPath: String? by mutableStateOf(null)
         private set
     var historyPagingSessionIds: Set<String> by mutableStateOf(emptySet())
         private set
@@ -120,7 +145,12 @@ class AndroidSharedStateHolder(
             runtimeCollection = appGraph.gatewayScope.launch {
                 launch {
                     appGraph.preferences.snapshots.collect { value ->
-                        withContext(Dispatchers.Main.immediate) { endpoint = value.endpoint }
+                        withContext(Dispatchers.Main.immediate) {
+                            endpoint = value.endpoint
+                            selectedWorkspaceId = value.selectedWorkspaceId
+                            workspacePreferenceLoaded = true
+                            if (hasReceivedWorkspaces) reconcileWorkspaceSelection()
+                        }
                     }
                 }
                 launch {
@@ -133,6 +163,7 @@ class AndroidSharedStateHolder(
                                 state.connection != GatewayConnectionState.AUTHENTICATING
                             ) {
                                 defaultConfigurationLoadingKinds = emptySet()
+                                clearWorkspaceRequestLoading()
                             }
                             if (
                                 state.connection == GatewayConnectionState.CONNECTED &&
@@ -158,6 +189,7 @@ class AndroidSharedStateHolder(
                                     event.correlatedSessionId
                                 ) {
                                     pruneAttachmentStateForSession()
+                                    handleWorkspaceFrame(event.frame)
                                     if (event.frame.kind == "history") {
                                         event.correlatedSessionId?.let { sessionId ->
                                             historyPagingSessionIds = historyPagingSessionIds - sessionId
@@ -170,6 +202,11 @@ class AndroidSharedStateHolder(
                                     if (event.frame.kind == "agent-presets") {
                                         agentPresetsAuthorable = event.frame.authorable == true
                                         agentPresetsHasDocument = event.frame.hasDocument == true
+                                    }
+                                }
+                                if (event.frame.kind == "sent") {
+                                    event.frame.sessionId?.takeIf(String::isNotBlank)?.let { sessionId ->
+                                        handleSentSession(appGraph, sessionId)
                                     }
                                 }
                                 if (trajectoryIsActive) publishTrajectory()
@@ -195,6 +232,7 @@ class AndroidSharedStateHolder(
                                 withContext(Dispatchers.Main.immediate) {
                                     defaultConfigurationLoadingKinds =
                                         defaultConfigurationLoadingKinds - event.requestType
+                                    clearWorkspaceRequestLoading(event.requestType)
                                 }
                                 event.targetSessionId?.takeIf { event.requestType == "history" }
                                     ?.let { projectionActor.historyTimedOut(it) }
@@ -208,6 +246,7 @@ class AndroidSharedStateHolder(
                                 withContext(Dispatchers.Main.immediate) {
                                     defaultConfigurationLoadingKinds =
                                         defaultConfigurationLoadingKinds - event.requestType
+                                    clearWorkspaceRequestLoading(event.requestType)
                                     platformError = "${event.requestType}: ${event.reason}"
                                 }
                                 event.targetSessionId?.takeIf { event.requestType == "history" }
@@ -248,7 +287,10 @@ class AndroidSharedStateHolder(
         val appGraph = graph
         if (appGraph == null) {
             runCatching { GatewayWireDecoder.decode(payload) }
-                .onSuccess { frame -> projectionActor.acceptFrameImmediate(payload, frame, frame.sessionId) }
+                .onSuccess { frame ->
+                    projectionActor.acceptFrameImmediate(payload, frame, frame.sessionId)
+                    handleWorkspaceFrame(frame)
+                }
                 .onFailure { platformError = "decode-failed" }
             return
         }
@@ -306,8 +348,105 @@ class AndroidSharedStateHolder(
         }
     }
 
+    val availableWorkspaces: List<GatewayWorkspace>
+        get() {
+            val created = recentlyCreatedWorkspace ?: return snapshot.workspaces
+            return if (snapshot.workspaces.any { it.workspaceId == created.workspaceId }) {
+                snapshot.workspaces
+            } else {
+                snapshot.workspaces + created
+            }
+        }
+
+    val activeWorkspace: GatewayWorkspace?
+        get() {
+            if (selectedWorkspaceId == UNGROUPED_WORKSPACE_ID) return null
+            return availableWorkspaces.firstOrNull { it.workspaceId == selectedWorkspaceId }
+                ?: availableWorkspaces.firstOrNull()
+        }
+
+    val isUngroupedWorkspaceSelected: Boolean
+        get() = selectedWorkspaceId == UNGROUPED_WORKSPACE_ID || availableWorkspaces.isEmpty()
+
     fun selectWorkspace(workspaceId: String?) {
-        selectedWorkspaceId = workspaceId
+        val resolved = workspaceId ?: resolveWorkspaceSelection(null, availableWorkspaces)
+        applyWorkspaceSelection(resolved, persist = true)
+    }
+
+    fun beginDirectoryBrowsing() {
+        directoryPath = null
+        directoryHome = null
+        directoryCrumbs = emptyList()
+        directoryEntries = emptyList()
+        createdDirectoryPathToReveal = null
+        workspaceCreationCompletedPath = null
+        browseDirectories()
+    }
+
+    fun browseDirectories(path: String? = null) {
+        val appGraph = graph ?: return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) {
+            platformError = "请先连接 DeepSeek Harness"
+            return
+        }
+        directoryIsLoading = true
+        appGraph.gatewayScope.launch {
+            val accepted = appGraph.gatewayRuntime.sendRequest(GatewayRequests.directories(path))
+            if (!accepted) withContext(Dispatchers.Main.immediate) {
+                directoryIsLoading = false
+                platformError = "目录请求正在处理中，请稍后重试"
+            }
+        }
+    }
+
+    fun createDirectory(parentPath: String, name: String) {
+        val appGraph = graph ?: return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) {
+            platformError = "请先连接 DeepSeek Harness"
+            return
+        }
+        val normalizedName = name.trim()
+        if (normalizedName.isEmpty()) {
+            platformError = "文件夹名称不能为空"
+            return
+        }
+        pendingDirectoryCreationParentPath = parentPath
+        directoryCreationIsLoading = true
+        appGraph.gatewayScope.launch {
+            val accepted = appGraph.gatewayRuntime.sendRequest(
+                GatewayRequests.createDirectory(parentPath, normalizedName)
+            )
+            if (!accepted) withContext(Dispatchers.Main.immediate) {
+                pendingDirectoryCreationParentPath = null
+                directoryCreationIsLoading = false
+                platformError = "文件夹创建请求正在处理中，请稍后重试"
+            }
+        }
+    }
+
+    fun acknowledgeCreatedDirectoryReveal(path: String) {
+        if (createdDirectoryPathToReveal == path) createdDirectoryPathToReveal = null
+    }
+
+    fun createWorkspace(path: String) {
+        val appGraph = graph ?: return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) {
+            platformError = "请先连接 DeepSeek Harness"
+            return
+        }
+        workspaceCreationCompletedPath = null
+        workspaceCreationIsLoading = true
+        appGraph.gatewayScope.launch {
+            val accepted = appGraph.gatewayRuntime.sendRequest(GatewayRequests.createWorkspace(path))
+            if (!accepted) withContext(Dispatchers.Main.immediate) {
+                workspaceCreationIsLoading = false
+                platformError = "工作区创建请求正在处理中，请稍后重试"
+            }
+        }
+    }
+
+    fun acknowledgeWorkspaceCreation(path: String) {
+        if (workspaceCreationCompletedPath == path) workspaceCreationCompletedPath = null
     }
 
     fun refreshProductState() {
@@ -471,11 +610,21 @@ class AndroidSharedStateHolder(
         val appGraph = graph ?: return
         if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
         appGraph.gatewayScope.launch {
-            appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("models", sessionId))
-            appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("permission-options", sessionId))
-            appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("context-usage", sessionId))
-            appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("session-stats", sessionId))
+            requestSessionControls(appGraph, sessionId)
         }
+    }
+
+    private suspend fun handleSentSession(appGraph: AndroidAppGraph, sessionId: String) {
+        appGraph.gatewayRuntime.subscribe(sessionId)
+        appGraph.gatewayRuntime.requestSessions()
+        requestSessionControls(appGraph, sessionId)
+    }
+
+    private suspend fun requestSessionControls(appGraph: AndroidAppGraph, sessionId: String) {
+        appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("models", sessionId))
+        appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("permission-options", sessionId))
+        appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("context-usage", sessionId))
+        appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("session-stats", sessionId))
     }
 
     fun answerQuestion(rpcId: String, sessionId: String, answers: List<GatewayQuestionAnswer>) {
@@ -605,7 +754,7 @@ class AndroidSharedStateHolder(
                 text = submission.draft,
                 images = submission.images.map(AndroidPreparedImage::outgoing),
                 sessionId = submission.sessionId,
-                workspaceId = selectedWorkspaceId,
+                workspaceId = activeWorkspace?.workspaceId,
                 clientTimeZone = TimeZone.getDefault().id
             )
             withContext(Dispatchers.Main.immediate) { applyMessageSendResult(submission, sent) }
@@ -731,6 +880,78 @@ class AndroidSharedStateHolder(
     val canSend: Boolean
         get() = gatewayState.connection == GatewayConnectionState.CONNECTED &&
             (messageDraft.isNotBlank() || preparedImages.isNotEmpty())
+
+    private fun handleWorkspaceFrame(frame: GatewayFrame) {
+        when (frame.kind) {
+            "workspaces" -> {
+                hasReceivedWorkspaces = true
+                recentlyCreatedWorkspace = recentlyCreatedWorkspace?.takeUnless { created ->
+                    snapshot.workspaces.any { it.workspaceId == created.workspaceId }
+                }
+                if (workspacePreferenceLoaded) reconcileWorkspaceSelection()
+            }
+            "directories" -> {
+                directoryIsLoading = false
+                directoryPath = frame.path
+                directoryHome = frame.home
+                directoryCrumbs = frame.crumbs.orEmpty()
+                directoryEntries = frame.entries.orEmpty()
+            }
+            "directory-create" -> {
+                directoryCreationIsLoading = false
+                val parentPath = pendingDirectoryCreationParentPath
+                pendingDirectoryCreationParentPath = null
+                createdDirectoryPathToReveal = frame.path
+                parentPath?.let(::browseDirectories)
+            }
+            "workspace-create" -> {
+                workspaceCreationIsLoading = false
+                val workspace = frame.workspace
+                if (workspace == null) {
+                    platformError = "Gateway 未返回创建后的工作区"
+                    return
+                }
+                recentlyCreatedWorkspace = workspace
+                workspaceCreationCompletedPath = workspace.path
+                applyWorkspaceSelection(workspace.workspaceId, persist = true)
+                refreshProductState()
+            }
+            "error" -> {
+                clearWorkspaceRequestLoading(frame.requestType)
+                if (frame.requestType in WORKSPACE_REQUEST_TYPES) {
+                    platformError = frame.message ?: "工作区请求失败"
+                }
+            }
+        }
+    }
+
+    private fun applyWorkspaceSelection(workspaceId: String, persist: Boolean) {
+        if (selectedWorkspaceId == workspaceId) return
+        selectedWorkspaceId = workspaceId
+        if (!persist) return
+        graph?.let { appGraph ->
+            appGraph.gatewayScope.launch {
+                val current = appGraph.preferences.load()
+                appGraph.preferences.update(current.copy(selectedWorkspaceId = workspaceId))
+            }
+        }
+    }
+
+    private fun reconcileWorkspaceSelection() {
+        val resolved = resolveWorkspaceSelection(selectedWorkspaceId, availableWorkspaces)
+        applyWorkspaceSelection(resolved, persist = resolved != selectedWorkspaceId)
+    }
+
+    private fun clearWorkspaceRequestLoading(requestType: String? = null) {
+        if (requestType == null || requestType == "directories") directoryIsLoading = false
+        if (requestType == null || requestType == "directory-create") {
+            directoryCreationIsLoading = false
+            pendingDirectoryCreationParentPath = null
+        }
+        if (requestType == null || requestType == "workspace-create") {
+            workspaceCreationIsLoading = false
+        }
+    }
 
     private fun pruneAttachmentStateForSession() {
         val sessionId = snapshot.selectedSessionId
@@ -885,12 +1106,30 @@ class AndroidSharedStateHolder(
     )
 
     companion object {
+        const val UNGROUPED_WORKSPACE_ID = "__ungrouped__"
+
+        private val WORKSPACE_REQUEST_TYPES = setOf(
+            "directories",
+            "directory-create",
+            "workspace-create"
+        )
         private const val MAXIMUM_THUMBNAIL_BYTES = 16L * 1_024 * 1_024
         private const val MAXIMUM_STATUS_COUNT = 256L
         private const val DEFAULT_THUMBNAIL_TARGET_PIXELS = 720
         const val DEFAULT_WIRE_PAYLOAD =
             """{"sessionId":"android-demo","seq":4,"time":1786937355,"event":{"type":"assistant/message","turn":1,"step":1,"text":"最终消息会替换流式临时消息。"}}"""
     }
+}
+
+internal fun resolveWorkspaceSelection(
+    preferredWorkspaceId: String?,
+    workspaces: List<GatewayWorkspace>
+): String = when {
+    preferredWorkspaceId == AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID ->
+        AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID
+    workspaces.any { it.workspaceId == preferredWorkspaceId } -> requireNotNull(preferredWorkspaceId)
+    workspaces.isNotEmpty() -> workspaces.first().workspaceId
+    else -> AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID
 }
 
 enum class AttachmentLoadState { IDLE, LOADING, LOADED, FAILED, DEFERRED }

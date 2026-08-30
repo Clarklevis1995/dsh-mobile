@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.DeepSeekHarness" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:colorAccent">@color/whale_foreground</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

@@ -88,6 +88,31 @@ object GatewayRequests {
         lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST
     ) { put("query", query) }
 
+    fun directories(path: String? = null): GatewayRequest = request(
+        "directories",
+        "directories",
+        lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST
+    ) {
+        path?.takeIf(String::isNotBlank)?.let { put("path", it) }
+    }
+
+    fun createDirectory(path: String, name: String): GatewayRequest = request(
+        "directory-create",
+        "directory-create",
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("path", path)
+        put("name", name)
+    }
+
+    fun createWorkspace(path: String): GatewayRequest = request(
+        "workspace-create",
+        "workspace-create",
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("path", path)
+    }
+
     fun setDefault(target: String, value: String): GatewayRequest = request(
         "set-default",
         "set-default",

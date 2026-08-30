@@ -12,6 +12,8 @@ import com.clarklevis.dsh.shared.domain.SessionControlState
 import com.clarklevis.dsh.shared.domain.SessionListAction
 import com.clarklevis.dsh.shared.domain.SessionListReducer
 import com.clarklevis.dsh.shared.domain.SessionListState
+import com.clarklevis.dsh.shared.gateway.GatewayRequestLanePolicy
+import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayPendingQuestionRequest
 import com.clarklevis.dsh.shared.protocol.GatewayPermissionOption
@@ -31,6 +33,29 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProtocolAndReducerTest {
+    @Test
+    fun workspaceDirectoryRequestsMatchTheIosGatewayContract() {
+        assertEquals("{\"type\":\"directories\"}", GatewayRequests.directories().payload)
+        assertEquals(
+            "{\"type\":\"directories\",\"path\":\"/Users/mobile\"}",
+            GatewayRequests.directories("/Users/mobile").payload
+        )
+
+        val createDirectory = GatewayRequests.createDirectory("/Users/mobile", "project")
+        assertEquals(
+            "{\"type\":\"directory-create\",\"path\":\"/Users/mobile\",\"name\":\"project\"}",
+            createDirectory.payload
+        )
+        assertEquals(GatewayRequestLanePolicy.REJECT_IF_BUSY, createDirectory.lanePolicy)
+
+        val createWorkspace = GatewayRequests.createWorkspace("/Users/mobile/project")
+        assertEquals(
+            "{\"type\":\"workspace-create\",\"path\":\"/Users/mobile/project\"}",
+            createWorkspace.payload
+        )
+        assertEquals(GatewayRequestLanePolicy.REJECT_IF_BUSY, createWorkspace.lanePolicy)
+    }
+
     @Test
     fun wireDecoderNormalizesMissingEventKindAndPreservesPayload() {
         val frame = GatewayWireDecoder.decode(GatewayProtocolFixtures.LIVE_EVENT_WITHOUT_KIND)

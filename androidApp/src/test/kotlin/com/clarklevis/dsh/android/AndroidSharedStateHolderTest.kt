@@ -2,12 +2,48 @@ package com.clarklevis.dsh.android
 
 import com.clarklevis.dsh.android.platform.AndroidPreparedImage
 import com.clarklevis.dsh.shared.gateway.GatewayOutgoingImage
+import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidSharedStateHolderTest {
+    @Test
+    fun workspaceSelectionRestoresAConcreteScopeInsteadOfAllSessions() {
+        val workspaces = listOf(
+            GatewayWorkspace("w1", "/one", "One", listOf("s1"), "now", "now"),
+            GatewayWorkspace("w2", "/two", "Two", listOf("s2"), "now", "now")
+        )
+
+        assertEquals("w2", resolveWorkspaceSelection("w2", workspaces))
+        assertEquals("w1", resolveWorkspaceSelection("missing", workspaces))
+        assertEquals(
+            AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID,
+            resolveWorkspaceSelection(null, emptyList())
+        )
+    }
+
+    @Test
+    fun directoryAndWorkspaceFramesDriveAndroidBrowserState() {
+        val holder = AndroidSharedStateHolder()
+        holder.wirePayload =
+            """{"kind":"directories","path":"/Users/mobile","home":"/Users/mobile","crumbs":[{"name":"mobile","path":"/Users/mobile","hidden":false}],"entries":[{"name":"project","path":"/Users/mobile/project","hidden":false}]}"""
+        holder.submitWirePayload()
+
+        assertEquals("/Users/mobile", holder.directoryPath)
+        assertEquals("project", holder.directoryEntries.single().name)
+        assertEquals(false, holder.directoryIsLoading)
+
+        holder.wirePayload =
+            """{"kind":"workspace-create","created":true,"workspace":{"workspaceId":"w-new","path":"/Users/mobile/project","title":"project","sessionIds":[],"createdAt":"now","updatedAt":"now"}}"""
+        holder.submitWirePayload()
+
+        assertEquals("w-new", holder.selectedWorkspaceId)
+        assertEquals("/Users/mobile/project", holder.workspaceCreationCompletedPath)
+        assertEquals("w-new", holder.activeWorkspace?.workspaceId)
+    }
+
     @Test
     fun fixtureAndWireInputAreReducedBySharedStore() {
         val holder = AndroidSharedStateHolder()

@@ -112,6 +112,18 @@ class SharedMobileStore(
                         SessionListAction.RemoteSessionsReceived(sessions)
                     )
                 }
+                "sent" -> frame.sessionId?.takeIf(String::isNotBlank)?.let { sessionId ->
+                    sessionListState = SessionListReducer.reduce(
+                        sessionListState,
+                        SessionListAction.MessageSent(
+                            sessionId = sessionId,
+                            agentPreset = agentPresetDefault,
+                            insertedAtEpochSeconds = frame.time
+                                ?.let(::normalizeEpochSeconds)
+                                ?: nowEpochSeconds()
+                        )
+                    )
+                }
                 "workspaces" -> {
                     workspaces = frame.items.orEmpty().mapNotNull { item ->
                         runCatching {

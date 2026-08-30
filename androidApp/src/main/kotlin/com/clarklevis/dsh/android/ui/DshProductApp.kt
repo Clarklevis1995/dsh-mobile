@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -38,7 +37,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -196,7 +194,8 @@ private fun WorkspaceScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showManualPairing by rememberSaveable { mutableStateOf(false) }
     var showQrScanner by rememberSaveable { mutableStateOf(false) }
-    var showWorkspaces by rememberSaveable { mutableStateOf(false) }
+    var showWorkspaceMenu by rememberSaveable { mutableStateOf(false) }
+    var showDirectoryBrowser by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(stateHolder.gatewayState.connection) { stateHolder.refreshProductState() }
     LaunchedEffect(searchQuery) {
         if (searchQuery.isNotBlank()) {
@@ -205,22 +204,20 @@ private fun WorkspaceScreen(
         }
     }
 
-    val selectedWorkspace = stateHolder.snapshot.workspaces
-        .firstOrNull { it.workspaceId == stateHolder.selectedWorkspaceId }
+    val workspaces = stateHolder.availableWorkspaces
+    val selectedWorkspace = stateHolder.activeWorkspace
+    val ungroupedSelected = stateHolder.isUngroupedWorkspaceSelected
     val sessions = remember(
         stateHolder.snapshot.sessions,
-        selectedWorkspace,
+        workspaces,
         stateHolder.selectedWorkspaceId,
         searchQuery
     ) {
-        val scoped = when {
-            selectedWorkspace != null -> stateHolder.snapshot.sessions.filter { it.id in selectedWorkspace.sessionIds }
-            stateHolder.selectedWorkspaceId == UNGROUPED -> {
-                val assigned = stateHolder.snapshot.workspaces.flatMapTo(mutableSetOf()) { it.sessionIds }
-                stateHolder.snapshot.sessions.filterNot { it.id in assigned }
-            }
-            else -> stateHolder.snapshot.sessions
-        }
+        val scoped = workspaceScopedSessions(
+            sessions = stateHolder.snapshot.sessions,
+            workspaces = workspaces,
+            selectedWorkspaceId = stateHolder.selectedWorkspaceId
+        )
         if (searchQuery.isBlank()) scoped else scoped.filter {
             it.title.contains(searchQuery, ignoreCase = true) ||
                 it.id.contains(searchQuery, ignoreCase = true) ||
@@ -264,15 +261,31 @@ private fun WorkspaceScreen(
                         )
                         Text("DeepSeek Harness 预览版", color = Color.White.copy(alpha = 0.65f), fontSize = 14.sp)
                     }
-                    WorkspaceCard(
-                        workspace = selectedWorkspace,
-                        ungrouped = stateHolder.selectedWorkspaceId == UNGROUPED,
-                        ungroupedCount = stateHolder.snapshot.sessions.count { session ->
-                            stateHolder.snapshot.workspaces.none { session.id in it.sessionIds }
-                        },
-                        state = stateHolder.gatewayState,
-                        onClick = { showWorkspaces = true }
-                    )
+                    Box(Modifier.fillMaxWidth()) {
+                        WorkspaceCard(
+                            workspace = selectedWorkspace,
+                            ungrouped = ungroupedSelected,
+                            ungroupedCount = stateHolder.snapshot.sessions.count { session ->
+                                workspaces.none { session.id in it.sessionIds }
+                            },
+                            state = stateHolder.gatewayState,
+                            onClick = { showWorkspaceMenu = true }
+                        )
+                        WorkspaceSelectionMenu(
+                            expanded = showWorkspaceMenu,
+                            workspaces = workspaces,
+                            selectedWorkspaceId = stateHolder.selectedWorkspaceId,
+                            onSelect = { workspaceId ->
+                                stateHolder.selectWorkspace(workspaceId)
+                                showWorkspaceMenu = false
+                            },
+                            onAddWorkspace = {
+                                showWorkspaceMenu = false
+                                showDirectoryBrowser = true
+                            },
+                            onDismiss = { showWorkspaceMenu = false }
+                        )
+                    }
                     GlassActionButton("＋", "新建会话", onNewSession)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("最近会话", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
@@ -303,15 +316,10 @@ private fun WorkspaceScreen(
     if (showManualPairing) {
         ManualGatewayPairingSheet(stateHolder) { showManualPairing = false }
     }
-    if (showWorkspaces) {
-        WorkspacePicker(
-            workspaces = stateHolder.snapshot.workspaces,
-            selectedId = stateHolder.selectedWorkspaceId,
-            onSelect = {
-                stateHolder.selectWorkspace(it)
-                showWorkspaces = false
-            },
-            onDismiss = { showWorkspaces = false }
+    if (showDirectoryBrowser) {
+        WorkspaceDirectoryBrowserSheet(
+            stateHolder = stateHolder,
+            onDismiss = { showDirectoryBrowser = false }
         )
     }
 }
@@ -398,7 +406,8 @@ private fun WorkspaceCard(
         Modifier.fillMaxWidth()
             .dshLiquidGlass(RoundedCornerShape(15.dp), DshGlassStyle.CARD)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 15.dp),
+            .padding(horizontal = 14.dp, vertical = 15.dp)
+            .testTag("workspace-card"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -581,45 +590,21 @@ private fun ConnectionStatusText(state: GatewayRuntimeState) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun WorkspacePicker(
+internal fun workspaceScopedSessions(
+    sessions: List<SessionSummary>,
     workspaces: List<GatewayWorkspace>,
-    selectedId: String?,
-    onSelect: (String?) -> Unit,
-    onDismiss: () -> Unit
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface
+    selectedWorkspaceId: String?
+): List<SessionSummary> {
+    val selected = workspaces.firstOrNull { it.workspaceId == selectedWorkspaceId }
+        ?: workspaces.firstOrNull()
+    if (
+        selectedWorkspaceId == AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID ||
+        selected == null
     ) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(22.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("选择工作区", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            WorkspaceChoice("全部会话", "所有 Mobile Gateway 会话", selectedId == null) { onSelect(null) }
-            WorkspaceChoice("未分组", "未归属任何工作区的会话", selectedId == UNGROUPED) { onSelect(UNGROUPED) }
-            workspaces.forEach { workspace ->
-                WorkspaceChoice(workspace.title, workspace.path, selectedId == workspace.workspaceId) {
-                    onSelect(workspace.workspaceId)
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-        }
+        val assigned = workspaces.flatMapTo(mutableSetOf()) { it.sessionIds }
+        return sessions.filterNot { it.id in assigned }
     }
-}
-
-@Composable
-private fun WorkspaceChoice(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(if (selected) "●" else "○", color = if (selected) DshColors.Ocean else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-        Spacer(Modifier.width(12.dp))
-        Column {
-            Text(title, fontWeight = FontWeight.Medium)
-            Text(subtitle, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), fontSize = 12.sp, maxLines = 1)
-        }
-    }
+    return sessions.filter { it.id in selected.sessionIds }
 }
 
 internal fun relativeTime(
@@ -650,5 +635,4 @@ private fun localDayIndex(epochMillis: Long, timeZone: TimeZone): Long {
         calendar.get(Calendar.DAY_OF_YEAR)
 }
 
-private const val UNGROUPED = "__ungrouped__"
 private const val WHALE_ICON_PATH = "M22.9168 1.43018C22.6713 1.31018 22.5658 1.53918 22.4223 1.65519C21.9317 2.1697 21.5127 2.42121 20.9657 2.39121C20.1657 2.34621 19.4827 2.59771 18.8787 3.20973C18.7502 2.45521 18.3236 2.0047 17.6746 1.71569C16.5876 .856163 16.5421 .597155 16.4591 .341647C16.3536 .0301382 16.1761 .00363739 15.8326 .270145C15.5306 .822162 15.4136 1.43018 15.4251 2.0462C15.4516 3.43174 16.0366 4.53527 17.1991 5.3203C17.3651 5.4103 17.3651 5.5003 17.3236 5.63181C17.0671 6.43533 16.9351 6.64584 16.7501 6.57033C14.2475 4.63328 13.5 3.75075 12.568 3.05973C10.9524 1.68169 12.028 .923165 12.277 .833162C12.5375 .739159 12.3675 .41615 11.5259 .42015C10.6844 .42365 9.91439 .705658 8.48384 1.21267C5.70226 1.11517 3.88321 1.31768 1.36213 3.64575C.0790928 5.4103-.222916 7.41536.146595 9.50642C.535106 11.7105 1.66014 13.535 3.38869 14.9616C5.18125 16.4406 7.24581 17.1657 9.60138 17.0266C11.0319 16.9441 12.6245 16.7526 14.421 15.2321C16.7456 15.6716 17.3306 15.5851 17.7836 15.4911C18.4931 15.3411 18.4441 14.6841 18.1876 14.5636C16.1081 13.595 16.5646 13.9891 16.1496 13.67C17.2061 12.42 18.8202 10.1979 19.3182 7.17235C19.4182 5.93231 19.4562 5.86831 19.6447 5.84931C22.4833 4.65528 23.0268 3.44624 23.1548 1.9972C23.1738 1.77569 23.1508 1.54668 22.9168 1.43018Z"

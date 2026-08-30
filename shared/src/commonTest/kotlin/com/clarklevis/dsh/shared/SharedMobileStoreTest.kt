@@ -58,6 +58,22 @@ class SharedMobileStoreTest {
     }
 
     @Test
+    fun sentResponseSelectsTheServerAssignedSessionForImmediateLiveProjection() {
+        val store = SharedMobileStore(nowEpochSeconds = { 1_800_000_000.0 })
+
+        var snapshot = store.acceptFrame(
+            """{"kind":"sent","sessionId":"session-new"}"""
+        )
+        assertEquals("session-new", snapshot.selectedSessionId)
+        assertEquals("session-new", snapshot.sessions.single().id)
+
+        snapshot = store.acceptFrame(
+            """{"kind":"event","sessionId":"session-new","seq":1,"time":1800000001,"event":{"type":"user/message","text":"第一句话"}}"""
+        )
+        assertEquals(listOf("第一句话"), snapshot.conversation.map { it.text })
+    }
+
+    @Test
     fun productFramesPopulateWorkspaceSearchAndControlUiState() {
         val store = SharedMobileStore()
         var snapshot = store.acceptFrame(

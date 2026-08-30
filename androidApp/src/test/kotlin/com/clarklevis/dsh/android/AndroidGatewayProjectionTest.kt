@@ -9,6 +9,26 @@ import org.junit.Test
 
 class AndroidGatewayProjectionTest {
     @Test
+    fun newSessionSentResponseBindsLiveConversationWithoutLeavingTheScreen() {
+        val projection = AndroidGatewayProjection()
+        projection.selectSession(null)
+
+        val sent = """{"kind":"sent","sessionId":"session-new"}"""
+        projection.acceptFrame(sent, GatewayWireDecoder.decode(sent), "session-new")
+        assertEquals("session-new", projection.snapshot().selectedSessionId)
+
+        val user =
+            """{"kind":"event","sessionId":"session-new","seq":1,"time":100,"event":{"type":"user/message","text":"123"}}"""
+        projection.acceptFrame(user, GatewayWireDecoder.decode(user), "session-new")
+        val assistant =
+            """{"kind":"event","sessionId":"session-new","seq":2,"time":101,"event":{"type":"assistant/message","turn":1,"step":1,"text":"reply"}}"""
+        projection.acceptFrame(assistant, GatewayWireDecoder.decode(assistant), "session-new")
+
+        assertEquals(listOf("123", "reply"), projection.snapshot().conversation.map { it.text })
+        projection.close()
+    }
+
+    @Test
     fun correlatedHistoryCannotWriteIntoNewSelectionAndLivePatchesRemainIncremental() {
         val requested = mutableListOf<Pair<String, Int?>>()
         val projection = AndroidGatewayProjection(

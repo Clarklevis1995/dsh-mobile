@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="11dp" />
+            <solid android:color="@color/launcher_icon_background" />
+        </shape>
+    </item>
+    <item
+        android:width="36dp"
+        android:height="27dp"
+        android:drawable="@drawable/deepseek_whale"
+        android:gravity="center" />
+</layer-list>
