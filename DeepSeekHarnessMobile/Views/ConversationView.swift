@@ -156,7 +156,18 @@ struct ConversationView: View {
                     if let snapshot = store.selectedSessionStatsSnapshot {
                         sessionStatsBanner(snapshot)
                     }
-                    if let request = store.selectedPendingQuestionRequest {
+                    if let request = store.selectedPendingApprovalRequest {
+                        ApprovalRequestView(
+                            request: request,
+                            status: store.approvalRequestStatuses[request.rpcId] ?? .idle,
+                            commandPreview: store.commandPreview(for: request),
+                            details: store.approvalArguments(for: request),
+                            onDecision: { store.respondToApproval(request, outcome: $0) }
+                        )
+                        .id(request.rpcId)
+                        .padding(.bottom, composerBottomPadding)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if let request = store.selectedPendingQuestionRequest {
                         HumanQuestionView(
                             request: request,
                             status: store.questionRequestStatuses[request.rpcId] ?? .idle,
@@ -191,6 +202,11 @@ struct ConversationView: View {
             viewportScrollToBottomToken &+= 1
         }
         .onChange(of: store.selectedPendingQuestionRequest?.rpcId) { _, rpcId in
+            guard rpcId != nil else { return }
+            composerIsFocused = false
+            if isPinnedToBottom { viewportScrollToBottomToken &+= 1 }
+        }
+        .onChange(of: store.selectedPendingApprovalRequest?.rpcId) { _, rpcId in
             guard rpcId != nil else { return }
             composerIsFocused = false
             if isPinnedToBottom { viewportScrollToBottomToken &+= 1 }

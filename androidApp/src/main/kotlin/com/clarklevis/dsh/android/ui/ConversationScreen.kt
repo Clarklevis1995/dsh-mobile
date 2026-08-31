@@ -72,6 +72,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -140,6 +141,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayQuestion
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.projection.TrajectoryNodeKind
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -505,10 +507,22 @@ private fun ConversationPage(
                     onViewFullStats = onShowFullStats
                 )
             }
+            val approval = stateHolder.snapshot.pendingApprovals.firstOrNull {
+                stateHolder.snapshot.selectedSessionId == null || it.sessionId == stateHolder.snapshot.selectedSessionId
+            }
             val question = stateHolder.snapshot.pendingQuestions.firstOrNull {
                 stateHolder.snapshot.selectedSessionId == null || it.sessionId == stateHolder.snapshot.selectedSessionId
             }
-            if (question != null) {
+            if (approval != null) {
+                ApprovalRequestCard(
+                    request = approval,
+                    status = stateHolder.snapshot.approvalRequestStatuses[approval.rpcId]
+                        ?: com.clarklevis.dsh.shared.facade.SharedApprovalStatusSnapshot("idle"),
+                    commandPreview = stateHolder.snapshot.approvalCommandPreviews[approval.rpcId],
+                    details = stateHolder.snapshot.approvalDetails[approval.rpcId],
+                    onDecision = { stateHolder.respondToApproval(approval.rpcId, it) }
+                )
+            } else if (question != null) {
                 HumanQuestionCard(
                     request = question,
                     onAnswer = { stateHolder.answerQuestion(question.rpcId, question.sessionId, it) },
@@ -611,14 +625,25 @@ private fun ConversationTimeline(
     onUserInteraction: () -> Unit,
     onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit
 ) {
-    val items = stateHolder.snapshot.conversation
+    val latestItems = stateHolder.snapshot.conversation
+    val selectedSessionId = stateHolder.snapshot.selectedSessionId
+    val latestHistoryLoading = selectedSessionId in stateHolder.historyPagingSessionIds
+    var items by remember(selectedSessionId) { mutableStateOf(latestItems) }
+    var hasHistoryLoadingRow by remember(selectedSessionId) {
+        mutableStateOf(latestHistoryLoading)
+    }
     val displayEntries = remember(items) { makeConversationDisplayEntries(items) }
-    val itemsById = remember(items) { items.associateBy(ConversationItem::id) }
-    val hasInitialContent = displayEntries.isNotEmpty()
-    val hasHistoryLoadingRow = stateHolder.snapshot.selectedSessionId in
-        stateHolder.historyPagingSessionIds
+    val timelineEntries = remember(displayEntries) {
+        makeConversationTimelineEntries(displayEntries)
+    }
+    val attachmentIdsByTimelineId = remember(timelineEntries) {
+        timelineEntries.associate { entry ->
+            entry.id to entry.images.mapTo(mutableSetOf()) { it.attachmentId }
+        }
+    }
+    val hasInitialContent = timelineEntries.isNotEmpty()
     val lastTimelineIndex = (
-        displayEntries.lastIndex + if (hasHistoryLoadingRow) 1 else 0
+        timelineEntries.lastIndex + if (hasHistoryLoadingRow) 1 else 0
     ).coerceAtLeast(0)
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = lastTimelineIndex
@@ -626,6 +651,54 @@ private fun ConversationTimeline(
     var initialPositionApplied by remember { mutableStateOf(false) }
     var isPinnedToBottom by remember { mutableStateOf(true) }
     var programmaticScrollCount by remember { mutableIntStateOf(0) }
+    var timelineUpdatesPaused by remember(selectedSessionId) { mutableStateOf(false) }
+    val isUserTimelineScrolling by remember(listState) {
+        derivedStateOf {
+            listState.isScrollInProgress && programmaticScrollCount == 0
+        }
+    }
+    LaunchedEffect(isUserTimelineScrolling) {
+        if (isUserTimelineScrolling) {
+            timelineUpdatesPaused = true
+        } else if (timelineUpdatesPaused) {
+            // fling 结束后留一帧稳定窗口，再把滚动期间积累的 token 一次性提交给列表。
+            delay(TIMELINE_STREAM_RESUME_DELAY_MILLISECONDS)
+            timelineUpdatesPaused = false
+        }
+    }
+    LaunchedEffect(
+        latestItems,
+        latestHistoryLoading,
+        timelineUpdatesPaused,
+        isUserTimelineScrolling
+    ) {
+        if (!timelineUpdatesPaused && !isUserTimelineScrolling) {
+            items = latestItems
+            hasHistoryLoadingRow = latestHistoryLoading
+        }
+    }
+    val markdownPreloader = rememberDshMarkdownPreloader()
+    LaunchedEffect(listState, timelineEntries, markdownPreloader) {
+        snapshotFlow {
+            val visible = listState.layoutInfo.visibleItemsInfo
+            val first = visible.firstOrNull()?.index ?: timelineEntries.lastIndex
+            val last = visible.lastOrNull()?.index ?: timelineEntries.lastIndex
+            first to last
+        }
+            .distinctUntilChanged()
+            .collectLatest { (first, last) ->
+                val start = (first - MARKDOWN_PREFETCH_ROWS).coerceAtLeast(0)
+                val end = (last + MARKDOWN_PREFETCH_ROWS).coerceAtMost(timelineEntries.lastIndex)
+                if (start <= end) {
+                    markdownPreloader.preload(
+                        timelineEntries.subList(start, end + 1)
+                            .filterIsInstance<ConversationTimelineEntry.AssistantMarkdown>()
+                            .filterNot { it.messageId.startsWith("stream-") }
+                            .map(ConversationTimelineEntry.AssistantMarkdown::markdown)
+                    )
+                }
+            }
+    }
     val windowInfo = LocalWindowInfo.current
     val density = LocalDensity.current
     val targetHeight = with(density) { 240.dp.roundToPx() }
@@ -634,9 +707,9 @@ private fun ConversationTimeline(
     }
     LaunchedEffect(listState, items) {
         snapshotFlow {
-            listState.layoutInfo.visibleItemsInfo.mapNotNull { visible ->
-                itemsById[visible.key.toString()]?.images
-            }.flatten().mapTo(mutableSetOf()) { it.attachmentId }
+            listState.layoutInfo.visibleItemsInfo.flatMapTo(mutableSetOf()) { visible ->
+                attachmentIdsByTimelineId[visible.key.toString()].orEmpty()
+            }
         }.distinctUntilChanged().collect(stateHolder::updateVisibleAttachments)
     }
     LaunchedEffect(hasInitialContent) {
@@ -652,12 +725,12 @@ private fun ConversationTimeline(
     }
     val hasStreamingItem = items.any(::isStreamingConversationItem)
     LaunchedEffect(
-        displayEntries.size,
+        timelineEntries.size,
         items.lastOrNull()?.text?.length,
         initialPositionApplied,
         hasStreamingItem
     ) {
-        if (initialPositionApplied && isPinnedToBottom && displayEntries.isNotEmpty()) {
+        if (initialPositionApplied && isPinnedToBottom && timelineEntries.isNotEmpty()) {
             programmaticScrollCount += 1
             try {
                 listState.scrollToTimelineBottom(
@@ -670,7 +743,7 @@ private fun ConversationTimeline(
         }
     }
     LaunchedEffect(scrollToBottomToken) {
-        if (scrollToBottomToken > 0 && displayEntries.isNotEmpty()) {
+        if (scrollToBottomToken > 0 && timelineEntries.isNotEmpty()) {
             programmaticScrollCount += 1
             try {
                 listState.scrollToTimelineBottom(lastTimelineIndex, animated = true)
@@ -755,21 +828,45 @@ private fun ConversationTimeline(
                     }
                 }
             }
-            items(displayEntries, key = ConversationDisplayEntry::id) { entry ->
+            items(
+                items = timelineEntries,
+                key = ConversationTimelineEntry::id,
+                contentType = ConversationTimelineEntry::contentType
+            ) { entry ->
                 when (entry) {
-                    is ConversationDisplayEntry.Message -> ConversationRow(
+                    is ConversationTimelineEntry.Display -> when (val display = entry.entry) {
+                        is ConversationDisplayEntry.Message -> ConversationRow(
+                            item = display.item,
+                            thumbnails = stateHolder.attachmentThumbnails,
+                            attachmentStates = stateHolder.attachmentStates,
+                            onRetryAttachment = stateHolder::retryAttachment,
+                            onPreviewImages = onPreviewImages
+                        )
+                        is ConversationDisplayEntry.Process -> ConversationProcessRow(display.group)
+                    }
+                    is ConversationTimelineEntry.AssistantHeader -> AssistantMessageHeader(
                         item = entry.item,
                         thumbnails = stateHolder.attachmentThumbnails,
-                        attachmentStates = stateHolder.attachmentStates,
-                        onRetryAttachment = stateHolder::retryAttachment,
-                        onPreviewImages = onPreviewImages
+                        states = stateHolder.attachmentStates,
+                        onRetry = stateHolder::retryAttachment
                     )
-                    is ConversationDisplayEntry.Process -> ConversationProcessRow(entry.group)
+                    is ConversationTimelineEntry.AssistantMarkdown -> DshLazyMarkdownText(
+                        markdown = entry.markdown,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    )
+                    is ConversationTimelineEntry.AssistantFooter -> Box(
+                        Modifier.fillMaxWidth().padding(top = 7.dp, bottom = 12.dp)
+                    ) {
+                        CopyButton(entry.text)
+                    }
                 }
             }
         }
     }
 }
+
+private const val TIMELINE_STREAM_RESUME_DELAY_MILLISECONDS = 80L
+private const val MARKDOWN_PREFETCH_ROWS = 24
 
 internal data class HistoryPagingGestureState(
     val firstVisibleItemIndex: Int,
@@ -1917,11 +2014,7 @@ private fun AssistantMessage(
     onRetry: (String) -> Unit
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            WhaleIcon(Modifier.width(26.dp).height(20.dp))
-            Text(item.title, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        }
-        AttachmentGrid(item.images, thumbnails, states, onRetry)
+        AssistantMessageHeaderContent(item, thumbnails, states, onRetry)
         if (item.text.isNotEmpty()) {
             DshStreamingAwareMarkdownText(
                 markdown = item.text,
@@ -1931,6 +2024,40 @@ private fun AssistantMessage(
         }
         CopyButton(item.text)
     }
+}
+
+@Composable
+private fun AssistantMessageHeader(
+    item: ConversationItem,
+    thumbnails: Map<String, ImageBitmap>,
+    states: Map<String, AttachmentLoadState>,
+    onRetry: (String) -> Unit
+) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        AssistantMessageHeaderContent(item, thumbnails, states, onRetry)
+    }
+}
+
+@Composable
+private fun AssistantMessageHeaderContent(
+    item: ConversationItem,
+    thumbnails: Map<String, ImageBitmap>,
+    states: Map<String, AttachmentLoadState>,
+    onRetry: (String) -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+        WhaleIcon(Modifier.width(26.dp).height(20.dp))
+        Text(
+            item.title,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+    AttachmentGrid(item.images, thumbnails, states, onRetry)
 }
 
 @Composable

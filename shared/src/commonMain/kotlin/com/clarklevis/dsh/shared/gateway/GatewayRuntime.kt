@@ -597,7 +597,7 @@ class GatewayRuntime(
     private fun responseCorrelationMatches(request: GatewayRequest, frame: GatewayFrame): Boolean =
         when (request.responseKind) {
             "attachment" -> request.correlationId == frame.attachment?.attachmentId
-            "question-response" -> request.correlationId == frame.rpcId
+            "question-response", "approval-response" -> request.correlationId == frame.rpcId
             else -> true
         }
 
@@ -607,7 +607,7 @@ class GatewayRuntime(
     private fun explicitResponseCorrelation(request: GatewayRequest, frame: GatewayFrame): String? =
         when (request.responseKind) {
             "attachment" -> frame.attachment?.attachmentId
-            "question-response" -> frame.rpcId
+            "question-response", "approval-response" -> frame.rpcId
             else -> null
         }
 
@@ -994,10 +994,11 @@ class GatewayRuntime(
             "websocket-failure"
         )
         private val UNCORRELATED_KINDS = setOf(
-            "event", "hello", "paired", "pong", "question-requested", "question-resolved"
+            "event", "hello", "paired", "pong", "question-requested", "question-resolved",
+            "approval-requested", "approval-resolved"
         )
         private val RESPONSE_KINDS_REQUIRING_ACTIVE_REQUEST = setOf(
-            "history", "attachment", "sent", "question-response"
+            "history", "attachment", "sent", "question-response", "approval-response"
         )
         private val IDEMPOTENT_CONNECTION_STATES = setOf(
             GatewayConnectionState.CONNECTING,

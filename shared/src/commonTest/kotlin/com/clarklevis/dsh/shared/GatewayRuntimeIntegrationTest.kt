@@ -21,6 +21,7 @@ import com.clarklevis.dsh.shared.platform.GatewayTransportFrame
 import com.clarklevis.dsh.shared.platform.GatewayTransportEvent
 import com.clarklevis.dsh.shared.platform.GatewayTransportState
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
+import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayQuestion
 import com.clarklevis.dsh.shared.protocol.GatewayEvent
 import com.clarklevis.dsh.shared.protocol.JsonValue
@@ -289,6 +290,36 @@ class GatewayRuntimeIntegrationTest {
     }
 
     @Test
+    fun openingExistingSessionAcceptsReplayedApprovalAfterSubscribeReceipt() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport)
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
+        runCurrent()
+
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        assertTrue(runtime.subscribe("existing-session"))
+        transport.receive("""{"kind":"subscribed","sessionId":"existing-session"}""")
+        transport.receive(
+            """{"kind":"approval-requested","rpcId":"approval-rpc","sessionId":"existing-session","approvalId":"approval-1","toolName":"Bash","callId":"call-1","reason":"需要执行命令","replay":true}"""
+        )
+        runCurrent()
+
+        val replay = events.filterIsInstance<GatewayRuntimeEvent.Frame>()
+            .last { it.frame.kind == "approval-requested" }
+        assertEquals("approval-rpc", replay.frame.rpcId)
+        assertEquals("existing-session", replay.frame.sessionId)
+        assertEquals(true, replay.frame.replay)
+        assertEquals("existing-session", replay.correlatedSessionId)
+        assertFalse(events.any {
+            it is GatewayRuntimeEvent.RequestRejected && it.reason == "unexpected-response"
+        })
+    }
+
+    @Test
     fun duplicateBootstrapSnapshotsCompleteSequentiallyWithoutReconnectLoop() = runTest {
         val transport = FakeTransport()
         val runtime = newRuntime(transport)
@@ -424,7 +455,8 @@ class GatewayRuntimeIntegrationTest {
     fun nonIdempotentRequestsRejectWhileBusyAndKeepTurnAccountingExact() = runTest {
         val transport = FakeTransport()
         val runtime = newRuntime(transport)
-        backgroundScope.launch { runtime.events.collect { } }
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
         runCurrent()
         runtime.connect("wss://gateway.example/ws/mobile")
         transport.opened()
@@ -453,6 +485,33 @@ class GatewayRuntimeIntegrationTest {
         assertTrue(runtime.state.value.connection == GatewayConnectionState.CONNECTED)
         transport.receive("""{"kind":"question-response","rpcId":"rpc-1","sessionId":"session-a"}""")
         runCurrent()
+
+        assertTrue(runtime.sendRequest(GatewayRequests.approvalResponse(
+            rpcId = "rpc-approval-1",
+            sessionId = "session-a",
+            approvalId = "approval-1",
+            outcome = GatewayApprovalOutcome.ALLOWED_ONCE
+        )))
+        assertFalse(runtime.sendRequest(GatewayRequests.approvalResponse(
+            rpcId = "rpc-approval-2",
+            sessionId = "session-a",
+            approvalId = "approval-2",
+            outcome = GatewayApprovalOutcome.REJECTED
+        )))
+        assertEquals("approval-response", transport.sentTypes.last())
+        assertTrue(transport.sentPayloads.last().contains("\"outcome\":\"allowed-once\""))
+        transport.receive(
+            """{"kind":"approval-response","rpcId":"wrong","sessionId":"session-a","approvalId":"approval-1","outcome":"allowed-once","accepted":true}"""
+        )
+        runCurrent()
+        transport.receive(
+            """{"kind":"approval-response","rpcId":"rpc-approval-1","sessionId":"session-a","approvalId":"approval-1","outcome":"allowed-once","accepted":true}"""
+        )
+        runCurrent()
+        assertTrue(events.any {
+            it is GatewayRuntimeEvent.Frame && it.frame.kind == "approval-response" &&
+                it.frame.rpcId == "rpc-approval-1"
+        })
     }
 
     @Test

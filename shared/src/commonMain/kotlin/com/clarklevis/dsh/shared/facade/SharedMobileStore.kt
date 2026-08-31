@@ -2,6 +2,9 @@ package com.clarklevis.dsh.shared.facade
 
 import com.clarklevis.dsh.shared.SharedModuleInfo
 import com.clarklevis.dsh.shared.domain.QuestionAction
+import com.clarklevis.dsh.shared.domain.ApprovalAction
+import com.clarklevis.dsh.shared.domain.ApprovalReducer
+import com.clarklevis.dsh.shared.domain.ApprovalState
 import com.clarklevis.dsh.shared.domain.QuestionReducer
 import com.clarklevis.dsh.shared.domain.QuestionState
 import com.clarklevis.dsh.shared.domain.SessionListAction
@@ -13,6 +16,8 @@ import com.clarklevis.dsh.shared.projection.ConversationItem
 import com.clarklevis.dsh.shared.projection.ConversationProjectionLabels
 import com.clarklevis.dsh.shared.projection.ConversationProjector
 import com.clarklevis.dsh.shared.protocol.GatewayPendingQuestionRequest
+import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
+import com.clarklevis.dsh.shared.protocol.GatewayPendingApprovalRequest
 import com.clarklevis.dsh.shared.protocol.GatewayAgentPreset
 import com.clarklevis.dsh.shared.protocol.GatewayContextSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewayHostSnapshot
@@ -25,6 +30,7 @@ import com.clarklevis.dsh.shared.protocol.GatewaySessionSummary
 import com.clarklevis.dsh.shared.protocol.GatewaySearchItem
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
+import com.clarklevis.dsh.shared.protocol.JsonValue
 import com.clarklevis.dsh.shared.protocol.SessionEvent
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -38,6 +44,11 @@ data class SharedMobileSnapshot(
     val conversation: List<ConversationItem> = emptyList(),
     val pendingQuestions: List<GatewayPendingQuestionRequest> = emptyList(),
     val pendingQuestionCount: Int = 0,
+    val pendingApprovals: List<GatewayPendingApprovalRequest> = emptyList(),
+    val approvalRequestStatuses: Map<String, SharedApprovalStatusSnapshot> = emptyMap(),
+    val approvalCommandPreviews: Map<String, String> = emptyMap(),
+    val approvalDetails: Map<String, JsonValue> = emptyMap(),
+    val pendingApprovalCount: Int = 0,
     val agentPresets: List<GatewayAgentPreset> = emptyList(),
     val agentPresetDefault: String? = null,
     val permissionDefault: String? = null,
@@ -57,6 +68,11 @@ data class SharedMobileSnapshot(
     val lastError: String? = null
 )
 
+data class SharedMobileApprovalSubmission(
+    val snapshot: SharedMobileSnapshot,
+    val effect: SharedApprovalEffect? = null
+)
+
 /**
  * Android 与 SwiftUI 的粗粒度共享业务入口。
  *
@@ -70,6 +86,7 @@ class SharedMobileStore(
 ) {
     private var sessionListState = SessionListState()
     private var questionState = QuestionState()
+    private var approvalState = ApprovalState()
     private val eventsBySession = mutableMapOf<String, List<SessionEvent>>()
     private var workspaces = emptyList<GatewayWorkspace>()
     private var searchResultSessionIds = emptyList<String>()
@@ -92,6 +109,55 @@ class SharedMobileStore(
         sessionId?.let {
             sessionListState = SessionListReducer.reduce(sessionListState, SessionListAction.MarkRead(it))
         }
+        return makeSnapshot()
+    }
+
+    fun submitApprovalDecision(
+        rpcId: String,
+        outcome: String,
+        isConnected: Boolean
+    ): SharedMobileApprovalSubmission {
+        val request = approvalState.pendingRequests.firstOrNull { it.rpcId == rpcId }
+            ?: return SharedMobileApprovalSubmission(makeSnapshot())
+        val current = approvalState.requestStatuses[rpcId]
+        if (current is com.clarklevis.dsh.shared.domain.ApprovalRequestStatus.Submitting ||
+            current is com.clarklevis.dsh.shared.domain.ApprovalRequestStatus.Accepted) {
+            return SharedMobileApprovalSubmission(makeSnapshot())
+        }
+        val parsed = outcome.toMobileApprovalOutcome()
+            ?: return SharedMobileApprovalSubmission(makeSnapshot())
+        approvalState = ApprovalReducer.reduce(
+            approvalState,
+            ApprovalAction.Submit(request, parsed, isConnected)
+        )
+        val effect = if (
+            approvalState.requestStatuses[rpcId] is
+                com.clarklevis.dsh.shared.domain.ApprovalRequestStatus.Submitting
+        ) {
+            SharedApprovalEffect(
+                action = "respond",
+                rpcId = request.rpcId,
+                sessionId = request.sessionId,
+                approvalId = request.approvalId,
+                outcome = outcome
+            )
+        } else null
+        return SharedMobileApprovalSubmission(makeSnapshot(), effect)
+    }
+
+    fun approvalRequestFailed(rpcId: String, message: String?): SharedMobileSnapshot {
+        approvalState = ApprovalReducer.reduce(
+            approvalState,
+            ApprovalAction.RequestFailed(rpcId, message)
+        )
+        return makeSnapshot()
+    }
+
+    fun approvalSessionRequestsFailed(sessionId: String, message: String?): SharedMobileSnapshot {
+        approvalState = ApprovalReducer.reduce(
+            approvalState,
+            ApprovalAction.SessionRequestsFailed(sessionId, message)
+        )
         return makeSnapshot()
     }
 
@@ -239,6 +305,40 @@ class SharedMobileStore(
                 "question-resolved" -> frame.rpcId?.let { rpcId ->
                     questionState = QuestionReducer.reduce(questionState, QuestionAction.Resolved(rpcId))
                 }
+                "approval-requested" -> {
+                    val rpcId = frame.rpcId
+                    val sessionId = frame.sessionId
+                    val approvalId = frame.approvalId
+                    val toolName = frame.toolName
+                    if (!rpcId.isNullOrBlank() && !sessionId.isNullOrBlank() &&
+                        !approvalId.isNullOrBlank() && !toolName.isNullOrBlank()) {
+                        approvalState = ApprovalReducer.reduce(
+                            approvalState,
+                            ApprovalAction.RequestReceived(GatewayPendingApprovalRequest(
+                                rpcId = rpcId,
+                                sessionId = sessionId,
+                                approvalId = approvalId,
+                                toolName = toolName,
+                                callId = frame.callId,
+                                reason = frame.reason,
+                                replay = frame.replay == true
+                            ))
+                        )
+                    }
+                }
+                "approval-response" -> {
+                    val rpcId = frame.rpcId
+                    val outcome = frame.outcome?.toMobileApprovalOutcome()
+                    if (rpcId != null && outcome != null && frame.accepted != null) {
+                        approvalState = ApprovalReducer.reduce(
+                            approvalState,
+                            ApprovalAction.ResponseReceived(rpcId, outcome, frame.accepted, frame.reason)
+                        )
+                    }
+                }
+                "approval-resolved" -> frame.rpcId?.let { rpcId ->
+                    approvalState = ApprovalReducer.reduce(approvalState, ApprovalAction.Resolved(rpcId))
+                }
             }
         } catch (error: Throwable) {
             lastError = error.message ?: error::class.simpleName ?: "decode-error"
@@ -260,6 +360,7 @@ class SharedMobileStore(
     fun reset(): SharedMobileSnapshot {
         sessionListState = SessionListState()
         questionState = QuestionState()
+        approvalState = ApprovalState()
         eventsBySession.clear()
         workspaces = emptyList()
         searchResultSessionIds = emptyList()
@@ -297,6 +398,17 @@ class SharedMobileStore(
             conversation = selected?.let { ConversationProjector.make(eventsBySession[it].orEmpty()) }.orEmpty(),
             pendingQuestions = questionState.pendingRequests,
             pendingQuestionCount = questionState.pendingRequests.size,
+            pendingApprovals = approvalState.pendingRequests,
+            approvalRequestStatuses = approvalState.requestStatuses.mapValues { (_, status) ->
+                status.toSharedApprovalStatusSnapshot()
+            },
+            approvalCommandPreviews = approvalState.pendingRequests.mapNotNull { request ->
+                request.commandPreview()?.let { request.rpcId to it }
+            }.toMap(),
+            approvalDetails = approvalState.pendingRequests.mapNotNull { request ->
+                request.approvalArguments()?.let { request.rpcId to it }
+            }.toMap(),
+            pendingApprovalCount = approvalState.pendingRequests.size,
             agentPresets = agentPresets,
             agentPresetDefault = agentPresetDefault,
             permissionDefault = permissionDefault,
@@ -310,6 +422,27 @@ class SharedMobileStore(
             lastError = lastError
         )
     }
+
+    private fun GatewayPendingApprovalRequest.commandPreview(): String? {
+        val arguments = approvalArguments() ?: return null
+        return arguments["cmd"]?.stringValue
+            ?: arguments["command"]?.stringValue
+    }
+
+    private fun GatewayPendingApprovalRequest.approvalArguments(): JsonValue? {
+        val targetCallId = callId ?: return null
+        return eventsBySession[sessionId]
+            ?.lastOrNull { it.event.callId == targetCallId }
+            ?.event
+            ?.arguments
+            ?.normalizedJsonValue()
+    }
+}
+
+private fun String.toMobileApprovalOutcome(): GatewayApprovalOutcome? = when (this) {
+    "allowed-once" -> GatewayApprovalOutcome.ALLOWED_ONCE
+    "rejected" -> GatewayApprovalOutcome.REJECTED
+    else -> null
 }
 
 /** Swift/Objective-C 友好的稳定门面，避免平台 UI 直接依赖内部 Reducer。 */
@@ -332,6 +465,8 @@ class SharedMobileFacade {
     )
 
     fun makeQuestionStore(): SharedQuestionStore = SharedQuestionStore()
+
+    fun makeApprovalStore(): SharedApprovalStore = SharedApprovalStore()
 
     fun makeSessionControlStore(): SharedSessionControlStore = SharedSessionControlStore()
 

@@ -11,6 +11,9 @@ object GatewayProtocolFixtures {
     const val REPLAYED_QUESTION_REQUEST =
         """{"kind":"question-requested","rpcId":"rpc-1","sessionId":"s1","replay":true,"questions":[{"id":"direction","header":"研究方向","question":"你想研究哪个方向？","detail":"请选择最感兴趣的方向","options":[{"label":"核心架构 (推荐)","description":"了解插件分层"},{"label":"移动端"}],"multiSelect":true},{"id":"notes","question":"还有什么要求？","multiSelect":false}]}"""
 
+    const val REPLAYED_APPROVAL_REQUEST =
+        """{"kind":"approval-requested","rpcId":"rpc-approval-1","sessionId":"s1","approvalId":"approval-1","toolName":"Bash","callId":"call-1","reason":"需要读取系统版本","replay":true}"""
+
     const val IMAGE_ATTACHMENT =
         """{"kind":"attachment","sessionId":"s1","attachment":{"attachmentId":"att-1","mediaType":"image/png","bytes":8,"width":1,"height":1},"data":"iVBORw0K"}"""
 
@@ -54,6 +57,9 @@ object GatewayProtocolFixtures {
         RouteFixture("""{"kind":"question-requested","rpcId":"rpc-1","sessionId":"s1","replay":true,"questions":[{"id":"q1","question":"继续？"}]}""", "question", "requested"),
         RouteFixture("""{"kind":"question-response","rpcId":"rpc-1","action":"cancel","accepted":false,"reason":"not-pending"}""", "question", "response"),
         RouteFixture("""{"kind":"question-resolved","rpcId":"rpc-1","sessionId":"s1","outcome":"cancelled"}""", "question", "resolved"),
+        RouteFixture("""{"kind":"approval-requested","rpcId":"rpc-a1","sessionId":"s1","approvalId":"approval-1","toolName":"Bash","callId":"call-1","reason":"需要执行命令","replay":true}""", "approval", "requested"),
+        RouteFixture("""{"kind":"approval-response","rpcId":"rpc-a1","sessionId":"s1","approvalId":"approval-1","outcome":"allowed-once","accepted":true}""", "approval", "response"),
+        RouteFixture("""{"kind":"approval-resolved","rpcId":"rpc-a1","sessionId":"s1","approvalId":"approval-1","outcome":"rejected"}""", "approval", "resolved"),
         RouteFixture("""{"kind":"error","requestType":"history","code":"failed","sessionId":"s1","rpcId":"rpc-1"}""", "failure", "error"),
         RouteFixture("""{"kind":"future-frame"}""", "unknown", "future-frame"),
         RouteFixture("""{"kind":"sent"}""", "ignored", "sent"),
@@ -61,6 +67,9 @@ object GatewayProtocolFixtures {
         RouteFixture("""{"kind":"attachment"}""", "ignored", "attachment"),
         RouteFixture("""{"kind":"question-requested","sessionId":"s1","questions":[]}""", "question", "invalid-request"),
         RouteFixture("""{"kind":"question-response"}""", "ignored", "question-response"),
-        RouteFixture("""{"kind":"question-resolved"}""", "ignored", "question-resolved")
+        RouteFixture("""{"kind":"question-resolved"}""", "ignored", "question-resolved"),
+        RouteFixture("""{"kind":"approval-requested","sessionId":"s1","approvalId":"approval-1","toolName":"Bash"}""", "approval", "invalid-request"),
+        RouteFixture("""{"kind":"approval-response"}""", "ignored", "approval-response"),
+        RouteFixture("""{"kind":"approval-resolved"}""", "ignored", "approval-resolved")
     )
 }

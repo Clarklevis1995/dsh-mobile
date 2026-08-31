@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.android
 
 import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
+import com.clarklevis.dsh.shared.facade.SharedApprovalEffect
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import kotlinx.coroutines.CoroutineDispatcher
@@ -83,11 +84,34 @@ internal class AndroidProjectionActor(
         afterPublish: () -> Unit = {}
     ) = mutate(afterPublish) { projection.loadHistory(sessionId, older) }
 
+    suspend fun catchUpSelectedHistoryAfterReconnect() = mutate {
+        projection.catchUpSelectedHistoryAfterReconnect()
+    }
+
     suspend fun loadFixture(afterPublish: () -> Unit = {}) =
         mutate(afterPublish = afterPublish, mutation = projection::loadFixture)
 
     suspend fun reset(afterPublish: () -> Unit = {}) =
         mutate(afterPublish = afterPublish, mutation = projection::reset)
+
+    suspend fun submitApprovalDecision(
+        rpcId: String,
+        outcome: String,
+        isConnected: Boolean
+    ): SharedApprovalEffect? = mutationLock.withLock {
+        flushPendingStreamingFrameLocked()
+        val result = projection.submitApprovalDecision(rpcId, outcome, isConnected)
+        publishMutationLocked(result.snapshot, coalesceWithDisplayFrame = false)
+        result.effect
+    }
+
+    suspend fun approvalRequestFailed(rpcId: String, message: String?) = mutate {
+        projection.approvalRequestFailed(rpcId, message)
+    }
+
+    suspend fun approvalSessionRequestsFailed(sessionId: String, message: String?) = mutate {
+        projection.approvalSessionRequestsFailed(sessionId, message)
+    }
 
     suspend fun historyTimedOut(sessionId: String) = mutate {
         projection.historyTimedOut(sessionId)

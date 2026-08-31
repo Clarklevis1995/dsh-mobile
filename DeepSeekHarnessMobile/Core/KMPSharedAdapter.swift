@@ -2072,6 +2072,190 @@ final class KMPQuestionStoreAdapter {
     }
 }
 
+// MARK: - Approval MVI
+
+struct KMPApprovalStatusSnapshot: Codable, Equatable {
+    let kind: String
+    let outcome: String?
+    let failureCode: String?
+    let failureArgument: String?
+
+    var platformStatus: GatewayApprovalRequestStatus {
+        let parsed = outcome.flatMap(GatewayApprovalOutcome.init(rawValue:)) ?? .rejected
+        switch kind {
+        case "submitting": return .submitting(parsed)
+        case "accepted": return .accepted(parsed)
+        case "rejected": return .failed(localizedFailure)
+        default: return .idle
+        }
+    }
+
+    private var localizedFailure: String {
+        switch failureCode {
+        case "DISCONNECTED":
+            String(localized: "WebSocket 已断开，重连后再处理审批。")
+        case "SERVER_REJECTED":
+            String(format: String(localized: "服务端未接受审批决定（%@），请重试。"), failureArgument ?? "bad-response")
+        default:
+            failureArgument?.isEmpty == false
+                ? failureArgument!
+                : String(localized: "审批响应发送失败，请重试。")
+        }
+    }
+}
+
+struct KMPApprovalSnapshot: Codable, Equatable {
+    let pendingRequests: [GatewayPendingApprovalRequest]
+    let requestStatuses: [String: KMPApprovalStatusSnapshot]
+
+    static let empty = KMPApprovalSnapshot(pendingRequests: [], requestStatuses: [:])
+
+    var platformStatuses: [String: GatewayApprovalRequestStatus] {
+        requestStatuses.mapValues(\.platformStatus)
+    }
+}
+
+struct KMPApprovalEffect: Codable, Equatable {
+    let action: String
+    let rpcId: String
+    let sessionId: String
+    let approvalId: String
+    let outcome: String
+}
+
+enum KMPApprovalIntent {
+    case reset
+    case requestReceived(GatewayPendingApprovalRequest)
+    case submitDecision(rpcID: String, outcome: GatewayApprovalOutcome, isConnected: Bool)
+    case responseReceived(rpcID: String, outcome: GatewayApprovalOutcome, accepted: Bool, reason: String?)
+    case resolved(rpcID: String)
+    case requestFailed(rpcID: String, message: String)
+    case sessionRequestsFailed(sessionID: String, message: String)
+}
+
+enum KMPApprovalStoreError: LocalizedError, Equatable {
+    case encoding(String)
+    case bridge(code: String, message: String?)
+    case invalidSnapshot(String)
+    case invalidEffect(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .encoding(let message): "无法编码 iOS Approval 输入：\(message)"
+        case .bridge(let code, let message): "KMP Approval 失败（\(code)）：\(message ?? "无详细信息")"
+        case .invalidSnapshot(let message): "无法解码 KMP Approval 快照：\(message)"
+        case .invalidEffect(let message): "无法解码 KMP Approval effect：\(message)"
+        }
+    }
+}
+
+protocol KMPApprovalStoreBridging: AnyObject {
+    func snapshot() -> SharedApprovalResult
+    func reset() -> SharedApprovalResult
+    func requestReceived(requestJson: String) -> SharedApprovalResult
+    func submitDecision(rpcId: String, outcome: String, isConnected: Bool) -> SharedApprovalResult
+    func responseReceived(rpcId: String, outcome: String, accepted: Bool, reason: String?) -> SharedApprovalResult
+    func resolved(rpcId: String) -> SharedApprovalResult
+    func requestFailed(rpcId: String, message: String?) -> SharedApprovalResult
+    func sessionRequestsFailed(sessionId: String, message: String?) -> SharedApprovalResult
+}
+
+extension SharedApprovalStore: KMPApprovalStoreBridging {}
+
+struct KMPApprovalTransition {
+    let snapshot: KMPApprovalSnapshot
+    let effect: KMPApprovalEffect?
+    let error: KMPApprovalStoreError?
+}
+
+@MainActor
+final class KMPApprovalStoreAdapter {
+    private let store: any KMPApprovalStoreBridging
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+    private(set) var snapshot: KMPApprovalSnapshot = .empty
+
+    init(
+        bridge: (any KMPApprovalStoreBridging)? = nil,
+        facade: SharedMobileFacade = SharedMobileFacade()
+    ) {
+        store = bridge ?? facade.makeApprovalStore()
+        let transition = decode(store.snapshot(), requiresSnapshot: true)
+        snapshot = transition.snapshot
+    }
+
+    func reduce(_ intent: KMPApprovalIntent) -> KMPApprovalTransition {
+        do {
+            let result: SharedApprovalResult
+            switch intent {
+            case .reset:
+                result = store.reset()
+            case .requestReceived(let request):
+                result = store.requestReceived(requestJson: try encode(request))
+            case .submitDecision(let rpcID, let outcome, let isConnected):
+                result = store.submitDecision(rpcId: rpcID, outcome: outcome.rawValue, isConnected: isConnected)
+            case .responseReceived(let rpcID, let outcome, let accepted, let reason):
+                result = store.responseReceived(
+                    rpcId: rpcID,
+                    outcome: outcome.rawValue,
+                    accepted: accepted,
+                    reason: reason
+                )
+            case .resolved(let rpcID):
+                result = store.resolved(rpcId: rpcID)
+            case .requestFailed(let rpcID, let message):
+                result = store.requestFailed(rpcId: rpcID, message: message)
+            case .sessionRequestsFailed(let sessionID, let message):
+                result = store.sessionRequestsFailed(sessionId: sessionID, message: message)
+            }
+            return decode(result, requiresSnapshot: false)
+        } catch {
+            return KMPApprovalTransition(snapshot: snapshot, effect: nil, error: .encoding(error.localizedDescription))
+        }
+    }
+
+    private func decode(_ result: SharedApprovalResult, requiresSnapshot: Bool) -> KMPApprovalTransition {
+        guard result.isSuccess else {
+            return KMPApprovalTransition(
+                snapshot: snapshot,
+                effect: nil,
+                error: .bridge(code: result.errorCode ?? "unknown-error", message: result.errorMessage)
+            )
+        }
+        var next = snapshot
+        if let json = result.snapshotJson {
+            do { next = try decoder.decode(KMPApprovalSnapshot.self, from: Data(json.utf8)) }
+            catch {
+                return KMPApprovalTransition(snapshot: snapshot, effect: nil, error: .invalidSnapshot(error.localizedDescription))
+            }
+        } else if requiresSnapshot {
+            return KMPApprovalTransition(snapshot: snapshot, effect: nil, error: .invalidSnapshot("KMP 未返回初始化快照"))
+        }
+        let effect: KMPApprovalEffect?
+        if let json = result.effectJson {
+            do { effect = try decoder.decode(KMPApprovalEffect.self, from: Data(json.utf8)) }
+            catch {
+                return KMPApprovalTransition(snapshot: snapshot, effect: nil, error: .invalidEffect(error.localizedDescription))
+            }
+            guard effect?.action == "respond",
+                  effect.flatMap({ GatewayApprovalOutcome(rawValue: $0.outcome) }) != nil,
+                  next.pendingRequests.contains(where: {
+                      $0.rpcId == effect?.rpcId && $0.sessionId == effect?.sessionId && $0.approvalId == effect?.approvalId
+                  }) else {
+                return KMPApprovalTransition(snapshot: snapshot, effect: nil, error: .invalidEffect("effect 与待审批请求不匹配"))
+            }
+        } else {
+            effect = nil
+        }
+        snapshot = next
+        return KMPApprovalTransition(snapshot: next, effect: effect, error: nil)
+    }
+
+    private func encode<T: Encodable>(_ value: T) throws -> String {
+        String(decoding: try encoder.encode(value), as: UTF8.self)
+    }
+}
+
 struct KMPSessionControlSnapshot: Codable, Equatable {
     var modelCatalogs: [String: GatewayModelCatalog]
     var globalModelCatalog: GatewayModelCatalog?

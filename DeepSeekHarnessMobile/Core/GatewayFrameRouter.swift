@@ -108,12 +108,29 @@ enum GatewayQuestionRoute {
     )
 }
 
+enum GatewayApprovalRoute {
+    case requested(GatewayPendingApprovalRequest)
+    case invalidRequest(sessionID: String?)
+    case response(
+        rpcID: String,
+        outcome: GatewayApprovalOutcome,
+        accepted: Bool,
+        reason: String?
+    )
+    case resolved(
+        rpcID: String,
+        sessionID: String?,
+        outcome: String?
+    )
+}
+
 enum GatewayFrameRoute {
     case connection(GatewayConnectionRoute)
     case content(GatewayContentRoute)
     case control(GatewayControlRoute)
     case workspace(GatewayWorkspaceRoute)
     case question(GatewayQuestionRoute)
+    case approval(GatewayApprovalRoute)
     case failure(GatewayFailurePayload)
     case ignored
     case unknown(String)
@@ -300,6 +317,40 @@ enum GatewayFrameRouter {
                 rpcID: rpcID,
                 sessionID: frame.sessionId,
                 cancelled: frame.outcome == "cancelled"
+            ))
+        case "approval-requested":
+            guard let rpcID = frame.rpcId, !rpcID.isEmpty,
+                  let sessionID = frame.sessionId, !sessionID.isEmpty,
+                  let approvalID = frame.approvalId, !approvalID.isEmpty,
+                  let toolName = frame.toolName, !toolName.isEmpty else {
+                return .approval(.invalidRequest(sessionID: frame.sessionId))
+            }
+            return .approval(.requested(GatewayPendingApprovalRequest(
+                rpcId: rpcID,
+                sessionId: sessionID,
+                approvalId: approvalID,
+                toolName: toolName,
+                callId: frame.callId,
+                reason: frame.reason,
+                replay: frame.replay == true
+            )))
+        case "approval-response":
+            guard let rpcID = frame.rpcId,
+                  let outcome = frame.outcome.flatMap(GatewayApprovalOutcome.init(rawValue:)) else {
+                return .ignored
+            }
+            return .approval(.response(
+                rpcID: rpcID,
+                outcome: outcome,
+                accepted: frame.accepted == true,
+                reason: frame.reason
+            ))
+        case "approval-resolved":
+            guard let rpcID = frame.rpcId else { return .ignored }
+            return .approval(.resolved(
+                rpcID: rpcID,
+                sessionID: frame.sessionId,
+                outcome: frame.outcome
             ))
         case "error":
             return .failure(GatewayFailurePayload(

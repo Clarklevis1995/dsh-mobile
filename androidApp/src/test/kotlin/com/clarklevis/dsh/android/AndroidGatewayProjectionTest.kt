@@ -121,6 +121,70 @@ class AndroidGatewayProjectionTest {
     }
 
     @Test
+    fun reconnectHistoryBackfillsMissedUserMessageBeforeLiveAssistantReply() {
+        val requested = mutableListOf<Pair<String, Int?>>()
+        val projection = AndroidGatewayProjection(
+            onHistoryPageRequested = { sessionId, before -> requested += sessionId to before }
+        )
+        projection.selectSession("session-a")
+        val emptyBaseline = """{"kind":"history","events":[],"hasMore":false,"bytes":0}"""
+        projection.acceptFrame(
+            emptyBaseline,
+            GatewayWireDecoder.decode(emptyBaseline),
+            "session-a"
+        )
+
+        // The app reconnects after the other client sent the user message. Only the
+        // later assistant event reaches the restored live subscription at first.
+        val liveAssistant =
+            """{"kind":"event","sessionId":"session-a","seq":3,"time":103,"event":{"type":"assistant/message","turn":2,"step":1,"text":"Agent 回复"}}"""
+        projection.acceptFrame(
+            liveAssistant,
+            GatewayWireDecoder.decode(liveAssistant),
+            "session-a"
+        )
+        assertEquals(listOf("Agent 回复"), projection.snapshot().conversation.map { it.text })
+
+        projection.catchUpSelectedHistoryAfterReconnect()
+        val catchUpHistory =
+            """{"kind":"history","events":[{"type":"user/message","seq":2,"time":102,"data":{"content":[{"type":"text","text":"后台期间的问题"}],"source":{"kind":"user"}}},{"type":"assistant/message","seq":3,"time":103,"data":{"content":[{"type":"text","text":"过期的历史回复"}]}}],"hasMore":false,"bytes":128}"""
+        projection.acceptFrame(
+            catchUpHistory,
+            GatewayWireDecoder.decode(catchUpHistory),
+            "session-a"
+        )
+
+        assertEquals(
+            listOf("后台期间的问题", "Agent 回复"),
+            projection.snapshot().conversation.map { it.text }
+        )
+        assertEquals(listOf("session-a" to null, "session-a" to null), requested)
+        projection.close()
+    }
+
+    @Test
+    fun replayedApprovalUsesCommandFromSharedHistoryProjection() {
+        val projection = AndroidGatewayProjection()
+        projection.selectSession("session-a")
+        val history =
+            """{"kind":"history","events":[{"type":"tool/call","seq":1,"time":100,"data":{"callId":"call-1","name":"Bash","arguments":"{\"command\":\"sw_vers && uname -a\",\"description\":\"读取系统版本\"}"}}],"hasMore":false}"""
+        projection.acceptFrame(history, GatewayWireDecoder.decode(history), "session-a")
+        val approval =
+            """{"kind":"approval-requested","rpcId":"rpc-1","sessionId":"session-a","approvalId":"approval-1","toolName":"Bash","callId":"call-1","reason":"读取系统版本","replay":true}"""
+        projection.acceptFrame(approval, GatewayWireDecoder.decode(approval), null)
+
+        assertEquals(
+            "sw_vers && uname -a",
+            projection.snapshot().approvalCommandPreviews["rpc-1"]
+        )
+        assertEquals(
+            "读取系统版本",
+            projection.snapshot().approvalDetails["rpc-1"]?.get("description")?.stringValue
+        )
+        projection.close()
+    }
+
+    @Test
     fun initialHistoryStopsAfterOnePageAndLeavesOlderPagesForUserScroll() {
         val projection = AndroidGatewayProjection()
         projection.selectSession("session-a")

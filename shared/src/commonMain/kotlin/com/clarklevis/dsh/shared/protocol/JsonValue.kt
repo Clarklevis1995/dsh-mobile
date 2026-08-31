@@ -47,6 +47,13 @@ sealed interface JsonValue {
         return prettyJson.encodeToString(JsonElement.serializer(), parsed)
     }
 
+    /** 将供应商以 JSON 字符串承载的参数规范化为真正的 JSON 值。 */
+    fun normalizedJsonValue(): JsonValue {
+        val raw = stringValue ?: return this
+        val parsed = runCatching { wireJson.parseToJsonElement(raw) }.getOrNull() ?: return this
+        return fromJsonElement(parsed)
+    }
+
     fun firstInteger(keys: Set<String>): Int? {
         objectValue?.let { objectValue ->
             keys.firstNotNullOfOrNull { key -> objectValue[key]?.doubleValue?.toInt() }?.let { return it }

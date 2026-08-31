@@ -10,10 +10,32 @@ import org.junit.Test
 
 class ConversationDisplayGroupsTest {
     @Test
-    fun `only provisional stream ids use lightweight text rendering`() {
+    fun `provisional stream ids are detected independently from rendering`() {
         assertTrue(isStreamingConversationItem(item("stream-text-1-1", ConversationItemKind.ASSISTANT)))
         assertTrue(isStreamingConversationItem(item("stream-reason-1-1", ConversationItemKind.REASONING)))
         assertFalse(isStreamingConversationItem(item("session-a-42", ConversationItemKind.ASSISTANT)))
+    }
+
+    @Test
+    fun `streaming assistant is markdown virtualized without a final copy footer`() {
+        val text = List(5) { index ->
+            "第${index + 1}段：${"流式 Markdown".repeat(40)}"
+        }.joinToString("\n\n")
+
+        val timeline = makeConversationTimelineEntries(
+            makeConversationDisplayEntries(
+                listOf(item("stream-text-7-9", ConversationItemKind.ASSISTANT, text = text))
+            )
+        )
+
+        assertTrue(timeline.first() is ConversationTimelineEntry.AssistantHeader)
+        assertTrue(timeline.any { it is ConversationTimelineEntry.AssistantMarkdown })
+        assertFalse(timeline.any { it is ConversationTimelineEntry.AssistantFooter })
+        assertEquals(
+            text,
+            timeline.filterIsInstance<ConversationTimelineEntry.AssistantMarkdown>()
+                .joinToString("\n\n", transform = { it.markdown })
+        )
     }
 
     @Test
@@ -54,6 +76,74 @@ class ConversationDisplayGroupsTest {
             listOf("process-context-a", "status", "process-reason-b", "system"),
             entries.map(ConversationDisplayEntry::id)
         )
+    }
+
+    @Test
+    fun `lazy list content types keep incompatible message layouts separate`() {
+        val entries = makeConversationDisplayEntries(
+            listOf(
+                item("user", ConversationItemKind.USER),
+                item("assistant", ConversationItemKind.ASSISTANT),
+                item("reason", ConversationItemKind.REASONING),
+                item("status", ConversationItemKind.STATUS),
+                item("system", ConversationItemKind.SYSTEM)
+            )
+        )
+
+        assertEquals(
+            listOf(
+                ConversationDisplayContentType.USER,
+                ConversationDisplayContentType.ASSISTANT,
+                ConversationDisplayContentType.PROCESS,
+                ConversationDisplayContentType.STATUS,
+                ConversationDisplayContentType.SYSTEM
+            ),
+            entries.map(ConversationDisplayEntry::contentType)
+        )
+    }
+
+    @Test
+    fun `final assistant markdown is virtualized into stable timeline rows`() {
+        val text = List(6) { index ->
+            "第${index + 1}段：${"长回复内容".repeat(45)}"
+        }.joinToString("\n\n")
+        val timeline = makeConversationTimelineEntries(
+            makeConversationDisplayEntries(
+                listOf(item("assistant-42", ConversationItemKind.ASSISTANT, text = text))
+            )
+        )
+
+        assertTrue(timeline.first() is ConversationTimelineEntry.AssistantHeader)
+        assertTrue(timeline.last() is ConversationTimelineEntry.AssistantFooter)
+        val markdownRows = timeline.filterIsInstance<ConversationTimelineEntry.AssistantMarkdown>()
+        assertTrue(markdownRows.size > 1)
+        assertEquals(
+            markdownRows.indices.map { "assistant:assistant-42:markdown:$it" },
+            markdownRows.map(ConversationTimelineEntry::id)
+        )
+        assertEquals(text, markdownRows.joinToString("\n\n", transform = { it.markdown }))
+    }
+
+    @Test
+    fun `markdown virtualization never splits a fenced code block`() {
+        val markdown = """
+            开始
+
+            ```kotlin
+            val first = 1
+
+            val second = 2
+            ```
+
+            结束段落
+        """.trimIndent()
+
+        val blocks = splitMarkdownForLazyLayout(markdown, targetCharacters = 20)
+
+        assertTrue(blocks.size > 1)
+        val codeBlock = blocks.single { it.contains("```kotlin") }
+        assertTrue(codeBlock.contains("val first = 1\n\nval second = 2"))
+        assertTrue(codeBlock.endsWith("```"))
     }
 
     @Test

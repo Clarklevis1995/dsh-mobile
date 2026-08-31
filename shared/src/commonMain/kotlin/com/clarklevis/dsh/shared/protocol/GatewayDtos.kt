@@ -74,6 +74,9 @@ data class GatewayFrame(
     val accepted: Boolean? = null,
     val reason: String? = null,
     val outcome: String? = null,
+    val approvalId: String? = null,
+    val toolName: String? = null,
+    val callId: String? = null,
     val attachment: GatewayImageAttachment? = null,
     val data: String? = null
 ) {
@@ -164,6 +167,27 @@ data class GatewayWorkspace(
     val createdAt: String,
     val updatedAt: String
 )
+
+@Serializable
+data class GatewayPendingApprovalRequest(
+    val rpcId: String,
+    val sessionId: String,
+    val approvalId: String,
+    val toolName: String,
+    val callId: String? = null,
+    val reason: String? = null,
+    val replay: Boolean = false
+) {
+    override fun toString(): String =
+        "GatewayPendingApprovalRequest(rpcId=<redacted>, sessionId=$sessionId, " +
+            "approvalId=<redacted>, toolName=$toolName, callId=<redacted>, reason=<redacted>, replay=$replay)"
+}
+
+@Serializable
+enum class GatewayApprovalOutcome {
+    @SerialName("allowed-once") ALLOWED_ONCE,
+    @SerialName("rejected") REJECTED
+}
 
 @Serializable
 data class GatewaySessionSummary(

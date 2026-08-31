@@ -1,6 +1,10 @@
 package com.clarklevis.dsh.shared
 
 import com.clarklevis.dsh.shared.domain.QuestionAction
+import com.clarklevis.dsh.shared.domain.ApprovalAction
+import com.clarklevis.dsh.shared.domain.ApprovalReducer
+import com.clarklevis.dsh.shared.domain.ApprovalRequestStatus
+import com.clarklevis.dsh.shared.domain.ApprovalState
 import com.clarklevis.dsh.shared.domain.QuestionFailureCode
 import com.clarklevis.dsh.shared.domain.QuestionReducer
 import com.clarklevis.dsh.shared.domain.QuestionRequestStatus
@@ -15,6 +19,8 @@ import com.clarklevis.dsh.shared.domain.SessionListState
 import com.clarklevis.dsh.shared.gateway.GatewayRequestLanePolicy
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
+import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
+import com.clarklevis.dsh.shared.protocol.GatewayPendingApprovalRequest
 import com.clarklevis.dsh.shared.protocol.GatewayPendingQuestionRequest
 import com.clarklevis.dsh.shared.protocol.GatewayPermissionOption
 import com.clarklevis.dsh.shared.protocol.GatewayQuestion
@@ -85,6 +91,56 @@ class ProtocolAndReducerTest {
         val normalized = history.events?.single()?.normalized("s1")
         assertEquals("att-history", normalized?.event?.images?.single()?.attachmentId)
         assertEquals("image/webp", normalized?.event?.images?.single()?.mediaType)
+    }
+
+    @Test
+    fun approvalWireContractAndReducerEnforceOneShotDecision() {
+        val frame = GatewayWireDecoder.decode(GatewayProtocolFixtures.REPLAYED_APPROVAL_REQUEST)
+        assertEquals("rpc-approval-1", frame.rpcId)
+        assertEquals("approval-1", frame.approvalId)
+        assertEquals("Bash", frame.toolName)
+        assertEquals("call-1", frame.callId)
+        assertEquals("需要读取系统版本", frame.reason)
+        assertEquals(true, frame.replay)
+
+        val request = GatewayPendingApprovalRequest(
+            rpcId = "rpc-approval-1",
+            sessionId = "s1",
+            approvalId = "approval-1",
+            toolName = "Bash",
+            callId = "call-1",
+            reason = "需要读取系统版本",
+            replay = true
+        )
+        var state = ApprovalReducer.reduce(
+            ApprovalState(),
+            ApprovalAction.RequestReceived(request)
+        )
+        state = ApprovalReducer.reduce(
+            state,
+            ApprovalAction.Submit(request, GatewayApprovalOutcome.ALLOWED_ONCE, isConnected = true)
+        )
+        assertEquals(
+            GatewayApprovalOutcome.ALLOWED_ONCE,
+            assertIs<ApprovalRequestStatus.Submitting>(
+                state.requestStatuses[request.rpcId]
+            ).outcome
+        )
+        state = ApprovalReducer.reduce(state, ApprovalAction.Resolved(request.rpcId))
+        assertTrue(state.pendingRequests.isEmpty())
+        assertNull(state.requestStatuses[request.rpcId])
+
+        val response = GatewayRequests.approvalResponse(
+            rpcId = request.rpcId,
+            sessionId = request.sessionId,
+            approvalId = request.approvalId,
+            outcome = GatewayApprovalOutcome.ALLOWED_ONCE
+        )
+        assertEquals(
+            "{\"type\":\"approval-response\",\"rpcId\":\"rpc-approval-1\",\"sessionId\":\"s1\",\"approvalId\":\"approval-1\",\"outcome\":\"allowed-once\"}",
+            response.payload
+        )
+        assertEquals(GatewayRequestLanePolicy.REJECT_IF_BUSY, response.lanePolicy)
     }
 
     @Test

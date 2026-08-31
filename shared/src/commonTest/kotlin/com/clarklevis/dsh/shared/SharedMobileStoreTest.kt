@@ -74,6 +74,49 @@ class SharedMobileStoreTest {
     }
 
     @Test
+    fun approvalLifecycleProducesSharedEffectAndWaitsForResolution() {
+        val store = SharedMobileStore()
+        store.acceptFrame(
+            """{"kind":"event","sessionId":"s1","seq":1,"time":1,"event":{"type":"tool/call","callId":"call-1","name":"Bash","arguments":"{\"command\":\"sw_vers && uname -a\",\"description\":\"读取系统版本\"}"}}"""
+        )
+        var snapshot = store.acceptFrame(GatewayProtocolFixtures.REPLAYED_APPROVAL_REQUEST)
+        assertEquals(1, snapshot.pendingApprovalCount)
+        assertEquals("Bash", snapshot.pendingApprovals.single().toolName)
+        assertEquals("idle", snapshot.approvalRequestStatuses["rpc-approval-1"]?.kind)
+        assertEquals(
+            "sw_vers && uname -a",
+            snapshot.approvalCommandPreviews["rpc-approval-1"]
+        )
+        assertEquals(
+            "读取系统版本",
+            snapshot.approvalDetails["rpc-approval-1"]?.get("description")?.stringValue
+        )
+
+        val submission = store.submitApprovalDecision(
+            rpcId = "rpc-approval-1",
+            outcome = "allowed-once",
+            isConnected = true
+        )
+        assertEquals("respond", submission.effect?.action)
+        assertEquals("approval-1", submission.effect?.approvalId)
+        assertEquals("allowed-once", submission.effect?.outcome)
+        assertEquals(
+            "submitting",
+            submission.snapshot.approvalRequestStatuses["rpc-approval-1"]?.kind
+        )
+
+        snapshot = store.acceptFrame(
+            """{"kind":"approval-response","rpcId":"rpc-approval-1","sessionId":"s1","approvalId":"approval-1","outcome":"allowed-once","accepted":true}"""
+        )
+        assertEquals("accepted", snapshot.approvalRequestStatuses["rpc-approval-1"]?.kind)
+        snapshot = store.acceptFrame(
+            """{"kind":"approval-resolved","rpcId":"rpc-approval-1","sessionId":"s1","approvalId":"approval-1","outcome":"allowed-once"}"""
+        )
+        assertEquals(0, snapshot.pendingApprovalCount)
+        assertNull(snapshot.approvalRequestStatuses["rpc-approval-1"])
+    }
+
+    @Test
     fun productFramesPopulateWorkspaceSearchAndControlUiState() {
         val store = SharedMobileStore()
         var snapshot = store.acceptFrame(

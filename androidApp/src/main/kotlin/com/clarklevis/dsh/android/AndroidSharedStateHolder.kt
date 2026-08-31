@@ -24,6 +24,7 @@ import com.clarklevis.dsh.shared.gateway.gatewayAttachmentCacheKey
 import com.clarklevis.dsh.shared.protocol.GatewayDirectoryItem
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
+import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
@@ -162,7 +163,10 @@ class AndroidSharedStateHolder(
                 launch {
                     appGraph.gatewayRuntime.state.collect { state ->
                         appGraph.diagnostics.runtimeState(state)
+                        var shouldCatchUpSelectedHistory = false
                         withContext(Dispatchers.Main.immediate) {
+                            val didReconnect = state.connection == GatewayConnectionState.CONNECTED &&
+                                lastObservedConnection != GatewayConnectionState.CONNECTED
                             gatewayState = state
                             if (state.connection != GatewayConnectionState.CONNECTED &&
                                 state.connection != GatewayConnectionState.CONNECTING &&
@@ -172,15 +176,22 @@ class AndroidSharedStateHolder(
                                 clearWorkspaceRequestLoading()
                             }
                             if (
-                                state.connection == GatewayConnectionState.CONNECTED &&
-                                lastObservedConnection != GatewayConnectionState.CONNECTED &&
+                                didReconnect &&
                                 activeAttachment != null
                             ) {
                                 attachmentQueue.addFirst(requireNotNull(activeAttachment))
                                 activeAttachment = null
                                 drainAttachmentQueue()
                             }
+                            if (didReconnect) {
+                                shouldCatchUpSelectedHistory = snapshot.selectedSessionId != null
+                            }
                             lastObservedConnection = state.connection
+                        }
+                        // 订阅只补发重连后的实时事件。重新拉取 latest history，按 seq 与
+                        // 本地 live tail 合并，补齐应用在后台断线期间由其他端发送的用户消息。
+                        if (shouldCatchUpSelectedHistory) {
+                            projectionActor.catchUpSelectedHistoryAfterReconnect()
                         }
                     }
                 }
@@ -221,6 +232,21 @@ class AndroidSharedStateHolder(
                                             agentPresetsAuthorable = event.frame.authorable == true
                                             agentPresetsHasDocument = event.frame.hasDocument == true
                                         }
+                                        if (event.frame.kind.startsWith("approval")) {
+                                            appGraph.diagnostics.approval(
+                                                stage = "frame-applied",
+                                                frameKind = event.frame.kind,
+                                                hasRpc = !event.frame.rpcId.isNullOrBlank(),
+                                                hasSession = !event.frame.sessionId.isNullOrBlank(),
+                                                hasApprovalId = !event.frame.approvalId.isNullOrBlank(),
+                                                hasTool = !event.frame.toolName.isNullOrBlank(),
+                                                replay = event.frame.replay == true,
+                                                pendingCount = snapshot.pendingApprovals.size,
+                                                selectedVisible = snapshot.pendingApprovals.any {
+                                                    it.sessionId == snapshot.selectedSessionId
+                                                }
+                                            )
+                                        }
                                     }
                                     if (event.frame.kind == "sent") {
                                         event.frame.sessionId?.takeIf(String::isNotBlank)?.let { sessionId ->
@@ -253,6 +279,11 @@ class AndroidSharedStateHolder(
                                         attachmentFailed(event.targetSessionId, event.correlationId)
                                     }
                                 }
+                                if (event.requestType == "approval-response") {
+                                    event.correlationId?.let {
+                                        projectionActor.approvalRequestFailed(it, event.reason)
+                                    }
+                                }
                             }
                             is GatewayRuntimeEvent.RequestTimedOut -> {
                                 withContext(Dispatchers.Main.immediate) {
@@ -270,6 +301,11 @@ class AndroidSharedStateHolder(
                                 if (event.requestType == "attachment") {
                                     withContext(Dispatchers.Main.immediate) {
                                         attachmentFailed(event.targetSessionId, event.correlationId)
+                                    }
+                                }
+                                if (event.requestType == "approval-response") {
+                                    event.correlationId?.let {
+                                        projectionActor.approvalRequestFailed(it, "request-timeout")
                                     }
                                 }
                             }
@@ -290,6 +326,21 @@ class AndroidSharedStateHolder(
                                 if (event.requestType == "attachment") {
                                     withContext(Dispatchers.Main.immediate) {
                                         attachmentFailed(event.targetSessionId, event.correlationId)
+                                    }
+                                }
+                                if (event.requestType == "approval-response") {
+                                    val correlationId = event.correlationId
+                                    val targetSessionId = event.targetSessionId
+                                    if (correlationId != null) {
+                                        projectionActor.approvalRequestFailed(
+                                            correlationId,
+                                            event.reason
+                                        )
+                                    } else if (targetSessionId != null) {
+                                        projectionActor.approvalSessionRequestsFailed(
+                                            targetSessionId,
+                                            event.reason
+                                        )
                                     }
                                 }
                             }
@@ -361,6 +412,14 @@ class AndroidSharedStateHolder(
                 if (trajectoryIsActive) publishTrajectory()
                 if (gatewayState.connection == GatewayConnectionState.CONNECTED) {
                     appGraph.gatewayRuntime.subscribe(sessionId)
+                    appGraph.diagnostics.approval(
+                        stage = "session-subscribed",
+                        hasSession = true,
+                        pendingCount = snapshot.pendingApprovals.size,
+                        selectedVisible = snapshot.pendingApprovals.any {
+                            it.sessionId == snapshot.selectedSessionId
+                        }
+                    )
                 }
             }
         }
@@ -661,6 +720,32 @@ class AndroidSharedStateHolder(
     fun cancelQuestion(rpcId: String, sessionId: String) {
         graph?.let { appGraph ->
             appGraph.gatewayScope.launch { appGraph.gatewayRuntime.cancelQuestion(rpcId, sessionId) }
+        }
+    }
+
+    fun respondToApproval(rpcId: String, outcome: GatewayApprovalOutcome) {
+        val appGraph = graph ?: return
+        appGraph.gatewayScope.launch {
+            val wireOutcome = when (outcome) {
+                GatewayApprovalOutcome.ALLOWED_ONCE -> "allowed-once"
+                GatewayApprovalOutcome.REJECTED -> "rejected"
+            }
+            val effect = projectionActor.submitApprovalDecision(
+                rpcId,
+                wireOutcome,
+                gatewayState.connection == GatewayConnectionState.CONNECTED
+            ) ?: return@launch
+            val accepted = appGraph.gatewayRuntime.sendRequest(
+                GatewayRequests.approvalResponse(
+                    effect.rpcId,
+                    effect.sessionId,
+                    effect.approvalId,
+                    outcome
+                )
+            )
+            if (!accepted) {
+                projectionActor.approvalRequestFailed(rpcId, "request-busy")
+            }
         }
     }
 

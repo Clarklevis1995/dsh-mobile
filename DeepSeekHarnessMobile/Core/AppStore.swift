@@ -9,6 +9,18 @@ protocol GatewayQuestionEffectExecuting: AnyObject {
 extension GatewayClient: GatewayQuestionEffectExecuting {}
 
 @MainActor
+protocol GatewayApprovalEffectExecuting: AnyObject {
+    func respondToApproval(
+        rpcId: String,
+        sessionId: String,
+        approvalId: String,
+        outcome: GatewayApprovalOutcome
+    )
+}
+
+extension GatewayClient: GatewayApprovalEffectExecuting {}
+
+@MainActor
 protocol GatewaySessionControlEffectExecuting: AnyObject {
     func requestModels(sessionId: String?)
     func requestPermissionOptions(sessionId: String?)
@@ -136,6 +148,8 @@ final class AppStore: ObservableObject {
     @Published private(set) var defaultConfigurationLoadingKinds: Set<String> = []
     @Published private(set) var pendingQuestionRequests: [GatewayPendingQuestionRequest] = []
     @Published private(set) var questionRequestStatuses: [String: GatewayQuestionRequestStatus] = [:]
+    @Published private(set) var pendingApprovalRequests: [GatewayPendingApprovalRequest] = []
+    @Published private(set) var approvalRequestStatuses: [String: GatewayApprovalRequestStatus] = [:]
     @Published private(set) var supportsImages = false
 
     let gateway = GatewayClient()
@@ -145,6 +159,9 @@ final class AppStore: ObservableObject {
     /// Human Question 的唯一业务状态来源；Swift 属性只发布 KMP 快照。
     private let kmpQuestionStore: KMPQuestionStoreAdapter
     private let questionEffectExecutor: any GatewayQuestionEffectExecuting
+    /// 操作审批状态与一次性响应 effect 的唯一业务来源。
+    private let kmpApprovalStore: KMPApprovalStoreAdapter
+    private let approvalEffectExecutor: any GatewayApprovalEffectExecuting
     /// SessionControl 的唯一业务状态来源；Swift 属性只发布 KMP 快照。
     private let kmpSessionControlStore: KMPSessionControlStoreAdapter
     private let sessionControlEffectExecutor: any GatewaySessionControlEffectExecuting
@@ -200,16 +217,19 @@ final class AppStore: ObservableObject {
         preferences: AppPreferences = UserDefaultsAppPreferences(),
         sessionListBridge: (any KMPSessionListStoreBridging)? = nil,
         questionBridge: (any KMPQuestionStoreBridging)? = nil,
+        approvalBridge: (any KMPApprovalStoreBridging)? = nil,
         sessionControlBridge: (any KMPSessionControlStoreBridging)? = nil,
         conversationBridge: (any KMPConversationStoreBridging)? = nil,
         trajectoryBridge: (any KMPTrajectoryStoreBridging)? = nil,
         historyBridge: (any KMPHistoryStoreBridging)? = nil,
         questionEffectExecutor: (any GatewayQuestionEffectExecuting)? = nil,
+        approvalEffectExecutor: (any GatewayApprovalEffectExecuting)? = nil,
         sessionControlEffectExecutor: (any GatewaySessionControlEffectExecuting)? = nil,
         backgroundExecutionController: AgentBackgroundExecutionController? = nil
     ) {
         self.preferences = preferences
         self.questionEffectExecutor = questionEffectExecutor ?? gateway
+        self.approvalEffectExecutor = approvalEffectExecutor ?? gateway
         self.backgroundExecutionController = backgroundExecutionController ?? AgentBackgroundExecutionController()
         let persistedSessions = preferences.loadSessions()
         let kmpSessionListStore = KMPSessionListStoreAdapter(
@@ -218,6 +238,8 @@ final class AppStore: ObservableObject {
         )
         self.kmpSessionListStore = kmpSessionListStore
         let kmpQuestionStore = KMPQuestionStoreAdapter(bridge: questionBridge)
+        let kmpApprovalStore = KMPApprovalStoreAdapter(bridge: approvalBridge)
+        self.kmpApprovalStore = kmpApprovalStore
         self.kmpQuestionStore = kmpQuestionStore
         let kmpSessionControlStore = KMPSessionControlStoreAdapter(bridge: sessionControlBridge)
         self.kmpSessionControlStore = kmpSessionControlStore
@@ -237,6 +259,8 @@ final class AppStore: ObservableObject {
         archivedSessionIds = kmpSessionListStore.snapshot.archivedSessionIDSet
         pendingQuestionRequests = kmpQuestionStore.snapshot.pendingRequests
         questionRequestStatuses = kmpQuestionStore.snapshot.platformStatuses
+        pendingApprovalRequests = kmpApprovalStore.snapshot.pendingRequests
+        approvalRequestStatuses = kmpApprovalStore.snapshot.platformStatuses
         // stage9-kmp-write-scope: initialization-end
         applySessionControlSnapshot(kmpSessionControlStore.snapshot)
         if let error = kmpSessionListStore.initializationError {
@@ -322,6 +346,34 @@ final class AppStore: ObservableObject {
     var selectedPendingQuestionRequest: GatewayPendingQuestionRequest? {
         guard let selectedSessionId else { return nil }
         return pendingQuestionRequests.first { $0.sessionId == selectedSessionId }
+    }
+    var selectedPendingApprovalRequest: GatewayPendingApprovalRequest? {
+        guard let selectedSessionId else { return nil }
+        return pendingApprovalRequests.first { $0.sessionId == selectedSessionId }
+    }
+
+    func approvalArguments(for request: GatewayPendingApprovalRequest) -> JSONValue? {
+        guard let callID = request.callId else { return nil }
+        return selectedEvents
+            .last(where: { $0.event.callId == callID })?
+            .event
+            .arguments?
+            .normalizedValue
+    }
+
+    func commandPreview(for request: GatewayPendingApprovalRequest) -> String? {
+        if let arguments = approvalArguments(for: request),
+           let command = arguments["cmd"]?.stringValue ?? arguments["command"]?.stringValue {
+            return command
+        }
+        guard let callID = request.callId,
+              let rawText = selectedConversationItems.last(where: { $0.id == "tool-\(callID)" })?.text else {
+            return nil
+        }
+        let normalized = JSONValue.string(rawText).normalizedValue
+        return normalized["cmd"]?.stringValue
+            ?? normalized["command"]?.stringValue
+            ?? (normalized.objectValue == nil ? rawText : nil)
     }
     func imageData(for attachmentId: String) -> Data? {
         imageAttachmentCache.data(for: attachmentId)
@@ -600,6 +652,10 @@ final class AppStore: ObservableObject {
             lastError = String(localized: "WebSocket 尚未连接，无法加载历史记录")
             return
         }
+        startHistorySync(for: sessionId, older: older)
+    }
+
+    private func startHistorySync(for sessionId: String, older: Bool = false) {
         do {
             try kmpHistoryStore.start(
                 sessionID: sessionId,
@@ -753,6 +809,17 @@ final class AppStore: ObservableObject {
         ))
         _ = transition
     }
+
+    func respondToApproval(
+        _ request: GatewayPendingApprovalRequest,
+        outcome: GatewayApprovalOutcome
+    ) {
+        dispatchApprovalIntent(.submitDecision(
+            rpcID: request.rpcId,
+            outcome: outcome,
+            isConnected: gateway.state.isConnected
+        ))
+    }
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
     private func handle(_ frame: GatewayFrame) {
@@ -775,6 +842,7 @@ final class AppStore: ObservableObject {
         case .control(let route): handleControlRoute(route)
         case .workspace(let route): handleWorkspaceRoute(route)
         case .question(let route): handleQuestionRoute(route)
+        case .approval(let route): handleApprovalRoute(route)
         case .failure(let payload): handleFailure(payload)
         case .ignored: break
         case .unknown(let kind): notice(String(localized: "未知网关响应"), kind)
@@ -794,6 +862,7 @@ final class AppStore: ObservableObject {
             resetOutstandingRequests()
             backgroundExecutionController.releaseAllQuestionAnswers()
             dispatchQuestionIntent(.reset)
+            dispatchApprovalIntent(.reset)
             supportsImages = payload.protocolVersion >= 3 && payload.capabilities.contains("images")
             attachmentLoader.reset()
             presentsNextConnectionFailureAsAlert = true
@@ -812,6 +881,17 @@ final class AppStore: ObservableObject {
             }
             refreshRemoteState()
             refreshDefaultConfiguration()
+            // A restored subscription only receives events emitted after the new
+            // connection. Rebase the visible conversation from latest history so
+            // user messages sent by another client while this app was suspended
+            // are merged back ahead of any live assistant tail.
+            if preparedConversationActivationKey != nil,
+               let selectedSessionId {
+                // Receiving hello is itself the transport-connected boundary. Use
+                // the unguarded sync entry so tests and connection recovery cannot
+                // race the separately published GatewayClient state mirror.
+                startHistorySync(for: selectedSessionId)
+            }
             if preparedConversationActivationKey != nil {
                 Task { [weak self] in
                     guard let self else { return }
@@ -1073,6 +1153,57 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func handleApprovalRoute(_ route: GatewayApprovalRoute) {
+        switch route {
+        case .requested(let request):
+            let isNewRequest = !pendingApprovalRequests.contains { $0.rpcId == request.rpcId }
+            gatewayApprovalTrace(
+                "router requested replay=\(request.replay) isNew=\(isNewRequest) " +
+                "selectedMatch=\(selectedSessionId == request.sessionId) pendingBefore=\(pendingApprovalRequests.count)"
+            )
+            dispatchApprovalIntent(.requestReceived(request))
+            if isNewRequest {
+                notice(
+                    request.replay ? String(localized: "待审批操作已恢复") : String(localized: "Agent 正在等待审批"),
+                    request.reason ?? request.toolName,
+                    sessionId: request.sessionId
+                )
+            }
+        case .invalidRequest(let sessionID):
+            gatewayApprovalTrace("router invalid-request hasSession=\(sessionID?.isEmpty == false)")
+            notice(
+                String(localized: "审批请求无效"),
+                String(localized: "缺少 rpcId、sessionId、approvalId 或 toolName。"),
+                sessionId: sessionID,
+                isError: true
+            )
+        case .response(let rpcID, let outcome, let accepted, let reason):
+            gatewayApprovalTrace("router response accepted=\(accepted) outcome=\(outcome.rawValue)")
+            let pendingSessionID = pendingApprovalRequests.first { $0.rpcId == rpcID }?.sessionId
+            dispatchApprovalIntent(.responseReceived(
+                rpcID: rpcID,
+                outcome: outcome,
+                accepted: accepted,
+                reason: reason
+            ))
+            if !accepted && reason == "not-pending" {
+                notice(
+                    String(localized: "审批已在其他端处理"),
+                    String(localized: "当前决定未生效。"),
+                    sessionId: pendingSessionID
+                )
+            }
+        case .resolved(let rpcID, let sessionID, let outcome):
+            gatewayApprovalTrace("router resolved outcome=\(outcome ?? "none")")
+            let pendingSessionID = pendingApprovalRequests.first { $0.rpcId == rpcID }?.sessionId
+            dispatchApprovalIntent(.resolved(rpcID: rpcID))
+            let detail = outcome == GatewayApprovalOutcome.allowedOnce.rawValue
+                ? String(localized: "已允许本次操作。")
+                : String(localized: "操作未获允许。")
+            notice(String(localized: "审批已处理"), detail, sessionId: sessionID ?? pendingSessionID)
+        }
+    }
+
     private func handleFailure(_ payload: GatewayFailurePayload) {
         waitingForNewSession = false
         if payload.requestType == "directories" { directoryIsLoading = false }
@@ -1101,6 +1232,13 @@ final class AppStore: ObservableObject {
                 // 不能从多个 pending request 中猜测任意一个 rpcId。
                 dispatchQuestionIntent(.sessionRequestsFailed(sessionID: sessionID, message: detail))
                 backgroundExecutionController.releaseQuestionAnswers(sessionID: sessionID)
+            }
+        }
+        if payload.requestType == "approval-response" {
+            if let rpcID = payload.rpcID {
+                dispatchApprovalIntent(.requestFailed(rpcID: rpcID, message: detail))
+            } else if let sessionID = payload.sessionID {
+                dispatchApprovalIntent(.sessionRequestsFailed(sessionID: sessionID, message: detail))
             }
         }
         let failedRequest = payload.requestType.flatMap { requestType in
@@ -1552,6 +1690,32 @@ final class AppStore: ObservableObject {
         default:
             lastError = "KMP Question 返回未知 effect：\(effect.action)"
         }
+    }
+
+    @discardableResult
+    private func dispatchApprovalIntent(_ intent: KMPApprovalIntent) -> KMPApprovalTransition {
+        let transition = kmpApprovalStore.reduce(intent)
+        if let error = transition.error {
+            gatewayApprovalTrace("shared rejected error=\(error.localizedDescription)")
+            lastError = error.localizedDescription
+            return transition
+        }
+        pendingApprovalRequests = transition.snapshot.pendingRequests
+        approvalRequestStatuses = transition.snapshot.platformStatuses
+        gatewayApprovalTrace(
+            "shared accepted pending=\(pendingApprovalRequests.count) " +
+            "selectedVisible=\(selectedPendingApprovalRequest != nil) hasEffect=\(transition.effect != nil)"
+        )
+        if let effect = transition.effect,
+           let outcome = GatewayApprovalOutcome(rawValue: effect.outcome) {
+            approvalEffectExecutor.respondToApproval(
+                rpcId: effect.rpcId,
+                sessionId: effect.sessionId,
+                approvalId: effect.approvalId,
+                outcome: outcome
+            )
+        }
+        return transition
     }
     private func handleHistoryChange(_ change: KMPHistoryChange) {
         // stage10-kmp-write-scope: history-begin

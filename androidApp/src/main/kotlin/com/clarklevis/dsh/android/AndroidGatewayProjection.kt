@@ -9,11 +9,14 @@ import com.clarklevis.dsh.shared.facade.SharedHistoryPatch
 import com.clarklevis.dsh.shared.facade.SharedHistoryStore
 import com.clarklevis.dsh.shared.facade.SharedMviEvent
 import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
+import com.clarklevis.dsh.shared.facade.SharedMobileApprovalSubmission
 import com.clarklevis.dsh.shared.facade.SharedMobileStore
 import com.clarklevis.dsh.shared.projection.ConversationItem
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.projection.TrajectoryProjection
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
+import com.clarklevis.dsh.shared.protocol.GatewayPendingApprovalRequest
+import com.clarklevis.dsh.shared.protocol.JsonValue
 import com.clarklevis.dsh.shared.protocol.SessionEvent
 import com.clarklevis.dsh.shared.sync.HistorySessionState
 import com.clarklevis.dsh.shared.sync.HistorySyncConfiguration
@@ -51,22 +54,48 @@ internal class AndroidGatewayProjection(
     private val historySubscription = historyStore.subscribe(::acceptHistoryMviEvent)
     private val conversationSubscription = conversationStore.subscribe(::acceptConversationMviEvent)
 
-    fun snapshot(): SharedMobileSnapshot = controlSnapshot.copy(
-        conversation = controlSnapshot.selectedSessionId?.let(conversationItems::get).orEmpty(),
-        selectedHistoryHasMore = controlSnapshot.selectedSessionId?.let(historyHasMore::get) == true,
-        selectedHistoryEarliestSequence = controlSnapshot.selectedSessionId
-            ?.let(historyEvents::get)?.firstOrNull()?.seq,
-        selectedHistoryIsLoading = controlSnapshot.selectedSessionId
-            ?.let(historySessionStates::get)?.isLoading == true,
-        selectedHistoryIsLoadingOlder = controlSnapshot.selectedSessionId
-            ?.let(historySessionStates::get)?.isLoadingOlder == true,
-        selectedHistoryLoadedEventCount = controlSnapshot.selectedSessionId
-            ?.let(historySessionStates::get)?.progress?.loaded ?: 0,
-        selectedHistoryTotalEventCount = controlSnapshot.selectedSessionId
-            ?.let(historySessionStates::get)?.progress?.total,
-        lastFrameKind = lastFrameKind ?: controlSnapshot.lastFrameKind,
-        lastError = lastError ?: controlSnapshot.lastError
-    )
+    fun snapshot(): SharedMobileSnapshot {
+        val approvalDetails = controlSnapshot.pendingApprovals.mapNotNull { request ->
+            approvalArguments(request)?.let { request.rpcId to it }
+        }.toMap()
+        val commandPreviews = controlSnapshot.pendingApprovals.mapNotNull { request ->
+            val arguments = approvalDetails[request.rpcId]
+            val preview = arguments?.get("cmd")?.stringValue
+                ?: arguments?.get("command")?.stringValue
+                ?: controlSnapshot.approvalCommandPreviews[request.rpcId]
+            preview?.let { request.rpcId to it }
+        }.toMap()
+        return controlSnapshot.copy(
+            conversation = controlSnapshot.selectedSessionId?.let(conversationItems::get).orEmpty(),
+            approvalCommandPreviews = commandPreviews,
+            approvalDetails = approvalDetails,
+            selectedHistoryHasMore = controlSnapshot.selectedSessionId?.let(historyHasMore::get) == true,
+            selectedHistoryEarliestSequence = controlSnapshot.selectedSessionId
+                ?.let(historyEvents::get)?.firstOrNull()?.seq,
+            selectedHistoryIsLoading = controlSnapshot.selectedSessionId
+                ?.let(historySessionStates::get)?.isLoading == true,
+            selectedHistoryIsLoadingOlder = controlSnapshot.selectedSessionId
+                ?.let(historySessionStates::get)?.isLoadingOlder == true,
+            selectedHistoryLoadedEventCount = controlSnapshot.selectedSessionId
+                ?.let(historySessionStates::get)?.progress?.loaded ?: 0,
+            selectedHistoryTotalEventCount = controlSnapshot.selectedSessionId
+                ?.let(historySessionStates::get)?.progress?.total,
+            lastFrameKind = lastFrameKind ?: controlSnapshot.lastFrameKind,
+            lastError = lastError ?: controlSnapshot.lastError
+        )
+    }
+
+    private fun approvalArguments(request: GatewayPendingApprovalRequest): JsonValue? {
+        val targetCallId = request.callId
+        val historyArguments = targetCallId?.let { callId ->
+            historyEvents[request.sessionId]
+                ?.lastOrNull { it.event.callId == callId }
+                ?.event
+                ?.arguments
+                ?.normalizedJsonValue()
+        }
+        return historyArguments ?: controlSnapshot.approvalDetails[request.rpcId]
+    }
 
     fun selectSession(sessionId: String?): SharedMobileSnapshot {
         controlSnapshot = mobileStore.selectSession(sessionId)
@@ -77,6 +106,31 @@ internal class AndroidGatewayProjection(
 
     fun loadHistory(sessionId: String, older: Boolean): SharedMobileSnapshot {
         startHistory(sessionId, older)
+        return snapshot()
+    }
+
+    fun catchUpSelectedHistoryAfterReconnect(): SharedMobileSnapshot {
+        controlSnapshot.selectedSessionId?.let { startHistory(it, older = false) }
+        return snapshot()
+    }
+
+    fun submitApprovalDecision(
+        rpcId: String,
+        outcome: String,
+        isConnected: Boolean
+    ): SharedMobileApprovalSubmission {
+        val result = mobileStore.submitApprovalDecision(rpcId, outcome, isConnected)
+        controlSnapshot = result.snapshot
+        return result.copy(snapshot = snapshot())
+    }
+
+    fun approvalRequestFailed(rpcId: String, message: String?): SharedMobileSnapshot {
+        controlSnapshot = mobileStore.approvalRequestFailed(rpcId, message)
+        return snapshot()
+    }
+
+    fun approvalSessionRequestsFailed(sessionId: String, message: String?): SharedMobileSnapshot {
+        controlSnapshot = mobileStore.approvalSessionRequestsFailed(sessionId, message)
         return snapshot()
     }
 

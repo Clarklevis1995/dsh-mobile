@@ -18,6 +18,7 @@ private enum GatewayProtocolParityFixtures {
     // 这些样本与 shared/commonTest/GatewayProtocolFixtures.kt 逐字保持一致。
     static let liveEventWithoutKind = #"{"sessionId":"s1","seq":7,"time":1001,"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"reasoning-delta","text":"thinking"}}"#
     static let replayedQuestionRequest = #"{"kind":"question-requested","rpcId":"rpc-1","sessionId":"s1","replay":true,"questions":[{"id":"direction","header":"研究方向","question":"你想研究哪个方向？","detail":"请选择最感兴趣的方向","options":[{"label":"核心架构 (推荐)","description":"了解插件分层"},{"label":"移动端"}],"multiSelect":true},{"id":"notes","question":"还有什么要求？","multiSelect":false}]}"#
+    static let replayedApprovalRequest = #"{"kind":"approval-requested","rpcId":"rpc-approval-1","sessionId":"s1","approvalId":"approval-1","toolName":"Bash","callId":"call-1","reason":"需要读取系统版本","replay":true}"#
     static let imageAttachment = #"{"kind":"attachment","sessionId":"s1","attachment":{"attachmentId":"att-1","mediaType":"image/png","bytes":8,"width":1,"height":1},"data":"iVBORw0K"}"#
     static let historyImage = #"{"kind":"history","events":[{"type":"user/message","seq":1,"time":1786937352,"data":{"content":[{"type":"image","attachment":{"attachmentId":"att-history","mediaType":"image/webp","bytes":42,"width":100,"height":80,"name":"image.webp"}}],"source":{"kind":"user"}}}],"hasMore":false}"#
 }
@@ -204,6 +205,49 @@ final class GatewayProtocolTests: XCTestCase {
             second.id,
             "prepare 返回时目标 Session 的延迟 KMP Event 必须已经发布，导航不能看到旧 ID"
         )
+    }
+
+    @MainActor
+    func testForegroundHelloHistoryCatchUpRestoresUserMessageBeforeLiveReply() async throws {
+        let session = SessionSummary(
+            id: "session-catch-up",
+            title: "Catch Up",
+            lastActivity: Date(timeIntervalSince1970: 103),
+            isRunning: true,
+            hasUnread: false
+        )
+        let store = AppStore(preferences: AppPreferencesSpy(
+            endpoint: "ws://127.0.0.1:3080/ws/mobile",
+            selectedWorkspaceID: nil,
+            sessions: [session]
+        ))
+        let prepared = await store.prepareConversation(for: session)
+        XCTAssertTrue(prepared)
+
+        // The restored subscription first sees only the Agent reply. The user
+        // message was emitted while this client was suspended.
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"event","sessionId":"session-catch-up","seq":3,"time":103,"event":{"type":"assistant/message","turn":2,"step":1,"text":"Agent 回复"}}"#.utf8
+        )))
+        await flushDeferredKMPEvents(in: store)
+        XCTAssertEqual(store.events[session.id]?.map(\.event.text), ["Agent 回复"])
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"hello","protocol":3,"capabilities":[],"authenticated":true,"clients":2}"#.utf8
+        )))
+        await flushDeferredKMPEvents(in: store)
+        XCTAssertTrue(store.historyLoadingSessionIds.contains(session.id))
+
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"history","events":[{"type":"user/message","seq":2,"time":102,"data":{"content":[{"type":"text","text":"后台期间的问题"}],"source":{"kind":"user"}}},{"type":"assistant/message","seq":3,"time":103,"data":{"content":[{"type":"text","text":"过期的历史回复"}]}}],"hasMore":false,"bytes":128}"#.utf8
+        )))
+        for _ in 0..<100 where store.historyLoadingSessionIds.contains(session.id) {
+            try await Task.sleep(for: .milliseconds(10))
+            await flushDeferredKMPEvents(in: store)
+        }
+
+        XCTAssertEqual(store.events[session.id]?.map(\.event.text), ["后台期间的问题", "Agent 回复"])
+        XCTAssertFalse(store.historyLoadingSessionIds.contains(session.id))
     }
 
     @MainActor
@@ -917,6 +961,63 @@ final class GatewayProtocolTests: XCTestCase {
             return XCTFail("缺少 rpcId 的问题必须显式路由为 invalidRequest")
         }
         XCTAssertEqual(sessionID, "s1")
+    }
+
+    @MainActor
+    func testApprovalRequestRoutesThroughSharedReducerAndBuildsOneShotEffect() throws {
+        let context = GatewayFrameRoutingContext(
+            selectedSessionID: "s1",
+            pendingHistorySessionID: nil,
+            pendingModelsSessionID: nil,
+            isPendingGlobalModelsRequest: false,
+            pendingModelSelectionSessionID: nil,
+            pendingPermissionOptionsSessionID: nil
+        )
+        let frame = try GatewayWireDecoder.decode(Data(
+            GatewayProtocolParityFixtures.replayedApprovalRequest.utf8
+        ))
+        guard case .approval(.requested(let request)) =
+                GatewayFrameRouter.route(frame, context: context) else {
+            return XCTFail("有效审批请求应路由为 approval.requested")
+        }
+        XCTAssertEqual(request.rpcId, "rpc-approval-1")
+        XCTAssertEqual(request.approvalId, "approval-1")
+        XCTAssertEqual(request.toolName, "Bash")
+        XCTAssertEqual(request.callId, "call-1")
+        XCTAssertEqual(request.reason, "需要读取系统版本")
+        XCTAssertTrue(request.replay)
+
+        let adapter = KMPApprovalStoreAdapter()
+        let received = adapter.reduce(.requestReceived(request))
+        XCTAssertNil(received.error)
+        XCTAssertEqual(received.snapshot.pendingRequests, [request])
+        let submitted = adapter.reduce(.submitDecision(
+            rpcID: request.rpcId,
+            outcome: .allowedOnce,
+            isConnected: true
+        ))
+        XCTAssertNil(submitted.error)
+        XCTAssertEqual(submitted.effect?.action, "respond")
+        XCTAssertEqual(submitted.effect?.approvalId, "approval-1")
+        XCTAssertEqual(submitted.effect?.outcome, "allowed-once")
+        XCTAssertEqual(submitted.snapshot.requestStatuses[request.rpcId]?.kind, "submitting")
+
+        let duplicate = adapter.reduce(.submitDecision(
+            rpcID: request.rpcId,
+            outcome: .rejected,
+            isConnected: true
+        ))
+        XCTAssertNil(duplicate.effect, "同一审批只能发出一次响应 effect")
+    }
+
+    func testApprovalArgumentsNormalizeJSONStringBeforeRendering() throws {
+        let encodedArguments = JSONValue.string(
+            #"{"command":"sw_vers && uname -a","description":"读取系统版本"}"#
+        )
+        let normalized = encodedArguments.normalizedValue
+
+        XCTAssertEqual(normalized["command"]?.stringValue, "sw_vers && uname -a")
+        XCTAssertEqual(normalized["description"]?.stringValue, "读取系统版本")
     }
 
     func testGatewayFrameRouterPreservesMissingSessionForKMPRequestCorrelation() throws {

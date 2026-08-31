@@ -1,6 +1,13 @@
 import Foundation
 import ImageIO
 
+@inline(__always)
+func gatewayApprovalTrace(_ message: @autoclosure () -> String) {
+#if DEBUG
+    print("[DshApproval] \(message())")
+#endif
+}
+
 enum JSONValue: Codable, Hashable, Sendable {
     case string(String), number(Double), bool(Bool), object([String: JSONValue]), array([JSONValue]), null
 
@@ -42,6 +49,16 @@ enum JSONValue: Codable, Hashable, Sendable {
             return String(decoding: formatted, as: UTF8.self)
         }
         return displayText
+    }
+
+    /// 将供应商以 JSON 字符串承载的 tool arguments 规范化为真正的 JSON 值。
+    var normalizedValue: JSONValue {
+        guard case .string(let value) = self,
+              let data = value.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(JSONValue.self, from: data) else {
+            return self
+        }
+        return decoded
     }
 
     var objectValue: [String: JSONValue]? { if case .object(let value) = self { value } else { nil } }
@@ -129,6 +146,10 @@ struct GatewayFrame: Codable, Sendable {
     var accepted: Bool?
     var reason: String?
     var outcome: String?
+    // Human-in-the-loop approval protocol (Mobile Gateway v0.6.6).
+    var approvalId: String?
+    var toolName: String?
+    var callId: String?
     // Image attachment protocol (Mobile Gateway v0.6.0 / protocol 3).
     var attachment: GatewayImageAttachment?
     var data: String?
@@ -253,6 +274,36 @@ enum GatewayQuestionRequestStatus: Equatable, Sendable {
         switch self {
         case .submitting, .accepted: true
         case .idle, .rejected: false
+        }
+    }
+}
+
+struct GatewayPendingApprovalRequest: Codable, Hashable, Sendable, Identifiable {
+    var rpcId: String
+    var sessionId: String
+    var approvalId: String
+    var toolName: String
+    var callId: String?
+    var reason: String?
+    var replay: Bool
+    var id: String { rpcId }
+}
+
+enum GatewayApprovalOutcome: String, Codable, Hashable, Sendable {
+    case allowedOnce = "allowed-once"
+    case rejected
+}
+
+enum GatewayApprovalRequestStatus: Equatable, Sendable {
+    case idle
+    case submitting(GatewayApprovalOutcome)
+    case accepted(GatewayApprovalOutcome)
+    case failed(String)
+
+    var isBusy: Bool {
+        switch self {
+        case .submitting, .accepted: true
+        case .idle, .failed: false
         }
     }
 }

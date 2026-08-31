@@ -121,6 +121,25 @@ internal class AndroidGatewayDiagnostics private constructor(
         emit(priority, message)
     }
 
+    fun approval(
+        stage: String,
+        frameKind: String? = null,
+        hasRpc: Boolean = false,
+        hasSession: Boolean = false,
+        hasApprovalId: Boolean = false,
+        hasTool: Boolean = false,
+        replay: Boolean = false,
+        pendingCount: Int = 0,
+        selectedVisible: Boolean = false
+    ) {
+        emit(
+            Log.INFO,
+            "approval stage=$stage kind=${safeProtocolValue(frameKind)} hasRpc=$hasRpc " +
+                "hasSession=$hasSession hasApprovalId=$hasApprovalId hasTool=$hasTool " +
+                "replay=$replay pending=$pendingCount selectedVisible=$selectedVisible"
+        )
+    }
+
     fun lifecycle(event: GatewayLifecycleEvent, keepAlive: Boolean? = null) {
         emit(
             Log.INFO,
@@ -183,6 +202,7 @@ private val SAFE_PROTOCOL_VALUES = setOf(
     "save-default-model", "set-default", "models", "select-model", "permission-options", "permission",
     "context-usage", "session-stats", "directories", "directory-create", "workspace-create",
     "question-requested", "question-response", "question-resolved", "question-answer", "question-cancel",
+    "approval-requested", "approval-response", "approval-resolved",
     "error", "message", "unsubscribe", "subscribe", "transport", "pair", "decode", "gateway",
     "authentication-required", "policy-violation", "websocket-failure", "incoming-overflow",
     "incoming-message-too-large", "not-connected", "send-failed", "open-failed", "decode-failed",

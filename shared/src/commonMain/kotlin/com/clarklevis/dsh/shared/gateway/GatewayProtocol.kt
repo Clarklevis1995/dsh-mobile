@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.shared.gateway
 
 import com.clarklevis.dsh.shared.protocol.GatewayPairingPayload
+import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.encodeToString
@@ -267,6 +268,27 @@ object GatewayRequests {
             put("rpcId", rpcId)
             put("sessionId", sessionId)
         }
+
+    fun approvalResponse(
+        rpcId: String,
+        sessionId: String,
+        approvalId: String,
+        outcome: GatewayApprovalOutcome
+    ): GatewayRequest = request(
+        "approval-response",
+        "approval-response",
+        sessionId,
+        correlationId = rpcId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("rpcId", rpcId)
+        put("sessionId", sessionId)
+        put("approvalId", approvalId)
+        put("outcome", when (outcome) {
+            GatewayApprovalOutcome.ALLOWED_ONCE -> "allowed-once"
+            GatewayApprovalOutcome.REJECTED -> "rejected"
+        })
+    }
 
     private fun request(
         type: String,

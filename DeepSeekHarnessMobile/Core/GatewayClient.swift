@@ -223,6 +223,7 @@ final class GatewayClient: ObservableObject {
     }
 
     func subscribe(sessionId: String?) {
+        gatewayApprovalTrace("transport subscribe hasSession=\(sessionId?.isEmpty == false)")
         if let sessionId, !sessionId.isEmpty {
             send(["type": "subscribe", "sessionId": sessionId])
         } else {
@@ -290,6 +291,21 @@ final class GatewayClient: ObservableObject {
         ])
     }
 
+    func respondToApproval(
+        rpcId: String,
+        sessionId: String,
+        approvalId: String,
+        outcome: GatewayApprovalOutcome
+    ) {
+        send([
+            "type": "approval-response",
+            "rpcId": rpcId,
+            "sessionId": sessionId,
+            "approvalId": approvalId,
+            "outcome": outcome.rawValue
+        ])
+    }
+
     private func send(_ object: [String: Any]) {
         guard let socket else {
             state = .failed(String(localized: "state.websocket.not-connected", defaultValue: "WebSocket 尚未连接"))
@@ -323,6 +339,14 @@ final class GatewayClient: ObservableObject {
                     let frame = try await Task.detached(priority: .userInitiated) {
                         try GatewayWireDecoder.decode(data)
                     }.value
+                    if frame.kind.hasPrefix("approval") {
+                        gatewayApprovalTrace(
+                            "transport received kind=\(frame.kind) hasRpc=\(frame.rpcId?.isEmpty == false) " +
+                            "hasSession=\(frame.sessionId?.isEmpty == false) " +
+                            "hasApprovalId=\(frame.approvalId?.isEmpty == false) " +
+                            "hasTool=\(frame.toolName?.isEmpty == false) replay=\(frame.replay == true)"
+                        )
+                    }
                     if frame.kind == "paired" {
                         guard let endpoint, let token = frame.token, !token.isEmpty else {
                             fail(String(localized: "pairing.response.missing-token", defaultValue: "配对响应缺少长期设备 token，未保存凭据"), shouldReconnect: false)
