@@ -6,6 +6,7 @@ import android.util.Log
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.platform.GatewayTransportState
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 仅在 debuggable 构建中输出 Gateway 关键路径元数据。
@@ -16,11 +17,15 @@ internal class AndroidGatewayDiagnostics private constructor(
     private val enabled: Boolean,
     private val writer: (priority: Int, tag: String, message: String) -> Unit
 ) {
+    private val transportFrameCount = AtomicLong()
+    private val runtimeChunkCount = AtomicLong()
+
     fun intent(action: GatewayDiagnosticAction, hasSession: Boolean = false, imageCount: Int = 0) {
         emit(Log.INFO, "intent action=${action.wireName} hasSession=$hasSession imageCount=$imageCount")
     }
 
     fun transportOpening(generation: Long, hasBearer: Boolean, hasPairingCode: Boolean) {
+        transportFrameCount.set(0)
         val authentication = when {
             hasPairingCode -> "pairing"
             hasBearer -> "bearer"
@@ -34,7 +39,13 @@ internal class AndroidGatewayDiagnostics private constructor(
     }
 
     fun transportFrame(generation: Long, byteCount: Int) {
-        emit(Log.DEBUG, "transport frame generation=$generation bytes=$byteCount")
+        val count = transportFrameCount.incrementAndGet()
+        if (count == 1L || count % FRAME_LOG_SAMPLE_INTERVAL == 0L) {
+            emit(
+                Log.DEBUG,
+                "transport frame-sample generation=$generation count=$count bytes=$byteCount"
+            )
+        }
     }
 
     fun transportState(state: GatewayTransportState) {
@@ -64,8 +75,21 @@ internal class AndroidGatewayDiagnostics private constructor(
         when (event) {
             is GatewayRuntimeEvent.Frame -> {
                 priority = Log.DEBUG
-                message = "runtime frame kind=${safeProtocolValue(event.frame.kind)} " +
-                    "correlated=${event.correlatedSessionId != null}"
+                val eventType = event.frame.event?.type
+                if (eventType == "assistant/chunk") {
+                    val count = runtimeChunkCount.incrementAndGet()
+                    if (count != 1L && count % FRAME_LOG_SAMPLE_INTERVAL != 0L) return
+                    message = "runtime chunk-sample count=$count " +
+                        "correlated=${event.correlatedSessionId != null}"
+                } else {
+                    val chunks = when (eventType) {
+                        "turn/start" -> runtimeChunkCount.getAndSet(0)
+                        "turn/end" -> runtimeChunkCount.getAndSet(0)
+                        else -> runtimeChunkCount.get()
+                    }
+                    message = "runtime frame kind=${safeProtocolValue(event.frame.kind)} " +
+                        "correlated=${event.correlatedSessionId != null} chunks=$chunks"
+                }
             }
             is GatewayRuntimeEvent.AttachmentCached -> {
                 priority = Log.INFO
@@ -110,6 +134,7 @@ internal class AndroidGatewayDiagnostics private constructor(
 
     companion object {
         const val TAG = "DshGateway"
+        private const val FRAME_LOG_SAMPLE_INTERVAL = 128L
 
         fun forApplication(application: Application): AndroidGatewayDiagnostics = AndroidGatewayDiagnostics(
             enabled = application.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0,

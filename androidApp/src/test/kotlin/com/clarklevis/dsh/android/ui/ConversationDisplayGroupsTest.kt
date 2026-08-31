@@ -3,11 +3,19 @@ package com.clarklevis.dsh.android.ui
 import com.clarklevis.dsh.shared.projection.ConversationItem
 import com.clarklevis.dsh.shared.projection.ConversationItemKind
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ConversationDisplayGroupsTest {
+    @Test
+    fun `only provisional stream ids use lightweight text rendering`() {
+        assertTrue(isStreamingConversationItem(item("stream-text-1-1", ConversationItemKind.ASSISTANT)))
+        assertTrue(isStreamingConversationItem(item("stream-reason-1-1", ConversationItemKind.REASONING)))
+        assertFalse(isStreamingConversationItem(item("session-a-42", ConversationItemKind.ASSISTANT)))
+    }
+
     @Test
     fun consecutiveProcessEventsBecomeOneNestedGroup() {
         val entries = makeConversationDisplayEntries(

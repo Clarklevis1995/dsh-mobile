@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -70,10 +71,26 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
         val historyBefore = transport.sentTypes.count { it == "history" }
         onMain { holder.selectSession("android-demo") }
         waitUntil { transport.sentTypes.count { it == "history" } > historyBefore }
+        val initialHistoryRequest = transport.payloadsOfType("history").last()
+        assertEquals(60, initialHistoryRequest.getValue("maxMessages").jsonPrimitive.int)
+        assertEquals(4 * 1_024 * 1_024, initialHistoryRequest.getValue("maxBytes").jsonPrimitive.int)
+        assertEquals("conversation", initialHistoryRequest.getValue("view").jsonPrimitive.content)
         transport.receive(
-            """{"kind":"history","sessionId":"android-demo","events":[{"type":"user/message","seq":1,"time":1,"data":{"content":[{"type":"text","text":"product-history"}],"source":{"kind":"user"}}}],"hasMore":false,"bytes":64}"""
+            """{"kind":"history","sessionId":"android-demo","events":[{"type":"user/message","seq":1,"time":1,"data":{"content":[{"type":"text","text":"product-history"}],"source":{"kind":"user"}}}],"hasMore":true,"nextBeforeSeq":0,"bytes":64}"""
         )
         waitUntil { holder.snapshot.conversation.any { it.text == "product-history" } }
+        delay(100)
+        assertEquals(historyBefore + 1, transport.sentTypes.count { it == "history" })
+
+        onMain { holder.loadOlderHistory() }
+        waitUntil { transport.sentTypes.count { it == "history" } == historyBefore + 2 }
+        val olderHistoryRequest = transport.payloadsOfType("history").last()
+        assertEquals(1, olderHistoryRequest.getValue("beforeSeq").jsonPrimitive.int)
+        assertEquals("conversation", olderHistoryRequest.getValue("view").jsonPrimitive.content)
+        transport.receive(
+            """{"kind":"history","sessionId":"android-demo","events":[],"hasMore":false,"bytes":0}"""
+        )
+        waitUntil { !holder.snapshot.selectedHistoryIsLoading }
 
         assertTrue(graph.gatewayRuntime.requestHistory("android-demo"))
         waitUntil { transport.sentTypes.count { it == "history" } >= historyBefore + 2 }
@@ -85,9 +102,25 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
         assertTrue(graph.gatewayRuntime.requestHistory("android-demo"))
         waitUntil { transport.sentTypes.count { it == "history" } > beforeRetry }
 
+        val chunks = List(1_200) { "长" }
+        chunks.forEachIndexed { index, text ->
+            transport.receive(
+                """{"sessionId":"android-demo","seq":${index + 2},"time":${index + 2},"event":{"type":"assistant/chunk","turn":2,"step":1,"chunkType":"text-delta","text":"$text"}}"""
+            )
+        }
+        val finalText = chunks.joinToString("")
+        transport.receive(
+            """{"sessionId":"android-demo","seq":1202,"time":1202,"event":{"type":"assistant/message","turn":2,"step":1,"text":"$finalText"}}"""
+        )
+        waitUntil {
+            holder.snapshot.conversation.any { it.text == finalText } &&
+                holder.snapshot.conversation.none { it.id.startsWith("stream-") }
+        }
+        assertTrue(holder.snapshot.conversation.none { it.id.startsWith("stream-") })
+
         val png = tinyPng()
         transport.receive(
-            """{"sessionId":"android-demo","seq":100,"time":100,"event":{"type":"assistant/message","turn":2,"step":1,"text":"image","images":[{"attachmentId":"same-id","mediaType":"image/png","bytes":${png.size},"width":2,"height":2}]}}"""
+            """{"sessionId":"android-demo","seq":1300,"time":1300,"event":{"type":"assistant/message","turn":2,"step":1,"text":"image","images":[{"attachmentId":"same-id","mediaType":"image/png","bytes":${png.size},"width":2,"height":2}]}}"""
         )
         waitUntil { holder.snapshot.conversation.any { item -> item.images.any { it.attachmentId == "same-id" } } }
         onMain { holder.updateVisibleAttachments(setOf("same-id")) }
@@ -121,13 +154,17 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
 
     private class FakeTransport : GatewayTransport {
         private val mutableState = MutableStateFlow<GatewayTransportState>(GatewayTransportState.Closed())
-        private val mutableEvents = MutableSharedFlow<GatewayTransportEvent>(extraBufferCapacity = 64)
+        private val mutableEvents = MutableSharedFlow<GatewayTransportEvent>(extraBufferCapacity = 2_048)
         val specs = mutableListOf<GatewayConnectionSpec>()
         private val payloads = mutableListOf<String>()
         val sentTypes: List<String>
             get() = synchronized(payloads) {
                 payloads.map { Json.parseToJsonElement(it).jsonObject.getValue("type").jsonPrimitive.content }
             }
+        fun payloadsOfType(type: String) = synchronized(payloads) {
+            payloads.map { Json.parseToJsonElement(it).jsonObject }
+                .filter { it.getValue("type").jsonPrimitive.content == type }
+        }
         override val state: StateFlow<GatewayTransportState> = mutableState
         override val events: Flow<GatewayTransportEvent> = mutableEvents
 

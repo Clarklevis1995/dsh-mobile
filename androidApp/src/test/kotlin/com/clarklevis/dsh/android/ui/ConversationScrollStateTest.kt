@@ -68,6 +68,35 @@ class ConversationScrollStateTest {
     }
 
     @Test
+    fun `older history requires a real backward user scroll near the top`() {
+        assertFalse(
+            shouldLoadOlderHistory(
+                HistoryPagingGestureState(0, false, true, false)
+            )
+        )
+        assertFalse(
+            shouldLoadOlderHistory(
+                HistoryPagingGestureState(0, true, true, true)
+            )
+        )
+        assertFalse(
+            shouldLoadOlderHistory(
+                HistoryPagingGestureState(0, true, false, false)
+            )
+        )
+        assertFalse(
+            shouldLoadOlderHistory(
+                HistoryPagingGestureState(3, true, true, false)
+            )
+        )
+        assertTrue(
+            shouldLoadOlderHistory(
+                HistoryPagingGestureState(2, true, true, false)
+            )
+        )
+    }
+
+    @Test
     fun `initial history overlay only covers a cold baseline load`() {
         assertTrue(
             shouldShowInitialHistoryOverlay(

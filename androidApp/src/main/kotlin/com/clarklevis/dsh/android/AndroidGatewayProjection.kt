@@ -16,6 +16,7 @@ import com.clarklevis.dsh.shared.projection.TrajectoryProjection
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.SessionEvent
 import com.clarklevis.dsh.shared.sync.HistorySessionState
+import com.clarklevis.dsh.shared.sync.HistorySyncConfiguration
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -29,7 +30,9 @@ private val adapterJson = Json {
 /** Android 的 KMP MVI 适配器：history/live 水位与流式 patch 均由现有共享 Store 决定。 */
 internal class AndroidGatewayProjection(
     private val mobileStore: SharedMobileStore = SharedMobileStore(),
-    private val historyStore: SharedHistoryStore = SharedHistoryStore(),
+    private val historyStore: SharedHistoryStore = SharedHistoryStore(
+        HistorySyncConfiguration(pagesPerBatch = 1)
+    ),
     private val conversationStore: SharedConversationStore = SharedConversationStore(),
     private val onHistoryPageRequested: (sessionId: String, beforeSequence: Int?) -> Unit = { _, _ -> }
 ) {
@@ -68,14 +71,23 @@ internal class AndroidGatewayProjection(
     fun selectSession(sessionId: String?): SharedMobileSnapshot {
         controlSnapshot = mobileStore.selectSession(sessionId)
         if (sessionId == null) return snapshot()
+        startHistory(sessionId, older = false)
+        return snapshot()
+    }
+
+    fun loadHistory(sessionId: String, older: Boolean): SharedMobileSnapshot {
+        startHistory(sessionId, older)
+        return snapshot()
+    }
+
+    private fun startHistory(sessionId: String, older: Boolean) {
         val local = historyEvents[sessionId].orEmpty()
         historyStore.start(
             sessionId = sessionId,
-            older = false,
+            older = older,
             hasLocalEvents = local.isNotEmpty(),
             earliestLocalSequence = local.firstOrNull()?.seq
         )
-        return snapshot()
     }
 
     fun acceptFrame(rawJson: String, frame: GatewayFrame, correlatedSessionId: String?): SharedMobileSnapshot {
@@ -172,7 +184,12 @@ internal class AndroidGatewayProjection(
             lastError = "live-event-invalid"
             return
         }
-        controlSnapshot = mobileStore.acceptFrame(rawJson)
+        // ConversationStore 已经增量处理 token。旧 MobileStore 会为每个 chunk 复制全部
+        // SessionEvent 并从头重建 Conversation；长回复因此越到后面越慢。chunk 不会更新
+        // Session 列表元数据，禁止再进入这条兼容性全量投影路径。
+        if (gatewayEvent.type != "assistant/chunk") {
+            controlSnapshot = mobileStore.acceptFrame(rawJson)
+        }
         val record = SessionEvent(sessionId, sequence, timestamp, gatewayEvent)
         val recordJson = adapterJson.encodeToString(record)
         val historyResult = historyStore.liveEventReceived(recordJson)

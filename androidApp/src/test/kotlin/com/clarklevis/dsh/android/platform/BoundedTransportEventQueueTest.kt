@@ -15,7 +15,7 @@ import org.junit.Test
 class BoundedTransportEventQueueTest {
     @Test
     fun failureAndFramesShareOneDeterministicOrder() = runTest {
-        val queue = BoundedTransportEventQueue(maximumFrameCount = 2, maximumFrameBytes = 6)
+        val queue = BoundedTransportEventQueue(maximumFrameBytes = 6)
         assertTrue(queue.offerFrame(GatewayTransportFrame(1, "old", 3)))
         assertTrue(
             queue.offerState(
@@ -42,8 +42,24 @@ class BoundedTransportEventQueueTest {
     }
 
     @Test
-    fun callbackBurstHasAuditableOverflowAndStillDeliversFailureAfterAcceptedFrames() = runTest {
-        val queue = BoundedTransportEventQueue(maximumFrameCount = 32, maximumFrameBytes = 1_024)
+    fun manyTinyFramesAreBoundedByMemoryInsteadOfAnArbitraryFrameCount() = runTest {
+        val queue = BoundedTransportEventQueue(
+            maximumFrameBytes = 1_024L * 1_024,
+            frameOverheadBytes = 32
+        )
+        repeat(1_000) { index ->
+            assertTrue(queue.offerFrame(GatewayTransportFrame(9, "frame-$index", 32)))
+        }
+
+        val received = async { queue.events.take(1_000).toList() }.await()
+        assertEquals((0 until 1_000).map { "frame-$it" }, received.map {
+            (it as GatewayTransportEvent.Frame).value.text
+        })
+    }
+
+    @Test
+    fun byteOverflowIsAuditableAndStillDeliversFailureAfterAcceptedFrames() = runTest {
+        val queue = BoundedTransportEventQueue(maximumFrameBytes = 1_024)
         repeat(32) { index ->
             assertTrue(queue.offerFrame(GatewayTransportFrame(9, "frame-$index", 32)))
         }

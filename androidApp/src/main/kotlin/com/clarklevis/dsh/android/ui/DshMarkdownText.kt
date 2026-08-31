@@ -9,6 +9,7 @@ import android.util.TypedValue
 import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -17,6 +18,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
@@ -96,6 +98,29 @@ internal fun DshMarkdownText(
         },
         modifier = modifier.fillMaxWidth()
     )
+}
+
+/**
+ * 流式阶段不反复解析整篇 Markdown。最终 assistant/message 到达后 ID 会切换为
+ * 持久化事件 ID，再一次性使用 Markwon 渲染完整正文。
+ */
+@Composable
+internal fun DshStreamingAwareMarkdownText(
+    markdown: String,
+    isStreaming: Boolean,
+    modifier: Modifier = Modifier
+) {
+    if (isStreaming) {
+        Text(
+            text = markdown,
+            modifier = modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 16.sp,
+            lineHeight = 24.sp
+        )
+    } else {
+        DshMarkdownText(markdown, modifier)
+    }
 }
 
 internal fun buildDshMarkwon(

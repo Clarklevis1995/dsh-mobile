@@ -25,8 +25,8 @@ internal class OkHttpGatewayTransport(
     private val activeGeneration = AtomicLong()
     private val mutableState = MutableStateFlow<GatewayTransportState>(GatewayTransportState.Closed())
     private val eventQueue = BoundedTransportEventQueue(
-        maximumFrameCount = MAXIMUM_QUEUED_FRAME_COUNT,
-        maximumFrameBytes = MAXIMUM_QUEUED_BYTES
+        maximumFrameBytes = MAXIMUM_QUEUED_BYTES,
+        frameOverheadBytes = QUEUED_FRAME_OVERHEAD_BYTES
     )
     private val lock = Any()
     private var socket: WebSocket? = null
@@ -174,8 +174,11 @@ internal class OkHttpGatewayTransport(
         private const val MOBILE_PROTOCOL = "dsh-mobile-v1"
         private const val PAIR_PROTOCOL_PREFIX = "dsh-pair."
         internal const val MAXIMUM_INCOMING_MESSAGE_SIZE = 16 * 1_024 * 1_024
-        internal const val MAXIMUM_QUEUED_FRAME_COUNT = 8
+        // OkHttp 的 WebSocket 回调不能挂起，固定“帧数”上限会把大量小 token 误判为
+        // 内存溢出。与 iOS 的串行 receive loop 一样保持有序、不丢帧，仅用总字节预算
+        // 做硬保护；每帧额外计入对象/Channel 开销，避免微小帧绕过内存上限。
         internal const val MAXIMUM_QUEUED_BYTES = 24L * 1_024 * 1_024
+        internal const val QUEUED_FRAME_OVERHEAD_BYTES = 512L
         private const val NORMAL_CLOSURE = 1000
         private const val POLICY_VIOLATION = 1008
         private const val MESSAGE_TOO_BIG = 1009

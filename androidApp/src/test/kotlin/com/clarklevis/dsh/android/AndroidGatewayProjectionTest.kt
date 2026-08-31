@@ -9,6 +9,44 @@ import org.junit.Test
 
 class AndroidGatewayProjectionTest {
     @Test
+    fun assistantChunkBypassesLegacyFullConversationProjection() {
+        val projection = AndroidGatewayProjection()
+        projection.selectSession("session-a")
+        val chunk = GatewayWireDecoder.decode(
+            """{"sessionId":"session-a","seq":1,"time":100,"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"text-delta","text":"增量"}}"""
+        )
+
+        // rawJson 只供旧 MobileStore 使用；chunk 应完全由增量 Store 消费。
+        projection.acceptFrame("not-json", chunk, "session-a")
+
+        assertEquals("增量", projection.snapshot().conversation.single().text)
+        assertEquals(null, projection.snapshot().lastError)
+        projection.close()
+    }
+
+    @Test
+    fun burstOfTinyChunksKeepsExactTextWithoutFallingBackToFullReprojection() {
+        val projection = AndroidGatewayProjection()
+        projection.selectSession("session-a")
+        val expected = buildString {
+            repeat(1_200) { index ->
+                val delta = ('a'.code + index % 26).toChar().toString()
+                append(delta)
+                val raw =
+                    """{"sessionId":"session-a","seq":${index + 1},"time":${index + 1},"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"text-delta","text":"$delta"}}"""
+                projection.acceptFrame(raw, GatewayWireDecoder.decode(raw), "session-a")
+            }
+        }
+        val finalRaw =
+            """{"sessionId":"session-a","seq":1201,"time":1201,"event":{"type":"assistant/message","turn":1,"step":1,"text":"$expected"}}"""
+        projection.acceptFrame(finalRaw, GatewayWireDecoder.decode(finalRaw), "session-a")
+
+        assertEquals(expected, projection.snapshot().conversation.single().text)
+        assertTrue(projection.snapshot().conversation.none { it.id.startsWith("stream-") })
+        projection.close()
+    }
+
+    @Test
     fun newSessionSentResponseBindsLiveConversationWithoutLeavingTheScreen() {
         val projection = AndroidGatewayProjection()
         projection.selectSession(null)
@@ -42,7 +80,10 @@ class AndroidGatewayProjectionTest {
             """{"kind":"history","events":[{"type":"user/message","seq":1,"time":100,"data":{"content":[{"type":"text","text":"history-a"}],"source":{"kind":"user"}}}],"hasMore":true,"nextBeforeSeq":0,"bytes":128}"""
         projection.acceptFrame(history, GatewayWireDecoder.decode(history), "session-a")
         assertTrue(projection.snapshot().conversation.isEmpty())
-        assertEquals("session-a" to 0, requested.last())
+        assertEquals(listOf("session-a" to null, "session-b" to null), requested)
+
+        projection.loadHistory("session-a", older = true)
+        assertEquals("session-a" to 1, requested.last())
         val older = """{"kind":"history","events":[],"hasMore":false,"bytes":0}"""
         projection.acceptFrame(older, GatewayWireDecoder.decode(older), "session-a")
 
@@ -80,7 +121,7 @@ class AndroidGatewayProjectionTest {
     }
 
     @Test
-    fun initialHistoryProgressPublishesUntilTheFinalPageCompletes() {
+    fun initialHistoryStopsAfterOnePageAndLeavesOlderPagesForUserScroll() {
         val projection = AndroidGatewayProjection()
         projection.selectSession("session-a")
         assertTrue(projection.snapshot().selectedHistoryIsLoading)
@@ -90,10 +131,12 @@ class AndroidGatewayProjectionTest {
         val firstPage =
             """{"kind":"history","events":[{"type":"user/message","seq":1,"time":100,"data":{"content":[{"type":"text","text":"history"}],"source":{"kind":"user"}}}],"hasMore":true,"nextBeforeSeq":0,"bytes":64}"""
         projection.acceptFrame(firstPage, GatewayWireDecoder.decode(firstPage), "session-a")
-        assertTrue(projection.snapshot().selectedHistoryIsLoading)
-        assertEquals(1, projection.snapshot().selectedHistoryLoadedEventCount)
-        assertEquals(null, projection.snapshot().selectedHistoryTotalEventCount)
+        assertFalse(projection.snapshot().selectedHistoryIsLoading)
+        assertTrue(projection.snapshot().selectedHistoryHasMore)
+        assertEquals(1, projection.snapshot().selectedHistoryEarliestSequence)
 
+        projection.loadHistory("session-a", older = true)
+        assertTrue(projection.snapshot().selectedHistoryIsLoadingOlder)
         val finalPage = """{"kind":"history","events":[],"hasMore":false,"bytes":0}"""
         projection.acceptFrame(finalPage, GatewayWireDecoder.decode(finalPage), "session-a")
         assertFalse(projection.snapshot().selectedHistoryIsLoading)

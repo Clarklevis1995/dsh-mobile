@@ -74,10 +74,12 @@ class AndroidSharedStateHolderTest {
         holder.applyMessageSendResult(false)
         assertEquals("keep me", holder.messageDraft)
         assertEquals(1, holder.preparedImages.size)
+        assertEquals(0L, holder.successfulMessageSendCount)
 
         holder.applyMessageSendResult(true)
         assertEquals("", holder.messageDraft)
         assertEquals(0, holder.preparedImages.size)
+        assertEquals(1L, holder.successfulMessageSendCount)
     }
 
     @Test
@@ -107,6 +109,7 @@ class AndroidSharedStateHolderTest {
 
         assertEquals("new draft", holder.messageDraft)
         assertEquals(listOf(newImage), holder.preparedImages)
+        assertEquals(0L, holder.successfulMessageSendCount)
         assertEquals("original draft", submission.draft)
         assertEquals(listOf(originalImage), submission.images)
     }

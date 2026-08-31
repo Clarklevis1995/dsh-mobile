@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,6 +43,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -84,6 +88,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
@@ -91,10 +96,13 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
@@ -151,6 +159,14 @@ internal fun ConversationScreen(
         ?.name
     val pagerState = rememberPagerState(pageCount = { 2 })
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val dismissInput: () -> Unit = remember(focusManager, keyboardController) {
+        {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+        }
+    }
     var showStats by remember { mutableStateOf(false) }
     LaunchedEffect(stateHolder.snapshot.selectedSessionId) { stateHolder.refreshSessionControls() }
     LaunchedEffect(pagerState.currentPage) { stateHolder.setTrajectoryActive(pagerState.currentPage == 1) }
@@ -169,7 +185,10 @@ internal fun ConversationScreen(
                     TopBarCircleButton(
                         iconRes = R.drawable.ic_back_chevron,
                         description = "返回",
-                        onClick = onBack,
+                        onClick = {
+                            dismissInput()
+                            onBack()
+                        },
                         modifier = Modifier.padding(start = 8.dp, end = 14.dp)
                     )
                 },
@@ -204,7 +223,10 @@ internal fun ConversationScreen(
                 .padding(padding)
                 .consumeWindowInsets(padding)
         ) {
-            SegmentedControl(pagerState.currentPage) { target -> scope.launch { pagerState.animateScrollToPage(target) } }
+            SegmentedControl(pagerState.currentPage) { target ->
+                dismissInput()
+                scope.launch { pagerState.animateScrollToPage(target) }
+            }
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize(),
@@ -214,7 +236,8 @@ internal fun ConversationScreen(
                     ConversationPage(
                         stateHolder = stateHolder,
                         onPickImage = onPickImage,
-                        onShowFullStats = { showStats = true }
+                        onShowFullStats = { showStats = true },
+                        onDismissInput = dismissInput
                     )
                 }
                 else TrajectoryPage(
@@ -387,11 +410,13 @@ private fun SegmentedControl(selected: Int, onSelect: (Int) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ConversationPage(
     stateHolder: AndroidSharedStateHolder,
     onPickImage: () -> Unit,
-    onShowFullStats: () -> Unit
+    onShowFullStats: () -> Unit,
+    onDismissInput: () -> Unit
 ) {
     val density = LocalDensity.current
     val sessionId = stateHolder.snapshot.selectedSessionId
@@ -399,6 +424,10 @@ private fun ConversationPage(
     var imagePreview by remember(sessionId) { mutableStateOf<ConversationImagePreviewRequest?>(null) }
     var isPinnedToBottom by remember(sessionId) { mutableStateOf(true) }
     var scrollToBottomToken by remember(sessionId) { mutableIntStateOf(0) }
+    val imeIsVisible = WindowInsets.isImeVisible
+    LaunchedEffect(imeIsVisible, sessionId) {
+        if (imeIsVisible) scrollToBottomToken += 1
+    }
     val isColdHistoryLoad = stateHolder.snapshot.selectedHistoryIsLoading &&
         !stateHolder.snapshot.selectedHistoryIsLoadingOlder &&
         stateHolder.snapshot.conversation.isEmpty()
@@ -416,6 +445,7 @@ private fun ConversationPage(
                 bottomContentHeight = bottomContentHeight,
                 scrollToBottomToken = scrollToBottomToken,
                 onPinnedToBottomChanged = { isPinnedToBottom = it },
+                onUserInteraction = onDismissInput,
                 onPreviewImages = { attachments, initialIndex ->
                     imagePreview = ConversationImagePreviewRequest(attachments, initialIndex)
                 }
@@ -449,10 +479,10 @@ private fun ConversationPage(
         Column(
             Modifier
                 .align(Alignment.BottomCenter)
+                .imePadding()
                 .onSizeChanged { size ->
                     bottomContentHeight = with(density) { size.height.toDp() }
                 }
-                .imePadding()
                 .navigationBarsPadding()
         ) {
             AnimatedVisibility(
@@ -485,7 +515,7 @@ private fun ConversationPage(
                     onCancel = { stateHolder.cancelQuestion(question.rpcId, question.sessionId) }
                 )
             } else {
-                Composer(stateHolder, onPickImage)
+                Composer(stateHolder, onPickImage, onDismissInput)
             }
         }
     }
@@ -578,6 +608,7 @@ private fun ConversationTimeline(
     bottomContentHeight: Dp,
     scrollToBottomToken: Int,
     onPinnedToBottomChanged: (Boolean) -> Unit,
+    onUserInteraction: () -> Unit,
     onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit
 ) {
     val items = stateHolder.snapshot.conversation
@@ -619,11 +650,20 @@ private fun ConversationTimeline(
             }
         }
     }
-    LaunchedEffect(displayEntries.size, items.lastOrNull()?.text?.length, initialPositionApplied) {
+    val hasStreamingItem = items.any(::isStreamingConversationItem)
+    LaunchedEffect(
+        displayEntries.size,
+        items.lastOrNull()?.text?.length,
+        initialPositionApplied,
+        hasStreamingItem
+    ) {
         if (initialPositionApplied && isPinnedToBottom && displayEntries.isNotEmpty()) {
             programmaticScrollCount += 1
             try {
-                listState.scrollToTimelineBottom(lastTimelineIndex, animated = true)
+                listState.scrollToTimelineBottom(
+                    lastTimelineIndex,
+                    animated = !hasStreamingItem
+                )
             } finally {
                 programmaticScrollCount -= 1
             }
@@ -661,20 +701,44 @@ private fun ConversationTimeline(
     }
     LaunchedEffect(listState, stateHolder.snapshot.selectedHistoryHasMore, initialPositionApplied) {
         if (!initialPositionApplied) return@LaunchedEffect
-        snapshotFlow { listState.firstVisibleItemIndex }
+        snapshotFlow {
+            HistoryPagingGestureState(
+                firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                isScrollInProgress = listState.isScrollInProgress,
+                lastScrolledBackward = listState.lastScrolledBackward,
+                isProgrammaticScroll = programmaticScrollCount > 0
+            )
+        }
             .distinctUntilChanged()
-            .collect { index ->
-                if (index <= 2 && stateHolder.snapshot.selectedHistoryHasMore) {
+            .collect { gesture ->
+                if (
+                    shouldLoadOlderHistory(gesture) &&
+                    stateHolder.snapshot.selectedHistoryHasMore
+                ) {
                     stateHolder.loadOlderHistory()
                 }
             }
     }
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .testTag("conversation-timeline")
+            .pointerInput(onUserInteraction) {
+                awaitEachGesture {
+                    awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial
+                    )
+                    onUserInteraction()
+                }
+            }
+    ) {
         if (items.isEmpty()) EmptyConversation(Modifier.align(Alignment.Center).padding(bottom = 150.dp))
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
+                .imePadding()
                 .padding(horizontal = 20.dp)
                 .alpha(if (hasInitialContent && !initialPositionApplied) 0f else 1f),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -706,6 +770,19 @@ private fun ConversationTimeline(
         }
     }
 }
+
+internal data class HistoryPagingGestureState(
+    val firstVisibleItemIndex: Int,
+    val isScrollInProgress: Boolean,
+    val lastScrolledBackward: Boolean,
+    val isProgrammaticScroll: Boolean
+)
+
+internal fun shouldLoadOlderHistory(gesture: HistoryPagingGestureState): Boolean =
+    gesture.firstVisibleItemIndex <= 2 &&
+        gesture.isScrollInProgress &&
+        gesture.lastScrolledBackward &&
+        !gesture.isProgrammaticScroll
 
 private fun androidx.compose.foundation.lazy.LazyListState.isPinnedToBottom(): Boolean {
     return isTimelinePinnedToBottom(
@@ -822,12 +899,30 @@ private fun EmptyConversation(modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Composer(stateHolder: AndroidSharedStateHolder, onPickImage: () -> Unit) {
+private fun Composer(
+    stateHolder: AndroidSharedStateHolder,
+    onPickImage: () -> Unit,
+    onDismissInput: () -> Unit
+) {
     val shape = RoundedCornerShape(24.dp)
     val isDark = isSystemInDarkTheme()
     val shadowColor = dshFloatingSurfaceShadow(isDark)
     val glassEdge = dshGlassEdge(isDark)
     val composerHasContent = stateHolder.messageDraft.trim().isNotEmpty() || stateHolder.preparedImages.isNotEmpty()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var inputIsFocused by remember { mutableStateOf(false) }
+    var observedSuccessfulSendCount by remember(stateHolder) {
+        mutableStateOf(stateHolder.successfulMessageSendCount)
+    }
+    LaunchedEffect(inputIsFocused) {
+        if (inputIsFocused) keyboardController?.show() else keyboardController?.hide()
+    }
+    LaunchedEffect(stateHolder.successfulMessageSendCount) {
+        if (stateHolder.successfulMessageSendCount > observedSuccessfulSendCount) {
+            observedSuccessfulSendCount = stateHolder.successfulMessageSendCount
+            onDismissInput()
+        }
+    }
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)
             .dropShadow(
@@ -872,6 +967,7 @@ private fun Composer(stateHolder: AndroidSharedStateHolder, onPickImage: () -> U
                     .fillMaxWidth()
                     .padding(horizontal = 3.dp)
                     .heightIn(min = 38.dp, max = 120.dp)
+                    .onFocusChanged { inputIsFocused = it.isFocused }
                     .testTag("composer-input"),
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(DshColors.Ocean),
@@ -1826,7 +1922,13 @@ private fun AssistantMessage(
             Text(item.title, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         }
         AttachmentGrid(item.images, thumbnails, states, onRetry)
-        if (item.text.isNotEmpty()) MarkdownLikeText(item.text)
+        if (item.text.isNotEmpty()) {
+            DshStreamingAwareMarkdownText(
+                markdown = item.text,
+                isStreaming = isStreamingConversationItem(item),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         CopyButton(item.text)
     }
 }
@@ -1929,6 +2031,9 @@ private fun CopyButton(text: String) {
 private fun MarkdownLikeText(text: String) {
     DshMarkdownText(text, Modifier.fillMaxWidth())
 }
+
+internal fun isStreamingConversationItem(item: ConversationItem): Boolean =
+    item.id.startsWith("stream-")
 
 @Composable
 private fun SmallConnectionDot(state: GatewayConnectionState) {

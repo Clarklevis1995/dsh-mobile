@@ -3,6 +3,7 @@ package com.clarklevis.dsh.android
 import android.net.Uri
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
@@ -32,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -49,16 +51,18 @@ class AndroidSharedStateHolder(
                     appGraph.gatewayRuntime.requestHistory(
                         sessionId = sessionId,
                         beforeSequence = beforeSequence,
-                        maxMessages = 50,
-                        maxBytes = 4 * 1_024 * 1_024,
-                        view = "mobile"
+                        maxMessages = HISTORY_PAGE_MESSAGE_LIMIT,
+                        maxBytes = HISTORY_PAGE_BYTE_BUDGET,
+                        view = HISTORY_VIEW
                     )
                 }
             }
         },
         uiDispatcher = if (graph == null) Dispatchers.Unconfined else Dispatchers.Main.immediate,
-        publish = { snapshot = it }
+        publish = ::publishProjectionSnapshot
     )
+    private var pendingStreamingSnapshot: SharedMobileSnapshot? = null
+    private var streamingSnapshotPublishJob: Job? = null
     private val attachmentQueue = ArrayDeque<AttachmentRequest>()
     private var activeAttachment: AttachmentRequest? = null
     private var visibleAttachmentKeys: Set<String> = emptySet()
@@ -132,6 +136,8 @@ class AndroidSharedStateHolder(
         private set
     var platformError: String? by mutableStateOf(null)
         private set
+    var successfulMessageSendCount: Long by mutableLongStateOf(0L)
+        private set
     var defaultConfigurationLoadingKinds: Set<String> by mutableStateOf(emptySet())
         private set
     var agentPresetsAuthorable: Boolean by mutableStateOf(false)
@@ -183,33 +189,48 @@ class AndroidSharedStateHolder(
                         appGraph.diagnostics.runtimeEvent(event)
                         when (event) {
                             is GatewayRuntimeEvent.Frame -> {
-                                projectionActor.acceptFrame(
-                                    event.rawJson,
-                                    event.frame,
-                                    event.correlatedSessionId
-                                ) {
-                                    pruneAttachmentStateForSession()
-                                    handleWorkspaceFrame(event.frame)
-                                    if (event.frame.kind == "history") {
-                                        event.correlatedSessionId?.let { sessionId ->
-                                            historyPagingSessionIds = historyPagingSessionIds - sessionId
+                                val isStreamingChunk = event.frame.kind == "event" &&
+                                    event.frame.event?.type == "assistant/chunk"
+                                val streamingProjectionFlushed = if (isStreamingChunk) {
+                                    projectionActor.acceptStreamingFrame(
+                                        event.rawJson,
+                                        event.frame,
+                                        event.correlatedSessionId
+                                    )
+                                } else {
+                                    projectionActor.acceptFrame(
+                                        event.rawJson,
+                                        event.frame,
+                                        event.correlatedSessionId
+                                    ) {
+                                        pruneAttachmentStateForSession()
+                                        handleWorkspaceFrame(event.frame)
+                                        if (event.frame.kind == "history") {
+                                            event.correlatedSessionId?.let { sessionId ->
+                                                historyPagingSessionIds = historyPagingSessionIds - sessionId
+                                            }
+                                        }
+                                    }
+                                    false
+                                }
+                                if (!isStreamingChunk) {
+                                    withContext(Dispatchers.Main.immediate) {
+                                        defaultConfigurationLoadingKinds =
+                                            defaultConfigurationLoadingKinds - event.frame.kind
+                                        if (event.frame.kind == "agent-presets") {
+                                            agentPresetsAuthorable = event.frame.authorable == true
+                                            agentPresetsHasDocument = event.frame.hasDocument == true
+                                        }
+                                    }
+                                    if (event.frame.kind == "sent") {
+                                        event.frame.sessionId?.takeIf(String::isNotBlank)?.let { sessionId ->
+                                            handleSentSession(appGraph, sessionId)
                                         }
                                     }
                                 }
-                                withContext(Dispatchers.Main.immediate) {
-                                    defaultConfigurationLoadingKinds =
-                                        defaultConfigurationLoadingKinds - event.frame.kind
-                                    if (event.frame.kind == "agent-presets") {
-                                        agentPresetsAuthorable = event.frame.authorable == true
-                                        agentPresetsHasDocument = event.frame.hasDocument == true
-                                    }
+                                if (trajectoryIsActive && (!isStreamingChunk || streamingProjectionFlushed)) {
+                                    publishTrajectory()
                                 }
-                                if (event.frame.kind == "sent") {
-                                    event.frame.sessionId?.takeIf(String::isNotBlank)?.let { sessionId ->
-                                        handleSentSession(appGraph, sessionId)
-                                    }
-                                }
-                                if (trajectoryIsActive) publishTrajectory()
                             }
                             is GatewayRuntimeEvent.AttachmentCached -> withContext(Dispatchers.Main.immediate) {
                                 attachmentCompleted(event.sessionId, event.attachmentId)
@@ -219,6 +240,11 @@ class AndroidSharedStateHolder(
                                 withContext(Dispatchers.Main.immediate) {
                                     defaultConfigurationLoadingKinds =
                                         defaultConfigurationLoadingKinds - event.requestType
+                                    if (event.requestType == "history") {
+                                        event.targetSessionId?.let {
+                                            historyPagingSessionIds = historyPagingSessionIds - it
+                                        }
+                                    }
                                 }
                                 event.targetSessionId?.takeIf { event.requestType == "history" }
                                     ?.let { projectionActor.historyCancelled(it) }
@@ -233,6 +259,11 @@ class AndroidSharedStateHolder(
                                     defaultConfigurationLoadingKinds =
                                         defaultConfigurationLoadingKinds - event.requestType
                                     clearWorkspaceRequestLoading(event.requestType)
+                                    if (event.requestType == "history") {
+                                        event.targetSessionId?.let {
+                                            historyPagingSessionIds = historyPagingSessionIds - it
+                                        }
+                                    }
                                 }
                                 event.targetSessionId?.takeIf { event.requestType == "history" }
                                     ?.let { projectionActor.historyTimedOut(it) }
@@ -248,6 +279,11 @@ class AndroidSharedStateHolder(
                                         defaultConfigurationLoadingKinds - event.requestType
                                     clearWorkspaceRequestLoading(event.requestType)
                                     platformError = "${event.requestType}: ${event.reason}"
+                                    if (event.requestType == "history") {
+                                        event.targetSessionId?.let {
+                                            historyPagingSessionIds = historyPagingSessionIds - it
+                                        }
+                                    }
                                 }
                                 event.targetSessionId?.takeIf { event.requestType == "history" }
                                     ?.let { projectionActor.historyCancelled(it) }
@@ -506,13 +542,7 @@ class AndroidSharedStateHolder(
         val appGraph = graph ?: return
         if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
         appGraph.gatewayScope.launch {
-            appGraph.gatewayRuntime.requestHistory(
-                sessionId = sessionId,
-                beforeSequence = null,
-                maxMessages = 50,
-                maxBytes = 4 * 1_024 * 1_024,
-                view = "mobile"
-            )
+            projectionActor.loadHistory(sessionId, older = false)
         }
     }
 
@@ -528,21 +558,16 @@ class AndroidSharedStateHolder(
 
     fun loadOlderHistory() {
         val sessionId = snapshot.selectedSessionId ?: return
-        val before = snapshot.selectedHistoryEarliestSequence ?: return
-        if (!snapshot.selectedHistoryHasMore || sessionId in historyPagingSessionIds) return
+        snapshot.selectedHistoryEarliestSequence ?: return
+        if (
+            !snapshot.selectedHistoryHasMore ||
+            snapshot.selectedHistoryIsLoading ||
+            sessionId in historyPagingSessionIds
+        ) return
         val appGraph = graph ?: return
         historyPagingSessionIds = historyPagingSessionIds + sessionId
         appGraph.gatewayScope.launch {
-            val accepted = appGraph.gatewayRuntime.requestHistory(
-                sessionId = sessionId,
-                beforeSequence = before,
-                maxMessages = 50,
-                maxBytes = 4 * 1_024 * 1_024,
-                view = "mobile"
-            )
-            if (!accepted) withContext(Dispatchers.Main.immediate) {
-                historyPagingSessionIds = historyPagingSessionIds - sessionId
-            }
+            projectionActor.loadHistory(sessionId, older = true)
         }
     }
 
@@ -790,6 +815,7 @@ class AndroidSharedStateHolder(
         }
         messageDraft = ""
         preparedImages = emptyList()
+        successfulMessageSendCount += 1
     }
 
     internal fun setPreparedImagesForTest(images: List<AndroidPreparedImage>) {
@@ -872,6 +898,7 @@ class AndroidSharedStateHolder(
     }
 
     fun close() {
+        streamingSnapshotPublishJob?.cancel()
         projectionActor.close()
         runtimeCollection?.cancel()
         scope?.cancel()
@@ -880,6 +907,33 @@ class AndroidSharedStateHolder(
     val canSend: Boolean
         get() = gatewayState.connection == GatewayConnectionState.CONNECTED &&
             (messageDraft.isNotBlank() || preparedImages.isNotEmpty())
+
+    /**
+     * KMP 继续无损消费每个 token；Compose 只按稳定显示节奏接收最新快照。
+     * 仅 assistant/chunk 可以合并；final、history、切换 session 等结构变化立即提交。
+     */
+    private fun publishProjectionSnapshot(
+        next: SharedMobileSnapshot,
+        coalesceWithDisplayFrame: Boolean
+    ) {
+        val holderScope = scope
+        if (holderScope == null || !coalesceWithDisplayFrame) {
+            pendingStreamingSnapshot = null
+            streamingSnapshotPublishJob?.cancel()
+            streamingSnapshotPublishJob = null
+            snapshot = next
+            return
+        }
+
+        pendingStreamingSnapshot = next
+        if (streamingSnapshotPublishJob?.isActive == true) return
+        streamingSnapshotPublishJob = holderScope.launch {
+            delay(STREAMING_SNAPSHOT_INTERVAL_MILLISECONDS)
+            pendingStreamingSnapshot?.let { snapshot = it }
+            pendingStreamingSnapshot = null
+            streamingSnapshotPublishJob = null
+        }
+    }
 
     private fun handleWorkspaceFrame(frame: GatewayFrame) {
         when (frame.kind) {
@@ -1106,6 +1160,10 @@ class AndroidSharedStateHolder(
     )
 
     companion object {
+        private const val STREAMING_SNAPSHOT_INTERVAL_MILLISECONDS = 32L
+        private const val HISTORY_PAGE_MESSAGE_LIMIT = 60
+        private const val HISTORY_PAGE_BYTE_BUDGET = 4 * 1_024 * 1_024
+        private const val HISTORY_VIEW = "conversation"
         const val UNGROUPED_WORKSPACE_ID = "__ungrouped__"
 
         private val WORKSPACE_REQUEST_TYPES = setOf(
