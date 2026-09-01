@@ -170,6 +170,7 @@ internal fun ConversationScreen(
         }
     }
     var showStats by remember { mutableStateOf(false) }
+    var showWorkspaceFiles by remember { mutableStateOf(false) }
     LaunchedEffect(stateHolder.snapshot.selectedSessionId) { stateHolder.refreshSessionControls() }
     LaunchedEffect(pagerState.currentPage) { stateHolder.setTrajectoryActive(pagerState.currentPage == 1) }
     DisposableEffect(stateHolder) {
@@ -207,9 +208,13 @@ internal fun ConversationScreen(
                             fontSize = 12.sp
                         )
                         ConversationMoreMenu(
+                            canBrowseFiles = stateHolder.snapshot.selectedSessionId != null &&
+                                stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED &&
+                                "file-downloads" in stateHolder.gatewayState.capabilities,
                             canReloadHistory = stateHolder.snapshot.selectedSessionId != null &&
                                 stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED,
                             canPing = stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED,
+                            onBrowseFiles = { showWorkspaceFiles = true },
                             onReloadHistory = stateHolder::reloadSelectedHistory,
                             onPing = stateHolder::pingGateway
                         )
@@ -251,6 +256,9 @@ internal fun ConversationScreen(
     }
     if (showStats) {
         SessionStatsSheet(stateHolder.snapshot.statsSnapshot) { showStats = false }
+    }
+    if (showWorkspaceFiles) {
+        WorkspaceFilesBottomSheet(stateHolder) { showWorkspaceFiles = false }
     }
 }
 
@@ -296,8 +304,10 @@ internal fun TopBarCircleButton(
 
 @Composable
 internal fun ConversationMoreMenu(
+    canBrowseFiles: Boolean,
     canReloadHistory: Boolean,
     canPing: Boolean,
+    onBrowseFiles: () -> Unit,
     onReloadHistory: () -> Unit,
     onPing: () -> Unit
 ) {
@@ -322,6 +332,14 @@ internal fun ConversationMoreMenu(
                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.055f)
             )
         ) {
+            ConversationMoreMenuItem(
+                title = "工作区文件",
+                iconRes = R.drawable.ic_folder_outline,
+                enabled = canBrowseFiles
+            ) {
+                expanded = false
+                onBrowseFiles()
+            }
             ConversationMoreMenuItem(
                 title = "重新加载历史",
                 iconRes = R.drawable.ic_history_reload,

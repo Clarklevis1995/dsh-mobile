@@ -306,6 +306,18 @@ final class GatewayClient: ObservableObject {
         ])
     }
 
+    /// KMP 文件状态机已经生成并校验过的协议请求。平台 transport 只负责发送。
+    func sendRequestPayload(_ payload: String) {
+        guard let socket else {
+            state = .failed(String(localized: "state.websocket.not-connected", defaultValue: "WebSocket 尚未连接"))
+            return
+        }
+        Task {
+            do { try await socket.send(.string(payload)) }
+            catch { handleFailure(error, socket: socket) }
+        }
+    }
+
     private func send(_ object: [String: Any]) {
         guard let socket else {
             state = .failed(String(localized: "state.websocket.not-connected", defaultValue: "WebSocket 尚未连接"))

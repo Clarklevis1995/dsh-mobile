@@ -195,6 +195,53 @@ object GatewayRequests {
             put("attachmentId", attachmentId)
         }
 
+    fun fileList(sessionId: String, path: String?, requestId: String): GatewayRequest = request(
+        "file-list",
+        "file-list",
+        targetSessionId = sessionId,
+        correlationId = requestId,
+        lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST
+    ) {
+        put("requestId", requestId)
+        put("sessionId", sessionId)
+        path?.takeIf(String::isNotBlank)?.let { put("path", it) }
+    }
+
+    fun fileDownloadOpen(
+        sessionId: String,
+        path: String,
+        requestId: String
+    ): GatewayRequest = request(
+        "file-download-open",
+        "file-download-opened",
+        targetSessionId = sessionId,
+        correlationId = requestId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("requestId", requestId)
+        put("sessionId", sessionId)
+        put("path", path)
+    }
+
+    fun fileDownloadRead(transferId: String, offset: Long): GatewayRequest = request(
+        "file-download-read",
+        "file-download-chunk",
+        correlationId = transferId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("transferId", transferId)
+        put("offset", offset)
+    }
+
+    fun fileDownloadCancel(transferId: String): GatewayRequest = request(
+        "file-download-cancel",
+        "file-download-cancelled",
+        correlationId = transferId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("transferId", transferId)
+    }
+
     fun subscribe(sessionId: String?): GatewayRequest = if (sessionId.isNullOrBlank()) {
         request("unsubscribe", "subscribed", lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST)
     } else {

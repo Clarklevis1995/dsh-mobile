@@ -474,6 +474,8 @@ class SharedMobileFacade {
 
     fun makeHistoryStore(): SharedHistoryStore = SharedHistoryStore()
 
+    fun makeWorkspaceFileStore(): SharedWorkspaceFileStore = SharedWorkspaceFileStore()
+
     fun makeConversationStore(
         userMessage: String,
         context: String,

@@ -40,6 +40,15 @@ data class GatewayFrame(
     val attachedSessions: Int? = null,
     val canOpenPath: Boolean? = null,
     val path: String? = null,
+    val requestId: String? = null,
+    val transferId: String? = null,
+    val name: String? = null,
+    val mediaType: String? = null,
+    val size: Long? = null,
+    val chunkBytes: Int? = null,
+    val offset: Long? = null,
+    val eof: Boolean? = null,
+    val sha256: String? = null,
     val home: String? = null,
     val crumbs: List<GatewayDirectoryItem>? = null,
     val entries: List<GatewayDirectoryItem>? = null,
@@ -205,7 +214,16 @@ data class GatewaySessionSummary(
 }
 
 @Serializable data class GatewaySearchItem(val sessionId: String, val snippet: String)
-@Serializable data class GatewayDirectoryItem(val name: String, val path: String, val hidden: Boolean)
+@Serializable
+data class GatewayDirectoryItem(
+    val name: String,
+    val path: String,
+    val hidden: Boolean = false,
+    val kind: String? = null,
+    val bytes: Long? = null,
+    val modifiedAt: Double? = null,
+    val mediaType: String? = null
+)
 
 @Serializable
 data class GatewayHostSnapshot(

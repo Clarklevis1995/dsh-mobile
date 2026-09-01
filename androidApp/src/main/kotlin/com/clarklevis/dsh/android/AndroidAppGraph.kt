@@ -25,7 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 class AndroidAppGraph(
-    application: Application,
+    val application: Application,
     transportOverride: GatewayTransport? = null,
     preferencesOverride: GatewayPreferences? = null,
     credentialStoreOverride: GatewayCredentialStore? = null,

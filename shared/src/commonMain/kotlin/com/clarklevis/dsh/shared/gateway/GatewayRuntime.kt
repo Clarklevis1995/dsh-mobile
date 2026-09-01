@@ -598,16 +598,20 @@ class GatewayRuntime(
         when (request.responseKind) {
             "attachment" -> request.correlationId == frame.attachment?.attachmentId
             "question-response", "approval-response" -> request.correlationId == frame.rpcId
+            "file-list", "file-download-opened" -> request.correlationId == frame.requestId
+            "file-download-chunk", "file-download-cancelled" -> request.correlationId == frame.transferId
             else -> true
         }
 
     private fun responseCorrelation(frame: GatewayFrame): String? =
-        frame.attachment?.attachmentId ?: frame.rpcId
+        frame.attachment?.attachmentId ?: frame.rpcId ?: frame.requestId ?: frame.transferId
 
     private fun explicitResponseCorrelation(request: GatewayRequest, frame: GatewayFrame): String? =
         when (request.responseKind) {
             "attachment" -> frame.attachment?.attachmentId
             "question-response", "approval-response" -> frame.rpcId
+            "file-list", "file-download-opened" -> frame.requestId
+            "file-download-chunk", "file-download-cancelled" -> frame.transferId
             else -> null
         }
 
@@ -998,7 +1002,8 @@ class GatewayRuntime(
             "approval-requested", "approval-resolved"
         )
         private val RESPONSE_KINDS_REQUIRING_ACTIVE_REQUEST = setOf(
-            "history", "attachment", "sent", "question-response", "approval-response"
+            "history", "attachment", "sent", "question-response", "approval-response",
+            "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled"
         )
         private val IDEMPOTENT_CONNECTION_STATES = setOf(
             GatewayConnectionState.CONNECTING,

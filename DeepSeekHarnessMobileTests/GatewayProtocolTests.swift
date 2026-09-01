@@ -76,6 +76,19 @@ final class GatewayProtocolTests: XCTestCase {
         await store.awaitPendingKMPEventDeliveriesForTesting()
     }
 
+    func testWorkspaceFileProtocolFramesDecodeWithoutDirectoryHiddenField() throws {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"file-list","requestId":"files-1","sessionId":"s1","path":".","entries":[{"name":"build","path":"build","kind":"directory"},{"name":"app.apk","path":"app.apk","kind":"file","bytes":42,"modifiedAt":1787111700000,"mediaType":"application/vnd.android.package-archive"}]}"#.utf8))
+        XCTAssertEqual(frame.requestId, "files-1")
+        XCTAssertEqual(frame.entries?.map(\.name), ["build", "app.apk"])
+        XCTAssertEqual(frame.entries?.first?.hidden, false)
+        XCTAssertEqual(frame.entries?.last?.bytes, 42)
+
+        let chunk = try GatewayWireDecoder.decode(Data(#"{"kind":"file-download-chunk","transferId":"t1","offset":0,"data":"YQ==","eof":true,"sha256":"ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"}"#.utf8))
+        XCTAssertEqual(chunk.transferId, "t1")
+        XCTAssertEqual(chunk.offset, 0)
+        XCTAssertEqual(chunk.eof, true)
+    }
+
     @MainActor
     func testConversationViewportReportsOnlyEmptyContentBoundaries() async throws {
         let timeline = ConversationTimeline()

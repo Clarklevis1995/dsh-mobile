@@ -111,6 +111,15 @@ struct GatewayFrame: Codable, Sendable {
     var attachedSessions: Int?
     var canOpenPath: Bool?
     var path: String?
+    var requestId: String?
+    var transferId: String?
+    var name: String?
+    var mediaType: String?
+    var size: Int64?
+    var chunkBytes: Int?
+    var offset: Int64?
+    var eof: Bool?
+    var sha256: String?
     var home: String?
     var crumbs: [GatewayDirectoryItem]?
     var entries: [GatewayDirectoryItem]?
@@ -378,8 +387,55 @@ struct GatewaySearchItem: Codable, Hashable, Sendable, Identifiable {
 struct GatewayDirectoryItem: Codable, Hashable, Sendable, Identifiable {
     var name: String
     var path: String
-    var hidden: Bool
+    var hidden: Bool = false
+    var kind: String?
+    var bytes: Int64?
+    var modifiedAt: Double?
+    var mediaType: String?
     var id: String { path }
+
+    init(
+        name: String,
+        path: String,
+        hidden: Bool = false,
+        kind: String? = nil,
+        bytes: Int64? = nil,
+        modifiedAt: Double? = nil,
+        mediaType: String? = nil
+    ) {
+        self.name = name
+        self.path = path
+        self.hidden = hidden
+        self.kind = kind
+        self.bytes = bytes
+        self.modifiedAt = modifiedAt
+        self.mediaType = mediaType
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, path, hidden, kind, bytes, modifiedAt, mediaType
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        path = try container.decode(String.self, forKey: .path)
+        hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+        kind = try container.decodeIfPresent(String.self, forKey: .kind)
+        bytes = try container.decodeIfPresent(Int64.self, forKey: .bytes)
+        modifiedAt = try container.decodeIfPresent(Double.self, forKey: .modifiedAt)
+        mediaType = try container.decodeIfPresent(String.self, forKey: .mediaType)
+    }
+}
+
+struct WorkspaceLocalFile: Identifiable, Equatable {
+    var url: URL
+    var sessionID: String
+    var remotePath: String
+    var name: String
+    var mediaType: String
+    var purpose: String
+    var id: String { url.path }
 }
 
 struct GatewayHostSnapshot: Codable, Hashable, Sendable {

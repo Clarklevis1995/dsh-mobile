@@ -1,4 +1,5 @@
 import SwiftUI
+import DeepSeekHarnessShared
 
 @MainActor
 protocol GatewayQuestionEffectExecuting: AnyObject {
@@ -151,6 +152,14 @@ final class AppStore: ObservableObject {
     @Published private(set) var pendingApprovalRequests: [GatewayPendingApprovalRequest] = []
     @Published private(set) var approvalRequestStatuses: [String: GatewayApprovalRequestStatus] = [:]
     @Published private(set) var supportsImages = false
+    @Published private(set) var supportsFileDownloads = false
+    @Published private(set) var workspaceFilePath = "."
+    @Published private(set) var workspaceFileEntries: [GatewayDirectoryItem] = []
+    @Published private(set) var workspaceFilesAreLoading = false
+    @Published private(set) var workspaceFileDownloadProgress: Double?
+    @Published private(set) var workspaceFileDownloadPath: String?
+    @Published private(set) var workspaceFileDownloadPurpose: String?
+    @Published var completedWorkspaceFile: WorkspaceLocalFile?
 
     let gateway = GatewayClient()
     private let preferences: AppPreferences
@@ -171,6 +180,8 @@ final class AppStore: ObservableObject {
     private let kmpTrajectoryStore: KMPTrajectoryStoreAdapter
     /// History pagination、cursor、水位与 raw event 去重的唯一业务状态来源。
     private let kmpHistoryStore: KMPHistoryStoreAdapter
+    /// 文件列表、分块偏移和 SHA-256 完整性校验由 KMP commonMain 统一负责。
+    private let kmpWorkspaceFileStore: DeepSeekHarnessShared.SharedWorkspaceFileStore
     /// KMP Store 会在 dispatch Intent 的同一 MainActor 调用栈内同步推送 Event。
     /// SwiftUI 的 `.task`/`.onChange` 或控件 Binding 可能仍处于 view update；直接
     /// 修改 `@Published` 会触发未定义行为。这里保持 FIFO，并统一在下一次
@@ -199,6 +210,8 @@ final class AppStore: ObservableObject {
     private var pendingModelSelectionSessionId: String?
     private var pendingPermissionOptionsSessionId: String?
     private var pendingDirectoryCreationParentPath: String?
+    private var workspaceFileHandle: FileHandle?
+    private var workspaceFileTemporaryURL: URL?
     private let sessionControlRequestTracker = RequestTracker()
     private let defaultConfigurationRequestTracker = RequestTracker()
     /// Navigation preparation is intentionally cheap. Remote activation begins
@@ -210,6 +223,9 @@ final class AppStore: ObservableObject {
     private let backgroundExecutionController: AgentBackgroundExecutionController
     private static let defaultConfigurationRequestKinds: Set<String> = [
         "agent-presets", "defaults", "default-model", "set-default", "save-default-model"
+    ]
+    private static let workspaceFileFrameKinds: Set<String> = [
+        "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled"
     ]
     private static let newConversationActivationKey = "__new-conversation__"
 
@@ -249,6 +265,7 @@ final class AppStore: ObservableObject {
         self.kmpTrajectoryStore = kmpTrajectoryStore
         let kmpHistoryStore = KMPHistoryStoreAdapter(bridge: historyBridge)
         self.kmpHistoryStore = kmpHistoryStore
+        self.kmpWorkspaceFileStore = SharedMobileFacade().makeWorkspaceFileStore()
         self.sessionControlEffectExecutor = sessionControlEffectExecutor ?? gateway
         appLanguage = AppLanguage.load()
         selectedWorkspaceId = preferences.selectedWorkspaceID
@@ -717,6 +734,42 @@ final class AppStore: ObservableObject {
         directoryIsLoading = true
         gateway.requestDirectories(path: path)
     }
+    func browseWorkspaceFiles(path: String? = nil) {
+        guard let sessionID = selectedSessionId else {
+            lastError = String(localized: "请先打开一个已有会话")
+            return
+        }
+        guard gateway.state.isConnected else {
+            lastError = String(localized: "请先连接 DeepSeek Harness")
+            return
+        }
+        guard supportsFileDownloads else {
+            lastError = String(localized: "当前 Mobile Gateway 不支持文件下载，请升级并重启网关。")
+            return
+        }
+        let transition = kmpWorkspaceFileStore.load(
+            sessionId: sessionID,
+            path: path,
+            requestId: UUID().uuidString
+        )
+        applyWorkspaceFileTransition(transition)
+    }
+
+    func openWorkspaceFile(_ item: GatewayDirectoryItem, purpose: String) {
+        guard item.kind == "file", let sessionID = selectedSessionId else { return }
+        completedWorkspaceFile = nil
+        let transition = kmpWorkspaceFileStore.download(
+            sessionId: sessionID,
+            path: item.path,
+            requestId: UUID().uuidString,
+            purpose: purpose
+        )
+        applyWorkspaceFileTransition(transition)
+    }
+
+    func cancelWorkspaceFileDownload() {
+        applyWorkspaceFileTransition(kmpWorkspaceFileStore.cancel())
+    }
     func createDirectory(parentPath: String, name: String) {
         guard gateway.state.isConnected else {
             lastError = String(localized: "请先连接 DeepSeek Harness")
@@ -823,6 +876,16 @@ final class AppStore: ObservableObject {
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
     private func handle(_ frame: GatewayFrame) {
+        if Self.workspaceFileFrameKinds.contains(frame.kind) ||
+            (frame.kind == "error" && frame.requestType?.hasPrefix("file-") == true) {
+            if let data = try? JSONEncoder().encode(frame) {
+                let transition = kmpWorkspaceFileStore.acceptFrame(
+                    json: String(decoding: data, as: UTF8.self)
+                )
+                applyWorkspaceFileTransition(transition)
+            }
+            if frame.kind != "error" { return }
+        }
         let context = GatewayFrameRoutingContext(
             selectedSessionID: selectedSessionId,
             pendingHistorySessionID: kmpHistoryStore.pendingSessionID,
@@ -864,6 +927,8 @@ final class AppStore: ObservableObject {
             dispatchQuestionIntent(.reset)
             dispatchApprovalIntent(.reset)
             supportsImages = payload.protocolVersion >= 3 && payload.capabilities.contains("images")
+            supportsFileDownloads = payload.protocolVersion >= 3 && payload.capabilities.contains("file-downloads")
+            applyWorkspaceFileTransition(kmpWorkspaceFileStore.reset(sessionId: selectedSessionId))
             attachmentLoader.reset()
             presentsNextConnectionFailureAsAlert = true
             let authentication = payload.authenticated
@@ -912,6 +977,120 @@ final class AppStore: ObservableObject {
                 detail,
                 sessionId: sessionID
             )
+        }
+    }
+
+    private func applyWorkspaceFileTransition(
+        _ transition: DeepSeekHarnessShared.SharedWorkspaceFileTransition
+    ) {
+        if transition.discardTransferId != nil {
+            closeWorkspaceTemporaryFile(remove: true)
+        }
+        let snapshot = transition.snapshot
+        if snapshot.activeDownload != nil, workspaceFileHandle == nil {
+            do {
+                try openWorkspaceTemporaryFile(name: snapshot.activeDownload?.name ?? "download")
+            } catch {
+                lastError = String(localized: "无法创建文件下载临时文件：\(error.localizedDescription)")
+                let cancelled = kmpWorkspaceFileStore.cancel()
+                closeWorkspaceTemporaryFile(remove: true)
+                if let request = cancelled.request { gateway.sendRequestPayload(request.payload) }
+                return
+            }
+        }
+        if let base64 = transition.appendBase64Data {
+            guard let bytes = Data(base64Encoded: base64), let workspaceFileHandle else {
+                lastError = String(localized: "文件分块无法写入临时文件")
+                cancelWorkspaceFileDownload()
+                return
+            }
+            do {
+                try workspaceFileHandle.seekToEnd()
+                try workspaceFileHandle.write(contentsOf: bytes)
+            } catch {
+                lastError = String(localized: "写入下载文件失败：\(error.localizedDescription)")
+                cancelWorkspaceFileDownload()
+                return
+            }
+        }
+        workspaceFilePath = snapshot.path
+        workspaceFileEntries = snapshot.entries.map { item in
+            GatewayDirectoryItem(
+                name: item.name,
+                path: item.path,
+                hidden: item.hidden,
+                kind: item.kind,
+                bytes: item.bytes?.int64Value,
+                modifiedAt: item.modifiedAt?.doubleValue,
+                mediaType: item.mediaType
+            )
+        }
+        workspaceFilesAreLoading = snapshot.isLoading
+        if let active = snapshot.activeDownload, active.size > 0 {
+            workspaceFileDownloadProgress = min(1, Double(active.receivedBytes) / Double(active.size))
+        } else {
+            workspaceFileDownloadProgress = snapshot.activeDownload == nil ? nil : 0
+        }
+        workspaceFileDownloadPath = snapshot.activeDownload?.path
+        workspaceFileDownloadPurpose = snapshot.activeDownload?.purpose
+        if let message = snapshot.lastError {
+            lastError = workspaceFileErrorMessage(message)
+        }
+        if let completion = transition.completion,
+           let url = workspaceFileTemporaryURL {
+            closeWorkspaceTemporaryFile(remove: false)
+            let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?
+                .int64Value
+            guard fileSize == completion.size else {
+                try? FileManager.default.removeItem(at: url)
+                workspaceFileTemporaryURL = nil
+                lastError = String(localized: "下载文件的本地大小校验失败")
+                return
+            }
+            completedWorkspaceFile = WorkspaceLocalFile(
+                url: url,
+                sessionID: completion.sessionId,
+                remotePath: completion.path,
+                name: completion.name,
+                mediaType: completion.mediaType,
+                purpose: completion.purpose
+            )
+        }
+        if let request = transition.request {
+            gateway.sendRequestPayload(request.payload)
+        }
+    }
+
+    private func openWorkspaceTemporaryFile(name: String) throws {
+        closeWorkspaceTemporaryFile(remove: true)
+        let safeName = URL(fileURLWithPath: name).lastPathComponent
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dsh-workspace-files", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(safeName)
+        guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        workspaceFileTemporaryURL = url
+        workspaceFileHandle = try FileHandle(forWritingTo: url)
+    }
+
+    private func closeWorkspaceTemporaryFile(remove: Bool) {
+        try? workspaceFileHandle?.close()
+        workspaceFileHandle = nil
+        if remove, let url = workspaceFileTemporaryURL {
+            try? FileManager.default.removeItem(at: url)
+            workspaceFileTemporaryURL = nil
+        }
+    }
+
+    private func workspaceFileErrorMessage(_ code: String) -> String {
+        switch code {
+        case "file-download-integrity-failed": String(localized: "文件完整性校验失败，请重新下载。")
+        case "download-busy": String(localized: "已有文件正在下载，请稍后再试。")
+        case "file-download-offset-mismatch": String(localized: "文件分块顺序异常，下载已取消。")
+        default: String(localized: "工作区文件请求失败：\(code)")
         }
     }
 

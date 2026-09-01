@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.android
 
 import android.net.Uri
+import android.util.Base64
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -15,6 +16,8 @@ import com.clarklevis.dsh.android.platform.AndroidPreparedImage
 import com.clarklevis.dsh.android.platform.BoundedLruCache
 import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
 import com.clarklevis.dsh.shared.facade.SharedMobileStore
+import com.clarklevis.dsh.shared.facade.SharedWorkspaceFileStore
+import com.clarklevis.dsh.shared.facade.SharedWorkspaceFileTransition
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import com.clarklevis.dsh.shared.gateway.GatewayPairingPayloadException
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
@@ -29,6 +32,9 @@ import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import java.util.TimeZone
+import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -43,6 +49,7 @@ class AndroidSharedStateHolder(
     store: SharedMobileStore = SharedMobileStore(),
     private val graph: AndroidAppGraph? = null
 ) {
+    private val workspaceFileStore = SharedWorkspaceFileStore()
     private val scope = graph?.let { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     private var runtimeCollection: Job? = null
     private val projectionActor = AndroidProjectionActor(
@@ -73,6 +80,8 @@ class AndroidSharedStateHolder(
     private var workspacePreferenceLoaded = false
     private var hasReceivedWorkspaces = false
     private var pendingDirectoryCreationParentPath: String? = null
+    private var workspaceFileOutput: FileOutputStream? = null
+    private var workspaceFileTemporaryFile: File? = null
     private var recentlyCreatedWorkspace: GatewayWorkspace? by mutableStateOf(null)
     private var inputGeneration = 0L
     private var pendingSelectedSessionId: String? = null
@@ -107,6 +116,20 @@ class AndroidSharedStateHolder(
     var createdDirectoryPathToReveal: String? by mutableStateOf(null)
         private set
     var workspaceCreationCompletedPath: String? by mutableStateOf(null)
+        private set
+    var workspaceFilePath: String by mutableStateOf(".")
+        private set
+    var workspaceFileEntries: List<GatewayDirectoryItem> by mutableStateOf(emptyList())
+        private set
+    var workspaceFilesAreLoading: Boolean by mutableStateOf(false)
+        private set
+    var workspaceFileDownloadProgress: Float? by mutableStateOf(null)
+        private set
+    var workspaceFileDownloadPath: String? by mutableStateOf(null)
+        private set
+    var workspaceFileDownloadPurpose: String? by mutableStateOf(null)
+        private set
+    var completedWorkspaceFile: AndroidWorkspaceLocalFile? by mutableStateOf(null)
         private set
     var historyPagingSessionIds: Set<String> by mutableStateOf(emptySet())
         private set
@@ -200,6 +223,12 @@ class AndroidSharedStateHolder(
                         appGraph.diagnostics.runtimeEvent(event)
                         when (event) {
                             is GatewayRuntimeEvent.Frame -> {
+                                if (event.frame.kind in WORKSPACE_FILE_FRAME_KINDS) {
+                                    applyWorkspaceFileTransition(
+                                        appGraph,
+                                        workspaceFileStore.acceptFrame(event.rawJson)
+                                    )
+                                }
                                 val isStreamingChunk = event.frame.kind == "event" &&
                                     event.frame.event?.type == "assistant/chunk"
                                 val streamingProjectionFlushed = if (isStreamingChunk) {
@@ -263,6 +292,16 @@ class AndroidSharedStateHolder(
                             }
                             is GatewayRuntimeEvent.RequestQueued -> Unit
                             is GatewayRuntimeEvent.RequestCancelled -> {
+                                if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
+                                    applyWorkspaceFileTransition(
+                                        appGraph,
+                                        workspaceFileStore.requestFailed(
+                                            event.requestType,
+                                            event.reason,
+                                            event.correlationId
+                                        )
+                                    )
+                                }
                                 withContext(Dispatchers.Main.immediate) {
                                     defaultConfigurationLoadingKinds =
                                         defaultConfigurationLoadingKinds - event.requestType
@@ -286,6 +325,16 @@ class AndroidSharedStateHolder(
                                 }
                             }
                             is GatewayRuntimeEvent.RequestTimedOut -> {
+                                if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
+                                    applyWorkspaceFileTransition(
+                                        appGraph,
+                                        workspaceFileStore.requestFailed(
+                                            event.requestType,
+                                            "request-timeout",
+                                            event.correlationId
+                                        )
+                                    )
+                                }
                                 withContext(Dispatchers.Main.immediate) {
                                     defaultConfigurationLoadingKinds =
                                         defaultConfigurationLoadingKinds - event.requestType
@@ -310,6 +359,16 @@ class AndroidSharedStateHolder(
                                 }
                             }
                             is GatewayRuntimeEvent.RequestRejected -> {
+                                if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
+                                    applyWorkspaceFileTransition(
+                                        appGraph,
+                                        workspaceFileStore.requestFailed(
+                                            event.requestType,
+                                            event.reason,
+                                            event.correlationId
+                                        )
+                                    )
+                                }
                                 withContext(Dispatchers.Main.immediate) {
                                     defaultConfigurationLoadingKinds =
                                         defaultConfigurationLoadingKinds - event.requestType
@@ -542,6 +601,58 @@ class AndroidSharedStateHolder(
 
     fun acknowledgeWorkspaceCreation(path: String) {
         if (workspaceCreationCompletedPath == path) workspaceCreationCompletedPath = null
+    }
+
+    fun browseWorkspaceFiles(path: String? = null) {
+        val appGraph = graph ?: return
+        val sessionId = snapshot.selectedSessionId
+        if (sessionId == null) {
+            platformError = "请先打开一个已有会话"
+            return
+        }
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) {
+            platformError = "请先连接 DeepSeek Harness"
+            return
+        }
+        if ("file-downloads" !in gatewayState.capabilities) {
+            platformError = "当前 Mobile Gateway 不支持文件下载，请升级并重启网关。"
+            return
+        }
+        appGraph.gatewayScope.launch {
+            applyWorkspaceFileTransition(
+                appGraph,
+                workspaceFileStore.load(sessionId, path, UUID.randomUUID().toString())
+            )
+        }
+    }
+
+    fun openWorkspaceFile(entry: GatewayDirectoryItem, purpose: String) {
+        val appGraph = graph ?: return
+        val sessionId = snapshot.selectedSessionId ?: return
+        if (entry.kind != "file") return
+        completedWorkspaceFile = null
+        appGraph.gatewayScope.launch {
+            applyWorkspaceFileTransition(
+                appGraph,
+                workspaceFileStore.download(
+                    sessionId,
+                    entry.path,
+                    UUID.randomUUID().toString(),
+                    purpose
+                )
+            )
+        }
+    }
+
+    fun cancelWorkspaceFileDownload() {
+        val appGraph = graph ?: return
+        appGraph.gatewayScope.launch {
+            applyWorkspaceFileTransition(appGraph, workspaceFileStore.cancel())
+        }
+    }
+
+    fun consumeCompletedWorkspaceFile() {
+        completedWorkspaceFile = null
     }
 
     fun refreshProductState() {
@@ -1064,6 +1175,102 @@ class AndroidSharedStateHolder(
         }
     }
 
+    private suspend fun applyWorkspaceFileTransition(
+        appGraph: AndroidAppGraph,
+        transition: SharedWorkspaceFileTransition
+    ) {
+        if (transition.discardTransferId != null) closeWorkspaceTemporaryFile(remove = true)
+        val snapshot = transition.snapshot
+        try {
+            if (snapshot.activeDownload != null && workspaceFileOutput == null) {
+                openWorkspaceTemporaryFile(appGraph, snapshot.activeDownload?.name ?: "download")
+            }
+            transition.appendBase64Data?.let { encoded ->
+                val bytes = Base64.decode(encoded, Base64.NO_WRAP)
+                requireNotNull(workspaceFileOutput).write(bytes)
+            }
+        } catch (_: Throwable) {
+            val cancelled = workspaceFileStore.cancel()
+            closeWorkspaceTemporaryFile(remove = true)
+            withContext(Dispatchers.Main.immediate) {
+                workspaceFileDownloadProgress = null
+                workspaceFileDownloadPath = null
+                workspaceFileDownloadPurpose = null
+                platformError = "写入下载文件失败"
+            }
+            cancelled.request?.let { appGraph.gatewayRuntime.sendRequest(it) }
+            return
+        }
+
+        var completed: AndroidWorkspaceLocalFile? = null
+        transition.completion?.let { completion ->
+            workspaceFileOutput?.fd?.sync()
+            closeWorkspaceTemporaryFile(remove = false)
+            val file = workspaceFileTemporaryFile
+            if (file == null || file.length() != completion.size) {
+                file?.delete()
+                workspaceFileTemporaryFile = null
+                withContext(Dispatchers.Main.immediate) {
+                    platformError = "下载文件的本地大小校验失败"
+                }
+                return
+            }
+            completed = AndroidWorkspaceLocalFile(
+                file = file,
+                sessionId = completion.sessionId,
+                remotePath = completion.path,
+                name = completion.name,
+                mediaType = completion.mediaType,
+                purpose = completion.purpose
+            )
+        }
+
+        withContext(Dispatchers.Main.immediate) {
+            workspaceFilePath = snapshot.path
+            workspaceFileEntries = snapshot.entries
+            workspaceFilesAreLoading = snapshot.isLoading
+            workspaceFileDownloadProgress = snapshot.activeDownload?.let { active ->
+                if (active.size == 0L) 0f
+                else (active.receivedBytes.toFloat() / active.size.toFloat()).coerceIn(0f, 1f)
+            }
+            workspaceFileDownloadPath = snapshot.activeDownload?.path
+            workspaceFileDownloadPurpose = snapshot.activeDownload?.purpose
+            snapshot.lastError?.let { platformError = workspaceFileErrorMessage(it) }
+            completed?.let { completedWorkspaceFile = it }
+        }
+        transition.request?.let { appGraph.gatewayRuntime.sendRequest(it) }
+    }
+
+    private fun openWorkspaceTemporaryFile(appGraph: AndroidAppGraph, name: String) {
+        closeWorkspaceTemporaryFile(remove = true)
+        val directory = File(
+            appGraph.application.cacheDir,
+            "workspace-files/${UUID.randomUUID()}"
+        ).apply { check(mkdirs() || isDirectory) }
+        val file = File(directory, File(name).name)
+        workspaceFileTemporaryFile = file
+        workspaceFileOutput = FileOutputStream(file, false)
+    }
+
+    private fun closeWorkspaceTemporaryFile(remove: Boolean) {
+        runCatching { workspaceFileOutput?.close() }
+        workspaceFileOutput = null
+        if (remove) {
+            workspaceFileTemporaryFile?.let { file ->
+                file.delete()
+                file.parentFile?.delete()
+            }
+            workspaceFileTemporaryFile = null
+        }
+    }
+
+    private fun workspaceFileErrorMessage(code: String): String = when (code) {
+        "file-download-integrity-failed" -> "文件完整性校验失败，请重新下载。"
+        "download-busy" -> "已有文件正在下载，请稍后再试。"
+        "file-download-offset-mismatch" -> "文件分块顺序异常，下载已取消。"
+        else -> "工作区文件请求失败：$code"
+    }
+
     private fun applyWorkspaceSelection(workspaceId: String, persist: Boolean) {
         if (selectedWorkspaceId == workspaceId) return
         selectedWorkspaceId = workspaceId
@@ -1256,6 +1463,12 @@ class AndroidSharedStateHolder(
             "directory-create",
             "workspace-create"
         )
+        private val WORKSPACE_FILE_FRAME_KINDS = setOf(
+            "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled"
+        )
+        private val WORKSPACE_FILE_REQUEST_TYPES = setOf(
+            "file-list", "file-download-open", "file-download-read", "file-download-cancel"
+        )
         private const val MAXIMUM_THUMBNAIL_BYTES = 16L * 1_024 * 1_024
         private const val MAXIMUM_STATUS_COUNT = 256L
         private const val DEFAULT_THUMBNAIL_TARGET_PIXELS = 720
@@ -1276,3 +1489,12 @@ internal fun resolveWorkspaceSelection(
 }
 
 enum class AttachmentLoadState { IDLE, LOADING, LOADED, FAILED, DEFERRED }
+
+data class AndroidWorkspaceLocalFile(
+    val file: File,
+    val sessionId: String,
+    val remotePath: String,
+    val name: String,
+    val mediaType: String,
+    val purpose: String
+)
