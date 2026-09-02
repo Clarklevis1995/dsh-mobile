@@ -180,31 +180,100 @@ private func firstDescendant<T: UIView>(of type: T.Type, in view: UIView) -> T? 
 
 final class ConversationViewportLayoutTests: XCTestCase {
     @MainActor
-    func testMarkdownRendererCoalescesRapidSnapshotsAndPublishesLatest() async throws {
-        let source = ConversationMarkdownRenderer()
-        XCTAssertTrue(source.update(title: "DeepSeek · 正在生成", text: "第一段"))
-        XCTAssertTrue(source.update(title: "DeepSeek · 正在生成", text: "第一段第二段"))
-        XCTAssertTrue(source.update(title: "DeepSeek", text: "第一段第二段最终内容", showsCopyButton: true))
+    func testStreamingTextPublishesLatestBufferedTextAfterUserScrollingStops() async throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 760)
+        controller.view.layoutIfNeeded()
+        controller.configure(
+            sessionID: "streaming-scroll-pause",
+            timeline: timeline,
+            supplementalEntries: [],
+            makeEntries: { items in
+                items.map { item in
+                    ConversationViewportEntry(
+                        id: item.id,
+                        revision: item.text.count,
+                        streamingAssistant: .init(title: item.title, text: item.text)
+                    )
+                }
+            },
+            bottomInset: 0
+        )
 
-        for _ in 0..<100 where source.renderedCharacterCount != 10 {
-            try await Task.sleep(nanoseconds: 10_000_000)
+        let initialText = "第一段"
+        timeline.publish([
+            ConversationItem(
+                id: "streaming-response",
+                kind: .assistant,
+                title: "DeepSeek · 正在生成",
+                text: initialText,
+                isError: false,
+                date: Date(timeIntervalSince1970: 1)
+            )
+        ])
+        var initialCell: StreamingAssistantCell?
+        for _ in 0..<200 where initialCell == nil {
+            controller.view.layoutIfNeeded()
+            if let collectionView = firstDescendant(
+                of: UICollectionView.self,
+                in: controller.view
+            ), let cell = collectionView.cellForItem(
+                at: IndexPath(item: 0, section: 0)
+            ) as? StreamingAssistantCell,
+               cell.renderedCharacterCount == initialText.count {
+                initialCell = cell
+            } else {
+                try await Task.sleep(for: .milliseconds(10))
+            }
         }
 
-        XCTAssertEqual(source.renderedCharacterCount, 10)
-        XCTAssertNotEqual(source.document, .empty)
-        XCTAssertEqual(source.copyText, "第一段第二段最终内容")
-        XCTAssertTrue(source.showsCopyButton)
-        source.finish()
-    }
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        let cell = try XCTUnwrap(initialCell)
+        let intermediateText = "第一段，滑动期间收到第二段"
+        let latestText = "第一段，滑动期间收到第二段，并继续累计到最终一段"
+        controller.scrollViewWillBeginDragging(collectionView)
+        timeline.publish([
+            ConversationItem(
+                id: "streaming-response",
+                kind: .assistant,
+                title: "DeepSeek · 正在生成",
+                text: intermediateText,
+                isError: false,
+                date: Date(timeIntervalSince1970: 1)
+            )
+        ])
+        timeline.publish([
+            ConversationItem(
+                id: "streaming-response",
+                kind: .assistant,
+                title: "DeepSeek · 正在生成",
+                text: latestText,
+                isError: false,
+                date: Date(timeIntervalSince1970: 1)
+            )
+        ])
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(cell.renderedCharacterCount, initialText.count)
 
-    @MainActor
-    func testStreamingAssistantCellRebuildsRendererWhenReusedForAnotherReply() {
-        let cell = StreamingAssistantCell(frame: CGRect(x: 0, y: 0, width: 390, height: 80))
-        let firstReplyRenderer = cell.rendererIdentity
+        // Finger release with remaining inertia must stay paused.
+        controller.scrollViewDidEndDragging(collectionView, willDecelerate: true)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(cell.renderedCharacterCount, initialText.count)
 
-        cell.prepareForReuse()
-
-        XCTAssertNotEqual(cell.rendererIdentity, firstReplyRenderer)
+        controller.scrollViewDidEndDecelerating(collectionView)
+        for _ in 0..<200 where cell.renderedCharacterCount != latestText.count {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(cell.renderedCharacterCount, latestText.count)
     }
 
     @MainActor

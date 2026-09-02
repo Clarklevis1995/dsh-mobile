@@ -44,7 +44,6 @@
 		E20191A4C7B1C0A8FF57CAC1 /* Glass.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF581253EBCFEB43865AB51 /* Glass.swift */; };
 		E73A2DB9D678DA4B8C01E349 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 4CE3D78565179C422C796509 /* MarkdownUI */; };
 		C7A710000000000000000001 /* ChatLayout in Frameworks */ = {isa = PBXBuildFile; productRef = C7A710000000000000000003 /* ChatLayout */; };
-		C7A710000000000000000002 /* SwiftStreamingMarkdown in Frameworks */ = {isa = PBXBuildFile; productRef = C7A710000000000000000005 /* SwiftStreamingMarkdown */; };
 		E7585B9F7F89A3084B6E0182 /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D610757C1FF81FD953A9D000 /* WorkspaceView.swift */; };
 		F5CD0CFD51B8D80944F87550 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BE407E6C6512836EB108990D /* Foundation.framework */; };
 /* End PBXBuildFile section */
@@ -109,7 +108,6 @@
 				F5CD0CFD51B8D80944F87550 /* Foundation.framework in Frameworks */,
 				E73A2DB9D678DA4B8C01E349 /* MarkdownUI in Frameworks */,
 				C7A710000000000000000001 /* ChatLayout in Frameworks */,
-				C7A710000000000000000002 /* SwiftStreamingMarkdown in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -277,7 +275,6 @@
 			packageProductDependencies = (
 				4CE3D78565179C422C796509 /* MarkdownUI */,
 				C7A710000000000000000003 /* ChatLayout */,
-				C7A710000000000000000005 /* SwiftStreamingMarkdown */,
 			);
 			productName = DshMobile;
 			productReference = 38457CD5C46830D1CA7E6D73 /* DshMobile.app */;
@@ -323,7 +320,6 @@
 			packageReferences = (
 				A5BC89015C15661603FC0C4B /* XCLocalSwiftPackageReference "Vendor/swift-markdown-ui" */,
 				C7A710000000000000000004 /* XCRemoteSwiftPackageReference "ChatLayout" */,
-				C7A710000000000000000006 /* XCRemoteSwiftPackageReference "SwiftStreamingMarkdown" */,
 			);
 			productRefGroup = D7854C843240E809A949A26E /* Products */;
 			projectDirPath = "";
@@ -692,14 +688,6 @@
 				version = 2.4.3;
 			};
 		};
-		C7A710000000000000000006 /* XCRemoteSwiftPackageReference "SwiftStreamingMarkdown" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/microsoft/SwiftStreamingMarkdown";
-			requirement = {
-				kind = revision;
-				revision = 5f7c04e0558df6146f90d482edb62cb456986bda;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -712,11 +700,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C7A710000000000000000004 /* XCRemoteSwiftPackageReference "ChatLayout" */;
 			productName = ChatLayout;
-		};
-		C7A710000000000000000005 /* SwiftStreamingMarkdown */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C7A710000000000000000006 /* XCRemoteSwiftPackageReference "SwiftStreamingMarkdown" */;
-			productName = SwiftStreamingMarkdown;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

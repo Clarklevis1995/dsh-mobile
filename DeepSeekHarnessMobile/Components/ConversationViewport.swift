@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 import ChatLayout
-import SwiftStreamingMarkdown
 
 struct ConversationViewportEntry: Identifiable {
     fileprivate enum CellKind {
@@ -245,8 +244,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private var cellHeightCache: [CellMeasurementKey: CGFloat] = [:]
     private var pendingDisclosureAnchor: DisclosureAnchor?
     private var disclosureAnchorGeneration = 0
-    private var pendingStreamingMarkdownLayoutIDs: Set<String> = []
-    private var isStreamingMarkdownLayoutScheduled = false
+    private var isStreamingRenderingPausedForUserScroll = false
+    private var deferredTimelineSnapshot: ConversationTimeline.Snapshot?
+    private var isStreamingRenderResumePending = false
 
     init(
         onContentAvailabilityChanged: @escaping (String?, Bool) -> Void,
@@ -300,6 +300,18 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     }
 
     private func receive(_ snapshot: ConversationTimeline.Snapshot) {
+        guard !isStreamingRenderingPausedForUserScroll else {
+            deferredTimelineSnapshot = snapshot
+            gatewayStreamingTrace(
+                "viewport-buffer",
+                "session=\(sessionID ?? "-") revision=\(snapshot.revision)"
+            )
+            return
+        }
+        render(snapshot)
+    }
+
+    private func render(_ snapshot: ConversationTimeline.Snapshot) {
         let hasContent = !snapshot.items.isEmpty
         guard let makeEntries else { return }
         let entries = supplementalEntries + makeEntries(snapshot.items)
@@ -340,8 +352,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         pendingApply = nil
         pendingDisclosureAnchor = nil
         disclosureAnchorGeneration &+= 1
-        pendingStreamingMarkdownLayoutIDs.removeAll(keepingCapacity: true)
-        isStreamingMarkdownLayoutScheduled = false
+        isStreamingRenderingPausedForUserScroll = false
+        deferredTimelineSnapshot = nil
+        isStreamingRenderResumePending = false
         cellHeightCache.removeAll(keepingCapacity: true)
     }
 
@@ -402,10 +415,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                 ) as! StreamingAssistantCell
                 cell.clipsToBounds = false
                 cell.contentView.clipsToBounds = false
-                cell.onMarkdownRendered = { [weak self] in
-                    self?.scheduleStreamingMarkdownLayout(for: entry.id)
-                }
-                cell.apply(itemID: entry.id, streamingAssistant)
+                cell.apply(streamingAssistant)
                 return cell
             }
             if let userMessage = entry.userMessage {
@@ -505,6 +515,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         collectionView.layer.removeAllAnimations()
         isProgrammaticScroll = false
         setPinned(isAtBottom(collectionView))
+        resumeStreamingRenderingAfterUserScroll()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -664,6 +675,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                     bottomInset: pending.bottomInset,
                     hasConversationContent: pending.hasConversationContent
                 )
+                self.finishStreamingRenderResumeIfPossible()
+            } else {
+                self.finishStreamingRenderResumeIfPossible()
             }
         }
     }
@@ -675,50 +689,21 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     }
 
     private func updateVisibleStreamingCells(_ ids: [String]) {
+        var invalidatedIndexPaths: [IndexPath] = []
         for id in ids {
             guard let payload = entriesByID[id]?.streamingAssistant,
                   let indexPath = dataSource.indexPath(for: id),
                   let cell = collectionView.cellForItem(at: indexPath) as? StreamingAssistantCell,
-                  cell.apply(itemID: id, payload) else { continue }
+                  cell.apply(payload) else { continue }
+            invalidatedIndexPaths.append(indexPath)
         }
-    }
-
-    private func scheduleStreamingMarkdownLayout(for id: String) {
-        pendingStreamingMarkdownLayoutIDs.insert(id)
-        guard !isStreamingMarkdownLayoutScheduled else { return }
-        isStreamingMarkdownLayoutScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            self?.flushStreamingMarkdownLayout()
-        }
-    }
-
-    private func flushStreamingMarkdownLayout() {
-        guard !isApplyingSnapshot else {
-            DispatchQueue.main.async { [weak self] in
-                self?.flushStreamingMarkdownLayout()
-            }
-            return
-        }
-        isStreamingMarkdownLayoutScheduled = false
-        let ids = pendingStreamingMarkdownLayoutIDs
-        pendingStreamingMarkdownLayoutIDs.removeAll(keepingCapacity: true)
-        let indexPaths = ids.compactMap { dataSource.indexPath(for: $0) }.filter {
-            collectionView.cellForItem(at: $0) is StreamingAssistantCell
-        }
-        guard !indexPaths.isEmpty else { return }
+        guard !invalidatedIndexPaths.isEmpty else { return }
 
         let context = ChatLayoutInvalidationContext()
         context.invalidateLayoutMetrics = false
-        context.invalidateItems(at: indexPaths)
+        context.invalidateItems(at: invalidatedIndexPaths)
         chatLayout.invalidateLayout(with: context)
         collectionView.layoutIfNeeded()
-
-        if isPinnedToBottom,
-           !collectionView.isTracking,
-           !collectionView.isDragging,
-           !collectionView.isDecelerating {
-            followStreamingTail()
-        }
     }
 
     private func updateVisibleUserMessageCells(_ ids: [String]) {
@@ -956,6 +941,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         // User interaction wins immediately over automatic tail following.
+        pauseStreamingRenderingForUserScroll()
         needsBottomAlignment = false
         bottomAlignmentGeneration &+= 1
         userInteractionGeneration &+= 1
@@ -964,10 +950,44 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         guard !decelerate else { return }
         updatePinnedState(for: scrollView)
+        resumeStreamingRenderingAfterUserScroll()
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         updatePinnedState(for: scrollView)
+        resumeStreamingRenderingAfterUserScroll()
+    }
+
+    private func pauseStreamingRenderingForUserScroll() {
+        guard !isStreamingRenderingPausedForUserScroll else { return }
+        isStreamingRenderingPausedForUserScroll = true
+        isStreamingRenderResumePending = false
+        gatewayStreamingTrace("viewport-pause", "session=\(sessionID ?? "-")")
+    }
+
+    private func resumeStreamingRenderingAfterUserScroll() {
+        guard isStreamingRenderingPausedForUserScroll else { return }
+        isStreamingRenderingPausedForUserScroll = false
+        isStreamingRenderResumePending = true
+        let deferredSnapshot = deferredTimelineSnapshot
+        deferredTimelineSnapshot = nil
+        if let deferredSnapshot {
+            render(deferredSnapshot)
+        }
+        gatewayStreamingTrace(
+            "viewport-resume-request",
+            "session=\(sessionID ?? "-") revision=\(deferredSnapshot?.revision ?? -1)"
+        )
+        finishStreamingRenderResumeIfPossible()
+    }
+
+    private func finishStreamingRenderResumeIfPossible() {
+        guard isStreamingRenderResumePending,
+              !isStreamingRenderingPausedForUserScroll,
+              !isApplyingSnapshot,
+              pendingApply == nil else { return }
+        isStreamingRenderResumePending = false
+        gatewayStreamingTrace("viewport-resume", "session=\(sessionID ?? "-")")
     }
 
     private func updatePinnedState(for scrollView: UIScrollView) {
@@ -1764,228 +1784,111 @@ private final class ZoomingImageViewController: UIViewController, UIScrollViewDe
     }
 }
 
-/// Owns the latest-snapshot Markdown rendering pipeline for one assistant cell.
-///
-/// Gateway updates are a hot stream, while SwiftStreamingMarkdown's sample
-/// `StreamedMarkdownSource` is a cold producer owned by the view lifecycle.
-/// Bridging the hot stream through `StreamedMarkdownView` left its private
-/// controller waiting on an old parse and could strand the cell at `.empty`.
-/// Parse snapshots here instead and hand the resulting document to the
-/// package's public `DocumentView`, coalescing intermediate snapshots while
-/// guaranteeing that the newest one is eventually published.
-@MainActor
-final class ConversationMarkdownRenderer: ObservableObject {
-    let identity = UUID()
-    @Published private(set) var title = ""
-    @Published private(set) var copyText = ""
-    @Published private(set) var showsCopyButton = false
-    @Published private(set) var document: RenderableDocument = .empty
-    @Published private(set) var renderedCharacterCount = 0
-
-    var onRender: (() -> Void)?
-
-    private struct PendingRender {
-        let revision: Int
-        let text: String
-    }
-
-    private let renderConfig = MarkdownRenderConfig(
-        shouldAnimateText: true,
-        blockSpacing: 10
-    )
-    private var currentText = ""
-    private var pendingRender: PendingRender?
-    private var renderTask: Task<Void, Never>?
-    private var renderRevision = 0
-    private var isFinished = false
-
-    deinit {
-        renderTask?.cancel()
-    }
-
-    @discardableResult
-    func update(title: String, text: String, showsCopyButton: Bool = false) -> Bool {
-        let metadataChanged = self.title != title
-            || self.showsCopyButton != showsCopyButton
-            || (showsCopyButton && copyText != text)
-        if self.title != title { self.title = title }
-        if self.showsCopyButton != showsCopyButton { self.showsCopyButton = showsCopyButton }
-        let nextCopyText = showsCopyButton ? text : ""
-        if copyText != nextCopyText { copyText = nextCopyText }
-
-        guard !isFinished else { return false }
-        let textChanged = text != currentText
-        guard textChanged else {
-            if metadataChanged { onRender?() }
-            return metadataChanged
-        }
-        currentText = text
-        renderRevision &+= 1
-        pendingRender = PendingRender(revision: renderRevision, text: text)
-
-        gatewayStreamingTrace(
-            "source-yield",
-            "source=\(identity.uuidString.prefix(8)) chars=\(text.count) revision=\(renderRevision)"
-        )
-        startNextRenderIfNeeded()
-        return true
-    }
-
-    func finish() {
-        guard !isFinished else { return }
-        isFinished = true
-        pendingRender = nil
-        renderTask?.cancel()
-        renderTask = nil
-    }
-
-    private func startNextRenderIfNeeded() {
-        guard renderTask == nil, let pendingRender, !isFinished else { return }
-        self.pendingRender = nil
-        let sourceID = identity
-        let config = renderConfig
-        gatewayStreamingTrace(
-            "parse-start",
-            "source=\(sourceID.uuidString.prefix(8)) revision=\(pendingRender.revision) " +
-            "chars=\(pendingRender.text.count)"
-        )
-
-        renderTask = Task { [weak self] in
-            let renderable = await Task.detached(priority: .userInitiated) {
-                await MarkdownParserImpl().parse(text: pendingRender.text, config: config)
-            }.value
-            guard let self, !Task.isCancelled, !self.isFinished else { return }
-
-            gatewayStreamingTrace(
-                "parse-finish",
-                "source=\(sourceID.uuidString.prefix(8)) revision=\(pendingRender.revision) " +
-                "chars=\(pendingRender.text.count) pending=\(self.pendingRender != nil)"
-            )
-            self.renderTask = nil
-
-            // Publishing an intermediate parse is useful only when it is still
-            // the newest snapshot. If chunks arrived during parsing, skip the
-            // stale document and immediately parse the latest accumulated text.
-            if self.pendingRender == nil {
-                self.document = renderable
-                self.renderedCharacterCount = pendingRender.text.count
-                gatewayStreamingTrace(
-                    "renderer",
-                    "source=\(sourceID.uuidString.prefix(8)) revision=\(pendingRender.revision) " +
-                    "publishedChars=\(pendingRender.text.count)"
-                )
-                self.onRender?()
-            }
-            self.startNextRenderIfNeeded()
-        }
-    }
-}
-
-private struct StreamingAssistantMarkdownView: View {
-    @ObservedObject var source: ConversationMarkdownRenderer
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 9) {
-                Image("DeepSeekWhale")
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 26, height: 26)
-                    .foregroundStyle(source.showsCopyButton ? Color.primary : Color.secondary)
-                Text(source.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(source.showsCopyButton ? Color.primary : Color.secondary)
-            }
-            DocumentView(
-                renderableDocument: source.document,
-                config: MarkdownRenderConfig(
-                    shouldAnimateText: true,
-                    blockSpacing: 10
-                )
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if source.showsCopyButton && !source.copyText.isEmpty {
-                CopyMessageButton(text: source.copyText)
-            }
-        }
-        .padding(.horizontal, 2)
-        .padding(.vertical, 15)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// The active assistant response owns one long-lived stream source. Incoming
-/// WebSocket snapshots are pushed into the Markdown renderer without replacing
-/// the cell or rebuilding already rendered blocks.
+/// The active assistant response is the only row that changes for text
+/// deltas. TextKit appends only the suffix to `NSTextStorage`, preserving all
+/// previously laid-out content. When the response finishes, the row switches
+/// back to the project's existing MarkdownUI renderer.
 final class StreamingAssistantCell: StableSelfSizingCollectionViewCell {
     static let reuseIdentifier = "StreamingAssistantCell"
 
-    var onMarkdownRendered: (() -> Void)?
-    private var source: ConversationMarkdownRenderer!
-    private var itemID = "-"
-    private var submittedCharacterCount = 0
-    var rendererIdentity: UUID { source.identity }
+    private let whaleView: UIImageView = {
+        let view = UIImageView(image: UIImage(named: "DeepSeekWhale")?.withRenderingMode(.alwaysTemplate))
+        view.tintColor = .secondaryLabel
+        view.contentMode = .scaleAspectFit
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    private let titleLabel: UILabel = {
+        let label = UILabel()
+        label.font = .preferredFont(forTextStyle: .subheadline).withWeight(.semibold)
+        label.textColor = .secondaryLabel
+        label.adjustsFontForContentSizeCategory = true
+        return label
+    }()
+
+    private let textView: UITextView = {
+        let view = UITextView()
+        view.backgroundColor = .clear
+        view.isEditable = false
+        view.isSelectable = false
+        view.isScrollEnabled = false
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        view.font = .preferredFont(forTextStyle: .body)
+        view.textColor = .label
+        view.adjustsFontForContentSizeCategory = true
+        view.setContentCompressionResistancePriority(.required, for: .vertical)
+        return view
+    }()
+
+    private var renderedText = ""
+    var renderedCharacterCount: Int { renderedText.count }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
         contentView.backgroundColor = .clear
-        installRenderer()
-    }
 
-    private func installRenderer() {
-        let source = ConversationMarkdownRenderer()
-        let sourceID = source.identity
-        self.source = source
-        source.onRender = { [weak self] in
-            if let self {
-                gatewayStreamingTrace(
-                    "cell-layout",
-                    "item=\(self.itemID) source=\(sourceID.uuidString.prefix(8)) " +
-                    "submittedChars=\(self.submittedCharacterCount)"
-                )
-            }
-            self?.onMarkdownRendered?()
-        }
-        contentConfiguration = UIHostingConfiguration {
-            StreamingAssistantMarkdownView(source: source)
-                // A reused cell must establish a new SwiftUI identity so a
-                // cancelled renderer from the previous reply cannot survive.
-                .id(source.identity)
-        }.margins(.all, 0)
+        let header = UIStackView(arrangedSubviews: [whaleView, titleLabel])
+        header.axis = .horizontal
+        header.alignment = .center
+        header.spacing = 9
+
+        let stack = UIStackView(arrangedSubviews: [header, textView])
+        stack.axis = .vertical
+        stack.alignment = .fill
+        stack.spacing = 7
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            whaleView.widthAnchor.constraint(equalToConstant: 26),
+            whaleView.heightAnchor.constraint(equalToConstant: 26),
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 2),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -2),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 15),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -15)
+        ])
     }
 
     required init?(coder: NSCoder) { nil }
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        onMarkdownRendered = nil
-        gatewayStreamingTrace(
-            "cell-reuse",
-            "item=\(itemID) source=\(source.identity.uuidString.prefix(8))"
-        )
-        source.finish()
-        itemID = "-"
-        submittedCharacterCount = 0
-        installRenderer()
+        renderedText = ""
+        textView.textStorage.setAttributedString(NSAttributedString())
     }
 
     @discardableResult
-    func apply(
-        itemID: String,
-        _ payload: ConversationViewportEntry.StreamingAssistant
-    ) -> Bool {
-        self.itemID = itemID
-        submittedCharacterCount = payload.text.count
+    func apply(_ payload: ConversationViewportEntry.StreamingAssistant) -> Bool {
+        titleLabel.text = payload.title
+        guard payload.text != renderedText else { return false }
+
         gatewayStreamingTrace(
             "cell-apply",
-            "item=\(itemID) source=\(source.identity.uuidString.prefix(8)) chars=\(payload.text.count)"
+            "renderer=textkit chars=\(payload.text.count)"
         )
-        return source.update(
-            title: payload.title,
-            text: payload.text,
-            showsCopyButton: payload.showsCopyButton
+
+        if payload.text.hasPrefix(renderedText) {
+            let suffix = String(payload.text.dropFirst(renderedText.count))
+            textView.textStorage.append(attributed(suffix))
+        } else {
+            textView.textStorage.setAttributedString(attributed(payload.text))
+        }
+        renderedText = payload.text
+        textView.invalidateIntrinsicContentSize()
+        setNeedsLayout()
+        return true
+    }
+
+    private func attributed(_ text: String) -> NSAttributedString {
+        NSAttributedString(
+            string: text,
+            attributes: [
+                .font: UIFont.preferredFont(forTextStyle: .body),
+                .foregroundColor: UIColor.label
+            ]
         )
     }
 }

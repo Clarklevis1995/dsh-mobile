@@ -1291,15 +1291,11 @@ struct ConversationView: View {
             if case .message(let item) = entry.content,
                item.kind == .assistant,
                item.images.isEmpty,
-               (item.title == L10n.streamingAssistantTitle || item.id.hasPrefix("stream-text-")) {
+               item.title == L10n.streamingAssistantTitle {
                 return [ConversationViewportEntry(
                     id: entry.id,
                     revision: revision,
-                    streamingAssistant: .init(
-                        title: item.title,
-                        text: item.text,
-                        showsCopyButton: entry.showsCopyButton
-                    )
+                    streamingAssistant: .init(title: item.title, text: item.text)
                 )]
             }
             if case .message(let item) = entry.content,
