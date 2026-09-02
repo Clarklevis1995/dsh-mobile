@@ -730,7 +730,7 @@ struct ConversationView: View {
                         if state.optionsCommand == nil {
                             ForEach(state.filteredGroups, id: \.id) { group in
                                 Text(group.title)
-                                    .font(.caption)
+                                    .font(.subheadline.weight(.medium))
                                     .foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 14)
