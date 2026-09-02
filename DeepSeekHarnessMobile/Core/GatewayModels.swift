@@ -8,6 +8,17 @@ func gatewayApprovalTrace(_ message: @autoclosure () -> String) {
 #endif
 }
 
+/// End-to-end trace for diagnosing dropped/coalesced assistant streaming on
+/// iOS. Keep payload text out of logs; lengths and protocol identifiers are
+/// enough to locate the stage that stopped forwarding a reply.
+@inline(__always)
+func gatewayStreamingTrace(_ stage: String, _ message: @autoclosure () -> String) {
+#if DEBUG
+    let milliseconds = Int(ProcessInfo.processInfo.systemUptime * 1_000)
+    print("[DshStream][\(milliseconds)][\(stage)] \(message())")
+#endif
+}
+
 enum JSONValue: Codable, Hashable, Sendable {
     case string(String), number(Double), bool(Bool), object([String: JSONValue]), array([JSONValue]), null
 

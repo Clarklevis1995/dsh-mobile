@@ -1,10 +1,25 @@
 import SwiftUI
 import UIKit
+import ChatLayout
+import SwiftStreamingMarkdown
 
 struct ConversationViewportEntry: Identifiable {
+    fileprivate enum CellKind {
+        case hosting
+        case streamingAssistant
+        case userMessage
+    }
+
     struct StreamingAssistant {
         let title: String
         let text: String
+        let showsCopyButton: Bool
+
+        init(title: String, text: String, showsCopyButton: Bool = false) {
+            self.title = title
+            self.text = text
+            self.showsCopyButton = showsCopyButton
+        }
     }
 
     struct UserMessage {
@@ -28,6 +43,12 @@ struct ConversationViewportEntry: Identifiable {
     let userMessage: UserMessage?
     let allowsHeightCaching: Bool
     let clipsContentToBounds: Bool
+
+    fileprivate var cellKind: CellKind {
+        if streamingAssistant != nil { return .streamingAssistant }
+        if userMessage != nil { return .userMessage }
+        return .hosting
+    }
 
     init(
         id: String,
@@ -70,6 +91,27 @@ private struct ConversationImagePreviewItem {
     let id: String
     let image: UIImage?
     let name: String?
+}
+
+/// Keeps hosted SwiftUI content attached to the collection item's top edge.
+/// ChatLayout may briefly reconcile an estimated and measured height when an
+/// item leaves the viewport. Without an explicit top anchor, the hosting
+/// configuration centers its ideal-size content inside that changing frame,
+/// which looks like the gap to the preceding process row is being compressed.
+private struct TopPinnedConversationContent: View {
+    let id: String
+    let content: AnyView
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            content
+                .id(id)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
 }
 
 /// UIKit-backed viewport for streaming conversation timelines.
@@ -146,19 +188,27 @@ final class ConversationViewportProxy {
         controller?.stopInertialScrolling()
     }
 
-    func remeasureDisclosure(for id: String) {
-        controller?.remeasureDisclosure(for: id)
+    func prepareForDisclosureUpdate(anchorID: String) {
+        controller?.prepareForDisclosureUpdate(anchorID: anchorID)
     }
 }
 
-final class ConversationViewportController: UIViewController, UICollectionViewDelegate {
+final class ConversationViewportController: UIViewController, UICollectionViewDelegate, ChatLayoutDelegate {
     weak var proxyOwner: ConversationViewportProxy?
     var onContentAvailabilityChanged: (String?, Bool) -> Void
     var onPinnedToBottomChanged: (Bool) -> Void
     var onBottomAlignmentCompleted: () -> Void
     var onApproachingTop: () -> Void
 
-    private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: Self.makeLayout())
+    private lazy var chatLayout: CollectionViewChatLayout = {
+        let layout = CollectionViewChatLayout()
+        layout.delegate = self
+        layout.settings.estimatedItemSize = CGSize(width: 390, height: 80)
+        layout.settings.interItemSpacing = 0
+        layout.keepContentOffsetAtBottomOnBatchUpdates = false
+        return layout
+    }()
+    private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: chatLayout)
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private var entriesByID: [String: ConversationViewportEntry] = [:]
     private var previousRevisions: [String: Int] = [:]
@@ -193,6 +243,10 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         hasConversationContent: Bool
     )?
     private var cellHeightCache: [CellMeasurementKey: CGFloat] = [:]
+    private var pendingDisclosureAnchor: DisclosureAnchor?
+    private var disclosureAnchorGeneration = 0
+    private var pendingStreamingMarkdownLayoutIDs: Set<String> = []
+    private var isStreamingMarkdownLayoutScheduled = false
 
     init(
         onContentAvailabilityChanged: @escaping (String?, Bool) -> Void,
@@ -248,8 +302,18 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private func receive(_ snapshot: ConversationTimeline.Snapshot) {
         let hasContent = !snapshot.items.isEmpty
         guard let makeEntries else { return }
+        let entries = supplementalEntries + makeEntries(snapshot.items)
+        for entry in entries {
+            if let streaming = entry.streamingAssistant {
+                gatewayStreamingTrace(
+                    "viewport",
+                    "session=\(sessionID ?? "-") revision=\(snapshot.revision) " +
+                    "item=\(entry.id) chars=\(streaming.text.count)"
+                )
+            }
+        }
         apply(
-            entries: supplementalEntries + makeEntries(snapshot.items),
+            entries: entries,
             revision: snapshot.revision,
             bottomInset: bottomInset,
             hasConversationContent: hasContent
@@ -274,6 +338,10 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         previousRevisions = [:]
         lastAppliedRevision = -1
         pendingApply = nil
+        pendingDisclosureAnchor = nil
+        disclosureAnchorGeneration &+= 1
+        pendingStreamingMarkdownLayoutIDs.removeAll(keepingCapacity: true)
+        isStreamingMarkdownLayoutScheduled = false
         cellHeightCache.removeAll(keepingCapacity: true)
     }
 
@@ -286,6 +354,15 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         collectionView.backgroundColor = .clear
         collectionView.delegate = self
         collectionView.contentInsetAdjustmentBehavior = .never
+        // UIHostingConfiguration may publish its final intrinsic height after
+        // the first estimated ChatLayout pass. Both switches are required:
+        // UICollectionView forwards the change and ChatLayout accepts the
+        // subsequent preferred-size invalidation.
+        if #available(iOS 16.0, *) {
+            collectionView.selfSizingInvalidation = .enabled
+            chatLayout.supportSelfSizingInvalidation = true
+        }
+        chatLayout.processOnlyVisibleItemsOnAnimatedBatchUpdates = false
         let dismissKeyboardTap = UITapGestureRecognizer(
             target: self,
             action: #selector(dismissKeyboardFromConversation)
@@ -323,7 +400,12 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                     withReuseIdentifier: StreamingAssistantCell.reuseIdentifier,
                     for: indexPath
                 ) as! StreamingAssistantCell
-                cell.apply(streamingAssistant)
+                cell.clipsToBounds = false
+                cell.contentView.clipsToBounds = false
+                cell.onMarkdownRendered = { [weak self] in
+                    self?.scheduleStreamingMarkdownLayout(for: entry.id)
+                }
+                cell.apply(itemID: entry.id, streamingAssistant)
                 return cell
             }
             if let userMessage = entry.userMessage {
@@ -331,6 +413,8 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                     withReuseIdentifier: UserMessageCell.reuseIdentifier,
                     for: indexPath
                 ) as! UserMessageCell
+                cell.clipsToBounds = false
+                cell.contentView.clipsToBounds = false
                 self?.cacheUserMessageHeightIfNeeded(userMessage, entry: entry)
                 cell.configureMeasurement(
                     id: entry.id,
@@ -358,6 +442,17 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             ) as? StableSelfSizingCollectionViewCell else {
                 return UICollectionViewCell()
             }
+            // Clear the previous item's measurement identity before replacing
+            // the hosting configuration. Reused cells must not cache the old
+            // SwiftUI tree's height under the incoming entry's id.
+            cell.disableMeasurementCaching()
+            cell.clipsToBounds = entry.clipsContentToBounds
+            cell.contentView.clipsToBounds = entry.clipsContentToBounds
+            cell.backgroundColor = .clear
+            cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
+            cell.contentConfiguration = UIHostingConfiguration {
+                TopPinnedConversationContent(id: entry.id, content: entry.content)
+            }.margins(.all, 0)
             if entry.allowsHeightCaching {
                 cell.configureMeasurement(
                     id: entry.id,
@@ -373,18 +468,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                         ] = height
                     }
                 )
-            } else {
-                cell.disableMeasurementCaching()
             }
-            cell.backgroundColor = .clear
-            cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
-            cell.clipsToBounds = entry.clipsContentToBounds
-            cell.contentView.clipsToBounds = entry.clipsContentToBounds
-            cell.contentConfiguration = UIHostingConfiguration {
-                entry.content
-                    .id(entry.id)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }.margins(.all, 0)
             return cell
         }
     }
@@ -444,6 +528,16 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         collectionView.contentInset.bottom = bottomInset
         collectionView.verticalScrollIndicatorInsets.bottom = bottomInset
         let ids = entries.map(\.id)
+
+        // Never replace the cell-provider model while an older diffable
+        // snapshot is still animating. Otherwise UIKit can ask for a cell from
+        // snapshot A and receive the entry from pending snapshot B, which is
+        // visible as duplicated/overlapping rows during rapid disclosures.
+        guard !isApplyingSnapshot else {
+            pendingApply = (entries, revision, bottomInset, hasConversationContent)
+            return
+        }
+
         let prependAnchor = capturePrependAnchor(for: ids)
         let oldEntriesByID = entriesByID
         entriesByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
@@ -457,13 +551,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             return
         }
 
-        // UICollectionView forbids nested diffable applies. Keep exactly one
-        // latest pending state: a fast stream can never create a main-queue
-        // backlog, and the next apply always contains every packet folded so
-        // far.
-        guard !isApplyingSnapshot else {
-            pendingApply = (entries, revision, bottomInset, hasConversationContent)
-            return
+        let disclosureAnchor = hasStructureChange ? pendingDisclosureAnchor : nil
+        if hasStructureChange {
+            pendingDisclosureAnchor = nil
         }
         let streamingChanged = changed.filter { id in
             previousRevisions[id] != nil && entriesByID[id]?.streamingAssistant != nil
@@ -490,8 +580,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         updateVisibleUserMessageCells(stableUserMessageChanged)
 
         // Pure token growth never enters diffable reconciliation. The visible
-        // TextKit cell has already appended the suffix; only its own estimated
-        // height is invalidated. Completed rows are untouched.
+        // streaming Markdown cell already consumed the newest snapshot; its
+        // render callback invalidates only that item's estimated height.
+        // Completed rows remain untouched.
         if !hasStructureChange, configuredChanged.isEmpty {
             if keepTail,
                userInteractionGeneration == interactionGeneration,
@@ -508,10 +599,27 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         snapshot.appendSections([0])
         snapshot.appendItems(ids)
         if #available(iOS 15.0, *) {
-            snapshot.reconfigureItems(configuredChanged.filter { snapshot.indexOfItem($0) != nil })
+            let existingIDs = Set(dataSource.snapshot().itemIdentifiers)
+            let reloadedIDs = configuredChanged.filter { id in
+                guard existingIDs.contains(id),
+                      snapshot.indexOfItem(id) != nil,
+                      let old = oldEntriesByID[id],
+                      let new = entriesByID[id] else { return false }
+                return old.cellKind != new.cellKind
+            }
+            let reloadedIDSet = Set(reloadedIDs)
+            let reconfiguredIDs = configuredChanged.filter {
+                existingIDs.contains($0)
+                    && snapshot.indexOfItem($0) != nil
+                    && !reloadedIDSet.contains($0)
+            }
+            let reconfiguredIndexPaths = reconfiguredIDs.compactMap { dataSource.indexPath(for: $0) }
+            chatLayout.reconfigureItems(at: reconfiguredIndexPaths)
+            snapshot.reloadItems(reloadedIDs)
+            snapshot.reconfigureItems(reconfiguredIDs)
         }
         let wasEmpty = !hasAppliedSnapshot
-        dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
+        dataSource.apply(snapshot, animatingDifferences: disclosureAnchor != nil) { [weak self] in
             guard let self else { return }
             self.isApplyingSnapshot = false
             guard self.sessionGeneration == applyingSessionGeneration else {
@@ -535,6 +643,8 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             self.reportContentAvailability(hasConversationContent)
             if let prependAnchor, !keepTail {
                 self.restore(prependAnchor)
+            } else if let disclosureAnchor {
+                self.stabilizeDisclosureAnchor(disclosureAnchor, remainingPasses: 3)
             }
             self.needsInitialBottomPlacement = self.needsInitialBottomPlacement || wasEmpty
             if self.needsInitialBottomPlacement {
@@ -565,18 +675,50 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     }
 
     private func updateVisibleStreamingCells(_ ids: [String]) {
-        var invalidatedIndexPaths: [IndexPath] = []
         for id in ids {
             guard let payload = entriesByID[id]?.streamingAssistant,
                   let indexPath = dataSource.indexPath(for: id),
                   let cell = collectionView.cellForItem(at: indexPath) as? StreamingAssistantCell,
-                  cell.apply(payload) else { continue }
-            invalidatedIndexPaths.append(indexPath)
+                  cell.apply(itemID: id, payload) else { continue }
         }
-        guard !invalidatedIndexPaths.isEmpty else { return }
-        let context = UICollectionViewLayoutInvalidationContext()
-        context.invalidateItems(at: invalidatedIndexPaths)
-        collectionView.collectionViewLayout.invalidateLayout(with: context)
+    }
+
+    private func scheduleStreamingMarkdownLayout(for id: String) {
+        pendingStreamingMarkdownLayoutIDs.insert(id)
+        guard !isStreamingMarkdownLayoutScheduled else { return }
+        isStreamingMarkdownLayoutScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            self?.flushStreamingMarkdownLayout()
+        }
+    }
+
+    private func flushStreamingMarkdownLayout() {
+        guard !isApplyingSnapshot else {
+            DispatchQueue.main.async { [weak self] in
+                self?.flushStreamingMarkdownLayout()
+            }
+            return
+        }
+        isStreamingMarkdownLayoutScheduled = false
+        let ids = pendingStreamingMarkdownLayoutIDs
+        pendingStreamingMarkdownLayoutIDs.removeAll(keepingCapacity: true)
+        let indexPaths = ids.compactMap { dataSource.indexPath(for: $0) }.filter {
+            collectionView.cellForItem(at: $0) is StreamingAssistantCell
+        }
+        guard !indexPaths.isEmpty else { return }
+
+        let context = ChatLayoutInvalidationContext()
+        context.invalidateLayoutMetrics = false
+        context.invalidateItems(at: indexPaths)
+        chatLayout.invalidateLayout(with: context)
+        collectionView.layoutIfNeeded()
+
+        if isPinnedToBottom,
+           !collectionView.isTracking,
+           !collectionView.isDragging,
+           !collectionView.isDecelerating {
+            followStreamingTail()
+        }
     }
 
     private func updateVisibleUserMessageCells(_ ids: [String]) {
@@ -632,43 +774,77 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         cellHeightCache[key] = UserMessageCell.estimatedHeight(for: userMessage, width: width)
     }
 
-    /// SwiftUI disclosure state lives inside a UIHostingConfiguration. That
-    /// internal state change does not reliably invalidate the enclosing
-    /// compositional-layout item, so explicitly remeasure only its host cell
-    /// after SwiftUI has committed the new hierarchy.
-    func remeasureDisclosure(for id: String) {
+    /// Capture the stable header before its descendants are inserted or
+    /// removed. The header remains its own collection item, so the subsequent
+    /// diffable update never needs to infer a position from a resizing host.
+    func prepareForDisclosureUpdate(anchorID id: String) {
         stopInertialScrolling()
         needsBottomAlignment = false
         bottomAlignmentGeneration &+= 1
         guard let indexPath = dataSource.indexPath(for: id),
               let attributes = collectionView.layoutAttributesForItem(at: indexPath) else { return }
-        let anchor = VisibleAnchor(
-            id: id,
-            offsetFromViewportTop: attributes.frame.minY - collectionView.contentOffset.y
+        disclosureAnchorGeneration &+= 1
+        pendingDisclosureAnchor = DisclosureAnchor(
+            anchor: VisibleAnchor(
+                id: id,
+                offsetFromViewportTop: attributes.frame.minY
+                    - collectionView.contentOffset.y
+                    - collectionView.adjustedContentInset.top
+            ),
+            generation: disclosureAnchorGeneration,
+            interactionGeneration: userInteractionGeneration
         )
+    }
 
+    private func stabilizeDisclosureAnchor(
+        _ disclosureAnchor: DisclosureAnchor,
+        remainingPasses: Int
+    ) {
+        guard disclosureAnchor.generation == disclosureAnchorGeneration,
+              disclosureAnchor.interactionGeneration == userInteractionGeneration,
+              !collectionView.isTracking,
+              !collectionView.isDragging,
+              !collectionView.isDecelerating,
+              let indexPath = dataSource.indexPath(for: disclosureAnchor.anchor.id) else { return }
+
+        chatLayout.restoreContentOffset(with: ChatLayoutPositionSnapshot(
+            indexPath: indexPath,
+            edge: .top,
+            offset: disclosureAnchor.anchor.offsetFromViewportTop
+        ))
+
+        guard remainingPasses > 0 else { return }
         DispatchQueue.main.async { [weak self] in
-            guard let self,
-                  self.dataSource.indexPath(for: id) == indexPath else { return }
-            if let cell = self.collectionView.cellForItem(at: indexPath) {
-                cell.invalidateIntrinsicContentSize()
-                cell.contentView.invalidateIntrinsicContentSize()
-                cell.contentView.subviews.forEach {
-                    $0.invalidateIntrinsicContentSize()
-                    $0.setNeedsLayout()
-                }
-                cell.setNeedsLayout()
-                cell.contentView.setNeedsLayout()
-            }
-            let context = UICollectionViewLayoutInvalidationContext()
-            context.invalidateItems(at: [indexPath])
-            UIView.performWithoutAnimation {
-                self.collectionView.collectionViewLayout.invalidateLayout(with: context)
-                self.collectionView.layoutIfNeeded()
-                self.restorePosition(anchor)
-            }
-            self.setPinned(self.isAtBottom(self.collectionView))
+            self?.stabilizeDisclosureAnchor(
+                disclosureAnchor,
+                remainingPasses: remainingPasses - 1
+            )
         }
+    }
+
+    func sizeForItem(
+        _ chatLayout: CollectionViewChatLayout,
+        at indexPath: IndexPath
+    ) -> ItemSize {
+        guard let id = dataSource?.itemIdentifier(for: indexPath),
+              let entry = entriesByID[id] else {
+            return .estimated(CGSize(width: chatLayout.layoutFrame.width, height: 80))
+        }
+        let width = chatLayout.layoutFrame.width
+        if entry.allowsHeightCaching,
+           let height = cellHeightCache[
+               CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+           ] {
+            return .exact(CGSize(width: width, height: height))
+        }
+        return .estimated(CGSize(width: width, height: 80))
+    }
+
+    func alignmentForItem(
+        _ chatLayout: CollectionViewChatLayout,
+        at indexPath: IndexPath
+    ) -> ChatItemAlignment {
+        .fullWidth
     }
 
     /// Streaming updates only need one lightweight tail adjustment. The
@@ -814,6 +990,12 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         let offsetFromViewportTop: CGFloat
     }
 
+    private struct DisclosureAnchor {
+        let anchor: VisibleAnchor
+        let generation: Int
+        let interactionGeneration: Int
+    }
+
     private func capturePrependAnchor(for newIDs: [String]) -> VisibleAnchor? {
         let oldIDs = dataSource.snapshot().itemIdentifiers
         guard let oldFirst = oldIDs.first,
@@ -864,24 +1046,6 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         }
     }
 
-    private static func makeLayout() -> UICollectionViewCompositionalLayout {
-        // `UserMessageCell` has a required 75pt minimum vertical chain:
-        // outer top + bubble padding + copy gap/button + outer bottom. Giving
-        // every item a 44pt provisional frame made UIKit lay that cell out in
-        // an impossible height before its cached/self-sized height was read,
-        // producing two constraint failures for every historical user row.
-        // This remains only an estimate; short hosted rows still self-size
-        // down and cached rows immediately replace it with their exact height.
-        let itemSize = NSCollectionLayoutSize(
-            widthDimension: .fractionalWidth(1),
-            heightDimension: .estimated(80)
-        )
-        let item = NSCollectionLayoutItem(layoutSize: itemSize)
-        let group = NSCollectionLayoutGroup.vertical(layoutSize: itemSize, subitems: [item])
-        let section = NSCollectionLayoutSection(group: group)
-        section.interGroupSpacing = 0
-        return UICollectionViewCompositionalLayout(section: section)
-    }
 }
 
 private struct CellMeasurementKey: Hashable {
@@ -902,7 +1066,7 @@ private struct CellMeasurementKey: Hashable {
 /// repeatedly invalidate the same cells until UIKit terminates the app for a
 /// recursive layout loop. Keep dynamic heights, but quantize the final result
 /// to whole points so repeated measurements are deterministic.
-private class StableSelfSizingCollectionViewCell: UICollectionViewCell {
+class StableSelfSizingCollectionViewCell: UICollectionViewCell {
     private var measurementID: String?
     private var cachedHeight: ((CGFloat) -> CGFloat?)?
     private var storeHeight: ((CGFloat, CGFloat) -> Void)?
@@ -940,12 +1104,31 @@ private class StableSelfSizingCollectionViewCell: UICollectionViewCell {
             return stable
         }
 
-        let fitted = super.preferredLayoutAttributesFitting(layoutAttributes)
-        guard let stable = fitted.copy() as? UICollectionViewLayoutAttributes else {
-            return fitted
+        // `UIHostingConfiguration` can initially return ChatLayout's estimate
+        // while a multi-block Markdown view already draws at its ideal height.
+        // Once that estimate is cached, the following process/assistant cell is
+        // laid out inside the visible Markdown. Measure the hosted content view
+        // explicitly at the layout's required width so the cell boundary and
+        // the pixels it owns are established in the same pass.
+        contentView.bounds.size.width = width
+        contentView.setNeedsLayout()
+        contentView.layoutIfNeeded()
+        let measured = contentView.systemLayoutSizeFitting(
+            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        )
+        let measuredHeight: CGFloat
+        if measured.height.isFinite, measured.height > 0 {
+            measuredHeight = measured.height
+        } else {
+            measuredHeight = super.preferredLayoutAttributesFitting(layoutAttributes).size.height
+        }
+        guard let stable = layoutAttributes.copy() as? UICollectionViewLayoutAttributes else {
+            return layoutAttributes
         }
         stable.size.width = width
-        stable.size.height = ceil(fitted.size.height)
+        stable.size.height = ceil(measuredHeight)
         if measurementID != nil {
             storeHeight?(width, stable.size.height)
         }
@@ -1581,107 +1764,228 @@ private final class ZoomingImageViewController: UIViewController, UIScrollViewDe
     }
 }
 
-/// The active assistant response is the only row that changes for text
-/// deltas. TextKit appends the suffix directly to `NSTextStorage`, preserving
-/// all previously laid-out cells and avoiding a full SwiftUI/Markdown rebuild
-/// for every WebSocket packet.
-private final class StreamingAssistantCell: StableSelfSizingCollectionViewCell {
+/// Owns the latest-snapshot Markdown rendering pipeline for one assistant cell.
+///
+/// Gateway updates are a hot stream, while SwiftStreamingMarkdown's sample
+/// `StreamedMarkdownSource` is a cold producer owned by the view lifecycle.
+/// Bridging the hot stream through `StreamedMarkdownView` left its private
+/// controller waiting on an old parse and could strand the cell at `.empty`.
+/// Parse snapshots here instead and hand the resulting document to the
+/// package's public `DocumentView`, coalescing intermediate snapshots while
+/// guaranteeing that the newest one is eventually published.
+@MainActor
+final class ConversationMarkdownRenderer: ObservableObject {
+    let identity = UUID()
+    @Published private(set) var title = ""
+    @Published private(set) var copyText = ""
+    @Published private(set) var showsCopyButton = false
+    @Published private(set) var document: RenderableDocument = .empty
+    @Published private(set) var renderedCharacterCount = 0
+
+    var onRender: (() -> Void)?
+
+    private struct PendingRender {
+        let revision: Int
+        let text: String
+    }
+
+    private let renderConfig = MarkdownRenderConfig(
+        shouldAnimateText: true,
+        blockSpacing: 10
+    )
+    private var currentText = ""
+    private var pendingRender: PendingRender?
+    private var renderTask: Task<Void, Never>?
+    private var renderRevision = 0
+    private var isFinished = false
+
+    deinit {
+        renderTask?.cancel()
+    }
+
+    @discardableResult
+    func update(title: String, text: String, showsCopyButton: Bool = false) -> Bool {
+        let metadataChanged = self.title != title
+            || self.showsCopyButton != showsCopyButton
+            || (showsCopyButton && copyText != text)
+        if self.title != title { self.title = title }
+        if self.showsCopyButton != showsCopyButton { self.showsCopyButton = showsCopyButton }
+        let nextCopyText = showsCopyButton ? text : ""
+        if copyText != nextCopyText { copyText = nextCopyText }
+
+        guard !isFinished else { return false }
+        let textChanged = text != currentText
+        guard textChanged else {
+            if metadataChanged { onRender?() }
+            return metadataChanged
+        }
+        currentText = text
+        renderRevision &+= 1
+        pendingRender = PendingRender(revision: renderRevision, text: text)
+
+        gatewayStreamingTrace(
+            "source-yield",
+            "source=\(identity.uuidString.prefix(8)) chars=\(text.count) revision=\(renderRevision)"
+        )
+        startNextRenderIfNeeded()
+        return true
+    }
+
+    func finish() {
+        guard !isFinished else { return }
+        isFinished = true
+        pendingRender = nil
+        renderTask?.cancel()
+        renderTask = nil
+    }
+
+    private func startNextRenderIfNeeded() {
+        guard renderTask == nil, let pendingRender, !isFinished else { return }
+        self.pendingRender = nil
+        let sourceID = identity
+        let config = renderConfig
+        gatewayStreamingTrace(
+            "parse-start",
+            "source=\(sourceID.uuidString.prefix(8)) revision=\(pendingRender.revision) " +
+            "chars=\(pendingRender.text.count)"
+        )
+
+        renderTask = Task { [weak self] in
+            let renderable = await Task.detached(priority: .userInitiated) {
+                await MarkdownParserImpl().parse(text: pendingRender.text, config: config)
+            }.value
+            guard let self, !Task.isCancelled, !self.isFinished else { return }
+
+            gatewayStreamingTrace(
+                "parse-finish",
+                "source=\(sourceID.uuidString.prefix(8)) revision=\(pendingRender.revision) " +
+                "chars=\(pendingRender.text.count) pending=\(self.pendingRender != nil)"
+            )
+            self.renderTask = nil
+
+            // Publishing an intermediate parse is useful only when it is still
+            // the newest snapshot. If chunks arrived during parsing, skip the
+            // stale document and immediately parse the latest accumulated text.
+            if self.pendingRender == nil {
+                self.document = renderable
+                self.renderedCharacterCount = pendingRender.text.count
+                gatewayStreamingTrace(
+                    "renderer",
+                    "source=\(sourceID.uuidString.prefix(8)) revision=\(pendingRender.revision) " +
+                    "publishedChars=\(pendingRender.text.count)"
+                )
+                self.onRender?()
+            }
+            self.startNextRenderIfNeeded()
+        }
+    }
+}
+
+private struct StreamingAssistantMarkdownView: View {
+    @ObservedObject var source: ConversationMarkdownRenderer
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 9) {
+                Image("DeepSeekWhale")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 26, height: 26)
+                    .foregroundStyle(source.showsCopyButton ? Color.primary : Color.secondary)
+                Text(source.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(source.showsCopyButton ? Color.primary : Color.secondary)
+            }
+            DocumentView(
+                renderableDocument: source.document,
+                config: MarkdownRenderConfig(
+                    shouldAnimateText: true,
+                    blockSpacing: 10
+                )
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if source.showsCopyButton && !source.copyText.isEmpty {
+                CopyMessageButton(text: source.copyText)
+            }
+        }
+        .padding(.horizontal, 2)
+        .padding(.vertical, 15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The active assistant response owns one long-lived stream source. Incoming
+/// WebSocket snapshots are pushed into the Markdown renderer without replacing
+/// the cell or rebuilding already rendered blocks.
+final class StreamingAssistantCell: StableSelfSizingCollectionViewCell {
     static let reuseIdentifier = "StreamingAssistantCell"
 
-    private let whaleView: UIImageView = {
-        let view = UIImageView(image: UIImage(named: "DeepSeekWhale")?.withRenderingMode(.alwaysTemplate))
-        view.tintColor = .secondaryLabel
-        view.contentMode = .scaleAspectFit
-        view.translatesAutoresizingMaskIntoConstraints = false
-        return view
-    }()
-
-    private let titleLabel: UILabel = {
-        let label = UILabel()
-        label.font = .preferredFont(forTextStyle: .subheadline).withWeight(.semibold)
-        label.textColor = .secondaryLabel
-        label.adjustsFontForContentSizeCategory = true
-        return label
-    }()
-
-    private let textView: UITextView = {
-        let view = UITextView()
-        view.backgroundColor = .clear
-        view.isEditable = false
-        view.isSelectable = false
-        view.isScrollEnabled = false
-        view.textContainerInset = .zero
-        view.textContainer.lineFragmentPadding = 0
-        view.font = .preferredFont(forTextStyle: .body)
-        view.textColor = .label
-        view.adjustsFontForContentSizeCategory = true
-        view.setContentCompressionResistancePriority(.required, for: .vertical)
-        return view
-    }()
-
-    private var renderedText = ""
+    var onMarkdownRendered: (() -> Void)?
+    private var source: ConversationMarkdownRenderer!
+    private var itemID = "-"
+    private var submittedCharacterCount = 0
+    var rendererIdentity: UUID { source.identity }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
         contentView.backgroundColor = .clear
+        installRenderer()
+    }
 
-        let header = UIStackView(arrangedSubviews: [whaleView, titleLabel])
-        header.axis = .horizontal
-        header.alignment = .center
-        header.spacing = 9
-
-        let stack = UIStackView(arrangedSubviews: [header, textView])
-        stack.axis = .vertical
-        stack.alignment = .fill
-        stack.spacing = 7
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            whaleView.widthAnchor.constraint(equalToConstant: 26),
-            whaleView.heightAnchor.constraint(equalToConstant: 26),
-            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 2),
-            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -2),
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 15),
-            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -15)
-        ])
+    private func installRenderer() {
+        let source = ConversationMarkdownRenderer()
+        let sourceID = source.identity
+        self.source = source
+        source.onRender = { [weak self] in
+            if let self {
+                gatewayStreamingTrace(
+                    "cell-layout",
+                    "item=\(self.itemID) source=\(sourceID.uuidString.prefix(8)) " +
+                    "submittedChars=\(self.submittedCharacterCount)"
+                )
+            }
+            self?.onMarkdownRendered?()
+        }
+        contentConfiguration = UIHostingConfiguration {
+            StreamingAssistantMarkdownView(source: source)
+                // A reused cell must establish a new SwiftUI identity so a
+                // cancelled renderer from the previous reply cannot survive.
+                .id(source.identity)
+        }.margins(.all, 0)
     }
 
     required init?(coder: NSCoder) { nil }
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        renderedText = ""
-        textView.textStorage.setAttributedString(NSAttributedString())
+        onMarkdownRendered = nil
+        gatewayStreamingTrace(
+            "cell-reuse",
+            "item=\(itemID) source=\(source.identity.uuidString.prefix(8))"
+        )
+        source.finish()
+        itemID = "-"
+        submittedCharacterCount = 0
+        installRenderer()
     }
 
     @discardableResult
-    func apply(_ payload: ConversationViewportEntry.StreamingAssistant) -> Bool {
-        titleLabel.text = payload.title
-        guard payload.text != renderedText else { return false }
-
-        if payload.text.hasPrefix(renderedText) {
-            let suffix = String(payload.text.dropFirst(renderedText.count))
-            textView.textStorage.append(attributed(suffix))
-        } else {
-            // Reconnect corrections and out-of-order replacement frames are
-            // uncommon, but the final accumulated server state still wins.
-            textView.textStorage.setAttributedString(attributed(payload.text))
-        }
-        renderedText = payload.text
-        textView.invalidateIntrinsicContentSize()
-        setNeedsLayout()
-        return true
-    }
-
-    private func attributed(_ text: String) -> NSAttributedString {
-        NSAttributedString(
-            string: text,
-            attributes: [
-                .font: UIFont.preferredFont(forTextStyle: .body),
-                .foregroundColor: UIColor.label
-            ]
+    func apply(
+        itemID: String,
+        _ payload: ConversationViewportEntry.StreamingAssistant
+    ) -> Bool {
+        self.itemID = itemID
+        submittedCharacterCount = payload.text.count
+        gatewayStreamingTrace(
+            "cell-apply",
+            "item=\(itemID) source=\(source.identity.uuidString.prefix(8)) chars=\(payload.text.count)"
+        )
+        return source.update(
+            title: payload.title,
+            text: payload.text,
+            showsCopyButton: payload.showsCopyButton
         )
     }
 }

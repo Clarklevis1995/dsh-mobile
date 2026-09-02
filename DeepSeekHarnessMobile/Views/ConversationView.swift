@@ -32,11 +32,11 @@ func slashCommandComposerPresentation(
     )
 }
 
-private struct SlashCommandTextView: UIViewRepresentable {
+struct SlashCommandTextView: UIViewRepresentable {
     @Binding var text: String
     let presentation: SlashCommandComposerPresentation?
     let placeholder: String
-    var isFocused: FocusState<Bool>.Binding
+    @Binding var isFocused: Bool
 
     func makeUIView(context: Context) -> CommandTextView {
         let textView = CommandTextView()
@@ -56,9 +56,9 @@ private struct SlashCommandTextView: UIViewRepresentable {
     func updateUIView(_ textView: CommandTextView, context: Context) {
         context.coordinator.update(parent: self)
         textView.apply(text: text, presentation: presentation, placeholder: placeholder)
-        if isFocused.wrappedValue && !textView.isFirstResponder {
+        if isFocused && !textView.isFirstResponder {
             textView.becomeFirstResponder()
-        } else if !isFocused.wrappedValue && textView.isFirstResponder {
+        } else if !isFocused && textView.isFirstResponder {
             textView.resignFirstResponder()
         }
     }
@@ -97,42 +97,69 @@ private struct SlashCommandTextView: UIViewRepresentable {
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
-            parent.isFocused.wrappedValue = true
+            parent.isFocused = true
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
-            parent.isFocused.wrappedValue = false
+            parent.isFocused = false
         }
     }
 }
 
-private final class CommandTextView: UITextView {
+final class CommandTextView: UITextView {
     private var renderedText = ""
     private var renderedPresentation: SlashCommandComposerPresentation?
     private var renderedPlaceholder = ""
 
     func apply(text: String, presentation: SlashCommandComposerPresentation?, placeholder: String) {
-        guard renderedText != text || renderedPresentation != presentation || renderedPlaceholder != placeholder else { return }
+        let needsTextSynchronization = self.text != text
+        let textChanged = renderedText != text
+        let presentationChanged = renderedPresentation != presentation
+        let placeholderChanged = renderedPlaceholder != placeholder
+        guard needsTextSynchronization || textChanged || presentationChanged || placeholderChanged else { return }
+
         let selection = selectedRange
         let attributes = baseAttributes()
-        let attributed = NSMutableAttributedString(string: text, attributes: attributes)
-        if let presentation, text.hasPrefix(presentation.token) {
-            attributed.addAttributes(
-                [.foregroundColor: UIColor.systemBlue],
-                range: NSRange(location: 0, length: (presentation.token as NSString).length)
+
+        // 用户输入已经存在于 UITextView 的 textStorage 中。SwiftUI 将 Binding
+        // 回传到这里时不能再次替换 attributedText，否则会打断第一响应者和
+        // marked-text（中文输入法）状态。只有菜单选中等真正的外部赋值才同步文本。
+        if needsTextSynchronization {
+            attributedText = NSAttributedString(string: text, attributes: attributes)
+            selectedRange = NSRange(
+                location: min(selection.location, (text as NSString).length),
+                length: 0
             )
         }
-        attributedText = attributed
+
         typingAttributes = attributes
         renderedText = text
         renderedPresentation = presentation
         renderedPlaceholder = placeholder
-        selectedRange = NSRange(
-            location: min(selection.location, (text as NSString).length),
-            length: 0
-        )
+        if needsTextSynchronization || presentationChanged {
+            applyCommandHighlight(presentation)
+        }
         setNeedsDisplay()
         invalidateIntrinsicContentSize()
+    }
+
+    private func applyCommandHighlight(_ presentation: SlashCommandComposerPresentation?) {
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+        let selection = selectedRange
+        textStorage.beginEditing()
+        textStorage.setAttributes(baseAttributes(), range: fullRange)
+        if let presentation, text.hasPrefix(presentation.token) {
+            let tokenLength = min((presentation.token as NSString).length, textStorage.length)
+            if tokenLength > 0 {
+                textStorage.addAttribute(
+                    .foregroundColor,
+                    value: UIColor.systemBlue,
+                    range: NSRange(location: 0, length: tokenLength)
+                )
+            }
+        }
+        textStorage.endEditing()
+        selectedRange = selection
     }
 
     override func draw(_ rect: CGRect) {
@@ -192,11 +219,14 @@ struct ConversationView: View {
     @State private var composerHeight: CGFloat = 168
     @State private var viewportScrollToBottomToken = 0
     @State private var viewportProxy = ConversationViewportProxy()
+    @State private var expandedConversationNodeIDsBySession: [String: Set<String>] = [:]
     @State private var isPreparingHistoryPresentation = false
     @State private var historyPresentationSessionID: String?
     @State private var viewportHasConversationContent = false
     @State private var bottomSafeAreaInset: CGFloat = 0
-    @FocusState private var composerIsFocused: Bool
+    // 输入主体是 UIKit UITextView，不需要 SwiftUI FocusState 参与焦点仲裁。
+    // 普通 State 作为单向的显式聚焦/失焦请求，UITextView 自己持有第一响应者。
+    @State private var composerIsFocused = false
     private let conversationBottomClearance: CGFloat = 22
 
     var body: some View {
@@ -1256,20 +1286,25 @@ struct ConversationView: View {
     }
 
     private func makeConversationViewportEntries(from items: [ConversationItem]) -> [ConversationViewportEntry] {
-        ConversationDisplayEntry.make(from: items).map { entry in
+        ConversationDisplayEntry.make(from: items).flatMap { entry in
             let revision = viewportEntryRevision(entry)
             if case .message(let item) = entry.content,
                item.kind == .assistant,
-               item.title == L10n.streamingAssistantTitle {
-                return ConversationViewportEntry(
+               item.images.isEmpty,
+               (item.title == L10n.streamingAssistantTitle || item.id.hasPrefix("stream-text-")) {
+                return [ConversationViewportEntry(
                     id: entry.id,
                     revision: revision,
-                    streamingAssistant: .init(title: item.title, text: item.text)
-                )
+                    streamingAssistant: .init(
+                        title: item.title,
+                        text: item.text,
+                        showsCopyButton: entry.showsCopyButton
+                    )
+                )]
             }
             if case .message(let item) = entry.content,
                item.kind == .user {
-                return ConversationViewportEntry(
+                return [ConversationViewportEntry(
                     id: entry.id,
                     revision: revision,
                     userMessage: .init(
@@ -1285,44 +1320,110 @@ struct ConversationView: View {
                         },
                         showsCopyButton: entry.showsCopyButton
                     )
-                )
+                )]
             }
-            let content: AnyView
-            let allowsHeightCaching: Bool
-            let clipsContentToBounds: Bool
             switch entry.content {
             case .message(let item):
-                content = AnyView(ConversationRow(
-                    item: item,
-                    showsCopyButton: entry.showsCopyButton,
-                    imageData: { store.imageData(for: $0) }
-                ))
-                // Fenced code uses a horizontal ScrollView. Its vertical ideal
-                // size is stable after layout, but not necessarily during the
-                // first UIHostingConfiguration measurement. Let UIKit measure
-                // these rows live instead of replaying a premature short cache.
-                allowsHeightCaching = !MarkdownViewportSizing.requiresLiveMeasurement(item.text)
-                clipsContentToBounds = false
+                return [ConversationViewportEntry(
+                    id: entry.id,
+                    revision: revision,
+                    content: AnyView(ConversationRow(
+                        item: item,
+                        showsCopyButton: entry.showsCopyButton,
+                        imageData: { store.imageData(for: $0) }
+                    )),
+                    // Fenced code uses a horizontal ScrollView. Its vertical
+                    // ideal size can settle after the first hosting pass.
+                    allowsHeightCaching: !MarkdownViewportSizing.requiresLiveMeasurement(item.text),
+                    // A completed Markdown response must never paint into an
+                    // adjacent expandable process cell while UIKit reconciles
+                    // a preferred-height invalidation.
+                    clipsContentToBounds: true
+                )]
             case .process(let group):
-                content = AnyView(
-                    ConversationProcessRow(group: group)
-                        .environment(\.conversationDisclosureDidToggle) {
-                            viewportProxy.remeasureDisclosure(for: entry.id)
-                        }
-                )
-                // Process rows contain nested disclosures. Their intrinsic
-                // height changes after a tap, so let UIHostingConfiguration
-                // and the self-sizing collection layout measure them live.
-                allowsHeightCaching = false
-                clipsContentToBounds = true
+                return processViewportEntries(for: group)
             }
-            return ConversationViewportEntry(
-                id: entry.id,
-                revision: revision,
-                content: content,
-                allowsHeightCaching: allowsHeightCaching,
-                clipsContentToBounds: clipsContentToBounds
+        }
+    }
+
+    private func processViewportEntries(for group: ConversationProcessGroup) -> [ConversationViewportEntry] {
+        ConversationProcessNode.make(
+            from: group,
+            expandedNodeIDs: expandedConversationNodeIDs
+        ).map { node in
+            ConversationViewportEntry(
+                id: node.id,
+                revision: node.revision,
+                content: AnyView(processNodeView(node)),
+                // Process descendants are independently self-sized cells.
+                // Clipping is a final safety boundary while an estimated
+                // height is settling, so Markdown can never paint over a
+                // sibling row during an animated insertion.
+                clipsContentToBounds: true
             )
+        }
+    }
+
+    private var expandedConversationNodeIDs: Set<String> {
+        guard let sessionID = store.selectedSessionId else { return [] }
+        return expandedConversationNodeIDsBySession[sessionID] ?? []
+    }
+
+    private func toggleConversationNode(_ id: String) {
+        guard let sessionID = store.selectedSessionId else { return }
+        viewportProxy.prepareForDisclosureUpdate(anchorID: id)
+        var expanded = expandedConversationNodeIDsBySession[sessionID] ?? []
+        if !expanded.insert(id).inserted {
+            expanded.remove(id)
+        }
+        expandedConversationNodeIDsBySession[sessionID] = expanded
+    }
+
+    @ViewBuilder
+    private func processNodeView(_ node: ConversationProcessNode) -> some View {
+        switch node.content {
+        case .groupHeader(let group, let isExpanded, let isExpandable):
+            ConversationProcessHeaderRow(
+                group: group,
+                expanded: isExpanded,
+                isExpandable: isExpandable,
+                onToggle: { toggleConversationNode(node.id) }
+            )
+        case .commandDetail(let command):
+            ConversationCommandDetailRow(command: command)
+        case .eventHeader(let item, let role, let isExpanded, let isExpandable):
+            ConversationEventHeaderRow(
+                item: item,
+                role: role,
+                expanded: isExpanded,
+                isExpandable: isExpandable,
+                onToggle: { toggleConversationNode(node.id) }
+            )
+        case .eventDetail(let item, let role):
+            ConversationEventDetailRow(item: item, role: role)
+        case .reasoningHeader(let text, let isExpanded):
+            ConversationReasoningHeaderRow(
+                text: text,
+                expanded: isExpanded,
+                onToggle: { toggleConversationNode(node.id) }
+            )
+        case .reasoningDetail(let text):
+            ConversationReasoningDetailRow(text: text)
+        case .toolBundleHeader(let tools, let isExpanded):
+            ConversationToolBundleHeaderRow(
+                tools: tools,
+                expanded: isExpanded,
+                onToggle: { toggleConversationNode(node.id) }
+            )
+        case .toolHeader(let tool, let isExpanded, let isExpandable):
+            ConversationProcessToolHeaderRow(
+                tool: tool,
+                expanded: isExpanded,
+                isExpandable: isExpandable,
+                onToggle: { toggleConversationNode(node.id) }
+            )
+        case .toolDetail(let tool):
+            ConversationProcessToolDetailRow(tool: tool)
         }
     }
 
@@ -1881,7 +1982,7 @@ private struct ContextUsagePopover: View {
     }
 }
 
-private struct ConversationProcessGroup: Identifiable {
+struct ConversationProcessGroup: Identifiable {
     let id: String
     let items: [ConversationItem]
 
@@ -1951,13 +2052,17 @@ private struct ConversationDisplayEntry: Identifiable {
     }
 }
 
-private struct ConversationProcessTool: Identifiable {
+struct ConversationProcessTool: Identifiable {
     let id: String
     let call: ConversationItem?
     let result: ConversationItem?
+
+    var isExpandable: Bool {
+        call?.text.isEmpty == false || result?.text.isEmpty == false
+    }
 }
 
-private enum ConversationProcessContent: Identifiable {
+enum ConversationProcessContent: Identifiable {
     case context(ConversationItem)
     case reasoning(ConversationItem)
     case tool(ConversationProcessTool)
@@ -1971,7 +2076,7 @@ private enum ConversationProcessContent: Identifiable {
     }
 }
 
-private extension ConversationProcessGroup {
+extension ConversationProcessGroup {
     var command: ConversationItem? {
         items.first?.kind == .status ? items.first : nil
     }
@@ -2018,79 +2123,257 @@ private extension ConversationProcessGroup {
             if case .context = content { count + 1 } else { count }
         }
     }
-}
 
-private struct ConversationProcessRow: View {
-    let group: ConversationProcessGroup
-    @State private var expanded = false
-    @Environment(\.conversationDisclosureDidToggle) private var disclosureDidToggle
-
-    private var reasoningText: String {
-        group.contents.compactMap { content in
+    var reasoningText: String {
+        contents.compactMap { content in
             if case .reasoning(let item) = content { item.text } else { nil }
         }.filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 
-    private var contexts: [ConversationItem] {
-        group.contents.compactMap { content in
+    var contexts: [ConversationItem] {
+        contents.compactMap { content in
             if case .context(let item) = content { item } else { nil }
         }
     }
 
-    private var tools: [ConversationProcessTool] {
-        group.contents.compactMap { content in
+    var tools: [ConversationProcessTool] {
+        contents.compactMap { content in
             if case .tool(let tool) = content { tool } else { nil }
         }
     }
 
-    private var commandHasDetailedText: Bool {
-        guard let text = group.command?.text else { return false }
+    var commandHasDetailedText: Bool {
+        guard let text = command?.text else { return false }
         return text.contains("\n") || text.count > 96
     }
 
-    private var isExpandable: Bool {
-        group.command == nil || commandHasDetailedText || !group.detailItems.isEmpty
+    var isExpandable: Bool {
+        command == nil || commandHasDetailedText || !detailItems.isEmpty
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if isExpandable {
-                Button { toggleWithoutAnimation($expanded, after: disclosureDidToggle) } label: {
-                    processHeader
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            } else {
-                processHeader
-            }
+    var processTitle: String {
+        if let command {
+            let preview = commandPreview(command.text)
+            return preview.isEmpty ? command.title : "\(command.title) · \(preview)"
+        }
+        if contextCount > 0, toolCount == 0, reasoningText.isEmpty {
+            return contextCount == 1
+                ? String(localized: "上下文")
+                : String(localized: "context.items.count", defaultValue: "\(contextCount) 项上下文")
+        }
+        let base: String
+        if duration >= 60 {
+            base = String(
+                localized: "duration.minutes-seconds",
+                defaultValue: "耗时 \(Int(duration) / 60) 分钟 \(Int(duration) % 60) 秒"
+            )
+        } else if duration >= 1 {
+            base = String(
+                localized: "duration.seconds",
+                defaultValue: "耗时 \(Int(duration.rounded())) 秒"
+            )
+        } else {
+            base = String(localized: "思考过程")
+        }
+        var details: [String] = []
+        if contextCount > 0 {
+            details.append(String(localized: "context.items.count", defaultValue: "\(contextCount) 项上下文"))
+        }
+        if toolCount > 0 {
+            details.append(String(localized: "toolcall.count", defaultValue: "\(toolCount) 次工具调用"))
+        }
+        return details.isEmpty ? base : "\(base) · \(details.joined(separator: " · "))"
+    }
 
-            if expanded, isExpandable {
-                VStack(alignment: .leading, spacing: 8) {
-                    if let command = group.command, commandHasDetailedText {
-                        Text(command.text)
-                            .font(.system(.subheadline, design: .monospaced))
-                            .foregroundStyle(command.isError ? .red : .primary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(.primary.opacity(0.08), lineWidth: 1)
-                            }
-                    }
-                    ForEach(contexts) { item in
-                        ConversationContextDisclosure(item: item)
-                    }
-                    if !reasoningText.isEmpty {
-                        ConversationReasoningDisclosure(text: reasoningText)
-                    }
-                    if !tools.isEmpty {
-                        ConversationToolBundle(tools: tools)
+    func commandPreview(_ text: String) -> String {
+        text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+enum ConversationProcessEventRole {
+    case context
+}
+
+/// A process group is projected into independent list items. Disclosure
+/// headers never change their own height; expanding a node only inserts or
+/// removes descendants after that stable header item.
+struct ConversationProcessNode: Identifiable {
+    enum Content {
+        case groupHeader(ConversationProcessGroup, isExpanded: Bool, isExpandable: Bool)
+        case commandDetail(ConversationItem)
+        case eventHeader(
+            ConversationItem,
+            role: ConversationProcessEventRole,
+            isExpanded: Bool,
+            isExpandable: Bool
+        )
+        case eventDetail(ConversationItem, role: ConversationProcessEventRole)
+        case reasoningHeader(String, isExpanded: Bool)
+        case reasoningDetail(String)
+        case toolBundleHeader([ConversationProcessTool], isExpanded: Bool)
+        case toolHeader(ConversationProcessTool, isExpanded: Bool, isExpandable: Bool)
+        case toolDetail(ConversationProcessTool)
+    }
+
+    let id: String
+    let parentID: String?
+    let depth: Int
+    let revision: Int
+    let content: Content
+
+    static func make(
+        from group: ConversationProcessGroup,
+        expandedNodeIDs: Set<String>
+    ) -> [ConversationProcessNode] {
+        let groupExpanded = expandedNodeIDs.contains(group.id)
+        var nodes: [ConversationProcessNode] = [
+            .init(
+                id: group.id,
+                parentID: nil,
+                depth: 0,
+                revision: revision(group.processTitle, group.command?.isError == true, groupExpanded),
+                content: .groupHeader(
+                    group,
+                    isExpanded: groupExpanded,
+                    isExpandable: group.isExpandable
+                )
+            )
+        ]
+        guard group.isExpandable, groupExpanded else { return nodes }
+
+        if let command = group.command, group.commandHasDetailedText {
+            nodes.append(.init(
+                id: "\(group.id)/command-detail",
+                parentID: group.id,
+                depth: 1,
+                revision: revision(command.title, command.text, command.isError),
+                content: .commandDetail(command)
+            ))
+        }
+
+        for context in group.contexts {
+            let headerID = "\(group.id)/context/\(context.id)"
+            let isExpandable = !context.text.isEmpty
+            let isExpanded = expandedNodeIDs.contains(headerID)
+            nodes.append(.init(
+                id: headerID,
+                parentID: group.id,
+                depth: 1,
+                revision: revision(context.title, preview(context.text), isExpanded),
+                content: .eventHeader(
+                    context,
+                    role: .context,
+                    isExpanded: isExpanded,
+                    isExpandable: isExpandable
+                )
+            ))
+            if isExpanded, isExpandable {
+                nodes.append(.init(
+                    id: "\(headerID)/detail",
+                    parentID: headerID,
+                    depth: 2,
+                    revision: revision(context.text),
+                    content: .eventDetail(context, role: .context)
+                ))
+            }
+        }
+
+        if !group.reasoningText.isEmpty {
+            let headerID = "\(group.id)/reasoning"
+            let isExpanded = expandedNodeIDs.contains(headerID)
+            nodes.append(.init(
+                id: headerID,
+                parentID: group.id,
+                depth: 1,
+                revision: revision(preview(group.reasoningText), isExpanded),
+                content: .reasoningHeader(group.reasoningText, isExpanded: isExpanded)
+            ))
+            if isExpanded {
+                nodes.append(.init(
+                    id: "\(headerID)/detail",
+                    parentID: headerID,
+                    depth: 2,
+                    revision: revision(group.reasoningText),
+                    content: .reasoningDetail(group.reasoningText)
+                ))
+            }
+        }
+
+        if !group.tools.isEmpty {
+            let bundleID = "\(group.id)/tools"
+            let bundleExpanded = expandedNodeIDs.contains(bundleID)
+            nodes.append(.init(
+                id: bundleID,
+                parentID: group.id,
+                depth: 1,
+                revision: revision(group.tools.map(toolSummary).joined(separator: "|"), bundleExpanded),
+                content: .toolBundleHeader(group.tools, isExpanded: bundleExpanded)
+            ))
+            if bundleExpanded {
+                for tool in group.tools {
+                    let headerID = "\(bundleID)/\(tool.id)"
+                    let toolExpanded = tool.isExpandable && expandedNodeIDs.contains(headerID)
+                    nodes.append(.init(
+                        id: headerID,
+                        parentID: bundleID,
+                        depth: 2,
+                        revision: revision(toolSummary(tool), toolExpanded),
+                        content: .toolHeader(
+                            tool,
+                            isExpanded: toolExpanded,
+                            isExpandable: tool.isExpandable
+                        )
+                    ))
+                    if toolExpanded, tool.isExpandable {
+                        nodes.append(.init(
+                            id: "\(headerID)/detail",
+                            parentID: headerID,
+                            depth: 3,
+                            revision: revision(tool.call?.text ?? "", tool.result?.text ?? "", tool.result?.isError == true),
+                            content: .toolDetail(tool)
+                        ))
                     }
                 }
-                .padding(.leading, 2)
+            }
+        }
+        return nodes
+    }
+
+    private static func preview(_ text: String) -> String {
+        text.replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func toolSummary(_ tool: ConversationProcessTool) -> String {
+        [
+            tool.call?.title,
+            tool.result?.title,
+            tool.result?.isError == true ? "error" : "ok"
+        ].compactMap { $0 }.joined(separator: "|")
+    }
+
+    private static func revision(_ values: Any...) -> Int {
+        var hasher = Hasher()
+        values.forEach { hasher.combine(String(describing: $0)) }
+        return hasher.finalize()
+    }
+}
+
+private struct ConversationProcessHeaderRow: View {
+    let group: ConversationProcessGroup
+    let expanded: Bool
+    let isExpandable: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Group {
+            if isExpandable {
+                Button(action: onToggle) { header.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+            } else {
+                header
             }
         }
         .padding(.vertical, 7)
@@ -2099,7 +2382,7 @@ private struct ConversationProcessRow: View {
         }
     }
 
-    private var processHeader: some View {
+    private var header: some View {
         HStack(spacing: 7) {
             if let command = group.command {
                 Image(systemName: "terminal")
@@ -2109,15 +2392,13 @@ private struct ConversationProcessRow: View {
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(command.isError ? .red : .primary)
                     .lineLimit(1)
-                Text("·")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
-                Text(commandPreview(command.text))
+                Text("·").font(.subheadline).foregroundStyle(.tertiary)
+                Text(group.commandPreview(command.text))
                     .font(.subheadline)
                     .foregroundStyle(command.isError ? .red : .secondary)
                     .lineLimit(1)
             } else {
-                Text(processTitle)
+                Text(group.processTitle)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -2131,34 +2412,300 @@ private struct ConversationProcessRow: View {
             }
         }
     }
+}
 
-    private var processTitle: String {
-        if let command = group.command {
-            let preview = commandPreview(command.text)
-            return preview.isEmpty ? command.title : "\(command.title) · \(preview)"
+private struct ConversationCommandDetailRow: View {
+    let command: ConversationItem
+
+    var body: some View {
+        Text(command.text)
+            .font(.system(.subheadline, design: .monospaced))
+            .foregroundStyle(command.isError ? .red : .primary)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(.primary.opacity(0.08), lineWidth: 1)
+            }
+            .padding(.leading, 2)
+            .padding(.vertical, 4)
+    }
+}
+
+private struct ConversationEventHeaderRow: View {
+    let item: ConversationItem
+    let role: ConversationProcessEventRole
+    let expanded: Bool
+    let isExpandable: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Group {
+            if isExpandable {
+                Button(action: onToggle) { header.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+            } else {
+                header
+            }
         }
-        if group.contextCount > 0, group.toolCount == 0, reasoningText.isEmpty {
-            return group.contextCount == 1 ? String(localized: "上下文") : String(localized: "context.items.count", defaultValue: "\(group.contextCount) 项上下文")
-        }
-        let duration = group.duration
-        let base: String
-        if duration >= 60 {
-            base = String(localized: "duration.minutes-seconds", defaultValue: "耗时 \(Int(duration) / 60) 分钟 \(Int(duration) % 60) 秒")
-        } else if duration >= 1 {
-            base = String(localized: "duration.seconds", defaultValue: "耗时 \(Int(duration.rounded())) 秒")
-        } else {
-            base = String(localized: "思考过程")
-        }
-        var details: [String] = []
-        if group.contextCount > 0 { details.append(String(localized: "context.items.count", defaultValue: "\(group.contextCount) 项上下文")) }
-        if group.toolCount > 0 { details.append(String(localized: "toolcall.count", defaultValue: "\(group.toolCount) 次工具调用")) }
-        return details.isEmpty ? base : "\(base) · \(details.joined(separator: " · "))"
+        .padding(.leading, 2)
+        .padding(.vertical, 2)
     }
 
-    private func commandPreview(_ text: String) -> String {
-        text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    private var header: some View {
+        HStack(spacing: 8) {
+            ConversationGlyphImage(glyph: glyph)
+                .foregroundStyle(tint)
+                .frame(width: 18)
+            Text(item.title).foregroundStyle(tint).lineLimit(1)
+            let summary = preview(item.text)
+            if !summary.isEmpty {
+                Text("·").foregroundStyle(.tertiary)
+                Text(summary).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            if isExpandable {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+        }
+        .font(.subheadline)
     }
+
+    private var glyph: ConversationGlyph {
+        switch role {
+        case .context: .asset("DshContextInjection")
+        }
+    }
+
+    private var tint: Color {
+        switch role {
+        case .context: .green
+        }
+    }
+}
+
+struct ConversationEventDetailRow: View {
+    let item: ConversationItem
+    let role: ConversationProcessEventRole
+
+    private var needsViewport: Bool {
+        item.text.count > 900 || item.text.components(separatedBy: .newlines).count > 20
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Rectangle().fill(.gray.opacity(0.24)).frame(width: 1)
+            Group {
+                if needsViewport {
+                    ScrollView(.vertical, showsIndicators: true) {
+                        MarkdownContent(item.text, compact: true)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                    }
+                    .frame(height: 320)
+                    .background(
+                        Color(uiColor: .secondarySystemFill),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                } else {
+                    MarkdownContent(item.text, compact: true)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .padding(.leading, 7)
+        .padding(.bottom, 5)
+    }
+}
+
+private struct ConversationReasoningHeaderRow: View {
+    let text: String
+    let expanded: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 8) {
+                ConversationGlyphImage(glyph: .asset("DshThink"))
+                    .foregroundStyle(DSHColor.purple)
+                    .frame(width: 18)
+                Text("Think")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(DSHColor.purple)
+                let summary = preview(text)
+                if !summary.isEmpty {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(summary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, 2)
+        .padding(.vertical, 2)
+    }
+}
+
+private struct ConversationReasoningDetailRow: View {
+    let text: String
+
+    private var needsViewport: Bool {
+        text.count > 4_000 || text.components(separatedBy: .newlines).count > 60
+    }
+
+    var body: some View {
+        Group {
+            if needsViewport {
+                ScrollView(.vertical, showsIndicators: true) {
+                    MarkdownContent(text, compact: true)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                }
+                .frame(height: 320)
+                .background(Color(uiColor: .secondarySystemFill), in: RoundedRectangle(cornerRadius: 10))
+            } else {
+                MarkdownContent(text, compact: true)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.leading, 28)
+        .padding(.bottom, 5)
+    }
+}
+
+private struct ConversationToolBundleHeaderRow: View {
+    let tools: [ConversationProcessTool]
+    let expanded: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 8) {
+                Image(systemName: "wrench.and.screwdriver")
+                    .foregroundStyle(DSHColor.orange)
+                    .frame(width: 18)
+                Text(bundleTitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, 2)
+        .padding(.vertical, 2)
+    }
+
+    private var bundleTitle: String {
+        let names = tools.compactMap { $0.call?.title }.prefix(2).joined(separator: "、")
+        return names.isEmpty
+            ? String(localized: "tools.view-results", defaultValue: "查看 \(tools.count) 个工具结果")
+            : String(
+                localized: "tools.used.summary",
+                defaultValue: "使用了 \(names)\(tools.count > 2 ? String(localized: " 等工具") : "")"
+            )
+    }
+}
+
+private struct ConversationProcessToolHeaderRow: View {
+    let tool: ConversationProcessTool
+    let expanded: Bool
+    let isExpandable: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Group {
+            if isExpandable {
+                Button(action: onToggle) { label }
+                    .buttonStyle(.plain)
+            } else {
+                label
+            }
+        }
+        .padding(.leading, 16)
+        .padding(.vertical, 3)
+    }
+
+    private var label: some View {
+        HStack(spacing: 7) {
+            ConversationGlyphImage(
+                glyph: tool.result?.isError == true
+                    ? .system("exclamationmark.triangle")
+                    : conversationToolGlyph(tool.call?.title)
+            )
+                .foregroundStyle(tool.result?.isError == true ? .red : DSHColor.orange)
+                .frame(width: 17)
+            Text(tool.call?.title ?? tool.result?.title ?? String(localized: "trajectory.tool.fallback", defaultValue: "工具"))
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            if let result = tool.result {
+                Text(result.isError ? String(localized: "失败") : String(localized: "完成"))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(result.isError ? .red : .secondary)
+            }
+            Spacer(minLength: 8)
+            if isExpandable {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct ConversationProcessToolDetailRow: View {
+    let tool: ConversationProcessTool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            if let call = tool.call, !call.text.isEmpty {
+                Text("调用参数")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ToolArgumentsView(text: call.text)
+            }
+            if let result = tool.result, !result.text.isEmpty {
+                Text(result.isError ? String(localized: "错误") : String(localized: "结果"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(result.isError ? .red : .secondary)
+                ToolOutputView(text: result.text)
+            }
+        }
+        .padding(.leading, 40)
+        .padding(.bottom, 5)
+    }
+}
+
+private func preview(_ text: String) -> String {
+    text.replacingOccurrences(of: "\n", with: " ")
+        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
 private enum ConversationGlyph {
@@ -2200,187 +2747,6 @@ private func conversationToolGlyph(_ toolName: String?) -> ConversationGlyph {
     }
 }
 
-private struct ConversationContextDisclosure: View {
-    let item: ConversationItem
-    @State private var expanded = false
-
-    var body: some View {
-        CompactEventDisclosure(
-            expanded: $expanded,
-            title: item.title,
-            text: item.text,
-            icon: .asset("DshContextInjection"),
-            tint: .green
-        )
-    }
-}
-
-private struct ConversationReasoningDisclosure: View {
-    let text: String
-    @State private var expanded = false
-    @Environment(\.conversationDisclosureDidToggle) private var disclosureDidToggle
-
-    private var preview: String {
-        text.replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var needsViewport: Bool {
-        text.count > 4_000 || text.components(separatedBy: .newlines).count > 60
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Button { toggleWithoutAnimation($expanded, after: disclosureDidToggle) } label: {
-                HStack(spacing: 8) {
-                    ConversationGlyphImage(glyph: .asset("DshThink"))
-                        .foregroundStyle(DSHColor.purple)
-                        .frame(width: 18)
-                    Text("Think")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(DSHColor.purple)
-                    if !preview.isEmpty {
-                        Text("·").foregroundStyle(.tertiary)
-                        Text(preview)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if expanded {
-                Group {
-                    if needsViewport {
-                        ScrollView(.vertical, showsIndicators: true) {
-                            MarkdownContent(text, compact: true)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                        }
-                        .frame(height: 320)
-                        .background(Color(uiColor: .secondarySystemFill), in: RoundedRectangle(cornerRadius: 10))
-                    } else {
-                        MarkdownContent(text, compact: true)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .padding(.leading, 26)
-            }
-        }
-    }
-}
-
-private struct ConversationToolBundle: View {
-    let tools: [ConversationProcessTool]
-    @State private var expanded = false
-    @Environment(\.conversationDisclosureDidToggle) private var disclosureDidToggle
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Button { toggleWithoutAnimation($expanded, after: disclosureDidToggle) } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "wrench.and.screwdriver")
-                        .foregroundStyle(DSHColor.orange)
-                        .frame(width: 18)
-                    Text(bundleTitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if expanded {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(tools) { tool in
-                        ConversationProcessToolRow(tool: tool)
-                    }
-                }
-                .padding(.leading, 14)
-            }
-        }
-    }
-
-    private var bundleTitle: String {
-        let names = tools.compactMap { $0.call?.title }.prefix(2).joined(separator: "、")
-        return names.isEmpty ? String(localized: "tools.view-results", defaultValue: "查看 \(tools.count) 个工具结果") : String(localized: "tools.used.summary", defaultValue: "使用了 \(names)\(tools.count > 2 ? String(localized: " 等工具") : "")")
-    }
-}
-
-private struct ConversationProcessToolRow: View {
-    let tool: ConversationProcessTool
-    @State private var expanded = false
-    @Environment(\.conversationDisclosureDidToggle) private var disclosureDidToggle
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Button { toggleWithoutAnimation($expanded, after: disclosureDidToggle) } label: {
-                HStack(spacing: 7) {
-                    ConversationGlyphImage(
-                        glyph: tool.result?.isError == true
-                            ? .system("exclamationmark.triangle")
-                            : conversationToolGlyph(tool.call?.title)
-                    )
-                        .foregroundStyle(tool.result?.isError == true ? .red : DSHColor.orange)
-                        .frame(width: 17)
-                    Text(tool.call?.title ?? tool.result?.title ?? String(localized: "trajectory.tool.fallback", defaultValue: "工具"))
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    if let result = tool.result {
-                        Text(result.isError ? String(localized: "失败") : String(localized: "完成"))
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(result.isError ? .red : .secondary)
-                    }
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if expanded {
-                VStack(alignment: .leading, spacing: 9) {
-                    if let call = tool.call, !call.text.isEmpty {
-                        Text("调用参数")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        ToolArgumentsView(text: call.text)
-                    }
-                    if let result = tool.result, !result.text.isEmpty {
-                        Text(result.isError ? String(localized: "错误") : String(localized: "结果"))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(result.isError ? .red : .secondary)
-                        ToolOutputView(text: result.text)
-                    }
-                }
-                .padding(.leading, 24)
-                .padding(.bottom, 5)
-            }
-        }
-        .padding(.vertical, 3)
-    }
-}
-
 private struct ToolArgumentsView: View {
     let text: String
 
@@ -2399,24 +2765,6 @@ private struct ToolArgumentsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .clipShape(RoundedRectangle(cornerRadius: 9))
     }
-}
-
-private struct ConversationDisclosureDidToggleKey: EnvironmentKey {
-    static let defaultValue: () -> Void = {}
-}
-
-private extension EnvironmentValues {
-    var conversationDisclosureDidToggle: () -> Void {
-        get { self[ConversationDisclosureDidToggleKey.self] }
-        set { self[ConversationDisclosureDidToggleKey.self] = newValue }
-    }
-}
-
-private func toggleWithoutAnimation(_ value: Binding<Bool>, after: () -> Void = {}) {
-    var transaction = Transaction()
-    transaction.disablesAnimations = true
-    withTransaction(transaction) { value.wrappedValue.toggle() }
-    after()
 }
 
 private struct AttachmentImageGrid: View {
@@ -2461,11 +2809,10 @@ private struct AttachmentImageGrid: View {
     }
 }
 
-private struct ConversationRow: View {
+struct ConversationRow: View {
     let item: ConversationItem
     let showsCopyButton: Bool
     let imageData: (String) -> Data?
-    @State private var expanded = false
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -2495,8 +2842,7 @@ private struct ConversationRow: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.vertical, 12)
         case .context:
-            CompactEventDisclosure(
-                expanded: $expanded,
+            ConversationFallbackEventRow(
                 title: item.title,
                 text: item.text,
                 icon: .asset("DshContextInjection"),
@@ -2525,16 +2871,14 @@ private struct ConversationRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 12)
         case .reasoning:
-            CompactEventDisclosure(
-                expanded: $expanded,
+            ConversationFallbackEventRow(
                 title: "Think",
                 text: item.text,
                 icon: .asset("DshThink"),
                 tint: DSHColor.purple
             )
         case .tool, .toolResult:
-            CompactEventDisclosure(
-                expanded: $expanded,
+            ConversationFallbackEventRow(
                 title: item.title,
                 text: item.text,
                 icon: item.isError
@@ -2546,8 +2890,7 @@ private struct ConversationRow: View {
                 rendersOutput: item.title == L10n.toolResultDoneTitle || item.title == L10n.toolResultFailedTitle
             )
         case .jsonTool:
-            CompactEventDisclosure(
-                expanded: $expanded,
+            ConversationFallbackEventRow(
                 title: item.title,
                 text: item.text,
                 icon: .system("curlybraces.square"),
@@ -2592,7 +2935,7 @@ private struct ConversationRow: View {
     }
 }
 
-private struct CopyMessageButton: View {
+struct CopyMessageButton: View {
     let text: String
     @State private var copied = false
 
@@ -2626,46 +2969,35 @@ private struct CopyMessageButton: View {
     }
 }
 
-private struct CompactEventDisclosure: View {
-    @Binding var expanded: Bool
+/// Defensive renderer for an isolated process event. The normal conversation
+/// path projects process groups into independent collection items before they
+/// reach `ConversationRow`. Keeping this fallback stateless ensures an
+/// unexpected standalone event can never resize itself behind the collection
+/// layout's back.
+private struct ConversationFallbackEventRow: View {
     let title: String
     let text: String
     let icon: ConversationGlyph
     let tint: Color
     var rendersJSON = false
     var rendersOutput = false
-    @Environment(\.conversationDisclosureDidToggle) private var disclosureDidToggle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                // DisclosureGroup animates its cached height inside LazyVStack.
-                // Large tool payloads can therefore temporarily overlap the
-                // following message. Toggle without a transition so SwiftUI
-                // measures the expanded payload before drawing sibling rows.
-                toggleWithoutAnimation($expanded, after: disclosureDidToggle)
-            } label: {
-                HStack(spacing: 8) {
-                    ConversationGlyphImage(glyph: icon)
-                        .foregroundStyle(tint)
-                        .frame(width: 18)
-                    Text(title).foregroundStyle(tint).lineLimit(1)
-                    if !preview.isEmpty {
-                        Text("·").foregroundStyle(.tertiary)
-                        Text(preview).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
+            HStack(spacing: 8) {
+                ConversationGlyphImage(glyph: icon)
+                    .foregroundStyle(tint)
+                    .frame(width: 18)
+                Text(title).foregroundStyle(tint).lineLimit(1)
+                if !preview.isEmpty {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(preview).foregroundStyle(.secondary).lineLimit(1)
                 }
-                .font(.subheadline)
-                .contentShape(Rectangle())
+                Spacer(minLength: 8)
             }
-            .buttonStyle(.plain)
+            .font(.subheadline)
 
-            if expanded && !text.isEmpty {
+            if !text.isEmpty {
                 HStack(alignment: .top, spacing: 10) {
                     Rectangle().fill(.gray.opacity(0.24)).frame(width: 1)
                     if rendersOutput {

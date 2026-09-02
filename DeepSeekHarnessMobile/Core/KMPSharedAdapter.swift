@@ -326,9 +326,19 @@ final class KMPConversationStoreAdapter {
             }
         } else {
             for operation in patch.operations {
+                let insertedItem = operation.item?.item
+                let tracedItemID = operation.itemId ?? insertedItem?.id ?? "-"
+                if tracedItemID.hasPrefix("stream-") {
+                    gatewayStreamingTrace(
+                        "kmp-patch",
+                        "session=\(patch.sessionId) seq=\(patch.lastSequence) op=\(operation.kind) " +
+                        "item=\(tracedItemID) deltaChars=\(operation.delta?.count ?? 0) " +
+                        "itemChars=\(insertedItem?.text.count ?? 0)"
+                    )
+                }
                 switch operation.kind {
                 case "insert":
-                    guard let item = operation.item?.item,
+                    guard let item = insertedItem,
                           operation.itemId == nil,
                           operation.delta == nil,
                           operation.epochSeconds == nil,

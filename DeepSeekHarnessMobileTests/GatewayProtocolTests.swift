@@ -112,24 +112,61 @@ final class SlashCommandComposerPresentationTests: XCTestCase {
             )
         )
     }
+
+    @MainActor
+    func testTypingKeepsTheSameTextViewAndFirstResponderAcrossMenuUpdates() async throws {
+        let controller = UIHostingController(rootView: SlashCommandFocusHarness())
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+
+        controller.view.frame = window.bounds
+        controller.view.layoutIfNeeded()
+        let original = try XCTUnwrap(firstDescendant(of: UITextView.self, in: controller.view))
+        XCTAssertTrue(original.becomeFirstResponder())
+
+        // 第一个字符会令命令菜单从 EmptyView 切成真实内容。这个状态更新不能
+        // 替换输入控件，也不能让 SwiftUI 的旧焦点值反向结束 UIKit 编辑会话。
+        original.insertText("/")
+        try await Task.sleep(for: .milliseconds(80))
+        controller.view.layoutIfNeeded()
+
+        let afterFirstCharacter = try XCTUnwrap(
+            firstDescendant(of: UITextView.self, in: controller.view)
+        )
+        XCTAssertTrue(original === afterFirstCharacter)
+        XCTAssertTrue(afterFirstCharacter.isFirstResponder)
+
+        afterFirstCharacter.insertText("p")
+        try await Task.sleep(for: .milliseconds(40))
+        XCTAssertEqual(afterFirstCharacter.text, "/p")
+        XCTAssertTrue(afterFirstCharacter.isFirstResponder)
+    }
 }
 
-private final class DisclosureLayoutProbe: ObservableObject {
-    @Published var expanded = false
-}
-
-private struct DisclosureLayoutProbeView: View {
-    @ObservedObject var probe: DisclosureLayoutProbe
+private struct SlashCommandFocusHarness: View {
+    @State private var text = ""
+    @State private var isFocused = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Expandable header")
-                .frame(height: 32)
-            if probe.expanded {
-                Color.clear.frame(height: 180)
+        VStack {
+            if text.hasPrefix("/") {
+                Text("命令")
+                    .frame(height: 120)
             }
+            SlashCommandTextView(
+                text: $text,
+                presentation: slashCommandComposerPresentation(
+                    draft: text,
+                    token: text.hasPrefix("/plan") ? "/plan" : nil,
+                    hint: "描述你的任务以生成计划"
+                ),
+                placeholder: "描述你想要构建的内容",
+                isFocused: $isFocused
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: 390, height: 400)
     }
 }
 
@@ -143,8 +180,172 @@ private func firstDescendant<T: UIView>(of type: T.Type, in view: UIView) -> T? 
 
 final class ConversationViewportLayoutTests: XCTestCase {
     @MainActor
-    func testDisclosureRemeasureKeepsHeaderStableAndPushesFollowingRow() async throws {
-        let probe = DisclosureLayoutProbe()
+    func testMarkdownRendererCoalescesRapidSnapshotsAndPublishesLatest() async throws {
+        let source = ConversationMarkdownRenderer()
+        XCTAssertTrue(source.update(title: "DeepSeek · 正在生成", text: "第一段"))
+        XCTAssertTrue(source.update(title: "DeepSeek · 正在生成", text: "第一段第二段"))
+        XCTAssertTrue(source.update(title: "DeepSeek", text: "第一段第二段最终内容", showsCopyButton: true))
+
+        for _ in 0..<100 where source.renderedCharacterCount != 10 {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(source.renderedCharacterCount, 10)
+        XCTAssertNotEqual(source.document, .empty)
+        XCTAssertEqual(source.copyText, "第一段第二段最终内容")
+        XCTAssertTrue(source.showsCopyButton)
+        source.finish()
+    }
+
+    @MainActor
+    func testStreamingAssistantCellRebuildsRendererWhenReusedForAnotherReply() {
+        let cell = StreamingAssistantCell(frame: CGRect(x: 0, y: 0, width: 390, height: 80))
+        let firstReplyRenderer = cell.rendererIdentity
+
+        cell.prepareForReuse()
+
+        XCTAssertNotEqual(cell.rendererIdentity, firstReplyRenderer)
+    }
+
+    @MainActor
+    func testExpandedProcessAndRealMarkdownAssistantNeverOverlap() async throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 760)
+        controller.view.layoutIfNeeded()
+
+        let response = ConversationItem(
+            id: "formal-response",
+            kind: .assistant,
+            title: "DeepSeek",
+            text: """
+            我把当前会话压缩成一份可持续使用的存档，并保留了完整的任务信息。
+
+            1. 第一项包含较长的中文说明，用来验证 Markdown 段落会按真实宽度换行。
+            2. 第二项继续补充内容，确保正式回复的高度明显超过布局的初始估算值。
+            3. 第三项包含 `inline code`，并继续追加多行文本用于覆盖截图中的真实结构。
+
+            ## 下一步
+
+            这里还有一段正式回复。它必须完整位于过程节点下方，而且后续 cell 必须等它结束以后再开始布局。
+            """,
+            isError: false,
+            date: Date(timeIntervalSince1970: 2)
+        )
+        let assistantView = ConversationRow(
+            item: response,
+            showsCopyButton: true,
+            imageData: { _ in nil }
+        )
+        let expectedHeight = UIHostingController(rootView: assistantView).sizeThatFits(
+            in: CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)
+        ).height
+
+        let collapsedEntries = [
+            ConversationViewportEntry(
+                id: "process-header",
+                revision: 0,
+                content: AnyView(Text("思考过程 · 1 次工具调用").frame(height: 34)),
+                clipsContentToBounds: true
+            ),
+            ConversationViewportEntry(
+                id: "assistant",
+                revision: 0,
+                content: AnyView(assistantView),
+                clipsContentToBounds: true
+            ),
+            ConversationViewportEntry(
+                id: "following",
+                revision: 0,
+                content: AnyView(Text("下一条消息").frame(height: 32)),
+                clipsContentToBounds: true
+            )
+        ]
+        controller.configure(
+            sessionID: "process-assistant-boundary",
+            timeline: timeline,
+            supplementalEntries: collapsedEntries,
+            makeEntries: { _ in [] },
+            bottomInset: 0
+        )
+        try await Task.sleep(for: .milliseconds(150))
+        controller.view.layoutIfNeeded()
+
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        let collapsedHeader = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame
+        )
+        let collapsedAssistant = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))?.frame
+        )
+        let headerScreenY = collapsedHeader.minY - collectionView.contentOffset.y
+
+        controller.prepareForDisclosureUpdate(anchorID: "process-header")
+        controller.configure(
+            sessionID: "process-assistant-boundary",
+            timeline: timeline,
+            supplementalEntries: [
+                ConversationViewportEntry(
+                    id: "process-header",
+                    revision: 1,
+                    content: AnyView(Text("思考过程 · 1 次工具调用").frame(height: 34)),
+                    clipsContentToBounds: true
+                ),
+                ConversationViewportEntry(
+                    id: "process-detail",
+                    revision: 0,
+                    content: AnyView(Text("compact · 已完成").frame(height: 42)),
+                    clipsContentToBounds: true
+                ),
+                ConversationViewportEntry(
+                    id: "assistant",
+                    revision: 0,
+                    content: AnyView(assistantView),
+                    clipsContentToBounds: true
+                ),
+                ConversationViewportEntry(
+                    id: "following",
+                    revision: 0,
+                    content: AnyView(Text("下一条消息").frame(height: 32)),
+                    clipsContentToBounds: true
+                )
+            ],
+            makeEntries: { _ in [] },
+            bottomInset: 0
+        )
+        try await Task.sleep(for: .milliseconds(500))
+        controller.view.layoutIfNeeded()
+
+        let expandedHeader = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame
+        )
+        let processDetail = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))?.frame
+        )
+        let assistant = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 2, section: 0))?.frame
+        )
+        let following = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 3, section: 0))?.frame
+        )
+
+        XCTAssertEqual(expandedHeader.minY - collectionView.contentOffset.y, headerScreenY, accuracy: 1)
+        XCTAssertGreaterThan(assistant.minY, collapsedAssistant.minY + 40)
+        XCTAssertGreaterThanOrEqual(assistant.minY + 0.5, processDetail.maxY)
+        XCTAssertGreaterThanOrEqual(assistant.height + 1, expectedHeight)
+        XCTAssertGreaterThanOrEqual(following.minY + 0.5, assistant.maxY)
+    }
+
+    @MainActor
+    func testDisclosureItemsKeepHeaderStableAndPushFollowingRow() async throws {
         let timeline = ConversationTimeline()
         let controller = ConversationViewportController(
             onContentAvailabilityChanged: { _, _ in },
@@ -160,11 +361,9 @@ final class ConversationViewportLayoutTests: XCTestCase {
             timeline: timeline,
             supplementalEntries: [
                 ConversationViewportEntry(
-                    id: "expandable",
+                    id: "header",
                     revision: 0,
-                    content: AnyView(DisclosureLayoutProbeView(probe: probe)),
-                    allowsHeightCaching: false,
-                    clipsContentToBounds: true
+                    content: AnyView(Text("Expandable header").frame(height: 32))
                 ),
                 ConversationViewportEntry(
                     id: "following",
@@ -191,23 +390,280 @@ final class ConversationViewportLayoutTests: XCTestCase {
         )
         let oldHeaderScreenY = oldFirst.minY - collectionView.contentOffset.y
 
-        probe.expanded = true
-        controller.remeasureDisclosure(for: "expandable")
-        try await Task.sleep(for: .milliseconds(50))
+        controller.prepareForDisclosureUpdate(anchorID: "header")
+        controller.configure(
+            sessionID: "layout-test",
+            timeline: timeline,
+            supplementalEntries: [
+                ConversationViewportEntry(
+                    id: "header",
+                    revision: 1,
+                    content: AnyView(Text("Expandable header").frame(height: 32))
+                ),
+                ConversationViewportEntry(
+                    id: "detail",
+                    revision: 0,
+                    content: AnyView(Color.clear.frame(height: 180))
+                ),
+                ConversationViewportEntry(
+                    id: "following",
+                    revision: 0,
+                    content: AnyView(Text("Following row").frame(height: 32))
+                )
+            ],
+            makeEntries: { _ in [] },
+            bottomInset: 0
+        )
+        try await Task.sleep(for: .milliseconds(500))
         controller.view.layoutIfNeeded()
 
         let newFirst = try XCTUnwrap(
             collectionView.layoutAttributesForItem(at: firstIndexPath)?.frame
         )
-        let newSecond = try XCTUnwrap(
+        let detail = try XCTUnwrap(
             collectionView.layoutAttributesForItem(at: secondIndexPath)?.frame
+        )
+        let newFollowing = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 2, section: 0))?.frame
         )
         let newHeaderScreenY = newFirst.minY - collectionView.contentOffset.y
 
         XCTAssertEqual(newHeaderScreenY, oldHeaderScreenY, accuracy: 1)
-        XCTAssertGreaterThan(newFirst.height, oldFirst.height + 170)
-        XCTAssertGreaterThan(newSecond.minY, oldSecond.minY + 170)
-        XCTAssertGreaterThanOrEqual(newSecond.minY + 0.5, newFirst.maxY)
+        XCTAssertEqual(newFirst.height, oldFirst.height, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(detail.minY + 0.5, newFirst.maxY)
+        XCTAssertGreaterThanOrEqual(newFollowing.minY + 0.5, detail.maxY)
+        XCTAssertGreaterThan(newFollowing.minY, oldSecond.minY + 170)
+    }
+
+    @MainActor
+    func testCellKindTransitionUsesFinalHeightInsteadOfOldStreamingEstimate() async throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 420)
+        controller.view.layoutIfNeeded()
+        controller.configure(
+            sessionID: "cell-kind-transition",
+            timeline: timeline,
+            supplementalEntries: [
+                ConversationViewportEntry(
+                    id: "assistant",
+                    revision: 0,
+                    streamingAssistant: .init(title: "DeepSeek", text: "short")
+                ),
+                ConversationViewportEntry(
+                    id: "following",
+                    revision: 0,
+                    content: AnyView(Text("Following row").frame(height: 32))
+                )
+            ],
+            makeEntries: { _ in [] },
+            bottomInset: 0
+        )
+        try await Task.sleep(for: .milliseconds(100))
+
+        controller.configure(
+            sessionID: "cell-kind-transition",
+            timeline: timeline,
+            supplementalEntries: [
+                ConversationViewportEntry(
+                    id: "assistant",
+                    revision: 1,
+                    content: AnyView(Color.clear.frame(height: 620)),
+                    clipsContentToBounds: true
+                ),
+                ConversationViewportEntry(
+                    id: "following",
+                    revision: 0,
+                    content: AnyView(Text("Following row").frame(height: 32))
+                )
+            ],
+            makeEntries: { _ in [] },
+            bottomInset: 0
+        )
+        try await Task.sleep(for: .milliseconds(500))
+        controller.view.layoutIfNeeded()
+
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        let assistant = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame
+        )
+        let following = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))?.frame
+        )
+
+        XCTAssertGreaterThanOrEqual(assistant.height, 619)
+        XCTAssertGreaterThanOrEqual(following.minY + 0.5, assistant.maxY)
+    }
+
+    @MainActor
+    func testLongSecondaryContextUsesBoundedScrollableViewport() {
+        let item = ConversationItem(
+            id: "long-context",
+            kind: .context,
+            title: "上下文注入",
+            text: String(repeating: "A long compacted context line with markdown content. ", count: 80),
+            isError: false,
+            date: Date(timeIntervalSince1970: 1)
+        )
+        let host = UIHostingController(
+            rootView: ConversationEventDetailRow(item: item, role: .context)
+        )
+
+        let size = host.sizeThatFits(
+            in: CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)
+        )
+
+        XCTAssertGreaterThan(size.height, 300)
+        XCTAssertLessThanOrEqual(size.height, 330)
+    }
+}
+
+final class ConversationProcessProjectionTests: XCTestCase {
+    func testExpansionCreatesStableHeaderAndIndependentDescendantItems() {
+        let date = Date(timeIntervalSince1970: 1)
+        let command = ConversationItem(
+            id: "command",
+            kind: .status,
+            title: "goal",
+            text: String(repeating: "Goal detail ", count: 12),
+            isError: false,
+            date: date
+        )
+        let context = ConversationItem(
+            id: "context",
+            kind: .context,
+            title: "上下文注入",
+            text: "context body",
+            isError: false,
+            date: date
+        )
+        let reasoning = ConversationItem(
+            id: "reasoning",
+            kind: .reasoning,
+            title: "Think",
+            text: "reasoning body",
+            isError: false,
+            date: date
+        )
+        let call = ConversationItem(
+            id: "call",
+            kind: .tool,
+            title: "Read",
+            text: #"{"path":"README.md"}"#,
+            isError: false,
+            date: date
+        )
+        let result = ConversationItem(
+            id: "result",
+            kind: .toolResult,
+            title: "完成",
+            text: "file contents",
+            isError: false,
+            date: date
+        )
+        let group = ConversationProcessGroup(
+            id: "process-command",
+            items: [command, context, reasoning, call, result]
+        )
+
+        let collapsed = ConversationProcessNode.make(from: group, expandedNodeIDs: [])
+        XCTAssertEqual(collapsed.map(\.id), ["process-command"])
+
+        let groupExpanded: Set<String> = ["process-command"]
+        let firstLevel = ConversationProcessNode.make(from: group, expandedNodeIDs: groupExpanded)
+        XCTAssertEqual(firstLevel.map(\.id), [
+            "process-command",
+            "process-command/command-detail",
+            "process-command/context/context",
+            "process-command/reasoning",
+            "process-command/tools"
+        ])
+        XCTAssertEqual(firstLevel.first?.id, collapsed.first?.id)
+        XCTAssertTrue(firstLevel.dropFirst().allSatisfy { $0.parentID == "process-command" })
+
+        let fullyExpanded = ConversationProcessNode.make(
+            from: group,
+            expandedNodeIDs: groupExpanded.union([
+                "process-command/context/context",
+                "process-command/reasoning",
+                "process-command/tools",
+                "process-command/tools/call"
+            ])
+        )
+        XCTAssertEqual(fullyExpanded.map(\.id), [
+            "process-command",
+            "process-command/command-detail",
+            "process-command/context/context",
+            "process-command/context/context/detail",
+            "process-command/reasoning",
+            "process-command/reasoning/detail",
+            "process-command/tools",
+            "process-command/tools/call",
+            "process-command/tools/call/detail"
+        ])
+    }
+
+    func testEmptyEventDetailsNeverCreateBlankDescendantRows() {
+        let date = Date(timeIntervalSince1970: 1)
+        let command = ConversationItem(
+            id: "command",
+            kind: .status,
+            title: "compact",
+            text: "完成",
+            isError: false,
+            date: date
+        )
+        let context = ConversationItem(
+            id: "empty-context",
+            kind: .context,
+            title: "上下文注入",
+            text: "",
+            isError: false,
+            date: date
+        )
+        let call = ConversationItem(
+            id: "empty-call",
+            kind: .tool,
+            title: "Read",
+            text: "",
+            isError: false,
+            date: date
+        )
+        let result = ConversationItem(
+            id: "empty-result",
+            kind: .toolResult,
+            title: "完成",
+            text: "",
+            isError: false,
+            date: date
+        )
+        let group = ConversationProcessGroup(
+            id: "process-command",
+            items: [command, context, call, result]
+        )
+        let expanded: Set<String> = [
+            "process-command",
+            "process-command/context/empty-context",
+            "process-command/tools",
+            "process-command/tools/empty-call"
+        ]
+
+        let nodes = ConversationProcessNode.make(from: group, expandedNodeIDs: expanded)
+
+        XCTAssertEqual(nodes.map(\.id), [
+            "process-command",
+            "process-command/context/empty-context",
+            "process-command/tools",
+            "process-command/tools/empty-call"
+        ])
     }
 }
 
@@ -430,10 +886,31 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertTrue(adapter.isOperational)
         XCTAssertEqual(adapter.items(for: "s1").map(\.text), ["Hello"])
         XCTAssertEqual(publishedTexts, [["Hel"], ["Hello"]])
+        let streamingItemID = try XCTUnwrap(adapter.items(for: "s1").first?.id)
+
+        try adapter.receive(SessionEvent(
+            sessionId: "s1", seq: 3, time: 3,
+            event: GatewayEvent(
+                type: "assistant/message", turn: 1, step: 1,
+                text: "Hello!"
+            )
+        ))
+        XCTAssertEqual(adapter.items(for: "s1").first?.id, streamingItemID)
+        XCTAssertEqual(adapter.items(for: "s1").first?.text, "Hello!")
+        XCTAssertEqual(adapter.items(for: "s1").first?.title, "DeepSeek")
+        try adapter.receive(SessionEvent(
+            sessionId: "s1", seq: 4, time: 4,
+            event: GatewayEvent(
+                type: "assistant/chunk", turn: 2, step: 1,
+                text: "第二轮正在", chunkType: "text-delta"
+            )
+        ))
+        XCTAssertEqual(adapter.items(for: "s1").last?.text, "第二轮正在")
+        XCTAssertEqual(adapter.items(for: "s1").last?.title, L10n.streamingAssistantTitle)
 
         let baseline = [
             SessionEvent(
-                sessionId: "s1", seq: 3, time: 3,
+                sessionId: "s1", seq: 5, time: 5,
                 event: GatewayEvent(type: "user/message", text: "新基线", source: "user")
             )
         ]

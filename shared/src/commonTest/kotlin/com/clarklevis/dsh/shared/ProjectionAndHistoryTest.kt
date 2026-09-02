@@ -39,6 +39,7 @@ class ProjectionAndHistoryTest {
         assertEquals("Hello", projector.items.single().text)
         projector.fold(listOf(event(3, GatewayEvent("assistant/message", turn = 1, step = 1, text = "Hello!"))))
         assertEquals(1, projector.items.size)
+        assertEquals("stream-text-1-1", projector.items.single().id)
         assertEquals("Hello!", projector.items.single().text)
         assertEquals(ConversationItemKind.ASSISTANT, projector.items.single().kind)
     }

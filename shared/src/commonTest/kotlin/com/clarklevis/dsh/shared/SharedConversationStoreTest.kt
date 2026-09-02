@@ -40,8 +40,10 @@ class SharedConversationStoreTest {
 
         assertTrue(store.receiveEvent(eventJson(3, GatewayEvent("assistant/message", turn = 1, step = 1, text = "Hello!"))).accepted)
         val final = patch(received.last())
-        assertEquals(listOf("remove", "insert"), final.operations.map { it.kind })
-        assertEquals("Hello!", final.operations.last().item?.text)
+        assertEquals(listOf("replace"), final.operations.map { it.kind })
+        assertEquals("stream-text-1-1", final.operations.single().itemId)
+        assertEquals("stream-text-1-1", final.operations.single().item?.id)
+        assertEquals("Hello!", final.operations.single().item?.text)
     }
 
     @Test

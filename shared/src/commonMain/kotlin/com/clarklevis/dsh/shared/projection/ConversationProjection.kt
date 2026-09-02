@@ -128,13 +128,44 @@ class ConversationProjector(
             }
             event.type == "assistant/message" -> {
                 finalizedKeys += key
-                removeStream("text-$key", operations)
-                removeStream("reason-$key", operations)
-                event.reasoning?.takeIf(String::isNotEmpty)?.let { reasoning ->
-                    insert(ConversationItem("${eventId(record)}-reason", ConversationItemKind.REASONING, labels.finalReasoning, reasoning, epochSeconds = date), operations)
+                val finalReasoning = event.reasoning?.takeIf(String::isNotEmpty)?.let { reasoning ->
+                    ConversationItem(
+                        "${eventId(record)}-reason",
+                        ConversationItemKind.REASONING,
+                        labels.finalReasoning,
+                        reasoning,
+                        epochSeconds = date
+                    )
                 }
-                if (!event.text.isNullOrEmpty() || !event.images.isNullOrEmpty()) {
-                    insert(ConversationItem(eventId(record), ConversationItemKind.ASSISTANT, labels.finalAssistant, event.text.orEmpty(), event.images.orEmpty(), epochSeconds = date), operations)
+                val finalAssistant = if (!event.text.isNullOrEmpty() || !event.images.isNullOrEmpty()) {
+                    ConversationItem(
+                        eventId(record),
+                        ConversationItemKind.ASSISTANT,
+                        labels.finalAssistant,
+                        event.text.orEmpty(),
+                        event.images.orEmpty(),
+                        epochSeconds = date
+                    )
+                } else {
+                    null
+                }
+
+                if (finalReasoning != null && streamIndexes["reason-$key"] == null) {
+                    // A final-only reasoning payload must still precede the
+                    // answer. Since insert operations append, rebuild this
+                    // uncommon pair in order instead of leaving reasoning
+                    // below an already-streamed answer.
+                    removeStream("text-$key", operations)
+                    insert(finalReasoning, operations)
+                    finalAssistant?.let { insert(it, operations) }
+                } else {
+                    // Keep a streamed response's identity through finalization.
+                    // Platform renderers own their parser/source by item id; a
+                    // remove+insert here tears down that source before its final
+                    // buffered snapshot can be rendered. Replacing in place also
+                    // avoids a structural list update at the end of every reply.
+                    finalizeStream("reason-$key", finalReasoning, operations)
+                    finalizeStream("text-$key", finalAssistant, operations)
                 }
             }
             event.type == "tool/call" -> {
@@ -327,6 +358,34 @@ class ConversationProjector(
         val removed = mutableItems.removeAt(index)
         operations += ConversationProjectionOperation(kind = "remove", itemId = removed.id)
         streamIndexes.entries.forEach { entry -> if (entry.value > index) entry.setValue(entry.value - 1) }
+    }
+
+    private fun finalizeStream(
+        key: String,
+        finalItem: ConversationItem?,
+        operations: MutableList<ConversationProjectionOperation>
+    ) {
+        val index = streamIndexes.remove(key)
+        if (index == null) {
+            finalItem?.let { insert(it, operations) }
+            return
+        }
+        if (finalItem == null) {
+            val removed = mutableItems.removeAt(index)
+            operations += ConversationProjectionOperation(kind = "remove", itemId = removed.id)
+            streamIndexes.entries.forEach { entry ->
+                if (entry.value > index) entry.setValue(entry.value - 1)
+            }
+            return
+        }
+
+        val stableFinalItem = finalItem.copy(id = mutableItems[index].id)
+        mutableItems[index] = stableFinalItem
+        operations += ConversationProjectionOperation(
+            kind = "replace",
+            item = stableFinalItem,
+            itemId = stableFinalItem.id
+        )
     }
 
     companion object {
