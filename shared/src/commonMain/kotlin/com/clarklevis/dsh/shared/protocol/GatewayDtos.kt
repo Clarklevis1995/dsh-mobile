@@ -2,6 +2,17 @@ package com.clarklevis.dsh.shared.protocol
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 @Serializable
 data class GatewayFrame(
@@ -22,6 +33,12 @@ data class GatewayFrame(
     val message: String? = null,
     val mode: String? = null,
     val command: JsonValue? = null,
+    val line: String? = null,
+    val commandId: String? = null,
+    val result: JsonValue? = null,
+    val commands: List<GatewaySlashCommand>? = null,
+    val skills: List<GatewaySlashCommand>? = null,
+    val options: List<GatewayCommandOption>? = null,
     val requestType: String? = null,
     val items: List<JsonValue>? = null,
     val events: List<RawSessionEvent>? = null,
@@ -55,9 +72,13 @@ data class GatewayFrame(
     val truncated: Boolean? = null,
     val current: GatewayModelSelection? = null,
     val routable: Boolean? = null,
-    val groups: List<GatewayModelGroup>? = null,
+    // `groups` is polymorphic: model catalogs contain GatewayModelGroup values,
+    // while slash catalogs contain GatewaySlashCommandGroup values.
+    // Decode it lazily after inspecting `kind` so a valid frame of one kind
+    // cannot fail because the other kind has a different group schema.
+    val groups: List<JsonValue>? = null,
     val failures: List<JsonValue>? = null,
-    val selected: GatewayModelSelection? = null,
+    val selected: JsonValue? = null,
     val selection: GatewayModelSelection? = null,
     val saved: GatewayModelSelection? = null,
     val namespace: JsonValue? = null,
@@ -74,7 +95,7 @@ data class GatewayFrame(
     val agentPresetDefault: String? = null,
     val permissionDefault: String? = null,
     val target: String? = null,
-    val value: String? = null,
+    val value: JsonValue? = null,
     val applied: Boolean? = null,
     val rpcId: String? = null,
     val questions: List<GatewayQuestion>? = null,
@@ -93,6 +114,83 @@ data class GatewayFrame(
         "GatewayFrame(kind=$kind, sessionId=$sessionId, seq=$seq, requestType=$requestType, " +
             "rpcId=<redacted>, token=<redacted>, data=<redacted>, message=<redacted>)"
 }
+
+@Serializable
+data class GatewaySlashCommand(
+    val id: String = "",
+    val name: String,
+    val description: String,
+    val source: String? = null,
+    val action: String? = null,
+    val modelInvocable: Boolean? = null,
+    val whenToUse: String? = null,
+    val input: GatewaySlashCommandInput? = null,
+    val ui: GatewaySlashCommandUi
+) {
+    val stableId: String get() = id.ifBlank { "${source ?: "item"}:$name" }
+}
+
+/**
+ * 事件流中的 `source` 既可能是 WebUI 简化后的字符串，也可能是 Host 原样下发的
+ * `{ kind: ... }` 对象。统一归一化为 kind，避免一条新事件破坏整个 WebSocket 解码。
+ */
+@OptIn(ExperimentalSerializationApi::class)
+object GatewayEventSourceSerializer : KSerializer<String?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor(
+        "GatewayEventSource",
+        PrimitiveKind.STRING
+    )
+
+    override fun serialize(encoder: Encoder, value: String?) {
+        if (value == null) encoder.encodeNull() else encoder.encodeString(value)
+    }
+
+    override fun deserialize(decoder: Decoder): String? {
+        val jsonDecoder = decoder as? JsonDecoder ?: return decoder.decodeString()
+        return when (val value = jsonDecoder.decodeJsonElement()) {
+            is JsonPrimitive -> value.contentOrNull
+            is JsonObject -> value["kind"]?.let { kind ->
+                (kind as? JsonPrimitive)?.contentOrNull
+            }
+            else -> null
+        }
+    }
+}
+
+@Serializable
+data class GatewaySlashCommandGroup(
+    val id: String,
+    val title: String,
+    val items: List<GatewaySlashCommand>
+)
+
+@Serializable
+data class GatewaySlashCommandInput(
+    val hint: String? = null,
+    val images: Boolean? = null
+)
+
+@Serializable
+data class GatewaySlashCommandUi(
+    val kind: String,
+    val insertText: String? = null,
+    val hint: String? = null,
+    val displayHint: String? = null,
+    val images: Boolean? = null,
+    val submitRequest: String? = null,
+    val submitText: String? = null,
+    val optionsRequest: String? = null,
+    val selectionRequest: String? = null
+)
+
+@Serializable
+data class GatewayCommandOption(
+    val id: String,
+    val label: String,
+    val detail: String? = null,
+    val description: String? = null,
+    val selected: Boolean? = null
+)
 
 @Serializable data class GatewayDevice(val id: String, val name: String? = null, val createdAt: Double? = null)
 
@@ -319,6 +417,7 @@ data class GatewayEvent(
     val turn: Int? = null,
     val step: Int? = null,
     val text: String? = null,
+    @Serializable(with = GatewayEventSourceSerializer::class)
     val source: String? = null,
     val chunkType: String? = null,
     val tool: ToolDelta? = null,
@@ -336,6 +435,15 @@ data class GatewayEvent(
     val rootCallId: String? = null,
     val parentCallId: String? = null,
     val subCallId: String? = null,
+    val commandId: String? = null,
+    val args: String? = null,
+    val outcome: String? = null,
+    val sourceEventSeq: Int? = null,
+    val compactionId: String? = null,
+    val sourceCommandId: String? = null,
+    val shadowedItemCount: Int? = null,
+    val shadowedTokenCount: Int? = null,
+    val error: String? = null,
     val raw: JsonValue? = null
 ) {
     override fun toString(): String =
@@ -429,7 +537,24 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
             )
             "turn/start", "turn/end", "step/start", "step/end" -> GatewayEvent(type, turn, step, reason = data["reason"]?.get("kind")?.stringValue, raw = data)
             "session/title" -> GatewayEvent(type, text = data["title"]?.stringValue, raw = data)
-            else -> GatewayEvent(type, turn, step, text = data["text"]?.stringValue, raw = data)
+            else -> GatewayEvent(
+                type = type,
+                turn = turn,
+                step = step,
+                text = data["text"]?.stringValue,
+                name = data["name"]?.stringValue,
+                isError = data["error"] != null && data["error"] != JsonValue.NullValue,
+                commandId = data["commandId"]?.stringValue,
+                args = data["args"]?.stringValue,
+                outcome = data["outcome"]?.stringValue,
+                sourceEventSeq = data["sourceEventSeq"]?.doubleValue?.toInt(),
+                compactionId = data["compactionId"]?.stringValue,
+                sourceCommandId = data["sourceCommandId"]?.stringValue,
+                shadowedItemCount = data["shadowedItemCount"]?.doubleValue?.toInt(),
+                shadowedTokenCount = data["shadowedTokenCount"]?.doubleValue?.toInt(),
+                error = data["error"]?.stringValue,
+                raw = data
+            )
         }
     }
 

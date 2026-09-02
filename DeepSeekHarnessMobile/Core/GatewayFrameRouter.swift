@@ -228,20 +228,20 @@ enum GatewayFrameRouter {
             return .control(.setDefault(
                 applied: frame.applied == true,
                 target: frame.target,
-                value: frame.value
+                value: frame.value?.stringValue
             ))
         case "models":
             return .control(.action(.modelsReceived(
                 sessionID: frame.sessionId,
                 current: frame.current,
                 routable: frame.routable ?? false,
-                groups: frame.groups ?? [],
+                groups: decodeItems(frame.groups, as: GatewayModelGroup.self),
                 isGlobalRequest: context.isPendingGlobalModelsRequest
             ), finishRequest: "models"))
         case "select-model":
             return .control(.modelSelected(
                 sessionID: frame.sessionId,
-                selection: frame.selected
+                selection: frame.selected?.decode(GatewayModelSelection.self)
             ))
         case "permission-options":
             return .control(.permissionOptions(
@@ -253,6 +253,9 @@ enum GatewayFrameRouter {
                 sessionID: frame.sessionId,
                 value: frame.set
             ))
+        case "commands", "command-options", "command-selected":
+            // 协议与状态已由 commonMain SharedSlashCommandStore 消费。
+            return .ignored
         case "context-usage":
             return .control(.action(.contextReceived(
                 sessionID: frame.sessionId,

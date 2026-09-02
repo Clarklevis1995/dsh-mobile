@@ -3,6 +3,180 @@ import MarkdownUI
 import PhotosUI
 import UIKit
 
+struct SlashCommandComposerPresentation: Equatable {
+    let token: String
+    let argument: String
+    let hint: String?
+
+    var showsHint: Bool {
+        argument.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !(hint?.isEmpty ?? true)
+    }
+
+    var hintLeadingWhitespace: String {
+        argument.isEmpty ? " " : argument
+    }
+}
+
+func slashCommandComposerPresentation(
+    draft: String,
+    token: String?,
+    hint: String?
+) -> SlashCommandComposerPresentation? {
+    guard let token,
+          draft == token || draft.hasPrefix("\(token) ") else { return nil }
+    return SlashCommandComposerPresentation(
+        token: token,
+        argument: String(draft.dropFirst(token.count)),
+        hint: hint
+    )
+}
+
+private struct SlashCommandTextView: UIViewRepresentable {
+    @Binding var text: String
+    let presentation: SlashCommandComposerPresentation?
+    let placeholder: String
+    var isFocused: FocusState<Bool>.Binding
+
+    func makeUIView(context: Context) -> CommandTextView {
+        let textView = CommandTextView()
+        textView.delegate = context.coordinator
+        textView.backgroundColor = .clear
+        textView.isScrollEnabled = false
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.adjustsFontForContentSizeCategory = true
+        textView.tintColor = .systemBlue
+        textView.textColor = .label
+        textView.apply(text: text, presentation: presentation, placeholder: placeholder)
+        return textView
+    }
+
+    func updateUIView(_ textView: CommandTextView, context: Context) {
+        context.coordinator.update(parent: self)
+        textView.apply(text: text, presentation: presentation, placeholder: placeholder)
+        if isFocused.wrappedValue && !textView.isFirstResponder {
+            textView.becomeFirstResponder()
+        } else if !isFocused.wrappedValue && textView.isFirstResponder {
+            textView.resignFirstResponder()
+        }
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        uiView: CommandTextView,
+        context: Context
+    ) -> CGSize? {
+        guard let width = proposal.width, width > 0 else { return nil }
+        let lineHeight = uiView.font?.lineHeight ?? UIFont.preferredFont(forTextStyle: .body).lineHeight
+        let minimumHeight = ceil(lineHeight)
+        let maximumHeight = ceil(lineHeight * 5)
+        let measured = uiView.sizeThatFits(
+            CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        ).height
+        let height = min(max(measured, minimumHeight), maximumHeight)
+        uiView.isScrollEnabled = measured > maximumHeight
+        return CGSize(width: width, height: height)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        private var parent: SlashCommandTextView
+
+        init(_ parent: SlashCommandTextView) { self.parent = parent }
+
+        func update(parent: SlashCommandTextView) {
+            self.parent = parent
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            guard parent.text != textView.text else { return }
+            parent.text = textView.text
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            parent.isFocused.wrappedValue = true
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            parent.isFocused.wrappedValue = false
+        }
+    }
+}
+
+private final class CommandTextView: UITextView {
+    private var renderedText = ""
+    private var renderedPresentation: SlashCommandComposerPresentation?
+    private var renderedPlaceholder = ""
+
+    func apply(text: String, presentation: SlashCommandComposerPresentation?, placeholder: String) {
+        guard renderedText != text || renderedPresentation != presentation || renderedPlaceholder != placeholder else { return }
+        let selection = selectedRange
+        let attributes = baseAttributes()
+        let attributed = NSMutableAttributedString(string: text, attributes: attributes)
+        if let presentation, text.hasPrefix(presentation.token) {
+            attributed.addAttributes(
+                [.foregroundColor: UIColor.systemBlue],
+                range: NSRange(location: 0, length: (presentation.token as NSString).length)
+            )
+        }
+        attributedText = attributed
+        typingAttributes = attributes
+        renderedText = text
+        renderedPresentation = presentation
+        renderedPlaceholder = placeholder
+        selectedRange = NSRange(
+            location: min(selection.location, (text as NSString).length),
+            length: 0
+        )
+        setNeedsDisplay()
+        invalidateIntrinsicContentSize()
+    }
+
+    override func draw(_ rect: CGRect) {
+        super.draw(rect)
+        if renderedText.isEmpty {
+            (renderedPlaceholder as NSString).draw(
+                at: CGPoint(x: textContainerInset.left, y: textContainerInset.top),
+                withAttributes: [
+                    .font: font ?? UIFont.preferredFont(forTextStyle: .body),
+                    .foregroundColor: UIColor.secondaryLabel.withAlphaComponent(0.62)
+                ]
+            )
+            return
+        }
+        guard let presentation = renderedPresentation,
+              presentation.showsHint,
+              let hint = presentation.hint else { return }
+
+        let textLength = (renderedText as NSString).length
+        let glyphRange = layoutManager.glyphRange(
+            forCharacterRange: NSRange(location: 0, length: textLength),
+            actualCharacterRange: nil
+        )
+        let usedRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        let needsLeadingSpace = presentation.argument.isEmpty
+        let hintText = (needsLeadingSpace ? " " : "") + hint
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font ?? UIFont.preferredFont(forTextStyle: .body),
+            .foregroundColor: UIColor.secondaryLabel.withAlphaComponent(0.62)
+        ]
+        (hintText as NSString).draw(
+            at: CGPoint(x: textContainerInset.left + usedRect.maxX, y: textContainerInset.top + usedRect.minY),
+            withAttributes: attributes
+        )
+    }
+
+    private func baseAttributes() -> [NSAttributedString.Key: Any] {
+        [
+            .font: font ?? UIFont.preferredFont(forTextStyle: .body),
+            .foregroundColor: UIColor.label
+        ]
+    }
+}
+
 struct ConversationView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.colorScheme) private var colorScheme
@@ -178,7 +352,11 @@ struct ConversationView: View {
                         .padding(.bottom, composerBottomPadding)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     } else {
-                        composer
+                        VStack(spacing: 10) {
+                            slashCommandMenus
+                                .padding(.horizontal, 14)
+                            composer
+                        }
                     }
                 }
                 .background {
@@ -387,17 +565,23 @@ struct ConversationView: View {
     }
 
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let slashPresentation = slashCommandComposerPresentation(
+            draft: draft,
+            token: store.slashCommands.commandToken,
+            hint: store.slashCommands.argumentHint
+        )
+        return VStack(alignment: .leading, spacing: 12) {
             if !pendingImages.isEmpty {
                 pendingImageStrip
             }
-            TextField("描述你想要构建的内容", text: $draft, axis: .vertical)
-                .lineLimit(1...5)
-                .font(.body)
-                .textFieldStyle(.plain)
-                .focused($composerIsFocused)
-                .padding(.horizontal, 3)
-                .frame(minHeight: 38, alignment: .top)
+            SlashCommandTextView(
+                text: $draft,
+                presentation: slashPresentation,
+                placeholder: "描述你想要构建的内容",
+                isFocused: $composerIsFocused
+            )
+            .padding(.horizontal, 3)
+            .frame(minHeight: 38, alignment: .top)
             HStack(spacing: 7) {
                 PhotosPicker(
                     selection: $selectedPhotoItems,
@@ -441,10 +625,15 @@ struct ConversationView: View {
                 }
 
                 Button {
-                    let content = draft
+                    let content = store.composedSlashMessage(arguments: draft)
                     let images = pendingImages
                     guard store.send(content, images: images) else { return }
+                    if store.commandSubmissionPending {
+                        composerIsFocused = false
+                        return
+                    }
                     draft = ""
+                    store.clearActiveSlashCommand()
                     pendingImages = []
                     selectedPhotoItems = []
                     composerIsFocused = false
@@ -461,7 +650,7 @@ struct ConversationView: View {
                         .background(DSHColor.ocean, in: Circle())
                 }
                 .buttonStyle(.plain)
-                .disabled(!composerHasContent || store.waitingForNewSession || isImportingImages)
+                .disabled(!composerHasContent || store.waitingForNewSession || isImportingImages || store.commandSubmissionPending)
                 .opacity(composerHasContent ? 1 : 0.48)
             }
         }
@@ -479,6 +668,117 @@ struct ConversationView: View {
         .onChange(of: selectedPhotoItems) { _, items in
             guard !items.isEmpty else { return }
             Task { await importPhotos(items) }
+        }
+        .onChange(of: draft) { _, value in
+            store.updateSlashCommandInput(value)
+        }
+        .onChange(of: store.commandDraftClearToken) {
+            draft = ""
+            pendingImages = []
+            selectedPhotoItems = []
+            composerIsFocused = false
+        }
+    }
+
+    @ViewBuilder
+    private var slashCommandMenus: some View {
+        let state = store.slashCommands
+        if state.catalogVisible || state.optionsCommand != nil {
+            VStack(alignment: .leading, spacing: 0) {
+                if let optionsCommand = state.optionsCommand {
+                    Text("/\(optionsCommand.name)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                }
+                if state.catalogLoading || state.optionsLoading || state.selectionLoading {
+                    ProgressView().progressViewStyle(.linear)
+                }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if state.optionsCommand == nil {
+                            ForEach(state.filteredGroups, id: \.id) { group in
+                                Text(group.title)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 9)
+                                ForEach(group.items, id: \.stableId) { command in
+                                    Button {
+                                        if let replacement = store.selectSlashCatalogItem(command.stableId) {
+                                            draft = replacement
+                                        }
+                                    } label: {
+                                        HStack(spacing: 10) {
+                                            Text(command.name)
+                                                .font(.body.weight(.medium))
+                                                .foregroundStyle(.primary)
+                                            Text(command.description_)
+                                                .font(.subheadline)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                            Spacer(minLength: 4)
+                                            if command.ui.kind == "select" {
+                                                Image(systemName: "chevron.right")
+                                                    .font(.caption.weight(.semibold))
+                                                    .foregroundStyle(.tertiary)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 11)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        } else {
+                            ForEach(state.options, id: \.id) { option in
+                                Button {
+                                    if let replacement = store.selectSlashCommandOption(option.id) {
+                                        draft = replacement
+                                    }
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(option.label)
+                                                .font(.body.weight(.medium))
+                                                .foregroundStyle(.primary)
+                                            if let detail = option.description_ ?? option.detail {
+                                                Text(detail)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(1)
+                                            }
+                                        }
+                                        Spacer(minLength: 4)
+                                        if option.selected == true {
+                                            Image(systemName: "checkmark")
+                                                .font(.body.weight(.semibold))
+                                                .foregroundStyle(DSHColor.ocean)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(state.selectionLoading)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 300)
+            }
+            .glassSurface(radius: 22, tint: glassTint)
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(glassEdge, lineWidth: 0.7)
+            }
+            .shadow(color: glassShadow, radius: 18, y: 8)
         }
     }
 
@@ -989,6 +1289,7 @@ struct ConversationView: View {
             }
             let content: AnyView
             let allowsHeightCaching: Bool
+            let clipsContentToBounds: Bool
             switch entry.content {
             case .message(let item):
                 content = AnyView(ConversationRow(
@@ -1001,24 +1302,26 @@ struct ConversationView: View {
                 // first UIHostingConfiguration measurement. Let UIKit measure
                 // these rows live instead of replaying a premature short cache.
                 allowsHeightCaching = !MarkdownViewportSizing.requiresLiveMeasurement(item.text)
+                clipsContentToBounds = false
             case .process(let group):
                 content = AnyView(
                     ConversationProcessRow(group: group)
-                        .environment(\.conversationDisclosureWillToggle) {
-                            viewportProxy.invalidateHeight(for: entry.id)
+                        .environment(\.conversationDisclosureDidToggle) {
+                            viewportProxy.remeasureDisclosure(for: entry.id)
                         }
                 )
-                // Collapsed process rows are immutable while scrolling. Cache
-                // their settled height just like completed Markdown rows; the
-                // environment callback evicts and remeasures only this item
-                // when a nested disclosure is explicitly toggled.
-                allowsHeightCaching = true
+                // Process rows contain nested disclosures. Their intrinsic
+                // height changes after a tap, so let UIHostingConfiguration
+                // and the self-sizing collection layout measure them live.
+                allowsHeightCaching = false
+                clipsContentToBounds = true
             }
             return ConversationViewportEntry(
                 id: entry.id,
                 revision: revision,
                 content: content,
-                allowsHeightCaching: allowsHeightCaching
+                allowsHeightCaching: allowsHeightCaching,
+                clipsContentToBounds: clipsContentToBounds
             )
         }
     }
@@ -1605,7 +1908,7 @@ private struct ConversationDisplayEntry: Identifiable {
         func flushProcess() {
             guard let first = processItems.first else { return }
             let group = ConversationProcessGroup(
-                id: "process-\(first.id)",
+                id: first.kind == .status ? "message-\(first.id)" : "process-\(first.id)",
                 items: processItems
             )
             result.append(.init(id: group.id, content: .process(group), showsCopyButton: false))
@@ -1616,7 +1919,10 @@ private struct ConversationDisplayEntry: Identifiable {
             switch item.kind {
             case .context, .reasoning, .tool, .jsonTool, .toolResult:
                 processItems.append(item)
-            case .user, .assistant, .status, .system:
+            case .status:
+                flushProcess()
+                processItems.append(item)
+            case .user, .assistant, .system:
                 flushProcess()
                 result.append(.init(id: "message-\(item.id)", content: .message(item), showsCopyButton: false))
             }
@@ -1666,11 +1972,19 @@ private enum ConversationProcessContent: Identifiable {
 }
 
 private extension ConversationProcessGroup {
+    var command: ConversationItem? {
+        items.first?.kind == .status ? items.first : nil
+    }
+
+    var detailItems: ArraySlice<ConversationItem> {
+        command == nil ? items[...] : items.dropFirst()
+    }
+
     var contents: [ConversationProcessContent] {
         var contents: [ConversationProcessContent] = []
         var tools: [ConversationProcessTool] = []
 
-        for item in items {
+        for item in detailItems {
             switch item.kind {
             case .context:
                 contents.append(.context(item))
@@ -1709,7 +2023,7 @@ private extension ConversationProcessGroup {
 private struct ConversationProcessRow: View {
     let group: ConversationProcessGroup
     @State private var expanded = false
-    @Environment(\.conversationDisclosureWillToggle) private var disclosureWillToggle
+    @Environment(\.conversationDisclosureDidToggle) private var disclosureDidToggle
 
     private var reasoningText: String {
         group.contents.compactMap { content in
@@ -1729,25 +2043,43 @@ private struct ConversationProcessRow: View {
         }
     }
 
+    private var commandHasDetailedText: Bool {
+        guard let text = group.command?.text else { return false }
+        return text.contains("\n") || text.count > 96
+    }
+
+    private var isExpandable: Bool {
+        group.command == nil || commandHasDetailedText || !group.detailItems.isEmpty
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Button { toggleWithoutAnimation($expanded, before: disclosureWillToggle) } label: {
-                HStack(spacing: 7) {
-                    Text(processTitle)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
+            if isExpandable {
+                Button { toggleWithoutAnimation($expanded, after: disclosureDidToggle) } label: {
+                    processHeader
+                        .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+            } else {
+                processHeader
             }
-            .buttonStyle(.plain)
 
-            if expanded {
+            if expanded, isExpandable {
                 VStack(alignment: .leading, spacing: 8) {
+                    if let command = group.command, commandHasDetailedText {
+                        Text(command.text)
+                            .font(.system(.subheadline, design: .monospaced))
+                            .foregroundStyle(command.isError ? .red : .primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(.primary.opacity(0.08), lineWidth: 1)
+                            }
+                    }
                     ForEach(contexts) { item in
                         ConversationContextDisclosure(item: item)
                     }
@@ -1767,7 +2099,44 @@ private struct ConversationProcessRow: View {
         }
     }
 
+    private var processHeader: some View {
+        HStack(spacing: 7) {
+            if let command = group.command {
+                Image(systemName: "terminal")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(command.isError ? .red : .secondary)
+                Text(command.title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(command.isError ? .red : .primary)
+                    .lineLimit(1)
+                Text("·")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+                Text(commandPreview(command.text))
+                    .font(.subheadline)
+                    .foregroundStyle(command.isError ? .red : .secondary)
+                    .lineLimit(1)
+            } else {
+                Text(processTitle)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            if isExpandable {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+        }
+    }
+
     private var processTitle: String {
+        if let command = group.command {
+            let preview = commandPreview(command.text)
+            return preview.isEmpty ? command.title : "\(command.title) · \(preview)"
+        }
         if group.contextCount > 0, group.toolCount == 0, reasoningText.isEmpty {
             return group.contextCount == 1 ? String(localized: "上下文") : String(localized: "context.items.count", defaultValue: "\(group.contextCount) 项上下文")
         }
@@ -1785,6 +2154,50 @@ private struct ConversationProcessRow: View {
         if group.toolCount > 0 { details.append(String(localized: "toolcall.count", defaultValue: "\(group.toolCount) 次工具调用")) }
         return details.isEmpty ? base : "\(base) · \(details.joined(separator: " · "))"
     }
+
+    private func commandPreview(_ text: String) -> String {
+        text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private enum ConversationGlyph {
+    case system(String)
+    case asset(String)
+}
+
+private struct ConversationGlyphImage: View {
+    let glyph: ConversationGlyph
+
+    @ViewBuilder
+    var body: some View {
+        switch glyph {
+        case .system(let name):
+            Image(systemName: name)
+        case .asset(let name):
+            Image(name)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 14, height: 14)
+        }
+    }
+}
+
+private func conversationToolGlyph(_ toolName: String?) -> ConversationGlyph {
+    let normalized = toolName?
+        .lowercased()
+        .filter { $0.isLetter || $0.isNumber } ?? ""
+    switch normalized {
+    case "glob", "grep", "websearch":
+        return .asset("DshSearch")
+    case "read", "webfetch", "cordispackageinspect", "cordisruntimeinspect":
+        return .asset("DshRead")
+    case "bash", "pwsh":
+        return .asset("DshBash")
+    default:
+        return .system("wrench.and.screwdriver")
+    }
 }
 
 private struct ConversationContextDisclosure: View {
@@ -1796,7 +2209,7 @@ private struct ConversationContextDisclosure: View {
             expanded: $expanded,
             title: item.title,
             text: item.text,
-            icon: "doc.text",
+            icon: .asset("DshContextInjection"),
             tint: .green
         )
     }
@@ -1805,7 +2218,7 @@ private struct ConversationContextDisclosure: View {
 private struct ConversationReasoningDisclosure: View {
     let text: String
     @State private var expanded = false
-    @Environment(\.conversationDisclosureWillToggle) private var disclosureWillToggle
+    @Environment(\.conversationDisclosureDidToggle) private var disclosureDidToggle
 
     private var preview: String {
         text.replacingOccurrences(of: "\n", with: " ")
@@ -1819,9 +2232,9 @@ private struct ConversationReasoningDisclosure: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Button { toggleWithoutAnimation($expanded, before: disclosureWillToggle) } label: {
+            Button { toggleWithoutAnimation($expanded, after: disclosureDidToggle) } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "sparkles")
+                    ConversationGlyphImage(glyph: .asset("DshThink"))
                         .foregroundStyle(DSHColor.purple)
                         .frame(width: 18)
                     Text("Think")
@@ -1870,11 +2283,11 @@ private struct ConversationReasoningDisclosure: View {
 private struct ConversationToolBundle: View {
     let tools: [ConversationProcessTool]
     @State private var expanded = false
-    @Environment(\.conversationDisclosureWillToggle) private var disclosureWillToggle
+    @Environment(\.conversationDisclosureDidToggle) private var disclosureDidToggle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Button { toggleWithoutAnimation($expanded, before: disclosureWillToggle) } label: {
+            Button { toggleWithoutAnimation($expanded, after: disclosureDidToggle) } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "wrench.and.screwdriver")
                         .foregroundStyle(DSHColor.orange)
@@ -1913,13 +2326,17 @@ private struct ConversationToolBundle: View {
 private struct ConversationProcessToolRow: View {
     let tool: ConversationProcessTool
     @State private var expanded = false
-    @Environment(\.conversationDisclosureWillToggle) private var disclosureWillToggle
+    @Environment(\.conversationDisclosureDidToggle) private var disclosureDidToggle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Button { toggleWithoutAnimation($expanded, before: disclosureWillToggle) } label: {
+            Button { toggleWithoutAnimation($expanded, after: disclosureDidToggle) } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: tool.result?.isError == true ? "exclamationmark.triangle" : "terminal")
+                    ConversationGlyphImage(
+                        glyph: tool.result?.isError == true
+                            ? .system("exclamationmark.triangle")
+                            : conversationToolGlyph(tool.call?.title)
+                    )
                         .foregroundStyle(tool.result?.isError == true ? .red : DSHColor.orange)
                         .frame(width: 17)
                     Text(tool.call?.title ?? tool.result?.title ?? String(localized: "trajectory.tool.fallback", defaultValue: "工具"))
@@ -1984,22 +2401,22 @@ private struct ToolArgumentsView: View {
     }
 }
 
-private struct ConversationDisclosureWillToggleKey: EnvironmentKey {
+private struct ConversationDisclosureDidToggleKey: EnvironmentKey {
     static let defaultValue: () -> Void = {}
 }
 
 private extension EnvironmentValues {
-    var conversationDisclosureWillToggle: () -> Void {
-        get { self[ConversationDisclosureWillToggleKey.self] }
-        set { self[ConversationDisclosureWillToggleKey.self] = newValue }
+    var conversationDisclosureDidToggle: () -> Void {
+        get { self[ConversationDisclosureDidToggleKey.self] }
+        set { self[ConversationDisclosureDidToggleKey.self] = newValue }
     }
 }
 
-private func toggleWithoutAnimation(_ value: Binding<Bool>, before: () -> Void = {}) {
-    before()
+private func toggleWithoutAnimation(_ value: Binding<Bool>, after: () -> Void = {}) {
     var transaction = Transaction()
     transaction.disablesAnimations = true
     withTransaction(transaction) { value.wrappedValue.toggle() }
+    after()
 }
 
 private struct AttachmentImageGrid: View {
@@ -2082,7 +2499,7 @@ private struct ConversationRow: View {
                 expanded: $expanded,
                 title: item.title,
                 text: item.text,
-                icon: "doc.text",
+                icon: .asset("DshContextInjection"),
                 tint: .green
             )
         case .assistant:
@@ -2112,7 +2529,7 @@ private struct ConversationRow: View {
                 expanded: $expanded,
                 title: "Think",
                 text: item.text,
-                icon: "sparkles",
+                icon: .asset("DshThink"),
                 tint: DSHColor.purple
             )
         case .tool, .toolResult:
@@ -2120,7 +2537,11 @@ private struct ConversationRow: View {
                 expanded: $expanded,
                 title: item.title,
                 text: item.text,
-                icon: item.isError ? "exclamationmark.triangle" : "wrench.and.screwdriver",
+                icon: item.isError
+                    ? .system("exclamationmark.triangle")
+                    : item.kind == .tool
+                        ? conversationToolGlyph(item.title)
+                        : .system("wrench.and.screwdriver"),
                 tint: item.isError ? .red : DSHColor.orange,
                 rendersOutput: item.title == L10n.toolResultDoneTitle || item.title == L10n.toolResultFailedTitle
             )
@@ -2129,12 +2550,25 @@ private struct ConversationRow: View {
                 expanded: $expanded,
                 title: item.title,
                 text: item.text,
-                icon: "curlybraces.square",
+                icon: .system("curlybraces.square"),
                 tint: DSHColor.orange,
                 rendersJSON: true
             )
         case .status:
-            HStack { Rectangle().fill(.gray.opacity(0.25)).frame(height: 1); Text([item.title, item.text].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary); Rectangle().fill(.gray.opacity(0.25)).frame(height: 1) }
+            HStack(alignment: .firstTextBaseline, spacing: 9) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(item.isError ? .red : .secondary)
+                Text(item.title)
+                    .foregroundStyle(item.isError ? .red : .primary)
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                Text(item.text)
+                    .foregroundStyle(item.isError ? .red : .secondary)
+            }
+            .font(.subheadline)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
         case .system:
             HStack(alignment: .top, spacing: 9) {
                 Image(systemName: item.isError ? "exclamationmark.circle.fill" : "antenna.radiowaves.left.and.right")
@@ -2196,11 +2630,11 @@ private struct CompactEventDisclosure: View {
     @Binding var expanded: Bool
     let title: String
     let text: String
-    let icon: String
+    let icon: ConversationGlyph
     let tint: Color
     var rendersJSON = false
     var rendersOutput = false
-    @Environment(\.conversationDisclosureWillToggle) private var disclosureWillToggle
+    @Environment(\.conversationDisclosureDidToggle) private var disclosureDidToggle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -2209,10 +2643,12 @@ private struct CompactEventDisclosure: View {
                 // Large tool payloads can therefore temporarily overlap the
                 // following message. Toggle without a transition so SwiftUI
                 // measures the expanded payload before drawing sibling rows.
-                toggleWithoutAnimation($expanded, before: disclosureWillToggle)
+                toggleWithoutAnimation($expanded, after: disclosureDidToggle)
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: icon).foregroundStyle(tint).frame(width: 18)
+                    ConversationGlyphImage(glyph: icon)
+                        .foregroundStyle(tint)
+                        .frame(width: 18)
                     Text(title).foregroundStyle(tint).lineLimit(1)
                     if !preview.isEmpty {
                         Text("·").foregroundStyle(.tertiary)

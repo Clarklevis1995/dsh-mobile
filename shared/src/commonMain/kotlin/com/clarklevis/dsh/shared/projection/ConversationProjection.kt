@@ -19,7 +19,12 @@ data class ConversationProjectionLabels(
     val finalReasoning: String = "Think",
     val assemblingTool: String = "Tool",
     val toolResultDone: String = "Tool result",
-    val toolResultFailed: String = "Tool failed"
+    val toolResultFailed: String = "Tool failed",
+    val commandRunning: String = "Running…",
+    val commandCompacting: String = "Compacting…",
+    val commandCompleted: String = "Completed",
+    val commandFailed: String = "Failed",
+    val compactedHistory: String = "Compacted {items} history items (~{tokens} tokens)"
 )
 
 @Serializable
@@ -49,6 +54,8 @@ class ConversationProjector(
     private val mutableItems = mutableListOf<ConversationItem>()
     private val streamIndexes = mutableMapOf<String, Int>()
     private val finalizedKeys = mutableSetOf<String>()
+    private val commandItemIds = mutableMapOf<String, String>()
+    private val compactionCommandIds = mutableMapOf<String, String>()
 
     val items: List<ConversationItem> get() = mutableItems.toList()
     var lastSequence: Int = -1
@@ -58,6 +65,8 @@ class ConversationProjector(
         mutableItems.clear()
         streamIndexes.clear()
         finalizedKeys.clear()
+        commandItemIds.clear()
+        compactionCommandIds.clear()
         lastSequence = -1
     }
 
@@ -141,7 +150,139 @@ class ConversationProjector(
                 isError = event.isError == true,
                 epochSeconds = date
             ), operations)
+            event.type == "command/run" -> commandStarted(record, date, operations)
+            event.type == "compaction/start" -> compactionStarted(record, date, operations)
+            event.type == "compaction/summary" -> compactionSummarized(record, date, operations)
+            event.type == "compaction/end" -> compactionEnded(record, date, operations)
+            event.type == "command/done" -> commandFinished(record, date, operations)
         }
+    }
+
+    private fun commandStarted(
+        record: SessionEvent,
+        date: Double,
+        operations: MutableList<ConversationProjectionOperation>
+    ) {
+        val event = record.event
+        val commandId = event.commandId ?: event.raw?.get("commandId")?.stringValue ?: return
+        val itemId = "${record.sessionId}-command-$commandId"
+        commandItemIds[commandId] = itemId
+        insert(
+            ConversationItem(
+                id = itemId,
+                kind = ConversationItemKind.STATUS,
+                title = event.name ?: event.raw?.get("name")?.stringValue ?: "command",
+                text = labels.commandRunning,
+                epochSeconds = date
+            ),
+            operations
+        )
+    }
+
+    private fun compactionStarted(
+        record: SessionEvent,
+        date: Double,
+        operations: MutableList<ConversationProjectionOperation>
+    ) {
+        val event = record.event
+        val compactionId = event.compactionId ?: event.raw?.get("compactionId")?.stringValue
+        val commandId = event.sourceCommandId ?: event.raw?.get("sourceCommandId")?.stringValue
+        if (compactionId != null && commandId != null) compactionCommandIds[compactionId] = commandId
+        updateCommand(record, commandId, date, operations) { old ->
+            old.copy(title = old.title.ifBlank { "compact" }, text = labels.commandCompacting, epochSeconds = date)
+        }
+    }
+
+    private fun compactionSummarized(
+        record: SessionEvent,
+        date: Double,
+        operations: MutableList<ConversationProjectionOperation>
+    ) {
+        val event = record.event
+        val compactionId = event.compactionId ?: event.raw?.get("compactionId")?.stringValue
+        val commandId = event.sourceCommandId
+            ?: event.raw?.get("sourceCommandId")?.stringValue
+            ?: compactionId?.let(compactionCommandIds::get)
+        val itemCount = event.shadowedItemCount
+            ?: event.raw?.get("shadowedItemCount")?.doubleValue?.toInt()
+        val tokenCount = event.shadowedTokenCount
+            ?: event.raw?.get("shadowedTokenCount")?.doubleValue?.toInt()
+        val summary = if (itemCount != null && tokenCount != null) {
+            labels.compactedHistory
+                .replace("{items}", itemCount.toString())
+                .replace("{tokens}", tokenCount.toString())
+        } else {
+            labels.commandCompleted
+        }
+        updateCommand(record, commandId, date, operations) { old ->
+            old.copy(title = old.title.ifBlank { "compact" }, text = summary, epochSeconds = date)
+        }
+    }
+
+    private fun compactionEnded(
+        record: SessionEvent,
+        date: Double,
+        operations: MutableList<ConversationProjectionOperation>
+    ) {
+        val event = record.event
+        val error = event.error ?: event.raw?.get("error")?.stringValue
+        if (error == null) return
+        val compactionId = event.compactionId ?: event.raw?.get("compactionId")?.stringValue
+        val commandId = event.sourceCommandId
+            ?: event.raw?.get("sourceCommandId")?.stringValue
+            ?: compactionId?.let(compactionCommandIds::get)
+        updateCommand(record, commandId, date, operations) { old ->
+            old.copy(text = error, isError = true, epochSeconds = date)
+        }
+    }
+
+    private fun commandFinished(
+        record: SessionEvent,
+        date: Double,
+        operations: MutableList<ConversationProjectionOperation>
+    ) {
+        val event = record.event
+        val commandId = event.commandId ?: event.raw?.get("commandId")?.stringValue
+        val outcome = event.outcome ?: event.raw?.get("outcome")?.stringValue
+        val failed = event.isError == true || outcome == "error" || outcome == "failed" || outcome == "failure"
+        updateCommand(record, commandId, date, operations) { old ->
+            val hasCompactionSummary = old.title == "compact" &&
+                old.text != labels.commandRunning && old.text != labels.commandCompacting
+            old.copy(
+                text = if (hasCompactionSummary && !failed) old.text
+                    else event.text?.takeIf(String::isNotBlank)
+                        ?: if (failed) labels.commandFailed else labels.commandCompleted,
+                isError = failed,
+                epochSeconds = date
+            )
+        }
+    }
+
+    private fun updateCommand(
+        record: SessionEvent,
+        commandId: String?,
+        date: Double,
+        operations: MutableList<ConversationProjectionOperation>,
+        transform: (ConversationItem) -> ConversationItem
+    ) {
+        val resolvedCommandId = commandId ?: return
+        val itemId = commandItemIds[resolvedCommandId] ?: "${record.sessionId}-command-$resolvedCommandId"
+        val index = mutableItems.indexOfFirst { it.id == itemId }
+        if (index < 0) {
+            commandItemIds[resolvedCommandId] = itemId
+            val fallback = ConversationItem(
+                id = itemId,
+                kind = ConversationItemKind.STATUS,
+                title = "compact",
+                text = labels.commandRunning,
+                epochSeconds = date
+            )
+            insert(transform(fallback), operations)
+            return
+        }
+        val updated = transform(mutableItems[index])
+        mutableItems[index] = updated
+        operations += ConversationProjectionOperation(kind = "replace", item = updated, itemId = itemId)
     }
 
     private fun insert(

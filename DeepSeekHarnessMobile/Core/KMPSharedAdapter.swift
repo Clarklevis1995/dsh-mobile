@@ -156,7 +156,15 @@ final class KMPConversationStoreAdapter {
             finalReasoning: "Think",
             assemblingTool: L10n.assemblingToolTitle,
             toolResultDone: L10n.toolResultDoneTitle,
-            toolResultFailed: L10n.toolResultFailedTitle
+            toolResultFailed: L10n.toolResultFailedTitle,
+            commandRunning: String(localized: "command.running", defaultValue: "正在执行…"),
+            commandCompacting: String(localized: "command.compacting", defaultValue: "正在压缩…"),
+            commandCompleted: String(localized: "command.completed", defaultValue: "已完成"),
+            commandFailed: String(localized: "command.failed", defaultValue: "执行失败"),
+            compactedHistory: String(
+                localized: "command.compacted-history",
+                defaultValue: "已压缩 {items} 条历史记录（约 {tokens} tokens）"
+            )
         )
         guard let eventStore = store as? any KMPConversationEventBridging else {
             failClosed(.runtimeFailed("Conversation bridge 不支持 MVI event stream"))
@@ -346,6 +354,15 @@ final class KMPConversationStoreAdapter {
                         isError: old.isError,
                         date: Date(timeIntervalSince1970: epochSeconds)
                     )
+                case "replace":
+                    guard let item = operation.item?.item,
+                          let itemID = operation.itemId, item.id == itemID,
+                          operation.delta == nil,
+                          operation.epochSeconds == nil,
+                          let index = next.firstIndex(where: { $0.id == itemID }) else {
+                        throw KMPConversationStoreError.invalidEvent("replace operation 无效")
+                    }
+                    next[index] = item
                 case "remove":
                     guard operation.item == nil,
                           let itemID = operation.itemId, !itemID.isEmpty,

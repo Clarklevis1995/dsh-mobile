@@ -15,6 +15,7 @@ final class GatewayClient: ObservableObject {
     @Published private(set) var clientCount: Int?
 
     var onFrame: ((GatewayFrame) -> Void)?
+    var onRawFrame: ((String) -> Void)?
     var onConnectionFailure: ((String) -> Void)?
     private var socket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
@@ -266,6 +267,35 @@ final class GatewayClient: ObservableObject {
         }
     }
 
+    func executeCommand(
+        line: String,
+        images: [GatewayOutgoingImage] = [],
+        sessionId: String?
+    ) {
+        guard let sessionId, !sessionId.isEmpty else {
+            state = .failed(String(localized: "state.websocket.not-connected", defaultValue: "WebSocket 尚未连接"))
+            return
+        }
+        let request = GatewayCommandExecuteRequest(
+            sessionId: sessionId,
+            line: line,
+            images: images.map {
+                GatewayMessageRequest.Image(mediaType: $0.mediaType, data: $0.data, name: $0.name)
+            }
+        )
+        Task { [weak self] in
+            guard let socket = self?.socket else { return }
+            do {
+                let payload = try await Task.detached(priority: .userInitiated) {
+                    try JSONEncoder().encode(request)
+                }.value
+                try await socket.send(.string(String(decoding: payload, as: UTF8.self)))
+            } catch {
+                self?.handleFailure(error, socket: socket)
+            }
+        }
+    }
+
     func answerQuestion(rpcId: String, sessionId: String, answers: [GatewayQuestionAnswer]) {
         let encodedAnswers: [[String: Any]] = answers.map { answer in
             var value: [String: Any] = [
@@ -346,6 +376,8 @@ final class GatewayClient: ObservableObject {
                 @unknown default: continue
                 }
                 do {
+                    let rawText = String(decoding: data, as: UTF8.self)
+                    onRawFrame?(rawText)
                     // A history page can contain thousands of raw events. JSON
                     // decoding must not occupy the main actor that drives SwiftUI.
                     let frame = try await Task.detached(priority: .userInitiated) {
@@ -496,6 +528,13 @@ private struct GatewayMessageRequest: Encodable, Sendable {
     var images: [Image]
     var workspaceId: String?
     var clientTimeZone: String
+}
+
+private struct GatewayCommandExecuteRequest: Encodable, Sendable {
+    let type = "command-execute"
+    var sessionId: String
+    var line: String
+    var images: [GatewayMessageRequest.Image]
 }
 
 private enum GatewayDeviceIdentityStore {

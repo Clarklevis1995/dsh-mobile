@@ -75,6 +75,43 @@ enum JSONValue: Codable, Hashable, Sendable {
     }
 }
 
+@propertyWrapper
+struct GatewayEventSource: Codable, Hashable, Sendable {
+    var wrappedValue: String?
+
+    init(wrappedValue: String? = nil) {
+        self.wrappedValue = wrappedValue
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            wrappedValue = nil
+        } else if let string = try? container.decode(String.self) {
+            wrappedValue = string
+        } else if let value = try? container.decode(JSONValue.self) {
+            wrappedValue = value["kind"]?.stringValue
+        } else {
+            wrappedValue = nil
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        if let wrappedValue {
+            try container.encode(wrappedValue)
+        } else {
+            try container.encodeNil()
+        }
+    }
+}
+
+extension KeyedDecodingContainer {
+    func decode(_ type: GatewayEventSource.Type, forKey key: Key) throws -> GatewayEventSource {
+        try decodeIfPresent(type, forKey: key) ?? GatewayEventSource()
+    }
+}
+
 struct GatewayFrame: Codable, Sendable {
     var kind: String
     var `protocol`: Int?
@@ -93,6 +130,9 @@ struct GatewayFrame: Codable, Sendable {
     var message: String?
     var mode: String?
     var command: JSONValue?
+    var line: String?
+    var commandId: String?
+    var result: JSONValue?
     var requestType: String?
     var items: [JSONValue]?
     var events: [RawSessionEvent]?
@@ -126,9 +166,11 @@ struct GatewayFrame: Codable, Sendable {
     var truncated: Bool?
     var current: GatewayModelSelection?
     var routable: Bool?
-    var groups: [GatewayModelGroup]?
+    // Model catalogs and slash catalogs both use `groups`, but with different
+    // item schemas. Route the raw values after inspecting `kind`.
+    var groups: [JSONValue]?
     var failures: [JSONValue]?
-    var selected: GatewayModelSelection?
+    var selected: JSONValue?
     var selection: GatewayModelSelection?
     var saved: GatewayModelSelection?
     var namespace: JSONValue?
@@ -145,7 +187,7 @@ struct GatewayFrame: Codable, Sendable {
     var agentPresetDefault: String?
     var permissionDefault: String?
     var target: String?
-    var value: String?
+    var value: JSONValue?
     var applied: Bool?
     // Human-in-the-loop question protocol (Mobile Gateway v0.5.0).
     var rpcId: String?
@@ -658,7 +700,24 @@ struct RawSessionEvent: Codable, Hashable, Sendable {
         case "session/title":
             return GatewayEvent(type: type, text: data["title"]?.stringValue, raw: data)
         default:
-            return GatewayEvent(type: type, turn: turn, step: step, text: data["text"]?.stringValue, raw: data)
+            return GatewayEvent(
+                type: type,
+                turn: turn,
+                step: step,
+                text: data["text"]?.stringValue,
+                name: data["name"]?.stringValue,
+                isError: data["error"] != nil && data["error"] != .null,
+                commandId: data["commandId"]?.stringValue,
+                args: data["args"]?.stringValue,
+                outcome: data["outcome"]?.stringValue,
+                sourceEventSeq: data["sourceEventSeq"]?.doubleValue.map(Int.init),
+                compactionId: data["compactionId"]?.stringValue,
+                sourceCommandId: data["sourceCommandId"]?.stringValue,
+                shadowedItemCount: data["shadowedItemCount"]?.doubleValue.map(Int.init),
+                shadowedTokenCount: data["shadowedTokenCount"]?.doubleValue.map(Int.init),
+                error: data["error"]?.stringValue,
+                raw: data
+            )
         }
     }
 
@@ -684,7 +743,7 @@ struct GatewayEvent: Codable, Hashable, Sendable, Identifiable {
     var turn: Int?
     var step: Int?
     var text: String?
-    var source: String?
+    @GatewayEventSource var source: String?
     var chunkType: String?
     var tool: ToolDelta?
     var usage: JSONValue?
@@ -701,7 +760,82 @@ struct GatewayEvent: Codable, Hashable, Sendable, Identifiable {
     var rootCallId: String?
     var parentCallId: String?
     var subCallId: String?
+    var commandId: String?
+    var args: String?
+    var outcome: String?
+    var sourceEventSeq: Int?
+    var compactionId: String?
+    var sourceCommandId: String?
+    var shadowedItemCount: Int?
+    var shadowedTokenCount: Int?
+    var error: String?
     var raw: JSONValue?
+
+    init(
+        type: String,
+        turn: Int? = nil,
+        step: Int? = nil,
+        text: String? = nil,
+        source: String? = nil,
+        chunkType: String? = nil,
+        tool: ToolDelta? = nil,
+        usage: JSONValue? = nil,
+        finish: FinishInfo? = nil,
+        reasoning: String? = nil,
+        toolCalls: [ToolCall]? = nil,
+        images: [GatewayImageAttachment]? = nil,
+        callId: String? = nil,
+        name: String? = nil,
+        arguments: JSONValue? = nil,
+        isError: Bool? = nil,
+        preview: String? = nil,
+        reason: String? = nil,
+        rootCallId: String? = nil,
+        parentCallId: String? = nil,
+        subCallId: String? = nil,
+        commandId: String? = nil,
+        args: String? = nil,
+        outcome: String? = nil,
+        sourceEventSeq: Int? = nil,
+        compactionId: String? = nil,
+        sourceCommandId: String? = nil,
+        shadowedItemCount: Int? = nil,
+        shadowedTokenCount: Int? = nil,
+        error: String? = nil,
+        raw: JSONValue? = nil
+    ) {
+        self.type = type
+        self.turn = turn
+        self.step = step
+        self.text = text
+        self._source = GatewayEventSource(wrappedValue: source)
+        self.chunkType = chunkType
+        self.tool = tool
+        self.usage = usage
+        self.finish = finish
+        self.reasoning = reasoning
+        self.toolCalls = toolCalls
+        self.images = images
+        self.callId = callId
+        self.name = name
+        self.arguments = arguments
+        self.isError = isError
+        self.preview = preview
+        self.reason = reason
+        self.rootCallId = rootCallId
+        self.parentCallId = parentCallId
+        self.subCallId = subCallId
+        self.commandId = commandId
+        self.args = args
+        self.outcome = outcome
+        self.sourceEventSeq = sourceEventSeq
+        self.compactionId = compactionId
+        self.sourceCommandId = sourceCommandId
+        self.shadowedItemCount = shadowedItemCount
+        self.shadowedTokenCount = shadowedTokenCount
+        self.error = error
+        self.raw = raw
+    }
 
     var id: String {
         "\(type)-\(turn ?? -1)-\(step ?? -1)-\(callId ?? "")-\(text?.hashValue ?? 0)"

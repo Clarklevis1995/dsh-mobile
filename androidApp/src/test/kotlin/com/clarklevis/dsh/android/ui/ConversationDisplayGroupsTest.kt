@@ -62,7 +62,7 @@ class ConversationDisplayGroupsTest {
     }
 
     @Test
-    fun conversationalAndStatusRowsSplitProcessGroups() {
+    fun commandOwnsFollowingContextAndReasoningAsNestedDetails() {
         val entries = makeConversationDisplayEntries(
             listOf(
                 item("context-a", ConversationItemKind.CONTEXT),
@@ -73,9 +73,13 @@ class ConversationDisplayGroupsTest {
         )
 
         assertEquals(
-            listOf("process-context-a", "status", "process-reason-b", "system"),
+            listOf("process-context-a", "status", "system"),
             entries.map(ConversationDisplayEntry::id)
         )
+        val command = (entries[1] as ConversationDisplayEntry.Process).group
+        assertEquals("status", command.command?.id)
+        assertEquals("reason-b", command.items.last().id)
+        assertTrue(command.isExpandable)
     }
 
     @Test
@@ -95,7 +99,7 @@ class ConversationDisplayGroupsTest {
                 ConversationDisplayContentType.USER,
                 ConversationDisplayContentType.ASSISTANT,
                 ConversationDisplayContentType.PROCESS,
-                ConversationDisplayContentType.STATUS,
+                ConversationDisplayContentType.PROCESS,
                 ConversationDisplayContentType.SYSTEM
             ),
             entries.map(ConversationDisplayEntry::contentType)

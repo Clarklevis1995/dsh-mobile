@@ -271,6 +271,20 @@ class GatewayRuntime(
         sent
     }
 
+    suspend fun executeCommand(
+        line: String,
+        images: List<GatewayOutgoingImage>,
+        sessionId: String?
+    ): Boolean = serialized {
+        val targetSessionId = sessionId?.takeIf(String::isNotBlank) ?: return@serialized false
+        if (line.isBlank()) return@serialized false
+        if (!outgoingImagesAreWithinLimits(images)) {
+            rejectLocked("command-execute", ERROR_IMAGE_LIMITS)
+            return@serialized false
+        }
+        sendRequestLocked(GatewayRequests.commandExecute(targetSessionId, line.trim(), images))
+    }
+
     suspend fun answerQuestion(
         rpcId: String,
         sessionId: String,
@@ -600,11 +614,13 @@ class GatewayRuntime(
             "question-response", "approval-response" -> request.correlationId == frame.rpcId
             "file-list", "file-download-opened" -> request.correlationId == frame.requestId
             "file-download-chunk", "file-download-cancelled" -> request.correlationId == frame.transferId
+            "command-options", "command-selected" -> request.correlationId == frame.command?.stringValue
             else -> true
         }
 
     private fun responseCorrelation(frame: GatewayFrame): String? =
-        frame.attachment?.attachmentId ?: frame.rpcId ?: frame.requestId ?: frame.transferId
+        frame.attachment?.attachmentId ?: frame.rpcId ?: frame.requestId ?: frame.transferId ?:
+            frame.command?.stringValue
 
     private fun explicitResponseCorrelation(request: GatewayRequest, frame: GatewayFrame): String? =
         when (request.responseKind) {
@@ -612,6 +628,7 @@ class GatewayRuntime(
             "question-response", "approval-response" -> frame.rpcId
             "file-list", "file-download-opened" -> frame.requestId
             "file-download-chunk", "file-download-cancelled" -> frame.transferId
+            "command-options", "command-selected" -> frame.command?.stringValue
             else -> null
         }
 

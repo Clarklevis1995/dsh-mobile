@@ -47,8 +47,10 @@ class ConversationChromeUiDeviceTest {
         compose.setContent {
             DshTheme {
                 ConversationMoreMenu(
+                    canBrowseFiles = false,
                     canReloadHistory = true,
                     canPing = true,
+                    onBrowseFiles = {},
                     onReloadHistory = { reloadCount += 1 },
                     onPing = { pingCount += 1 }
                 )

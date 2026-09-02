@@ -12,6 +12,7 @@ import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
 import com.clarklevis.dsh.shared.facade.SharedMobileApprovalSubmission
 import com.clarklevis.dsh.shared.facade.SharedMobileStore
 import com.clarklevis.dsh.shared.projection.ConversationItem
+import com.clarklevis.dsh.shared.projection.ConversationProjectionLabels
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.projection.TrajectoryProjection
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
@@ -23,6 +24,7 @@ import com.clarklevis.dsh.shared.sync.HistorySyncConfiguration
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.util.Locale
 
 private val adapterJson = Json {
     ignoreUnknownKeys = false
@@ -36,7 +38,7 @@ internal class AndroidGatewayProjection(
     private val historyStore: SharedHistoryStore = SharedHistoryStore(
         HistorySyncConfiguration(pagesPerBatch = 1)
     ),
-    private val conversationStore: SharedConversationStore = SharedConversationStore(),
+    private val conversationStore: SharedConversationStore = SharedConversationStore(mobileConversationLabels()),
     private val onHistoryPageRequested: (sessionId: String, beforeSequence: Int?) -> Unit = { _, _ -> }
 ) {
     private val historyEvents = mutableMapOf<String, List<SessionEvent>>()
@@ -445,6 +447,13 @@ internal class AndroidGatewayProjection(
                         epochSeconds = operation.epochSeconds ?: items[index].epochSeconds
                     )
                 }
+                "replace" -> {
+                    val item = requireNotNull(operation.item)
+                    require(operation.itemId == item.id && operation.delta == null && operation.epochSeconds == null)
+                    val index = items.indexOfFirst { it.id == item.id }
+                    require(index >= 0)
+                    items[index] = item
+                }
                 "remove" -> {
                     require(operation.item == null && !operation.itemId.isNullOrBlank() && operation.delta == null)
                     require(items.removeAll { it.id == operation.itemId })
@@ -474,6 +483,21 @@ internal class AndroidGatewayProjection(
         private val HISTORY_OUTCOMES = setOf(
             "none", "request-page", "stopped", "completed", "failed"
         )
+    }
+}
+
+private fun mobileConversationLabels(): ConversationProjectionLabels {
+    val isChinese = Locale.getDefault().language.startsWith("zh")
+    return if (isChinese) {
+        ConversationProjectionLabels(
+            commandRunning = "正在执行…",
+            commandCompacting = "正在压缩…",
+            commandCompleted = "已完成",
+            commandFailed = "执行失败",
+            compactedHistory = "已压缩 {items} 条历史记录（约 {tokens} tokens）"
+        )
+    } else {
+        ConversationProjectionLabels()
     }
 }
 

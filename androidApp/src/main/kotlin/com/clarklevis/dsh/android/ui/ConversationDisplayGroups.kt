@@ -165,15 +165,27 @@ internal data class ConversationProcessGroup(
     val id: String,
     val items: List<ConversationItem>
 ) {
-    val contexts: List<ConversationItem> = items.filter { it.kind == ConversationItemKind.CONTEXT }
+    val command: ConversationItem? = items.firstOrNull()?.takeIf {
+        it.kind == ConversationItemKind.STATUS
+    }
 
-    val reasoningText: String = items.asSequence()
+    private val detailItems: List<ConversationItem> = if (command == null) items else items.drop(1)
+
+    val contexts: List<ConversationItem> = detailItems.filter { it.kind == ConversationItemKind.CONTEXT }
+
+    val reasoningText: String = detailItems.asSequence()
         .filter { it.kind == ConversationItemKind.REASONING }
         .map(ConversationItem::text)
         .filter(String::isNotEmpty)
         .joinToString("\n\n")
 
-    val tools: List<ConversationProcessTool> = pairProcessTools(items)
+    val tools: List<ConversationProcessTool> = pairProcessTools(detailItems)
+
+    val commandHasDetailedText: Boolean
+        get() = command?.text?.let { it.contains('\n') || it.length > COMMAND_PREVIEW_LIMIT } == true
+
+    val isExpandable: Boolean
+        get() = command == null || commandHasDetailedText || detailItems.isNotEmpty()
 
     val durationSeconds: Double
         get() = when {
@@ -183,6 +195,10 @@ internal data class ConversationProcessGroup(
 
     val title: String
         get() {
+            command?.let {
+                val preview = it.text.commandSingleLinePreview()
+                return if (preview.isEmpty()) it.title else "${it.title} · $preview"
+            }
             if (contexts.isNotEmpty() && tools.isEmpty() && reasoningText.isEmpty()) {
                 return if (contexts.size == 1) "上下文" else "${contexts.size} 项上下文"
             }
@@ -200,6 +216,10 @@ internal data class ConversationProcessGroup(
             }
             return if (details.isEmpty()) base else "$base · ${details.joinToString(" · ")}"
         }
+
+    private companion object {
+        const val COMMAND_PREVIEW_LIMIT = 96
+    }
 }
 
 internal data class ConversationProcessTool(
@@ -218,7 +238,7 @@ internal fun makeConversationDisplayEntries(
         val first = processItems.firstOrNull() ?: return
         result += ConversationDisplayEntry.Process(
             ConversationProcessGroup(
-                id = "process-${first.id}",
+                id = if (first.kind == ConversationItemKind.STATUS) first.id else "process-${first.id}",
                 items = processItems.toList()
             )
         )
@@ -233,9 +253,13 @@ internal fun makeConversationDisplayEntries(
             ConversationItemKind.JSON_TOOL,
             ConversationItemKind.TOOL_RESULT -> processItems += item
 
+            ConversationItemKind.STATUS -> {
+                flushProcess()
+                processItems += item
+            }
+
             ConversationItemKind.USER,
             ConversationItemKind.ASSISTANT,
-            ConversationItemKind.STATUS,
             ConversationItemKind.SYSTEM -> {
                 flushProcess()
                 result += ConversationDisplayEntry.Message(item)
@@ -245,6 +269,11 @@ internal fun makeConversationDisplayEntries(
     flushProcess()
     return result
 }
+
+private fun String.commandSingleLinePreview(): String =
+    lineSequence().joinToString(" ") { it.trim() }
+        .replace(Regex("\\s+"), " ")
+        .trim()
 
 private fun pairProcessTools(
     items: List<ConversationItem>

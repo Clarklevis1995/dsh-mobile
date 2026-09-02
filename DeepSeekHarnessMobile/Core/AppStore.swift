@@ -153,6 +153,10 @@ final class AppStore: ObservableObject {
     @Published private(set) var approvalRequestStatuses: [String: GatewayApprovalRequestStatus] = [:]
     @Published private(set) var supportsImages = false
     @Published private(set) var supportsFileDownloads = false
+    @Published private(set) var supportsSlashCommands = false
+    @Published private(set) var slashCommands: SharedSlashCommandSnapshot
+    @Published private(set) var commandSubmissionPending = false
+    @Published private(set) var commandDraftClearToken = 0
     @Published private(set) var workspaceFilePath = "."
     @Published private(set) var workspaceFileEntries: [GatewayDirectoryItem] = []
     @Published private(set) var workspaceFilesAreLoading = false
@@ -182,6 +186,8 @@ final class AppStore: ObservableObject {
     private let kmpHistoryStore: KMPHistoryStoreAdapter
     /// 文件列表、分块偏移和 SHA-256 完整性校验由 KMP commonMain 统一负责。
     private let kmpWorkspaceFileStore: DeepSeekHarnessShared.SharedWorkspaceFileStore
+    /// 斜杠命令目录、UI 描述符、二级选项与请求关联由 commonMain 统一解析。
+    private let kmpSlashCommandStore = DeepSeekHarnessShared.SharedSlashCommandStore()
     /// KMP Store 会在 dispatch Intent 的同一 MainActor 调用栈内同步推送 Event。
     /// SwiftUI 的 `.task`/`.onChange` 或控件 Binding 可能仍处于 view update；直接
     /// 修改 `@Published` 会触发未定义行为。这里保持 FIFO，并统一在下一次
@@ -243,6 +249,7 @@ final class AppStore: ObservableObject {
         sessionControlEffectExecutor: (any GatewaySessionControlEffectExecuting)? = nil,
         backgroundExecutionController: AgentBackgroundExecutionController? = nil
     ) {
+        slashCommands = kmpSlashCommandStore.snapshot()
         self.preferences = preferences
         self.questionEffectExecutor = questionEffectExecutor ?? gateway
         self.approvalEffectExecutor = approvalEffectExecutor ?? gateway
@@ -336,6 +343,10 @@ final class AppStore: ObservableObject {
             }
         }
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
+        gateway.onRawFrame = { [weak self] json in
+            guard let self else { return }
+            self.applySlashCommandTransition(self.kmpSlashCommandStore.acceptFrame(json: json))
+        }
         gateway.onConnectionFailure = { [weak self] detail in
             self?.handleConnectionFailure(detail)
         }
@@ -823,6 +834,39 @@ final class AppStore: ObservableObject {
             isConnected: gateway.state.isConnected
         ))
     }
+    func updateSlashCommandInput(_ text: String) {
+        applySlashCommandTransition(kmpSlashCommandStore.updateInput(
+            sessionId: selectedSessionId,
+            text: text,
+            isConnected: gateway.state.isConnected,
+            isSupported: supportsSlashCommands,
+            locale: Locale.current.identifier
+        ))
+    }
+    @discardableResult
+    func selectSlashCommand(_ name: String) -> String? {
+        let transition = kmpSlashCommandStore.selectCommand(name: name)
+        applySlashCommandTransition(transition)
+        return slashCommandReplacementText(from: transition)
+    }
+    @discardableResult
+    func selectSlashCatalogItem(_ id: String) -> String? {
+        let transition = kmpSlashCommandStore.selectItem(id: id)
+        applySlashCommandTransition(transition)
+        return slashCommandReplacementText(from: transition)
+    }
+    @discardableResult
+    func selectSlashCommandOption(_ optionID: String) -> String? {
+        let transition = kmpSlashCommandStore.selectOption(optionId: optionID)
+        applySlashCommandTransition(transition)
+        return slashCommandReplacementText(from: transition)
+    }
+    func clearActiveSlashCommand() {
+        applySlashCommandTransition(kmpSlashCommandStore.clearActiveCommand())
+    }
+    func composedSlashMessage(arguments: String) -> String {
+        arguments
+    }
     @discardableResult
     func send(_ text: String, images: [GatewayOutgoingImage] = []) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -831,6 +875,15 @@ final class AppStore: ObservableObject {
         guard images.isEmpty || supportsImages else {
             lastError = String(localized: "当前 Mobile Gateway 不支持图片，请升级并重启 dsh web。")
             return false
+        }
+        if let command = kmpSlashCommandStore.commandExecutionForInput(text: trimmed) {
+            guard images.isEmpty || command.allowsImages else {
+                lastError = String(localized: "此命令不支持图片")
+                return false
+            }
+            commandSubmissionPending = true
+            gateway.executeCommand(line: command.line, images: images, sessionId: selectedSessionId)
+            return true
         }
         waitingForNewSession = selectedSessionId == nil
         beginAgentBackgroundExecution(for: selectedSessionId, startsNewTurn: true)
@@ -841,6 +894,31 @@ final class AppStore: ObservableObject {
             workspaceId: selectedSessionId == nil ? activeWorkspace?.id : nil
         )
         return true
+    }
+
+    private func applySlashCommandTransition(_ transition: SharedSlashCommandTransition) {
+        slashCommands = transition.snapshot
+        if let error = transition.snapshot.lastError {
+            lastError = String(localized: "斜杠命令操作失败") + "：\(error)"
+        }
+        if transition.selectedModel != nil ||
+            (transition.clearDraft && !transition.snapshot.selections.isEmpty) {
+            if let sessionID = selectedSessionId { refreshSessionControls(for: sessionID) }
+        }
+        if let payload = transition.request?.payload {
+            gateway.sendRequestPayload(payload)
+        }
+        if let text = transition.submitText {
+            _ = send(text)
+        }
+        if let command = transition.commandExecution {
+            gateway.executeCommand(line: command.line, sessionId: selectedSessionId)
+        }
+    }
+
+    private func slashCommandReplacementText(from transition: SharedSlashCommandTransition) -> String? {
+        if let replacementText = transition.replacementText { return replacementText }
+        return transition.clearDraft ? "" : nil
     }
 
     func answerQuestion(_ request: GatewayPendingQuestionRequest, answers: [GatewayQuestionAnswer]) {
@@ -876,6 +954,13 @@ final class AppStore: ObservableObject {
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
     private func handle(_ frame: GatewayFrame) {
+        if frame.kind == "command-executed" {
+            handleCommandExecutionResult(frame)
+            return
+        }
+        if frame.kind == "error", frame.requestType == "command-execute" {
+            commandSubmissionPending = false
+        }
         if Self.workspaceFileFrameKinds.contains(frame.kind) ||
             (frame.kind == "error" && frame.requestType?.hasPrefix("file-") == true) {
             if let data = try? JSONEncoder().encode(frame) {
@@ -896,6 +981,19 @@ final class AppStore: ObservableObject {
         )
         let route = GatewayFrameRouter.route(frame, context: context)
         handle(route)
+    }
+
+    private func handleCommandExecutionResult(_ frame: GatewayFrame) {
+        let result = frame.result?.objectValue
+        let succeeded = result?["kind"]?.stringValue == "success"
+        let detail = result?["text"]?.stringValue
+        commandSubmissionPending = false
+        if succeeded {
+            commandDraftClearToken &+= 1
+            clearActiveSlashCommand()
+        } else {
+            lastError = detail ?? frame.message ?? String(localized: "命令执行失败")
+        }
     }
 
     private func handle(_ route: GatewayFrameRoute) {
@@ -928,6 +1026,8 @@ final class AppStore: ObservableObject {
             dispatchApprovalIntent(.reset)
             supportsImages = payload.protocolVersion >= 3 && payload.capabilities.contains("images")
             supportsFileDownloads = payload.protocolVersion >= 3 && payload.capabilities.contains("file-downloads")
+            supportsSlashCommands = payload.capabilities.contains("commands")
+            applySlashCommandTransition(kmpSlashCommandStore.reset(sessionId: selectedSessionId))
             applyWorkspaceFileTransition(kmpWorkspaceFileStore.reset(sessionId: selectedSessionId))
             attachmentLoader.reset()
             presentsNextConnectionFailureAsAlert = true

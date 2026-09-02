@@ -70,6 +70,147 @@ private func stage9WriteMatches(for property: String, in source: String) throws 
     }
 }
 
+final class SlashCommandComposerPresentationTests: XCTestCase {
+    func testActiveCommandPresentationRendersOneCompleteTextLayer() {
+        let hint = slashCommandComposerPresentation(
+            draft: "/plan ",
+            token: "/plan",
+            hint: "描述你的任务以生成计划"
+        )
+        XCTAssertEqual(hint?.token, "/plan")
+        XCTAssertEqual(hint?.argument, " ")
+        XCTAssertTrue(hint?.showsHint == true)
+        XCTAssertEqual(hint?.hintLeadingWhitespace, " ")
+
+        let argument = slashCommandComposerPresentation(
+            draft: "/plan 重构移动端",
+            token: "/plan",
+            hint: "描述你的任务以生成计划"
+        )
+        XCTAssertEqual(argument?.argument, " 重构移动端")
+        XCTAssertFalse(argument?.showsHint == true)
+
+        XCTAssertNil(
+            slashCommandComposerPresentation(
+                draft: "/planning",
+                token: "/plan",
+                hint: "描述你的任务以生成计划"
+            )
+        )
+        XCTAssertNil(
+            slashCommandComposerPresentation(
+                draft: "/pla",
+                token: "/plan",
+                hint: "描述你的任务以生成计划"
+            )
+        )
+        XCTAssertNil(
+            slashCommandComposerPresentation(
+                draft: "",
+                token: "/plan",
+                hint: "描述你的任务以生成计划"
+            )
+        )
+    }
+}
+
+private final class DisclosureLayoutProbe: ObservableObject {
+    @Published var expanded = false
+}
+
+private struct DisclosureLayoutProbeView: View {
+    @ObservedObject var probe: DisclosureLayoutProbe
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Expandable header")
+                .frame(height: 32)
+            if probe.expanded {
+                Color.clear.frame(height: 180)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private func firstDescendant<T: UIView>(of type: T.Type, in view: UIView) -> T? {
+    if let match = view as? T { return match }
+    for subview in view.subviews {
+        if let match = firstDescendant(of: type, in: subview) { return match }
+    }
+    return nil
+}
+
+final class ConversationViewportLayoutTests: XCTestCase {
+    @MainActor
+    func testDisclosureRemeasureKeepsHeaderStableAndPushesFollowingRow() async throws {
+        let probe = DisclosureLayoutProbe()
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 300)
+        controller.view.layoutIfNeeded()
+        controller.configure(
+            sessionID: "layout-test",
+            timeline: timeline,
+            supplementalEntries: [
+                ConversationViewportEntry(
+                    id: "expandable",
+                    revision: 0,
+                    content: AnyView(DisclosureLayoutProbeView(probe: probe)),
+                    allowsHeightCaching: false,
+                    clipsContentToBounds: true
+                ),
+                ConversationViewportEntry(
+                    id: "following",
+                    revision: 0,
+                    content: AnyView(Text("Following row").frame(height: 32))
+                )
+            ],
+            makeEntries: { _ in [] },
+            bottomInset: 0
+        )
+        try await Task.sleep(for: .milliseconds(50))
+        controller.view.layoutIfNeeded()
+
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        let firstIndexPath = IndexPath(item: 0, section: 0)
+        let secondIndexPath = IndexPath(item: 1, section: 0)
+        let oldFirst = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: firstIndexPath)?.frame
+        )
+        let oldSecond = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: secondIndexPath)?.frame
+        )
+        let oldHeaderScreenY = oldFirst.minY - collectionView.contentOffset.y
+
+        probe.expanded = true
+        controller.remeasureDisclosure(for: "expandable")
+        try await Task.sleep(for: .milliseconds(50))
+        controller.view.layoutIfNeeded()
+
+        let newFirst = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: firstIndexPath)?.frame
+        )
+        let newSecond = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: secondIndexPath)?.frame
+        )
+        let newHeaderScreenY = newFirst.minY - collectionView.contentOffset.y
+
+        XCTAssertEqual(newHeaderScreenY, oldHeaderScreenY, accuracy: 1)
+        XCTAssertGreaterThan(newFirst.height, oldFirst.height + 170)
+        XCTAssertGreaterThan(newSecond.minY, oldSecond.minY + 170)
+        XCTAssertGreaterThanOrEqual(newSecond.minY + 0.5, newFirst.maxY)
+    }
+}
+
 final class GatewayProtocolTests: XCTestCase {
     @MainActor
     private func flushDeferredKMPEvents(in store: AppStore) async {
@@ -1605,7 +1746,8 @@ final class GatewayProtocolTests: XCTestCase {
         let modelsJSON = #"{"kind":"models","current":{"provider":"deepseek-official","model":"deepseek-v4-flash","reasoningEffort":"high"},"routable":true,"groups":[{"id":"deepseek-official","name":"DeepSeek","models":[{"id":"deepseek-v4-flash","name":"DeepSeek-V4-Flash","reasoning":{"efforts":[{"id":"off","name":"Off"},{"id":"high","name":"High"}],"defaultEffort":"high"}}]}],"failures":[]}"#
         let models = try GatewayWireDecoder.decode(Data(modelsJSON.utf8))
         XCTAssertEqual(models.current?.model, "deepseek-v4-flash")
-        XCTAssertEqual(models.groups?.first?.models.first?.reasoning?.efforts.map(\.id), ["off", "high"])
+        let firstModelGroup = try XCTUnwrap(models.groups?.first?.decode(GatewayModelGroup.self))
+        XCTAssertEqual(firstModelGroup.models.first?.reasoning?.efforts.map(\.id), ["off", "high"])
 
         let permissionsJSON = #"{"kind":"permission-options","namespace":{"value":{"defaultPreset":"workspace-write"}},"sessionPermissions":{"options":[{"value":"read-only","name":"read-only"},{"value":"danger-full-access","name":"danger-full-access"}],"currentValue":"danger-full-access"}}"#
         let permissions = try GatewayWireDecoder.decode(Data(permissionsJSON.utf8))

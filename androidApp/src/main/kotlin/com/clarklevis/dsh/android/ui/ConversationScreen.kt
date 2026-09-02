@@ -110,9 +110,18 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpOffset
@@ -540,14 +549,28 @@ private fun ConversationPage(
                     details = stateHolder.snapshot.approvalDetails[approval.rpcId],
                     onDecision = { stateHolder.respondToApproval(approval.rpcId, it) }
                 )
-            } else if (question != null) {
-                HumanQuestionCard(
-                    request = question,
-                    onAnswer = { stateHolder.answerQuestion(question.rpcId, question.sessionId, it) },
-                    onCancel = { stateHolder.cancelQuestion(question.rpcId, question.sessionId) }
-                )
             } else {
-                Composer(stateHolder, onPickImage, onDismissInput)
+                AnimatedHumanQuestionPanel(
+                    request = question,
+                    onAnswer = { answeredRequest, answers ->
+                        stateHolder.answerQuestion(
+                            answeredRequest.rpcId,
+                            answeredRequest.sessionId,
+                            answers
+                        )
+                    },
+                    onCancel = { cancelledRequest ->
+                        stateHolder.cancelQuestion(cancelledRequest.rpcId, cancelledRequest.sessionId)
+                    }
+                ) {
+                    Column {
+                        SlashCommandMenus(
+                            stateHolder = stateHolder,
+                            modifier = Modifier.padding(horizontal = 14.dp)
+                        )
+                        Composer(stateHolder, onPickImage, onDismissInput)
+                    }
+                }
             }
         }
     }
@@ -1038,6 +1061,22 @@ private fun Composer(
             onDismissInput()
         }
     }
+    var inputValue by remember(stateHolder) {
+        mutableStateOf(
+            TextFieldValue(
+                text = stateHolder.messageDraft,
+                selection = TextRange(stateHolder.messageDraft.length)
+            )
+        )
+    }
+    LaunchedEffect(stateHolder.messageDraft) {
+        if (inputValue.text != stateHolder.messageDraft) {
+            inputValue = TextFieldValue(
+                text = stateHolder.messageDraft,
+                selection = TextRange(stateHolder.messageDraft.length)
+            )
+        }
+    }
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)
             .dropShadow(
@@ -1075,9 +1114,14 @@ private fun Composer(
                     }
                 }
             }
+            val commandToken = stateHolder.slashCommands.commandToken
+            val commandHint = stateHolder.slashCommands.argumentHint
             BasicTextField(
-                value = stateHolder.messageDraft,
-                onValueChange = { stateHolder.messageDraft = it },
+                value = inputValue,
+                onValueChange = {
+                    inputValue = it
+                    stateHolder.messageDraft = it.text
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 3.dp)
@@ -1086,10 +1130,35 @@ private fun Composer(
                     .testTag("composer-input"),
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(DshColors.Ocean),
+                visualTransformation = slashCommandVisualTransformation(commandToken),
                 decorationBox = { field ->
                     Box {
                         if (stateHolder.messageDraft.isEmpty()) {
-                            Text("描述你想要构建的内容", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f))
+                            Text(
+                                "描述你想要构建的内容",
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
+                            )
+                        } else if (
+                            commandToken != null &&
+                            commandHint != null &&
+                            stateHolder.messageDraft.trimEnd() == commandToken
+                        ) {
+                            Text(
+                                buildAnnotatedString {
+                                    withStyle(SpanStyle(color = Color.Transparent)) {
+                                        append(stateHolder.messageDraft)
+                                    }
+                                    if (!stateHolder.messageDraft.last().isWhitespace()) append(" ")
+                                    withStyle(
+                                        SpanStyle(
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
+                                        )
+                                    ) {
+                                        append(commandHint)
+                                    }
+                                },
+                                style = MaterialTheme.typography.bodyLarge
+                            )
                         }
                         field()
                     }
@@ -1129,8 +1198,135 @@ private fun Composer(
     }
 }
 
+@Composable
+private fun SlashCommandMenus(
+    stateHolder: AndroidSharedStateHolder,
+    modifier: Modifier = Modifier
+) {
+    val state = stateHolder.slashCommands
+    if (!state.catalogVisible && state.optionsCommand == null) return
+    val isDark = isSystemInDarkTheme()
+    val shape = RoundedCornerShape(22.dp)
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(max = 300.dp)
+            .dropShadow(
+                shape = shape,
+                shadow = Shadow(
+                    radius = 10.dp,
+                    spread = 0.dp,
+                    color = dshFloatingSurfaceShadow(isDark),
+                    offset = DpOffset(x = 0.dp, y = 4.dp)
+                )
+            ),
+        shape = shape,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+        border = androidx.compose.foundation.BorderStroke(
+            0.8.dp,
+            dshGlassEdge(isDark)
+        )
+    ) {
+        val optionsCommand = state.optionsCommand
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(vertical = 7.dp)
+        ) {
+            if (optionsCommand != null) item {
+                Text(
+                    text = "/${optionsCommand.name}",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f),
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp)
+                )
+            }
+            if (state.catalogLoading || state.optionsLoading || state.selectionLoading) item {
+                LinearProgressIndicator(Modifier.fillMaxWidth(), color = DshColors.Ocean)
+            }
+            if (optionsCommand == null) {
+                state.filteredGroups.forEach { group ->
+                    item(key = "group-${group.id}") {
+                        Text(
+                            text = group.title,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    items(group.items, key = { "catalog-${it.stableId}" }) { command ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable { stateHolder.selectSlashCatalogItem(command.stableId) }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(command.name, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                command.description,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f),
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(start = 10.dp).weight(1f)
+                            )
+                            if (command.ui.kind == "select") {
+                                Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f))
+                            }
+                        }
+                    }
+                }
+            } else {
+                items(state.options, key = { "option-${it.id}" }) { option ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .clickable(enabled = !state.selectionLoading) {
+                                stateHolder.selectSlashCommandOption(option.id)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(option.label, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            (option.description ?: option.detail)?.let {
+                                Text(
+                                    it,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f),
+                                    fontSize = 12.sp,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        if (option.selected == true) {
+                            Text("✓", color = DshColors.Ocean, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 internal fun dshFloatingSurfaceShadow(isDark: Boolean): Color =
     Color.Black.copy(alpha = if (isDark) 0.20f else 0.08f)
+
+private fun slashCommandVisualTransformation(commandToken: String?): VisualTransformation {
+    if (commandToken == null) return VisualTransformation.None
+    return VisualTransformation { source ->
+        val highlightsCommand = source.text == commandToken || source.text.startsWith("$commandToken ")
+        val transformed = buildAnnotatedString {
+            append(source)
+            if (highlightsCommand) {
+                addStyle(
+                    SpanStyle(color = DshColors.Ocean, fontWeight = FontWeight.SemiBold),
+                    start = 0,
+                    end = commandToken.length
+                )
+            }
+        }
+        TransformedText(transformed, OffsetMapping.Identity)
+    }
+}
 
 internal fun dshGlassEdge(isDark: Boolean): Brush = Brush.verticalGradient(
     colorStops = arrayOf(
@@ -1507,28 +1703,92 @@ private fun ConversationRow(
 @Composable
 private fun ConversationProcessRow(group: ConversationProcessGroup) {
     var expanded by remember(group.id) { mutableStateOf(false) }
+    val command = group.command
+    val commandColor = if (command?.isError == true) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
     Column(Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth().clickable(enabled = group.isExpandable) {
+                expanded = !expanded
+            },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Text(
-                group.title,
-                modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            ProcessChevron(expanded)
+            if (command != null) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_command_status),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (command.isError) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
+                )
+            }
+            if (command != null) {
+                Text(
+                    command.title,
+                    color = commandColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1
+                )
+                Text(
+                    "·",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                    fontSize = 14.sp
+                )
+                Text(
+                    command.text.singleLinePreview(),
+                    modifier = Modifier.weight(1f),
+                    color = if (command.isError) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f),
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                Text(
+                    group.title,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (group.isExpandable) ProcessChevron(expanded)
         }
-        if (expanded) {
+        if (expanded && group.isExpandable) {
             Column(
                 modifier = Modifier.padding(start = 2.dp, top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                if (command != null && group.commandHasDetailedText) {
+                    Box(
+                        Modifier.fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                                RoundedCornerShape(14.dp)
+                            )
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                                RoundedCornerShape(14.dp)
+                            )
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                    ) {
+                        Text(
+                            command.text,
+                            color = commandColor,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
                 group.contexts.forEach { ProcessContextDisclosure(it) }
                 if (group.reasoningText.isNotEmpty()) {
                     ProcessReasoningDisclosure(group.id, group.reasoningText)
@@ -1552,7 +1812,7 @@ private fun ProcessContextDisclosure(item: ConversationItem) {
         id = "context-${item.id}",
         title = item.title.toContextDisplayTitle(),
         preview = item.text.singleLinePreview(),
-        iconRes = R.drawable.ic_process_context,
+        iconRes = R.drawable.ic_dsh_context_injection,
         tint = DshColors.Success
     ) {
         DshMarkdownText(item.text, Modifier.fillMaxWidth(), compact = true)
@@ -1565,7 +1825,7 @@ private fun ProcessReasoningDisclosure(groupId: String, text: String) {
         id = "reasoning-$groupId",
         title = "Think",
         preview = text.singleLinePreview(),
-        iconRes = R.drawable.ic_process_reasoning,
+        iconRes = R.drawable.ic_dsh_think,
         tint = DshColors.Purple
     ) {
         DshMarkdownText(text, Modifier.fillMaxWidth(), compact = true)
@@ -1603,7 +1863,7 @@ private fun ProcessToolDisclosure(tool: ConversationProcessTool) {
         id = "tool-${tool.id}",
         title = tool.call?.title ?: tool.result?.title ?: "工具",
         preview = tool.result?.let { if (failed) "失败" else "完成" }.orEmpty(),
-        iconRes = R.drawable.ic_process_terminal,
+        iconRes = processToolIcon(tool.call?.title),
         tint = if (failed) Color.Red else DshColors.Orange
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -1650,12 +1910,14 @@ private fun ProcessDisclosure(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                painter = painterResource(iconRes),
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = tint
-            )
+            Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = tint
+                )
+            }
             Text(
                 title,
                 color = tint,
@@ -1703,6 +1965,19 @@ private fun String.singleLinePreview(): String =
 private fun String.toContextDisplayTitle(): String = when {
     startsWith("Context · ") -> "上下文注入 · ${removePrefix("Context · ")}"
     else -> this
+}
+
+private fun processToolIcon(toolName: String?): Int {
+    val normalized = toolName.orEmpty()
+        .lowercase()
+        .filter(Char::isLetterOrDigit)
+    return when (normalized) {
+        "glob", "grep", "websearch" -> R.drawable.ic_dsh_search
+        "read", "webfetch", "cordispackageinspect", "cordisruntimeinspect" ->
+            R.drawable.ic_dsh_read
+        "bash", "pwsh" -> R.drawable.ic_dsh_bash
+        else -> R.drawable.ic_process_tool
+    }
 }
 
 @Composable
@@ -2080,10 +2355,21 @@ private fun AssistantMessageHeaderContent(
 
 @Composable
 private fun StatusRow(item: ConversationItem) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        HorizontalDivider(Modifier.weight(1f), color = Color.Gray.copy(alpha = 0.25f))
-        Text(listOf(item.title, item.text).filter { it.isNotEmpty() }.joinToString(" · "), Modifier.padding(horizontal = 8.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
-        HorizontalDivider(Modifier.weight(1f), color = Color.Gray.copy(alpha = 0.25f))
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_command_status),
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = if (item.isError) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
+        )
+        Text(item.title, fontSize = 14.sp, color = if (item.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+        Text("·", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f))
+        Text(item.text, fontSize = 14.sp, color = if (item.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f))
     }
 }
 

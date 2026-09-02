@@ -27,12 +27,20 @@ struct ConversationViewportEntry: Identifiable {
     let streamingAssistant: StreamingAssistant?
     let userMessage: UserMessage?
     let allowsHeightCaching: Bool
+    let clipsContentToBounds: Bool
 
-    init(id: String, revision: Int, content: AnyView, allowsHeightCaching: Bool = true) {
+    init(
+        id: String,
+        revision: Int,
+        content: AnyView,
+        allowsHeightCaching: Bool = true,
+        clipsContentToBounds: Bool = false
+    ) {
         self.id = id
         self.revision = revision
         self.content = content
         self.allowsHeightCaching = allowsHeightCaching
+        self.clipsContentToBounds = clipsContentToBounds
         streamingAssistant = nil
         userMessage = nil
     }
@@ -44,6 +52,7 @@ struct ConversationViewportEntry: Identifiable {
         self.streamingAssistant = streamingAssistant
         userMessage = nil
         allowsHeightCaching = false
+        clipsContentToBounds = false
     }
 
     init(id: String, revision: Int, userMessage: UserMessage) {
@@ -53,6 +62,7 @@ struct ConversationViewportEntry: Identifiable {
         streamingAssistant = nil
         self.userMessage = userMessage
         allowsHeightCaching = true
+        clipsContentToBounds = false
     }
 }
 
@@ -136,8 +146,8 @@ final class ConversationViewportProxy {
         controller?.stopInertialScrolling()
     }
 
-    func invalidateHeight(for id: String) {
-        controller?.invalidateHeight(for: id)
+    func remeasureDisclosure(for id: String) {
+        controller?.remeasureDisclosure(for: id)
     }
 }
 
@@ -368,6 +378,8 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             }
             cell.backgroundColor = .clear
             cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
+            cell.clipsToBounds = entry.clipsContentToBounds
+            cell.contentView.clipsToBounds = entry.clipsContentToBounds
             cell.contentConfiguration = UIHostingConfiguration {
                 entry.content
                     .id(entry.id)
@@ -620,23 +632,42 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         cellHeightCache[key] = UserMessageCell.estimatedHeight(for: userMessage, width: width)
     }
 
-    /// Disclosure rows are normally immutable and can reuse their measured
-    /// height while scrolling. A tap is the only event that changes their
-    /// intrinsic height, so evict and remeasure just that item after SwiftUI
-    /// commits its expanded state instead of keeping every process row in live
-    /// measurement mode.
-    func invalidateHeight(for id: String) {
-        cellHeightCache = cellHeightCache.filter { $0.key.id != id }
-        guard let indexPath = dataSource.indexPath(for: id) else { return }
+    /// SwiftUI disclosure state lives inside a UIHostingConfiguration. That
+    /// internal state change does not reliably invalidate the enclosing
+    /// compositional-layout item, so explicitly remeasure only its host cell
+    /// after SwiftUI has committed the new hierarchy.
+    func remeasureDisclosure(for id: String) {
+        stopInertialScrolling()
+        needsBottomAlignment = false
+        bottomAlignmentGeneration &+= 1
+        guard let indexPath = dataSource.indexPath(for: id),
+              let attributes = collectionView.layoutAttributesForItem(at: indexPath) else { return }
+        let anchor = VisibleAnchor(
+            id: id,
+            offsetFromViewportTop: attributes.frame.minY - collectionView.contentOffset.y
+        )
+
         DispatchQueue.main.async { [weak self] in
             guard let self,
                   self.dataSource.indexPath(for: id) == indexPath else { return }
+            if let cell = self.collectionView.cellForItem(at: indexPath) {
+                cell.invalidateIntrinsicContentSize()
+                cell.contentView.invalidateIntrinsicContentSize()
+                cell.contentView.subviews.forEach {
+                    $0.invalidateIntrinsicContentSize()
+                    $0.setNeedsLayout()
+                }
+                cell.setNeedsLayout()
+                cell.contentView.setNeedsLayout()
+            }
             let context = UICollectionViewLayoutInvalidationContext()
             context.invalidateItems(at: [indexPath])
             UIView.performWithoutAnimation {
                 self.collectionView.collectionViewLayout.invalidateLayout(with: context)
                 self.collectionView.layoutIfNeeded()
+                self.restorePosition(anchor)
             }
+            self.setPinned(self.isAtBottom(self.collectionView))
         }
     }
 
@@ -801,6 +832,11 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         guard let item = dataSource.snapshot().indexOfItem(anchor.id) else { return }
         collectionView.collectionViewLayout.invalidateLayout()
         collectionView.layoutIfNeeded()
+        restorePosition(anchor, item: item)
+    }
+
+    private func restorePosition(_ anchor: VisibleAnchor, item: Int? = nil) {
+        guard let item = item ?? dataSource.snapshot().indexOfItem(anchor.id) else { return }
         let indexPath = IndexPath(item: item, section: 0)
         guard let attributes = collectionView.layoutAttributesForItem(at: indexPath) else { return }
         isProgrammaticScroll = true

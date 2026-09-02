@@ -150,6 +150,43 @@ object GatewayRequests {
         put("name", name)
     }
 
+    fun slashCommands(sessionId: String, locale: String? = null): GatewayRequest = request(
+        "commands",
+        "commands",
+        targetSessionId = sessionId,
+        lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST
+    ) {
+        put("sessionId", sessionId)
+        locale?.takeIf(String::isNotBlank)?.let { put("locale", it) }
+    }
+
+    fun slashCommandOptions(sessionId: String, command: String): GatewayRequest = request(
+        "command-options",
+        "command-options",
+        targetSessionId = sessionId,
+        correlationId = command,
+        lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST
+    ) {
+        put("sessionId", sessionId)
+        put("command", command)
+    }
+
+    fun selectSlashCommandOption(
+        sessionId: String,
+        command: String,
+        optionId: String
+    ): GatewayRequest = request(
+        "command-select",
+        "command-selected",
+        targetSessionId = sessionId,
+        correlationId = command,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("sessionId", sessionId)
+        put("command", command)
+        put("optionId", optionId)
+    }
+
     fun saveDefaultModel(
         provider: String,
         model: String,
@@ -280,6 +317,29 @@ object GatewayRequests {
             workspaceId?.takeIf(String::isNotBlank)?.let { put("workspaceId", it) }
         }
         put("clientTimeZone", clientTimeZone)
+    }
+
+    fun commandExecute(
+        sessionId: String,
+        line: String,
+        images: List<GatewayOutgoingImage>
+    ): GatewayRequest = request(
+        "command-execute",
+        "command-executed",
+        sessionId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("sessionId", sessionId)
+        put("line", line)
+        put("images", buildJsonArray {
+            images.forEach { image ->
+                add(buildJsonObject {
+                    put("mediaType", image.mediaType)
+                    put("data", image.base64Data)
+                    image.name?.takeIf(String::isNotBlank)?.let { put("name", it) }
+                })
+            }
+        })
     }
 
     fun questionAnswer(

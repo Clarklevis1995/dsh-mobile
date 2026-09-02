@@ -16,6 +16,9 @@ import com.clarklevis.dsh.android.platform.AndroidPreparedImage
 import com.clarklevis.dsh.android.platform.BoundedLruCache
 import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
 import com.clarklevis.dsh.shared.facade.SharedMobileStore
+import com.clarklevis.dsh.shared.facade.SharedSlashCommandSnapshot
+import com.clarklevis.dsh.shared.facade.SharedSlashCommandStore
+import com.clarklevis.dsh.shared.facade.SharedSlashCommandTransition
 import com.clarklevis.dsh.shared.facade.SharedWorkspaceFileStore
 import com.clarklevis.dsh.shared.facade.SharedWorkspaceFileTransition
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
@@ -32,6 +35,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import java.util.TimeZone
+import java.util.Locale
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -50,6 +54,7 @@ class AndroidSharedStateHolder(
     private val graph: AndroidAppGraph? = null
 ) {
     private val workspaceFileStore = SharedWorkspaceFileStore()
+    private val slashCommandStore = SharedSlashCommandStore()
     private val scope = graph?.let { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     private var runtimeCollection: Job? = null
     private val projectionActor = AndroidProjectionActor(
@@ -131,18 +136,30 @@ class AndroidSharedStateHolder(
         private set
     var completedWorkspaceFile: AndroidWorkspaceLocalFile? by mutableStateOf(null)
         private set
+    var slashCommands: SharedSlashCommandSnapshot by mutableStateOf(slashCommandStore.snapshot())
+        private set
     var historyPagingSessionIds: Set<String> by mutableStateOf(emptySet())
         private set
     var trajectoryNodes: List<TrajectoryNode> by mutableStateOf(emptyList())
         private set
     private var trajectoryIsActive = false
     private var messageDraftState: String by mutableStateOf("")
+    private var pendingCommandSubmission: MessageSubmission? = null
     var messageDraft: String
         get() = messageDraftState
         set(value) {
             if (messageDraftState != value) {
                 messageDraftState = value
                 inputGeneration += 1
+                applySlashCommandTransition(
+                    slashCommandStore.updateInput(
+                        sessionId = pendingSelectedSessionId ?: snapshot.selectedSessionId,
+                        text = value,
+                        isConnected = gatewayState.connection == GatewayConnectionState.CONNECTED,
+                        isSupported = "commands" in gatewayState.capabilities,
+                        locale = Locale.getDefault().toLanguageTag()
+                    )
+                )
             }
         }
     private var preparedImagesState: List<AndroidPreparedImage> by mutableStateOf(emptyList())
@@ -223,6 +240,14 @@ class AndroidSharedStateHolder(
                         appGraph.diagnostics.runtimeEvent(event)
                         when (event) {
                             is GatewayRuntimeEvent.Frame -> {
+                                if (event.frame.kind == "command-executed") {
+                                    handleCommandExecuted(event.frame)
+                                }
+                                if (event.frame.kind in SLASH_COMMAND_FRAME_KINDS ||
+                                    (event.frame.kind == "error" && event.frame.requestType in SLASH_COMMAND_REQUEST_TYPES)
+                                ) {
+                                    applySlashCommandTransition(slashCommandStore.acceptFrame(event.rawJson))
+                                }
                                 if (event.frame.kind in WORKSPACE_FILE_FRAME_KINDS) {
                                     applyWorkspaceFileTransition(
                                         appGraph,
@@ -292,6 +317,14 @@ class AndroidSharedStateHolder(
                             }
                             is GatewayRuntimeEvent.RequestQueued -> Unit
                             is GatewayRuntimeEvent.RequestCancelled -> {
+                                if (event.requestType == "command-execute") {
+                                    pendingCommandSubmission = null
+                                }
+                                if (event.requestType in SLASH_COMMAND_REQUEST_TYPES) {
+                                    applySlashCommandTransition(
+                                        slashCommandStore.requestFailed(event.requestType, event.reason)
+                                    )
+                                }
                                 if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
                                     applyWorkspaceFileTransition(
                                         appGraph,
@@ -325,6 +358,14 @@ class AndroidSharedStateHolder(
                                 }
                             }
                             is GatewayRuntimeEvent.RequestTimedOut -> {
+                                if (event.requestType == "command-execute") {
+                                    pendingCommandSubmission = null
+                                }
+                                if (event.requestType in SLASH_COMMAND_REQUEST_TYPES) {
+                                    applySlashCommandTransition(
+                                        slashCommandStore.requestFailed(event.requestType, "request-timeout")
+                                    )
+                                }
                                 if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
                                     applyWorkspaceFileTransition(
                                         appGraph,
@@ -359,6 +400,14 @@ class AndroidSharedStateHolder(
                                 }
                             }
                             is GatewayRuntimeEvent.RequestRejected -> {
+                                if (event.requestType == "command-execute") {
+                                    pendingCommandSubmission = null
+                                }
+                                if (event.requestType in SLASH_COMMAND_REQUEST_TYPES) {
+                                    applySlashCommandTransition(
+                                        slashCommandStore.requestFailed(event.requestType, event.reason)
+                                    )
+                                }
                                 if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
                                     applyWorkspaceFileTransition(
                                         appGraph,
@@ -457,6 +506,7 @@ class AndroidSharedStateHolder(
         graph?.diagnostics?.intent(GatewayDiagnosticAction.SELECT_SESSION, hasSession = true)
         pendingSelectedSessionId = sessionId
         inputGeneration += 1
+        applySlashCommandTransition(slashCommandStore.reset(sessionId))
         val afterPublish = {
             if (pendingSelectedSessionId == sessionId) pendingSelectedSessionId = null
             visibleAttachmentKeys = emptySet()
@@ -487,6 +537,7 @@ class AndroidSharedStateHolder(
     fun prepareNewSession() {
         pendingSelectedSessionId = null
         inputGeneration += 1
+        applySlashCommandTransition(slashCommandStore.reset(null))
         val afterPublish = {
             visibleAttachmentKeys = emptySet()
             pruneAttachmentStateForSession()
@@ -962,6 +1013,26 @@ class AndroidSharedStateHolder(
         preparedImages = preparedImages.filterIndexed { itemIndex, _ -> itemIndex != index }
     }
 
+    fun selectSlashCommand(name: String) {
+        applySlashCommandTransition(slashCommandStore.selectCommand(name))
+    }
+
+    fun selectSlashCatalogItem(id: String) {
+        applySlashCommandTransition(slashCommandStore.selectItem(id))
+    }
+
+    fun selectSlashCommandOption(optionId: String) {
+        applySlashCommandTransition(slashCommandStore.selectOption(optionId))
+    }
+
+    fun dismissSlashCommandMenus() {
+        applySlashCommandTransition(slashCommandStore.dismissMenus())
+    }
+
+    fun clearActiveSlashCommand() {
+        applySlashCommandTransition(slashCommandStore.clearActiveCommand())
+    }
+
     fun sendMessage() {
         val appGraph = graph ?: return
         val submission = captureMessageSubmission()
@@ -971,14 +1042,34 @@ class AndroidSharedStateHolder(
             imageCount = submission.images.size
         )
         appGraph.gatewayScope.launch {
-            val sent = appGraph.gatewayRuntime.sendMessage(
-                text = submission.draft,
-                images = submission.images.map(AndroidPreparedImage::outgoing),
-                sessionId = submission.sessionId,
-                workspaceId = activeWorkspace?.workspaceId,
-                clientTimeZone = TimeZone.getDefault().id
-            )
-            withContext(Dispatchers.Main.immediate) { applyMessageSendResult(submission, sent) }
+            val commandExecution = slashCommandStore.commandExecutionForInput(submission.draft)
+            if (commandExecution != null) {
+                if (submission.images.isNotEmpty() && !commandExecution.allowsImages) {
+                    withContext(Dispatchers.Main.immediate) {
+                        platformError = "此命令不支持图片"
+                    }
+                    return@launch
+                }
+                val sent = appGraph.gatewayRuntime.executeCommand(
+                    line = commandExecution.line,
+                    images = submission.images.map(AndroidPreparedImage::outgoing),
+                    sessionId = submission.sessionId
+                )
+                withContext(Dispatchers.Main.immediate) {
+                    if (sent) {
+                        pendingCommandSubmission = submission
+                    }
+                }
+            } else {
+                val sent = appGraph.gatewayRuntime.sendMessage(
+                    text = submission.draft,
+                    images = submission.images.map(AndroidPreparedImage::outgoing),
+                    sessionId = submission.sessionId,
+                    workspaceId = activeWorkspace?.workspaceId,
+                    clientTimeZone = TimeZone.getDefault().id
+                )
+                withContext(Dispatchers.Main.immediate) { applyMessageSendResult(submission, sent) }
+            }
         }
     }
 
@@ -995,7 +1086,7 @@ class AndroidSharedStateHolder(
     private fun captureMessageSubmission(): MessageSubmission = MessageSubmission(
         generation = inputGeneration,
         sessionId = pendingSelectedSessionId ?: snapshot.selectedSessionId,
-        draft = messageDraft,
+        draft = composedMessageText(),
         images = preparedImages.toList()
     )
 
@@ -1003,13 +1094,14 @@ class AndroidSharedStateHolder(
         if (!sent) return
         if (
             inputGeneration != submission.generation ||
-            messageDraft != submission.draft ||
+            composedMessageText() != submission.draft ||
             preparedImages != submission.images ||
             (pendingSelectedSessionId ?: snapshot.selectedSessionId) != submission.sessionId
         ) {
             return
         }
         messageDraft = ""
+        applySlashCommandTransition(slashCommandStore.clearActiveCommand())
         preparedImages = emptyList()
         successfulMessageSendCount += 1
     }
@@ -1102,7 +1194,85 @@ class AndroidSharedStateHolder(
 
     val canSend: Boolean
         get() = gatewayState.connection == GatewayConnectionState.CONNECTED &&
-            (messageDraft.isNotBlank() || preparedImages.isNotEmpty())
+            pendingCommandSubmission == null &&
+            (composedMessageText().isNotBlank() || preparedImages.isNotEmpty())
+
+    private fun composedMessageText(): String {
+        return messageDraft
+    }
+
+    private fun applySlashCommandTransition(transition: SharedSlashCommandTransition) {
+        slashCommands = transition.snapshot
+        transition.snapshot.lastError?.let { platformError = slashCommandErrorMessage(it) }
+        val replacementText = transition.replacementText
+        if (replacementText != null && messageDraftState != replacementText) {
+            messageDraftState = replacementText
+            inputGeneration += 1
+        } else if (replacementText == null && transition.clearDraft && messageDraftState.isNotEmpty()) {
+            messageDraftState = ""
+            inputGeneration += 1
+        }
+        if (transition.selectedModel != null ||
+            (transition.clearDraft && transition.snapshot.selections.isNotEmpty())
+        ) refreshSessionControls()
+        transition.submitText?.let(::sendSlashCommandImmediately)
+        transition.commandExecution?.let(::executeSlashCommandImmediately)
+        val request = transition.request ?: return
+        val appGraph = graph ?: return
+        appGraph.gatewayScope.launch {
+            val accepted = appGraph.gatewayRuntime.sendRequest(request)
+            if (!accepted) withContext(Dispatchers.Main.immediate) {
+                applySlashCommandTransition(
+                    slashCommandStore.requestFailed(request.requestType, "request-busy")
+                )
+            }
+        }
+    }
+
+    private fun sendSlashCommandImmediately(text: String) {
+        val appGraph = graph ?: return
+        val sessionId = snapshot.selectedSessionId ?: return
+        appGraph.gatewayScope.launch {
+            val sent = appGraph.gatewayRuntime.sendMessage(
+                text = text,
+                images = emptyList(),
+                sessionId = sessionId,
+                workspaceId = null,
+                clientTimeZone = TimeZone.getDefault().id
+            )
+            if (sent) withContext(Dispatchers.Main.immediate) {
+                successfulMessageSendCount += 1
+            }
+        }
+    }
+
+    private fun executeSlashCommandImmediately(command: com.clarklevis.dsh.shared.facade.SharedSlashCommandExecution) {
+        val appGraph = graph ?: return
+        val sessionId = snapshot.selectedSessionId ?: return
+        appGraph.gatewayScope.launch {
+            appGraph.gatewayRuntime.executeCommand(command.line, emptyList(), sessionId)
+        }
+    }
+
+    private fun handleCommandExecuted(frame: GatewayFrame) {
+        val result = frame.result?.objectValue
+        val succeeded = result?.get("kind")?.stringValue == "success"
+        val detail = result?.get("text")?.stringValue
+        if (succeeded) {
+            pendingCommandSubmission?.let { applyMessageSendResult(it, true) }
+        } else {
+            platformError = detail ?: frame.message ?: "命令执行失败"
+        }
+        pendingCommandSubmission = null
+    }
+
+    private fun slashCommandErrorMessage(code: String): String = when (code) {
+        "command-frame-invalid", "command-catalog-invalid", "command-options-invalid",
+        "command-selection-invalid" -> "斜杠命令协议响应无效"
+        "request-timeout" -> "斜杠命令请求超时"
+        "request-busy" -> "斜杠命令请求正在处理中"
+        else -> "斜杠命令操作失败：$code"
+    }
 
     /**
      * KMP 继续无损消费每个 token；Compose 只按稳定显示节奏接收最新快照。
@@ -1463,6 +1633,8 @@ class AndroidSharedStateHolder(
             "directory-create",
             "workspace-create"
         )
+        private val SLASH_COMMAND_REQUEST_TYPES = setOf("commands", "command-options", "command-select")
+        private val SLASH_COMMAND_FRAME_KINDS = setOf("commands", "command-options", "command-selected")
         private val WORKSPACE_FILE_FRAME_KINDS = setOf(
             "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled"
         )

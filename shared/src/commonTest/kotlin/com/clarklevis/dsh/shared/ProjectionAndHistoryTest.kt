@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.shared
 
 import com.clarklevis.dsh.shared.projection.ConversationItemKind
+import com.clarklevis.dsh.shared.projection.ConversationProjectionLabels
 import com.clarklevis.dsh.shared.projection.ConversationProjector
 import com.clarklevis.dsh.shared.projection.TrajectoryNodeKind
 import com.clarklevis.dsh.shared.projection.TrajectoryProjection
@@ -40,6 +41,54 @@ class ProjectionAndHistoryTest {
         assertEquals(1, projector.items.size)
         assertEquals("Hello!", projector.items.single().text)
         assertEquals(ConversationItemKind.ASSISTANT, projector.items.single().kind)
+    }
+
+    @Test
+    fun commandLifecycleUpdatesOnePersistentStatusRowInRealTime() {
+        val projector = ConversationProjector(
+            ConversationProjectionLabels(
+                commandRunning = "正在执行…",
+                commandCompacting = "正在压缩…",
+                commandCompleted = "已完成",
+                commandFailed = "执行失败",
+                compactedHistory = "已压缩 {items} 条历史记录（约 {tokens} tokens）"
+            )
+        )
+
+        val started = projector.foldWithOperations(
+            listOf(event(1, GatewayEvent("command/run", commandId = "cmd-1", name = "compact")))
+        )
+        assertEquals("insert", started.single().kind)
+        assertEquals("正在执行…", projector.items.single().text)
+
+        val compacting = projector.foldWithOperations(
+            listOf(event(2, GatewayEvent("compaction/start", compactionId = "cmp-1", sourceCommandId = "cmd-1")))
+        )
+        assertEquals("replace", compacting.single().kind)
+        assertEquals("正在压缩…", projector.items.single().text)
+
+        projector.fold(
+            listOf(event(3, GatewayEvent(
+                "compaction/summary",
+                compactionId = "cmp-1",
+                sourceCommandId = "cmd-1",
+                shadowedItemCount = 11,
+                shadowedTokenCount = 3441
+            )))
+        )
+        projector.fold(
+            listOf(event(4, GatewayEvent(
+                "command/done",
+                commandId = "cmd-1",
+                outcome = "success",
+                text = "Compacted 11 history items (~3441 tokens)."
+            )))
+        )
+
+        assertEquals(1, projector.items.size)
+        assertEquals(ConversationItemKind.STATUS, projector.items.single().kind)
+        assertEquals("compact", projector.items.single().title)
+        assertEquals("已压缩 11 条历史记录（约 3441 tokens）", projector.items.single().text)
     }
 
     @Test

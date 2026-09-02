@@ -22,6 +22,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayAgentPreset
 import com.clarklevis.dsh.shared.protocol.GatewayContextSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewayHostSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewayModelCatalog
+import com.clarklevis.dsh.shared.protocol.GatewayModelGroup
 import com.clarklevis.dsh.shared.protocol.GatewayModelSelection
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAction
 import com.clarklevis.dsh.shared.protocol.GatewaySessionPermissions
@@ -215,8 +216,8 @@ class SharedMobileStore(
                 }
                 "set-default" -> if (frame.applied != false) {
                     when (frame.target) {
-                        "agent-preset" -> agentPresetDefault = frame.value ?: agentPresetDefault
-                        "permission" -> permissionDefault = frame.value ?: permissionDefault
+                        "agent-preset" -> agentPresetDefault = frame.value?.stringValue ?: agentPresetDefault
+                        "permission" -> permissionDefault = frame.value?.stringValue ?: permissionDefault
                     }
                 }
                 "default-model", "save-default-model" -> {
@@ -225,7 +226,14 @@ class SharedMobileStore(
                 "models" -> modelCatalog = GatewayModelCatalog(
                     current = frame.current,
                     routable = frame.routable != false,
-                    groups = frame.groups.orEmpty()
+                    groups = frame.groups.orEmpty().mapNotNull { group ->
+                        runCatching {
+                            wireJson.decodeFromJsonElement(
+                                GatewayModelGroup.serializer(),
+                                group.toJsonElement()
+                            )
+                        }.getOrNull()
+                    }
                 )
                 "permission-options", "permission" -> {
                     permissions = frame.sessionPermissions ?: permissions
@@ -485,7 +493,12 @@ class SharedMobileFacade {
         finalReasoning: String,
         assemblingTool: String,
         toolResultDone: String,
-        toolResultFailed: String
+        toolResultFailed: String,
+        commandRunning: String,
+        commandCompacting: String,
+        commandCompleted: String,
+        commandFailed: String,
+        compactedHistory: String
     ): SharedConversationStore = SharedConversationStore(
         ConversationProjectionLabels(
             userMessage = userMessage,
@@ -496,7 +509,12 @@ class SharedMobileFacade {
             finalReasoning = finalReasoning,
             assemblingTool = assemblingTool,
             toolResultDone = toolResultDone,
-            toolResultFailed = toolResultFailed
+            toolResultFailed = toolResultFailed,
+            commandRunning = commandRunning,
+            commandCompacting = commandCompacting,
+            commandCompleted = commandCompleted,
+            commandFailed = commandFailed,
+            compactedHistory = compactedHistory
         )
     )
 
