@@ -534,6 +534,10 @@ private fun ConversationPage(
                     onViewFullStats = onShowFullStats
                 )
             }
+            TaskGoalPanels(
+                stateHolder = stateHolder,
+                modifier = Modifier.padding(horizontal = 14.dp)
+            )
             val approval = stateHolder.snapshot.pendingApprovals.firstOrNull {
                 stateHolder.snapshot.selectedSessionId == null || it.sessionId == stateHolder.snapshot.selectedSessionId
             }

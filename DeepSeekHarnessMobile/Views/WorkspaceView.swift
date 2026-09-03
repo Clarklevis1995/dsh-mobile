@@ -660,14 +660,20 @@ private struct ManualGatewayPairingSheet: View {
 
                     connectionResult
 
-                    Button(action: connect) {
+                    Button(action: primaryConnectionAction) {
                         HStack(spacing: 9) {
-                            if case .connecting = gateway.state {
+                            if isConnecting {
                                 ProgressView().tint(.white)
                             } else {
                                 Image(systemName: "link")
                             }
-                            Text(gateway.state.isConnected ? String(localized: "重新配对并连接") : String(localized: "连接"))
+                            Text(
+                                isConnecting
+                                    ? String(localized: "取消连接")
+                                    : gateway.state.isConnected
+                                        ? String(localized: "重新配对并连接")
+                                        : String(localized: "连接")
+                            )
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
@@ -676,8 +682,8 @@ private struct ManualGatewayPairingSheet: View {
                         .background(DSHColor.ocean, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .disabled(pairingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || gateway.state == .connecting)
-                    .opacity(pairingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+                    .disabled(pairingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isConnecting)
+                    .opacity(pairingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isConnecting ? 0.45 : 1)
                 }
                 .padding(22)
             }
@@ -775,6 +781,19 @@ private struct ManualGatewayPairingSheet: View {
             try store.pair(usingQRCode: pairingText, presentsFailureAlert: false)
         } catch {
             validationError = error.localizedDescription
+        }
+    }
+
+    private var isConnecting: Bool {
+        if case .connecting = gateway.state { return true }
+        return false
+    }
+
+    private func primaryConnectionAction() {
+        if isConnecting {
+            gateway.disconnect()
+        } else {
+            connect()
         }
     }
 

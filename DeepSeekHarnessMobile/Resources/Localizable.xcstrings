@@ -454,6 +454,23 @@
         }
       }
     },
+    "connection.timeout" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection timed out. Check your network or pairing details, then try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接超时，请检查网络或配对信息后重试。"
+          }
+        }
+      }
+    },
     "context.items.count" : {
       "extractionState" : "manual",
       "localizations" : {

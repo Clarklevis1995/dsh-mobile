@@ -185,6 +185,7 @@ internal fun ManualGatewayPairingSheet(
         GatewayConnectionState.WAITING_FOR_NETWORK
     )
     val canSubmit = pairingText.isNotBlank() && !isConnecting
+    val canUsePrimaryAction = isConnecting || canSubmit
     val dismissWithAnimation = {
         coroutineScope.launch {
             sheetState.hide()
@@ -258,26 +259,30 @@ internal fun ManualGatewayPairingSheet(
 
                 Surface(
                     modifier = Modifier.fillMaxWidth().height(50.dp)
-                        .clickable(enabled = canSubmit, role = Role.Button) {
-                            validationError = null
-                            didAttemptConnection = true
-                            val trimmed = pairingText.trim()
-                            val validation = runCatching {
-                                GatewayPairingPayloadParser.parse(trimmed, System.currentTimeMillis())
-                            }
-                            if (validation.isFailure) {
-                                validationError = validation.exceptionOrNull()?.message ?: "配对信息无效"
+                        .clickable(enabled = canUsePrimaryAction, role = Role.Button) {
+                            if (isConnecting) {
+                                stateHolder.disconnect()
                             } else {
-                                stateHolder.pair(
-                                    payload = trimmed,
-                                    reportFailureGlobally = false,
-                                    onFailure = { validationError = it }
-                                )
+                                validationError = null
+                                didAttemptConnection = true
+                                val trimmed = pairingText.trim()
+                                val validation = runCatching {
+                                    GatewayPairingPayloadParser.parse(trimmed, System.currentTimeMillis())
+                                }
+                                if (validation.isFailure) {
+                                    validationError = validation.exceptionOrNull()?.message ?: "配对信息无效"
+                                } else {
+                                    stateHolder.pair(
+                                        payload = trimmed,
+                                        reportFailureGlobally = false,
+                                        onFailure = { validationError = it }
+                                    )
+                                }
                             }
                         }
                         .testTag("gateway-manual-connect"),
                     shape = RoundedCornerShape(16.dp),
-                    color = DshColors.Ocean.copy(alpha = if (canSubmit) 1f else 0.45f)
+                    color = DshColors.Ocean.copy(alpha = if (canUsePrimaryAction) 1f else 0.45f)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxSize(),
@@ -300,7 +305,9 @@ internal fun ManualGatewayPairingSheet(
                         }
                         Spacer(Modifier.width(9.dp))
                         Text(
-                            if (stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED) {
+                            if (isConnecting) {
+                                "取消连接"
+                            } else if (stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED) {
                                 "重新配对并连接"
                             } else {
                                 "连接"
@@ -402,7 +409,7 @@ private fun pairingResultPresentation(
         )
         GatewayConnectionState.FAILED -> PairingResultPresentation(
             "连接失败",
-            state.lastError ?: "请检查配对信息后重新连接。",
+            pairingFailureDetail(state.lastError),
             MaterialTheme.colorScheme.error,
             R.drawable.ic_permission_warning
         )
@@ -414,6 +421,12 @@ private fun pairingResultPresentation(
             R.drawable.ic_gateway_auth
         )
     }
+}
+
+private fun pairingFailureDetail(error: String?): String = when (error) {
+    "connection-timeout" -> "连接超时，请检查网络或配对信息后重试。"
+    "network-lost" -> "网络不可用，请恢复网络后重新连接。"
+    else -> error ?: "请检查配对信息后重新连接。"
 }
 
 @Composable

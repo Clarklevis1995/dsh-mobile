@@ -12,6 +12,7 @@ import class DeepSeekHarnessShared.SharedSessionListResult
 import class DeepSeekHarnessShared.KotlinLong
 import class DeepSeekHarnessShared.KotlinInt
 import class DeepSeekHarnessShared.KotlinDouble
+import class DeepSeekHarnessShared.WorkspaceCodePreviewSupport
 @testable import DeepSeekHarnessMobile
 
 private enum GatewayProtocolParityFixtures {
@@ -176,6 +177,45 @@ private func firstDescendant<T: UIView>(of type: T.Type, in view: UIView) -> T? 
         if let match = firstDescendant(of: type, in: subview) { return match }
     }
     return nil
+}
+
+final class WorkspaceCodeTextKitPerformanceTests: XCTestCase {
+    @MainActor
+    func testReportSizedHtmlConfiguresWithoutEagerSwiftUILayout() throws {
+        var lines = ["<!DOCTYPE html>", "<html lang=\"zh-CN\"><head><style>"]
+        for index in 0..<590 {
+            lines.append(
+                ".report-\(index) { color: #8a8f99; margin: \(index % 24)px; " +
+                    "content: \"DeepSeek 深度调研报告 \(index)\"; }"
+            )
+        }
+        lines.append("</style></head><body><main class=\"report\">报告</main></body></html>")
+        let source = lines.joined(separator: "\n")
+        let document = WorkspaceCodePreviewSupport.shared.prepare(
+            source: source,
+            name: "deepseek_report.html",
+            mediaType: "text/html"
+        )
+        let view = WorkspaceCodeTextKitContainer(
+            frame: CGRect(x: 0, y: 0, width: 390, height: 760)
+        )
+
+        let started = CFAbsoluteTimeGetCurrent()
+        view.configure(document: document, isDark: false)
+        view.layoutIfNeeded()
+        let elapsed = CFAbsoluteTimeGetCurrent() - started
+
+        let textView = try XCTUnwrap(firstDescendant(of: UITextView.self, in: view))
+        let lineNumberLabel = try XCTUnwrap(firstDescendant(of: UILabel.self, in: view))
+        XCTAssertEqual(textView.attributedText.length, (source as NSString).length)
+        XCTAssertFalse(textView.textContainer.widthTracksTextView)
+        XCTAssertTrue(textView.isSelectable)
+        let initialLineNumberY = lineNumberLabel.frame.minY
+        textView.contentOffset = CGPoint(x: 80, y: 120)
+        view.scrollViewDidScroll(textView)
+        XCTAssertEqual(lineNumberLabel.frame.minY, initialLineNumberY - 120, accuracy: 0.5)
+        XCTAssertLessThan(elapsed, 1.0, "TextKit 预览配置耗时异常：\(elapsed)s")
+    }
 }
 
 final class ConversationViewportLayoutTests: XCTestCase {

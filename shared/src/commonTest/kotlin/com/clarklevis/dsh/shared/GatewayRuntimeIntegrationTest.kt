@@ -164,6 +164,71 @@ class GatewayRuntimeIntegrationTest {
     }
 
     @Test
+    fun manualPairingStopsAfterRecoverableFailureAndConnectionTimeout() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(
+            transport = transport,
+            connectionAttemptTimeoutMilliseconds = 100
+        )
+        backgroundScope.launch { runtime.events.collect { } }
+        runCurrent()
+
+        val pairingPayload = encodeBase64Url(
+            """{"version":2,"publicUrl":"wss://gateway.example/ws/mobile","pairingCode":"one-time","expiresAt":101}"""
+        )
+        runtime.pair(pairingPayload)
+        runCurrent()
+        val firstGeneration = transport.connectionSpecs.single().generation
+        transport.fail(
+            GatewayTransportState.Failed(
+                generation = firstGeneration,
+                recoverable = true,
+                reason = "websocket-failure"
+            )
+        )
+        runCurrent()
+
+        assertEquals(GatewayConnectionState.FAILED, runtime.state.value.connection)
+        assertEquals(1, transport.connectionSpecs.size)
+
+        runtime.pair(pairingPayload)
+        runCurrent()
+        advanceTimeBy(100)
+        runCurrent()
+
+        assertEquals(GatewayConnectionState.FAILED, runtime.state.value.connection)
+        assertEquals("connection-timeout", runtime.state.value.lastError)
+        assertEquals(2, transport.connectionSpecs.size)
+    }
+
+    @Test
+    fun taskAndGoalRealtimePushesAreAcceptedWithoutAnOutstandingQuery() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport = transport)
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
+        runCurrent()
+
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true,"capabilities":["tasks","goals"]}""")
+        transport.receive(
+            """{"kind":"tasks-updated","sessionId":"s1","asOfSeq":8,"todos":[{"content":"检查 SDK","status":"in_progress"}]}"""
+        )
+        transport.receive(
+            """{"kind":"goal-updated","sessionId":"s1","asOfSeq":9,"goal":{"goal":{"id":"goal-1","revision":2,"objective":"完成 Android 对接","phase":"active"},"roundsStarted":1}}"""
+        )
+        runCurrent()
+
+        val taskUpdate = events.filterIsInstance<GatewayRuntimeEvent.Frame>()
+            .first { it.frame.kind == "tasks-updated" }.frame
+        assertEquals("检查 SDK", taskUpdate.todos?.single()?.content)
+        val goalUpdate = events.filterIsInstance<GatewayRuntimeEvent.Frame>()
+            .first { it.frame.kind == "goal-updated" }.frame
+        assertEquals(2, goalUpdate.goal?.goal?.revision)
+    }
+
+    @Test
     fun pairingParserRejectsExpiredAndNonWebSocketPayloads() {
         val expired = encodeBase64Url(
             """{"version":2,"publicUrl":"wss://gateway.example/ws/mobile","pairingCode":"code","expiresAt":99}"""
@@ -931,7 +996,8 @@ class GatewayRuntimeIntegrationTest {
         cache: FakeAttachmentCache = FakeAttachmentCache(),
         credentials: FakeCredentials = FakeCredentials(),
         requestTimeoutMilliseconds: Long = 30_000,
-        recoveryWindowMilliseconds: Long = 60_000
+        recoveryWindowMilliseconds: Long = 60_000,
+        connectionAttemptTimeoutMilliseconds: Long = 15_000
     ): GatewayRuntime = GatewayRuntime(
         transport,
         FakePreferences(),
@@ -941,7 +1007,8 @@ class GatewayRuntimeIntegrationTest {
         FakeClock(0),
         backgroundScope,
         requestTimeoutMilliseconds,
-        recoveryWindowMilliseconds
+        recoveryWindowMilliseconds,
+        connectionAttemptTimeoutMilliseconds
     )
 
     private class FakeTransport : GatewayTransport {

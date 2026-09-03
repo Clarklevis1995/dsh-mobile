@@ -20,9 +20,12 @@ final class GatewayClient: ObservableObject {
     private var socket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
+    private var connectionTimeoutTask: Task<Void, Never>?
     private var endpoint: URL?
     private var wantsConnection = false
     private var pairingCode: String?
+    /// 手动配对码是一次性的，失败后不能拿旧码在后台重复尝试。
+    private var isManualPairingAttempt = false
     private var lastReportedFailure: String?
     /// iOS may suspend and tear down a normal WebSocket after the app moves
     /// into the background. Keep this lifecycle state separate from protocol
@@ -34,11 +37,13 @@ final class GatewayClient: ObservableObject {
     deinit {
         receiveTask?.cancel()
         reconnectTask?.cancel()
+        connectionTimeoutTask?.cancel()
         socket?.cancel(with: .goingAway, reason: nil)
     }
 
     func connect(to rawEndpoint: String) {
         isRecoveringFromBackground = false
+        isManualPairingAttempt = false
         beginConnection(to: rawEndpoint, pairingCode: nil, resetReportedFailure: true)
     }
 
@@ -55,6 +60,7 @@ final class GatewayClient: ObservableObject {
 
     func connectForPairing(_ payload: GatewayPairingPayload) {
         isRecoveringFromBackground = false
+        isManualPairingAttempt = true
         beginConnection(to: payload.publicUrl, pairingCode: payload.pairingCode, resetReportedFailure: true)
     }
 
@@ -98,6 +104,7 @@ final class GatewayClient: ObservableObject {
         wantsConnection = true
         endpoint = url
         self.pairingCode = pairingCode
+        isManualPairingAttempt = pairingCode != nil
         if resetReportedFailure { lastReportedFailure = nil }
         state = .connecting
         var request = URLRequest(url: url)
@@ -122,6 +129,7 @@ final class GatewayClient: ObservableObject {
         socket.maximumMessageSize = Self.maximumIncomingMessageSize
         self.socket = socket
         socket.resume()
+        startConnectionTimeout(for: socket)
         receiveTask = Task { [weak self] in await self?.receiveLoop(socket) }
     }
 
@@ -129,11 +137,14 @@ final class GatewayClient: ObservableObject {
         wantsConnection = reconnect
         reconnectTask?.cancel()
         reconnectTask = nil
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = nil
         receiveTask?.cancel()
         receiveTask = nil
         socket?.cancel(with: .normalClosure, reason: nil)
         socket = nil
         pairingCode = nil
+        isManualPairingAttempt = false
         state = .disconnected
     }
 
@@ -183,6 +194,37 @@ final class GatewayClient: ObservableObject {
     }
     func requestSessionStats(sessionId: String) {
         send(["type": "session-stats", "sessionId": sessionId])
+    }
+    func requestTasks(sessionId: String) {
+        send(["type": "tasks", "sessionId": sessionId])
+    }
+    func requestGoal(sessionId: String) {
+        send(["type": "goal", "sessionId": sessionId])
+    }
+    func editGoal(sessionId: String, ref: GatewayGoalReference, objective: String) {
+        send([
+            "type": "goal-edit",
+            "sessionId": sessionId,
+            "ref": ["id": ref.id, "revision": ref.revision],
+            "objective": objective
+        ])
+    }
+    func pauseGoal(sessionId: String, ref: GatewayGoalReference) {
+        sendGoalAction("goal-pause", sessionId: sessionId, ref: ref)
+    }
+    func resumeGoal(sessionId: String, ref: GatewayGoalReference) {
+        sendGoalAction("goal-resume", sessionId: sessionId, ref: ref)
+    }
+    func clearGoal(sessionId: String, ref: GatewayGoalReference) {
+        sendGoalAction("goal-clear", sessionId: sessionId, ref: ref)
+    }
+
+    private func sendGoalAction(_ type: String, sessionId: String, ref: GatewayGoalReference) {
+        send([
+            "type": type,
+            "sessionId": sessionId,
+            "ref": ["id": ref.id, "revision": ref.revision]
+        ])
     }
     func requestAgentPresets() {
         send(["type": "agent-presets"])
@@ -414,6 +456,9 @@ final class GatewayClient: ObservableObject {
                     } else if frame.kind == "hello" {
                         // `hello` is the protocol's authentication boundary.
                         // Debug mode may explicitly return authenticated=false.
+                        connectionTimeoutTask?.cancel()
+                        connectionTimeoutTask = nil
+                        isManualPairingAttempt = false
                         state = .connected
                         lastReportedFailure = nil
                         isRecoveringFromBackground = false
@@ -473,10 +518,16 @@ final class GatewayClient: ObservableObject {
             shouldReconnect = true
             shouldReportFailure = !(isApplicationInBackground || isRecoveringFromBackground)
         }
-        fail(detail, shouldReconnect: shouldReconnect, reportFailure: shouldReportFailure)
+        fail(
+            detail,
+            shouldReconnect: shouldReconnect && !isManualPairingAttempt,
+            reportFailure: shouldReportFailure
+        )
     }
 
     private func fail(_ detail: String, shouldReconnect: Bool, reportFailure: Bool = true) {
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = nil
         state = .failed(detail)
         socket = nil
         receiveTask = nil
@@ -498,10 +549,29 @@ final class GatewayClient: ObservableObject {
         }
     }
 
+    private func startConnectionTimeout(for socket: URLSessionWebSocketTask) {
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = Task { [weak self, weak socket] in
+            try? await Task.sleep(for: .seconds(15))
+            guard let self,
+                  let socket,
+                  self.socket === socket,
+                  self.wantsConnection,
+                  !self.state.isConnected else { return }
+            socket.cancel(with: .goingAway, reason: nil)
+            self.fail(
+                String(localized: "connection.timeout", defaultValue: "连接超时，请检查网络或配对信息后重试。"),
+                shouldReconnect: false
+            )
+        }
+    }
+
     private func suspendTransportForBackground() {
         wantsConnection = true
         reconnectTask?.cancel()
         reconnectTask = nil
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = nil
         receiveTask?.cancel()
         receiveTask = nil
         socket?.cancel(with: .goingAway, reason: nil)

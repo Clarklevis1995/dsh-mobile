@@ -29,6 +29,7 @@ import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.gateway.gatewayAttachmentCacheKey
 import com.clarklevis.dsh.shared.protocol.GatewayDirectoryItem
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
+import com.clarklevis.dsh.shared.protocol.GatewayGoalRef
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
@@ -185,6 +186,8 @@ class AndroidSharedStateHolder(
         private set
     var agentPresetsHasDocument: Boolean by mutableStateOf(false)
         private set
+    var goalMutationKind: String? by mutableStateOf(null)
+        private set
 
     init {
         graph?.let { appGraph ->
@@ -204,6 +207,7 @@ class AndroidSharedStateHolder(
                     appGraph.gatewayRuntime.state.collect { state ->
                         appGraph.diagnostics.runtimeState(state)
                         var shouldCatchUpSelectedHistory = false
+                        var sessionIdToRefresh: String? = null
                         withContext(Dispatchers.Main.immediate) {
                             val didReconnect = state.connection == GatewayConnectionState.CONNECTED &&
                                 lastObservedConnection != GatewayConnectionState.CONNECTED
@@ -225,6 +229,7 @@ class AndroidSharedStateHolder(
                             }
                             if (didReconnect) {
                                 shouldCatchUpSelectedHistory = snapshot.selectedSessionId != null
+                                sessionIdToRefresh = snapshot.selectedSessionId
                             }
                             lastObservedConnection = state.connection
                         }
@@ -233,6 +238,7 @@ class AndroidSharedStateHolder(
                         if (shouldCatchUpSelectedHistory) {
                             projectionActor.catchUpSelectedHistoryAfterReconnect()
                         }
+                        sessionIdToRefresh?.let { requestSessionControls(appGraph, it) }
                     }
                 }
                 launch {
@@ -240,6 +246,12 @@ class AndroidSharedStateHolder(
                         appGraph.diagnostics.runtimeEvent(event)
                         when (event) {
                             is GatewayRuntimeEvent.Frame -> {
+                                if (event.frame.kind in GOAL_MUTATION_RESPONSE_KINDS) {
+                                    withContext(Dispatchers.Main.immediate) { goalMutationKind = null }
+                                    event.frame.sessionId?.let { sessionId ->
+                                        appGraph.gatewayRuntime.sendRequest(GatewayRequests.goal(sessionId))
+                                    }
+                                }
                                 if (event.frame.kind == "command-executed") {
                                     handleCommandExecuted(event.frame)
                                 }
@@ -356,6 +368,12 @@ class AndroidSharedStateHolder(
                                         projectionActor.approvalRequestFailed(it, event.reason)
                                     }
                                 }
+                                finishGoalMutationAfterFailure(
+                                    appGraph,
+                                    event.requestType,
+                                    event.targetSessionId,
+                                    event.reason
+                                )
                             }
                             is GatewayRuntimeEvent.RequestTimedOut -> {
                                 if (event.requestType == "command-execute") {
@@ -398,6 +416,12 @@ class AndroidSharedStateHolder(
                                         projectionActor.approvalRequestFailed(it, "request-timeout")
                                     }
                                 }
+                                finishGoalMutationAfterFailure(
+                                    appGraph,
+                                    event.requestType,
+                                    event.targetSessionId,
+                                    "request-timeout"
+                                )
                             }
                             is GatewayRuntimeEvent.RequestRejected -> {
                                 if (event.requestType == "command-execute") {
@@ -451,6 +475,12 @@ class AndroidSharedStateHolder(
                                         )
                                     }
                                 }
+                                finishGoalMutationAfterFailure(
+                                    appGraph,
+                                    event.requestType,
+                                    event.targetSessionId,
+                                    event.reason
+                                )
                             }
                         }
                     }
@@ -871,6 +901,75 @@ class AndroidSharedStateHolder(
         appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("permission-options", sessionId))
         appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("context-usage", sessionId))
         appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("session-stats", sessionId))
+        if ("tasks" in gatewayState.capabilities) {
+            appGraph.gatewayRuntime.sendRequest(GatewayRequests.tasks(sessionId))
+        }
+        if ("goals" in gatewayState.capabilities) {
+            appGraph.gatewayRuntime.sendRequest(GatewayRequests.goal(sessionId))
+        }
+    }
+
+    fun editGoal(objective: String) {
+        submitGoalMutation("goal-edit") { sessionId, ref ->
+            GatewayRequests.editGoal(sessionId, ref, objective = objective)
+        }
+    }
+
+    fun pauseGoal() = submitGoalMutation("goal-pause") { sessionId, ref ->
+        GatewayRequests.goalAction("goal-pause", sessionId, ref)
+    }
+
+    fun resumeGoal() = submitGoalMutation("goal-resume") { sessionId, ref ->
+        GatewayRequests.goalAction("goal-resume", sessionId, ref)
+    }
+
+    fun clearGoal() = submitGoalMutation("goal-clear") { sessionId, ref ->
+        GatewayRequests.goalAction("goal-clear", sessionId, ref)
+    }
+
+    private fun submitGoalMutation(
+        type: String,
+        request: (sessionId: String, ref: GatewayGoalRef) -> com.clarklevis.dsh.shared.gateway.GatewayRequest
+    ) {
+        val appGraph = graph ?: return
+        val sessionId = snapshot.selectedSessionId
+        val goal = snapshot.goalSnapshot?.goal?.goal
+        if (sessionId == null || goal == null) return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) {
+            platformError = "请先连接 DeepSeek Harness"
+            return
+        }
+        if ("goals" !in gatewayState.capabilities) {
+            platformError = "当前 Mobile Gateway 不支持目标管理，请升级并重启网关。"
+            return
+        }
+        if (goalMutationKind != null) return
+        goalMutationKind = type
+        appGraph.gatewayScope.launch {
+            val accepted = appGraph.gatewayRuntime.sendRequest(request(sessionId, goal.ref))
+            if (!accepted) withContext(Dispatchers.Main.immediate) {
+                goalMutationKind = null
+                platformError = "目标操作正在处理中，请稍后重试。"
+            }
+        }
+    }
+
+    private suspend fun finishGoalMutationAfterFailure(
+        appGraph: AndroidAppGraph,
+        requestType: String,
+        sessionId: String?,
+        reason: String
+    ) {
+        if (requestType !in GOAL_MUTATION_REQUEST_TYPES) return
+        withContext(Dispatchers.Main.immediate) {
+            goalMutationKind = null
+            platformError = if (reason == "request-timeout") {
+                "目标操作超时，已刷新当前目标后可重试。"
+            } else {
+                "目标操作未完成，已刷新当前目标后可重试。"
+            }
+        }
+        sessionId?.let { appGraph.gatewayRuntime.sendRequest(GatewayRequests.goal(it)) }
     }
 
     fun answerQuestion(rpcId: String, sessionId: String, answers: List<GatewayQuestionAnswer>) {
@@ -1635,6 +1734,10 @@ class AndroidSharedStateHolder(
         )
         private val SLASH_COMMAND_REQUEST_TYPES = setOf("commands", "command-options", "command-select")
         private val SLASH_COMMAND_FRAME_KINDS = setOf("commands", "command-options", "command-selected")
+        private val GOAL_MUTATION_REQUEST_TYPES = setOf(
+            "goal-edit", "goal-pause", "goal-resume", "goal-clear"
+        )
+        private val GOAL_MUTATION_RESPONSE_KINDS = GOAL_MUTATION_REQUEST_TYPES
         private val WORKSPACE_FILE_FRAME_KINDS = setOf(
             "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled"
         )

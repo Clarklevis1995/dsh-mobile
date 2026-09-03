@@ -85,6 +85,10 @@ data class GatewayFrame(
     val sessionPermissions: GatewaySessionPermissions? = null,
     val set: String? = null,
     val asOfSeq: Long? = null,
+    val todos: List<GatewayTask>? = null,
+    val goal: GatewayGoalSnapshot? = null,
+    val ref: GatewayGoalRef? = null,
+    val cleared: Boolean? = null,
     val sessionStats: GatewaySessionStats? = null,
     val tokenUsage: GatewayTokenUsage? = null,
     val contextPressure: GatewayContextPressure? = null,
@@ -114,6 +118,39 @@ data class GatewayFrame(
         "GatewayFrame(kind=$kind, sessionId=$sessionId, seq=$seq, requestType=$requestType, " +
             "rpcId=<redacted>, token=<redacted>, data=<redacted>, message=<redacted>)"
 }
+
+/** WebUI 的 todo_write 投影；移动端仅展示，不直接修改。 */
+@Serializable
+data class GatewayTask(
+    val content: String,
+    val status: String
+)
+
+/** Goal 写入的 compare-and-set 引用，防止多端以旧版本覆盖新修改。 */
+@Serializable
+data class GatewayGoalRef(
+    val id: String,
+    val revision: Int
+)
+
+@Serializable
+data class GatewayGoalDefinition(
+    val id: String,
+    val revision: Int,
+    val objective: String,
+    val phase: String,
+    val maxGoalRounds: Int? = null
+) {
+    val ref: GatewayGoalRef get() = GatewayGoalRef(id, revision)
+}
+
+@Serializable
+data class GatewayGoalSnapshot(
+    val goal: GatewayGoalDefinition,
+    val roundsStarted: Int = 0,
+    val createdAt: Double? = null,
+    val updatedAt: Double? = null
+)
 
 @Serializable
 data class GatewaySlashCommand(

@@ -215,6 +215,10 @@ struct ConversationView: View {
     @State private var showsContextUsage = false
     @State private var showsSessionStats = false
     @State private var showsSessionStatsPopover = false
+    @State private var tasksExpanded = true
+    @State private var showsGoalEditor = false
+    @State private var goalObjectiveDraft = ""
+    @State private var confirmsGoalClear = false
     @State private var isPinnedToBottom = true
     @State private var composerHeight: CGFloat = 168
     @State private var viewportScrollToBottomToken = 0
@@ -360,6 +364,56 @@ struct ConversationView: View {
                     if let snapshot = store.selectedSessionStatsSnapshot {
                         sessionStatsBanner(snapshot)
                     }
+                    if let tasks = store.selectedTaskProjection?.todos,
+                       let goal = store.selectedGoalProjection?.goal {
+                        TaskGoalPanels(
+                            tasks: tasks,
+                            goal: goal,
+                            isMutatingGoal: store.goalMutationKind != nil,
+                            tasksExpanded: $tasksExpanded,
+                            onPauseResume: {
+                                if goal.goal.phase == "active" { store.pauseGoal() }
+                                else { store.resumeGoal() }
+                            },
+                            onEdit: {
+                                goalObjectiveDraft = goal.goal.objective
+                                showsGoalEditor = true
+                            },
+                            onClear: { confirmsGoalClear = true }
+                        )
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 8)
+                    } else if let tasks = store.selectedTaskProjection?.todos {
+                        TaskGoalPanels(
+                            tasks: tasks,
+                            goal: nil,
+                            isMutatingGoal: false,
+                            tasksExpanded: $tasksExpanded,
+                            onPauseResume: {},
+                            onEdit: {},
+                            onClear: {}
+                        )
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 8)
+                    } else if let goal = store.selectedGoalProjection?.goal {
+                        TaskGoalPanels(
+                            tasks: nil,
+                            goal: goal,
+                            isMutatingGoal: store.goalMutationKind != nil,
+                            tasksExpanded: $tasksExpanded,
+                            onPauseResume: {
+                                if goal.goal.phase == "active" { store.pauseGoal() }
+                                else { store.resumeGoal() }
+                            },
+                            onEdit: {
+                                goalObjectiveDraft = goal.goal.objective
+                                showsGoalEditor = true
+                            },
+                            onClear: { confirmsGoalClear = true }
+                        )
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 8)
+                    }
                     if let request = store.selectedPendingApprovalRequest {
                         ApprovalRequestView(
                             request: request,
@@ -418,6 +472,18 @@ struct ConversationView: View {
             guard rpcId != nil else { return }
             composerIsFocused = false
             if isPinnedToBottom { viewportScrollToBottomToken &+= 1 }
+        }
+        .alert("编辑目标", isPresented: $showsGoalEditor) {
+            TextField("目标", text: $goalObjectiveDraft, axis: .vertical)
+            Button("取消", role: .cancel) {}
+            Button("保存") { store.editGoal(objective: goalObjectiveDraft.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                .disabled(goalObjectiveDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .alert("删除当前目标？", isPresented: $confirmsGoalClear) {
+            Button("取消", role: .cancel) {}
+            Button("删除", role: .destructive) { store.clearGoal() }
+        } message: {
+            Text("删除后，智能体不再持有这个持续目标。")
         }
         .onChange(of: isLoadingSelectedHistory) { wasLoading, isLoading in
             guard historyPresentationSessionID == store.selectedSessionId,
@@ -1461,6 +1527,168 @@ struct ConversationView: View {
 /// Unlike a page-styled `TabView`, this container does not virtualize the
 /// off-screen page, so UIKit viewport state and trajectory projection state
 /// survive every tab switch.
+/// 与 WebUI 的任务 / Goal 区块保持同一信息层级：显示在输入框上方，任务可折叠。
+private struct TaskGoalPanels: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let tasks: [GatewayTodoItem]?
+    let goal: GatewayGoalPayload?
+    let isMutatingGoal: Bool
+    @Binding var tasksExpanded: Bool
+    let onPauseResume: () -> Void
+    let onEdit: () -> Void
+    let onClear: () -> Void
+
+    private var completedCount: Int { tasks?.count { $0.status == "completed" } ?? 0 }
+    private var activeCount: Int { tasks?.count { $0.status == "in_progress" } ?? 0 }
+    private var pendingCount: Int { max(0, (tasks?.count ?? 0) - completedCount - activeCount) }
+
+    /// 与输入框使用完全相同的 glass tint，避免面板透出下方的聊天文本。
+    private var panelGlassTint: Color {
+        Color(uiColor: .secondarySystemBackground)
+            .opacity(colorScheme == .dark ? 0.52 : 0.48)
+    }
+
+    private var panelGlassEdge: Color {
+        colorScheme == .dark ? .white.opacity(0.13) : .white.opacity(0.56)
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if let tasks { taskPanel(tasks) }
+            if let goal { goalPanel(goal) }
+        }
+    }
+
+    private func taskPanel(_ tasks: [GatewayTodoItem]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { tasksExpanded.toggle() } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text("任务").font(.headline)
+                    Text(taskSummary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: tasksExpanded ? "chevron.up" : "chevron.down")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(tasksExpanded ? "收起任务" : "展开任务")
+
+            if tasksExpanded {
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(Array(tasks.enumerated()), id: \.offset) { _, task in
+                        HStack(spacing: 11) {
+                            taskStatusIcon(task.status)
+                            Text(task.content)
+                                .font(.body)
+                                .foregroundStyle(task.status == "completed" ? .secondary : .primary)
+                                .multilineTextAlignment(.leading)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .padding(.top, 12)
+            }
+        }
+        .padding(15)
+        .glassSurface(radius: 18, tint: panelGlassTint)
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(panelGlassEdge, lineWidth: 0.7)
+        }
+    }
+
+    private func goalPanel(_ goal: GatewayGoalPayload) -> some View {
+        let active = goal.goal.phase == "active"
+        return HStack(spacing: 10) {
+            Image(systemName: "target")
+                .font(.system(size: 21, weight: .medium))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Text(goalPhaseLabel(goal.goal.phase))
+                    .font(.headline)
+                    .fixedSize(horizontal: true, vertical: false)
+                Text(goal.goal.objective)
+                    .font(.body)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if isMutatingGoal {
+                ProgressView().controlSize(.small).tint(DSHColor.ocean)
+            } else {
+                goalActionButton(
+                    active ? "pause.circle" : "play.circle",
+                    active ? "暂停目标" : "继续目标",
+                    onPauseResume
+                )
+                goalActionButton("pencil", "编辑目标", onEdit)
+                goalActionButton("trash", "删除目标", onClear)
+            }
+        }
+        .padding(15)
+        .glassSurface(radius: 18, tint: panelGlassTint)
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(panelGlassEdge, lineWidth: 0.7)
+        }
+    }
+
+    private var taskSummary: String {
+        [
+            completedCount > 0 ? "\(completedCount) 已完成" : nil,
+            activeCount > 0 ? "\(activeCount) 进行中" : nil,
+            pendingCount > 0 ? "\(pendingCount) 待处理" : nil
+        ]
+        .compactMap { $0 }
+        .joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private func taskStatusIcon(_ status: String) -> some View {
+        switch status {
+        case "completed":
+            Image(systemName: "checkmark.circle")
+                .foregroundStyle(.green)
+                .font(.system(size: 20, weight: .medium))
+        case "in_progress":
+            ProgressView().controlSize(.small).tint(DSHColor.ocean).frame(width: 20, height: 20)
+        default:
+            Image(systemName: "circle.dotted")
+                .foregroundStyle(.tertiary)
+                .font(.system(size: 20, weight: .medium))
+        }
+    }
+
+    private func goalActionButton(_ image: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: image)
+                .font(.system(size: 20, weight: .medium))
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel(label)
+    }
+
+    private func goalPhaseLabel(_ phase: String) -> String {
+        switch phase {
+        case "active": "进行中的目标"
+        case "paused": "已暂停的目标"
+        case "blocked": "受阻的目标"
+        default: "当前目标"
+        }
+    }
+}
+
 private struct PersistentSessionPager<ConversationPage: View, TrajectoryPage: View>: View {
     @Binding var selection: Int
     private let conversationPage: ConversationPage
@@ -2861,7 +3089,15 @@ struct ConversationRow: View {
                     MarkdownContent(item.text)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if showsCopyButton && !item.text.isEmpty { CopyMessageButton(text: item.text) }
+                if showsCopyButton && !item.text.isEmpty {
+                    // UIHostingConfiguration can settle a completed Markdown
+                    // row a few points shorter than its final SwiftUI drawing
+                    // on the first self-sizing pass. Keep the action glyph
+                    // above that clipping boundary without disabling cell
+                    // clipping (which protects adjacent timeline rows).
+                    CopyMessageButton(text: item.text)
+                        .padding(.bottom, 8)
+                }
             }
             .padding(.vertical, 3)
             .frame(maxWidth: .infinity, alignment: .leading)

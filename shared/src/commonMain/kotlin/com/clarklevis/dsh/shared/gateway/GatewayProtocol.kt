@@ -2,6 +2,7 @@ package com.clarklevis.dsh.shared.gateway
 
 import com.clarklevis.dsh.shared.protocol.GatewayPairingPayload
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
+import com.clarklevis.dsh.shared.protocol.GatewayGoalRef
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.encodeToString
@@ -82,6 +83,50 @@ object GatewayRequests {
         targetSessionId = sessionId,
         lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST
     ) { put("sessionId", sessionId) }
+
+    fun tasks(sessionId: String): GatewayRequest = sessionControl("tasks", sessionId)
+
+    fun goal(sessionId: String): GatewayRequest = sessionControl("goal", sessionId)
+
+    fun editGoal(
+        sessionId: String,
+        ref: GatewayGoalRef,
+        objective: String? = null,
+        maxGoalRounds: Int? = null
+    ): GatewayRequest = request(
+        "goal-edit",
+        "goal-edit",
+        targetSessionId = sessionId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("sessionId", sessionId)
+        put("ref", buildJsonObject {
+            put("id", ref.id)
+            put("revision", ref.revision)
+        })
+        objective?.trim()?.takeIf(String::isNotEmpty)?.let { put("objective", it) }
+        maxGoalRounds?.takeIf { it > 0 }?.let { put("maxGoalRounds", it) }
+    }
+
+    fun goalAction(
+        type: String,
+        sessionId: String,
+        ref: GatewayGoalRef
+    ): GatewayRequest {
+        require(type in GOAL_ACTION_TYPES)
+        return request(
+            type,
+            type,
+            targetSessionId = sessionId,
+            lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+        ) {
+            put("sessionId", sessionId)
+            put("ref", buildJsonObject {
+                put("id", ref.id)
+                put("revision", ref.revision)
+            })
+        }
+    }
 
     fun search(query: String): GatewayRequest = request(
         "search",
@@ -418,6 +463,8 @@ object GatewayRequests {
             wireJson.encodeToString(json)
         )
     }
+
+    private val GOAL_ACTION_TYPES = setOf("goal-pause", "goal-resume", "goal-clear")
 }
 
 internal fun requireWebSocketEndpoint(endpoint: String) {

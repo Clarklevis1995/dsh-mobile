@@ -154,6 +154,11 @@ final class AppStore: ObservableObject {
     @Published private(set) var supportsImages = false
     @Published private(set) var supportsFileDownloads = false
     @Published private(set) var supportsSlashCommands = false
+    @Published private(set) var supportsTasks = false
+    @Published private(set) var supportsGoals = false
+    @Published private(set) var taskProjections: [String: GatewayTasksProjection] = [:]
+    @Published private(set) var goalProjections: [String: GatewayGoalProjection] = [:]
+    @Published private(set) var goalMutationKind: String?
     @Published private(set) var slashCommands: SharedSlashCommandSnapshot
     @Published private(set) var commandSubmissionPending = false
     @Published private(set) var commandDraftClearToken = 0
@@ -232,6 +237,9 @@ final class AppStore: ObservableObject {
     ]
     private static let workspaceFileFrameKinds: Set<String> = [
         "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled"
+    ]
+    private static let goalMutationResponseKinds: Set<String> = [
+        "goal-edit", "goal-pause", "goal-resume", "goal-clear"
     ]
     private static let newConversationActivationKey = "__new-conversation__"
 
@@ -371,6 +379,8 @@ final class AppStore: ObservableObject {
     var selectedPermissions: GatewaySessionPermissions? { selectedSessionId.flatMap { sessionPermissions[$0] } }
     var selectedContextSnapshot: GatewayContextSnapshot? { selectedSessionId.flatMap { contextSnapshots[$0] } }
     var selectedSessionStatsSnapshot: GatewaySessionStatsSnapshot? { selectedSessionId.flatMap { sessionStatsSnapshots[$0] } }
+    var selectedTaskProjection: GatewayTasksProjection? { selectedSessionId.flatMap { taskProjections[$0] } }
+    var selectedGoalProjection: GatewayGoalProjection? { selectedSessionId.flatMap { goalProjections[$0] } }
     var selectedPendingQuestionRequest: GatewayPendingQuestionRequest? {
         guard let selectedSessionId else { return nil }
         return pendingQuestionRequests.first { $0.sessionId == selectedSessionId }
@@ -813,6 +823,51 @@ final class AppStore: ObservableObject {
         dispatchSessionControl(.requestPermissionOptions(sessionID: sessionId, isConnected: true))
         dispatchSessionControl(.requestContextUsage(sessionID: sessionId, isConnected: true))
         dispatchSessionControl(.requestSessionStats(sessionID: sessionId, isConnected: true))
+        if supportsTasks { gateway.requestTasks(sessionId: sessionId) }
+        if supportsGoals { gateway.requestGoal(sessionId: sessionId) }
+    }
+
+    func editGoal(objective: String) {
+        submitGoalMutation("goal-edit") { sessionID, ref in
+            gateway.editGoal(sessionId: sessionID, ref: ref, objective: objective)
+        }
+    }
+
+    func pauseGoal() {
+        submitGoalMutation("goal-pause") { sessionID, ref in
+            gateway.pauseGoal(sessionId: sessionID, ref: ref)
+        }
+    }
+
+    func resumeGoal() {
+        submitGoalMutation("goal-resume") { sessionID, ref in
+            gateway.resumeGoal(sessionId: sessionID, ref: ref)
+        }
+    }
+
+    func clearGoal() {
+        submitGoalMutation("goal-clear") { sessionID, ref in
+            gateway.clearGoal(sessionId: sessionID, ref: ref)
+        }
+    }
+
+    private func submitGoalMutation(
+        _ kind: String,
+        send: (String, GatewayGoalReference) -> Void
+    ) {
+        guard let sessionID = selectedSessionId,
+              let goal = selectedGoalProjection?.goal?.goal else { return }
+        guard gateway.state.isConnected else {
+            lastError = String(localized: "请先连接 DeepSeek Harness")
+            return
+        }
+        guard supportsGoals else {
+            lastError = String(localized: "当前 Mobile Gateway 不支持目标管理，请升级并重启网关。")
+            return
+        }
+        guard goalMutationKind == nil else { return }
+        goalMutationKind = kind
+        send(sessionID, goal.ref)
     }
     func selectModel(provider: String, model: String, reasoningEffort: String?) {
         guard let sessionId = selectedSessionId else { return }
@@ -954,6 +1009,26 @@ final class AppStore: ObservableObject {
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
     private func handle(_ frame: GatewayFrame) {
+        if frame.kind == "tasks" || frame.kind == "tasks-updated" {
+            applyTasksProjection(frame)
+            return
+        }
+        if frame.kind == "goal" || frame.kind == "goal-updated" {
+            applyGoalProjection(frame)
+            return
+        }
+        if Self.goalMutationResponseKinds.contains(frame.kind) {
+            goalMutationKind = nil
+            if let sessionID = frame.sessionId { gateway.requestGoal(sessionId: sessionID) }
+            return
+        }
+        if frame.kind == "error", let requestType = frame.requestType,
+           Self.goalMutationResponseKinds.contains(requestType) {
+            goalMutationKind = nil
+            if let sessionID = frame.sessionId ?? selectedSessionId {
+                gateway.requestGoal(sessionId: sessionID)
+            }
+        }
         if frame.kind == "command-executed" {
             handleCommandExecutionResult(frame)
             return
@@ -1027,6 +1102,8 @@ final class AppStore: ObservableObject {
             supportsImages = payload.protocolVersion >= 3 && payload.capabilities.contains("images")
             supportsFileDownloads = payload.protocolVersion >= 3 && payload.capabilities.contains("file-downloads")
             supportsSlashCommands = payload.capabilities.contains("commands")
+            supportsTasks = payload.capabilities.contains("tasks")
+            supportsGoals = payload.capabilities.contains("goals")
             applySlashCommandTransition(kmpSlashCommandStore.reset(sessionId: selectedSessionId))
             applyWorkspaceFileTransition(kmpWorkspaceFileStore.reset(sessionId: selectedSessionId))
             attachmentLoader.reset()
@@ -1046,6 +1123,9 @@ final class AppStore: ObservableObject {
             }
             refreshRemoteState()
             refreshDefaultConfiguration()
+            if let selectedSessionId {
+                refreshSessionControls(for: selectedSessionId)
+            }
             // A restored subscription only receives events emitted after the new
             // connection. Rebase the visible conversation from latest history so
             // user messages sent by another client while this app was suspended
@@ -1888,6 +1968,29 @@ final class AppStore: ObservableObject {
     private func sessionControlKind(from value: String) -> String? {
         ["permission-options", "select-model", "context-usage", "session-stats", "permission", "models"]
             .first { value.localizedCaseInsensitiveContains($0) }
+    }
+
+    private func applyTasksProjection(_ frame: GatewayFrame) {
+        guard let sessionID = frame.sessionId else { return }
+        let candidate = GatewayTasksProjection(asOfSequence: frame.asOfSeq, todos: frame.todos)
+        guard projection(candidate.asOfSequence, isNotOlderThan: taskProjections[sessionID]?.asOfSequence) else {
+            return
+        }
+        taskProjections[sessionID] = candidate
+    }
+
+    private func applyGoalProjection(_ frame: GatewayFrame) {
+        guard let sessionID = frame.sessionId else { return }
+        let candidate = GatewayGoalProjection(asOfSequence: frame.asOfSeq, goal: frame.goal)
+        guard projection(candidate.asOfSequence, isNotOlderThan: goalProjections[sessionID]?.asOfSequence) else {
+            return
+        }
+        goalProjections[sessionID] = candidate
+    }
+
+    private func projection(_ candidate: Int?, isNotOlderThan current: Int?) -> Bool {
+        guard let candidate, let current else { return true }
+        return candidate >= current
     }
     private func markRead(_ id: String) {
         dispatchSessionListIntent(.markRead(id))

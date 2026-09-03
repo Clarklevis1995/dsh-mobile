@@ -19,6 +19,7 @@ import com.clarklevis.dsh.shared.domain.SessionListState
 import com.clarklevis.dsh.shared.gateway.GatewayRequestLanePolicy
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
+import com.clarklevis.dsh.shared.protocol.GatewayGoalRef
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayPendingApprovalRequest
 import com.clarklevis.dsh.shared.protocol.GatewayPendingQuestionRequest
@@ -39,6 +40,22 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProtocolAndReducerTest {
+    @Test
+    fun taskAndGoalRequestsMatchGatewayContractAndCarryCasReference() {
+        assertEquals("{\"type\":\"tasks\",\"sessionId\":\"s1\"}", GatewayRequests.tasks("s1").payload)
+        assertEquals("{\"type\":\"goal\",\"sessionId\":\"s1\"}", GatewayRequests.goal("s1").payload)
+        val ref = GatewayGoalRef("goal-1", 7)
+        assertEquals(
+            "{\"type\":\"goal-edit\",\"sessionId\":\"s1\",\"ref\":{\"id\":\"goal-1\",\"revision\":7},\"objective\":\"完成 Android app\"}",
+            GatewayRequests.editGoal("s1", ref, objective = "完成 Android app").payload
+        )
+        assertEquals(
+            "{\"type\":\"goal-pause\",\"sessionId\":\"s1\",\"ref\":{\"id\":\"goal-1\",\"revision\":7}}",
+            GatewayRequests.goalAction("goal-pause", "s1", ref).payload
+        )
+        assertEquals(GatewayRequestLanePolicy.REJECT_IF_BUSY, GatewayRequests.goalAction("goal-clear", "s1", ref).lanePolicy)
+    }
+
     @Test
     fun workspaceDirectoryRequestsMatchTheIosGatewayContract() {
         assertEquals("{\"type\":\"directories\"}", GatewayRequests.directories().payload)

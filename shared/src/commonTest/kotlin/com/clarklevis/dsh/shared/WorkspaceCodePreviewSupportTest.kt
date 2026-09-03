@@ -6,6 +6,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.measureTime
 
 class WorkspaceCodePreviewSupportTest {
     @Test
@@ -53,5 +55,29 @@ class WorkspaceCodePreviewSupportTest {
         assertTrue(document.tokens.any { it.kind == WorkspaceCodeTokenKind.TAG && document.text.substring(it.start, it.endExclusive) == "canvas" })
         assertTrue(document.tokens.any { it.kind == WorkspaceCodeTokenKind.ATTRIBUTE && document.text.substring(it.start, it.endExclusive) == "id" })
         assertTrue(document.tokens.any { it.kind == WorkspaceCodeTokenKind.STRING && document.text.substring(it.start, it.endExclusive) == "\"game\"" })
+    }
+
+    @Test
+    fun preparesReportSizedHtmlWithoutPathologicalSlowdown() {
+        val source = buildString {
+            appendLine("<!DOCTYPE html>")
+            appendLine("<html lang=\"zh-CN\"><head><style>")
+            repeat(590) { index ->
+                appendLine(
+                    ".report-$index { color: #8a8f99; margin: ${index % 24}px; " +
+                        "content: \"DeepSeek 深度调研报告 $index\"; }"
+                )
+            }
+            appendLine("</style></head><body><main class=\"report\">报告</main></body></html>")
+        }
+
+        lateinit var document: com.clarklevis.dsh.shared.facade.WorkspaceCodeDocument
+        val elapsed = measureTime {
+            document = WorkspaceCodePreviewSupport.prepare(source, "deepseek_report.html", "text/html")
+        }
+
+        assertEquals(594, document.lineCount)
+        assertTrue(document.tokens.isNotEmpty())
+        assertTrue(elapsed < 10.seconds, "34 KB 级 HTML 解析耗时异常：$elapsed")
     }
 }

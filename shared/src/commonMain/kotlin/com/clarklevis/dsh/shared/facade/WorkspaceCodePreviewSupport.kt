@@ -70,13 +70,22 @@ object WorkspaceCodePreviewSupport {
 
     private fun tokenize(text: String, language: String): List<WorkspaceCodeToken> {
         if (text.isEmpty() || language == "plaintext") return emptyList()
+        if (language in MARKUP_LANGUAGES) return tokenizeMarkup(text)
         val occupied = BooleanArray(text.length)
         val tokens = mutableListOf<WorkspaceCodeToken>()
 
         fun addRange(start: Int, endExclusive: Int, kind: WorkspaceCodeTokenKind) {
             if (start !in text.indices || endExclusive <= start || endExclusive > text.length) return
-            if ((start until endExclusive).any(occupied::get)) return
-            for (index in start until endExclusive) occupied[index] = true
+            var index = start
+            while (index < endExclusive) {
+                if (occupied[index]) return
+                index++
+            }
+            index = start
+            while (index < endExclusive) {
+                occupied[index] = true
+                index++
+            }
             tokens += WorkspaceCodeToken(start, endExclusive, kind)
         }
 
@@ -101,7 +110,7 @@ object WorkspaceCodePreviewSupport {
                 token.startsWith("#") && language in HASH_COMMENT_LANGUAGES -> WorkspaceCodeTokenKind.COMMENT
                 token.startsWith("--") && language == "sql" -> WorkspaceCodeTokenKind.COMMENT
                 language == "json" && token.startsWith('"') &&
-                    text.substring(match.range.last + 1).trimStart().startsWith(':') ->
+                    nextNonWhitespaceCharacter(text, match.range.last + 1) == ':' ->
                     WorkspaceCodeTokenKind.ATTRIBUTE
                 else -> WorkspaceCodeTokenKind.STRING
             }
@@ -111,11 +120,6 @@ object WorkspaceCodePreviewSupport {
                 else -> true
             }
             if (isAllowed) addRange(match.range.first, match.range.last + 1, kind)
-        }
-
-        if (language in MARKUP_LANGUAGES) {
-            addGroupMatches(TAG_PATTERN, 1, WorkspaceCodeTokenKind.TAG)
-            addMatches(ATTRIBUTE_PATTERN, WorkspaceCodeTokenKind.ATTRIBUTE)
         }
 
         if (language == "css") {
@@ -137,6 +141,177 @@ object WorkspaceCodePreviewSupport {
         addMatches(NUMBER_PATTERN, WorkspaceCodeTokenKind.NUMBER)
 
         return tokens.sortedBy(WorkspaceCodeToken::start)
+    }
+
+    /**
+     * Kotlin/Native 的多轮正则扫描在几百行 HTML 上会出现数量级退化。
+     * 标记语言改用单遍词法扫描，同时保留标签、属性、字符串、注释和数字高亮。
+     */
+    private fun tokenizeMarkup(text: String): List<WorkspaceCodeToken> {
+        val tokens = mutableListOf<WorkspaceCodeToken>()
+        var index = 0
+
+        fun add(start: Int, endExclusive: Int, kind: WorkspaceCodeTokenKind) {
+            if (start >= 0 && endExclusive > start && endExclusive <= text.length) {
+                tokens += WorkspaceCodeToken(start, endExclusive, kind)
+            }
+        }
+
+        fun quotedEnd(start: Int, quote: Char): Int {
+            var cursor = start + 1
+            while (cursor < text.length) {
+                if (text[cursor] == '\\' && cursor + 1 < text.length) {
+                    cursor += 2
+                    continue
+                }
+                if (text[cursor] == quote) return cursor + 1
+                cursor++
+            }
+            return text.length
+        }
+
+        fun numberEnd(start: Int): Int {
+            var cursor = start
+            if (cursor + 1 < text.length && text[cursor] == '0' &&
+                (text[cursor + 1] == 'x' || text[cursor + 1] == 'X')
+            ) {
+                cursor += 2
+                while (cursor < text.length && text[cursor].isHexDigit()) cursor++
+                return cursor
+            }
+            while (cursor < text.length && text[cursor].isDigit()) cursor++
+            if (cursor < text.length && text[cursor] == '.') {
+                cursor++
+                while (cursor < text.length && text[cursor].isDigit()) cursor++
+            }
+            return cursor
+        }
+
+        while (index < text.length) {
+            when {
+                text.startsWith("<!--", index) -> {
+                    val close = text.indexOf("-->", startIndex = index + 4)
+                    val end = if (close < 0) text.length else close + 3
+                    add(index, end, WorkspaceCodeTokenKind.COMMENT)
+                    index = end
+                }
+                text.startsWith("/*", index) -> {
+                    val close = text.indexOf("*/", startIndex = index + 2)
+                    val end = if (close < 0) text.length else close + 2
+                    add(index, end, WorkspaceCodeTokenKind.COMMENT)
+                    index = end
+                }
+                text.startsWith("//", index) -> {
+                    val close = text.indexOf('\n', startIndex = index + 2)
+                    val end = if (close < 0) text.length else close
+                    add(index, end, WorkspaceCodeTokenKind.COMMENT)
+                    index = end
+                }
+                text[index] == '<' -> {
+                    index = tokenizeMarkupTag(text, index, tokens)
+                }
+                text[index] == '"' || text[index] == '\'' || text[index] == '`' -> {
+                    val end = quotedEnd(index, text[index])
+                    add(index, end, WorkspaceCodeTokenKind.STRING)
+                    index = end
+                }
+                text[index].isDigit() && (index == 0 || !text[index - 1].isIdentifierPart()) -> {
+                    val end = numberEnd(index)
+                    if (end == text.length || !text[end].isIdentifierPart()) {
+                        add(index, end, WorkspaceCodeTokenKind.NUMBER)
+                    }
+                    index = end.coerceAtLeast(index + 1)
+                }
+                text[index].isUpperCase() && (index == 0 || !text[index - 1].isIdentifierPart()) -> {
+                    var end = index + 1
+                    while (end < text.length && text[end].isIdentifierPart()) end++
+                    add(index, end, WorkspaceCodeTokenKind.TYPE)
+                    index = end
+                }
+                else -> index++
+            }
+        }
+        return tokens
+    }
+
+    private fun tokenizeMarkupTag(
+        text: String,
+        start: Int,
+        tokens: MutableList<WorkspaceCodeToken>
+    ): Int {
+        var index = start + 1
+        if (index < text.length && text[index] == '/') index++
+        while (index < text.length && text[index].isWhitespace()) index++
+        if (index < text.length && (text[index] == '!' || text[index] == '?')) index++
+        while (index < text.length && text[index].isWhitespace()) index++
+
+        val tagStart = index
+        while (index < text.length && text[index].isMarkupNamePart()) index++
+        if (index > tagStart) {
+            val kind = if (text.regionMatches(tagStart, "DOCTYPE", 0, 7, ignoreCase = true)) {
+                WorkspaceCodeTokenKind.KEYWORD
+            } else {
+                WorkspaceCodeTokenKind.TAG
+            }
+            tokens += WorkspaceCodeToken(tagStart, index, kind)
+        }
+
+        while (index < text.length && text[index] != '>') {
+            when {
+                text[index] == '"' || text[index] == '\'' -> {
+                    val quote = text[index]
+                    var end = index + 1
+                    while (end < text.length) {
+                        if (text[end] == '\\' && end + 1 < text.length) {
+                            end += 2
+                            continue
+                        }
+                        if (text[end] == quote) {
+                            end++
+                            break
+                        }
+                        end++
+                    }
+                    tokens += WorkspaceCodeToken(index, end, WorkspaceCodeTokenKind.STRING)
+                    index = end
+                }
+                text[index].isMarkupNameStart() -> {
+                    val attributeStart = index
+                    index++
+                    while (index < text.length && text[index].isMarkupNamePart()) index++
+                    var lookahead = index
+                    while (lookahead < text.length && text[lookahead].isWhitespace()) lookahead++
+                    if (lookahead < text.length && text[lookahead] == '=') {
+                        tokens += WorkspaceCodeToken(
+                            attributeStart,
+                            index,
+                            WorkspaceCodeTokenKind.ATTRIBUTE
+                        )
+                    }
+                }
+                else -> index++
+            }
+        }
+        return if (index < text.length) index + 1 else text.length
+    }
+
+    private fun Char.isIdentifierPart(): Boolean = isLetterOrDigit() || this == '_'
+
+    private fun Char.isMarkupNameStart(): Boolean = isLetter() || this == '_' || this == ':'
+
+    private fun Char.isMarkupNamePart(): Boolean =
+        isLetterOrDigit() || this == '_' || this == ':' || this == '-' || this == '.'
+
+    private fun Char.isHexDigit(): Boolean =
+        isDigit() || this in 'a'..'f' || this in 'A'..'F'
+
+    private fun nextNonWhitespaceCharacter(text: String, start: Int): Char? {
+        var index = start
+        while (index < text.length) {
+            if (!text[index].isWhitespace()) return text[index]
+            index++
+        }
+        return null
     }
 
     private val EXTENSION_LANGUAGES = mapOf(
@@ -196,8 +371,6 @@ object WorkspaceCodePreviewSupport {
         pattern = """<!--.*?-->|/\*.*?\*/|//[^\n]*|--[^\n]*|\#[^\n]*|\"\"\".*?\"\"\"|'''.*?'''|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`""",
         options = setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.MULTILINE)
     )
-    private val TAG_PATTERN = Regex("</?([A-Za-z][A-Za-z0-9:_-]*)")
-    private val ATTRIBUTE_PATTERN = Regex("\\b[A-Za-z_:][A-Za-z0-9:_.-]*(?=\\s*=)")
     private val CSS_PROPERTY_PATTERN = Regex("(?m)^[ \\t]*([A-Za-z-]+)(?=\\s*:)")
     private val CSS_SELECTOR_PATTERN = Regex("(?m)(?:^|[},])\\s*([.#]?[A-Za-z][A-Za-z0-9_-]*)(?=\\s*[{,])")
     private val TYPE_PATTERN = Regex("\\b[A-Z][A-Za-z0-9_]*\\b")

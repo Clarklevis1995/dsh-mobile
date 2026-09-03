@@ -188,6 +188,10 @@ struct GatewayFrame: Codable, Sendable {
     var sessionPermissions: GatewaySessionPermissions?
     var set: String?
     var asOfSeq: Int?
+    var todos: [GatewayTodoItem]?
+    var goal: GatewayGoalPayload?
+    var ref: GatewayGoalReference?
+    var cleared: Bool?
     var sessionStats: GatewaySessionStats?
     var tokenUsage: GatewayTokenUsage?
     var contextPressure: GatewayContextPressure?
@@ -215,6 +219,47 @@ struct GatewayFrame: Codable, Sendable {
     // Image attachment protocol (Mobile Gateway v0.6.0 / protocol 3).
     var attachment: GatewayImageAttachment?
     var data: String?
+}
+
+/// WebUI 的 todo_write 投影；移动端只读展示。
+struct GatewayTodoItem: Codable, Hashable, Sendable, Identifiable {
+    var content: String
+    var status: String
+
+    var id: String { "\(status):\(content)" }
+}
+
+/// Goal 写操作的 compare-and-set 引用，避免多端以旧 revision 覆盖新状态。
+struct GatewayGoalReference: Codable, Hashable, Sendable {
+    var id: String
+    var revision: Int
+}
+
+struct GatewayGoalDefinition: Codable, Hashable, Sendable {
+    var id: String
+    var revision: Int
+    var objective: String
+    var phase: String
+    var maxGoalRounds: Int?
+
+    var ref: GatewayGoalReference { GatewayGoalReference(id: id, revision: revision) }
+}
+
+struct GatewayGoalPayload: Codable, Hashable, Sendable {
+    var goal: GatewayGoalDefinition
+    var roundsStarted: Int
+    var createdAt: Double?
+    var updatedAt: Double?
+}
+
+struct GatewayTasksProjection: Hashable, Sendable {
+    var asOfSequence: Int?
+    var todos: [GatewayTodoItem]?
+}
+
+struct GatewayGoalProjection: Hashable, Sendable {
+    var asOfSequence: Int?
+    var goal: GatewayGoalPayload?
 }
 
 struct GatewayImageAttachment: Codable, Hashable, Sendable, Identifiable {

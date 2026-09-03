@@ -96,6 +96,7 @@ class GatewayRuntime(
     private val scope: CoroutineScope,
     private val requestTimeoutMilliseconds: Long = DEFAULT_REQUEST_TIMEOUT_MILLISECONDS,
     private val recoveryWindowMilliseconds: Long = DEFAULT_RECOVERY_WINDOW_MILLISECONDS,
+    private val connectionAttemptTimeoutMilliseconds: Long = DEFAULT_CONNECTION_ATTEMPT_TIMEOUT_MILLISECONDS,
     private val frameDecoder: (String) -> GatewayFrame = GatewayWireDecoder::decode
 ) {
     private val serialization = Mutex()
@@ -112,6 +113,8 @@ class GatewayRuntime(
     private var unassociatedTurnCount = 0
     private var desiredConnection = false
     private var reconnectBlocked = false
+    /** 手动配对码是一次性的；失败后绝不能在后台反复重连。 */
+    private var isManualPairingAttempt = false
     private var pairingCode: String? = null
     private var endpoint: String? = null
     private var subscribedSessionId: String? = null
@@ -120,6 +123,7 @@ class GatewayRuntime(
     private var requestGeneration = 0L
     private var reconnectJob: Job? = null
     private var recoveryDeadlineJob: Job? = null
+    private var connectionAttemptTimeoutJob: Job? = null
 
     val state: StateFlow<GatewayRuntimeState> = mutableState.asStateFlow()
     val events: Flow<GatewayRuntimeEvent> = eventQueue.flow
@@ -140,6 +144,7 @@ class GatewayRuntime(
         preferences.update(existing.copy(endpoint = endpoint))
         this.endpoint = endpoint
         pairingCode = null
+        isManualPairingAttempt = false
         desiredConnection = true
         reconnectBlocked = false
         reconnectJob?.cancel()
@@ -154,6 +159,7 @@ class GatewayRuntime(
         preferences.update(existing.copy(endpoint = payload.publicUrl))
         endpoint = payload.publicUrl
         pairingCode = payload.pairingCode
+        isManualPairingAttempt = true
         desiredConnection = true
         reconnectBlocked = false
         reconnectJob?.cancel()
@@ -178,6 +184,7 @@ class GatewayRuntime(
         requireWebSocketEndpoint(stored.endpoint)
         endpoint = stored.endpoint
         pairingCode = null
+        isManualPairingAttempt = false
         desiredConnection = true
         reconnectBlocked = false
         reconnectJob?.cancel()
@@ -191,10 +198,13 @@ class GatewayRuntime(
         desiredConnection = false
         reconnectBlocked = false
         pairingCode = null
+        isManualPairingAttempt = false
         reconnectJob?.cancel()
         reconnectJob = null
         recoveryDeadlineJob?.cancel()
         recoveryDeadlineJob = null
+        connectionAttemptTimeoutJob?.cancel()
+        connectionAttemptTimeoutJob = null
         connectionGeneration += 1
         clearConnectionWorkLocked()
         runCatching { transport.close() }
@@ -208,6 +218,8 @@ class GatewayRuntime(
     suspend fun applicationDidEnterBackground() = serialized {
         isInBackground = true
         if (!mutableState.value.shouldKeepAliveInBackground) {
+            connectionAttemptTimeoutJob?.cancel()
+            connectionAttemptTimeoutJob = null
             connectionGeneration += 1
             cancelPendingLocked(ERROR_BACKGROUND_SUSPENDED)
             runCatching { transport.close() }
@@ -379,7 +391,17 @@ class GatewayRuntime(
     }
 
     private suspend fun openTransportLocked(preserveTurns: Boolean) {
+        connectionAttemptTimeoutJob?.cancel()
+        connectionAttemptTimeoutJob = null
         if (!networkAvailableLocked()) {
+            if (isManualPairingAttempt) {
+                reconnectBlocked = true
+                mutableState.value = mutableState.value.copy(
+                    connection = GatewayConnectionState.FAILED,
+                    lastError = ERROR_NETWORK_LOST
+                )
+                return
+            }
             mutableState.value = mutableState.value.copy(connection = GatewayConnectionState.WAITING_FOR_NETWORK)
             return
         }
@@ -415,7 +437,9 @@ class GatewayRuntime(
             endpoint = target,
             lastError = null
         )
-        runCatching { transport.open(spec) }.onFailure { failOpenLocked(ERROR_OPEN_FAILED) }
+        runCatching { transport.open(spec) }
+            .onSuccess { startConnectionAttemptTimeoutLocked(spec.generation) }
+            .onFailure { failOpenLocked(ERROR_OPEN_FAILED) }
     }
 
     private suspend fun handleTransportStateLocked(transportState: GatewayTransportState) {
@@ -434,12 +458,14 @@ class GatewayRuntime(
 
     private suspend fun handleTransportFailureLocked(failure: GatewayTransportState.Failed) {
         // failure 与 frame 共用有序通道；处理 failure 时立即作废代次，随后到达的旧帧只能被拒绝。
+        connectionAttemptTimeoutJob?.cancel()
+        connectionAttemptTimeoutJob = null
         connectionGeneration += 1
         val authenticationFailure = failure.httpStatus == 401 || failure.closeCode == 4003
         if (failure.httpStatus == 401 && pairingCode == null) {
             endpoint?.let { runCatching { credentials.deleteToken(it) } }
         }
-        if (authenticationFailure || !failure.recoverable) reconnectBlocked = true
+        if (authenticationFailure || !failure.recoverable || isManualPairingAttempt) reconnectBlocked = true
         cancelPendingLocked(failure.stableErrorCode())
         val shouldReconnect = canReconnectLocked() && failure.recoverable && !authenticationFailure
         if (!shouldReconnect) clearTurnsLocked() else startRecoveryDeadlineLocked()
@@ -473,6 +499,9 @@ class GatewayRuntime(
             pairingCode = null
         }
         if (frame.kind == "hello") {
+            connectionAttemptTimeoutJob?.cancel()
+            connectionAttemptTimeoutJob = null
+            isManualPairingAttempt = false
             recoveryDeadlineJob?.cancel()
             recoveryDeadlineJob = null
             mutableState.value = mutableState.value.copy(
@@ -691,6 +720,17 @@ class GatewayRuntime(
             connectionGeneration += 1
             runCatching { transport.close() }
             cancelPendingLocked(ERROR_NETWORK_LOST)
+            if (isManualPairingAttempt) {
+                connectionAttemptTimeoutJob?.cancel()
+                connectionAttemptTimeoutJob = null
+                reconnectBlocked = true
+                clearTurnsLocked()
+                mutableState.value = mutableState.value.copy(
+                    connection = GatewayConnectionState.FAILED,
+                    lastError = ERROR_NETWORK_LOST
+                )
+                return
+            }
             startRecoveryDeadlineLocked()
             if (desiredConnection && !reconnectBlocked) {
                 mutableState.value = mutableState.value.copy(
@@ -712,6 +752,8 @@ class GatewayRuntime(
 
     private suspend fun failOpenLocked(code: String) {
         connectionGeneration += 1
+        connectionAttemptTimeoutJob?.cancel()
+        connectionAttemptTimeoutJob = null
         runCatching { transport.close() }
         clearConnectionWorkLocked()
         mutableState.value = mutableState.value.copy(connection = GatewayConnectionState.FAILED, lastError = code)
@@ -856,8 +898,41 @@ class GatewayRuntime(
         mutableState.value.networkAvailable && networkMonitor.state.value == GatewayNetworkState.AVAILABLE
 
     private fun canReconnectLocked(): Boolean =
-        desiredConnection && !reconnectBlocked && networkAvailableLocked() &&
+        desiredConnection && !reconnectBlocked && !isManualPairingAttempt && networkAvailableLocked() &&
             (!isInBackground || mutableState.value.shouldKeepAliveInBackground)
+
+    private fun startConnectionAttemptTimeoutLocked(generation: Long) {
+        connectionAttemptTimeoutJob?.cancel()
+        connectionAttemptTimeoutJob = scope.launch {
+            delay(connectionAttemptTimeoutMilliseconds)
+            serialized {
+                if (
+                    generation != connectionGeneration ||
+                    mutableState.value.connection !in setOf(
+                        GatewayConnectionState.CONNECTING,
+                        GatewayConnectionState.AUTHENTICATING
+                    )
+                ) {
+                    return@serialized
+                }
+                // 超时是这次连接意图的终态，用户可以立即换 token 重试。
+                reconnectJob?.cancel()
+                reconnectBlocked = true
+                connectionGeneration += 1
+                cancelPendingLocked(ERROR_CONNECTION_TIMEOUT)
+                while (deferredRequests.isNotEmpty()) {
+                    emitCancelledLocked(deferredRequests.removeFirst(), ERROR_CONNECTION_TIMEOUT)
+                }
+                runCatching { transport.close() }
+                clearTurnsLocked()
+                mutableState.value = mutableState.value.copy(
+                    connection = GatewayConnectionState.FAILED,
+                    lastError = ERROR_CONNECTION_TIMEOUT
+                )
+                connectionAttemptTimeoutJob = null
+            }
+        }
+    }
 
     private fun scheduleReconnectLocked(immediate: Boolean) {
         reconnectJob?.cancel()
@@ -974,6 +1049,7 @@ class GatewayRuntime(
     companion object {
         private const val DEFAULT_REQUEST_TIMEOUT_MILLISECONDS = 30_000L
         private const val DEFAULT_RECOVERY_WINDOW_MILLISECONDS = 60_000L
+        private const val DEFAULT_CONNECTION_ATTEMPT_TIMEOUT_MILLISECONDS = 15_000L
         private const val MAXIMUM_ATTACHMENT_BYTES = 8 * 1_024 * 1_024
         private const val MAXIMUM_OUTGOING_IMAGE_COUNT = 4
         private const val MAXIMUM_OUTGOING_IMAGE_CHARACTERS = 4_893_356
@@ -1009,6 +1085,7 @@ class GatewayRuntime(
         private const val ERROR_BACKGROUND_SUSPENDED = "background-suspended"
         private const val ERROR_NETWORK_LOST = "network-lost"
         private const val ERROR_RECOVERY_TIMEOUT = "recovery-timeout"
+        private const val ERROR_CONNECTION_TIMEOUT = "connection-timeout"
         private val STABLE_TRANSPORT_CODES = setOf(
             "incoming-overflow",
             "incoming-message-too-large",
@@ -1016,7 +1093,7 @@ class GatewayRuntime(
         )
         private val UNCORRELATED_KINDS = setOf(
             "event", "hello", "paired", "pong", "question-requested", "question-resolved",
-            "approval-requested", "approval-resolved"
+            "approval-requested", "approval-resolved", "tasks-updated", "goal-updated"
         )
         private val RESPONSE_KINDS_REQUIRING_ACTIVE_REQUEST = setOf(
             "history", "attachment", "sent", "question-response", "approval-response",

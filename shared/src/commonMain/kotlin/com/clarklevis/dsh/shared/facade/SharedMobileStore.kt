@@ -21,6 +21,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayPendingApprovalRequest
 import com.clarklevis.dsh.shared.protocol.GatewayAgentPreset
 import com.clarklevis.dsh.shared.protocol.GatewayContextSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewayHostSnapshot
+import com.clarklevis.dsh.shared.protocol.GatewayGoalSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewayModelCatalog
 import com.clarklevis.dsh.shared.protocol.GatewayModelGroup
 import com.clarklevis.dsh.shared.protocol.GatewayModelSelection
@@ -30,6 +31,7 @@ import com.clarklevis.dsh.shared.protocol.GatewaySessionStatsSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewaySessionSummary
 import com.clarklevis.dsh.shared.protocol.GatewaySearchItem
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
+import com.clarklevis.dsh.shared.protocol.GatewayTask
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import com.clarklevis.dsh.shared.protocol.JsonValue
 import com.clarklevis.dsh.shared.protocol.SessionEvent
@@ -58,6 +60,8 @@ data class SharedMobileSnapshot(
     val permissions: GatewaySessionPermissions? = null,
     val contextSnapshot: GatewayContextSnapshot? = null,
     val statsSnapshot: GatewaySessionStatsSnapshot? = null,
+    val taskSnapshot: GatewayTaskSnapshot? = null,
+    val goalSnapshot: GatewayGoalProjection? = null,
     val hostSnapshot: GatewayHostSnapshot? = null,
     val selectedHistoryHasMore: Boolean = false,
     val selectedHistoryEarliestSequence: Int? = null,
@@ -67,6 +71,17 @@ data class SharedMobileSnapshot(
     val selectedHistoryTotalEventCount: Int? = null,
     val lastFrameKind: String? = null,
     val lastError: String? = null
+)
+
+/** 与 Gateway 的 asOfSeq 对齐；同一会话只接受不早于当前水位的更新。 */
+data class GatewayTaskSnapshot(
+    val asOfSeq: Long?,
+    val tasks: List<GatewayTask>?
+)
+
+data class GatewayGoalProjection(
+    val asOfSeq: Long?,
+    val goal: GatewayGoalSnapshot?
 )
 
 data class SharedMobileApprovalSubmission(
@@ -99,6 +114,8 @@ class SharedMobileStore(
     private var permissions: GatewaySessionPermissions? = null
     private var contextSnapshot: GatewayContextSnapshot? = null
     private var statsSnapshot: GatewaySessionStatsSnapshot? = null
+    private val tasksBySession = mutableMapOf<String, GatewayTaskSnapshot>()
+    private val goalsBySession = mutableMapOf<String, GatewayGoalProjection>()
     private var hostSnapshot: GatewayHostSnapshot? = null
     private var lastFrameKind: String? = null
     private var lastError: String? = null
@@ -251,6 +268,20 @@ class SharedMobileStore(
                     },
                     contextPressure = frame.contextPressure
                 )
+                "tasks", "tasks-updated" -> frame.sessionId?.takeIf(String::isNotBlank)?.let { sessionId ->
+                    val candidate = GatewayTaskSnapshot(frame.asOfSeq, frame.todos)
+                    val existing = tasksBySession[sessionId]
+                    if (existing == null || projectionIsNotOlder(candidate.asOfSeq, existing.asOfSeq)) {
+                        tasksBySession[sessionId] = candidate
+                    }
+                }
+                "goal", "goal-updated" -> frame.sessionId?.takeIf(String::isNotBlank)?.let { sessionId ->
+                    val candidate = GatewayGoalProjection(frame.asOfSeq, frame.goal)
+                    val existing = goalsBySession[sessionId]
+                    if (existing == null || projectionIsNotOlder(candidate.asOfSeq, existing.asOfSeq)) {
+                        goalsBySession[sessionId] = candidate
+                    }
+                }
                 "host" -> hostSnapshot = GatewayHostSnapshot(
                     version = frame.version,
                     cwd = frame.cwd,
@@ -380,6 +411,8 @@ class SharedMobileStore(
         permissions = null
         contextSnapshot = null
         statsSnapshot = null
+        tasksBySession.clear()
+        goalsBySession.clear()
         hostSnapshot = null
         lastFrameKind = null
         lastError = null
@@ -425,10 +458,17 @@ class SharedMobileStore(
             permissions = permissions,
             contextSnapshot = contextSnapshot,
             statsSnapshot = statsSnapshot,
+            taskSnapshot = selected?.let(tasksBySession::get),
+            goalSnapshot = selected?.let(goalsBySession::get),
             hostSnapshot = hostSnapshot,
             lastFrameKind = lastFrameKind,
             lastError = lastError
         )
+    }
+
+    private fun projectionIsNotOlder(candidate: Long?, current: Long?): Boolean = when {
+        candidate == null || current == null -> true
+        else -> candidate >= current
     }
 
     private fun GatewayPendingApprovalRequest.commandPreview(): String? {

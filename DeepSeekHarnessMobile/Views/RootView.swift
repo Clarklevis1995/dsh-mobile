@@ -529,29 +529,56 @@ private struct WorkspaceCodePreview: View {
                 }
             }
         }
-        .task(id: file.id) { loadDocument() }
+        .task(id: file.id) { await loadDocument() }
         .sheet(isPresented: $showsSystemPreview) {
             WorkspaceQuickLookPreview(url: file.url)
                 .ignoresSafeArea()
         }
     }
 
-    private func loadDocument() {
+    @MainActor
+    private func loadDocument() async {
+        document = nil
+        errorMessage = nil
+        let url = file.url
+        let name = file.name
+        let mediaType = file.mediaType
+        let maximumBytes = maximumPreviewBytes
         do {
-            let values = try file.url.resourceValues(forKeys: [.fileSizeKey])
-            if let size = values.fileSize, size > maximumPreviewBytes {
-                errorMessage = "文件超过 2 MB，请使用系统应用打开"
-                return
-            }
-            let source = try String(contentsOf: file.url, encoding: .utf8)
-            document = WorkspaceCodePreviewSupport.shared.prepare(
-                source: source,
-                name: file.name,
-                mediaType: file.mediaType
-            )
+            let loaded = try await Task.detached(priority: .userInitiated) {
+                let values = try url.resourceValues(forKeys: [.fileSizeKey])
+                if let size = values.fileSize, size > maximumBytes {
+                    throw WorkspaceCodePreviewLoadError.fileTooLarge
+                }
+                let source = try String(contentsOf: url, encoding: .utf8)
+                return SendableWorkspaceCodeDocument(
+                    WorkspaceCodePreviewSupport.shared.prepare(
+                        source: source,
+                        name: name,
+                        mediaType: mediaType
+                    )
+                )
+            }.value
+            guard !Task.isCancelled else { return }
+            document = loaded.value
+        } catch WorkspaceCodePreviewLoadError.fileTooLarge {
+            errorMessage = "文件超过 2 MB，请使用系统应用打开"
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "读取代码失败：\(error.localizedDescription)"
         }
+    }
+}
+
+private enum WorkspaceCodePreviewLoadError: Error {
+    case fileTooLarge
+}
+
+private struct SendableWorkspaceCodeDocument: @unchecked Sendable {
+    let value: WorkspaceCodeDocument
+
+    init(_ value: WorkspaceCodeDocument) {
+        self.value = value
     }
 }
 
@@ -574,109 +601,224 @@ private struct WorkspaceCodeDocumentView: View {
             .frame(height: 38)
             .background(Color(uiColor: .secondarySystemBackground))
 
-            GeometryReader { geometry in
-                ScrollView([.horizontal, .vertical]) {
-                    HStack(alignment: .top, spacing: 0) {
-                        Text(lineNumbers)
-                            .font(.system(size: 13, design: .monospaced))
-                            .foregroundStyle(Color(uiColor: .tertiaryLabel))
-                            .multilineTextAlignment(.trailing)
-                            .lineSpacing(4)
-                            .padding(.top, 14)
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 24)
-                            .frame(minWidth: 52, alignment: .trailing)
-                            .background(Color(uiColor: .secondarySystemBackground))
-
-                        Text(WorkspaceCodeAttributedText.highlight(document, colorScheme: colorScheme))
-                            .font(.system(size: 13, design: .monospaced))
-                            .lineSpacing(4)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: true, vertical: true)
-                            .padding(.top, 14)
-                            .padding(.leading, 14)
-                            .padding(.trailing, 28)
-                            .padding(.bottom, 24)
-                    }
-                    .frame(
-                        minWidth: geometry.size.width,
-                        minHeight: geometry.size.height,
-                        alignment: .topLeading
-                    )
-                }
-                .background(codeBackground)
-            }
+            WorkspaceCodeTextKitView(document: document, colorScheme: colorScheme)
         }
     }
+}
 
-    private var lineNumbers: String {
-        (1...max(1, Int(document.lineCount))).map(String.init).joined(separator: "\n")
+private struct WorkspaceCodeTextKitView: UIViewRepresentable {
+    let document: WorkspaceCodeDocument
+    let colorScheme: ColorScheme
+
+    func makeUIView(context: Context) -> WorkspaceCodeTextKitContainer {
+        let view = WorkspaceCodeTextKitContainer()
+        view.configure(document: document, isDark: colorScheme == .dark)
+        return view
     }
 
-    private var codeBackground: Color {
-        colorScheme == .dark ? Color(red: 0.05, green: 0.07, blue: 0.09) : Color(red: 0.98, green: 0.985, blue: 0.99)
+    func updateUIView(_ view: WorkspaceCodeTextKitContainer, context: Context) {
+        view.configure(document: document, isDark: colorScheme == .dark)
+    }
+}
+
+final class WorkspaceCodeTextKitContainer: UIView, UITextViewDelegate {
+    private let gutterView = UIView()
+    private let lineNumberLabel = UILabel()
+    private let codeTextView = UITextView(frame: .zero, textContainer: nil)
+    private let codeFont = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+    private let lineSpacing: CGFloat = 4
+    private var lineCount = 1
+    private var maximumLineWidth: CGFloat = 0
+    private var configuredRevision: String?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        clipsToBounds = true
+
+        gutterView.translatesAutoresizingMaskIntoConstraints = false
+        gutterView.clipsToBounds = true
+        addSubview(gutterView)
+
+        lineNumberLabel.numberOfLines = 0
+        lineNumberLabel.textAlignment = .right
+        gutterView.addSubview(lineNumberLabel)
+
+        codeTextView.translatesAutoresizingMaskIntoConstraints = false
+        codeTextView.delegate = self
+        codeTextView.isEditable = false
+        codeTextView.isSelectable = true
+        codeTextView.isScrollEnabled = true
+        codeTextView.alwaysBounceVertical = true
+        codeTextView.showsVerticalScrollIndicator = true
+        codeTextView.showsHorizontalScrollIndicator = true
+        codeTextView.contentInsetAdjustmentBehavior = .never
+        codeTextView.contentInset = .zero
+        codeTextView.textContainerInset = UIEdgeInsets(top: 14, left: 14, bottom: 24, right: 28)
+        codeTextView.textContainer.lineFragmentPadding = 0
+        codeTextView.textContainer.widthTracksTextView = false
+        codeTextView.textContainer.heightTracksTextView = false
+        codeTextView.textContainer.lineBreakMode = .byClipping
+        codeTextView.layoutManager.allowsNonContiguousLayout = true
+        addSubview(codeTextView)
+
+        NSLayoutConstraint.activate([
+            gutterView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            gutterView.topAnchor.constraint(equalTo: topAnchor),
+            gutterView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            gutterView.widthAnchor.constraint(equalToConstant: 52),
+            codeTextView.leadingAnchor.constraint(equalTo: gutterView.trailingAnchor),
+            codeTextView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            codeTextView.topAnchor.constraint(equalTo: topAnchor),
+            codeTextView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(document: WorkspaceCodeDocument, isDark: Bool) {
+        let revision = "\(document.text.hashValue)-\(document.tokens.count)-\(isDark)"
+        guard configuredRevision != revision else { return }
+        configuredRevision = revision
+        lineCount = max(1, Int(document.lineCount))
+
+        let codeBackground = isDark
+            ? UIColor(red: 0.05, green: 0.07, blue: 0.09, alpha: 1)
+            : UIColor(red: 0.98, green: 0.985, blue: 0.99, alpha: 1)
+        let gutterBackground = isDark
+            ? UIColor(red: 0.086, green: 0.106, blue: 0.133, alpha: 1)
+            : UIColor.secondarySystemBackground
+        backgroundColor = codeBackground
+        codeTextView.backgroundColor = codeBackground
+        gutterView.backgroundColor = gutterBackground
+        codeTextView.tintColor = UIColor(DSHColor.ocean)
+        codeTextView.attributedText = WorkspaceCodeAttributedText.highlight(document, isDark: isDark)
+        codeTextView.textContainer.widthTracksTextView = false
+        codeTextView.textContainer.lineBreakMode = .byClipping
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = lineSpacing
+        lineNumberLabel.attributedText = NSAttributedString(
+            string: (1...lineCount).map(String.init).joined(separator: "\n"),
+            attributes: [
+                .font: codeFont,
+                .foregroundColor: UIColor.tertiaryLabel,
+                .paragraphStyle: paragraph
+            ]
+        )
+        maximumLineWidth = document.text
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .reduce(CGFloat.zero) { width, line in
+                max(
+                    width,
+                    (String(line) as NSString).size(withAttributes: [.font: codeFont]).width
+                )
+            }
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let insets = codeTextView.textContainerInset
+        let visibleWidth = max(1, codeTextView.bounds.width - insets.left - insets.right)
+        let containerWidth = max(visibleWidth, ceil(maximumLineWidth) + 1)
+        if abs(codeTextView.textContainer.size.width - containerWidth) > 0.5 {
+            codeTextView.textContainer.size = CGSize(
+                width: containerWidth,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+        }
+        codeTextView.textContainer.widthTracksTextView = false
+        updateLineNumberPosition()
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView === codeTextView else { return }
+        updateLineNumberPosition()
+    }
+
+    private func updateLineNumberPosition() {
+        let rowHeight = codeFont.lineHeight + lineSpacing
+        let labelHeight = CGFloat(lineCount) * codeFont.lineHeight +
+            CGFloat(max(0, lineCount - 1)) * lineSpacing
+        lineNumberLabel.frame = CGRect(
+            x: 0,
+            y: 14 - codeTextView.contentOffset.y,
+            width: 40,
+            height: max(labelHeight, rowHeight)
+        )
     }
 }
 
 private enum WorkspaceCodeAttributedText {
-    static func highlight(_ document: WorkspaceCodeDocument, colorScheme: ColorScheme) -> AttributedString {
+    static func highlight(_ document: WorkspaceCodeDocument, isDark: Bool) -> NSAttributedString {
         let source = document.text as NSString
-        var result = AttributedString()
-        var cursor = 0
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 4
+        let result = NSMutableAttributedString(
+            string: document.text,
+            attributes: [
+                .font: UIFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+                .foregroundColor: baseColor(isDark),
+                .paragraphStyle: paragraph
+            ]
+        )
 
         for token in document.tokens {
             let start = Int(token.start)
             let end = Int(token.endExclusive)
-            guard start >= cursor, end >= start, end <= source.length else { continue }
-            if start > cursor {
-                result += styled(
-                    source.substring(with: NSRange(location: cursor, length: start - cursor)),
-                    color: baseColor(colorScheme)
-                )
-            }
-            result += styled(
-                source.substring(with: NSRange(location: start, length: end - start)),
-                color: tokenColor(token.kind, colorScheme: colorScheme)
+            guard start >= 0, end >= start, end <= source.length else { continue }
+            result.addAttribute(
+                .foregroundColor,
+                value: tokenColor(token.kind, isDark: isDark),
+                range: NSRange(location: start, length: end - start)
             )
-            cursor = end
-        }
-        if cursor < source.length {
-            result += styled(source.substring(from: cursor), color: baseColor(colorScheme))
         }
         return result
     }
 
-    private static func styled(_ value: String, color: Color) -> AttributedString {
-        var result = AttributedString(value)
-        result.foregroundColor = color
-        return result
+    private static func baseColor(_ isDark: Bool) -> UIColor {
+        isDark
+            ? UIColor(red: 0.90, green: 0.93, blue: 0.95, alpha: 1)
+            : UIColor(red: 0.12, green: 0.14, blue: 0.16, alpha: 1)
     }
 
-    private static func baseColor(_ colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? Color(red: 0.90, green: 0.93, blue: 0.95) : Color(red: 0.12, green: 0.14, blue: 0.16)
-    }
-
-    private static func tokenColor(_ kind: WorkspaceCodeTokenKind, colorScheme: ColorScheme) -> Color {
-        let dark = colorScheme == .dark
+    private static func tokenColor(_ kind: WorkspaceCodeTokenKind, isDark: Bool) -> UIColor {
         if kind == WorkspaceCodeTokenKind.comment {
-            return dark ? Color(red: 0.55, green: 0.58, blue: 0.62) : Color(red: 0.43, green: 0.47, blue: 0.51)
+            return isDark
+                ? UIColor(red: 0.55, green: 0.58, blue: 0.62, alpha: 1)
+                : UIColor(red: 0.43, green: 0.47, blue: 0.51, alpha: 1)
         }
         if kind == WorkspaceCodeTokenKind.string {
-            return dark ? Color(red: 0.65, green: 0.84, blue: 1.0) : Color(red: 0.04, green: 0.48, blue: 0.24)
+            return isDark
+                ? UIColor(red: 0.65, green: 0.84, blue: 1.0, alpha: 1)
+                : UIColor(red: 0.04, green: 0.48, blue: 0.24, alpha: 1)
         }
         if kind == WorkspaceCodeTokenKind.keyword {
-            return dark ? Color(red: 1.0, green: 0.48, blue: 0.45) : Color(red: 0.51, green: 0.31, blue: 0.87)
+            return isDark
+                ? UIColor(red: 1.0, green: 0.48, blue: 0.45, alpha: 1)
+                : UIColor(red: 0.51, green: 0.31, blue: 0.87, alpha: 1)
         }
         if kind == WorkspaceCodeTokenKind.number {
-            return dark ? Color(red: 0.47, green: 0.75, blue: 1.0) : Color(red: 0.02, green: 0.31, blue: 0.68)
+            return isDark
+                ? UIColor(red: 0.47, green: 0.75, blue: 1.0, alpha: 1)
+                : UIColor(red: 0.02, green: 0.31, blue: 0.68, alpha: 1)
         }
         if kind == WorkspaceCodeTokenKind.type {
-            return dark ? Color(red: 0.82, green: 0.66, blue: 1.0) : Color(red: 0.58, green: 0.22, blue: 0.0)
+            return isDark
+                ? UIColor(red: 0.82, green: 0.66, blue: 1.0, alpha: 1)
+                : UIColor(red: 0.58, green: 0.22, blue: 0.0, alpha: 1)
         }
         if kind == WorkspaceCodeTokenKind.tag {
-            return dark ? Color(red: 0.49, green: 0.91, blue: 0.53) : Color(red: 0.81, green: 0.13, blue: 0.18)
+            return isDark
+                ? UIColor(red: 0.49, green: 0.91, blue: 0.53, alpha: 1)
+                : UIColor(red: 0.81, green: 0.13, blue: 0.18, alpha: 1)
         }
-        return dark ? Color(red: 1.0, green: 0.65, blue: 0.34) : Color(red: 0.58, green: 0.22, blue: 0.0)
+        return isDark
+            ? UIColor(red: 1.0, green: 0.65, blue: 0.34, alpha: 1)
+            : UIColor(red: 0.58, green: 0.22, blue: 0.0, alpha: 1)
     }
 }
 

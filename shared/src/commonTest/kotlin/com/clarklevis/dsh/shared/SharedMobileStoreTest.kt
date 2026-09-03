@@ -163,4 +163,31 @@ class SharedMobileStoreTest {
         assertEquals("deepseek-official", snapshot.hostSnapshot?.provider)
         assertEquals(12, snapshot.hostSnapshot?.attachedSessions)
     }
+
+    @Test
+    fun taskAndGoalProjectionsUseAsOfSequenceToRejectOutOfOrderPushes() {
+        val store = SharedMobileStore()
+        store.selectSession("s1")
+
+        var snapshot = store.acceptFrame(
+            """{"kind":"tasks","sessionId":"s1","asOfSeq":12,"todos":[{"content":"检查 SDK","status":"completed"},{"content":"构建 APK","status":"in_progress"}]}"""
+        )
+        assertEquals(listOf("completed", "in_progress"), snapshot.taskSnapshot?.tasks?.map { it.status })
+
+        snapshot = store.acceptFrame(
+            """{"kind":"tasks-updated","sessionId":"s1","asOfSeq":11,"todos":[{"content":"过期任务","status":"pending"}]}"""
+        )
+        assertEquals("检查 SDK", snapshot.taskSnapshot?.tasks?.first()?.content)
+
+        snapshot = store.acceptFrame(
+            """{"kind":"goal","sessionId":"s1","asOfSeq":12,"goal":{"goal":{"id":"goal-1","revision":7,"objective":"初始化 Android app","phase":"active","maxGoalRounds":12},"roundsStarted":3}}"""
+        )
+        assertEquals("goal-1", snapshot.goalSnapshot?.goal?.goal?.id)
+        assertEquals(7, snapshot.goalSnapshot?.goal?.goal?.revision)
+
+        snapshot = store.acceptFrame(
+            """{"kind":"goal-updated","sessionId":"s1","asOfSeq":13,"goal":null}"""
+        )
+        assertNull(snapshot.goalSnapshot?.goal)
+    }
 }
