@@ -292,3 +292,5 @@ iOS 测试可在 Xcode 中选择 `DeepSeekHarnessMobile` Scheme 后执行 **Prod
 项目处于持续开发阶段。KMP 共享层、Android 原生应用和 iOS 原生应用均已落地，协议、跨端一致性和移动端体验仍会随 DeepSeek Harness 与 Mobile Gateway 持续演进。
 
 本项目是面向 DeepSeek Harness 的社区客户端，不代表 DeepSeek 官方发布。
+
+[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/clarklevis1995/dsh-plugin-mobile-gateway)
