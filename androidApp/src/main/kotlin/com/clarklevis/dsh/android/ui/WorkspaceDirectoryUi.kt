@@ -28,7 +28,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -363,12 +362,21 @@ internal fun WorkspaceDirectoryBrowserSheet(
     }
 
     if (showCreateDirectoryPrompt) {
-        AlertDialog(
+        DshAlertDialog(
+            title = "新建文件夹",
+            message = "将在当前目录中创建一个新的子文件夹。",
             onDismissRequest = { showCreateDirectoryPrompt = false },
-            title = { Text("新建文件夹", fontWeight = FontWeight.Bold) },
-            text = {
+            dismissLabel = "取消",
+            onDismissClick = { showCreateDirectoryPrompt = false },
+            confirmLabel = "创建",
+            confirmEnabled = newDirectoryName.trim().isNotEmpty(),
+            onConfirm = {
+                val parent = stateHolder.directoryPath ?: return@DshAlertDialog
+                showCreateDirectoryPrompt = false
+                stateHolder.createDirectory(parent, newDirectoryName)
+            },
+            content = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("将在当前目录中创建一个新的子文件夹。")
                     OutlinedTextField(
                         value = newDirectoryName,
                         onValueChange = { newDirectoryName = it },
@@ -378,19 +386,6 @@ internal fun WorkspaceDirectoryBrowserSheet(
                         modifier = Modifier.fillMaxWidth().testTag("new-directory-name")
                     )
                 }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = newDirectoryName.trim().isNotEmpty(),
-                    onClick = {
-                        val parent = stateHolder.directoryPath ?: return@TextButton
-                        showCreateDirectoryPrompt = false
-                        stateHolder.createDirectory(parent, newDirectoryName)
-                    }
-                ) { Text("创建") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreateDirectoryPrompt = false }) { Text("取消") }
             }
         )
     }

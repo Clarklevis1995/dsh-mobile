@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -188,11 +187,11 @@ internal fun SettingsScreen(
         }
     }
     pendingPermission?.let { value ->
-        SettingsConfirmationDialog(
+        DshAlertDialog(
             title = "修改全局默认权限？",
             message = "将新会话的默认权限改为“${permissionName(value)}”。这会更新部署级设置，并同步影响 WebUI。",
             confirmLabel = "确认修改",
-            onDismiss = { pendingPermission = null },
+            onDismissRequest = { pendingPermission = null },
             onConfirm = {
                 stateHolder.setDefault("permission", value)
                 pendingPermission = null
@@ -259,11 +258,11 @@ internal fun AgentPresetSelectionScreen(
     }
 
     pendingPreset?.let { preset ->
-        SettingsConfirmationDialog(
+        DshAlertDialog(
             title = "设为全局默认预设？",
             message = "将“${agentPresetDisplayName(preset.id, preset.name)}”设为新会话的默认 Agent 预设。这会更新部署级设置，并同步影响 WebUI。",
             confirmLabel = "设为默认",
-            onDismiss = { pendingPreset = null },
+            onDismissRequest = { pendingPreset = null },
             onConfirm = {
                 stateHolder.setDefault("agent-preset", preset.id)
                 pendingPreset = null
@@ -349,11 +348,11 @@ internal fun DefaultModelSelectionScreen(
     }
 
     pendingChange?.let { change ->
-        SettingsConfirmationDialog(
+        DshAlertDialog(
             title = "修改默认模型？",
             message = "将新会话的默认模型改为“${change.summary}”。这会更新部署级设置，并同步影响 WebUI。",
             confirmLabel = "确认修改",
-            onDismiss = { pendingChange = null },
+            onDismissRequest = { pendingChange = null },
             onConfirm = {
                 stateHolder.saveDefaultModel(change.provider, change.model, change.reasoningEffort)
                 pendingChange = null
@@ -567,56 +566,6 @@ private fun CurrentDefaultBadge() {
         fontSize = 12.sp,
         fontWeight = FontWeight.SemiBold
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SettingsConfirmationDialog(
-    title: String,
-    message: String,
-    confirmLabel: String,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    BasicAlertDialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 340.dp),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-            tonalElevation = 8.dp,
-            shadowElevation = 18.dp
-        ) {
-            Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    message,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f),
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    SettingsDialogButton("取消", Modifier.weight(1f), onDismiss)
-                    SettingsDialogButton(confirmLabel, Modifier.weight(1f), onConfirm)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsDialogButton(label: String, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier = modifier.height(48.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-    }
 }
 
 internal data class PendingDefaultModelChange(

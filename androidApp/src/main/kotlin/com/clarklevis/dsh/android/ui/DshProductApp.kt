@@ -32,15 +32,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -166,18 +163,16 @@ internal fun DshProductApp(
         }
     }
     stateHolder.platformError?.let { error ->
-        AlertDialog(
+        DshAlertDialog(
+            title = "DeepSeek Harness",
+            message = error,
             onDismissRequest = stateHolder::clearPlatformError,
-            title = { Text("DeepSeek Harness") },
-            text = { Text(error) },
-            confirmButton = {
-                TextButton(onClick = {
-                    stateHolder.clearPlatformError()
-                    stateHolder.connect()
-                }) { Text("重新连接") }
-            },
-            dismissButton = {
-                TextButton(onClick = stateHolder::clearPlatformError) { Text("好") }
+            dismissLabel = "好",
+            onDismissClick = stateHolder::clearPlatformError,
+            confirmLabel = "重新连接",
+            onConfirm = {
+                stateHolder.clearPlatformError()
+                stateHolder.connect()
             }
         )
     }

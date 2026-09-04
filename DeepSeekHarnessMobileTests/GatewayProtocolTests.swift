@@ -1,6 +1,7 @@
 import XCTest
 import UIKit
 import SwiftUI
+import ChatLayout
 import ImageIO
 import UniformTypeIdentifiers
 import class DeepSeekHarnessShared.SharedQuestionResult
@@ -171,6 +172,21 @@ private struct SlashCommandFocusHarness: View {
     }
 }
 
+private struct ExpandingConversationCellTestView: View {
+    @State private var usesResolvedHeight = false
+
+    var body: some View {
+        Text("主要产出目录： `/Users/lichaofan/测试 2/MyFirstApp/`。")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: usesResolvedHeight ? 120 : 24, alignment: .top)
+            .onAppear {
+                DispatchQueue.main.async {
+                    usesResolvedHeight = true
+                }
+            }
+    }
+}
+
 private func firstDescendant<T: UIView>(of type: T.Type, in view: UIView) -> T? {
     if let match = view as? T { return match }
     for subview in view.subviews {
@@ -219,6 +235,306 @@ final class WorkspaceCodeTextKitPerformanceTests: XCTestCase {
 }
 
 final class ConversationViewportLayoutTests: XCTestCase {
+    func testLongInlineCodeCanWrapAtPathSeparatorsWithoutChangingSourceText() {
+        let source = "主要产出目录：`/Users/lichaofan/测试 2/My_FirstApp/`。"
+
+        let rendered = InlineCodePadding.apply(to: source)
+
+        XCTAssertTrue(rendered.contains("/\u{200B}"))
+        XCTAssertTrue(rendered.contains("_\u{200B}"))
+        XCTAssertEqual(
+            rendered
+                .replacingOccurrences(of: "\u{200B}", with: "")
+                .replacingOccurrences(of: "\u{2009}", with: ""),
+            source
+        )
+    }
+
+    @MainActor
+    func testLiveHostedHeightPushesFollowingCellInsteadOfClippingContent() async throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        // iPhone 17 app width (402pt) minus ConversationView's 20pt
+        // horizontal padding on each side.
+        controller.view.frame = CGRect(x: 0, y: 0, width: 362, height: 300)
+        controller.view.layoutIfNeeded()
+        let window = UIWindow(frame: controller.view.frame)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+
+        controller.configure(
+            sessionID: "live-hosted-height",
+            timeline: timeline,
+            supplementalEntries: [
+                ConversationViewportEntry(
+                    id: "assistant",
+                    revision: 1,
+                    content: AnyView(ExpandingConversationCellTestView()),
+                    clipsContentToBounds: true
+                ),
+                ConversationViewportEntry(
+                    id: "process",
+                    revision: 1,
+                    content: AnyView(Text("耗时 9 秒 · 1 项上下文 · 1 次工具调用").frame(height: 34)),
+                    clipsContentToBounds: true
+                )
+            ],
+            makeEntries: { _ in [] },
+            bottomInset: 0
+        )
+
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        for _ in 0..<100 {
+            controller.view.layoutIfNeeded()
+            let height = collectionView.layoutAttributesForItem(
+                at: IndexPath(item: 0, section: 0)
+            )?.frame.height ?? 0
+            if height >= 120 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let assistant = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame
+        )
+        let process = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))?.frame
+        )
+        XCTAssertGreaterThanOrEqual(assistant.height, 120)
+        XCTAssertEqual(process.minY, assistant.maxY, accuracy: 0.5)
+    }
+
+    @MainActor
+    func testViewportDisablesRecursiveAutomaticSelfSizingInvalidation() throws {
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 760)
+        controller.view.layoutIfNeeded()
+
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        let layout = try XCTUnwrap(
+            collectionView.collectionViewLayout as? CollectionViewChatLayout
+        )
+        if #available(iOS 16.0, *) {
+            XCTAssertEqual(collectionView.selfSizingInvalidation, .disabled)
+            XCTAssertFalse(layout.supportSelfSizingInvalidation)
+        }
+    }
+
+    @MainActor
+    func testStreamingHeightEstimateDoesNotClipTextKitContent() {
+        let payload = ConversationViewportEntry.StreamingAssistant(
+            title: "DeepSeek · 正在生成",
+            text: """
+            第一段正在生成的中文内容，用于验证自动换行后的真实高度。
+            第二段继续增长，并包含 a/very/long/path/with/separators/file.txt。
+            第三段用于覆盖多行 TextKit 的字体行高。
+            """
+        )
+        let width: CGFloat = 390
+        let cell = StreamingAssistantCell(frame: CGRect(x: 0, y: 0, width: width, height: 80))
+        cell.contentView.bounds.size.width = width
+        cell.apply(payload)
+        cell.contentView.setNeedsLayout()
+        cell.contentView.layoutIfNeeded()
+
+        let measured = cell.contentView.systemLayoutSizeFitting(
+            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        ).height
+        let estimated = StreamingAssistantCell.estimatedHeight(for: payload, width: width)
+
+        XCTAssertGreaterThanOrEqual(estimated + 1, measured)
+    }
+
+    @MainActor
+    func testRapidStreamingStructureUpdatesKeepExactNonOverlappingFrames() async throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 420)
+        controller.view.layoutIfNeeded()
+
+        func makeEntries(_ items: [ConversationItem]) -> [ConversationViewportEntry] {
+            items.map { item in
+                ConversationViewportEntry(
+                    id: item.id,
+                    revision: item.text.count,
+                    streamingAssistant: .init(title: item.title, text: item.text)
+                )
+            }
+        }
+
+        for revision in 1...24 {
+            let processRows = (0..<min(revision, 6)).map { index in
+                ConversationViewportEntry(
+                    id: "process-\(index)",
+                    revision: revision,
+                    content: AnyView(
+                        Text("耗时 \(revision) 秒 · \(index + 1) 次工具调用")
+                            .frame(height: 34)
+                    ),
+                    clipsContentToBounds: true
+                )
+            }
+            controller.configure(
+                sessionID: "rapid-layout-updates",
+                timeline: timeline,
+                supplementalEntries: processRows,
+                makeEntries: makeEntries,
+                bottomInset: 0
+            )
+            timeline.publish([
+                ConversationItem(
+                    id: "streaming-response",
+                    kind: .assistant,
+                    title: "DeepSeek · 正在生成",
+                    text: String(repeating: "第\(revision)轮内容 ", count: revision),
+                    isError: false,
+                    date: Date(timeIntervalSince1970: 1)
+                )
+            ])
+            try await Task.sleep(for: .milliseconds(4))
+        }
+
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        for _ in 0..<100 where collectionView.numberOfItems(inSection: 0) != 7 {
+            try await Task.sleep(for: .milliseconds(10))
+            controller.view.layoutIfNeeded()
+        }
+
+        XCTAssertEqual(collectionView.numberOfItems(inSection: 0), 7)
+        let frames = try (0..<7).map { item in
+            try XCTUnwrap(
+                collectionView.layoutAttributesForItem(
+                    at: IndexPath(item: item, section: 0)
+                )?.frame
+            )
+        }
+        for (previous, next) in zip(frames, frames.dropFirst()) {
+            XCTAssertEqual(next.minY, previous.maxY, accuracy: 1)
+        }
+    }
+
+    @MainActor
+    func testHostedRowsKeepStableBoundariesWhileWidthAndScrollPositionChange() async throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 360)
+        controller.view.layoutIfNeeded()
+
+        let markdown = """
+        Agent 输出必须按照当前列表宽度稳定换行。拖动聊天列表或改变容器宽度时，
+        前一行的高度不能重新退回估算值，也不能让后面的思考过程覆盖正文。
+
+        ## 验证内容
+
+        - 第一段用于制造多行布局。
+        - 第二段包含 `active/armed/complete` 等行内代码。
+        - 第三段继续增加高度，确保测试过程能够实际滚动。
+        """
+        let entries: [ConversationViewportEntry] = (0..<4).flatMap { index in
+            let response = ConversationItem(
+                id: "assistant-\(index)",
+                kind: .assistant,
+                title: "DeepSeek",
+                text: markdown,
+                isError: false,
+                date: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+            return [
+                ConversationViewportEntry(
+                    id: "process-\(index)",
+                    revision: 0,
+                    content: AnyView(Text("思考过程 · 1 次工具调用").frame(height: 34)),
+                    clipsContentToBounds: true
+                ),
+                ConversationViewportEntry(
+                    id: "assistant-\(index)",
+                    revision: 0,
+                    content: AnyView(ConversationRow(
+                        item: response,
+                        showsCopyButton: false,
+                        imageData: { _ in nil }
+                    )),
+                    clipsContentToBounds: true
+                )
+            ]
+        }
+        controller.configure(
+            sessionID: "bounds-and-scroll-stability",
+            timeline: timeline,
+            supplementalEntries: entries,
+            makeEntries: { _ in [] },
+            bottomInset: 0
+        )
+        try await Task.sleep(for: .milliseconds(200))
+
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        controller.view.frame.size.width = 326
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
+        collectionView.collectionViewLayout.invalidateLayout()
+        collectionView.layoutIfNeeded()
+
+        let frames = try (0..<entries.count).map { item in
+            try XCTUnwrap(
+                collectionView.layoutAttributesForItem(
+                    at: IndexPath(item: item, section: 0)
+                )?.frame
+            )
+        }
+        for (previous, next) in zip(frames, frames.dropFirst()) {
+            XCTAssertEqual(next.minY, previous.maxY, accuracy: 1)
+        }
+
+        let maximumOffset = max(0, collectionView.contentSize.height - collectionView.bounds.height)
+        for progress in stride(from: CGFloat.zero, through: 1, by: 0.1) {
+            collectionView.contentOffset.y = maximumOffset * progress
+            collectionView.layoutIfNeeded()
+            for cell in collectionView.visibleCells {
+                let hostedView = try XCTUnwrap(cell.contentView.subviews.first)
+                XCTAssertEqual(hostedView.frame, cell.contentView.bounds)
+                XCTAssertEqual(hostedView.bounds.origin, .zero)
+                let idealHeight = hostedView.sizeThatFits(
+                    CGSize(width: cell.contentView.bounds.width, height: .greatestFiniteMagnitude)
+                ).height
+                XCTAssertGreaterThanOrEqual(cell.bounds.height + 1, idealHeight)
+            }
+        }
+    }
+
     @MainActor
     func testStreamingTextPublishesLatestBufferedTextAfterUserScrollingStops() async throws {
         let timeline = ConversationTimeline()
@@ -451,6 +767,193 @@ final class ConversationViewportLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(assistant.minY + 0.5, processDetail.maxY)
         XCTAssertGreaterThanOrEqual(assistant.height + 1, expectedHeight)
         XCTAssertGreaterThanOrEqual(following.minY + 0.5, assistant.maxY)
+    }
+
+    @MainActor
+    func testFencedMarkdownKeepsExactHeightAndZeroPhantomSpacingAfterReuse() async throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 280)
+        controller.view.layoutIfNeeded()
+
+        let response = ConversationItem(
+            id: "markdown-with-code",
+            kind: .assistant,
+            title: "DeepSeek",
+            text: """
+            构建结果如下，代码块和后续正文都必须完整显示。
+
+            ```yaml
+            launchable-activity: com.example.myfirstapp.MainActivity
+            build-type: debug
+            min-sdk: 24
+            compile-sdk: 36
+            ```
+
+            ## 说明与下一步
+
+            - 包含 debug 变体。
+            - 产物已经完成验证。
+            """,
+            isError: false,
+            date: Date(timeIntervalSince1970: 1)
+        )
+        let responseView = ConversationRow(
+            item: response,
+            showsCopyButton: true,
+            imageData: { _ in nil }
+        )
+        let expectedResponseHeight = UIHostingController(rootView: responseView).sizeThatFits(
+            in: CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)
+        ).height
+        let entries = [
+            ConversationViewportEntry(
+                id: "assistant-code",
+                revision: 1,
+                content: AnyView(responseView),
+                clipsContentToBounds: true
+            ),
+            ConversationViewportEntry(
+                id: "process-header",
+                revision: 1,
+                content: AnyView(Text("思考过程 · 1 次工具调用").frame(height: 34)),
+                clipsContentToBounds: true
+            ),
+            ConversationViewportEntry(
+                id: "next-assistant",
+                revision: 1,
+                content: AnyView(Text("下一条 DeepSeek 回复").frame(height: 48)),
+                clipsContentToBounds: true
+            )
+        ]
+        controller.configure(
+            sessionID: "fenced-markdown-reuse",
+            timeline: timeline,
+            supplementalEntries: entries,
+            makeEntries: { _ in [] },
+            bottomInset: 0
+        )
+        try await Task.sleep(for: .milliseconds(300))
+        controller.view.layoutIfNeeded()
+
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        collectionView.setContentOffset(.zero, animated: false)
+        collectionView.layoutIfNeeded()
+        collectionView.scrollToItem(
+            at: IndexPath(item: 2, section: 0),
+            at: .bottom,
+            animated: false
+        )
+        collectionView.layoutIfNeeded()
+        collectionView.setContentOffset(.zero, animated: false)
+        collectionView.layoutIfNeeded()
+
+        let assistant = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame
+        )
+        let process = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))?.frame
+        )
+        let nextAssistant = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 2, section: 0))?.frame
+        )
+
+        XCTAssertGreaterThanOrEqual(assistant.height + 1, expectedResponseHeight)
+        XCTAssertLessThanOrEqual(assistant.height, ceil(expectedResponseHeight) + 1)
+        XCTAssertEqual(process.minY, assistant.maxY, accuracy: 1)
+        XCTAssertEqual(nextAssistant.minY, process.maxY, accuracy: 1)
+        for cell in collectionView.visibleCells {
+            guard let hostedView = cell.contentView.subviews.first else { continue }
+            XCTAssertEqual(hostedView.frame, cell.contentView.bounds)
+            XCTAssertEqual(hostedView.bounds.origin, .zero)
+        }
+    }
+
+    @MainActor
+    func testHistorySnapshotWaitsForResolvedViewportWidth() async throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = .zero
+        controller.view.layoutIfNeeded()
+
+        let historyResponse = ConversationItem(
+            id: "history-response",
+            kind: .assistant,
+            title: "DeepSeek",
+            text: """
+            APK 构建并验证成功。更新任务清单并标记目标完成。
+
+            目标当前处于 `paused` / `disabled` 状态，自动 `complete` 被拒。
+            打包任务本身已全部完成并验证。
+            """,
+            isError: false,
+            date: Date(timeIntervalSince1970: 1)
+        )
+        let responseView = ConversationRow(
+            item: historyResponse,
+            showsCopyButton: false,
+            imageData: { _ in nil }
+        )
+        let entries = [
+            ConversationViewportEntry(
+                id: "history-process",
+                revision: 1,
+                content: AnyView(Text("耗时 5 秒 · 3 次工具调用").frame(height: 34)),
+                clipsContentToBounds: true
+            ),
+            ConversationViewportEntry(
+                id: "history-assistant",
+                revision: 1,
+                content: AnyView(responseView),
+                clipsContentToBounds: true
+            )
+        ]
+        controller.configure(
+            sessionID: "restored-history",
+            timeline: timeline,
+            supplementalEntries: entries,
+            makeEntries: { _ in [] },
+            bottomInset: 0
+        )
+
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        XCTAssertEqual(collectionView.numberOfSections, 0)
+
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 280)
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(200))
+        controller.view.layoutIfNeeded()
+
+        XCTAssertEqual(collectionView.numberOfItems(inSection: 0), 2)
+        let process = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame
+        )
+        let assistant = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))?.frame
+        )
+        let expectedAssistantHeight = UIHostingController(rootView: responseView).sizeThatFits(
+            in: CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)
+        ).height
+
+        XCTAssertEqual(assistant.minY, process.maxY, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(assistant.height + 1, expectedAssistantHeight)
     }
 
     @MainActor
@@ -807,6 +1310,9 @@ final class GatewayProtocolTests: XCTestCase {
             onBottomAlignmentCompleted: {},
             onApproachingTop: {}
         )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 760)
+        controller.view.layoutIfNeeded()
         controller.configure(
             sessionID: "history-session",
             timeline: timeline,

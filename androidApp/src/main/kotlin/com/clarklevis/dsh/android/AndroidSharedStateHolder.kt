@@ -935,6 +935,7 @@ class AndroidSharedStateHolder(
         val sessionId = snapshot.selectedSessionId
         val goal = snapshot.goalSnapshot?.goal?.goal
         if (sessionId == null || goal == null) return
+        if (goal.phase.lowercase() == "complete") return
         if (gatewayState.connection != GatewayConnectionState.CONNECTED) {
             platformError = "请先连接 DeepSeek Harness"
             return

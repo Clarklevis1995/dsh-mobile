@@ -380,7 +380,13 @@ final class AppStore: ObservableObject {
     var selectedContextSnapshot: GatewayContextSnapshot? { selectedSessionId.flatMap { contextSnapshots[$0] } }
     var selectedSessionStatsSnapshot: GatewaySessionStatsSnapshot? { selectedSessionId.flatMap { sessionStatsSnapshots[$0] } }
     var selectedTaskProjection: GatewayTasksProjection? { selectedSessionId.flatMap { taskProjections[$0] } }
-    var selectedGoalProjection: GatewayGoalProjection? { selectedSessionId.flatMap { goalProjections[$0] } }
+    var selectedGoalProjection: GatewayGoalProjection? {
+        selectedSessionId
+            .flatMap { goalProjections[$0] }
+            .flatMap { projection in
+                projection.goal?.goal.phase.lowercased() == "complete" ? nil : projection
+            }
+    }
     var selectedPendingQuestionRequest: GatewayPendingQuestionRequest? {
         guard let selectedSessionId else { return nil }
         return pendingQuestionRequests.first { $0.sessionId == selectedSessionId }
@@ -857,6 +863,7 @@ final class AppStore: ObservableObject {
     ) {
         guard let sessionID = selectedSessionId,
               let goal = selectedGoalProjection?.goal?.goal else { return }
+        guard goal.phase.lowercased() != "complete" else { return }
         guard gateway.state.isConnected else {
             lastError = String(localized: "请先连接 DeepSeek Harness")
             return

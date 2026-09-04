@@ -71,7 +71,10 @@ struct ConversationViewportEntry: Identifiable {
         content = AnyView(EmptyView())
         self.streamingAssistant = streamingAssistant
         userMessage = nil
-        allowsHeightCaching = false
+        // Streaming rows also use a deterministic TextKit height. Keeping the
+        // current revision in the shared cache prevents UIKit from starting a
+        // preferred-size invalidation while a diffable update is committing.
+        allowsHeightCaching = true
         clipsContentToBounds = false
     }
 
@@ -92,24 +95,52 @@ private struct ConversationImagePreviewItem {
     let name: String?
 }
 
-/// Keeps hosted SwiftUI content attached to the collection item's top edge.
-/// ChatLayout may briefly reconcile an estimated and measured height when an
-/// item leaves the viewport. Without an explicit top anchor, the hosting
-/// configuration centers its ideal-size content inside that changing frame,
-/// which looks like the gap to the preceding process row is being compressed.
+private struct ConversationContentHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Gives hosted SwiftUI content one stable identity and a width-constrained
+/// ideal height. Do not add a flexible spacer or an infinite-height frame here:
+/// either one makes `systemLayoutSizeFitting` absorb ChatLayout's provisional
+/// 80pt estimate, which can then be cached as a clipped cell or a large gap.
 private struct TopPinnedConversationContent: View {
     let id: String
+    let revision: Int
     let content: AnyView
+    var onHeightChange: ((CGFloat) -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            content
-                .id(id)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        content
+            .id("\(id)#\(revision)")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            // Detached premeasurement is only a starting value. MarkdownUI
+            // can choose an additional wrapped line after it enters the real
+            // window environment. Read the height of the fixed-size content,
+            // not the (possibly stale and clipped) collection-cell bounds.
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: ConversationContentHeightPreferenceKey.self,
+                        value: proxy.size.height
+                    )
+                }
+            }
+            .onPreferenceChange(ConversationContentHeightPreferenceKey.self) { height in
+                guard height.isFinite, height > 0 else { return }
+                onHeightChange?(height)
+            }
+            // A collection cell that crosses the window's bottom safe area
+            // inherits the Home Indicator inset. That inset changes as the
+            // user drags and otherwise shifts the entire hosted message by
+            // exactly 34pt relative to its cell. Conversation rows already
+            // receive their own explicit viewport padding, so they must never
+            // participate in the window safe area.
+            .ignoresSafeArea(.container, edges: .all)
     }
 }
 
@@ -242,6 +273,8 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         hasConversationContent: Bool
     )?
     private var cellHeightCache: [CellMeasurementKey: CGFloat] = [:]
+    private var pendingLiveHeightCorrections: [CellMeasurementKey: LiveHeightCorrection] = [:]
+    private var isLiveHeightCorrectionScheduled = false
     private var pendingDisclosureAnchor: DisclosureAnchor?
     private var disclosureAnchorGeneration = 0
     private var isStreamingRenderingPausedForUserScroll = false
@@ -356,6 +389,8 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         deferredTimelineSnapshot = nil
         isStreamingRenderResumePending = false
         cellHeightCache.removeAll(keepingCapacity: true)
+        pendingLiveHeightCorrections.removeAll(keepingCapacity: true)
+        isLiveHeightCorrectionScheduled = false
     }
 
     override func viewDidLoad() {
@@ -367,15 +402,15 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         collectionView.backgroundColor = .clear
         collectionView.delegate = self
         collectionView.contentInsetAdjustmentBehavior = .never
-        // UIHostingConfiguration may publish its final intrinsic height after
-        // the first estimated ChatLayout pass. Both switches are required:
-        // UICollectionView forwards the change and ChatLayout accepts the
-        // subsequent preferred-size invalidation.
+        // ChatLayout's automatic self-sizing mode is explicitly experimental.
+        // During a diffable batch it can recursively re-enter
+        // `_updateVisibleCellsNow` when SwiftUI/TextKit invalidates intrinsic
+        // content size. All mutable rows below are invalidated explicitly and
+        // immutable rows are premeasured, so automatic invalidation must stay off.
         if #available(iOS 16.0, *) {
-            collectionView.selfSizingInvalidation = .enabled
-            chatLayout.supportSelfSizingInvalidation = true
+            collectionView.selfSizingInvalidation = .disabled
+            chatLayout.supportSelfSizingInvalidation = false
         }
-        chatLayout.processOnlyVisibleItemsOnAnimatedBatchUpdates = false
         let dismissKeyboardTap = UITapGestureRecognizer(
             target: self,
             action: #selector(dismissKeyboardFromConversation)
@@ -385,7 +420,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         dismissKeyboardTap.cancelsTouchesInView = false
         collectionView.addGestureRecognizer(dismissKeyboardTap)
         collectionView.register(
-            StableSelfSizingCollectionViewCell.self,
+            HostedConversationCell.self,
             forCellWithReuseIdentifier: "ConversationCell"
         )
         collectionView.register(
@@ -405,7 +440,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             collectionView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         dataSource = UICollectionViewDiffableDataSource<Int, String>(collectionView: collectionView) { [weak self] collectionView, indexPath, id in
-            guard let entry = self?.entriesByID[id] else {
+            guard let self, let entry = self.entriesByID[id] else {
                 return collectionView.dequeueReusableCell(withReuseIdentifier: "ConversationCell", for: indexPath)
             }
             if let streamingAssistant = entry.streamingAssistant {
@@ -413,8 +448,13 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                     withReuseIdentifier: StreamingAssistantCell.reuseIdentifier,
                     for: indexPath
                 ) as! StreamingAssistantCell
-                cell.clipsToBounds = false
-                cell.contentView.clipsToBounds = false
+                // The layout owns every row's vertical boundary. Even though
+                // TextKit is measured deterministically, clipping is the last
+                // line of defence against a glyph painting into a sibling
+                // during a bounds-change transaction.
+                cell.clipsToBounds = true
+                cell.contentView.clipsToBounds = true
+                self.configureStreamingMeasurement(cell, entry: entry)
                 cell.apply(streamingAssistant)
                 return cell
             }
@@ -423,9 +463,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                     withReuseIdentifier: UserMessageCell.reuseIdentifier,
                     for: indexPath
                 ) as! UserMessageCell
-                cell.clipsToBounds = false
-                cell.contentView.clipsToBounds = false
-                self?.cacheUserMessageHeightIfNeeded(userMessage, entry: entry)
+                cell.clipsToBounds = true
+                cell.contentView.clipsToBounds = true
+                self.cacheUserMessageHeightIfNeeded(userMessage, entry: entry)
                 cell.configureMeasurement(
                     id: entry.id,
                     revision: entry.revision,
@@ -449,34 +489,42 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             guard let cell = collectionView.dequeueReusableCell(
                 withReuseIdentifier: "ConversationCell",
                 for: indexPath
-            ) as? StableSelfSizingCollectionViewCell else {
+            ) as? HostedConversationCell else {
                 return UICollectionViewCell()
             }
-            // Clear the previous item's measurement identity before replacing
-            // the hosting configuration. Reused cells must not cache the old
-            // SwiftUI tree's height under the incoming entry's id.
+            // Reused cells must not cache the old SwiftUI tree's height under
+            // the incoming entry's id.
             cell.disableMeasurementCaching()
             cell.clipsToBounds = entry.clipsContentToBounds
             cell.contentView.clipsToBounds = entry.clipsContentToBounds
             cell.backgroundColor = .clear
             cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
-            cell.contentConfiguration = UIHostingConfiguration {
-                TopPinnedConversationContent(id: entry.id, content: entry.content)
-            }.margins(.all, 0)
-            if entry.allowsHeightCaching {
-                cell.configureMeasurement(
+            cell.configureMeasurement(
+                id: entry.id,
+                revision: entry.revision,
+                cachedHeight: { [weak self] width in
+                    guard entry.allowsHeightCaching else { return nil }
+                    return self?.cellHeightCache[
+                        CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+                    ]
+                },
+                storeHeight: { [weak self] width, height in
+                    guard entry.allowsHeightCaching else { return }
+                    self?.cellHeightCache[
+                        CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+                    ] = height
+                },
+                measureHeight: { [weak cell] width in
+                    cell?.measuredHeight(for: width)
+                        ?? Self.measureHostedHeight(for: entry, width: width)
+                }
+            )
+            cell.apply(entry, parent: self) { [weak self] width, height in
+                self?.receiveLiveHostedHeight(
                     id: entry.id,
                     revision: entry.revision,
-                    cachedHeight: { [weak self] width in
-                        self?.cellHeightCache[
-                            CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
-                        ]
-                    },
-                    storeHeight: { [weak self] width, height in
-                        self?.cellHeightCache[
-                            CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
-                        ] = height
-                    }
+                    width: width,
+                    height: height
                 )
             }
             return cell
@@ -526,6 +574,17 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        if !isApplyingSnapshot,
+           collectionView.bounds.width > 0,
+           let pending = pendingApply {
+            pendingApply = nil
+            apply(
+                entries: pending.entries,
+                revision: pending.revision,
+                bottomInset: pending.bottomInset,
+                hasConversationContent: pending.hasConversationContent
+            )
+        }
         placeInitialPositionIfNeeded()
         alignBottomIfNeeded()
     }
@@ -538,6 +597,13 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     ) {
         collectionView.contentInset.bottom = bottomInset
         collectionView.verticalScrollIndicatorInsets.bottom = bottomInset
+        guard collectionView.bounds.width > 0 else {
+            // History can arrive during UIViewControllerRepresentable's first
+            // update, before Auto Layout assigns the viewport its real width.
+            // Applying now would seed every history row with the 80pt estimate.
+            pendingApply = (entries, revision, bottomInset, hasConversationContent)
+            return
+        }
         let ids = entries.map(\.id)
 
         // Never replace the cell-provider model while an older diffable
@@ -552,10 +618,24 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         let prependAnchor = capturePrependAnchor(for: ids)
         let oldEntriesByID = entriesByID
         entriesByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
-        prewarmUserMessageHeights(in: entries)
         let changed = entries.compactMap { previousRevisions[$0.id] == $0.revision ? nil : $0.id }
         let hasStructureChange = dataSource.snapshot().itemIdentifiers != ids
+        if hasStructureChange || changed.contains(where: { entriesByID[$0]?.allowsHeightCaching == true }) {
+            let cacheableRevisions = Dictionary(
+                uniqueKeysWithValues: entries.compactMap { entry in
+                    entry.allowsHeightCaching ? (entry.id, entry.revision) : nil
+                }
+            )
+            cellHeightCache = cellHeightCache.filter { key, _ in
+                cacheableRevisions[key.id] == key.revision
+            }
+        }
+        // Finish every height calculation before entering UIKit's diffable
+        // commit. `sizeForItem` and `preferredLayoutAttributesFitting` will
+        // therefore return the same exact value throughout the batch.
+        let newlyPrewarmedIDs = prewarmHeights(in: entries)
         guard hasStructureChange || !changed.isEmpty else {
+            invalidatePrewarmedItems(newlyPrewarmedIDs)
             hasAppliedSnapshot = true
             collectionView.isHidden = false
             reportContentAvailability(hasConversationContent)
@@ -647,6 +727,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                 }
                 return
             }
+            self.flushLiveHeightCorrectionsIfNeeded()
             self.hasAppliedSnapshot = true
             self.collectionView.isHidden = false
             // 只有 diffable snapshot 已经真正提交、cell 可以显示以后，才允许
@@ -691,10 +772,12 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private func updateVisibleStreamingCells(_ ids: [String]) {
         var invalidatedIndexPaths: [IndexPath] = []
         for id in ids {
-            guard let payload = entriesByID[id]?.streamingAssistant,
+            guard let entry = entriesByID[id],
+                  let payload = entry.streamingAssistant,
                   let indexPath = dataSource.indexPath(for: id),
-                  let cell = collectionView.cellForItem(at: indexPath) as? StreamingAssistantCell,
-                  cell.apply(payload) else { continue }
+                  let cell = collectionView.cellForItem(at: indexPath) as? StreamingAssistantCell else { continue }
+            configureStreamingMeasurement(cell, entry: entry)
+            guard cell.apply(payload) else { continue }
             invalidatedIndexPaths.append(indexPath)
         }
         guard !invalidatedIndexPaths.isEmpty else { return }
@@ -732,16 +815,172 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         }
     }
 
-    /// User rows are sparse and immutable. Premeasure both their attachment
-    /// grid and text bubble so the collection view never has to correct a
-    /// provisional height while an assistant row is streaming below them.
-    private func prewarmUserMessageHeights(in entries: [ConversationViewportEntry]) {
-        let width = collectionView.bounds.width
-        guard width > 0 else { return }
-        for entry in entries {
-            guard let userMessage = entry.userMessage else { continue }
-            cacheUserMessageHeightIfNeeded(userMessage, entry: entry)
+    /// Premeasure every cacheable row before diffable data source starts a
+    /// batch update. Measuring only the visible tail was insufficient for
+    /// restored history: UICollectionView can provisionally create a row from
+    /// either end while calculating its new content offset.
+    private func prewarmHeights(in entries: [ConversationViewportEntry]) -> Set<String> {
+        let width = chatLayout.layoutFrame.width > 0
+            ? chatLayout.layoutFrame.width
+            : collectionView.bounds.width
+        guard width > 0 else { return [] }
+
+        var measuredIDs = Set<String>()
+        for entry in entries where entry.allowsHeightCaching {
+            let key = CellMeasurementKey(
+                id: entry.id,
+                revision: entry.revision,
+                width: width
+            )
+            guard cellHeightCache[key] == nil else { continue }
+            let height = Self.measureHeight(for: entry, width: width)
+            guard height.isFinite, height > 0 else { continue }
+            cellHeightCache[key] = ceil(height)
+            measuredIDs.insert(entry.id)
         }
+        return measuredIDs
+    }
+
+    private func configureStreamingMeasurement(
+        _ cell: StreamingAssistantCell,
+        entry: ConversationViewportEntry
+    ) {
+        guard let payload = entry.streamingAssistant else {
+            cell.disableMeasurementCaching()
+            return
+        }
+        cell.configureMeasurement(
+            id: entry.id,
+            revision: entry.revision,
+            cachedHeight: { [weak self] width in
+                self?.cellHeightCache[
+                    CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+                ]
+            },
+            storeHeight: { [weak self] width, height in
+                self?.cellHeightCache[
+                    CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+                ] = height
+            },
+            measureHeight: { width in
+                StreamingAssistantCell.estimatedHeight(for: payload, width: width)
+            }
+        )
+    }
+
+    private func invalidatePrewarmedItems(_ ids: Set<String>) {
+        let indexPaths = ids.compactMap { dataSource.indexPath(for: $0) }
+        guard !indexPaths.isEmpty else { return }
+        let context = ChatLayoutInvalidationContext()
+        context.invalidateLayoutMetrics = true
+        context.invalidateItems(at: indexPaths)
+        chatLayout.invalidateLayout(with: context)
+        collectionView.layoutIfNeeded()
+    }
+
+    /// A hosted row owns its vertical extent. The following row is positioned
+    /// from that resolved extent; no per-cell gap or overlap compensation is
+    /// involved. This live value corrects detached SwiftUI premeasurement when
+    /// Markdown wraps differently after joining the real window hierarchy.
+    private func receiveLiveHostedHeight(
+        id: String,
+        revision: Int,
+        width: CGFloat,
+        height: CGFloat
+    ) {
+        guard width > 0, height.isFinite, height > 0 else { return }
+        let key = CellMeasurementKey(id: id, revision: revision, width: width)
+        pendingLiveHeightCorrections[key] = LiveHeightCorrection(
+            id: id,
+            revision: revision,
+            width: width,
+            height: ceil(height)
+        )
+        guard !isLiveHeightCorrectionScheduled else { return }
+        isLiveHeightCorrectionScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            self?.flushLiveHeightCorrectionsIfNeeded()
+        }
+    }
+
+    private func flushLiveHeightCorrectionsIfNeeded() {
+        guard !isApplyingSnapshot else {
+            isLiveHeightCorrectionScheduled = false
+            return
+        }
+        isLiveHeightCorrectionScheduled = false
+        let corrections = Array(pendingLiveHeightCorrections.values)
+        pendingLiveHeightCorrections.removeAll(keepingCapacity: true)
+
+        var indexPaths: [IndexPath] = []
+        for correction in corrections {
+            guard entriesByID[correction.id]?.revision == correction.revision else { continue }
+            let key = CellMeasurementKey(
+                id: correction.id,
+                revision: correction.revision,
+                width: correction.width
+            )
+            guard cellHeightCache[key].map({ abs($0 - correction.height) >= 0.5 }) ?? true else {
+                continue
+            }
+            cellHeightCache[key] = correction.height
+            if let indexPath = dataSource.indexPath(for: correction.id) {
+                indexPaths.append(indexPath)
+            }
+        }
+        guard !indexPaths.isEmpty else { return }
+
+        let context = ChatLayoutInvalidationContext()
+        context.invalidateLayoutMetrics = true
+        context.invalidateItems(at: indexPaths)
+        chatLayout.invalidateLayout(with: context)
+        collectionView.layoutIfNeeded()
+
+        if isPinnedToBottom,
+           !collectionView.isTracking,
+           !collectionView.isDragging,
+           !collectionView.isDecelerating {
+            followStreamingTail()
+        }
+    }
+
+    private static func measureHostedHeight(
+        for entry: ConversationViewportEntry,
+        width: CGFloat
+    ) -> CGFloat {
+        let host = UIHostingController(
+            rootView: TopPinnedConversationContent(
+                id: entry.id,
+                revision: entry.revision,
+                content: entry.content,
+                onHeightChange: nil
+            )
+        )
+        // A hosting controller embedded in a scrolling cell otherwise derives
+        // safe-area insets from the cell's current intersection with the
+        // window. Those insets change while the user drags and make SwiftUI
+        // move/reflow content inside an unchanged collection-view item.
+        host.safeAreaRegions = []
+        host.view.backgroundColor = .clear
+        return host.sizeThatFits(
+            in: CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        ).height
+    }
+
+    private static func measureHeight(
+        for entry: ConversationViewportEntry,
+        width: CGFloat
+    ) -> CGFloat {
+        if let userMessage = entry.userMessage {
+            return UserMessageCell.estimatedHeight(for: userMessage, width: width)
+        }
+        if let streamingAssistant = entry.streamingAssistant {
+            return StreamingAssistantCell.estimatedHeight(
+                for: streamingAssistant,
+                width: width
+            )
+        }
+        return measureHostedHeight(for: entry, width: width)
     }
 
     /// `configure` can run before the collection view receives its final
@@ -816,11 +1055,30 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             return .estimated(CGSize(width: chatLayout.layoutFrame.width, height: 80))
         }
         let width = chatLayout.layoutFrame.width
-        if entry.allowsHeightCaching,
-           let height = cellHeightCache[
-               CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
-           ] {
-            return .exact(CGSize(width: width, height: height))
+        guard width > 0 else {
+            return .estimated(CGSize(width: width, height: 80))
+        }
+        if entry.allowsHeightCaching {
+            let key = CellMeasurementKey(
+                id: entry.id,
+                revision: entry.revision,
+                width: width
+            )
+            if let height = cellHeightCache[key] {
+                return .exact(CGSize(width: width, height: height))
+            }
+
+            // Bounds can change without a new timeline revision (rotation,
+            // split view, or an interactive page transition). Never fall back
+            // to ChatLayout's 80pt estimate for that new width: a following
+            // process row would otherwise be placed inside the rendered Agent
+            // response until another invalidation happens to correct it.
+            let measuredHeight = Self.measureHeight(for: entry, width: width)
+            if measuredHeight.isFinite, measuredHeight > 0 {
+                let height = ceil(measuredHeight)
+                cellHeightCache[key] = height
+                return .exact(CGSize(width: width, height: height))
+            }
         }
         return .estimated(CGSize(width: width, height: 80))
     }
@@ -1068,6 +1326,13 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 
 }
 
+private struct LiveHeightCorrection {
+    let id: String
+    let revision: Int
+    let width: CGFloat
+    let height: CGFloat
+}
+
 private struct CellMeasurementKey: Hashable {
     let id: String
     let revision: Int
@@ -1080,32 +1345,34 @@ private struct CellMeasurementKey: Hashable {
     }
 }
 
-/// `UIHostingConfiguration` can report two adjacent fractional heights while
-/// the collection view is moving (for example 34⅓pt and 34⅔pt). A
-/// compositional layout treats each value as a new preferred size and can
-/// repeatedly invalidate the same cells until UIKit terminates the app for a
-/// recursive layout loop. Keep dynamic heights, but quantize the final result
-/// to whole points so repeated measurements are deterministic.
+/// SwiftUI and TextKit can report adjacent fractional heights while the
+/// collection view is moving (for example 34⅓pt and 34⅔pt). ChatLayout treats
+/// each value as a new preferred size. Quantize the explicit result so every
+/// request in one diffable transaction receives the same height.
 class StableSelfSizingCollectionViewCell: UICollectionViewCell {
     private var measurementID: String?
     private var cachedHeight: ((CGFloat) -> CGFloat?)?
     private var storeHeight: ((CGFloat, CGFloat) -> Void)?
+    private var measureHeight: ((CGFloat) -> CGFloat)?
 
     func configureMeasurement(
         id: String,
         revision: Int,
         cachedHeight: @escaping (CGFloat) -> CGFloat?,
-        storeHeight: @escaping (CGFloat, CGFloat) -> Void
+        storeHeight: @escaping (CGFloat, CGFloat) -> Void,
+        measureHeight: ((CGFloat) -> CGFloat)? = nil
     ) {
         measurementID = "\(id)#\(revision)"
         self.cachedHeight = cachedHeight
         self.storeHeight = storeHeight
+        self.measureHeight = measureHeight
     }
 
     func disableMeasurementCaching() {
         measurementID = nil
         cachedHeight = nil
         storeHeight = nil
+        measureHeight = nil
     }
 
     override func prepareForReuse() {
@@ -1124,20 +1391,23 @@ class StableSelfSizingCollectionViewCell: UICollectionViewCell {
             return stable
         }
 
-        // `UIHostingConfiguration` can initially return ChatLayout's estimate
-        // while a multi-block Markdown view already draws at its ideal height.
-        // Once that estimate is cached, the following process/assistant cell is
-        // laid out inside the visible Markdown. Measure the hosted content view
-        // explicitly at the layout's required width so the cell boundary and
-        // the pixels it owns are established in the same pass.
-        contentView.bounds.size.width = width
-        contentView.setNeedsLayout()
-        contentView.layoutIfNeeded()
-        let measured = contentView.systemLayoutSizeFitting(
-            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
-            withHorizontalFittingPriority: .required,
-            verticalFittingPriority: .fittingSizeLevel
-        )
+        // A view can initially inherit ChatLayout's estimate while its content
+        // already draws at the ideal height. Use the deterministic measurement
+        // supplied by the controller so cell bounds and rendered pixels agree.
+        let explicitHeight = measureHeight?(width)
+        let measured: CGSize
+        if let explicitHeight, explicitHeight.isFinite, explicitHeight > 0 {
+            measured = CGSize(width: width, height: explicitHeight)
+        } else {
+            contentView.bounds.size.width = width
+            contentView.setNeedsLayout()
+            contentView.layoutIfNeeded()
+            measured = contentView.systemLayoutSizeFitting(
+                CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
+                withHorizontalFittingPriority: .required,
+                verticalFittingPriority: .fittingSizeLevel
+            )
+        }
         let measuredHeight: CGFloat
         if measured.height.isFinite, measured.height > 0 {
             measuredHeight = measured.height
@@ -1153,6 +1423,86 @@ class StableSelfSizingCollectionViewCell: UICollectionViewCell {
             storeHeight?(width, stable.size.height)
         }
         return stable
+    }
+}
+
+/// A deterministic SwiftUI host for ChatLayout cells. UIHostingConfiguration
+/// owns a private content view whose bounds origin can survive reconfiguration
+/// while a historical snapshot is self-sizing. Keeping one explicit hosting
+/// controller lets the cell reset the root identity and pins its rendered view
+/// to `contentView.bounds` on every layout pass.
+private final class HostedConversationCell: StableSelfSizingCollectionViewCell {
+    private var hostingController: UIHostingController<AnyView>?
+    private var representedIdentity: String?
+
+    func apply(
+        _ entry: ConversationViewportEntry,
+        parent: UIViewController,
+        onHeightChange: @escaping (CGFloat, CGFloat) -> Void
+    ) {
+        let identity = "\(entry.id)#\(entry.revision)"
+        representedIdentity = identity
+        let root = AnyView(
+            TopPinnedConversationContent(
+                id: entry.id,
+                revision: entry.revision,
+                content: entry.content,
+                onHeightChange: { [weak self] height in
+                    guard let self, self.representedIdentity == identity else { return }
+                    let width = self.contentView.bounds.width
+                    guard width > 0 else { return }
+                    onHeightChange(width, height)
+                }
+            )
+        )
+        let host: UIHostingController<AnyView>
+        if let existing = hostingController {
+            host = existing
+            if existing.parent !== parent {
+                existing.willMove(toParent: nil)
+                existing.view.removeFromSuperview()
+                existing.removeFromParent()
+                parent.addChild(existing)
+                contentView.addSubview(existing.view)
+                existing.didMove(toParent: parent)
+            }
+            existing.rootView = root
+        } else {
+            let created = UIHostingController(rootView: root)
+            created.safeAreaRegions = []
+            created.view.backgroundColor = .clear
+            created.view.clipsToBounds = true
+            parent.addChild(created)
+            contentView.addSubview(created.view)
+            created.didMove(toParent: parent)
+            hostingController = created
+            host = created
+        }
+
+        host.view.frame = contentView.bounds
+        host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        host.view.bounds.origin = .zero
+        host.view.setNeedsLayout()
+        setNeedsLayout()
+    }
+
+    func measuredHeight(for width: CGFloat) -> CGFloat {
+        guard let hostingController else { return 0 }
+        return hostingController.sizeThatFits(
+            in: CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        ).height
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        representedIdentity = nil
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let hostedView = hostingController?.view else { return }
+        hostedView.frame = contentView.bounds
+        hostedView.bounds.origin = .zero
     }
 }
 
@@ -1825,6 +2175,26 @@ final class StreamingAssistantCell: StableSelfSizingCollectionViewCell {
     private var renderedText = ""
     var renderedCharacterCount: Int { renderedText.count }
 
+    static func estimatedHeight(
+        for payload: ConversationViewportEntry.StreamingAssistant,
+        width: CGFloat
+    ) -> CGFloat {
+        let font = UIFont.preferredFont(forTextStyle: .body)
+        let availableWidth = max(1, width - 4)
+        let textHeight: CGFloat
+        if payload.text.isEmpty {
+            textHeight = 0
+        } else {
+            textHeight = ceil((payload.text as NSString).boundingRect(
+                with: CGSize(width: availableWidth, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: font],
+                context: nil
+            ).height)
+        }
+        return ceil(15 + 26 + 7 + textHeight + 15)
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
@@ -1877,7 +2247,8 @@ final class StreamingAssistantCell: StableSelfSizingCollectionViewCell {
             textView.textStorage.setAttributedString(attributed(payload.text))
         }
         renderedText = payload.text
-        textView.invalidateIntrinsicContentSize()
+        textView.setNeedsLayout()
+        contentView.setNeedsLayout()
         setNeedsLayout()
         return true
     }

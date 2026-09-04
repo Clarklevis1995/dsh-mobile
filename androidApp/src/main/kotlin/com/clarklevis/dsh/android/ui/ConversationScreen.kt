@@ -467,6 +467,12 @@ private fun ConversationPage(
             !stateHolder.snapshot.selectedHistoryIsLoading -> coldHistoryLoadStarted = false
         }
     }
+    val approval = stateHolder.snapshot.pendingApprovals.firstOrNull {
+        stateHolder.snapshot.selectedSessionId == null || it.sessionId == stateHolder.snapshot.selectedSessionId
+    }
+    val question = stateHolder.snapshot.pendingQuestions.firstOrNull {
+        stateHolder.snapshot.selectedSessionId == null || it.sessionId == stateHolder.snapshot.selectedSessionId
+    }
     Box(Modifier.fillMaxSize()) {
         androidx.compose.runtime.key(sessionId) {
             ConversationTimeline(
@@ -527,23 +533,6 @@ private fun ConversationPage(
                     onClick = { scrollToBottomToken += 1 }
                 )
             }
-            stateHolder.snapshot.statsSnapshot?.let { snapshot ->
-                SessionStatsBanner(
-                    snapshot = snapshot,
-                    sessionId = sessionId,
-                    onViewFullStats = onShowFullStats
-                )
-            }
-            TaskGoalPanels(
-                stateHolder = stateHolder,
-                modifier = Modifier.padding(horizontal = 14.dp)
-            )
-            val approval = stateHolder.snapshot.pendingApprovals.firstOrNull {
-                stateHolder.snapshot.selectedSessionId == null || it.sessionId == stateHolder.snapshot.selectedSessionId
-            }
-            val question = stateHolder.snapshot.pendingQuestions.firstOrNull {
-                stateHolder.snapshot.selectedSessionId == null || it.sessionId == stateHolder.snapshot.selectedSessionId
-            }
             if (approval != null) {
                 ApprovalRequestCard(
                     request = approval,
@@ -568,6 +557,20 @@ private fun ConversationPage(
                     }
                 ) {
                     Column {
+                        // Pending interaction cards replace normal composer
+                        // chrome. Stats/tasks/goals must not consume height and
+                        // push the approval or question actions off screen.
+                        stateHolder.snapshot.statsSnapshot?.let { snapshot ->
+                            SessionStatsBanner(
+                                snapshot = snapshot,
+                                sessionId = sessionId,
+                                onViewFullStats = onShowFullStats
+                            )
+                        }
+                        TaskGoalPanels(
+                            stateHolder = stateHolder,
+                            modifier = Modifier.padding(horizontal = 14.dp)
+                        )
                         SlashCommandMenus(
                             stateHolder = stateHolder,
                             modifier = Modifier.padding(horizontal = 14.dp)

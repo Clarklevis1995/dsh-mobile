@@ -215,7 +215,7 @@ struct ConversationView: View {
     @State private var showsContextUsage = false
     @State private var showsSessionStats = false
     @State private var showsSessionStatsPopover = false
-    @State private var tasksExpanded = true
+    @State private var tasksExpanded = false
     @State private var showsGoalEditor = false
     @State private var goalObjectiveDraft = ""
     @State private var confirmsGoalClear = false
@@ -361,59 +361,6 @@ struct ConversationView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 0) {
-                    if let snapshot = store.selectedSessionStatsSnapshot {
-                        sessionStatsBanner(snapshot)
-                    }
-                    if let tasks = store.selectedTaskProjection?.todos,
-                       let goal = store.selectedGoalProjection?.goal {
-                        TaskGoalPanels(
-                            tasks: tasks,
-                            goal: goal,
-                            isMutatingGoal: store.goalMutationKind != nil,
-                            tasksExpanded: $tasksExpanded,
-                            onPauseResume: {
-                                if goal.goal.phase == "active" { store.pauseGoal() }
-                                else { store.resumeGoal() }
-                            },
-                            onEdit: {
-                                goalObjectiveDraft = goal.goal.objective
-                                showsGoalEditor = true
-                            },
-                            onClear: { confirmsGoalClear = true }
-                        )
-                        .padding(.horizontal, 14)
-                        .padding(.bottom, 8)
-                    } else if let tasks = store.selectedTaskProjection?.todos {
-                        TaskGoalPanels(
-                            tasks: tasks,
-                            goal: nil,
-                            isMutatingGoal: false,
-                            tasksExpanded: $tasksExpanded,
-                            onPauseResume: {},
-                            onEdit: {},
-                            onClear: {}
-                        )
-                        .padding(.horizontal, 14)
-                        .padding(.bottom, 8)
-                    } else if let goal = store.selectedGoalProjection?.goal {
-                        TaskGoalPanels(
-                            tasks: nil,
-                            goal: goal,
-                            isMutatingGoal: store.goalMutationKind != nil,
-                            tasksExpanded: $tasksExpanded,
-                            onPauseResume: {
-                                if goal.goal.phase == "active" { store.pauseGoal() }
-                                else { store.resumeGoal() }
-                            },
-                            onEdit: {
-                                goalObjectiveDraft = goal.goal.objective
-                                showsGoalEditor = true
-                            },
-                            onClear: { confirmsGoalClear = true }
-                        )
-                        .padding(.horizontal, 14)
-                        .padding(.bottom, 8)
-                    }
                     if let request = store.selectedPendingApprovalRequest {
                         ApprovalRequestView(
                             request: request,
@@ -436,6 +383,63 @@ struct ConversationView: View {
                         .padding(.bottom, composerBottomPadding)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     } else {
+                        // Approval and human-question cards are high-priority
+                        // interaction layers. Lower-priority composer chrome is
+                        // only mounted when neither one is waiting, so task and
+                        // goal panels cannot push an action card off screen.
+                        if let snapshot = store.selectedSessionStatsSnapshot {
+                            sessionStatsBanner(snapshot)
+                        }
+                        if let tasks = store.selectedTaskProjection?.todos,
+                           let goal = store.selectedGoalProjection?.goal {
+                            TaskGoalPanels(
+                                tasks: tasks,
+                                goal: goal,
+                                isMutatingGoal: store.goalMutationKind != nil,
+                                tasksExpanded: $tasksExpanded,
+                                onPauseResume: {
+                                    if goal.goal.phase == "active" { store.pauseGoal() }
+                                    else { store.resumeGoal() }
+                                },
+                                onEdit: {
+                                    goalObjectiveDraft = goal.goal.objective
+                                    showsGoalEditor = true
+                                },
+                                onClear: { confirmsGoalClear = true }
+                            )
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 8)
+                        } else if let tasks = store.selectedTaskProjection?.todos {
+                            TaskGoalPanels(
+                                tasks: tasks,
+                                goal: nil,
+                                isMutatingGoal: false,
+                                tasksExpanded: $tasksExpanded,
+                                onPauseResume: {},
+                                onEdit: {},
+                                onClear: {}
+                            )
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 8)
+                        } else if let goal = store.selectedGoalProjection?.goal {
+                            TaskGoalPanels(
+                                tasks: nil,
+                                goal: goal,
+                                isMutatingGoal: store.goalMutationKind != nil,
+                                tasksExpanded: $tasksExpanded,
+                                onPauseResume: {
+                                    if goal.goal.phase == "active" { store.pauseGoal() }
+                                    else { store.resumeGoal() }
+                                },
+                                onEdit: {
+                                    goalObjectiveDraft = goal.goal.objective
+                                    showsGoalEditor = true
+                                },
+                                onClear: { confirmsGoalClear = true }
+                            )
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 8)
+                        }
                         VStack(spacing: 10) {
                             slashCommandMenus
                                 .padding(.horizontal, 14)
@@ -500,6 +504,8 @@ struct ConversationView: View {
             viewportScrollToBottomToken &+= 1
         }
         .task(id: store.selectedSessionId) {
+            // 每次进入会话先收起历史任务；用户在当前会话手动展开后不会被后续推送重置。
+            tasksExpanded = false
             guard let sessionID = store.selectedSessionId else {
                 historyPresentationSessionID = nil
                 isPreparingHistoryPresentation = false
@@ -1394,12 +1400,9 @@ struct ConversationView: View {
                         showsCopyButton: entry.showsCopyButton,
                         imageData: { store.imageData(for: $0) }
                     )),
-                    // Fenced code uses a horizontal ScrollView. Its vertical
-                    // ideal size can settle after the first hosting pass.
-                    allowsHeightCaching: !MarkdownViewportSizing.requiresLiveMeasurement(item.text),
-                    // A completed Markdown response must never paint into an
-                    // adjacent expandable process cell while UIKit reconciles
-                    // a preferred-height invalidation.
+                    // Completed responses are immutable for this revision.
+                    // The viewport measures their SwiftUI root directly before
+                    // caching, including fenced-code horizontal scroll views.
                     clipsContentToBounds: true
                 )]
             case .process(let group):
@@ -1654,18 +1657,30 @@ private struct TaskGoalPanels: View {
 
     @ViewBuilder
     private func taskStatusIcon(_ status: String) -> some View {
-        switch status {
-        case "completed":
-            Image(systemName: "checkmark.circle")
-                .foregroundStyle(.green)
-                .font(.system(size: 20, weight: .medium))
-        case "in_progress":
-            ProgressView().controlSize(.small).tint(DSHColor.ocean).frame(width: 20, height: 20)
-        default:
-            Image(systemName: "circle.dotted")
-                .foregroundStyle(.tertiary)
-                .font(.system(size: 20, weight: .medium))
+        ZStack {
+            switch status {
+            case "completed":
+                Image(systemName: "checkmark.circle")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.green)
+                    .frame(width: 16, height: 16)
+            case "in_progress":
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(DSHColor.ocean)
+                    .frame(width: 16, height: 16)
+            default:
+                Image(systemName: "circle.dotted")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 16, height: 16)
+            }
         }
+        // Every state owns the same layout slot. Changing status must only
+        // replace the glyph, never alter the width available to task text.
+        .frame(width: 20, height: 20)
     }
 
     private func goalActionButton(_ image: String, _ label: String, _ action: @escaping () -> Void) -> some View {
@@ -3090,11 +3105,6 @@ struct ConversationRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if showsCopyButton && !item.text.isEmpty {
-                    // UIHostingConfiguration can settle a completed Markdown
-                    // row a few points shorter than its final SwiftUI drawing
-                    // on the first self-sizing pass. Keep the action glyph
-                    // above that clipping boundary without disabling cell
-                    // clipping (which protects adjacent timeline rows).
                     CopyMessageButton(text: item.text)
                         .padding(.bottom, 8)
                 }
@@ -3427,25 +3437,16 @@ private extension Theme {
     }
 }
 
-private enum MarkdownViewportSizing {
-    private static let fencedCode = try! NSRegularExpression(
-        pattern: #"(?m)^[\t ]{0,3}(?:```|~~~)"#
-    )
-
-    static func requiresLiveMeasurement(_ source: String) -> Bool {
-        let range = NSRange(location: 0, length: (source as NSString).length)
-        return fencedCode.firstMatch(in: source, range: range) != nil
-    }
-}
-
 private enum DSHInlineCodeStyle {
     // Close to the neutral blue-gray chip used by Harness WebUI, but adaptive
     // enough to remain legible when the app later gains a dark conversation UI.
     static let fallbackBackground = Color(uiColor: .systemGray5).opacity(0.68)
 }
 
-private enum InlineCodePadding {
+enum InlineCodePadding {
     private static let expression = try! NSRegularExpression(pattern: #"(?<!`)`([^`\n]+)`(?!`)"#)
+    private static let softBreak = "\u{200B}"
+    private static let softBreakDelimiters: Set<Character> = ["/", "\\", "_", ".", "-", ":"]
 
     static func apply(to markdown: String) -> String {
         var insideFence = false
@@ -3456,13 +3457,31 @@ private enum InlineCodePadding {
                 return line
             }
             guard !insideFence else { return line }
-            let range = NSRange(location: 0, length: (line as NSString).length)
-            return expression.stringByReplacingMatches(
-                in: line,
-                range: range,
-                withTemplate: "`\u{2009}$1\u{2009}`"
-            )
+            let result = NSMutableString(string: line)
+            let range = NSRange(location: 0, length: result.length)
+            for match in expression.matches(in: line, range: range).reversed() {
+                let source = result.substring(with: match.range(at: 1))
+                let rendered = addingSoftBreaks(to: source)
+                result.replaceCharacters(
+                    in: match.range,
+                    with: "`\u{2009}\(rendered)\u{2009}`"
+                )
+            }
+            return result as String
         }.joined(separator: "\n")
+    }
+
+    private static func addingSoftBreaks(to source: String) -> String {
+        guard source.utf16.count > 24 else { return source }
+        var rendered = ""
+        rendered.reserveCapacity(source.count + 8)
+        for character in source {
+            rendered.append(character)
+            if softBreakDelimiters.contains(character) {
+                rendered.append(contentsOf: softBreak)
+            }
+        }
+        return rendered
     }
 }
 

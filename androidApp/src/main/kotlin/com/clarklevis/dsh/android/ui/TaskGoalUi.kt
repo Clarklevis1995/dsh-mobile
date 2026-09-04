@@ -14,14 +14,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,8 +49,12 @@ internal fun TaskGoalPanels(
 ) {
     val sessionId = stateHolder.snapshot.selectedSessionId
     val tasks = stateHolder.snapshot.taskSnapshot?.tasks
-    val goal = stateHolder.snapshot.goalSnapshot?.goal
-    var tasksExpanded by rememberSaveable(sessionId) { mutableStateOf(true) }
+    // complete Goal 仅作为会话历史保留，不应继续占用输入框上方的操作栏。
+    val goal = stateHolder.snapshot.goalSnapshot?.goal?.takeIf {
+        it.goal.phase.lowercase() != "complete"
+    }
+    // 刚进入 Session 时默认收起历史任务；用户展开后按 Session 保持该选择。
+    var tasksExpanded by rememberSaveable(sessionId) { mutableStateOf(false) }
     var showGoalEditor by remember(sessionId) { mutableStateOf(false) }
     var confirmGoalClear by remember(sessionId) { mutableStateOf(false) }
 
@@ -91,18 +93,16 @@ internal fun TaskGoalPanels(
                     )
                 }
                 if (confirmGoalClear) {
-                    AlertDialog(
+                    DshAlertDialog(
+                        title = "删除当前目标？",
+                        message = "删除后，智能体不再持有这个持续目标。",
                         onDismissRequest = { confirmGoalClear = false },
-                        title = { Text("删除当前目标？") },
-                        text = { Text("删除后，智能体不再持有这个持续目标。") },
-                        dismissButton = {
-                            TextButton(onClick = { confirmGoalClear = false }) { Text("取消") }
-                        },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                confirmGoalClear = false
-                                stateHolder.clearGoal()
-                            }) { Text("删除") }
+                        dismissLabel = "取消",
+                        onDismissClick = { confirmGoalClear = false },
+                        confirmLabel = "删除",
+                        onConfirm = {
+                            confirmGoalClear = false
+                            stateHolder.clearGoal()
                         }
                     )
                 }
@@ -173,29 +173,35 @@ private fun TaskPanel(
 
 @Composable
 private fun TaskRow(task: GatewayTask) {
-    val iconSize = 24.dp
+    val iconSlotSize = 24.dp
+    val iconVisualSize = 18.dp
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        when (task.status) {
-            "completed" -> Icon(
-                painter = painterResource(R.drawable.ic_check_circle),
-                contentDescription = "已完成",
-                modifier = Modifier.size(iconSize),
-                tint = DshColors.Success
-            )
-            "in_progress" -> CircularProgressIndicator(
-                modifier = Modifier.size(21.dp).padding(2.dp),
-                color = DshColors.Ocean,
-                strokeWidth = 2.dp
-            )
-            else -> Icon(
-                painter = painterResource(R.drawable.ic_task_pending),
-                contentDescription = "待处理",
-                modifier = Modifier.size(iconSize),
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
-            )
+        Box(
+            modifier = Modifier.size(iconSlotSize),
+            contentAlignment = Alignment.Center
+        ) {
+            when (task.status) {
+                "completed" -> Icon(
+                    painter = painterResource(R.drawable.ic_check_circle),
+                    contentDescription = "已完成",
+                    modifier = Modifier.size(iconVisualSize),
+                    tint = DshColors.Success
+                )
+                "in_progress" -> CircularProgressIndicator(
+                    modifier = Modifier.size(iconVisualSize),
+                    color = DshColors.Ocean,
+                    strokeWidth = 2.dp
+                )
+                else -> Icon(
+                    painter = painterResource(R.drawable.ic_task_pending),
+                    contentDescription = "待处理",
+                    modifier = Modifier.size(iconVisualSize),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
+                )
+            }
         }
         Spacer(Modifier.width(12.dp))
         Text(
@@ -299,10 +305,15 @@ private fun GoalEditDialog(
     onConfirm: (String) -> Unit
 ) {
     var objective by remember(initialObjective) { mutableStateOf(initialObjective) }
-    AlertDialog(
+    DshAlertDialog(
+        title = "编辑目标",
         onDismissRequest = onDismiss,
-        title = { Text("编辑目标") },
-        text = {
+        dismissLabel = "取消",
+        onDismissClick = onDismiss,
+        confirmLabel = "保存",
+        confirmEnabled = objective.trim().isNotEmpty(),
+        onConfirm = { onConfirm(objective.trim()) },
+        content = {
             OutlinedTextField(
                 value = objective,
                 onValueChange = { objective = it },
@@ -310,13 +321,6 @@ private fun GoalEditDialog(
                 maxLines = 4,
                 modifier = Modifier.fillMaxWidth()
             )
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-        confirmButton = {
-            TextButton(
-                enabled = objective.trim().isNotEmpty(),
-                onClick = { onConfirm(objective.trim()) }
-            ) { Text("保存") }
         }
     )
 }
