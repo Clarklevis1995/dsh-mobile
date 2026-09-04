@@ -425,14 +425,6 @@ final class GatewayClient: ObservableObject {
                     let frame = try await Task.detached(priority: .userInitiated) {
                         try GatewayWireDecoder.decode(data)
                     }.value
-                    if let event = frame.event, event.type == "assistant/chunk" {
-                        gatewayStreamingTrace(
-                            "ws",
-                            "session=\(frame.sessionId ?? "-") seq=\(frame.seq.map(String.init) ?? "-") " +
-                            "turn=\(event.turn.map(String.init) ?? "-") step=\(event.step.map(String.init) ?? "-") " +
-                            "type=\(event.chunkType ?? "-") chars=\(event.text?.count ?? 0)"
-                        )
-                    }
                     if frame.kind.hasPrefix("approval") {
                         gatewayApprovalTrace(
                             "transport received kind=\(frame.kind) hasRpc=\(frame.rpcId?.isEmpty == false) " +

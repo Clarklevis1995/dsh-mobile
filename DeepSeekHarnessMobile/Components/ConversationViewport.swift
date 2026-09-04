@@ -273,6 +273,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         hasConversationContent: Bool
     )?
     private var cellHeightCache: [CellMeasurementKey: CGFloat] = [:]
+    private var streamingHeightMeasurers: [String: StreamingTextHeightMeasurer] = [:]
     private var pendingLiveHeightCorrections: [CellMeasurementKey: LiveHeightCorrection] = [:]
     private var isLiveHeightCorrectionScheduled = false
     private var pendingDisclosureAnchor: DisclosureAnchor?
@@ -280,6 +281,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private var isStreamingRenderingPausedForUserScroll = false
     private var deferredTimelineSnapshot: ConversationTimeline.Snapshot?
     private var isStreamingRenderResumePending = false
+#if DEBUG
+    private(set) var streamingLayoutInvalidationCount = 0
+#endif
 
     init(
         onContentAvailabilityChanged: @escaping (String?, Bool) -> Void,
@@ -335,10 +339,6 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private func receive(_ snapshot: ConversationTimeline.Snapshot) {
         guard !isStreamingRenderingPausedForUserScroll else {
             deferredTimelineSnapshot = snapshot
-            gatewayStreamingTrace(
-                "viewport-buffer",
-                "session=\(sessionID ?? "-") revision=\(snapshot.revision)"
-            )
             return
         }
         render(snapshot)
@@ -348,15 +348,6 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         let hasContent = !snapshot.items.isEmpty
         guard let makeEntries else { return }
         let entries = supplementalEntries + makeEntries(snapshot.items)
-        for entry in entries {
-            if let streaming = entry.streamingAssistant {
-                gatewayStreamingTrace(
-                    "viewport",
-                    "session=\(sessionID ?? "-") revision=\(snapshot.revision) " +
-                    "item=\(entry.id) chars=\(streaming.text.count)"
-                )
-            }
-        }
         apply(
             entries: entries,
             revision: snapshot.revision,
@@ -388,7 +379,11 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         isStreamingRenderingPausedForUserScroll = false
         deferredTimelineSnapshot = nil
         isStreamingRenderResumePending = false
+#if DEBUG
+        streamingLayoutInvalidationCount = 0
+#endif
         cellHeightCache.removeAll(keepingCapacity: true)
+        streamingHeightMeasurers.removeAll(keepingCapacity: true)
         pendingLiveHeightCorrections.removeAll(keepingCapacity: true)
         isLiveHeightCorrectionScheduled = false
     }
@@ -620,6 +615,12 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         entriesByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
         let changed = entries.compactMap { previousRevisions[$0.id] == $0.revision ? nil : $0.id }
         let hasStructureChange = dataSource.snapshot().itemIdentifiers != ids
+        let activeStreamingIDs = Set(entries.compactMap { entry in
+            entry.streamingAssistant == nil ? nil : entry.id
+        })
+        streamingHeightMeasurers = streamingHeightMeasurers.filter {
+            activeStreamingIDs.contains($0.key)
+        }
         if hasStructureChange || changed.contains(where: { entriesByID[$0]?.allowsHeightCaching == true }) {
             let cacheableRevisions = Dictionary(
                 uniqueKeysWithValues: entries.compactMap { entry in
@@ -633,9 +634,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         // Finish every height calculation before entering UIKit's diffable
         // commit. `sizeForItem` and `preferredLayoutAttributesFitting` will
         // therefore return the same exact value throughout the batch.
-        let newlyPrewarmedIDs = prewarmHeights(in: entries)
+        let prewarmResult = prewarmHeights(in: entries)
         guard hasStructureChange || !changed.isEmpty else {
-            invalidatePrewarmedItems(newlyPrewarmedIDs)
+            invalidatePrewarmedItems(prewarmResult.measuredIDs)
             hasAppliedSnapshot = true
             collectionView.isHidden = false
             reportContentAvailability(hasConversationContent)
@@ -667,15 +668,19 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         let interactionGeneration = userInteractionGeneration
         lastAppliedRevision = revision
         previousRevisions = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.revision) })
-        updateVisibleStreamingCells(streamingChanged)
+        let streamingLayoutChanged = updateVisibleStreamingCells(
+            streamingChanged,
+            heightChangedIDs: prewarmResult.streamingHeightChangedIDs
+        )
         updateVisibleUserMessageCells(stableUserMessageChanged)
 
         // Pure token growth never enters diffable reconciliation. The visible
         // streaming Markdown cell already consumed the newest snapshot; its
-        // render callback invalidates only that item's estimated height.
-        // Completed rows remain untouched.
+        // retained TextKit measurer invalidates only when the row gains a
+        // line. Completed rows remain untouched.
         if !hasStructureChange, configuredChanged.isEmpty {
             if keepTail,
+               streamingLayoutChanged,
                userInteractionGeneration == interactionGeneration,
                !collectionView.isTracking,
                !collectionView.isDragging,
@@ -769,24 +774,38 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         onContentAvailabilityChanged(sessionID, hasContent)
     }
 
-    private func updateVisibleStreamingCells(_ ids: [String]) {
-        var invalidatedIndexPaths: [IndexPath] = []
+    @discardableResult
+    private func updateVisibleStreamingCells(
+        _ ids: [String],
+        heightChangedIDs: Set<String>
+    ) -> Bool {
         for id in ids {
             guard let entry = entriesByID[id],
                   let payload = entry.streamingAssistant,
                   let indexPath = dataSource.indexPath(for: id),
                   let cell = collectionView.cellForItem(at: indexPath) as? StreamingAssistantCell else { continue }
             configureStreamingMeasurement(cell, entry: entry)
-            guard cell.apply(payload) else { continue }
-            invalidatedIndexPaths.append(indexPath)
+            cell.apply(payload)
         }
-        guard !invalidatedIndexPaths.isEmpty else { return }
+        let invalidatedIndexPaths = ids.compactMap { id -> IndexPath? in
+            guard heightChangedIDs.contains(id) else { return nil }
+            return dataSource.indexPath(for: id)
+        }
+        guard !invalidatedIndexPaths.isEmpty else { return false }
 
+#if DEBUG
+        streamingLayoutInvalidationCount &+= 1
+#endif
         let context = ChatLayoutInvalidationContext()
-        context.invalidateLayoutMetrics = false
+        // Glyphs are appended for every projected chunk, but the collection
+        // layout only changes when TextKit reports that the text crossed a
+        // line boundary. This keeps streaming caught up with the gateway
+        // instead of re-laying out the full conversation every display frame.
+        context.invalidateLayoutMetrics = true
         context.invalidateItems(at: invalidatedIndexPaths)
         chatLayout.invalidateLayout(with: context)
         collectionView.layoutIfNeeded()
+        return true
     }
 
     private func updateVisibleUserMessageCells(_ ids: [String]) {
@@ -819,13 +838,14 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     /// batch update. Measuring only the visible tail was insufficient for
     /// restored history: UICollectionView can provisionally create a row from
     /// either end while calculating its new content offset.
-    private func prewarmHeights(in entries: [ConversationViewportEntry]) -> Set<String> {
+    private func prewarmHeights(in entries: [ConversationViewportEntry]) -> HeightPrewarmResult {
         let width = chatLayout.layoutFrame.width > 0
             ? chatLayout.layoutFrame.width
             : collectionView.bounds.width
-        guard width > 0 else { return [] }
+        guard width > 0 else { return HeightPrewarmResult() }
 
         var measuredIDs = Set<String>()
+        var streamingHeightChangedIDs = Set<String>()
         for entry in entries where entry.allowsHeightCaching {
             let key = CellMeasurementKey(
                 id: entry.id,
@@ -833,12 +853,27 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                 width: width
             )
             guard cellHeightCache[key] == nil else { continue }
-            let height = Self.measureHeight(for: entry, width: width)
+            let measurement: (height: CGFloat, changed: Bool)
+            if let streaming = entry.streamingAssistant {
+                let measurer = streamingHeightMeasurers[entry.id]
+                    ?? StreamingTextHeightMeasurer()
+                streamingHeightMeasurers[entry.id] = measurer
+                measurement = measurer.measure(text: streaming.text, width: width)
+            } else {
+                measurement = (Self.measureHeight(for: entry, width: width), false)
+            }
+            let height = measurement.height
             guard height.isFinite, height > 0 else { continue }
             cellHeightCache[key] = ceil(height)
             measuredIDs.insert(entry.id)
+            if measurement.changed {
+                streamingHeightChangedIDs.insert(entry.id)
+            }
         }
-        return measuredIDs
+        return HeightPrewarmResult(
+            measuredIDs: measuredIDs,
+            streamingHeightChangedIDs: streamingHeightChangedIDs
+        )
     }
 
     private func configureStreamingMeasurement(
@@ -1220,7 +1255,6 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         guard !isStreamingRenderingPausedForUserScroll else { return }
         isStreamingRenderingPausedForUserScroll = true
         isStreamingRenderResumePending = false
-        gatewayStreamingTrace("viewport-pause", "session=\(sessionID ?? "-")")
     }
 
     private func resumeStreamingRenderingAfterUserScroll() {
@@ -1232,10 +1266,6 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         if let deferredSnapshot {
             render(deferredSnapshot)
         }
-        gatewayStreamingTrace(
-            "viewport-resume-request",
-            "session=\(sessionID ?? "-") revision=\(deferredSnapshot?.revision ?? -1)"
-        )
         finishStreamingRenderResumeIfPossible()
     }
 
@@ -1245,7 +1275,6 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
               !isApplyingSnapshot,
               pendingApply == nil else { return }
         isStreamingRenderResumePending = false
-        gatewayStreamingTrace("viewport-resume", "session=\(sessionID ?? "-")")
     }
 
     private func updatePinnedState(for scrollView: UIScrollView) {
@@ -1331,6 +1360,84 @@ private struct LiveHeightCorrection {
     let revision: Int
     let width: CGFloat
     let height: CGFloat
+}
+
+private struct HeightPrewarmResult {
+    var measuredIDs = Set<String>()
+    var streamingHeightChangedIDs = Set<String>()
+}
+
+/// Retains TextKit's glyph and line-fragment state across streaming revisions.
+/// Appending a suffix therefore lays out only the newly received text instead
+/// of measuring the entire accumulated response again on every display frame.
+private final class StreamingTextHeightMeasurer {
+    private let textStorage = NSTextStorage()
+    private let layoutManager = NSLayoutManager()
+    private let textContainer = NSTextContainer(
+        size: CGSize(width: 1, height: CGFloat.greatestFiniteMagnitude)
+    )
+    private var measuredText = ""
+    private var measuredWidthInPixels = 0
+    private var measuredFont = UIFont.preferredFont(forTextStyle: .body)
+    private var lastHeight: CGFloat?
+
+    init() {
+        textContainer.lineFragmentPadding = 0
+        textContainer.maximumNumberOfLines = 0
+        textContainer.lineBreakMode = .byWordWrapping
+        layoutManager.addTextContainer(textContainer)
+        textStorage.addLayoutManager(layoutManager)
+    }
+
+    func measure(text: String, width: CGFloat) -> (height: CGFloat, changed: Bool) {
+        let availableWidth = max(1, width - 4)
+        let widthInPixels = Int((availableWidth * UIScreen.main.scale).rounded())
+        if widthInPixels != measuredWidthInPixels {
+            measuredWidthInPixels = widthInPixels
+            textContainer.size = CGSize(
+                width: availableWidth,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+        }
+
+        let currentFont = UIFont.preferredFont(forTextStyle: .body)
+        if !currentFont.isEqual(measuredFont) {
+            measuredFont = currentFont
+            if textStorage.length > 0 {
+                textStorage.addAttribute(
+                    .font,
+                    value: currentFont,
+                    range: NSRange(location: 0, length: textStorage.length)
+                )
+            }
+        }
+
+        if text != measuredText {
+            if text.hasPrefix(measuredText) {
+                let suffix = String(text.dropFirst(measuredText.count))
+                textStorage.append(attributed(suffix, font: currentFont))
+            } else {
+                textStorage.setAttributedString(attributed(text, font: currentFont))
+            }
+            measuredText = text
+        }
+
+        let textHeight: CGFloat
+        if textStorage.length == 0 {
+            textHeight = 0
+        } else {
+            layoutManager.ensureLayout(for: textContainer)
+            textHeight = ceil(layoutManager.usedRect(for: textContainer).height)
+        }
+        let height = ceil(15 + 26 + 7 + textHeight + 15)
+        let changed = lastHeight.map { abs($0 - height) >= 0.5 } ?? true
+        lastHeight = height
+        return (height, changed)
+    }
+
+    private func attributed(_ text: String, font: UIFont) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [.font: font])
+    }
 }
 
 private struct CellMeasurementKey: Hashable {
@@ -2234,11 +2341,6 @@ final class StreamingAssistantCell: StableSelfSizingCollectionViewCell {
     func apply(_ payload: ConversationViewportEntry.StreamingAssistant) -> Bool {
         titleLabel.text = payload.title
         guard payload.text != renderedText else { return false }
-
-        gatewayStreamingTrace(
-            "cell-apply",
-            "renderer=textkit chars=\(payload.text.count)"
-        )
 
         if payload.text.hasPrefix(renderedText) {
             let suffix = String(payload.text.dropFirst(renderedText.count))

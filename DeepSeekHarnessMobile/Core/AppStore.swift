@@ -1786,14 +1786,6 @@ final class AppStore: ObservableObject {
             }
             conversationProjectionDrivers[sessionId] = driver
         }
-        if let item = kmpConversationStore.items(for: sessionId).last(where: {
-            $0.id.hasPrefix("stream-text-")
-        }) {
-            gatewayStreamingTrace(
-                "projection-schedule",
-                "session=\(sessionId) item=\(item.id) chars=\(item.text.count)"
-            )
-        }
         driver.invalidate()
     }
     private func scheduleTrajectoryProjection(for sessionId: String) {
@@ -1826,13 +1818,6 @@ final class AppStore: ObservableObject {
     private func projectIncrementally(for sessionId: String) async {
         guard !Task.isCancelled else { return }
         let items = kmpConversationStore.items(for: sessionId)
-        let streamingItems = items.filter { $0.id.hasPrefix("stream-text-") }
-        for item in streamingItems {
-            gatewayStreamingTrace(
-                "timeline",
-                "session=\(sessionId) item=\(item.id) chars=\(item.text.count) totalItems=\(items.count)"
-            )
-        }
         publishConversationItems(items, for: sessionId)
     }
     private func publishConversationItems(_ items: [ConversationItem], for sessionId: String) {
@@ -2138,15 +2123,6 @@ final class AppStore: ObservableObject {
             events[change.sessionID] = change.events
             do {
                 if patchKind == "append", let record = change.eventRecord {
-                    if record.event.type == "assistant/chunk" {
-                        gatewayStreamingTrace(
-                            "history-forward",
-                            "session=\(record.sessionId) seq=\(record.seq) " +
-                            "turn=\(record.event.turn.map(String.init) ?? "-") " +
-                            "step=\(record.event.step.map(String.init) ?? "-") " +
-                            "chars=\(record.event.text?.count ?? 0)"
-                        )
-                    }
                     try kmpConversationStore.receive(record)
                     if activeTrajectorySessionIDs.contains(change.sessionID) {
                         pendingTrajectoryEvents[change.sessionID, default: []].append(record)

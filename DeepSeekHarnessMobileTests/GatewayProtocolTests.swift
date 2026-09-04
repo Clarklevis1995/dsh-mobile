@@ -364,6 +364,166 @@ final class ConversationViewportLayoutTests: XCTestCase {
     }
 
     @MainActor
+    func testStreamingChunksGrowVisibleCellBeforeFinalMarkdownReplacement() async throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 362, height: 300)
+        controller.view.layoutIfNeeded()
+        let window = UIWindow(frame: controller.view.frame)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+
+        controller.configure(
+            sessionID: "streaming-chunk-growth",
+            timeline: timeline,
+            supplementalEntries: [],
+            makeEntries: { items in
+                items.map { item in
+                    ConversationViewportEntry(
+                        id: item.id,
+                        revision: item.text.count,
+                        streamingAssistant: .init(title: item.title, text: item.text)
+                    )
+                }
+            },
+            bottomInset: 0
+        )
+
+        func item(_ text: String) -> ConversationItem {
+            ConversationItem(
+                id: "streaming-response",
+                kind: .assistant,
+                title: "DeepSeek · 正在生成",
+                text: text,
+                isError: false,
+                date: Date(timeIntervalSince1970: 1)
+            )
+        }
+
+        let firstChunk = "好嘞，先输出第一行。"
+        timeline.publish([item(firstChunk)])
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        for _ in 0..<100 {
+            controller.view.layoutIfNeeded()
+            if let cell = collectionView.cellForItem(
+                at: IndexPath(item: 0, section: 0)
+            ) as? StreamingAssistantCell,
+               cell.renderedCharacterCount == firstChunk.count {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let firstHeight = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))
+        ).frame.height
+
+        let laterChunks = firstChunk + String(
+            repeating: "程序员点外卖的故事仍在逐个 chunk 持续输出，界面必须同步增长。",
+            count: 18
+        )
+        timeline.publish([item(laterChunks)])
+        for _ in 0..<100 {
+            controller.view.layoutIfNeeded()
+            let renderedCount = (collectionView.cellForItem(
+                at: IndexPath(item: 0, section: 0)
+            ) as? StreamingAssistantCell)?.renderedCharacterCount ?? 0
+            let height = collectionView.layoutAttributesForItem(
+                at: IndexPath(item: 0, section: 0)
+            )?.frame.height ?? 0
+            if renderedCount == laterChunks.count, height > firstHeight + 40 {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let streamingCell = try XCTUnwrap(
+            collectionView.cellForItem(at: IndexPath(item: 0, section: 0))
+                as? StreamingAssistantCell
+        )
+        let grownHeight = try XCTUnwrap(
+            collectionView.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))
+        ).frame.height
+        XCTAssertEqual(streamingCell.renderedCharacterCount, laterChunks.count)
+        XCTAssertGreaterThan(grownHeight, firstHeight + 40)
+    }
+
+    @MainActor
+    func testLongStreamingReplyDoesNotRelayoutForEveryChunk() throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 362, height: 300)
+        controller.view.layoutIfNeeded()
+        let window = UIWindow(frame: controller.view.frame)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+
+        controller.configure(
+            sessionID: "streaming-layout-frequency",
+            timeline: timeline,
+            supplementalEntries: [],
+            makeEntries: { items in
+                items.map { item in
+                    ConversationViewportEntry(
+                        id: item.id,
+                        revision: item.text.utf16.count,
+                        streamingAssistant: .init(title: item.title, text: item.text)
+                    )
+                }
+            },
+            bottomInset: 0
+        )
+
+        func publish(_ text: String) {
+            timeline.publish([
+                ConversationItem(
+                    id: "streaming-response",
+                    kind: .assistant,
+                    title: "DeepSeek · 正在生成",
+                    text: text,
+                    isError: false,
+                    date: Date(timeIntervalSince1970: 1)
+                )
+            ])
+        }
+
+        var text = ""
+        for _ in 0..<300 {
+            text.append("abcdefghij")
+            publish(text)
+        }
+
+        let collectionView = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)
+        )
+        let cell = try XCTUnwrap(
+            collectionView.cellForItem(at: IndexPath(item: 0, section: 0))
+                as? StreamingAssistantCell
+        )
+        XCTAssertEqual(cell.renderedCharacterCount, text.count)
+        XCTAssertLessThan(
+            controller.streamingLayoutInvalidationCount,
+            120,
+            "流式布局应按实际新增行更新，不能重新退化为每个 chunk 一次"
+        )
+    }
+
+    @MainActor
     func testRapidStreamingStructureUpdatesKeepExactNonOverlappingFrames() async throws {
         let timeline = ConversationTimeline()
         let controller = ConversationViewportController(
