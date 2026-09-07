@@ -24,7 +24,8 @@ data class SessionListLabels(
 data class SessionListState(
     val sessions: List<SessionSummary> = emptyList(),
     val archivedSessionIds: Set<String> = emptySet(),
-    val selectedSessionId: String? = null
+    val selectedSessionId: String? = null,
+    val titleSequences: Map<String, Int> = emptyMap()
 )
 
 sealed interface SessionListAction {
@@ -130,6 +131,17 @@ object SessionListReducer {
         insertedAtEpochSeconds: Double
     ): SessionListState {
         val event = record.event
+        if (event.type == "session/title") {
+            val title = event.text?.takeIf(String::isNotBlank) ?: return state
+            val previousSequence = state.titleSequences[record.sessionId]
+            if (previousSequence != null && record.seq <= previousSequence) return state
+            val sessions = upsert(state.sessions, record.sessionId, title, labels, insertedAtEpochSeconds)
+                .map { if (it.id == record.sessionId) it.copy(title = title) else it }
+            return state.copy(
+                sessions = sessions,
+                titleSequences = state.titleSequences + (record.sessionId to record.seq)
+            )
+        }
         val title = when (event.type) {
             "user/message" -> event.text?.take(28)
             "session/title" -> event.text

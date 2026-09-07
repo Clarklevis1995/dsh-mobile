@@ -328,6 +328,9 @@ class AndroidSharedStateHolder(
                                             )
                                         }
                                     }
+                                    if (event.frame.kind in setOf("session-archives", "session-archived")) {
+                                        appGraph.gatewayRuntime.requestSessions()
+                                    }
                                     if (event.frame.kind == "sent") {
                                         event.frame.sessionId?.takeIf(String::isNotBlank)?.let { sessionId ->
                                             handleSentSession(appGraph, sessionId)
@@ -865,6 +868,22 @@ class AndroidSharedStateHolder(
         if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
         appGraph.gatewayScope.launch {
             projectionActor.loadHistory(sessionId, older = false)
+        }
+    }
+
+    fun archiveSession(sessionId: String) {
+        val appGraph = graph ?: return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
+        appGraph.gatewayScope.launch {
+            appGraph.gatewayRuntime.sendRequest(GatewayRequests.archiveSession(sessionId))
+        }
+    }
+
+    fun renameSession(sessionId: String, title: String) {
+        val appGraph = graph ?: return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED || title.isBlank()) return
+        appGraph.gatewayScope.launch {
+            appGraph.gatewayRuntime.sendRequest(GatewayRequests.renameSession(sessionId, title))
         }
     }
 

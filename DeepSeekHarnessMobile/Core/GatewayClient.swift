@@ -326,6 +326,14 @@ final class GatewayClient: ObservableObject {
         }
     }
 
+    func archiveSession(sessionId: String) {
+        send(["type": "session-archive", "sessionId": sessionId])
+    }
+
+    func renameSession(sessionId: String, title: String) {
+        send(["type": "session-rename", "sessionId": sessionId, "title": title])
+    }
+
     func cancelSession(sessionId: String) {
         send(["type": "session-cancel", "sessionId": sessionId])
     }

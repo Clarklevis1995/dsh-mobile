@@ -2330,6 +2330,39 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(path, "/tmp/workspace/Sources")
     }
 
+    func testSessionMetadataFramesDoNotDependOnSelectedSession() throws {
+        let context = GatewayFrameRoutingContext(
+            selectedSessionID: "other",
+            pendingHistorySessionID: nil,
+            pendingModelsSessionID: nil,
+            isPendingGlobalModelsRequest: false,
+            pendingModelSelectionSessionID: nil,
+            pendingPermissionOptionsSessionID: nil
+        )
+        for kind in ["session-title-changed", "session-renamed"] {
+            let data = Data("{\"kind\":\"\(kind)\",\"sessionId\":\"s1\",\"title\":\"新名称\",\"seq\":129}".utf8)
+            let frame = try GatewayWireDecoder.decode(data)
+            guard case .content(.sessionTitle(let id, let title, let sequence, _)) =
+                GatewayFrameRouter.route(frame, context: context) else {
+                return XCTFail("名称回执及广播应路由为会话元数据")
+            }
+            XCTAssertEqual(id, "s1")
+            XCTAssertEqual(title, "新名称")
+            XCTAssertEqual(sequence, 129)
+        }
+        for kind in ["session-archives", "session-archived"] {
+            let data = Data("{\"kind\":\"\(kind)\",\"archivedSessionIds\":[]}".utf8)
+            guard case .content(.sessionArchives(let ids)) = GatewayFrameRouter.route(
+                try GatewayWireDecoder.decode(data), context: context
+            ) else { return XCTFail("空归档集合也必须完整应用") }
+            XCTAssertTrue(ids.isEmpty)
+        }
+        let malformed = try GatewayWireDecoder.decode(Data(#"{"kind":"session-archives"}"#.utf8))
+        guard case .ignored = GatewayFrameRouter.route(malformed, context: context) else {
+            return XCTFail("缺失集合不能清空已有归档")
+        }
+    }
+
     func testGatewayFrameRouterMapsHelloAndLiveEventPayloads() throws {
         let context = GatewayFrameRoutingContext(
             selectedSessionID: "selected",

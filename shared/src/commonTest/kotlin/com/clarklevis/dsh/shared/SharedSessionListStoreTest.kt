@@ -16,6 +16,44 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SharedSessionListStoreTest {
+    @Test
+    fun titleNotificationsReplaceExistingNamesAndIgnoreDuplicateOrOlderEvents() {
+        val store = makeStore()
+        store.restore(wireJson.encodeToString(SharedSessionListSnapshot(
+            sessions = listOf(SharedSessionSummarySnapshot("s1", "原名称", 100.0, true, false)),
+            selectedSessionId = "s1"
+        )))
+        fun title(seq: Int, value: String) = store.receiveEvent(
+            """{"sessionId":"s1","seq":$seq,"time":200,"event":{"type":"session/title","text":"$value"}}""",
+            200.0
+        )
+        val updated = decode(title(129, "新名称").snapshotJson).sessions.single()
+        assertEquals("新名称", updated.title)
+        assertEquals(100.0, updated.lastActivityEpochSeconds)
+        assertTrue(updated.isRunning)
+        assertFalse(updated.hasUnread)
+        assertNull(title(129, "重复通知").snapshotJson)
+        assertNull(title(128, "旧名称").snapshotJson)
+        assertEquals("再次改名", decode(title(130, "再次改名").snapshotJson).sessions.single().title)
+    }
+
+    @Test
+    fun mobileMetadataFramesApplyOutsideSelectedSessionAndReplaceArchiveSet() {
+        val store = com.clarklevis.dsh.shared.facade.SharedMobileStore()
+        store.acceptFrame("""{"kind":"sessions","items":[{"sessionId":"s1","updatedAt":100,"running":false,"blank":false},{"sessionId":"s2","updatedAt":200,"running":false,"blank":false}]}""")
+        store.selectSession("s2")
+        var snapshot = store.acceptFrame("""{"kind":"session-title-changed","sessionId":"s1","title":"远端改名","seq":129}""")
+        assertEquals("远端改名", snapshot.sessions.first { it.id == "s1" }.title)
+        snapshot = store.acceptFrame("""{"kind":"session-renamed","sessionId":"s1","title":"旧回执","seq":128}""")
+        assertEquals("远端改名", snapshot.sessions.first { it.id == "s1" }.title)
+        snapshot = store.acceptFrame("""{"kind":"session-archived","archivedSessionIds":["s1"]}""")
+        assertEquals(listOf("s2"), snapshot.sessions.map { it.id })
+        snapshot = store.acceptFrame("""{"kind":"session-archives","archivedSessionIds":["s2"]}""")
+        assertEquals(listOf("s1"), snapshot.sessions.map { it.id })
+        snapshot = store.acceptFrame("""{"kind":"session-archives","archivedSessionIds":[]}""")
+        assertEquals(2, snapshot.sessions.size)
+    }
+
     private fun makeStore() = SharedSessionListStore(
         newSessionTitle = "新建会话",
         remoteSessionPrefix = "远端会话 ",

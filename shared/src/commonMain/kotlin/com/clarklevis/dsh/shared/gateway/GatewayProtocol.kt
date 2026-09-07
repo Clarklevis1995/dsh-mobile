@@ -84,6 +84,17 @@ object GatewayRequests {
         workspaceId?.takeIf(String::isNotBlank)?.let { put("workspaceId", it) }
     }
 
+    fun archiveSession(sessionId: String): GatewayRequest = request(
+        "session-archive", "session-archived", targetSessionId = sessionId
+    ) { put("sessionId", sessionId) }
+
+    fun renameSession(sessionId: String, title: String): GatewayRequest = request(
+        "session-rename", "session-renamed", targetSessionId = sessionId
+    ) {
+        put("sessionId", sessionId)
+        put("title", title.trim())
+    }
+
     fun ping(): GatewayRequest =
         request("ping", "pong", lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY)
 

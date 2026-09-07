@@ -7,6 +7,10 @@ struct WorkspaceView: View {
     let onNewSession: () -> Void
     let onSettings: () -> Void
     @State private var searchQuery = ""
+    @State private var renamingSession: SessionSummary?
+    @State private var renamedTitle = ""
+    @State private var archivingSession: SessionSummary?
+    @State private var connectionIsReady = false
     @State private var showsDirectoryBrowser = false
     @State private var showsQRScanner = false
     @State private var showsManualPairing = false
@@ -51,6 +55,31 @@ struct WorkspaceView: View {
         .foregroundStyle(.white)
         .onAppear {
             store.refreshRemoteState()
+        }
+        .onReceive(store.gateway.$state) { connectionIsReady = $0.isConnected }
+        .alert("重命名会话", isPresented: Binding(
+            get: { renamingSession != nil },
+            set: { if !$0 { renamingSession = nil } }
+        )) {
+            TextField("会话名称", text: $renamedTitle)
+            Button("取消", role: .cancel) { renamingSession = nil }
+            Button("保存") {
+                if let session = renamingSession { store.renameSession(session.id, title: renamedTitle) }
+                renamingSession = nil
+            }
+            .disabled(renamedTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .alert("删除会话？", isPresented: Binding(
+            get: { archivingSession != nil },
+            set: { if !$0 { archivingSession = nil } }
+        )) {
+            Button("取消", role: .cancel) { archivingSession = nil }
+            Button("删除", role: .destructive) {
+                if let session = archivingSession { store.archiveSession(session.id) }
+                archivingSession = nil
+            }
+        } message: {
+            Text("会话将被归档并从列表隐藏，历史记录会保留。")
         }
         .onChange(of: searchQuery) { _, value in store.search(value) }
         .sheet(isPresented: $showsDirectoryBrowser) {
@@ -234,6 +263,7 @@ struct WorkspaceView: View {
     }
 
     private var displayedSessions: [SessionSummary] {
+        guard connectionIsReady else { return [] }
         let workspaceSessions: [SessionSummary]
         if store.isUngroupedWorkspaceSelected {
             workspaceSessions = store.ungroupedSessions
@@ -244,10 +274,10 @@ struct WorkspaceView: View {
             workspaceSessions = store.sessions
         }
         guard !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return workspaceSessions
+            return workspaceSessions.filter { !store.archivedSessionIds.contains($0.id) }
         }
         let ids = Set(store.searchResults.map(\.sessionId))
-        return workspaceSessions.filter { ids.contains($0.id) || $0.title.localizedCaseInsensitiveContains(searchQuery) }
+        return workspaceSessions.filter { !store.archivedSessionIds.contains($0.id) && (ids.contains($0.id) || $0.title.localizedCaseInsensitiveContains(searchQuery)) }
     }
 
     private var workspaceDisplayTitle: String {
@@ -271,6 +301,15 @@ struct WorkspaceView: View {
                     sessionRow(session)
                 }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        Button {
+                            renamedTitle = session.title
+                            renamingSession = session
+                        } label: { Label("重命名", systemImage: "pencil") }
+                        Button(role: .destructive) {
+                            archivingSession = session
+                        } label: { Label("删除（归档）", systemImage: "archivebox") }
+                    }
                     .id("workspace-session-\(session.id)")
 
                 Divider()

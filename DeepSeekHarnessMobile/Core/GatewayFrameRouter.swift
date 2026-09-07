@@ -59,6 +59,8 @@ enum GatewayContentRoute {
     case sent(sessionID: String, command: JSONValue?)
     case liveEvent(SessionEvent)
     case workspaces([GatewayWorkspace], archivedSessionIDs: Set<String>)
+    case sessionArchives(Set<String>)
+    case sessionTitle(sessionID: String, title: String, sequence: Int, time: Double?)
     case sessions([GatewaySessionSummary])
     case history(GatewayHistoryPayload)
     case attachment(GatewayAttachmentPayload)
@@ -175,6 +177,14 @@ enum GatewayFrameRouter {
                 decodeItems(frame.items, as: GatewayWorkspace.self),
                 archivedSessionIDs: Set(frame.archivedSessionIds ?? [])
             ))
+        case "session-archives", "session-archived":
+            guard let ids = frame.archivedSessionIds else { return .ignored }
+            return .content(.sessionArchives(Set(ids)))
+        case "session-title-changed", "session-renamed":
+            guard let id = frame.sessionId, !id.isEmpty,
+                  let title = frame.title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let seq = frame.seq else { return .ignored }
+            return .content(.sessionTitle(sessionID: id, title: title, sequence: seq, time: frame.time))
         case "sessions":
             return .content(.sessions(decodeItems(frame.items, as: GatewaySessionSummary.self)))
         case "history":

@@ -123,6 +123,7 @@ struct GatewayFrame: Codable, Sendable {
     var clients: Int?
     var at: Double?
     var sessionId: String?
+    var title: String?
     var seq: Int?
     var time: Double?
     var event: GatewayEvent?

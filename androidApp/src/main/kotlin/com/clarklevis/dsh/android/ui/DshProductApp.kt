@@ -10,6 +10,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -210,10 +214,13 @@ private fun WorkspaceScreen(
     val ungroupedSelected = stateHolder.isUngroupedWorkspaceSelected
     val sessions = remember(
         stateHolder.snapshot.sessions,
+        stateHolder.gatewayState.connection,
+        stateHolder.snapshot.searchResultSessionIds,
         workspaces,
         stateHolder.selectedWorkspaceId,
         searchQuery
     ) {
+        if (stateHolder.gatewayState.connection != GatewayConnectionState.CONNECTED) return@remember emptyList()
         val scoped = workspaceScopedSessions(
             sessions = stateHolder.snapshot.sessions,
             workspaces = workspaces,
@@ -294,7 +301,7 @@ private fun WorkspaceScreen(
                         ConnectionStatusText(stateHolder.gatewayState)
                     }
                     SessionSearch(searchQuery) { searchQuery = it }
-                    if (sessions.isEmpty()) EmptySessions() else SessionList(sessions, onOpenSession)
+                    if (sessions.isEmpty()) EmptySessions() else SessionList(sessions, onOpenSession, stateHolder::renameSession, stateHolder::archiveSession)
                     Spacer(Modifier.height(24.dp))
                 }
             }
@@ -509,11 +516,55 @@ private fun EmptySessions() {
 @Composable
 private fun SessionList(
     sessions: List<SessionSummary>,
-    onOpen: (String) -> Unit
+    onOpen: (String) -> Unit,
+    onRename: (String, String) -> Unit,
+    onArchive: (String) -> Unit
 ) {
     Column(Modifier.background(Color.Transparent)) {
         sessions.take(12).forEach { session ->
-            SessionRow(session) { onOpen(session.id) }
+            androidx.compose.runtime.key(session.id) {
+                var menuVisible by remember { mutableStateOf(false) }
+                var renaming by remember { mutableStateOf(false) }
+                var archiving by remember { mutableStateOf(false) }
+                var title by remember { mutableStateOf(session.title) }
+                Box {
+                    SessionRow(session, onClick = { onOpen(session.id) }, onLongClick = { menuVisible = true })
+                    SessionContextMenu(
+                        expanded = menuVisible,
+                        onDismissRequest = { menuVisible = false },
+                        onRename = {
+                            title = session.title
+                            menuVisible = false
+                            renaming = true
+                        },
+                        onArchive = {
+                            menuVisible = false
+                            archiving = true
+                        }
+                    )
+                }
+                if (renaming) AlertDialog(
+                    onDismissRequest = { renaming = false },
+                    title = { Text("重命名会话") },
+                    text = { OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true) },
+                    confirmButton = {
+                        TextButton(enabled = title.isNotBlank(), onClick = {
+                            onRename(session.id, title)
+                            renaming = false
+                        }) { Text("保存") }
+                    },
+                    dismissButton = { TextButton(onClick = { renaming = false }) { Text("取消") } }
+                )
+                if (archiving) AlertDialog(
+                    onDismissRequest = { archiving = false },
+                    title = { Text("删除会话？") },
+                    text = { Text("会话将被归档并从列表隐藏，历史记录会保留。") },
+                    confirmButton = {
+                        TextButton(onClick = { onArchive(session.id); archiving = false }) { Text("删除") }
+                    },
+                    dismissButton = { TextButton(onClick = { archiving = false }) { Text("取消") } }
+                )
+            }
             HorizontalDivider(
                 modifier = Modifier.padding(start = 18.dp),
                 thickness = 0.5.dp,
@@ -524,9 +575,9 @@ private fun SessionList(
 }
 
 @Composable
-private fun SessionRow(session: SessionSummary, onClick: () -> Unit) {
+private fun SessionRow(session: SessionSummary, onClick: () -> Unit, onLongClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 10.dp)
+        Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 4.dp, vertical = 10.dp)
             .testTag("workspace-session-${session.id}"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp)

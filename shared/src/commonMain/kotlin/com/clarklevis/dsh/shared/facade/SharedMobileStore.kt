@@ -15,6 +15,7 @@ import com.clarklevis.dsh.shared.domain.normalizeEpochSeconds
 import com.clarklevis.dsh.shared.projection.ConversationItem
 import com.clarklevis.dsh.shared.projection.ConversationProjectionLabels
 import com.clarklevis.dsh.shared.projection.ConversationProjector
+import com.clarklevis.dsh.shared.protocol.GatewayEvent
 import com.clarklevis.dsh.shared.protocol.GatewayPendingQuestionRequest
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayPendingApprovalRequest
@@ -185,6 +186,25 @@ class SharedMobileStore(
             lastFrameKind = frame.kind
             lastError = null
             when (frame.kind) {
+                "session-archives", "session-archived" -> frame.archivedSessionIds?.let { ids ->
+                    sessionListState = SessionListReducer.reduce(
+                        sessionListState, SessionListAction.SetArchivedSessionIds(ids.toSet())
+                    )
+                }
+                "session-title-changed", "session-renamed" -> {
+                    val id = frame.sessionId
+                    val title = frame.title
+                    val seq = frame.seq
+                    if (!id.isNullOrBlank() && !title.isNullOrBlank() && seq != null) {
+                        sessionListState = SessionListReducer.reduce(
+                            sessionListState,
+                            SessionListAction.EventReceived(
+                                SessionEvent(id, seq, frame.time ?: 0.0, GatewayEvent(type = "session/title", text = title)),
+                                nowEpochSeconds()
+                            )
+                        )
+                    }
+                }
                 "sessions" -> {
                     val sessions = frame.items.orEmpty().mapNotNull { item ->
                         runCatching {
@@ -209,6 +229,11 @@ class SharedMobileStore(
                     )
                 }
                 "workspaces" -> {
+                    frame.archivedSessionIds?.let { ids ->
+                        sessionListState = SessionListReducer.reduce(
+                            sessionListState, SessionListAction.SetArchivedSessionIds(ids.toSet())
+                        )
+                    }
                     workspaces = frame.items.orEmpty().mapNotNull { item ->
                         runCatching {
                             wireJson.decodeFromJsonElement(GatewayWorkspace.serializer(), item.toJsonElement())
@@ -432,7 +457,7 @@ class SharedMobileStore(
     private fun makeSnapshot(): SharedMobileSnapshot {
         val selected = sessionListState.selectedSessionId
         return SharedMobileSnapshot(
-            sessions = sessionListState.sessions,
+            sessions = sessionListState.sessions.filterNot { it.id in sessionListState.archivedSessionIds },
             workspaces = workspaces,
             searchResultSessionIds = searchResultSessionIds,
             selectedSessionId = selected,

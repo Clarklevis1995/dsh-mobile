@@ -26,6 +26,7 @@ data class GatewayFrame(
     val clients: Int? = null,
     val at: Double? = null,
     val sessionId: String? = null,
+    val title: String? = null,
     val seq: Int? = null,
     val time: Double? = null,
     val event: GatewayEvent? = null,

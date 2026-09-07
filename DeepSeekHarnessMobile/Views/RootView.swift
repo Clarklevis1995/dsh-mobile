@@ -155,10 +155,15 @@ private struct ConversationNavigationShell<Content: View>: View {
     let onActivate: () async -> Void
     @ViewBuilder let content: () -> Content
     @State private var showsWorkspaceFiles = false
+    @State private var liveTitle: String?
 
     var body: some View {
         content()
-            .navigationTitle(header.title)
+            .navigationTitle(liveTitle ?? header.title)
+            .onReceive(store.$sessions) { sessions in
+                let sessionID = header.sessionID ?? store.selectedSessionId
+                liveTitle = sessions.first { $0.id == sessionID }?.title
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarRole(.editor)
             .toolbarBackground(.hidden, for: .navigationBar)

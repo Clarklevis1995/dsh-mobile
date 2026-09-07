@@ -1315,6 +1315,24 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func archiveSession(_ sessionID: String) {
+        guard gateway.state.isConnected else {
+            lastError = String(localized: "请先在设置中连接 DeepSeek Harness")
+            return
+        }
+        gateway.archiveSession(sessionId: sessionID)
+    }
+
+    func renameSession(_ sessionID: String, title: String) {
+        guard gateway.state.isConnected else {
+            lastError = String(localized: "请先在设置中连接 DeepSeek Harness")
+            return
+        }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        gateway.renameSession(sessionId: sessionID, title: trimmed)
+    }
+
     private func handleContentRoute(_ route: GatewayContentRoute) {
         switch route {
         case .sent(let sessionID, let command):
@@ -1335,6 +1353,16 @@ final class AppStore: ObservableObject {
                 String(localized: "notice.workspaces.synced", defaultValue: "工作区已同步"),
                 String(localized: "workspaces.count", defaultValue: "\(workspaces.count) 个工作区")
             )
+        case .sessionArchives(let ids):
+            dispatchSessionListIntent(.setArchivedSessionIDs(ids))
+            gateway.requestSessions()
+        case .sessionTitle(let id, let title, let sequence, let time):
+            dispatchSessionListIntent(.eventReceived(SessionEvent(
+                sessionId: id,
+                seq: sequence,
+                time: time ?? sessions.first(where: { $0.id == id })?.lastActivity.timeIntervalSince1970 ?? 0,
+                event: GatewayEvent(type: "session/title", text: title)
+            )))
         case .sessions(let received):
             dispatchSessionListIntent(.remoteSessionsReceived(received))
             isRefreshing = false
