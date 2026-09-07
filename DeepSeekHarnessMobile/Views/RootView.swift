@@ -25,6 +25,7 @@ struct RootView: View {
 private struct RootNavigationHost: View, Equatable {
     let store: AppStore
     @State private var navigationPath: [AppRoute] = []
+    @State private var newConversationTask: Task<Void, Never>?
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.store === rhs.store
@@ -34,6 +35,7 @@ private struct RootNavigationHost: View, Equatable {
         NavigationStack(path: $navigationPath) {
             WorkspaceView(
                 onOpenSession: { session in
+                    newConversationTask?.cancel()
                     let header = conversationHeader(for: session)
                     Task { @MainActor in
                         guard await store.prepareConversation(for: session),
@@ -42,14 +44,21 @@ private struct RootNavigationHost: View, Equatable {
                     }
                 },
                 onNewSession: {
-                    let header = conversationHeader(for: nil)
-                    Task { @MainActor in
+                    guard newConversationTask == nil else { return }
+                    newConversationTask = Task { @MainActor in
+                        defer { newConversationTask = nil }
                         guard await store.prepareNewConversation(),
                               !Task.isCancelled else { return }
+                        let header = ConversationNavigationHeader(
+                            sessionID: store.selectedSessionId,
+                            title: String(localized: "session.new.fallback", defaultValue: "新建 DeepSeek Harness"),
+                            agentPresetTitle: agentPresetDisplayName(for: store.agentPresetDefault)
+                        )
                         navigate(to: .conversation(header))
                     }
                 },
                 onSettings: {
+                    newConversationTask?.cancel()
                     navigate(to: .settings)
                 }
             )

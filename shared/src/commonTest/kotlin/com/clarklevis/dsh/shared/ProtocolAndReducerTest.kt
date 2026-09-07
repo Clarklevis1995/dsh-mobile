@@ -174,6 +174,17 @@ class ProtocolAndReducerTest {
     }
 
     @Test
+    fun sessionCancelUsesDedicatedResponseLaneAndKeepsSessionIdentity() {
+        val request = GatewayRequests.sessionCancel("session-1")
+
+        assertEquals("session-cancel", request.requestType)
+        assertEquals("session-cancelled", request.responseKind)
+        assertEquals("session-1", request.targetSessionId)
+        assertEquals(GatewayRequestLanePolicy.REJECT_IF_BUSY, request.lanePolicy)
+        assertEquals("{\"type\":\"session-cancel\",\"sessionId\":\"session-1\"}", request.payload)
+    }
+
+    @Test
     fun sessionListReducerMatchesRemoteMergeAndUnreadSemantics() {
         var state = SessionListState(selectedSessionId = "selected")
         state = SessionListReducer.reduce(

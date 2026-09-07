@@ -51,6 +51,7 @@ object GatewayProtocolFixtures {
         RouteFixture("""{"kind":"permission","set":"workspace-write"}""", "control", "permission"),
         RouteFixture("""{"kind":"context-usage","asOfSeq":8}""", "control", "context-usage"),
         RouteFixture("""{"kind":"session-stats","asOfSeq":8}""", "control", "session-stats"),
+        RouteFixture("""{"kind":"session-cancelled","sessionId":"s1","accepted":true}""", "control", "session-cancelled"),
         RouteFixture("""{"kind":"directories","entries":[],"crumbs":[]}""", "workspace", "directories"),
         RouteFixture("""{"kind":"directory-create","path":"/tmp/new"}""", "workspace", "directory-create"),
         RouteFixture("""{"kind":"workspace-create","created":false}""", "workspace", "workspace-create"),

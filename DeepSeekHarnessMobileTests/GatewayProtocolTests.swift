@@ -1441,6 +1441,29 @@ final class ConversationProcessProjectionTests: XCTestCase {
 
 final class GatewayProtocolTests: XCTestCase {
     @MainActor
+    func testSessionCreationRejectsDisconnectedTransport() async {
+        let gateway = GatewayClient()
+        do {
+            _ = try await gateway.createSession(workspaceId: "w1")
+            XCTFail("Disconnected creation must fail without waiting for a timeout")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
+        }
+    }
+
+    @MainActor
+    func testLateSessionCreationFramesAreConsumedWithoutRoutingToCurrentConversation() throws {
+        let gateway = GatewayClient()
+        let created = try GatewayWireDecoder.decode(Data(#"{"kind":"session-created","requestId":"old-request","sessionId":"empty-1"}"#.utf8))
+        XCTAssertEqual(created.sessionId, "empty-1")
+        XCTAssertEqual(created.requestId, "old-request")
+        XCTAssertTrue(gateway.acceptSessionCreationFrame(created))
+        let failure = try GatewayWireDecoder.decode(Data(#"{"kind":"error","requestType":"session-create","requestId":"old-request","message":"failed"}"#.utf8))
+        XCTAssertTrue(gateway.acceptSessionCreationFrame(failure))
+        XCTAssertFalse(gateway.acceptSessionCreationFrame(GatewayFrame(kind: "sent", sessionId: "s1")))
+    }
+
+    @MainActor
     private func flushDeferredKMPEvents(in store: AppStore) async {
         await store.awaitPendingKMPEventDeliveriesForTesting()
     }
@@ -2336,6 +2359,27 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(record.sessionId, "s1")
         XCTAssertEqual(record.seq, 7)
         XCTAssertEqual(record.event.text, "done")
+    }
+
+    func testGatewayFrameRouterMapsSessionCancellationAcknowledgement() throws {
+        let context = GatewayFrameRoutingContext(
+            selectedSessionID: "s1",
+            pendingHistorySessionID: nil,
+            pendingModelsSessionID: nil,
+            isPendingGlobalModelsRequest: false,
+            pendingModelSelectionSessionID: nil,
+            pendingPermissionOptionsSessionID: nil
+        )
+        let frame = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"session-cancelled","sessionId":"s1","accepted":true}"#.utf8
+        ))
+
+        guard case .control(.sessionCancelled(let sessionID, let accepted)) =
+                GatewayFrameRouter.route(frame, context: context) else {
+            return XCTFail("session-cancelled 应路由为 control.sessionCancelled")
+        }
+        XCTAssertEqual(sessionID, "s1")
+        XCTAssertTrue(accepted)
     }
 
     func testGatewayFrameRouterBuildsQuestionPayloadAndRejectsMalformedRequest() throws {

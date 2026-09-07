@@ -40,6 +40,12 @@ import java.util.Locale
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -188,6 +194,8 @@ class AndroidSharedStateHolder(
         private set
     var goalMutationKind: String? by mutableStateOf(null)
         private set
+    var cancellingSessionIds: Set<String> by mutableStateOf(emptySet())
+        private set
 
     init {
         graph?.let { appGraph ->
@@ -212,6 +220,9 @@ class AndroidSharedStateHolder(
                             val didReconnect = state.connection == GatewayConnectionState.CONNECTED &&
                                 lastObservedConnection != GatewayConnectionState.CONNECTED
                             gatewayState = state
+                            if (state.connection != GatewayConnectionState.CONNECTED) {
+                                cancellingSessionIds = emptySet()
+                            }
                             if (state.connection != GatewayConnectionState.CONNECTED &&
                                 state.connection != GatewayConnectionState.CONNECTING &&
                                 state.connection != GatewayConnectionState.AUTHENTICATING
@@ -246,6 +257,9 @@ class AndroidSharedStateHolder(
                         appGraph.diagnostics.runtimeEvent(event)
                         when (event) {
                             is GatewayRuntimeEvent.Frame -> {
+                                withContext(Dispatchers.Main.immediate) {
+                                    handleSessionCancellationFrame(event.frame)
+                                }
                                 if (event.frame.kind in GOAL_MUTATION_RESPONSE_KINDS) {
                                     withContext(Dispatchers.Main.immediate) { goalMutationKind = null }
                                     event.frame.sessionId?.let { sessionId ->
@@ -329,6 +343,9 @@ class AndroidSharedStateHolder(
                             }
                             is GatewayRuntimeEvent.RequestQueued -> Unit
                             is GatewayRuntimeEvent.RequestCancelled -> {
+                                withContext(Dispatchers.Main.immediate) {
+                                    handleSessionCancellationFailure(event.requestType, event.targetSessionId)
+                                }
                                 if (event.requestType == "command-execute") {
                                     pendingCommandSubmission = null
                                 }
@@ -376,6 +393,9 @@ class AndroidSharedStateHolder(
                                 )
                             }
                             is GatewayRuntimeEvent.RequestTimedOut -> {
+                                withContext(Dispatchers.Main.immediate) {
+                                    handleSessionCancellationFailure(event.requestType, event.targetSessionId)
+                                }
                                 if (event.requestType == "command-execute") {
                                     pendingCommandSubmission = null
                                 }
@@ -424,6 +444,9 @@ class AndroidSharedStateHolder(
                                 )
                             }
                             is GatewayRuntimeEvent.RequestRejected -> {
+                                withContext(Dispatchers.Main.immediate) {
+                                    handleSessionCancellationFailure(event.requestType, event.targetSessionId)
+                                }
                                 if (event.requestType == "command-execute") {
                                     pendingCommandSubmission = null
                                 }
@@ -564,22 +587,70 @@ class AndroidSharedStateHolder(
         }
     }
 
-    fun prepareNewSession() {
-        pendingSelectedSessionId = null
-        inputGeneration += 1
-        applySlashCommandTransition(slashCommandStore.reset(null))
-        val afterPublish = {
-            visibleAttachmentKeys = emptySet()
-            pruneAttachmentStateForSession()
+    private var preparingNewSession = false
+
+    suspend fun prepareNewSession(): Boolean {
+        if (preparingNewSession) return false
+        val appGraph = graph ?: return false
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) {
+            platformError = "请先连接 DeepSeek Harness"
+            return false
         }
-        val appGraph = graph
-        if (appGraph == null) projectionActor.selectSessionImmediate(null, afterPublish)
-        else appGraph.gatewayScope.launch {
-            projectionActor.selectSession(null, afterPublish)
-            if (trajectoryIsActive) publishTrajectory()
-            if (gatewayState.connection == GatewayConnectionState.CONNECTED) {
-                appGraph.gatewayRuntime.subscribe(null)
+        if ("session-create" !in gatewayState.capabilities) {
+            platformError = "请更新并重启 Mobile Gateway，以支持发送消息前配置新会话"
+            return false
+        }
+        preparingNewSession = true
+        try {
+            val requestId = UUID.randomUUID().toString()
+            val workspaceId = activeWorkspace?.workspaceId
+            val event = withTimeoutOrNull(15_000) {
+                coroutineScope {
+                    // 先监听再发送，避免本地网关快速响应时丢失创建结果。
+                    val response = async(start = CoroutineStart.UNDISPATCHED) {
+                        appGraph.gatewayRuntime.events.first { event ->
+                            when (event) {
+                                is GatewayRuntimeEvent.Frame -> event.frame.requestId == requestId &&
+                                    (event.frame.kind == "session-created" ||
+                                        event.frame.kind == "error" && event.frame.requestType == "session-create")
+                                is GatewayRuntimeEvent.RequestCancelled -> event.correlationId == requestId
+                                is GatewayRuntimeEvent.RequestTimedOut -> event.correlationId == requestId
+                                is GatewayRuntimeEvent.RequestRejected -> event.correlationId == requestId
+                                else -> false
+                            }
+                        }
+                    }
+                    if (!appGraph.gatewayRuntime.sendRequest(GatewayRequests.createSession(requestId, workspaceId))) {
+                        response.cancel()
+                        null
+                    } else response.await()
+                }
             }
+            val frame = (event as? GatewayRuntimeEvent.Frame)?.frame
+            val sessionId = frame?.sessionId?.takeIf(String::isNotBlank)
+            if (frame?.kind != "session-created" || sessionId == null) {
+                platformError = frame?.message ?: "创建会话失败，请检查连接后重试"
+                return false
+            }
+            pendingSelectedSessionId = sessionId
+            inputGeneration += 1
+            applySlashCommandTransition(slashCommandStore.reset(sessionId))
+            projectionActor.selectSession(sessionId) {
+                pendingSelectedSessionId = null
+                visibleAttachmentKeys = emptySet()
+                pruneAttachmentStateForSession()
+            }
+            appGraph.gatewayRuntime.subscribe(sessionId)
+            appGraph.gatewayRuntime.requestSessions()
+            requestSessionControls(appGraph, sessionId)
+            return true
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            platformError = error.message ?: "创建会话失败"
+            return false
+        } finally {
+            preparingNewSession = false
         }
     }
 
@@ -1173,6 +1244,25 @@ class AndroidSharedStateHolder(
         }
     }
 
+    fun cancelSelectedSession() {
+        val appGraph = graph ?: return
+        val sessionId = snapshot.selectedSessionId ?: return
+        val isRunning = snapshot.sessions.firstOrNull { it.id == sessionId }?.isRunning == true
+        if (
+            !isRunning ||
+            "session-cancel" !in gatewayState.capabilities ||
+            gatewayState.connection != GatewayConnectionState.CONNECTED ||
+            sessionId in cancellingSessionIds
+        ) return
+        cancellingSessionIds = cancellingSessionIds + sessionId
+        appGraph.gatewayScope.launch {
+            val accepted = appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionCancel(sessionId))
+            if (!accepted) withContext(Dispatchers.Main.immediate) {
+                cancellingSessionIds = cancellingSessionIds - sessionId
+            }
+        }
+    }
+
     internal fun applyMessageSendResult(sent: Boolean) {
         applyMessageSendResult(captureMessageSubmission(), sent)
     }
@@ -1297,6 +1387,36 @@ class AndroidSharedStateHolder(
             pendingCommandSubmission == null &&
             (composedMessageText().isNotBlank() || preparedImages.isNotEmpty())
 
+    val showsSessionStopButton: Boolean
+        get() {
+            val sessionId = snapshot.selectedSessionId ?: return false
+            return "session-cancel" in gatewayState.capabilities &&
+                snapshot.sessions.firstOrNull { it.id == sessionId }?.isRunning == true
+        }
+
+    val canCancelSelectedSession: Boolean
+        get() = showsSessionStopButton &&
+            gatewayState.connection == GatewayConnectionState.CONNECTED &&
+            snapshot.selectedSessionId !in cancellingSessionIds
+
+    private fun handleSessionCancellationFrame(frame: GatewayFrame) {
+        val sessionId = frame.sessionId ?: return
+        when {
+            frame.kind == "session-cancelled" && frame.accepted != true -> {
+                cancellingSessionIds = cancellingSessionIds - sessionId
+                platformError = "停止请求未被服务端接受"
+            }
+            frame.kind == "event" && frame.event?.type == "turn/end" -> {
+                cancellingSessionIds = cancellingSessionIds - sessionId
+            }
+        }
+    }
+
+    private fun handleSessionCancellationFailure(requestType: String, sessionId: String?) {
+        if (requestType != "session-cancel") return
+        sessionId?.let { cancellingSessionIds = cancellingSessionIds - it }
+    }
+
     private fun composedMessageText(): String {
         return messageDraft
     }
@@ -1387,7 +1507,7 @@ class AndroidSharedStateHolder(
             pendingStreamingSnapshot = null
             streamingSnapshotPublishJob?.cancel()
             streamingSnapshotPublishJob = null
-            snapshot = next
+            publishSnapshot(next)
             return
         }
 
@@ -1395,10 +1515,18 @@ class AndroidSharedStateHolder(
         if (streamingSnapshotPublishJob?.isActive == true) return
         streamingSnapshotPublishJob = holderScope.launch {
             delay(STREAMING_SNAPSHOT_INTERVAL_MILLISECONDS)
-            pendingStreamingSnapshot?.let { snapshot = it }
+            pendingStreamingSnapshot?.let(::publishSnapshot)
             pendingStreamingSnapshot = null
             streamingSnapshotPublishJob = null
         }
+    }
+
+    private fun publishSnapshot(next: SharedMobileSnapshot) {
+        snapshot = next
+        val runningSessionIds = next.sessions
+            .filter { it.isRunning }
+            .mapTo(mutableSetOf()) { it.id }
+        cancellingSessionIds = cancellingSessionIds.intersect(runningSessionIds)
     }
 
     private fun handleWorkspaceFrame(frame: GatewayFrame) {

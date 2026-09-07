@@ -21,6 +21,57 @@ final class GatewayClient: ObservableObject {
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var connectionTimeoutTask: Task<Void, Never>?
+    private var sessionCreationContinuations: [String: CheckedContinuation<String, Error>] = [:]
+
+    func createSession(workspaceId: String?) async throws -> String {
+        try Task.checkCancellation()
+        guard state.isConnected else { throw URLError(.notConnectedToInternet) }
+        let requestId = UUID().uuidString
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                sessionCreationContinuations[requestId] = continuation
+                var payload: [String: Any] = ["type": "session-create", "requestId": requestId]
+                if let workspaceId { payload["workspaceId"] = workspaceId }
+                send(payload)
+                Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(15))
+                    self?.sessionCreationContinuations.removeValue(forKey: requestId)?
+                        .resume(throwing: URLError(.timedOut))
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.sessionCreationContinuations.removeValue(forKey: requestId)?
+                    .resume(throwing: CancellationError())
+            }
+        }
+    }
+
+    private func failSessionCreations() {
+        let pending = sessionCreationContinuations
+        sessionCreationContinuations.removeAll()
+        for continuation in pending.values {
+            continuation.resume(throwing: URLError(.networkConnectionLost))
+        }
+    }
+
+    /// 迟到的创建响应也在此消费，避免修改已经离开的页面。
+    func acceptSessionCreationFrame(_ frame: GatewayFrame) -> Bool {
+        guard frame.kind == "session-created" ||
+                (frame.kind == "error" && frame.requestType == "session-create") else { return false }
+        guard let requestId = frame.requestId,
+              let continuation = sessionCreationContinuations.removeValue(forKey: requestId) else { return true }
+        if frame.kind == "session-created", let sessionId = frame.sessionId, !sessionId.isEmpty {
+            continuation.resume(returning: sessionId)
+        } else {
+            continuation.resume(throwing: NSError(
+                domain: "GatewaySessionCreation", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: frame.message ?? "创建会话失败"]
+            ))
+        }
+        return true
+    }
+
     private var endpoint: URL?
     private var wantsConnection = false
     private var pairingCode: String?
@@ -134,6 +185,7 @@ final class GatewayClient: ObservableObject {
     }
 
     func disconnect(reconnect: Bool = false) {
+        failSessionCreations()
         wantsConnection = reconnect
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -272,6 +324,10 @@ final class GatewayClient: ObservableObject {
         } else {
             send(["type": "unsubscribe"])
         }
+    }
+
+    func cancelSession(sessionId: String) {
+        send(["type": "session-cancel", "sessionId": sessionId])
     }
 
     func sendMessage(
@@ -457,7 +513,7 @@ final class GatewayClient: ObservableObject {
                         serverPort = frame.port
                         clientCount = frame.clients
                     }
-                    onFrame?(frame)
+                    if !acceptSessionCreationFrame(frame) { onFrame?(frame) }
                 } catch {
                     // One future or malformed frame must not tear down an otherwise healthy socket.
                     onFrame?(GatewayFrame(kind: "error", code: "decode-failed", message: error.localizedDescription))
@@ -518,6 +574,7 @@ final class GatewayClient: ObservableObject {
     }
 
     private func fail(_ detail: String, shouldReconnect: Bool, reportFailure: Bool = true) {
+        failSessionCreations()
         connectionTimeoutTask?.cancel()
         connectionTimeoutTask = nil
         state = .failed(detail)
@@ -559,6 +616,7 @@ final class GatewayClient: ObservableObject {
     }
 
     private func suspendTransportForBackground() {
+        failSessionCreations()
         wantsConnection = true
         reconnectTask?.cancel()
         reconnectTask = nil

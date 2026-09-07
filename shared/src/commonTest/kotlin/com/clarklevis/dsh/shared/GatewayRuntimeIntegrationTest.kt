@@ -144,6 +144,21 @@ class GatewayRuntimeIntegrationTest {
         transport.receive("""{"kind":"sent","sessionId":"session-new"}""")
         runCurrent()
         assertEquals(setOf("session-new"), runtime.state.value.activeTurnSessionIds)
+
+        assertTrue(runtime.sendRequest(GatewayRequests.sessionCancel("session-new")))
+        assertEquals("session-cancel", transport.sentTypes.last())
+        transport.receive(
+            """{"kind":"session-cancelled","sessionId":"session-new","accepted":true}"""
+        )
+        runCurrent()
+        assertEquals(
+            true,
+            events.filterIsInstance<GatewayRuntimeEvent.Frame>()
+                .last { it.frame.kind == "session-cancelled" }
+                .frame.accepted
+        )
+        assertTrue(runtime.state.value.shouldKeepAliveInBackground)
+
         transport.receive(
             """{"sessionId":"session-new","seq":9,"time":1786937355,"event":{"type":"turn/end"}}"""
         )
@@ -312,6 +327,33 @@ class GatewayRuntimeIntegrationTest {
         assertFalse(
             "private-frame" in GatewayTransportFrame(1, "private-frame", 13).toString()
         )
+    }
+
+    @Test
+    fun emptySessionCreationCorrelatesBeforeControlsAndNeverPrompts() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport)
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true,"capabilities":["session-create","commands"]}""")
+        runCurrent()
+
+        assertTrue(runtime.sendRequest(GatewayRequests.createSession("create-1", "workspace-1")))
+        assertTrue(transport.sentPayloads.last().contains("\"workspaceId\":\"workspace-1\""))
+        transport.receive("""{"kind":"session-created","requestId":"stale","sessionId":"wrong"}""")
+        runCurrent()
+        assertTrue(events.filterIsInstance<GatewayRuntimeEvent.Frame>().none { it.frame.kind == "session-created" })
+        transport.receive("""{"kind":"session-created","requestId":"create-1","sessionId":"empty-1"}""")
+        runCurrent()
+        assertEquals("empty-1", events.filterIsInstance<GatewayRuntimeEvent.Frame>().last().correlatedSessionId)
+        assertTrue(runtime.sendRequest(GatewayRequests.sessionControl("models", "empty-1")))
+        assertTrue(runtime.sendRequest(GatewayRequests.sessionControl("permission-options", "empty-1")))
+        assertTrue(runtime.sendRequest(GatewayRequests.slashCommands("empty-1")))
+        assertTrue(transport.sentTypes.containsAll(listOf("models", "permission-options", "commands")))
+        assertFalse(transport.sentTypes.contains("message"))
     }
 
     @Test

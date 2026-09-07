@@ -641,7 +641,7 @@ class GatewayRuntime(
         when (request.responseKind) {
             "attachment" -> request.correlationId == frame.attachment?.attachmentId
             "question-response", "approval-response" -> request.correlationId == frame.rpcId
-            "file-list", "file-download-opened" -> request.correlationId == frame.requestId
+            "session-created", "file-list", "file-download-opened" -> request.correlationId == frame.requestId
             "file-download-chunk", "file-download-cancelled" -> request.correlationId == frame.transferId
             "command-options", "command-selected" -> request.correlationId == frame.command?.stringValue
             else -> true
@@ -655,7 +655,7 @@ class GatewayRuntime(
         when (request.responseKind) {
             "attachment" -> frame.attachment?.attachmentId
             "question-response", "approval-response" -> frame.rpcId
-            "file-list", "file-download-opened" -> frame.requestId
+            "session-created", "file-list", "file-download-opened" -> frame.requestId
             "file-download-chunk", "file-download-cancelled" -> frame.transferId
             "command-options", "command-selected" -> frame.command?.stringValue
             else -> null
@@ -1097,7 +1097,8 @@ class GatewayRuntime(
         )
         private val RESPONSE_KINDS_REQUIRING_ACTIVE_REQUEST = setOf(
             "history", "attachment", "sent", "question-response", "approval-response",
-            "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled"
+            "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled",
+            "session-cancelled", "session-created"
         )
         private val IDEMPOTENT_CONNECTION_STATES = setOf(
             GatewayConnectionState.CONNECTING,

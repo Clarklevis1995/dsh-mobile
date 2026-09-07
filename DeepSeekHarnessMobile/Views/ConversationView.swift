@@ -727,6 +727,10 @@ struct ConversationView: View {
                 }
 
                 Button {
+                    if showsSessionStopButton {
+                        store.cancelSelectedSession()
+                        return
+                    }
                     let content = store.composedSlashMessage(arguments: draft)
                     let images = pendingImages
                     guard store.send(content, images: images) else { return }
@@ -745,15 +749,36 @@ struct ConversationView: View {
                     // above the composer without ever being hidden behind it.
                     viewportScrollToBottomToken &+= 1
                 } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 42, height: 42)
-                        .background(DSHColor.ocean, in: Circle())
+                    Group {
+                        if showsSessionStopButton {
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(.white)
+                                .frame(width: 14, height: 14)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 17, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .frame(width: 42, height: 42)
+                    .background(DSHColor.ocean, in: Circle())
                 }
                 .buttonStyle(.plain)
-                .disabled(!composerHasContent || store.waitingForNewSession || isImportingImages || store.commandSubmissionPending)
-                .opacity(composerHasContent ? 1 : 0.48)
+                .disabled(
+                    showsSessionStopButton
+                        ? store.isCancellingSelectedSession
+                        : (!composerHasContent || store.waitingForNewSession || isImportingImages || store.commandSubmissionPending)
+                )
+                .opacity(
+                    showsSessionStopButton
+                        ? (store.isCancellingSelectedSession ? 0.66 : 1)
+                        : (composerHasContent ? 1 : 0.48)
+                )
+                .accessibilityLabel(
+                    showsSessionStopButton
+                        ? String(localized: "a11y.stop-generation", defaultValue: "停止生成")
+                        : String(localized: "a11y.send-message", defaultValue: "发送")
+                )
             }
         }
         .padding(.horizontal, 14)
@@ -786,7 +811,7 @@ struct ConversationView: View {
     private var slashCommandMenus: some View {
         let state = store.slashCommands
         if state.catalogVisible || state.optionsCommand != nil {
-            VStack(alignment: .leading, spacing: 0) {
+            ContentSizedCommandScrollView {
                 if let optionsCommand = state.optionsCommand {
                     Text("/\(optionsCommand.name)")
                         .font(.caption)
@@ -797,83 +822,80 @@ struct ConversationView: View {
                 if state.catalogLoading || state.optionsLoading || state.selectionLoading {
                     ProgressView().progressViewStyle(.linear)
                 }
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if state.optionsCommand == nil {
-                            ForEach(state.filteredGroups, id: \.id) { group in
-                                Text(group.title)
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 9)
-                                ForEach(group.items, id: \.stableId) { command in
-                                    Button {
-                                        if let replacement = store.selectSlashCatalogItem(command.stableId) {
-                                            draft = replacement
-                                        }
-                                    } label: {
-                                        HStack(spacing: 10) {
-                                            Text(command.name)
-                                                .font(.body.weight(.medium))
-                                                .foregroundStyle(.primary)
-                                            Text(command.description_)
-                                                .font(.subheadline)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                            Spacer(minLength: 4)
-                                            if command.ui.kind == "select" {
-                                                Image(systemName: "chevron.right")
-                                                    .font(.caption.weight(.semibold))
-                                                    .foregroundStyle(.tertiary)
-                                            }
-                                        }
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 11)
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        } else {
-                            ForEach(state.options, id: \.id) { option in
+                VStack(spacing: 0) {
+                    if state.optionsCommand == nil {
+                        ForEach(state.filteredGroups, id: \.id) { group in
+                            Text(group.title)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                            ForEach(group.items, id: \.stableId) { command in
                                 Button {
-                                    if let replacement = store.selectSlashCommandOption(option.id) {
+                                    if let replacement = store.selectSlashCatalogItem(command.stableId) {
                                         draft = replacement
                                     }
                                 } label: {
                                     HStack(spacing: 10) {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(option.label)
-                                                .font(.body.weight(.medium))
-                                                .foregroundStyle(.primary)
-                                            if let detail = option.description_ ?? option.detail {
-                                                Text(detail)
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                                    .lineLimit(1)
-                                            }
-                                        }
+                                        Text(command.name)
+                                            .font(.body.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                        Text(command.description_)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
                                         Spacer(minLength: 4)
-                                        if option.selected == true {
-                                            Image(systemName: "checkmark")
-                                                .font(.body.weight(.semibold))
-                                                .foregroundStyle(DSHColor.ocean)
+                                        if command.ui.kind == "select" {
+                                            Image(systemName: "chevron.right")
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(.tertiary)
                                         }
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
+                                    .padding(.vertical, 11)
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
-                                .disabled(state.selectionLoading)
                             }
+                        }
+                    } else {
+                        ForEach(state.options, id: \.id) { option in
+                            Button {
+                                if let replacement = store.selectSlashCommandOption(option.id) {
+                                    draft = replacement
+                                }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(option.label)
+                                            .font(.body.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                        if let detail = option.description_ ?? option.detail {
+                                            Text(detail)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    Spacer(minLength: 4)
+                                    if option.selected == true {
+                                        Image(systemName: "checkmark")
+                                            .font(.body.weight(.semibold))
+                                            .foregroundStyle(DSHColor.ocean)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(state.selectionLoading)
                         }
                     }
                 }
-                .frame(maxHeight: 300)
             }
             .glassSurface(radius: 22, tint: glassTint)
             .overlay {
@@ -886,6 +908,10 @@ struct ConversationView: View {
 
     private var composerHasContent: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
+    }
+
+    private var showsSessionStopButton: Bool {
+        store.supportsSessionCancel && store.selectedSession?.isRunning == true
     }
 
     private var pendingImageStrip: some View {
@@ -1852,6 +1878,25 @@ private enum NestedHorizontalScrollResolver {
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)
+    }
+}
+
+/// 按实际内容收缩；目录较长时保留滚动，标题和加载条也计入高度上限。
+private struct ContentSizedCommandScrollView<Content: View>: View {
+    @State private var contentHeight: CGFloat = 0
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0, content: content)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.size.height
+                } action: { height in
+                    contentHeight = height
+                }
+        }
+        .frame(height: min(contentHeight, 300))
     }
 }
 

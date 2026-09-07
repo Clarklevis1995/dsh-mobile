@@ -1186,19 +1186,48 @@ private fun Composer(
                 ContextUsageRing(stateHolder)
                 Box(
                     Modifier.size(42.dp)
-                        .alpha(if (composerHasContent) 1f else 0.48f)
+                        .alpha(
+                            if (stateHolder.showsSessionStopButton) {
+                                if (stateHolder.canCancelSelectedSession) 1f else 0.66f
+                            } else if (composerHasContent) 1f else 0.48f
+                        )
                         .clip(CircleShape)
                         .background(DshColors.Ocean)
-                        .clickable(enabled = stateHolder.canSend, onClick = stateHolder::sendMessage)
-                        .semantics { contentDescription = "发送" },
+                        .clickable(
+                            enabled = if (stateHolder.showsSessionStopButton) {
+                                stateHolder.canCancelSelectedSession
+                            } else {
+                                stateHolder.canSend
+                            },
+                            onClick = if (stateHolder.showsSessionStopButton) {
+                                stateHolder::cancelSelectedSession
+                            } else {
+                                stateHolder::sendMessage
+                            }
+                        )
+                        .semantics {
+                            contentDescription = if (stateHolder.showsSessionStopButton) {
+                                "停止生成"
+                            } else {
+                                "发送"
+                            }
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_arrow_up),
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = Color.White
-                    )
+                    if (stateHolder.showsSessionStopButton) {
+                        Box(
+                            Modifier.size(14.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color.White)
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_arrow_up),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = Color.White
+                        )
+                    }
                 }
             }
         }
@@ -1235,11 +1264,13 @@ private fun SlashCommandMenus(
         )
     ) {
         val optionsCommand = state.optionsCommand
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(vertical = 7.dp)
+        // 测量实际内容高度，短列表随内容收缩，超过面板上限时滚动。
+        Column(
+            modifier = Modifier.fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 7.dp)
         ) {
-            if (optionsCommand != null) item {
+            if (optionsCommand != null) {
                 Text(
                     text = "/${optionsCommand.name}",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f),
@@ -1247,21 +1278,19 @@ private fun SlashCommandMenus(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp)
                 )
             }
-            if (state.catalogLoading || state.optionsLoading || state.selectionLoading) item {
+            if (state.catalogLoading || state.optionsLoading || state.selectionLoading) {
                 LinearProgressIndicator(Modifier.fillMaxWidth(), color = DshColors.Ocean)
             }
             if (optionsCommand == null) {
                 state.filteredGroups.forEach { group ->
-                    item(key = "group-${group.id}") {
-                        Text(
-                            text = group.title,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                    items(group.items, key = { "catalog-${it.stableId}" }) { command ->
+                    Text(
+                        text = group.title,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.64f),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    group.items.forEach { command ->
                         Row(
                             modifier = Modifier.fillMaxWidth()
                                 .clickable { stateHolder.selectSlashCatalogItem(command.stableId) }
@@ -1284,7 +1313,7 @@ private fun SlashCommandMenus(
                     }
                 }
             } else {
-                items(state.options, key = { "option-${it.id}" }) { option ->
+                state.options.forEach { option ->
                     Row(
                         modifier = Modifier.fillMaxWidth()
                             .clickable(enabled = !state.selectionLoading) {

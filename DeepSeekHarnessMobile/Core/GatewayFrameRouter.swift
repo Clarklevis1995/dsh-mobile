@@ -68,6 +68,7 @@ enum GatewayContentRoute {
 
 enum GatewayControlRoute {
     case action(KMPSessionControlAction, finishRequest: String?)
+    case sessionCancelled(sessionID: String, accepted: Bool)
     case saveDefaultModel(GatewayModelSelection?)
     case setDefault(applied: Bool, target: String?, value: String?)
     case modelSelected(sessionID: String?, selection: GatewayModelSelection?)
@@ -272,6 +273,12 @@ enum GatewayFrameRouter {
                 tokenUsageTotals: frame.tokenUsage?.totals,
                 contextPressure: frame.contextPressure
             ), finishRequest: "session-stats"))
+        case "session-cancelled":
+            guard let sessionID = frame.sessionId else { return .ignored }
+            return .control(.sessionCancelled(
+                sessionID: sessionID,
+                accepted: frame.accepted == true
+            ))
         case "directories":
             return .workspace(.directories(
                 path: frame.path,

@@ -154,8 +154,12 @@ final class AppStore: ObservableObject {
     @Published private(set) var supportsImages = false
     @Published private(set) var supportsFileDownloads = false
     @Published private(set) var supportsSlashCommands = false
+    private var supportsSessionCreation = false
+    private var isPreparingNewConversation = false
     @Published private(set) var supportsTasks = false
     @Published private(set) var supportsGoals = false
+    @Published private(set) var supportsSessionCancel = false
+    @Published private(set) var cancellingSessionIDs: Set<String> = []
     @Published private(set) var taskProjections: [String: GatewayTasksProjection] = [:]
     @Published private(set) var goalProjections: [String: GatewayGoalProjection] = [:]
     @Published private(set) var goalMutationKind: String?
@@ -375,6 +379,9 @@ final class AppStore: ObservableObject {
         Array(protocolNotices.filter { $0.sessionId == nil || $0.sessionId == selectedSessionId }.suffix(20))
     }
     var selectedSession: SessionSummary? { sessions.first { $0.id == selectedSessionId } }
+    var isCancellingSelectedSession: Bool {
+        selectedSessionId.map(cancellingSessionIDs.contains) == true
+    }
     var selectedModelCatalog: GatewayModelCatalog? { selectedSessionId.flatMap { modelCatalogs[$0] } }
     var selectedPermissions: GatewaySessionPermissions? { selectedSessionId.flatMap { sessionPermissions[$0] } }
     var selectedContextSnapshot: GatewayContextSnapshot? { selectedSessionId.flatMap { contextSnapshots[$0] } }
@@ -606,12 +613,26 @@ final class AppStore: ObservableObject {
         ))
     }
     func prepareNewConversation() async -> Bool {
-        guard dispatchSessionListIntent(.select(nil)) else { return false }
+        guard !isPreparingNewConversation else { return false }
+        isPreparingNewConversation = true
+        defer { isPreparingNewConversation = false }
+        var sessionID: String?
+        if supportsSessionCreation {
+            do {
+                sessionID = try await gateway.createSession(workspaceId: activeWorkspace?.id)
+            } catch {
+                if !Task.isCancelled { lastError = error.localizedDescription }
+                return false
+            }
+        }
+        guard !Task.isCancelled else { return false }
+        if let sessionID { addKnownSession(sessionID) }
+        guard dispatchSessionListIntent(.select(sessionID)) else { return false }
         waitingForNewSession = false
-        preparedConversationActivationKey = Self.newConversationActivationKey
+        preparedConversationActivationKey = sessionID ?? Self.newConversationActivationKey
         activeConversationActivationKey = nil
         await commitPendingKMPEventsAfterViewUpdate()
-        return selectedSessionId == nil
+        return selectedSessionId == sessionID
     }
 
     func prepareConversation(for session: SessionSummary) async -> Bool {
@@ -958,6 +979,16 @@ final class AppStore: ObservableObject {
         return true
     }
 
+    func cancelSelectedSession() {
+        guard supportsSessionCancel,
+              gateway.state.isConnected,
+              let sessionID = selectedSessionId,
+              selectedSession?.isRunning == true,
+              !cancellingSessionIDs.contains(sessionID) else { return }
+        cancellingSessionIDs.insert(sessionID)
+        gateway.cancelSession(sessionId: sessionID)
+    }
+
     private func applySlashCommandTransition(_ transition: SharedSlashCommandTransition) {
         slashCommands = transition.snapshot
         if let error = transition.snapshot.lastError {
@@ -1109,8 +1140,11 @@ final class AppStore: ObservableObject {
             supportsImages = payload.protocolVersion >= 3 && payload.capabilities.contains("images")
             supportsFileDownloads = payload.protocolVersion >= 3 && payload.capabilities.contains("file-downloads")
             supportsSlashCommands = payload.capabilities.contains("commands")
+            supportsSessionCreation = payload.capabilities.contains("session-create")
             supportsTasks = payload.capabilities.contains("tasks")
             supportsGoals = payload.capabilities.contains("goals")
+            supportsSessionCancel = payload.capabilities.contains("session-cancel")
+            cancellingSessionIDs = []
             applySlashCommandTransition(kmpSlashCommandStore.reset(sessionId: selectedSessionId))
             applyWorkspaceFileTransition(kmpWorkspaceFileStore.reset(sessionId: selectedSessionId))
             attachmentLoader.reset()
@@ -1337,6 +1371,21 @@ final class AppStore: ObservableObject {
             // KMP 响应事务已原子完成 active 并可能启动 queued；
             // 这里不能再按 kind finish，否则会误结束新 generation。
             if let finishRequest { cancelCompletedSessionControlTracker(finishRequest, transition: transition) }
+        case .sessionCancelled(let sessionID, let accepted):
+            if !accepted {
+                cancellingSessionIDs.remove(sessionID)
+                let message = String(
+                    localized: "session.cancel.not-accepted",
+                    defaultValue: "停止请求未被服务端接受"
+                )
+                lastError = message
+                notice(
+                    String(localized: "session.cancel.failed-title", defaultValue: "停止生成失败"),
+                    message,
+                    sessionId: sessionID,
+                    isError: true
+                )
+            }
         case .saveDefaultModel(let saved):
             if let saved {
                 let transition = submitSessionControlIntent(.defaultModelSaved(saved))
@@ -1572,6 +1621,10 @@ final class AppStore: ObservableObject {
 
     private func handleFailure(_ payload: GatewayFailurePayload) {
         waitingForNewSession = false
+        let onlyCancellingSessionID = cancellingSessionIDs.count == 1 ? cancellingSessionIDs.first : nil
+        if payload.requestType == "session-cancel", let sessionID = payload.sessionID ?? onlyCancellingSessionID {
+            cancellingSessionIDs.remove(sessionID)
+        }
         if payload.requestType == "directories" { directoryIsLoading = false }
         if payload.requestType == "directory-create" {
             directoryCreationIsLoading = false
@@ -1721,6 +1774,9 @@ final class AppStore: ObservableObject {
         }
     }
     private func merge(_ record: SessionEvent) {
+        if record.event.type == "turn/end" {
+            cancellingSessionIDs.remove(record.sessionId)
+        }
         do { try kmpHistoryStore.receive(record) }
         catch {
             lastError = error.localizedDescription
@@ -1878,6 +1934,7 @@ final class AppStore: ObservableObject {
         // Keep the prepared destination, but require a fresh activation after
         // the transport reconnects and emits its next hello frame.
         activeConversationActivationKey = nil
+        cancellingSessionIDs = []
         // A transport/authentication failure invalidates every outstanding
         // business request. Cancel their timeout tokens first so an unrelated
         // "agent-presets 请求超时" cannot replace the real WebSocket cause.
@@ -2014,6 +2071,8 @@ final class AppStore: ObservableObject {
             sessions = mappedSessions
             persistSessions()
         }
+        let runningSessionIDs = Set(mappedSessions.filter(\.isRunning).map(\.id))
+        cancellingSessionIDs.formIntersection(runningSessionIDs)
         let mappedArchivedSessionIDs = snapshot.archivedSessionIDSet
         if mappedArchivedSessionIDs != archivedSessionIds {
             archivedSessionIds = mappedArchivedSessionIDs

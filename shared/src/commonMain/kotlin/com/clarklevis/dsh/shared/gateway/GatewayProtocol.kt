@@ -74,6 +74,16 @@ object GatewayRequests {
     fun simple(type: String, responseKind: String = type): GatewayRequest =
         request(type, responseKind, lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST)
 
+    fun createSession(requestId: String, workspaceId: String?): GatewayRequest = request(
+        "session-create",
+        "session-created",
+        correlationId = requestId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("requestId", requestId)
+        workspaceId?.takeIf(String::isNotBlank)?.let { put("workspaceId", it) }
+    }
+
     fun ping(): GatewayRequest =
         request("ping", "pong", lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY)
 
@@ -333,6 +343,16 @@ object GatewayRequests {
             sessionId,
             lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST
         ) { put("sessionId", sessionId) }
+    }
+
+    /** Stops only the active turn; a later ordinary message resumes the same session. */
+    fun sessionCancel(sessionId: String): GatewayRequest = request(
+        "session-cancel",
+        "session-cancelled",
+        targetSessionId = sessionId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("sessionId", sessionId)
     }
 
     fun message(

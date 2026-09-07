@@ -1,6 +1,8 @@
 package com.clarklevis.dsh.android.ui
 
 import android.app.Activity
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -131,6 +133,7 @@ internal fun DshProductApp(
         }
     ) {
         composable(ROUTE_WORKSPACE) {
+            val workspaceScope = rememberCoroutineScope()
             WorkspaceScreen(
                 stateHolder = stateHolder,
                 onOpenSession = { id ->
@@ -138,8 +141,11 @@ internal fun DshProductApp(
                     navController.navigate(ROUTE_CONVERSATION)
                 },
                 onNewSession = {
-                    stateHolder.prepareNewSession()
-                    navController.navigate(ROUTE_CONVERSATION)
+                    workspaceScope.launch {
+                        if (stateHolder.prepareNewSession()) {
+                            navController.navigate(ROUTE_CONVERSATION)
+                        }
+                    }
                 },
                 onSettings = { navController.navigate(ROUTE_SETTINGS) }
             )
