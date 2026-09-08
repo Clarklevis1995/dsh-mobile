@@ -185,21 +185,37 @@ private fun WhaleParticleField(time: Float, isStatic: Boolean) {
         if (particles.isEmpty()) return@Canvas
         val square = max(size.width * 1.15f, size.height * 0.48f)
         val center = Offset(size.width * 0.55f, size.height * 0.34f)
-        val baseDot = max(1.45.dp.toPx(), square / 220f)
+        // 加密采样后同步缩小点，维持原有留白和整体亮度。
+        val baseDot = max(1.45.dp.toPx(), square / 220f) * (60f / WHALE_SAMPLE_SIZE)
         val t = if (isStatic) 0f else time
+        // 动态位移按 dp 计算，避免高密度屏幕上的几像素波动几乎不可见。
+        val driftAmplitudeX = if (isStatic) 2.8f else 4.dp.toPx()
+        val driftAmplitudeY = if (isStatic) 2.6f else 4.dp.toPx()
+        val tailAmplitude = if (isStatic) 7f else 10.dp.toPx()
+        val staggerAmplitude = square / WHALE_SAMPLE_SIZE * 0.14f
         particles.forEach { particle ->
             val tail = smoothstep(0.54f, 0.94f, particle.x)
             val edgeDrift = 0.35f + 0.65f * particle.edge
-            val driftX = sin(t * 0.50f + particle.phase * 0.53f) * 2.8f * edgeDrift
-            val driftY = cos(t * 0.42f + particle.phase * 0.71f) * 2.6f * edgeDrift
-            val tailWave = sin(t * 1.10f - particle.x * 7f) * 7f * tail
+            // 相位由空间位置连续变化，避免按点序号起伏造成相邻行错位。
+            val phaseX = particle.x * 5f + particle.y * 3f
+            val phaseY = particle.x * 4f - particle.y * 3f
+            val driftX = sin(t * 0.50f + phaseX) * driftAmplitudeX * edgeDrift
+            val driftY = cos(t * 0.42f + phaseY) * driftAmplitudeY * edgeDrift
+            // 以网格行列生成短周期相位差，让间隙轻微交错；位移限制在点距内。
+            val column = particle.x * WHALE_SAMPLE_SIZE
+            val row = particle.y * WHALE_SAMPLE_SIZE
+            val staggerX = sin(row * 1.05f + column * 0.35f + t * 0.50f) * staggerAmplitude
+            // 相邻行错开四分之一个周期，让波峰和波谷形成清晰的逐行交错。
+            val rowPhase = row * (kotlin.math.PI.toFloat() / 2f)
+            val staggerY = sin(column * 0.90f - rowPhase + t * 0.42f) * staggerAmplitude * 0.7f
+            val tailWave = sin(t * 1.10f - particle.x * 7f) * tailAmplitude * tail
             val shimmer = 0.90f + 0.10f * sin(t * 1.5f + particle.x * 15f + particle.y * 9f)
             val point = Offset(
-                center.x + (particle.x - 0.5f) * square + driftX,
-                center.y + (particle.y - 0.5f) * square + driftY + tailWave
+                center.x + (particle.x - 0.5f) * square + driftX + staggerX,
+                center.y + (particle.y - 0.5f) * square + driftY + staggerY + tailWave
             )
             val dot = baseDot * (0.72f + particle.luminance * 0.58f)
-            val alpha = ((0.10f + particle.luminance * 0.38f) * shimmer).coerceIn(0f, 1f) * 0.56f
+            val alpha = ((0.10f + particle.luminance * 0.38f) * shimmer).coerceIn(0f, 1f) * 0.42f
             drawRoundRect(
                 Color(
                     red = (0.73f + 0.15f * particle.light).coerceIn(0f, 1f),
@@ -224,7 +240,7 @@ internal data class WhaleParticle(
     val light: Float
 )
 
-internal fun makeWhaleParticles(sampleSize: Int = 60): List<WhaleParticle> {
+internal fun makeWhaleParticles(sampleSize: Int = WHALE_SAMPLE_SIZE): List<WhaleParticle> {
     val path = requireNotNull(PathParser.createPathFromPathData(WHALE_PATH))
     val bitmap = createBitmap(sampleSize, sampleSize)
     val scale = minOf(
@@ -296,6 +312,7 @@ private fun smoothstep(edge0: Float, edge1: Float, value: Float): Float {
     return x * x * (3f - 2f * x)
 }
 
+private const val WHALE_SAMPLE_SIZE = 72
 private const val WHALE_VIEWPORT_WIDTH = 24f
 private const val WHALE_VIEWPORT_HEIGHT = 18f
 private const val WHALE_LUMINANCE_THRESHOLD = 0.2f
