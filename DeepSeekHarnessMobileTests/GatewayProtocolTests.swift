@@ -1440,6 +1440,60 @@ final class ConversationProcessProjectionTests: XCTestCase {
 }
 
 final class GatewayProtocolTests: XCTestCase {
+    func testConversationRequestsAreSeparatedFromFilesAndSessionControls() {
+        for type in ["message", "history", "subscribe", "unsubscribe"] {
+            XCTAssertTrue(GatewayClient.usesConversationChannel(type))
+        }
+        for type in ["file-list", "file-download-open", "file-download-read", "file-download-cancel",
+                     "session-rename", "session-archive", "session-cancel", "permission-options",
+                     "question-answer", "approval-response", "commands", "ping"] {
+            XCTAssertFalse(GatewayClient.usesConversationChannel(type))
+        }
+    }
+
+    @MainActor
+    func testStreamingBurstDoesNotPublishCommandMenuAndKeepsControlResponsesInOrder() throws {
+        let gateway = GatewayClient()
+        var commandDeliveries = 0
+        var deliveredKinds: [String] = []
+        gateway.onCommandFrame = { _ in commandDeliveries += 1 }
+        gateway.onFrame = { deliveredKinds.append($0.kind) }
+        let eventData = Data(GatewayProtocolParityFixtures.liveEventWithoutKind.utf8)
+        let event = try GatewayWireDecoder.decode(eventData)
+        for index in 0..<2_000 {
+            gateway.deliverApplicationFrame(event, data: eventData)
+            if index == 1_000 {
+                for kind in ["file-list", "session-renamed", "permission-options"] {
+                    gateway.deliverApplicationFrame(GatewayFrame(kind: kind), data: Data())
+                }
+            }
+        }
+        XCTAssertEqual(commandDeliveries, 0)
+        XCTAssertEqual(deliveredKinds.count, 2_003)
+        XCTAssertEqual(Array(deliveredKinds[1_001...1_003]), ["file-list", "session-renamed", "permission-options"])
+        XCTAssertEqual(deliveredKinds.filter { $0 == "event" }.count, 2_000)
+    }
+
+    @MainActor
+    func testCommandFramesKeepOriginalPayloadAndOnlyMatchingErrorsReachMenu() throws {
+        let gateway = GatewayClient()
+        var commandPayloads: [String] = []
+        gateway.onCommandFrame = { commandPayloads.append($0) }
+        let payloads = [
+            #"{"kind":"commands","sessionId":"s1","groups":[]}"#,
+            #"{"kind":"command-options","sessionId":"s1"}"#,
+            #"{"kind":"command-selected","sessionId":"s1"}"#,
+            #"{"kind":"error","requestType":"commands"}"#,
+            #"{"kind":"error","requestType":"command-options"}"#,
+            #"{"kind":"error","requestType":"command-select"}"#
+        ]
+        for payload in payloads + [#"{"kind":"error","requestType":"file-list"}"#, #"{"kind":"error"}"#] {
+            let data = Data(payload.utf8)
+            gateway.deliverApplicationFrame(try GatewayWireDecoder.decode(data), data: data)
+        }
+        XCTAssertEqual(commandPayloads, payloads)
+    }
+
     @MainActor
     func testSessionCreationRejectsDisconnectedTransport() async {
         let gateway = GatewayClient()

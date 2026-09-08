@@ -47,7 +47,10 @@ class AndroidAppGraph(
     val attachmentThumbnailer = AndroidAttachmentThumbnailer()
     val imagePreprocessor = AndroidImagePreprocessor(application.contentResolver)
     val networkMonitor: GatewayNetworkMonitor = networkMonitorOverride ?: AndroidNetworkMonitor(application)
-    val transport: GatewayTransport = transportOverride ?: OkHttpGatewayTransport(diagnostics = diagnostics)
+    val transport: GatewayTransport = transportOverride ?: com.clarklevis.dsh.shared.gateway.SplitGatewayTransport(
+        OkHttpGatewayTransport(diagnostics = diagnostics),
+        OkHttpGatewayTransport(diagnostics = diagnostics)
+    )
     val gatewayRuntime = GatewayRuntime(
         transport = transport,
         preferences = preferences,
@@ -56,7 +59,8 @@ class AndroidAppGraph(
         networkMonitor = networkMonitor,
         clock = clockOverride ?: AndroidGatewayClock,
         scope = gatewayScope,
-        frameDecoder = frameDecoderOverride ?: GatewayWireDecoder::decode
+        frameDecoder = frameDecoderOverride ?: GatewayWireDecoder::decode,
+        frameDecodingDispatcher = Dispatchers.Default
     )
     val stateHolder: AndroidSharedStateHolder by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         AndroidSharedStateHolder(graph = this)

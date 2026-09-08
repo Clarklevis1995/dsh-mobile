@@ -24,6 +24,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import com.clarklevis.dsh.shared.platform.GatewaySplitTransport
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.encodeToString
 
@@ -97,7 +101,8 @@ class GatewayRuntime(
     private val requestTimeoutMilliseconds: Long = DEFAULT_REQUEST_TIMEOUT_MILLISECONDS,
     private val recoveryWindowMilliseconds: Long = DEFAULT_RECOVERY_WINDOW_MILLISECONDS,
     private val connectionAttemptTimeoutMilliseconds: Long = DEFAULT_CONNECTION_ATTEMPT_TIMEOUT_MILLISECONDS,
-    private val frameDecoder: (String) -> GatewayFrame = GatewayWireDecoder::decode
+    private val frameDecoder: (String) -> GatewayFrame = GatewayWireDecoder::decode,
+    private val frameDecodingDispatcher: CoroutineDispatcher? = null
 ) {
     private val serialization = Mutex()
     private val mutableState = MutableStateFlow(
@@ -107,6 +112,12 @@ class GatewayRuntime(
         maximumEvents = MAXIMUM_RUNTIME_EVENT_COUNT,
         maximumBytes = MAXIMUM_RUNTIME_EVENT_BYTES
     )
+    private val conversationQueue = BoundedGatewayRuntimeEventQueue(
+        maximumEvents = MAXIMUM_RUNTIME_EVENT_COUNT,
+        maximumBytes = MAXIMUM_RUNTIME_EVENT_BYTES
+    )
+    val conversationEvents: Flow<GatewayRuntimeEvent> = conversationQueue.flow
+
     private val pendingLanes = mutableMapOf<String, PendingLane>()
     private val deferredRequests = ArrayDeque<GatewayRequest>()
     private val activeTurnCountsBySession = mutableMapOf<String, Int>()
@@ -126,16 +137,21 @@ class GatewayRuntime(
     private var connectionAttemptTimeoutJob: Job? = null
 
     val state: StateFlow<GatewayRuntimeState> = mutableState.asStateFlow()
+    /**
+     * 单消费者有界事件流。collector 内不要等待 Runtime 的挂起操作（如 sendRequest）；
+     * 生产者可能持有 serialization 等待队列预算。后续请求必须独立提交，先让 collector 返回。
+     */
     val events: Flow<GatewayRuntimeEvent> = eventQueue.flow
 
     init {
-        collectSafely(transport.events, ERROR_INCOMING_FLOW) { event ->
-            when (event) {
-                is GatewayTransportEvent.Frame -> handleIncomingFrameLocked(event.value)
-                is GatewayTransportEvent.State -> handleTransportStateLocked(event.value)
-            }
-        }
-        collectSafely(networkMonitor.state, ERROR_NETWORK_FLOW, ::handleNetworkLocked)
+        collectSafely(transport.events, ERROR_INCOMING_FLOW, serializeHandler = false, handler = ::handleTransportEvent)
+        collectSafely(
+            (transport as? GatewaySplitTransport)?.conversationEvents ?: emptyFlow(),
+            ERROR_INCOMING_FLOW,
+            serializeHandler = false,
+            handler = ::handleTransportEvent
+        )
+        collectSafely(networkMonitor.state, ERROR_NETWORK_FLOW, handler = ::handleNetworkLocked)
     }
 
     suspend fun connect(endpoint: String) = serialized {
@@ -476,25 +492,47 @@ class GatewayRuntime(
         if (shouldReconnect) scheduleReconnectLocked(immediate = false)
     }
 
-    private suspend fun handleIncomingFrameLocked(transportFrame: GatewayTransportFrame) {
+    private data class FrameDelivery(val event: GatewayRuntimeEvent.Frame, val bytes: Long)
+
+    private suspend fun handleTransportEvent(event: GatewayTransportEvent) {
+        when (event) {
+            is GatewayTransportEvent.State -> serialized { handleTransportStateLocked(event.value) }
+            is GatewayTransportEvent.Frame -> {
+                // 大 history 页的解码和对话队列背压均不得占用控制请求的锁。
+                val frame = try {
+                    frameDecodingDispatcher?.let { dispatcher ->
+                        withContext(dispatcher) { frameDecoder(event.value.text) }
+                    } ?: frameDecoder(event.value.text)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    serialized { rejectLocked("decode", ERROR_DECODE_FAILED) }
+                    return
+                }
+                val delivery = serialized { handleIncomingFrameLocked(event.value, frame) } ?: return
+                val queue = if (transport is GatewaySplitTransport && frame.kind in setOf("event", "history")) {
+                    conversationQueue
+                } else eventQueue
+                queue.emit(delivery.event, delivery.bytes)
+            }
+        }
+    }
+
+    private suspend fun handleIncomingFrameLocked(transportFrame: GatewayTransportFrame, frame: GatewayFrame): FrameDelivery? {
         if (transportFrame.generation != connectionGeneration) {
             rejectLocked("transport", ERROR_STALE_FRAME)
-            return
-        }
-        val frame = runCatching { frameDecoder(transportFrame.text) }.getOrElse {
-            rejectLocked("decode", ERROR_DECODE_FAILED)
-            return
+            return null
         }
         if (frame.kind == "paired") {
             val target = endpoint
             val token = frame.token
             if (target == null || token.isNullOrBlank()) {
                 rejectLocked("pair", ERROR_PAIR_TOKEN_MISSING)
-                return
+                return null
             }
             if (runCatching { credentials.saveToken(target, token) }.isFailure) {
                 rejectLocked("pair", ERROR_CREDENTIAL_ACCESS)
-                return
+                return null
             }
             pairingCode = null
         }
@@ -517,7 +555,7 @@ class GatewayRuntime(
         }
 
         val correlation = correlateLocked(frame)
-        if (!correlation.accepted) return
+        if (!correlation.accepted) return null
         if (frame.kind == "error") {
             rejectLocked(
                 frame.requestType ?: "gateway",
@@ -526,7 +564,7 @@ class GatewayRuntime(
                 responseCorrelation(frame)
             )
             suspendBackgroundConnectionIfIdleLocked()
-            return
+            return null
         }
         if (frame.kind == "sent" && unassociatedTurnCount > 0 && !frame.sessionId.isNullOrBlank()) {
             unassociatedTurnCount -= 1
@@ -539,7 +577,7 @@ class GatewayRuntime(
         if (frame.kind == "attachment") {
             val cached = cacheAttachmentLocked(frame)
             completeLaneLocked("attachment")
-            if (!cached) return
+            if (!cached) return null
         }
         val safeFrame = when (frame.kind) {
             "paired" -> frame.copy(token = null)
@@ -553,11 +591,8 @@ class GatewayRuntime(
         } else {
             transportFrame.byteCount.toLong() * FRAME_RETENTION_MULTIPLIER + FRAME_OBJECT_OVERHEAD_BYTES
         }
-        emitEventLocked(
-            GatewayRuntimeEvent.Frame(safeRaw, safeFrame, correlation.sessionId),
-            estimatedBytes
-        )
         if (endedLastBackgroundTurn) suspendBackgroundConnectionIfIdleLocked()
+        return FrameDelivery(GatewayRuntimeEvent.Frame(safeRaw, safeFrame, correlation.sessionId), estimatedBytes)
     }
 
     private suspend fun correlateLocked(frame: GatewayFrame): Correlation {
@@ -997,12 +1032,12 @@ class GatewayRuntime(
         eventQueue.emit(event, estimatedBytes)
     }
 
-    private fun <T> collectSafely(flow: Flow<T>, code: String, handler: suspend (T) -> Unit) {
+    private fun <T> collectSafely(flow: Flow<T>, code: String, serializeHandler: Boolean = true, handler: suspend (T) -> Unit) {
         scope.launch {
             try {
                 flow.collect { value ->
                     try {
-                        serialized { handler(value) }
+                        if (serializeHandler) serialized { handler(value) } else handler(value)
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Throwable) {

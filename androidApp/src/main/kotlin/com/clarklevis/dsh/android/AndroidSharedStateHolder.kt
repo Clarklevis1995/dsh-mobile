@@ -64,6 +64,11 @@ class AndroidSharedStateHolder(
     private val slashCommandStore = SharedSlashCommandStore()
     private val scope = graph?.let { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     private var runtimeCollection: Job? = null
+    private val gatewayFollowUps = graph?.let { appGraph ->
+        AndroidGatewayFollowUpQueue(appGraph.gatewayScope, onFailure = { error ->
+            scope?.launch { platformError = error.message ?: "后续请求提交失败" }
+        })
+    }
     private val projectionActor = AndroidProjectionActor(
         projection = AndroidGatewayProjection(store) { sessionId, beforeSequence ->
             graph?.let { appGraph ->
@@ -252,261 +257,266 @@ class AndroidSharedStateHolder(
                         sessionIdToRefresh?.let { requestSessionControls(appGraph, it) }
                     }
                 }
-                launch {
-                    appGraph.gatewayRuntime.events.collect { event ->
-                        appGraph.diagnostics.runtimeEvent(event)
-                        when (event) {
-                            is GatewayRuntimeEvent.Frame -> {
-                                withContext(Dispatchers.Main.immediate) {
-                                    handleSessionCancellationFrame(event.frame)
-                                }
-                                if (event.frame.kind in GOAL_MUTATION_RESPONSE_KINDS) {
-                                    withContext(Dispatchers.Main.immediate) { goalMutationKind = null }
-                                    event.frame.sessionId?.let { sessionId ->
-                                        appGraph.gatewayRuntime.sendRequest(GatewayRequests.goal(sessionId))
+                // 两条物理线路分别消费，文件响应不等待对话投影队列清空。
+                for (eventStream in listOf(appGraph.gatewayRuntime.events, appGraph.gatewayRuntime.conversationEvents)) {
+                    launch {
+                        eventStream.collect { event ->
+                            appGraph.diagnostics.runtimeEvent(event)
+                            when (event) {
+                                is GatewayRuntimeEvent.Frame -> {
+                                    withContext(Dispatchers.Main.immediate) {
+                                        handleSessionCancellationFrame(event.frame)
                                     }
-                                }
-                                if (event.frame.kind == "command-executed") {
-                                    handleCommandExecuted(event.frame)
-                                }
-                                if (event.frame.kind in SLASH_COMMAND_FRAME_KINDS ||
-                                    (event.frame.kind == "error" && event.frame.requestType in SLASH_COMMAND_REQUEST_TYPES)
-                                ) {
-                                    applySlashCommandTransition(slashCommandStore.acceptFrame(event.rawJson))
-                                }
-                                if (event.frame.kind in WORKSPACE_FILE_FRAME_KINDS) {
-                                    applyWorkspaceFileTransition(
-                                        appGraph,
-                                        workspaceFileStore.acceptFrame(event.rawJson)
-                                    )
-                                }
-                                val isStreamingChunk = event.frame.kind == "event" &&
-                                    event.frame.event?.type == "assistant/chunk"
-                                val streamingProjectionFlushed = if (isStreamingChunk) {
-                                    projectionActor.acceptStreamingFrame(
-                                        event.rawJson,
-                                        event.frame,
-                                        event.correlatedSessionId
-                                    )
-                                } else {
-                                    projectionActor.acceptFrame(
-                                        event.rawJson,
-                                        event.frame,
-                                        event.correlatedSessionId
-                                    ) {
-                                        pruneAttachmentStateForSession()
-                                        handleWorkspaceFrame(event.frame)
-                                        if (event.frame.kind == "history") {
-                                            event.correlatedSessionId?.let { sessionId ->
-                                                historyPagingSessionIds = historyPagingSessionIds - sessionId
+                                    if (event.frame.kind in GOAL_MUTATION_RESPONSE_KINDS) {
+                                        withContext(Dispatchers.Main.immediate) { goalMutationKind = null }
+                                        event.frame.sessionId?.let { sessionId ->
+                                            gatewayFollowUps?.submit {
+                                                appGraph.gatewayRuntime.sendRequest(GatewayRequests.goal(sessionId))
                                             }
                                         }
                                     }
-                                    false
+                                    if (event.frame.kind == "command-executed") {
+                                        handleCommandExecuted(event.frame)
+                                    }
+                                    if (event.frame.kind in SLASH_COMMAND_FRAME_KINDS ||
+                                        (event.frame.kind == "error" && event.frame.requestType in SLASH_COMMAND_REQUEST_TYPES)
+                                    ) {
+                                        applySlashCommandTransition(slashCommandStore.acceptFrame(event.rawJson))
+                                    }
+                                    if (event.frame.kind in WORKSPACE_FILE_FRAME_KINDS) {
+                                        applyWorkspaceFileTransition(
+                                            appGraph,
+                                            workspaceFileStore.acceptFrame(event.rawJson)
+                                        )
+                                    }
+                                    val isStreamingChunk = event.frame.kind == "event" &&
+                                        event.frame.event?.type == "assistant/chunk"
+                                    val streamingProjectionFlushed = if (isStreamingChunk) {
+                                        projectionActor.acceptStreamingFrame(
+                                            event.rawJson,
+                                            event.frame,
+                                            event.correlatedSessionId
+                                        )
+                                    } else {
+                                        projectionActor.acceptFrame(
+                                            event.rawJson,
+                                            event.frame,
+                                            event.correlatedSessionId
+                                        ) {
+                                            pruneAttachmentStateForSession()
+                                            handleWorkspaceFrame(event.frame)
+                                            if (event.frame.kind == "history") {
+                                                event.correlatedSessionId?.let { sessionId ->
+                                                    historyPagingSessionIds = historyPagingSessionIds - sessionId
+                                                }
+                                            }
+                                        }
+                                        false
+                                    }
+                                    if (!isStreamingChunk) {
+                                        withContext(Dispatchers.Main.immediate) {
+                                            defaultConfigurationLoadingKinds =
+                                                defaultConfigurationLoadingKinds - event.frame.kind
+                                            if (event.frame.kind == "agent-presets") {
+                                                agentPresetsAuthorable = event.frame.authorable == true
+                                                agentPresetsHasDocument = event.frame.hasDocument == true
+                                            }
+                                            if (event.frame.kind.startsWith("approval")) {
+                                                appGraph.diagnostics.approval(
+                                                    stage = "frame-applied",
+                                                    frameKind = event.frame.kind,
+                                                    hasRpc = !event.frame.rpcId.isNullOrBlank(),
+                                                    hasSession = !event.frame.sessionId.isNullOrBlank(),
+                                                    hasApprovalId = !event.frame.approvalId.isNullOrBlank(),
+                                                    hasTool = !event.frame.toolName.isNullOrBlank(),
+                                                    replay = event.frame.replay == true,
+                                                    pendingCount = snapshot.pendingApprovals.size,
+                                                    selectedVisible = snapshot.pendingApprovals.any {
+                                                        it.sessionId == snapshot.selectedSessionId
+                                                    }
+                                                )
+                                            }
+                                        }
+                                        if (event.frame.kind in setOf("session-archives", "session-archived")) {
+                                            gatewayFollowUps?.submit { appGraph.gatewayRuntime.requestSessions() }
+                                        }
+                                        if (event.frame.kind == "sent") {
+                                            event.frame.sessionId?.takeIf(String::isNotBlank)?.let { sessionId ->
+                                                handleSentSession(appGraph, sessionId)
+                                            }
+                                        }
+                                    }
+                                    if (trajectoryIsActive && (!isStreamingChunk || streamingProjectionFlushed)) {
+                                        publishTrajectory()
+                                    }
                                 }
-                                if (!isStreamingChunk) {
+                                is GatewayRuntimeEvent.AttachmentCached -> withContext(Dispatchers.Main.immediate) {
+                                    attachmentCompleted(event.sessionId, event.attachmentId)
+                                }
+                                is GatewayRuntimeEvent.RequestQueued -> Unit
+                                is GatewayRuntimeEvent.RequestCancelled -> {
+                                    withContext(Dispatchers.Main.immediate) {
+                                        handleSessionCancellationFailure(event.requestType, event.targetSessionId)
+                                    }
+                                    if (event.requestType == "command-execute") {
+                                        pendingCommandSubmission = null
+                                    }
+                                    if (event.requestType in SLASH_COMMAND_REQUEST_TYPES) {
+                                        applySlashCommandTransition(
+                                            slashCommandStore.requestFailed(event.requestType, event.reason)
+                                        )
+                                    }
+                                    if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
+                                        applyWorkspaceFileTransition(
+                                            appGraph,
+                                            workspaceFileStore.requestFailed(
+                                                event.requestType,
+                                                event.reason,
+                                                event.correlationId
+                                            )
+                                        )
+                                    }
                                     withContext(Dispatchers.Main.immediate) {
                                         defaultConfigurationLoadingKinds =
-                                            defaultConfigurationLoadingKinds - event.frame.kind
-                                        if (event.frame.kind == "agent-presets") {
-                                            agentPresetsAuthorable = event.frame.authorable == true
-                                            agentPresetsHasDocument = event.frame.hasDocument == true
+                                            defaultConfigurationLoadingKinds - event.requestType
+                                        if (event.requestType == "history") {
+                                            event.targetSessionId?.let {
+                                                historyPagingSessionIds = historyPagingSessionIds - it
+                                            }
                                         }
-                                        if (event.frame.kind.startsWith("approval")) {
-                                            appGraph.diagnostics.approval(
-                                                stage = "frame-applied",
-                                                frameKind = event.frame.kind,
-                                                hasRpc = !event.frame.rpcId.isNullOrBlank(),
-                                                hasSession = !event.frame.sessionId.isNullOrBlank(),
-                                                hasApprovalId = !event.frame.approvalId.isNullOrBlank(),
-                                                hasTool = !event.frame.toolName.isNullOrBlank(),
-                                                replay = event.frame.replay == true,
-                                                pendingCount = snapshot.pendingApprovals.size,
-                                                selectedVisible = snapshot.pendingApprovals.any {
-                                                    it.sessionId == snapshot.selectedSessionId
-                                                }
+                                    }
+                                    event.targetSessionId?.takeIf { event.requestType == "history" }
+                                        ?.let { projectionActor.historyCancelled(it) }
+                                    if (event.requestType == "attachment") {
+                                        withContext(Dispatchers.Main.immediate) {
+                                            attachmentFailed(event.targetSessionId, event.correlationId)
+                                        }
+                                    }
+                                    if (event.requestType == "approval-response") {
+                                        event.correlationId?.let {
+                                            projectionActor.approvalRequestFailed(it, event.reason)
+                                        }
+                                    }
+                                    finishGoalMutationAfterFailure(
+                                        appGraph,
+                                        event.requestType,
+                                        event.targetSessionId,
+                                        event.reason
+                                    )
+                                }
+                                is GatewayRuntimeEvent.RequestTimedOut -> {
+                                    withContext(Dispatchers.Main.immediate) {
+                                        handleSessionCancellationFailure(event.requestType, event.targetSessionId)
+                                    }
+                                    if (event.requestType == "command-execute") {
+                                        pendingCommandSubmission = null
+                                    }
+                                    if (event.requestType in SLASH_COMMAND_REQUEST_TYPES) {
+                                        applySlashCommandTransition(
+                                            slashCommandStore.requestFailed(event.requestType, "request-timeout")
+                                        )
+                                    }
+                                    if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
+                                        applyWorkspaceFileTransition(
+                                            appGraph,
+                                            workspaceFileStore.requestFailed(
+                                                event.requestType,
+                                                "request-timeout",
+                                                event.correlationId
+                                            )
+                                        )
+                                    }
+                                    withContext(Dispatchers.Main.immediate) {
+                                        defaultConfigurationLoadingKinds =
+                                            defaultConfigurationLoadingKinds - event.requestType
+                                        clearWorkspaceRequestLoading(event.requestType)
+                                        if (event.requestType == "history") {
+                                            event.targetSessionId?.let {
+                                                historyPagingSessionIds = historyPagingSessionIds - it
+                                            }
+                                        }
+                                    }
+                                    event.targetSessionId?.takeIf { event.requestType == "history" }
+                                        ?.let { projectionActor.historyTimedOut(it) }
+                                    if (event.requestType == "attachment") {
+                                        withContext(Dispatchers.Main.immediate) {
+                                            attachmentFailed(event.targetSessionId, event.correlationId)
+                                        }
+                                    }
+                                    if (event.requestType == "approval-response") {
+                                        event.correlationId?.let {
+                                            projectionActor.approvalRequestFailed(it, "request-timeout")
+                                        }
+                                    }
+                                    finishGoalMutationAfterFailure(
+                                        appGraph,
+                                        event.requestType,
+                                        event.targetSessionId,
+                                        "request-timeout"
+                                    )
+                                }
+                                is GatewayRuntimeEvent.RequestRejected -> {
+                                    withContext(Dispatchers.Main.immediate) {
+                                        handleSessionCancellationFailure(event.requestType, event.targetSessionId)
+                                    }
+                                    if (event.requestType == "command-execute") {
+                                        pendingCommandSubmission = null
+                                    }
+                                    if (event.requestType in SLASH_COMMAND_REQUEST_TYPES) {
+                                        applySlashCommandTransition(
+                                            slashCommandStore.requestFailed(event.requestType, event.reason)
+                                        )
+                                    }
+                                    if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
+                                        applyWorkspaceFileTransition(
+                                            appGraph,
+                                            workspaceFileStore.requestFailed(
+                                                event.requestType,
+                                                event.reason,
+                                                event.correlationId
+                                            )
+                                        )
+                                    }
+                                    withContext(Dispatchers.Main.immediate) {
+                                        defaultConfigurationLoadingKinds =
+                                            defaultConfigurationLoadingKinds - event.requestType
+                                        clearWorkspaceRequestLoading(event.requestType)
+                                        platformError = "${event.requestType}: ${event.reason}"
+                                        if (event.requestType == "history") {
+                                            event.targetSessionId?.let {
+                                                historyPagingSessionIds = historyPagingSessionIds - it
+                                            }
+                                        }
+                                    }
+                                    event.targetSessionId?.takeIf { event.requestType == "history" }
+                                        ?.let { projectionActor.historyCancelled(it) }
+                                    if (event.requestType == "attachment") {
+                                        withContext(Dispatchers.Main.immediate) {
+                                            attachmentFailed(event.targetSessionId, event.correlationId)
+                                        }
+                                    }
+                                    if (event.requestType == "approval-response") {
+                                        val correlationId = event.correlationId
+                                        val targetSessionId = event.targetSessionId
+                                        if (correlationId != null) {
+                                            projectionActor.approvalRequestFailed(
+                                                correlationId,
+                                                event.reason
+                                            )
+                                        } else if (targetSessionId != null) {
+                                            projectionActor.approvalSessionRequestsFailed(
+                                                targetSessionId,
+                                                event.reason
                                             )
                                         }
                                     }
-                                    if (event.frame.kind in setOf("session-archives", "session-archived")) {
-                                        appGraph.gatewayRuntime.requestSessions()
-                                    }
-                                    if (event.frame.kind == "sent") {
-                                        event.frame.sessionId?.takeIf(String::isNotBlank)?.let { sessionId ->
-                                            handleSentSession(appGraph, sessionId)
-                                        }
-                                    }
-                                }
-                                if (trajectoryIsActive && (!isStreamingChunk || streamingProjectionFlushed)) {
-                                    publishTrajectory()
-                                }
-                            }
-                            is GatewayRuntimeEvent.AttachmentCached -> withContext(Dispatchers.Main.immediate) {
-                                attachmentCompleted(event.sessionId, event.attachmentId)
-                            }
-                            is GatewayRuntimeEvent.RequestQueued -> Unit
-                            is GatewayRuntimeEvent.RequestCancelled -> {
-                                withContext(Dispatchers.Main.immediate) {
-                                    handleSessionCancellationFailure(event.requestType, event.targetSessionId)
-                                }
-                                if (event.requestType == "command-execute") {
-                                    pendingCommandSubmission = null
-                                }
-                                if (event.requestType in SLASH_COMMAND_REQUEST_TYPES) {
-                                    applySlashCommandTransition(
-                                        slashCommandStore.requestFailed(event.requestType, event.reason)
-                                    )
-                                }
-                                if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
-                                    applyWorkspaceFileTransition(
+                                    finishGoalMutationAfterFailure(
                                         appGraph,
-                                        workspaceFileStore.requestFailed(
-                                            event.requestType,
-                                            event.reason,
-                                            event.correlationId
-                                        )
+                                        event.requestType,
+                                        event.targetSessionId,
+                                        event.reason
                                     )
                                 }
-                                withContext(Dispatchers.Main.immediate) {
-                                    defaultConfigurationLoadingKinds =
-                                        defaultConfigurationLoadingKinds - event.requestType
-                                    if (event.requestType == "history") {
-                                        event.targetSessionId?.let {
-                                            historyPagingSessionIds = historyPagingSessionIds - it
-                                        }
-                                    }
-                                }
-                                event.targetSessionId?.takeIf { event.requestType == "history" }
-                                    ?.let { projectionActor.historyCancelled(it) }
-                                if (event.requestType == "attachment") {
-                                    withContext(Dispatchers.Main.immediate) {
-                                        attachmentFailed(event.targetSessionId, event.correlationId)
-                                    }
-                                }
-                                if (event.requestType == "approval-response") {
-                                    event.correlationId?.let {
-                                        projectionActor.approvalRequestFailed(it, event.reason)
-                                    }
-                                }
-                                finishGoalMutationAfterFailure(
-                                    appGraph,
-                                    event.requestType,
-                                    event.targetSessionId,
-                                    event.reason
-                                )
-                            }
-                            is GatewayRuntimeEvent.RequestTimedOut -> {
-                                withContext(Dispatchers.Main.immediate) {
-                                    handleSessionCancellationFailure(event.requestType, event.targetSessionId)
-                                }
-                                if (event.requestType == "command-execute") {
-                                    pendingCommandSubmission = null
-                                }
-                                if (event.requestType in SLASH_COMMAND_REQUEST_TYPES) {
-                                    applySlashCommandTransition(
-                                        slashCommandStore.requestFailed(event.requestType, "request-timeout")
-                                    )
-                                }
-                                if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
-                                    applyWorkspaceFileTransition(
-                                        appGraph,
-                                        workspaceFileStore.requestFailed(
-                                            event.requestType,
-                                            "request-timeout",
-                                            event.correlationId
-                                        )
-                                    )
-                                }
-                                withContext(Dispatchers.Main.immediate) {
-                                    defaultConfigurationLoadingKinds =
-                                        defaultConfigurationLoadingKinds - event.requestType
-                                    clearWorkspaceRequestLoading(event.requestType)
-                                    if (event.requestType == "history") {
-                                        event.targetSessionId?.let {
-                                            historyPagingSessionIds = historyPagingSessionIds - it
-                                        }
-                                    }
-                                }
-                                event.targetSessionId?.takeIf { event.requestType == "history" }
-                                    ?.let { projectionActor.historyTimedOut(it) }
-                                if (event.requestType == "attachment") {
-                                    withContext(Dispatchers.Main.immediate) {
-                                        attachmentFailed(event.targetSessionId, event.correlationId)
-                                    }
-                                }
-                                if (event.requestType == "approval-response") {
-                                    event.correlationId?.let {
-                                        projectionActor.approvalRequestFailed(it, "request-timeout")
-                                    }
-                                }
-                                finishGoalMutationAfterFailure(
-                                    appGraph,
-                                    event.requestType,
-                                    event.targetSessionId,
-                                    "request-timeout"
-                                )
-                            }
-                            is GatewayRuntimeEvent.RequestRejected -> {
-                                withContext(Dispatchers.Main.immediate) {
-                                    handleSessionCancellationFailure(event.requestType, event.targetSessionId)
-                                }
-                                if (event.requestType == "command-execute") {
-                                    pendingCommandSubmission = null
-                                }
-                                if (event.requestType in SLASH_COMMAND_REQUEST_TYPES) {
-                                    applySlashCommandTransition(
-                                        slashCommandStore.requestFailed(event.requestType, event.reason)
-                                    )
-                                }
-                                if (event.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
-                                    applyWorkspaceFileTransition(
-                                        appGraph,
-                                        workspaceFileStore.requestFailed(
-                                            event.requestType,
-                                            event.reason,
-                                            event.correlationId
-                                        )
-                                    )
-                                }
-                                withContext(Dispatchers.Main.immediate) {
-                                    defaultConfigurationLoadingKinds =
-                                        defaultConfigurationLoadingKinds - event.requestType
-                                    clearWorkspaceRequestLoading(event.requestType)
-                                    platformError = "${event.requestType}: ${event.reason}"
-                                    if (event.requestType == "history") {
-                                        event.targetSessionId?.let {
-                                            historyPagingSessionIds = historyPagingSessionIds - it
-                                        }
-                                    }
-                                }
-                                event.targetSessionId?.takeIf { event.requestType == "history" }
-                                    ?.let { projectionActor.historyCancelled(it) }
-                                if (event.requestType == "attachment") {
-                                    withContext(Dispatchers.Main.immediate) {
-                                        attachmentFailed(event.targetSessionId, event.correlationId)
-                                    }
-                                }
-                                if (event.requestType == "approval-response") {
-                                    val correlationId = event.correlationId
-                                    val targetSessionId = event.targetSessionId
-                                    if (correlationId != null) {
-                                        projectionActor.approvalRequestFailed(
-                                            correlationId,
-                                            event.reason
-                                        )
-                                    } else if (targetSessionId != null) {
-                                        projectionActor.approvalSessionRequestsFailed(
-                                            targetSessionId,
-                                            event.reason
-                                        )
-                                    }
-                                }
-                                finishGoalMutationAfterFailure(
-                                    appGraph,
-                                    event.requestType,
-                                    event.targetSessionId,
-                                    event.reason
-                                )
                             }
                         }
                     }
@@ -981,9 +991,11 @@ class AndroidSharedStateHolder(
     }
 
     private suspend fun handleSentSession(appGraph: AndroidAppGraph, sessionId: String) {
-        appGraph.gatewayRuntime.subscribe(sessionId)
-        appGraph.gatewayRuntime.requestSessions()
-        requestSessionControls(appGraph, sessionId)
+        gatewayFollowUps?.submit {
+            appGraph.gatewayRuntime.subscribe(sessionId)
+            appGraph.gatewayRuntime.requestSessions()
+            requestSessionControls(appGraph, sessionId)
+        }
     }
 
     private suspend fun requestSessionControls(appGraph: AndroidAppGraph, sessionId: String) {
@@ -1060,7 +1072,9 @@ class AndroidSharedStateHolder(
                 "目标操作未完成，已刷新当前目标后可重试。"
             }
         }
-        sessionId?.let { appGraph.gatewayRuntime.sendRequest(GatewayRequests.goal(it)) }
+        sessionId?.let {
+            gatewayFollowUps?.submit { appGraph.gatewayRuntime.sendRequest(GatewayRequests.goal(it)) }
+        }
     }
 
     fun answerQuestion(rpcId: String, sessionId: String, answers: List<GatewayQuestionAnswer>) {
@@ -1395,6 +1409,7 @@ class AndroidSharedStateHolder(
     }
 
     fun close() {
+        gatewayFollowUps?.close()
         streamingSnapshotPublishJob?.cancel()
         projectionActor.close()
         runtimeCollection?.cancel()
@@ -1615,7 +1630,9 @@ class AndroidSharedStateHolder(
                 workspaceFileDownloadPurpose = null
                 platformError = "写入下载文件失败"
             }
-            cancelled.request?.let { appGraph.gatewayRuntime.sendRequest(it) }
+            cancelled.request?.let { request ->
+                gatewayFollowUps?.submit { appGraph.gatewayRuntime.sendRequest(request) }
+            }
             return
         }
 
@@ -1655,7 +1672,9 @@ class AndroidSharedStateHolder(
             snapshot.lastError?.let { platformError = workspaceFileErrorMessage(it) }
             completed?.let { completedWorkspaceFile = it }
         }
-        transition.request?.let { appGraph.gatewayRuntime.sendRequest(it) }
+        transition.request?.let { request ->
+            gatewayFollowUps?.submit { appGraph.gatewayRuntime.sendRequest(request) }
+        }
     }
 
     private fun openWorkspaceTemporaryFile(appGraph: AndroidAppGraph, name: String) {

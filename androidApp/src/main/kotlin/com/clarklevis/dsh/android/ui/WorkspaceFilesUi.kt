@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -44,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +70,8 @@ internal fun WorkspaceFilesBottomSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // 使用稳定的窗口高度，避免面板 offset 改变 Insets 后反复重算展开锚点。
+    val sheetHeight = LocalConfiguration.current.screenHeightDp.dp * 0.88f
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val downloadRegistry = remember(context) { AndroidWorkspaceDownloadRegistry(context) }
@@ -140,13 +142,16 @@ internal fun WorkspaceFilesBottomSheet(
             onDismiss()
         },
         sheetState = sheetState,
+        // 文件列表独占滚动/惯性手势；面板通过完成、返回或点击遮罩关闭。
+        sheetGesturesEnabled = false,
+        dragHandle = null,
         containerColor = Color(0xFFF5F5F5),
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.88f)
+                .height(sheetHeight)
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(bottom = 12.dp)
         ) {
@@ -243,6 +248,7 @@ private fun WorkspaceFileSheetHeader(
         Modifier
             .fillMaxWidth()
             .background(Color(0xFFF5F5F5))
+            .padding(top = 16.dp)
     ) {
         Box(
             Modifier

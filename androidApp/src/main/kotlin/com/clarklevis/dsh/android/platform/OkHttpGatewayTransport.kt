@@ -55,6 +55,7 @@ internal class OkHttpGatewayTransport(
                     ?: MOBILE_PROTOCOL
             )
             .apply {
+                spec.channel?.let { header("X-DSH-Channel", it) }
                 spec.bearerToken?.takeIf(String::isNotBlank)?.let {
                     header("Authorization", "Bearer $it")
                 }

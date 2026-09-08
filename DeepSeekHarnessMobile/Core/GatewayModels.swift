@@ -426,6 +426,14 @@ struct GatewayPairingPayload: Codable, Hashable, Sendable {
 /// here so one malformed discriminator cannot discard an otherwise valid event.
 enum GatewayWireDecoder {
     static func decode(_ data: Data) throws -> GatewayFrame {
+        // 带 kind 的控制响应和大 history 页直接解码，避免先完整解析、
+        // 再序列化整个 JSON。只为旧版无 kind 的实时事件走兼容路径。
+        do {
+            return try JSONDecoder().decode(GatewayFrame.self, from: data)
+        } catch DecodingError.keyNotFound(let key, let context)
+            where key.stringValue == "kind" && context.codingPath.isEmpty {
+            // 下方仅在满足完整事件信封条件时补齐 kind。
+        }
         guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return try JSONDecoder().decode(GatewayFrame.self, from: data)
         }

@@ -3,6 +3,12 @@ import Security
 
 @MainActor
 final class GatewayClient: ObservableObject {
+    private let channel: String
+    private var conversationClient: GatewayClient?
+
+    init(channel: String = "control") {
+        self.channel = channel
+    }
     /// History responses contain raw trajectory events (including request
     /// context) and can exceed URLSessionWebSocketTask's 1 MiB default.
     /// Gateway v0.1.12 normally keeps history pages below 4 MiB. Retain a much
@@ -15,7 +21,8 @@ final class GatewayClient: ObservableObject {
     @Published private(set) var clientCount: Int?
 
     var onFrame: ((GatewayFrame) -> Void)?
-    var onRawFrame: ((String) -> Void)?
+    /// 仅命令菜单需要原始 JSON；对话流不能触发它的解析和 UI 发布。
+    var onCommandFrame: ((String) -> Void)?
     var onConnectionFailure: ((String) -> Void)?
     private var socket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
@@ -159,6 +166,7 @@ final class GatewayClient: ObservableObject {
         if resetReportedFailure { lastReportedFailure = nil }
         state = .connecting
         var request = URLRequest(url: url)
+        request.setValue(channel, forHTTPHeaderField: "X-DSH-Channel")
         do {
             request.setValue(try GatewayDeviceIdentityStore.loadOrCreate(), forHTTPHeaderField: "X-DSH-Device-ID")
         } catch {
@@ -185,6 +193,8 @@ final class GatewayClient: ObservableObject {
     }
 
     func disconnect(reconnect: Bool = false) {
+        conversationClient?.disconnect()
+        conversationClient = nil
         failSessionCreations()
         wantsConnection = reconnect
         reconnectTask?.cancel()
@@ -344,6 +354,10 @@ final class GatewayClient: ObservableObject {
         sessionId: String?,
         workspaceId: String? = nil
     ) {
+        if let conversationClient {
+            conversationClient.sendMessage(text: text, images: images, sessionId: sessionId, workspaceId: workspaceId)
+            return
+        }
         guard let socket else {
             state = .failed(String(localized: "state.websocket.not-connected", defaultValue: "WebSocket 尚未连接"))
             return
@@ -444,6 +458,11 @@ final class GatewayClient: ObservableObject {
 
     /// KMP 文件状态机已经生成并校验过的协议请求。平台 transport 只负责发送。
     func sendRequestPayload(_ payload: String) {
+        if let type = try? JSONDecoder().decode(RequestEnvelope.self, from: Data(payload.utf8)).type,
+           Self.usesConversationChannel(type), let conversationClient {
+            conversationClient.sendRequestPayload(payload)
+            return
+        }
         guard let socket else {
             state = .failed(String(localized: "state.websocket.not-connected", defaultValue: "WebSocket 尚未连接"))
             return
@@ -455,6 +474,12 @@ final class GatewayClient: ObservableObject {
     }
 
     private func send(_ object: [String: Any]) {
+        if let type = object["type"] as? String,
+           Self.usesConversationChannel(type),
+           let conversationClient {
+            conversationClient.send(object)
+            return
+        }
         guard let socket else {
             state = .failed(String(localized: "state.websocket.not-connected", defaultValue: "WebSocket 尚未连接"))
             return
@@ -471,6 +496,14 @@ final class GatewayClient: ObservableObject {
         }
     }
 
+    nonisolated static func usesConversationChannel(_ requestType: String) -> Bool {
+        ["message", "history", "subscribe", "unsubscribe"].contains(requestType)
+    }
+
+    private struct RequestEnvelope: Decodable {
+        let type: String
+    }
+
     private func receiveLoop(_ socket: URLSessionWebSocketTask) async {
         do {
             while !Task.isCancelled {
@@ -482,13 +515,12 @@ final class GatewayClient: ObservableObject {
                 @unknown default: continue
                 }
                 do {
-                    let rawText = String(decoding: data, as: UTF8.self)
-                    onRawFrame?(rawText)
                     // A history page can contain thousands of raw events. JSON
                     // decoding must not occupy the main actor that drives SwiftUI.
                     let frame = try await Task.detached(priority: .userInitiated) {
                         try GatewayWireDecoder.decode(data)
                     }.value
+                    guard !Task.isCancelled, self.socket === socket else { return }
                     if frame.kind.hasPrefix("approval") {
                         gatewayApprovalTrace(
                             "transport received kind=\(frame.kind) hasRpc=\(frame.rpcId?.isEmpty == false) " +
@@ -510,6 +542,9 @@ final class GatewayClient: ObservableObject {
                             return
                         }
                     } else if frame.kind == "hello" {
+                        if channel == "control", frame.capabilities?.contains("split-channels") == true {
+                            openConversationChannel()
+                        }
                         // `hello` is the protocol's authentication boundary.
                         // Debug mode may explicitly return authenticated=false.
                         connectionTimeoutTask?.cancel()
@@ -521,7 +556,7 @@ final class GatewayClient: ObservableObject {
                         serverPort = frame.port
                         clientCount = frame.clients
                     }
-                    if !acceptSessionCreationFrame(frame) { onFrame?(frame) }
+                    deliverApplicationFrame(frame, data: data)
                 } catch {
                     // One future or malformed frame must not tear down an otherwise healthy socket.
                     onFrame?(GatewayFrame(kind: "error", code: "decode-failed", message: error.localizedDescription))
@@ -532,6 +567,35 @@ final class GatewayClient: ObservableObject {
         } catch {
             handleFailure(error, socket: socket)
         }
+    }
+
+    private func openConversationChannel() {
+        guard conversationClient == nil, let endpoint else { return }
+        let client = GatewayClient(channel: "conversation")
+        conversationClient = client
+        client.onFrame = { [weak self, weak client] frame in
+            guard let self, self.conversationClient === client,
+                  frame.kind != "hello", frame.kind != "paired" else { return }
+            self.onFrame?(frame)
+        }
+        client.onConnectionFailure = { [weak self, weak client] detail in
+            guard let self, self.conversationClient === client else { return }
+            self.fail(detail, shouldReconnect: true)
+        }
+        // 长期凭据已在控制连接 paired 帧中保存，绝不重复使用一次性配对码。
+        client.connect(to: endpoint.absoluteString)
+    }
+
+    func deliverApplicationFrame(_ frame: GatewayFrame, data: Data) {
+        switch frame.kind {
+        case "commands", "command-options", "command-selected":
+            onCommandFrame?(String(decoding: data, as: UTF8.self))
+        case "error" where ["commands", "command-options", "command-select"].contains(frame.requestType):
+            onCommandFrame?(String(decoding: data, as: UTF8.self))
+        default:
+            break
+        }
+        if !acceptSessionCreationFrame(frame) { onFrame?(frame) }
     }
 
     private func handleFailure(_ error: Error, socket: URLSessionWebSocketTask? = nil) {
@@ -582,11 +646,15 @@ final class GatewayClient: ObservableObject {
     }
 
     private func fail(_ detail: String, shouldReconnect: Bool, reportFailure: Bool = true) {
+        conversationClient?.disconnect()
+        conversationClient = nil
         failSessionCreations()
         connectionTimeoutTask?.cancel()
         connectionTimeoutTask = nil
         state = .failed(detail)
+        socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
+        receiveTask?.cancel()
         receiveTask = nil
         if !shouldReconnect { wantsConnection = false }
         if reportFailure, lastReportedFailure != detail {
@@ -594,7 +662,7 @@ final class GatewayClient: ObservableObject {
             onConnectionFailure?(detail)
         }
         reconnectTask?.cancel()
-        guard shouldReconnect else { return }
+        guard shouldReconnect, channel == "control" else { return }
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
             guard let self, self.wantsConnection, let endpoint = self.endpoint else { return }
@@ -624,6 +692,8 @@ final class GatewayClient: ObservableObject {
     }
 
     private func suspendTransportForBackground() {
+        conversationClient?.disconnect()
+        conversationClient = nil
         failSessionCreations()
         wantsConnection = true
         reconnectTask?.cancel()

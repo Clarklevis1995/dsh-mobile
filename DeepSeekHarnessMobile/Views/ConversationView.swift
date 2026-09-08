@@ -2,6 +2,7 @@ import SwiftUI
 import MarkdownUI
 import PhotosUI
 import UIKit
+import DeepSeekHarnessShared
 
 struct SlashCommandComposerPresentation: Equatable {
     let token: String
@@ -2341,6 +2342,13 @@ struct ConversationProcessTool: Identifiable {
     let call: ConversationItem?
     let result: ConversationItem?
 
+    var activitySummary: ToolActivitySummary {
+        ToolActivitySummaryFormatter.shared.summarize(
+            name: call?.title ?? result?.title ?? "工具",
+            arguments: call?.text ?? ""
+        )
+    }
+
     var isExpandable: Bool {
         call?.text.isEmpty == false || result?.text.isEmpty == false
     }
@@ -2634,6 +2642,8 @@ struct ConversationProcessNode: Identifiable {
         [
             tool.call?.title,
             tool.result?.title,
+            tool.call?.text,
+            tool.result == nil ? "pending" : "finished",
             tool.result?.isError == true ? "error" : "ok"
         ].compactMap { $0 }.joined(separator: "|")
     }
@@ -2930,11 +2940,12 @@ private struct ConversationProcessToolHeaderRow: View {
             }
         }
         .padding(.leading, 16)
-        .padding(.vertical, 3)
+        .padding(.vertical, 6)
     }
 
     private var label: some View {
-        HStack(spacing: 7) {
+        let summary = tool.activitySummary
+        return HStack(spacing: 7) {
             ConversationGlyphImage(
                 glyph: tool.result?.isError == true
                     ? .system("exclamationmark.triangle")
@@ -2942,14 +2953,30 @@ private struct ConversationProcessToolHeaderRow: View {
             )
                 .foregroundStyle(tool.result?.isError == true ? .red : DSHColor.orange)
                 .frame(width: 17)
-            Text(tool.call?.title ?? tool.result?.title ?? String(localized: "trajectory.tool.fallback", defaultValue: "工具"))
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            if let result = tool.result {
-                Text(result.isError ? String(localized: "失败") : String(localized: "完成"))
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(result.isError ? .red : .secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text(summary.label)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    if !summary.annotation.isEmpty {
+                        Text(summary.annotation)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
+                    if tool.result?.isError == true {
+                        Text("失败").font(.caption2.weight(.semibold)).foregroundStyle(.red)
+                    } else if tool.result == nil {
+                        Text("等待结果").font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                if !summary.detail.isEmpty {
+                    Text(summary.detail)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .multilineTextAlignment(.leading)
+                }
             }
             Spacer(minLength: 8)
             if isExpandable {
@@ -3020,6 +3047,8 @@ private func conversationToolGlyph(_ toolName: String?) -> ConversationGlyph {
         .lowercased()
         .filter { $0.isLetter || $0.isNumber } ?? ""
     switch normalized {
+    case "write", "edit", "writefile", "editfile", "applypatch":
+        return .system("pencil")
     case "glob", "grep", "websearch":
         return .asset("DshSearch")
     case "read", "webfetch", "cordispackageinspect", "cordisruntimeinspect":

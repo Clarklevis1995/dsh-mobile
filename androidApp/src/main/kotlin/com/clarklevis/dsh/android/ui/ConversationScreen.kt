@@ -556,7 +556,7 @@ private fun ConversationPage(
                         stateHolder.cancelQuestion(cancelledRequest.rpcId, cancelledRequest.sessionId)
                     }
                 ) {
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         // Pending interaction cards replace normal composer
                         // chrome. Stats/tasks/goals must not consume height and
                         // push the approval or question actions off screen.
@@ -1085,7 +1085,7 @@ private fun Composer(
         }
     }
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).padding(bottom = 10.dp)
             .dropShadow(
                 shape = shape,
                 shadow = Shadow(
@@ -1895,10 +1895,19 @@ private fun ProcessToolBundle(
 @Composable
 private fun ProcessToolDisclosure(tool: ConversationProcessTool) {
     val failed = tool.result?.isError == true
+    val summary = remember(tool.call?.title, tool.call?.text, tool.result?.title) {
+        com.clarklevis.dsh.shared.projection.ToolActivitySummaryFormatter.summarize(
+            tool.call?.title ?: tool.result?.title ?: "工具", tool.call?.text.orEmpty()
+        )
+    }
     ProcessDisclosure(
         id = "tool-${tool.id}",
-        title = tool.call?.title ?: tool.result?.title ?: "工具",
-        preview = tool.result?.let { if (failed) "失败" else "完成" }.orEmpty(),
+        title = listOf(summary.label, summary.annotation).filter(String::isNotBlank).joinToString(" · "),
+        preview = listOf(
+            summary.detail,
+            if (failed) "失败" else if (tool.result == null) "等待结果" else ""
+        ).filter(String::isNotBlank).joinToString(" · "),
+        stackedPreview = true,
         iconRes = processToolIcon(tool.call?.title),
         tint = if (failed) Color.Red else DshColors.Orange
     ) {
@@ -1937,6 +1946,7 @@ private fun ProcessDisclosure(
     iconRes: Int,
     tint: Color,
     bodyStartPadding: Dp = 26.dp,
+    stackedPreview: Boolean = false,
     content: @Composable () -> Unit
 ) {
     var expanded by remember(id) { mutableStateOf(false) }
@@ -1954,26 +1964,37 @@ private fun ProcessDisclosure(
                     tint = tint
                 )
             }
-            Text(
-                title,
-                color = tint,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (preview.isNotEmpty()) {
-                Text("·", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f))
+            if (stackedPreview) {
+                Column(Modifier.weight(1f).padding(vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(title, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    if (preview.isNotEmpty()) Text(preview,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f),
+                        fontSize = 12.sp, fontFamily = FontFamily.Monospace,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            } else {
                 Text(
-                    preview,
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f),
+                    title,
+                    color = tint,
                     fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-            } else {
-                Spacer(Modifier.weight(1f))
+                if (preview.isNotEmpty()) {
+                    Text("·", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f))
+                    Text(
+                        preview,
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f),
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
             }
             ProcessChevron(expanded)
         }
@@ -2008,6 +2029,7 @@ private fun processToolIcon(toolName: String?): Int {
         .lowercase()
         .filter(Char::isLetterOrDigit)
     return when (normalized) {
+        "write", "edit", "writefile", "editfile", "applypatch" -> R.drawable.ic_session_rename
         "glob", "grep", "websearch" -> R.drawable.ic_dsh_search
         "read", "webfetch", "cordispackageinspect", "cordisruntimeinspect" ->
             R.drawable.ic_dsh_read

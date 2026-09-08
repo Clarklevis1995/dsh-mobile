@@ -135,7 +135,7 @@ internal fun SessionStatsBanner(
     val glassEdge = dshGlassEdge(isDark)
     val shadowColor = dshFloatingSurfaceShadow(isDark)
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).padding(bottom = 2.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
         horizontalArrangement = Arrangement.End
     ) {
         Box {

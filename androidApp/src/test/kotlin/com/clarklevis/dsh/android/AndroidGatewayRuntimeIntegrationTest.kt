@@ -3,6 +3,8 @@ package com.clarklevis.dsh.android
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import com.clarklevis.dsh.shared.gateway.GatewayRuntime
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
+import com.clarklevis.dsh.shared.gateway.GatewayRequests
+import kotlinx.coroutines.CompletableDeferred
 import com.clarklevis.dsh.shared.platform.GatewayAttachmentCache
 import com.clarklevis.dsh.shared.platform.GatewayClock
 import com.clarklevis.dsh.shared.platform.GatewayConnectionSpec
@@ -30,6 +32,59 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AndroidGatewayRuntimeIntegrationTest {
+    @Test
+    fun fileFollowUpDoesNotDeadlockWhenConversationFillsRuntimeQueue() = runTest {
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport, FakePreferences(), FakeCredentials(), FakeAttachmentCache(),
+            FakeNetworkMonitor(), ImmediateClock, backgroundScope
+        )
+        val releaseFileConsumer = CompletableDeferred<Unit>()
+        val followUps = AndroidGatewayFollowUpQueue(backgroundScope, onFailure = { throw it })
+        val receivedSequences = mutableListOf<Int>()
+        var receivedChunks = 0
+        backgroundScope.launch {
+            runtime.events.collect { event ->
+                if (event is GatewayRuntimeEvent.Frame) {
+                    if (event.frame.kind == "event") receivedSequences += requireNotNull(event.frame.seq)
+                    if (event.frame.kind == "file-download-chunk") {
+                        receivedChunks += 1
+                        if (receivedChunks == 1) {
+                            releaseFileConsumer.await()
+                            followUps.submit {
+                                runtime.sendRequest(GatewayRequests.fileDownloadRead("transfer-1", 524_288))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        runCurrent()
+        assertTrue(runtime.connectStoredIfPaired())
+        runCurrent()
+        transport.open()
+        transport.receive("""{"kind":"hello","protocol":3,"authenticated":true}""")
+        runCurrent()
+        runtime.sendRequest(GatewayRequests.fileDownloadRead("transfer-1", 0))
+        transport.receive("""{"kind":"file-download-chunk","transferId":"transfer-1","offset":0,"data":"YQ==","eof":false}""")
+        runCurrent()
+        assertEquals(1, receivedChunks)
+        // Runtime 的事件队列容量为 8；消费者停在写文件后的下一块请求前。
+        repeat(24) { index ->
+            transport.receive("""{"sessionId":"s1","seq":${index + 1},"time":1,"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"text-delta","text":"x"}}""")
+        }
+        runCurrent()
+        assertTrue(receivedSequences.isEmpty())
+        releaseFileConsumer.complete(Unit)
+        runCurrent()
+        assertEquals((1..24).toList(), receivedSequences)
+        assertEquals(2, transport.sentPayloads.count { "file-download-read" in it })
+        transport.receive("""{"kind":"file-download-chunk","transferId":"transfer-1","offset":524288,"data":"Yg==","eof":true}""")
+        runCurrent()
+        assertEquals(2, receivedChunks)
+        followUps.close()
+    }
+
     @Test
     fun androidHostReplaysFakeGatewayWithoutLosingStateAcrossReconnect() = runTest {
         val transport = FakeTransport()

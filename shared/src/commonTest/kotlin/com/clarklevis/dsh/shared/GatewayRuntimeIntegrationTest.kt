@@ -6,6 +6,8 @@ import com.clarklevis.dsh.shared.gateway.GatewayPairingPayloadException
 import com.clarklevis.dsh.shared.gateway.GatewayPairingPayloadParser
 import com.clarklevis.dsh.shared.gateway.GatewayRuntime
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
+import com.clarklevis.dsh.shared.gateway.SplitGatewayTransport
+import kotlinx.coroutines.CompletableDeferred
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.gateway.gatewayAttachmentCacheKey
 import com.clarklevis.dsh.shared.platform.GatewayAttachmentCache
@@ -49,6 +51,91 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GatewayRuntimeIntegrationTest {
+    @Test
+    fun splitTransportKeepsFilesMovingWhileConversationConsumerIsBlocked() = runTest {
+        val control = FakeTransport()
+        val conversation = FakeTransport()
+        val runtime = GatewayRuntime(
+            SplitGatewayTransport(control, conversation), FakePreferences(), FakeCredentials(),
+            FakeAttachmentCache(), FakeNetworkMonitor(), FakeClock(0), backgroundScope
+        )
+        val releaseConversation = CompletableDeferred<Unit>()
+        val controlFrames = mutableListOf<String>()
+        val sequences = mutableListOf<Int>()
+        backgroundScope.launch {
+            runtime.events.collect { if (it is GatewayRuntimeEvent.Frame) controlFrames += it.frame.kind }
+        }
+        backgroundScope.launch {
+            runtime.conversationEvents.collect {
+                releaseConversation.await()
+                if (it is GatewayRuntimeEvent.Frame) sequences += requireNotNull(it.frame.seq)
+            }
+        }
+        runCurrent()
+        runtime.connect("ws://localhost/mobile")
+        runCurrent()
+        control.opened()
+        control.receive("""{"kind":"hello","capabilities":["split-channels"],"protocol":3}""")
+        runCurrent()
+        assertEquals("control", control.connectionSpecs.single().channel)
+        assertEquals("conversation", conversation.connectionSpecs.single().channel)
+        conversation.opened()
+        conversation.receive("""{"kind":"hello","capabilities":["split-channels"],"protocol":3}""")
+        runCurrent()
+        runtime.subscribe("s1")
+        runtime.requestHistory("s1")
+        assertTrue("subscribe" in conversation.sentTypes && "history" in conversation.sentTypes)
+        assertFalse("subscribe" in control.sentTypes || "history" in control.sentTypes)
+        repeat(24) { index ->
+            conversation.receive("""{"sessionId":"s1","seq":${index + 1},"time":1,"event":{"type":"assistant/chunk","text":"x","chunkType":"text-delta","turn":1,"step":1}}""")
+        }
+        runCurrent()
+        assertTrue(sequences.isEmpty())
+        // 对话有界队列已满；控制请求、回执仍必须完成，且不依赖放开对话消费者。
+        assertTrue(runtime.sendRequest(GatewayRequests.fileList("s1", null, "files-split")))
+        control.receive("""{"kind":"file-list","requestId":"files-split","sessionId":"s1","path":".","entries":[]}""")
+        runCurrent()
+        assertTrue("file-list" in controlFrames)
+        assertTrue(runtime.sendRequest(GatewayRequests.fileDownloadRead("transfer-split", 0)))
+        control.receive("""{"kind":"file-download-chunk","transferId":"transfer-split","offset":0,"data":"YQ==","eof":true}""")
+        runCurrent()
+        assertTrue("file-download-chunk" in controlFrames)
+        assertFalse("event" in controlFrames)
+        assertFalse("file-list" in conversation.sentTypes || "file-download-read" in conversation.sentTypes)
+        releaseConversation.complete(Unit)
+        runCurrent()
+        assertEquals((1..24).toList(), sequences)
+    }
+
+    @Test
+    fun splitTransportReusesPairingTokenAndFallsBackForOldGateways() = runTest {
+        val control = FakeTransport()
+        val conversation = FakeTransport()
+        val transport = SplitGatewayTransport(control, conversation)
+        backgroundScope.launch { transport.events.collect {} }
+        backgroundScope.launch { transport.conversationEvents.collect {} }
+        runCurrent()
+        val spec = GatewayConnectionSpec(1, "ws://localhost/mobile", "device", pairingCode = "single-use")
+        transport.open(spec)
+        control.opened()
+        control.receive("""{"kind":"paired","token":"long-lived"}""")
+        control.receive("""{"kind":"hello","capabilities":["split-channels"]}""")
+        runCurrent()
+        assertEquals("long-lived", conversation.connectionSpecs.single().bearerToken)
+        assertNull(conversation.connectionSpecs.single().pairingCode)
+        conversation.opened()
+        conversation.receive("""{"kind":"hello","capabilities":["split-channels"]}""")
+        runCurrent()
+        transport.close()
+        transport.open(spec.copy(generation = 2, pairingCode = null, bearerToken = "long-lived"))
+        control.opened()
+        control.receive("""{"kind":"hello","capabilities":[]}""")
+        runCurrent()
+        transport.send(GatewayRequests.history("s1").payload)
+        assertEquals(1, conversation.connectionSpecs.size)
+        assertTrue("history" in control.sentTypes)
+    }
+
     @Test
     fun fakeTransportCoversPairingCorrelationAttachmentAndReconnect() = runTest {
         val transport = FakeTransport()

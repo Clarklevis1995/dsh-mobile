@@ -355,7 +355,7 @@ final class AppStore: ObservableObject {
             }
         }
         gateway.onFrame = { [weak self] frame in self?.handle(frame) }
-        gateway.onRawFrame = { [weak self] json in
+        gateway.onCommandFrame = { [weak self] json in
             guard let self else { return }
             self.applySlashCommandTransition(self.kmpSlashCommandStore.acceptFrame(json: json))
         }
