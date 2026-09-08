@@ -990,6 +990,15 @@ class AndroidSharedStateHolder(
         }
     }
 
+    fun refreshContextUsage() {
+        val sessionId = snapshot.selectedSessionId ?: return
+        val appGraph = graph ?: return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
+        appGraph.gatewayScope.launch {
+            appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("context-usage", sessionId))
+        }
+    }
+
     private suspend fun handleSentSession(appGraph: AndroidAppGraph, sessionId: String) {
         gatewayFollowUps?.submit {
             appGraph.gatewayRuntime.subscribe(sessionId)

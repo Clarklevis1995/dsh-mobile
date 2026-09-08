@@ -1,7 +1,15 @@
 package com.clarklevis.dsh.android.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,6 +126,11 @@ private fun TaskPanel(
     onExpandedChange: () -> Unit
 ) {
     val shape = RoundedCornerShape(20.dp)
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 0f else 180f,
+        animationSpec = tween(220),
+        label = "task-panel-arrow"
+    )
     // 与 Composer 一致：使用几乎不透明的 surface，而不是叠加在聊天内容上的浅色蒙层。
     val panelSurface = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
     val completed = tasks.count { it.status == "completed" }
@@ -135,7 +148,12 @@ private fun TaskPanel(
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                    .clickable(onClick = onExpandedChange)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = androidx.compose.ui.semantics.Role.Button,
+                        onClick = onExpandedChange
+                    )
                     .semantics { contentDescription = if (expanded) "收起任务" else "展开任务" },
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -159,13 +177,18 @@ private fun TaskPanel(
                 Icon(
                     painter = painterResource(R.drawable.ic_chevron_up),
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp).rotate(if (expanded) 0f else 180f),
+                    modifier = Modifier.size(18.dp).rotate(arrowRotation),
                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                 )
             }
-            if (expanded) {
-                Spacer(Modifier.height(10.dp))
-                tasks.forEach { task -> TaskRow(task) }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(tween(220), expandFrom = Alignment.Top) + fadeIn(tween(160)),
+                exit = shrinkVertically(tween(220), shrinkTowards = Alignment.Top) + fadeOut(tween(120))
+            ) {
+                Column(Modifier.padding(top = 10.dp)) {
+                    tasks.forEach { task -> TaskRow(task) }
+                }
             }
         }
     }

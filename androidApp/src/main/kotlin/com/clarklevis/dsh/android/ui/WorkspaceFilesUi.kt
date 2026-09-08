@@ -2,6 +2,10 @@ package com.clarklevis.dsh.android.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.ClipData
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -38,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +84,54 @@ internal fun WorkspaceFilesBottomSheet(
     var pendingExport by remember { mutableStateOf<AndroidWorkspaceLocalFile?>(null) }
     var codePreviewFile by remember { mutableStateOf<AndroidWorkspaceLocalFile?>(null) }
     var downloadedPaths by remember(sessionId) { mutableStateOf(emptySet<String>()) }
+    var pendingApkUri by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun canInstallApks(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+        context.packageManager.canRequestPackageInstalls()
+
+    fun launchApkInstaller(uri: Uri) {
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, APK_MEDIA_TYPE)
+                clipData = ClipData.newRawUri("APK", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            })
+        }.onFailure {
+            stateHolder.showPlatformError(
+                if (it is ActivityNotFoundException) "设备上没有可用的 APK 安装程序"
+                else "打开安装程序失败：${it.localizedMessage}"
+            )
+        }
+    }
+
+    val installPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val uri = pendingApkUri?.let(Uri::parse)
+        pendingApkUri = null
+        if (uri != null) {
+            if (canInstallApks()) launchApkInstaller(uri)
+            else stateHolder.showPlatformError("尚未允许安装未知应用，点击 APK 文件可重新尝试。")
+        }
+    }
+
+    fun requestApkInstall(file: AndroidWorkspaceLocalFile) {
+        runCatching {
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.workspace-files", file.file)
+            if (canInstallApks()) {
+                launchApkInstaller(uri)
+            } else {
+                pendingApkUri = uri.toString()
+                installPermissionLauncher.launch(Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${context.packageName}")
+                ))
+            }
+        }.onFailure {
+            pendingApkUri = null
+            stateHolder.showPlatformError("无法准备 APK 安装：${it.localizedMessage}")
+        }
+    }
 
     fun refreshDownloadedPaths() {
         downloadedPaths = sessionId?.let { currentSessionId ->
@@ -110,6 +163,8 @@ internal fun WorkspaceFilesBottomSheet(
         if (file.purpose == "download") {
             pendingExport = file
             exporter.launch(file.name)
+        } else if (file.name.endsWith(".apk", ignoreCase = true) || file.mediaType == APK_MEDIA_TYPE) {
+            requestApkInstall(file)
         } else if (WorkspaceCodePreviewSupport.isSupported(file.name, file.mediaType)) {
             codePreviewFile = file
         } else {
@@ -213,6 +268,8 @@ internal fun WorkspaceFilesBottomSheet(
         )
     }
 }
+
+private const val APK_MEDIA_TYPE = "application/vnd.android.package-archive"
 
 private fun openWorkspaceFileExternally(
     context: android.content.Context,

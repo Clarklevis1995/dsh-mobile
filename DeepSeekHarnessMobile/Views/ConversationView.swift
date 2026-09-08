@@ -1580,7 +1580,11 @@ private struct TaskGoalPanels: View {
     }
 
     private var panelGlassEdge: Color {
-        colorScheme == .dark ? .white.opacity(0.13) : .white.opacity(0.56)
+        colorScheme == .dark ? .white.opacity(0.22) : .black.opacity(0.13)
+    }
+
+    private var panelShadow: Color {
+        .black.opacity(colorScheme == .dark ? 0.30 : 0.10)
     }
 
     var body: some View {
@@ -1632,8 +1636,9 @@ private struct TaskGoalPanels: View {
         .glassSurface(radius: 18, tint: panelGlassTint)
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(panelGlassEdge, lineWidth: 0.7)
+                .strokeBorder(panelGlassEdge, lineWidth: 1)
         }
+        .shadow(color: panelShadow, radius: 8, y: 3)
     }
 
     private func goalPanel(_ goal: GatewayGoalPayload) -> some View {
@@ -1668,8 +1673,9 @@ private struct TaskGoalPanels: View {
         .glassSurface(radius: 18, tint: panelGlassTint)
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(panelGlassEdge, lineWidth: 0.7)
+                .strokeBorder(panelGlassEdge, lineWidth: 1)
         }
+        .shadow(color: panelShadow, radius: 8, y: 3)
     }
 
     private var taskSummary: String {

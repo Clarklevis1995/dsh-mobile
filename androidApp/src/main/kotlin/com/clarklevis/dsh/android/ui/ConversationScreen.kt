@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -1607,7 +1608,10 @@ private fun ComposerPopupMenu(
     horizontalCompensation: Dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    if (!expanded) return
+    val visibility = remember { MutableTransitionState(false) }
+    visibility.targetState = expanded
+    // 退出动画结束后才移除 Popup，避免关闭时直接消失。
+    if (!visibility.currentState && !visibility.targetState) return
     val density = LocalDensity.current
     val windowHeight = with(density) { LocalWindowInfo.current.containerSize.height.toDp() }
     val maxSurfaceHeight = (windowHeight - 180.dp).coerceIn(240.dp, 560.dp)
@@ -1632,26 +1636,44 @@ private fun ComposerPopupMenu(
         onDismissRequest = onDismissRequest,
         properties = PopupProperties(focusable = true, clippingEnabled = true)
     ) {
-        Box(Modifier.padding(20.dp)) {
-            Surface(
-                modifier = Modifier.width(width).heightIn(max = maxSurfaceHeight).dropShadow(
-                    shape = RoundedCornerShape(24.dp),
-                    shadow = Shadow(
-                        radius = 18.dp,
-                        spread = 0.dp,
-                        color = Color.Black.copy(alpha = 0.18f),
-                        offset = DpOffset(x = 0.dp, y = 8.dp)
-                    )
-                ),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp
-            ) {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
-                    content = content
+        AnimatedVisibility(
+            visibleState = visibility,
+            enter = fadeIn(tween(180)) + scaleIn(
+                animationSpec = tween(220),
+                initialScale = 0.94f,
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
+                    if (alignment == Alignment.BottomEnd) 1f else 0f, 1f
                 )
+            ),
+            exit = fadeOut(tween(140)) + scaleOut(
+                animationSpec = tween(140),
+                targetScale = 0.96f,
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
+                    if (alignment == Alignment.BottomEnd) 1f else 0f, 1f
+                )
+            )
+        ) {
+            Box(Modifier.padding(20.dp)) {
+                Surface(
+                    modifier = Modifier.width(width).heightIn(max = maxSurfaceHeight).dropShadow(
+                        shape = RoundedCornerShape(24.dp),
+                        shadow = Shadow(
+                            radius = 18.dp,
+                            spread = 0.dp,
+                            color = Color.Black.copy(alpha = 0.18f),
+                            offset = DpOffset(x = 0.dp, y = 8.dp)
+                        )
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
+                        content = content
+                    )
+                }
             }
         }
     }
@@ -1697,12 +1719,23 @@ private class ComposerPopupPositionProvider(
 
 @Composable
 private fun ContextUsageRing(stateHolder: AndroidSharedStateHolder) {
-    val pressure = stateHolder.snapshot.contextSnapshot?.pressure
+    val snapshot = stateHolder.snapshot.contextSnapshot
+    var expanded by remember(stateHolder.snapshot.selectedSessionId) { mutableStateOf(false) }
+    val pressure = snapshot?.pressure
     val contextWindow = pressure?.contextWindow
     val progress = if (contextWindow != null && contextWindow > 0) {
         (pressure.pressureTokens ?: 0).toFloat() / contextWindow
     } else 0f
-    Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+    Box(
+        Modifier.size(32.dp)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                expanded = true
+                stateHolder.refreshContextUsage()
+            }
+            .semantics { contentDescription = "查看上下文用量" }
+            .testTag("context-usage-ring"),
+        contentAlignment = Alignment.Center
+    ) {
         CircularProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
             modifier = Modifier.size(18.dp),
@@ -1710,7 +1743,66 @@ private fun ContextUsageRing(stateHolder: AndroidSharedStateHolder) {
             color = DshColors.Ocean,
             trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f)
         )
+        ComposerPopupMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            width = 300.dp,
+            alignment = Alignment.BottomEnd,
+            horizontalCompensation = 0.dp
+        ) {
+            Column(
+                Modifier.padding(horizontal = 18.dp, vertical = 10.dp).testTag("context-usage-popover"),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("上下文已用", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (contextWindow != null && contextWindow > 0 && pressure.pressureTokens != null)
+                            "${kotlin.math.round(progress.coerceIn(0f, 1f) * 100).toInt()}%" else "—",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text("${contextTokenCount(pressure?.pressureTokens)} / ${contextTokenCount(contextWindow)}", fontSize = 12.sp)
+                }
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = DshColors.Ocean
+                )
+                val breakdown = snapshot?.breakdown
+                val usage = snapshot?.tokenUsage
+                if (breakdown != null) {
+                    ContextUsageRow("系统提示词", breakdown.systemTokens, Color.Gray)
+                    ContextUsageRow("工具", breakdown.toolsTokens, Color(0xFF8055CF))
+                    ContextUsageRow("对话消息", breakdown.messageTokens, DshColors.Ocean)
+                } else if (usage != null) {
+                    ContextUsageRow("未缓存输入", usage.uncachedInputTokens, DshColors.Ocean)
+                    ContextUsageRow("缓存读取", usage.cacheReadTokens, Color(0xFF8055CF))
+                    ContextUsageRow("模型输出", usage.outputTokens, Color(0xFFE18B38))
+                } else {
+                    Text("暂无上下文用量明细", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                }
+            }
+        }
     }
+}
+
+@Composable
+private fun ContextUsageRow(title: String, tokens: Int?, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.size(11.dp).background(color, RoundedCornerShape(3.dp)))
+        Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        Spacer(Modifier.weight(1f))
+        Text(contextTokenCount(tokens), fontSize = 14.sp)
+    }
+}
+
+private fun contextTokenCount(value: Int?): String = when {
+    value == null -> "—"
+    value >= 1_000_000 -> "~" + String.format(java.util.Locale.ROOT, "%.1fM", value / 1_000_000.0)
+    value >= 1_000 -> "~" + String.format(java.util.Locale.ROOT, "%.1fK", value / 1_000.0)
+    else -> "~$value"
 }
 
 @Composable
