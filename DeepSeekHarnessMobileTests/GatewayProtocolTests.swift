@@ -5942,3 +5942,60 @@ private final class BackgroundTaskApplicationSpy: BackgroundTaskApplication {
         endedIdentifiers.append(identifier)
     }
 }
+
+/// Regression coverage for a launch-time crash on a physical device.
+///
+/// A completed assistant message is premeasured by hosting the real view
+/// (`ConversationViewportController.measureHostedHeight`). MarkdownUI built its
+/// inline `Text` with a left-associative `result = result + next` chain, so a
+/// single paragraph holding N inline nodes produced a concatenation tree of
+/// depth N. SwiftUI resolves `ConcatenatedTextStorage` recursively, so once a
+/// session contained a long message — one inline node per line — resolution
+/// overflowed the main thread's stack:
+///
+///   EXC_BAD_ACCESS (SIGSEGV) — "Thread stack size exceeded due to excessive
+///   recursion" — Text.resolve ⇄ ConcatenatedTextStorage.resolve
+///
+/// These tests fail by killing the test process before the fix, and must return
+/// a finite measurement after it.
+final class MarkdownLargeMessageTests: XCTestCase {
+    private func longMessage(lineCount: Int) -> String {
+        (1...lineCount).map(String.init).joined(separator: "\n")
+    }
+
+    @MainActor
+    func testMeasuringVeryLongSingleParagraphMessageIsStable() {
+        let host = UIHostingController(
+            rootView: MarkdownContent(longMessage(lineCount: 20000))
+        )
+
+        let size = host.sizeThatFits(
+            in: CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)
+        )
+
+        XCTAssertTrue(size.height.isFinite, "measurement produced a non-finite height")
+        XCTAssertGreaterThan(size.height, 0)
+    }
+
+    @MainActor
+    func testMeasuringAssistantRowWithVeryLongMessageIsStable() {
+        let item = ConversationItem(
+            id: "very-long-assistant",
+            kind: .assistant,
+            title: "Agent",
+            text: longMessage(lineCount: 20000),
+            isError: false,
+            date: Date(timeIntervalSince1970: 1)
+        )
+        let host = UIHostingController(
+            rootView: ConversationRow(item: item, showsCopyButton: true, imageData: { _ in nil })
+        )
+
+        let size = host.sizeThatFits(
+            in: CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)
+        )
+
+        XCTAssertTrue(size.height.isFinite, "measurement produced a non-finite height")
+        XCTAssertGreaterThan(size.height, 0)
+    }
+}
