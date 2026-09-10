@@ -3,6 +3,7 @@ package com.clarklevis.dsh.android.ui
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
@@ -33,7 +34,7 @@ import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 
 /**
- * Backdrop 只录制背景层，玻璃控件不会被再次采样，避免递归渲染和重影。
+ * 页面内玻璃控件只采样背景层，避免递归渲染和重影；独立窗口的弹层采样整个页面。
  *
  * API 31+ 使用真实背景采样与模糊，API 33+ 额外启用 AGSL lens 折射；
  * API 24～30 保持与原设计一致的半透明玻璃降级。
@@ -45,12 +46,15 @@ internal fun DshLiquidGlassHost(
     content: @Composable BoxScope.() -> Unit
 ) {
     val backdrop = rememberLayerBackdrop()
+    val sheetBackdrop = rememberLayerBackdrop()
     val frameSignal = remember { mutableLongStateOf(0L) }
     CompositionLocalProvider(
         LocalDshBackdrop provides backdrop,
+        LocalDshSheetBackdrop provides sheetBackdrop,
         LocalDshGlassFrameSignal provides frameSignal
     ) {
-        Box(modifier) {
+        // 弹层位于独立窗口，可采样整个页面；页面内的玻璃控件仍只采样背景。
+        Box(modifier.layerBackdrop(sheetBackdrop)) {
             background(
                 Modifier
                     .drawWithContent {
@@ -158,4 +162,28 @@ internal fun Modifier.dshLiquidGlass(
 }
 
 private val LocalDshBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
+private val LocalDshSheetBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 internal val LocalDshGlassFrameSignal = staticCompositionLocalOf<MutableLongState?> { null }
+
+/** 弹层只模糊已录制的背景，文字和操作控件保持清晰。 */
+@Composable
+internal fun Modifier.dshFrostedSheet(shape: Shape): Modifier {
+    val backdrop = LocalDshSheetBackdrop.current
+    val frameSignal = LocalDshGlassFrameSignal.current
+    val dark = isSystemInDarkTheme()
+    val tint = if (dark) Color(0xFF22252C) else Color(0xFFE8EDF5)
+    val surface = if (backdrop == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        background(tint.copy(alpha = 0.92f), shape)
+    } else {
+        drawWithContent {
+            frameSignal?.longValue
+            drawContent()
+        }.drawBackdrop(
+            backdrop = backdrop,
+            shape = { shape },
+            effects = { blur(24.dp.toPx()) },
+            onDrawSurface = { drawRect(tint.copy(alpha = if (dark) 0.76f else 0.68f)) }
+        )
+    }
+    return surface.clip(shape).border(0.8.dp, Color.White.copy(alpha = if (dark) 0.12f else 0.35f), shape)
+}

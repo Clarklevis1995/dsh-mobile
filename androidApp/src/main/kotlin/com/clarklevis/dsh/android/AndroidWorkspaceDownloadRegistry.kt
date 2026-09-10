@@ -11,10 +11,10 @@ import android.util.Base64
  * URI 仅在文件确实写入成功后登记；读取状态时会实际打开文件校验，用户在系统文件
  * 应用中删除文件后，失效记录也会随之移除。
  */
-class AndroidWorkspaceDownloadRegistry(context: Context) {
+class AndroidWorkspaceDownloadRegistry(context: Context, gatewayId: String = "legacy") {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences(
-        PREFERENCES_NAME,
+        "${PREFERENCES_NAME}_$gatewayId",
         Context.MODE_PRIVATE
     )
 

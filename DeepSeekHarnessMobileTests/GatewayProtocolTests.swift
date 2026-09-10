@@ -4731,6 +4731,56 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
+    func testAgentPresetTimeoutAndDisconnectedRetryStayInline() async throws {
+        let bridge = SharedSessionControlStore()
+        let adapter = KMPSessionControlStoreAdapter(bridge: bridge)
+        let request = adapter.reduce(.requestAgentPresets(isConnected: true))
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            sessionControlBridge: bridge,
+            sessionControlEffectExecutor: SessionControlEffectExecutorSpy()
+        )
+        request.effects.forEach(store.executeSessionControlEffect)
+        try await Task.sleep(for: .seconds(13))
+        XCTAssertNotNil(store.agentPresetsLoadError)
+        XCTAssertNil(store.lastError)
+        XCTAssertFalse(store.defaultConfigurationLoadingKinds.contains("agent-presets"))
+
+        store.retryAgentPresets()
+        XCTAssertNotNil(store.agentPresetsLoadError)
+        XCTAssertNil(store.lastError)
+    }
+
+    @MainActor
+    func testAgentPresetResponseCompletesWithoutAlert() async throws {
+        let bridge = SharedSessionControlStore()
+        _ = bridge.requestAgentPresets(isConnected: true)
+        let store = AppStore(
+            preferences: AppPreferencesSpy(
+                endpoint: "wss://injected.example/ws/mobile",
+                selectedWorkspaceID: nil,
+                sessions: []
+            ),
+            sessionControlBridge: bridge,
+            sessionControlEffectExecutor: SessionControlEffectExecutorSpy()
+        )
+        store.retryAgentPresets()
+        XCTAssertNotNil(store.agentPresetsLoadError)
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"agent-presets","presets":[{"id":"standard","isDefault":true}]}"#.utf8
+        )))
+        await flushDeferredKMPEvents(in: store)
+        XCTAssertNil(store.agentPresetsLoadError)
+        XCTAssertNil(store.lastError)
+        XCTAssertEqual(store.agentPresets.first?.id, "standard")
+        XCTAssertFalse(store.defaultConfigurationLoadingKinds.contains("agent-presets"))
+    }
+
+    @MainActor
     func testAppStoreIgnoresUncorrelatedSessionControlResponses() throws {
         let executor = SessionControlEffectExecutorSpy()
         let store = AppStore(

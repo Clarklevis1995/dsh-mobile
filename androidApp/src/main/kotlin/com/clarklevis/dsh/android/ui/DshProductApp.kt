@@ -258,7 +258,8 @@ private fun WorkspaceScreen(
                         },
                         onSettings = onSettings
                     )
-                    Spacer(Modifier.height(90.dp))
+                    GatewaySwitcherBar()
+                    Spacer(Modifier.height(54.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Text(
                             "探索未至之境",
@@ -443,7 +444,12 @@ private fun WorkspaceCard(
             )
         }
         ConnectionDot(state)
-        Text("⌄", color = Color.White.copy(alpha = 0.55f), fontSize = 13.sp)
+        Image(
+            painter = painterResource(R.drawable.ic_question_chevron_down),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.55f)),
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 

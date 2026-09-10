@@ -192,7 +192,12 @@ internal fun ConversationScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Column {
+                        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        if (stateHolder.gatewayDisplayName.isNotBlank()) {
+                            Text(stateHolder.gatewayDisplayName, maxLines = 1, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 },
                 navigationIcon = {
                     TopBarCircleButton(

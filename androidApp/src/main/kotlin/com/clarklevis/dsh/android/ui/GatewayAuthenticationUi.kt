@@ -179,7 +179,13 @@ internal fun ManualGatewayPairingSheet(
     var pairingText by rememberSaveable { mutableStateOf("") }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
     var didAttemptConnection by rememberSaveable { mutableStateOf(false) }
-    val isConnecting = stateHolder.gatewayState.connection in setOf(
+    val hosts = (LocalContext.current.applicationContext as? com.clarklevis.dsh.android.DshAndroidApplication)?.hosts
+    val pairingState = if (hosts != null && didAttemptConnection) {
+        GatewayRuntimeState(
+            connection = if (hosts.pairing) GatewayConnectionState.CONNECTING else GatewayConnectionState.DISCONNECTED
+        )
+    } else stateHolder.gatewayState
+    val isConnecting = pairingState.connection in setOf(
         GatewayConnectionState.CONNECTING,
         GatewayConnectionState.AUTHENTICATING,
         GatewayConnectionState.WAITING_FOR_NETWORK
@@ -251,7 +257,7 @@ internal fun ManualGatewayPairingSheet(
 
                 PairingResultCard(
                     presentation = pairingResultPresentation(
-                        state = stateHolder.gatewayState,
+                        state = pairingState,
                         didAttemptConnection = didAttemptConnection,
                         validationError = validationError
                     )
@@ -261,7 +267,7 @@ internal fun ManualGatewayPairingSheet(
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                         .clickable(enabled = canUsePrimaryAction, role = Role.Button) {
                             if (isConnecting) {
-                                stateHolder.disconnect()
+                                if (hosts != null) hosts.cancelPairing() else stateHolder.disconnect()
                             } else {
                                 validationError = null
                                 didAttemptConnection = true

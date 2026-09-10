@@ -160,6 +160,10 @@ private struct ConversationNavigationShell<Content: View>: View {
     var body: some View {
         content()
             .navigationTitle(liveTitle ?? header.title)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Text(store.gatewayDisplayName).font(.caption2).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity).padding(.vertical, 3)
+            }
             .onReceive(store.$sessions) { sessions in
                 let sessionID = header.sessionID ?? store.selectedSessionId
                 liveTitle = sessions.first { $0.id == sessionID }?.title
@@ -306,7 +310,7 @@ private struct WorkspaceFilesSheet: View {
         .sheet(item: exportBinding) { file in
             WorkspaceFileExporter(url: file.url) { localURL in
                 WorkspaceDownloadRegistry.shared.record(
-                    sessionID: file.sessionID,
+                    sessionID: "\(store.gatewayLocalID):\(file.sessionID)",
                     remotePath: file.remotePath,
                     localURL: localURL
                 )
@@ -381,7 +385,7 @@ private struct WorkspaceFilesSheet: View {
             return
         }
         downloadedPaths = WorkspaceDownloadRegistry.shared.existingRemotePaths(
-            sessionID: sessionID,
+            sessionID: "\(store.gatewayLocalID):\(sessionID)",
             remotePaths: store.workspaceFileEntries
                 .filter { $0.kind == "file" }
                 .map(\.path)

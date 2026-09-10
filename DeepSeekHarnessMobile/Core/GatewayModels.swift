@@ -114,6 +114,8 @@ extension KeyedDecodingContainer {
 
 struct GatewayFrame: Codable, Sendable {
     var kind: String
+    var gatewayId: String?
+    var gatewayName: String?
     var `protocol`: Int?
     var capabilities: [String]?
     var authenticated: Bool?
@@ -416,6 +418,9 @@ struct GatewayPairingPayload: Codable, Hashable, Sendable {
     var publicUrl: String
     var pairingCode: String
     var expiresAt: Double
+    var gatewayId: String?
+    var gatewayName: String?
+    var endpoints: [String]?
 
     var endpoint: URL? { URL(string: publicUrl) }
     var expirationDate: Date { Date(timeIntervalSince1970: expiresAt / 1_000) }

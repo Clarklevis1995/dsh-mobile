@@ -20,6 +20,13 @@ class SplitGatewayTransport(
     private var split = false
     private var receivedHello = false
     private var conversationReady = false
+    private val pendingConversation = ArrayDeque<String>()
+    private var pendingConversationBytes = 0
+
+    private fun clearPendingConversation() {
+        pendingConversation.clear()
+        pendingConversationBytes = 0
+    }
 
     override val state = control.state
     override val events: Flow<GatewayTransportEvent> = control.events.transform { event ->
@@ -29,22 +36,19 @@ class SplitGatewayTransport(
                 emit(event)
                 return@transform
             }
+            if (header.kind == "paired" || header.kind == "hello") {
+                if (runCatching { GatewayIdentity.validate(spec?.expectedGatewayId, header.gatewayId) }.isFailure) {
+                    emit(GatewayTransportEvent.State(GatewayTransportState.Failed(
+                        generation = event.value.generation, reason = "gateway-identity-mismatch", recoverable = false
+                    )))
+                    return@transform
+                }
+                spec = spec?.copy(expectedGatewayId = header.gatewayId ?: spec?.expectedGatewayId)
+            }
             if (header.kind == "paired") spec = spec?.copy(bearerToken = header.token, pairingCode = null)
             if (header.kind == "hello") {
                 receivedHello = true
                 split = "split-channels" in header.capabilities
-                if (split) {
-                    try {
-                        conversation.open(requireNotNull(spec).copy(channel = "conversation", pairingCode = null))
-                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                        throw cancelled
-                    } catch (_: Throwable) {
-                        emit(GatewayTransportEvent.State(GatewayTransportState.Failed(
-                            generation = event.value.generation, reason = "conversation-open-failed"
-                        )))
-                        return@transform
-                    }
-                }
             }
         }
         emit(event)
@@ -60,11 +64,17 @@ class SplitGatewayTransport(
             is GatewayTransportEvent.Frame -> {
                 if (!conversationReady) {
                     val header = runCatching { wireJson.decodeFromString<Header>(event.value.text) }.getOrNull()
-                    if (header?.kind != "hello" || "split-channels" !in header.capabilities) {
+                    if (header?.kind != "hello" || "split-channels" !in header.capabilities ||
+                        runCatching { GatewayIdentity.validate(spec?.expectedGatewayId, header.gatewayId) }.isFailure) {
                         emit(GatewayTransportEvent.State(GatewayTransportState.Failed(
-                            generation = generation, reason = "conversation-handshake-failed"
+                            generation = generation, reason = "conversation-handshake-failed", recoverable = false
                         )))
                         return@transform
+                    }
+                    while (pendingConversation.isNotEmpty()) {
+                        val payload = pendingConversation.removeFirst()
+                        pendingConversationBytes -= payload.length * 2
+                        conversation.send(payload)
                     }
                     conversationReady = true
                 } else emit(event)
@@ -72,13 +82,19 @@ class SplitGatewayTransport(
             is GatewayTransportEvent.State -> {
                 if (event.value is GatewayTransportState.Failed) {
                     conversationReady = false
+                    clearPendingConversation()
                     emit(event)
                 }
             }
         }
     }
 
+    override suspend fun confirmControlHandshake() {
+        if (split) conversation.open(requireNotNull(spec).copy(channel = "conversation", pairingCode = null))
+    }
+
     override suspend fun open(spec: GatewayConnectionSpec) {
+        clearPendingConversation()
         conversationReady = false
         this.spec = spec
         split = false
@@ -90,13 +106,20 @@ class SplitGatewayTransport(
     override suspend fun send(text: String) {
         val type = wireJson.decodeFromString<Header>(text).type
         if (split && type in CONVERSATION_REQUESTS) {
-            // 平台 socket 会在握手完成前缓冲 send；此处不能等待对话 hello，
-            // 否则调用方 Runtime 的发送锁会再次阻塞控制线路。
-            conversation.send(text)
+            // 只在会话身份核对之后发送；这里不能等待 hello 阻塞 Runtime 的发送锁。
+            if (conversationReady) conversation.send(text)
+            else {
+                check(pendingConversation.size < 64 && pendingConversationBytes + text.length * 2 <= 16 * 1024 * 1024) {
+                    "conversation-handshake-queue-full"
+                }
+                pendingConversation.addLast(text)
+                pendingConversationBytes += text.length * 2
+            }
         } else control.send(text)
     }
 
     override suspend fun close() {
+        clearPendingConversation()
         split = false
         spec = null
         conversationReady = false
@@ -109,6 +132,7 @@ class SplitGatewayTransport(
         val kind: String? = null,
         val type: String? = null,
         val token: String? = null,
+        val gatewayId: String? = null,
         val capabilities: List<String> = emptyList()
     )
 

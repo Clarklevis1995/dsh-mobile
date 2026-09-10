@@ -52,6 +52,100 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class GatewayRuntimeIntegrationTest {
     @Test
+    fun pairingMustPersistTokenBeforeAcceptingHello() = runTest {
+        val transport = FakeTransport()
+        val credentials = FakeCredentials()
+        val runtime = GatewayRuntime(
+            transport, FakePreferences(), credentials, FakeAttachmentCache(),
+            FakeNetworkMonitor(), FakeClock(0), backgroundScope
+        )
+        runCurrent()
+        runtime.pair(encodeBase64Url(
+            """{"version":2,"publicUrl":"wss://gateway.example/ws/mobile","pairingCode":"once","expiresAt":4102444800000}"""
+        ))
+        transport.opened()
+        transport.receive("""{"kind":"hello","protocol":3}""")
+        runCurrent()
+        assertEquals(GatewayConnectionState.FAILED, runtime.state.value.connection)
+        assertTrue(credentials.tokens.isEmpty())
+    }
+
+    @Test
+    fun gatewayIdentityMismatchNeverSavesTokenOrStartsConversation() = runTest {
+        val control = FakeTransport()
+        val conversation = FakeTransport()
+        val credentials = FakeCredentials()
+        val runtime = GatewayRuntime(
+            SplitGatewayTransport(control, conversation), FakePreferences(), credentials,
+            FakeAttachmentCache(), FakeNetworkMonitor(), FakeClock(0), backgroundScope,
+            expectedGatewayId = "d56a1098-8519-43a1-9dce-fb99863bf5bb"
+        )
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        control.opened()
+        control.receive("""{"kind":"paired","token":"must-not-save","gatewayId":"a56a1098-8519-43a1-9dce-fb99863bf5bb"}""")
+        runCurrent()
+        assertTrue(credentials.tokens.isEmpty())
+        assertTrue(conversation.connectionSpecs.isEmpty())
+        assertEquals(GatewayConnectionState.FAILED, runtime.state.value.connection)
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertEquals(1, control.connectionSpecs.size)
+    }
+
+    @Test
+    fun savedGatewayIdentityCannotDowngradeToLegacyHello() = runTest {
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport, FakePreferences(), FakeCredentials(), FakeAttachmentCache(),
+            FakeNetworkMonitor(), FakeClock(0), backgroundScope,
+            expectedGatewayId = "d56a1098-8519-43a1-9dce-fb99863bf5bb"
+        )
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","capabilities":[]}""")
+        runCurrent()
+        assertEquals(GatewayConnectionState.FAILED, runtime.state.value.connection)
+        assertFalse(runtime.sendRequest(GatewayRequests.simple("sessions")))
+    }
+
+    @Test
+    fun untrustedEndpointIsRejectedBeforeOpeningTransport() = runTest {
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport, FakePreferences(), FakeCredentials(), FakeAttachmentCache(),
+            FakeNetworkMonitor(), FakeClock(0), backgroundScope,
+            trustedEndpoints = listOf("wss://trusted.example/ws/mobile")
+        )
+        assertFailsWith<IllegalArgumentException> { runtime.connect("wss://untrusted.example/ws/mobile") }
+        assertTrue(transport.connectionSpecs.isEmpty())
+    }
+
+    @Test
+    fun conversationIdentityMustMatchAuthenticatedControl() = runTest {
+        val control = FakeTransport()
+        val conversation = FakeTransport()
+        val runtime = GatewayRuntime(
+            SplitGatewayTransport(control, conversation), FakePreferences(), FakeCredentials(),
+            FakeAttachmentCache(), FakeNetworkMonitor(), FakeClock(0), backgroundScope,
+            expectedGatewayId = "d56a1098-8519-43a1-9dce-fb99863bf5bb"
+        )
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        control.opened()
+        control.receive("""{"kind":"hello","gatewayId":"d56a1098-8519-43a1-9dce-fb99863bf5bb","capabilities":["split-channels"]}""")
+        runCurrent()
+        runtime.subscribe("same-session")
+        assertTrue(conversation.sentPayloads.isEmpty())
+        conversation.opened()
+        conversation.receive("""{"kind":"hello","gatewayId":"a56a1098-8519-43a1-9dce-fb99863bf5bb","capabilities":["split-channels"]}""")
+        runCurrent()
+        assertEquals(GatewayConnectionState.FAILED, runtime.state.value.connection)
+        assertTrue(conversation.sentPayloads.isEmpty())
+    }
+
+    @Test
     fun splitTransportKeepsFilesMovingWhileConversationConsumerIsBlocked() = runTest {
         val control = FakeTransport()
         val conversation = FakeTransport()
@@ -121,6 +215,8 @@ class GatewayRuntimeIntegrationTest {
         control.receive("""{"kind":"paired","token":"long-lived"}""")
         control.receive("""{"kind":"hello","capabilities":["split-channels"]}""")
         runCurrent()
+        assertTrue(conversation.connectionSpecs.isEmpty())
+        transport.confirmControlHandshake()
         assertEquals("long-lived", conversation.connectionSpecs.single().bearerToken)
         assertNull(conversation.connectionSpecs.single().pairingCode)
         conversation.opened()

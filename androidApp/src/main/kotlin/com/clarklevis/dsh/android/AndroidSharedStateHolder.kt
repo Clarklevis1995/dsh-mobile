@@ -1142,6 +1142,9 @@ class AndroidSharedStateHolder(
         attachmentStates = emptyMap()
     }
 
+    val gatewayLocalId: String get() = graph?.gatewayLocalId ?: "legacy"
+    val gatewayDisplayName: String get() = graph?.gatewayDisplayName.orEmpty()
+
     fun connect() {
         val appGraph = graph ?: return
         appGraph.diagnostics.intent(GatewayDiagnosticAction.CONNECT)
@@ -1163,6 +1166,7 @@ class AndroidSharedStateHolder(
         onFailure: (String) -> Unit = {}
     ) {
         val appGraph = graph ?: return
+        appGraph.pairingHandler?.let { handler -> handler(payload); return }
         appGraph.diagnostics.intent(GatewayDiagnosticAction.PAIR)
         platformError = null
         appGraph.gatewayScope.launch {
