@@ -7,10 +7,23 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3459A8BD9696202CAC9D85A5 /* GatewaySwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B6B2953247E15BDA40F0BB /* GatewaySwitcherView.swift */; };
+		375D401B1B6F03015EC9073D /* GatewayProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E638ED93D0BBFD018966FB52 /* GatewayProfile.swift */; };
 		39FD319C875F4B4A6893D676 /* GatewayProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */; };
-		CA11E000000000000000000F /* LocalizationCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000011 /* LocalizationCatalogTests.swift */; };
 		48857E4314868A4DD9F695EA /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BE407E6C6512836EB108990D /* Foundation.framework */; };
 		5ED39F22065A71FC54D755AC /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61A1F439244BA594BF547C92 /* AppStore.swift */; };
+		605DCE79952E970820A95606 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEABECFD00017A6E10B1F4A2 /* ConversationView.swift */; };
+		605DCE79952E970820A95607 /* HumanQuestionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEABECFD00017A6E10B1F4A3 /* HumanQuestionView.swift */; };
+		6FED6D958ABD07A258CC53F0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 152A3874C0D169644C9C7B6D /* Assets.xcassets */; };
+		75392054CB69B9596796C57A /* MultiGatewayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEABDA4B6DAF199B320B1BA1 /* MultiGatewayTests.swift */; };
+		7B8DAA4E77DE3665B7E1C087 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98111628697EC1C4FF9878B /* SettingsView.swift */; };
+		80E777AC0855635BC3D12EA7 /* GatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61E231D0CD3E07857F861B0 /* GatewayClient.swift */; };
+		8891D9FBE23CCC096061416E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A37B43613D712F252BA91D7 /* RootView.swift */; };
+		991D4FD90B81F84A0B8B79AD /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12863E736F832D8F502B94A0 /* Theme.swift */; };
+		A0C0FFEE0000000000000001 /* ConversationViewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000002 /* ConversationViewport.swift */; };
+		A0C0FFEE0000000000000003 /* ConversationTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000004 /* ConversationTimeline.swift */; };
+		A1A0C0000000000000000001 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A1A0C0000000000000000002 /* LaunchScreen.storyboard */; };
+		A1B2C3D4E5F60718293A4B5C /* ApprovalRequestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* ApprovalRequestView.swift */; };
 		A9F100000000000000000001 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F100000000000000000002 /* AppPreferences.swift */; };
 		A9F200000000000000000001 /* PairingPayloadParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F200000000000000000002 /* PairingPayloadParser.swift */; };
 		A9F300000000000000000001 /* KMPDomainIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F300000000000000000002 /* KMPDomainIntents.swift */; };
@@ -20,30 +33,21 @@
 		A9FA00000000000000000001 /* AgentBackgroundExecutionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */; };
 		A9FB00000000000000000001 /* GatewayFrameRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FB00000000000000000002 /* GatewayFrameRouter.swift */; };
 		A9FC00000000000000000001 /* KMPSharedAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FC00000000000000000002 /* KMPSharedAdapter.swift */; };
-		CA11E0000000000000000001 /* ImageAttachmentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000002 /* ImageAttachmentCache.swift */; };
-		CA11E0000000000000000003 /* ImagePreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000004 /* ImagePreprocessor.swift */; };
-		605DCE79952E970820A95606 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEABECFD00017A6E10B1F4A2 /* ConversationView.swift */; };
-		605DCE79952E970820A95607 /* HumanQuestionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEABECFD00017A6E10B1F4A3 /* HumanQuestionView.swift */; };
-		A1B2C3D4E5F60718293A4B5C /* ApprovalRequestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* ApprovalRequestView.swift */; };
-		6FED6D958ABD07A258CC53F0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 152A3874C0D169644C9C7B6D /* Assets.xcassets */; };
-		A1A0C0000000000000000001 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A1A0C0000000000000000002 /* LaunchScreen.storyboard */; };
-		CA11E0000000000000000009 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E000000000000000000A /* L10n.swift */; };
-		CA11E000000000000000000B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CA11E000000000000000000C /* Localizable.xcstrings */; };
-		CA11E000000000000000000D /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CA11E000000000000000000E /* InfoPlist.xcstrings */; };
-		7B8DAA4E77DE3665B7E1C087 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98111628697EC1C4FF9878B /* SettingsView.swift */; };
-		80E777AC0855635BC3D12EA7 /* GatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61E231D0CD3E07857F861B0 /* GatewayClient.swift */; };
-		8891D9FBE23CCC096061416E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A37B43613D712F252BA91D7 /* RootView.swift */; };
-		991D4FD90B81F84A0B8B79AD /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12863E736F832D8F502B94A0 /* Theme.swift */; };
-		A0C0FFEE0000000000000001 /* ConversationViewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000002 /* ConversationViewport.swift */; };
-		A0C0FFEE0000000000000003 /* ConversationTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000004 /* ConversationTimeline.swift */; };
 		AFAE90EEB4462AD84169D356 /* GatewayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */; };
 		B0C0FFEE0000000000000001 /* HarnessAnimatedBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C0FFEE0000000000000002 /* HarnessAnimatedBackground.swift */; };
 		B0C0FFEE0000000000000003 /* HarnessBackground.metal in Sources */ = {isa = PBXBuildFile; fileRef = B0C0FFEE0000000000000004 /* HarnessBackground.metal */; };
+		C075849EE750C3CCD2C87FC7 /* MultiGatewayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5FF365A80AA28B4D4CF2347 /* MultiGatewayStore.swift */; };
 		C5F737EBF5077A9BF35E9F64 /* TrajectoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65009160A0642089906B54DF /* TrajectoryView.swift */; };
+		C7A710000000000000000001 /* ChatLayout in Frameworks */ = {isa = PBXBuildFile; productRef = C7A710000000000000000003 /* ChatLayout */; };
+		CA11E0000000000000000001 /* ImageAttachmentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000002 /* ImageAttachmentCache.swift */; };
+		CA11E0000000000000000003 /* ImagePreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000004 /* ImagePreprocessor.swift */; };
+		CA11E0000000000000000009 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E000000000000000000A /* L10n.swift */; };
+		CA11E000000000000000000B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CA11E000000000000000000C /* Localizable.xcstrings */; };
+		CA11E000000000000000000D /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CA11E000000000000000000E /* InfoPlist.xcstrings */; };
+		CA11E000000000000000000F /* LocalizationCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000011 /* LocalizationCatalogTests.swift */; };
 		D3A40BFC0B9C8D4B1C8FAA95 /* DeepSeekHarnessMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 430CA64DF207C7EF58574336 /* DeepSeekHarnessMobileApp.swift */; };
 		E20191A4C7B1C0A8FF57CAC1 /* Glass.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF581253EBCFEB43865AB51 /* Glass.swift */; };
 		E73A2DB9D678DA4B8C01E349 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 4CE3D78565179C422C796509 /* MarkdownUI */; };
-		C7A710000000000000000001 /* ChatLayout in Frameworks */ = {isa = PBXBuildFile; productRef = C7A710000000000000000003 /* ChatLayout */; };
 		E7585B9F7F89A3084B6E0182 /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D610757C1FF81FD953A9D000 /* WorkspaceView.swift */; };
 		F5CD0CFD51B8D80944F87550 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BE407E6C6512836EB108990D /* Foundation.framework */; };
 /* End PBXBuildFile section */
@@ -60,18 +64,20 @@
 
 /* Begin PBXFileReference section */
 		0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayProtocolTests.swift; sourceTree = "<group>"; };
-		CA11E0000000000000000011 /* LocalizationCatalogTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalizationCatalogTests.swift; sourceTree = "<group>"; };
 		12863E736F832D8F502B94A0 /* Theme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		152A3874C0D169644C9C7B6D /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		CA11E000000000000000000A /* L10n.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
-		CA11E000000000000000000C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		CA11E000000000000000000E /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		38457CD5C46830D1CA7E6D73 /* DshMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DshMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		430CA64DF207C7EF58574336 /* DeepSeekHarnessMobileApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeepSeekHarnessMobileApp.swift; sourceTree = "<group>"; };
 		59B069578BB7F31AD35F601A /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		A1A0C0000000000000000002 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		5A37B43613D712F252BA91D7 /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		61A1F439244BA594BF547C92 /* AppStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		65009160A0642089906B54DF /* TrajectoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrajectoryView.swift; sourceTree = "<group>"; };
+		65B6B2953247E15BDA40F0BB /* GatewaySwitcherView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewaySwitcherView.swift; sourceTree = "<group>"; };
+		954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayModels.swift; sourceTree = "<group>"; };
+		A0C0FFEE0000000000000002 /* ConversationViewport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationViewport.swift; sourceTree = "<group>"; };
+		A0C0FFEE0000000000000004 /* ConversationTimeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationTimeline.swift; sourceTree = "<group>"; };
+		A1A0C0000000000000000002 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B5D /* ApprovalRequestView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ApprovalRequestView.swift; sourceTree = "<group>"; };
 		A9F100000000000000000002 /* AppPreferences.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
 		A9F200000000000000000002 /* PairingPayloadParser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairingPayloadParser.swift; sourceTree = "<group>"; };
 		A9F300000000000000000002 /* KMPDomainIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KMPDomainIntents.swift; sourceTree = "<group>"; };
@@ -81,23 +87,25 @@
 		A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentBackgroundExecutionController.swift; sourceTree = "<group>"; };
 		A9FB00000000000000000002 /* GatewayFrameRouter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayFrameRouter.swift; sourceTree = "<group>"; };
 		A9FC00000000000000000002 /* KMPSharedAdapter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KMPSharedAdapter.swift; sourceTree = "<group>"; };
-		CA11E0000000000000000002 /* ImageAttachmentCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImageAttachmentCache.swift; sourceTree = "<group>"; };
-		CA11E0000000000000000004 /* ImagePreprocessor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImagePreprocessor.swift; sourceTree = "<group>"; };
-		65009160A0642089906B54DF /* TrajectoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrajectoryView.swift; sourceTree = "<group>"; };
-		954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayModels.swift; sourceTree = "<group>"; };
-		A0C0FFEE0000000000000002 /* ConversationViewport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationViewport.swift; sourceTree = "<group>"; };
-		A0C0FFEE0000000000000004 /* ConversationTimeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationTimeline.swift; sourceTree = "<group>"; };
 		B0C0FFEE0000000000000002 /* HarnessAnimatedBackground.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HarnessAnimatedBackground.swift; sourceTree = "<group>"; };
 		B0C0FFEE0000000000000004 /* HarnessBackground.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; path = HarnessBackground.metal; sourceTree = "<group>"; };
 		B64F29E9B8346B9A678CA487 /* DeepSeekHarnessMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeepSeekHarnessMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BE407E6C6512836EB108990D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		CA11E0000000000000000002 /* ImageAttachmentCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImageAttachmentCache.swift; sourceTree = "<group>"; };
+		CA11E0000000000000000004 /* ImagePreprocessor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImagePreprocessor.swift; sourceTree = "<group>"; };
+		CA11E000000000000000000A /* L10n.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
+		CA11E000000000000000000C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		CA11E000000000000000000E /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		CA11E0000000000000000011 /* LocalizationCatalogTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalizationCatalogTests.swift; sourceTree = "<group>"; };
 		D610757C1FF81FD953A9D000 /* WorkspaceView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
 		D98111628697EC1C4FF9878B /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		E5FF365A80AA28B4D4CF2347 /* MultiGatewayStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MultiGatewayStore.swift; sourceTree = "<group>"; };
 		E61E231D0CD3E07857F861B0 /* GatewayClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayClient.swift; sourceTree = "<group>"; };
+		E638ED93D0BBFD018966FB52 /* GatewayProfile.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayProfile.swift; sourceTree = "<group>"; };
 		EEABECFD00017A6E10B1F4A2 /* ConversationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
 		EEABECFD00017A6E10B1F4A3 /* HumanQuestionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HumanQuestionView.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F60718293A4B5D /* ApprovalRequestView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ApprovalRequestView.swift; sourceTree = "<group>"; };
 		FCF581253EBCFEB43865AB51 /* Glass.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Glass.swift; sourceTree = "<group>"; };
+		FEABDA4B6DAF199B320B1BA1 /* MultiGatewayTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MultiGatewayTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -142,6 +150,8 @@
 				954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */,
 				CA11E000000000000000000A /* L10n.swift */,
 				12863E736F832D8F502B94A0 /* Theme.swift */,
+				E638ED93D0BBFD018966FB52 /* GatewayProfile.swift */,
+				E5FF365A80AA28B4D4CF2347 /* MultiGatewayStore.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -151,6 +161,7 @@
 			children = (
 				0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */,
 				CA11E0000000000000000011 /* LocalizationCatalogTests.swift */,
+				FEABDA4B6DAF199B320B1BA1 /* MultiGatewayTests.swift */,
 			);
 			path = DeepSeekHarnessMobileTests;
 			sourceTree = "<group>";
@@ -234,6 +245,7 @@
 				D98111628697EC1C4FF9878B /* SettingsView.swift */,
 				65009160A0642089906B54DF /* TrajectoryView.swift */,
 				D610757C1FF81FD953A9D000 /* WorkspaceView.swift */,
+				65B6B2953247E15BDA40F0BB /* GatewaySwitcherView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -370,7 +382,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\ncd \"$SRCROOT\"\nif [ -z \"${ANDROID_HOME:-}\" ]; then\n  export ANDROID_HOME=\"${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}\"\nfi\ncase \"$CONFIGURATION\" in\n  *[Rr]elease*) KMP_BUILD_TYPE=Release ;;\n  *) KMP_BUILD_TYPE=Debug ;;\nesac\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n  case \"$ARCHS\" in\n    *x86_64*) KMP_TARGET=IosX64 ;;\n    *) KMP_TARGET=IosSimulatorArm64 ;;\n  esac\nelse\n  KMP_TARGET=IosArm64\nfi\n\"$SRCROOT/gradlew\" \"\:shared\:link${KMP_BUILD_TYPE}Framework${KMP_TARGET}\" --quiet\n";
+			shellScript = "set -eu\ncd \"$SRCROOT\"\nif [ -z \"${ANDROID_HOME:-}\" ]; then\n  export ANDROID_HOME=\"${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}\"\nfi\ncase \"$CONFIGURATION\" in\n  *[Rr]elease*) KMP_BUILD_TYPE=Release ;;\n  *) KMP_BUILD_TYPE=Debug ;;\nesac\nif [ \"$PLATFORM_NAME\" = \"iphonesimulator\" ]; then\n  case \"$ARCHS\" in\n    *x86_64*) KMP_TARGET=IosX64 ;;\n    *) KMP_TARGET=IosSimulatorArm64 ;;\n  esac\nelse\n  KMP_TARGET=IosArm64\nfi\n\"$SRCROOT/gradlew\" \":shared:link${KMP_BUILD_TYPE}Framework${KMP_TARGET}\" --quiet\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -382,6 +394,7 @@
 			files = (
 				39FD319C875F4B4A6893D676 /* GatewayProtocolTests.swift in Sources */,
 				CA11E000000000000000000F /* LocalizationCatalogTests.swift in Sources */,
+				75392054CB69B9596796C57A /* MultiGatewayTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -418,6 +431,9 @@
 				7B8DAA4E77DE3665B7E1C087 /* SettingsView.swift in Sources */,
 				C5F737EBF5077A9BF35E9F64 /* TrajectoryView.swift in Sources */,
 				E7585B9F7F89A3084B6E0182 /* WorkspaceView.swift in Sources */,
+				375D401B1B6F03015EC9073D /* GatewayProfile.swift in Sources */,
+				C075849EE750C3CCD2C87FC7 /* MultiGatewayStore.swift in Sources */,
+				3459A8BD9696202CAC9D85A5 /* GatewaySwitcherView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -443,7 +459,7 @@
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=x86_64]" = "$(SRCROOT)/shared/build/bin/iosX64/debugFramework";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.dsh.mobile.ios.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.clarklevis.dshmobile.tests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DshMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DshMobile";
@@ -457,19 +473,19 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				DEVELOPMENT_TEAM = SHVN6YQNQF;
-				GENERATE_INFOPLIST_FILE = NO;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/shared/build/bin/iosArm64/debugFramework";
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=arm64]" = "$(SRCROOT)/shared/build/bin/iosSimulatorArm64/debugFramework";
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=x86_64]" = "$(SRCROOT)/shared/build/bin/iosX64/debugFramework";
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DeepSeekHarnessMobile/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = ai.dsh.mobile.ios;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.clarklevis.dshmobile;
 				PRODUCT_MODULE_NAME = DeepSeekHarnessMobile;
 				PRODUCT_NAME = DshMobile;
 				SDKROOT = iphoneos;
@@ -488,7 +504,7 @@
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=x86_64]" = "$(SRCROOT)/shared/build/bin/iosX64/releaseFramework";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.dsh.mobile.ios.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.clarklevis.dshmobile.tests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.10;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DshMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DshMobile";
@@ -618,19 +634,19 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				DEVELOPMENT_TEAM = SHVN6YQNQF;
-				GENERATE_INFOPLIST_FILE = NO;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/shared/build/bin/iosArm64/releaseFramework";
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=arm64]" = "$(SRCROOT)/shared/build/bin/iosSimulatorArm64/releaseFramework";
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=x86_64]" = "$(SRCROOT)/shared/build/bin/iosX64/releaseFramework";
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = DeepSeekHarnessMobile/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = ai.dsh.mobile.ios;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.clarklevis.dshmobile;
 				PRODUCT_MODULE_NAME = DeepSeekHarnessMobile;
 				PRODUCT_NAME = DshMobile;
 				SDKROOT = iphoneos;

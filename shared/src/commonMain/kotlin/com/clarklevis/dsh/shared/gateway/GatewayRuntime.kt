@@ -102,7 +102,10 @@ class GatewayRuntime(
     private val recoveryWindowMilliseconds: Long = DEFAULT_RECOVERY_WINDOW_MILLISECONDS,
     private val connectionAttemptTimeoutMilliseconds: Long = DEFAULT_CONNECTION_ATTEMPT_TIMEOUT_MILLISECONDS,
     private val frameDecoder: (String) -> GatewayFrame = GatewayWireDecoder::decode,
-    private val frameDecodingDispatcher: CoroutineDispatcher? = null
+    private val frameDecodingDispatcher: CoroutineDispatcher? = null,
+    private var expectedGatewayId: String? = null,
+    private val trustedEndpoints: List<String> = emptyList(),
+    private val onIdentity: suspend (GatewayFrame, String) -> Unit = { _, _ -> }
 ) {
     private val serialization = Mutex()
     private val mutableState = MutableStateFlow(
@@ -156,6 +159,7 @@ class GatewayRuntime(
 
     suspend fun connect(endpoint: String) = serialized {
         requireWebSocketEndpoint(endpoint)
+        require(trustedEndpoints.isEmpty() || endpoint in trustedEndpoints) { "地址未经此主机确认" }
         val existing = preferences.load()
         preferences.update(existing.copy(endpoint = endpoint))
         this.endpoint = endpoint
@@ -171,6 +175,8 @@ class GatewayRuntime(
 
     suspend fun pair(encodedPayload: String) = serialized {
         val payload = GatewayPairingPayloadParser.parse(encodedPayload, clock.nowEpochMilliseconds())
+        GatewayIdentity.validate(expectedGatewayId, payload.gatewayId)
+        expectedGatewayId = payload.gatewayId ?: expectedGatewayId
         val existing = preferences.load()
         preferences.update(existing.copy(endpoint = payload.publicUrl))
         endpoint = payload.publicUrl
@@ -426,6 +432,12 @@ class GatewayRuntime(
             return
         }
         val target = endpoint ?: return
+        if (trustedEndpoints.isNotEmpty() && target !in trustedEndpoints) {
+            reconnectBlocked = true
+            desiredConnection = false
+            failOpenLocked("untrusted-gateway-endpoint")
+            return
+        }
         val immutablePairingCode = pairingCode
         val credentialSnapshot = runCatching {
             credentials.loadOrCreateDeviceId() to
@@ -439,7 +451,8 @@ class GatewayRuntime(
             endpoint = target,
             deviceId = credentialSnapshot.first,
             bearerToken = credentialSnapshot.second,
-            pairingCode = immutablePairingCode
+            pairingCode = immutablePairingCode,
+            expectedGatewayId = expectedGatewayId
         )
         cancelPendingLocked(ERROR_CONNECTION_REPLACED)
         if (!preserveTurns) {
@@ -523,20 +536,48 @@ class GatewayRuntime(
             rejectLocked("transport", ERROR_STALE_FRAME)
             return null
         }
+        if (frame.kind == "hello" && isManualPairingAttempt && pairingCode != null) {
+            reconnectBlocked = true
+            desiredConnection = false
+            failOpenLocked(ERROR_PAIR_TOKEN_MISSING)
+            return null
+        }
+        if (frame.kind == "paired" || frame.kind == "hello") {
+            try {
+                GatewayIdentity.validate(expectedGatewayId, frame.gatewayId)
+                onIdentity(frame, endpoint.orEmpty())
+                expectedGatewayId = frame.gatewayId ?: expectedGatewayId
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                reconnectBlocked = true
+                desiredConnection = false
+                failOpenLocked("gateway-identity-mismatch")
+                return null
+            }
+        }
         if (frame.kind == "paired") {
             val target = endpoint
             val token = frame.token
             if (target == null || token.isNullOrBlank()) {
-                rejectLocked("pair", ERROR_PAIR_TOKEN_MISSING)
+                reconnectBlocked = true
+                desiredConnection = false
+                failOpenLocked(ERROR_PAIR_TOKEN_MISSING)
                 return null
             }
             if (runCatching { credentials.saveToken(target, token) }.isFailure) {
-                rejectLocked("pair", ERROR_CREDENTIAL_ACCESS)
+                reconnectBlocked = true
+                desiredConnection = false
+                failOpenLocked(ERROR_CREDENTIAL_ACCESS)
                 return null
             }
             pairingCode = null
         }
         if (frame.kind == "hello") {
+            try {
+                (transport as? GatewaySplitTransport)?.confirmControlHandshake()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Throwable) { failOpenLocked("conversation-open-failed"); return null }
             connectionAttemptTimeoutJob?.cancel()
             connectionAttemptTimeoutJob = null
             isManualPairingAttempt = false
@@ -950,7 +991,13 @@ class GatewayRuntime(
                 ) {
                     return@serialized
                 }
-                // 超时是这次连接意图的终态，用户可以立即换 token 重试。
+                if (!isManualPairingAttempt && trustedEndpoints.size > 1) {
+                    runCatching { transport.close() }
+                    mutableState.value = mutableState.value.copy(connection = GatewayConnectionState.FAILED, lastError = ERROR_CONNECTION_TIMEOUT)
+                    scheduleReconnectLocked(immediate = false)
+                    return@serialized
+                }
+                // 一次性配对超时后不自动重用原配对码。
                 reconnectJob?.cancel()
                 reconnectBlocked = true
                 connectionGeneration += 1
@@ -980,7 +1027,14 @@ class GatewayRuntime(
                 }
                 clock.delay((2_000L shl (attempt - 1)).coerceAtMost(30_000L))
             }
-            serialized { if (canReconnectLocked()) openTransportLocked(preserveTurns = true) }
+            serialized {
+                if (canReconnectLocked()) {
+                    if (trustedEndpoints.size > 1) {
+                        endpoint = trustedEndpoints[(trustedEndpoints.indexOf(endpoint) + 1) % trustedEndpoints.size]
+                    }
+                    openTransportLocked(preserveTurns = true)
+                }
+            }
         }
     }
 

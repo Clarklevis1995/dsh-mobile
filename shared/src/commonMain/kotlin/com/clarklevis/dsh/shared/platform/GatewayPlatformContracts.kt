@@ -12,7 +12,8 @@ data class GatewayConnectionSpec(
     val deviceId: String,
     val bearerToken: String? = null,
     val pairingCode: String? = null,
-    val channel: String? = null
+    val channel: String? = null,
+    val expectedGatewayId: String? = null
 ) {
     override fun toString(): String =
         "GatewayConnectionSpec(generation=$generation, endpoint=<redacted>, deviceId=<redacted>, " +
@@ -66,6 +67,7 @@ interface GatewayTransport {
 
 /** 两条物理连接各自提供有序事件流，不能在 transport 内合并成同一阻塞队列。 */
 interface GatewaySplitTransport : GatewayTransport {
+    suspend fun confirmControlHandshake() {}
     val conversationEvents: Flow<GatewayTransportEvent>
 }
 

@@ -198,6 +198,7 @@ private fun safeProtocolValue(value: String?): String = when {
 
 private val SAFE_PROTOCOL_VALUES = setOf(
     "none", "paired", "hello", "pong", "subscribed", "sent", "event", "workspaces", "sessions",
+    "session-create", "session-created",
     "history", "attachment", "search", "host", "agent-presets", "defaults", "default-model",
     "save-default-model", "set-default", "models", "select-model", "permission-options", "permission",
     "context-usage", "session-stats", "directories", "directory-create", "workspace-create",

@@ -306,7 +306,7 @@ private struct WorkspaceFilesSheet: View {
         .sheet(item: exportBinding) { file in
             WorkspaceFileExporter(url: file.url) { localURL in
                 WorkspaceDownloadRegistry.shared.record(
-                    sessionID: file.sessionID,
+                    sessionID: "\(store.gatewayLocalID):\(file.sessionID)",
                     remotePath: file.remotePath,
                     localURL: localURL
                 )
@@ -381,7 +381,7 @@ private struct WorkspaceFilesSheet: View {
             return
         }
         downloadedPaths = WorkspaceDownloadRegistry.shared.existingRemotePaths(
-            sessionID: sessionID,
+            sessionID: "\(store.gatewayLocalID):\(sessionID)",
             remotePaths: store.workspaceFileEntries
                 .filter { $0.kind == "file" }
                 .map(\.path)

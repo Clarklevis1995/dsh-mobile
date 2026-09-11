@@ -5,7 +5,7 @@ import com.clarklevis.dsh.shared.platform.GatewayTransportFrame
 import com.clarklevis.dsh.shared.platform.GatewayTransportState
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.onEach
 
 internal class BoundedTransportEventQueue(
@@ -18,7 +18,8 @@ internal class BoundedTransportEventQueue(
     private val budgetLock = Any()
     private var frameBytes = 0L
 
-    val events: Flow<GatewayTransportEvent> = channel.consumeAsFlow().onEach { event ->
+    // 探活只读取首个握手帧；结束收集不能关闭生产端，否则 close 状态会被误判为溢出。
+    val events: Flow<GatewayTransportEvent> = channel.receiveAsFlow().onEach { event ->
         if (event is GatewayTransportEvent.Frame) {
             synchronized(budgetLock) {
                 frameBytes -= event.value.queueWeight()

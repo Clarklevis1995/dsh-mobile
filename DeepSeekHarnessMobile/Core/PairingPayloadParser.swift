@@ -33,6 +33,8 @@ enum PairingPayloadParser {
         guard payload.expirationDate > now else {
             throw PairingPayloadError.expired
         }
+        try GatewayIdentity.validate(expected: nil, received: payload.gatewayId)
+        _ = try GatewayIdentity.endpoints(payload)
         return payload
     }
 

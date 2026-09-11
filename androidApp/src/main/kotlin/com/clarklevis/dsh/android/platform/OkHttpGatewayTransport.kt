@@ -187,11 +187,16 @@ internal class OkHttpGatewayTransport(
         private const val AUTHENTICATION_REQUIRED = 4003
         private const val HTTP_UNAUTHORIZED = 401
 
-        private fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
+        private fun defaultClient(): OkHttpClient = sharedClient
+
+        private val sharedClient: OkHttpClient by lazy { OkHttpClient.Builder()
+            .followRedirects(false)
+            .followSslRedirects(false)
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .pingInterval(30, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
+        }
     }
 }
 

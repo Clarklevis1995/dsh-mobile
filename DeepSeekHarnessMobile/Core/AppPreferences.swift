@@ -21,39 +21,42 @@ final class UserDefaultsAppPreferences: AppPreferences {
     }
 
     private let userDefaults: UserDefaults
+    private let namespace: String
+    private func key(_ value: String) -> String { namespace + value }
 
-    init(userDefaults: UserDefaults = .standard) {
+    init(userDefaults: UserDefaults = .standard, gatewayID: String? = nil) {
+        namespace = gatewayID.map { "host.\($0)." } ?? ""
         self.userDefaults = userDefaults
     }
 
     var endpoint: String {
-        get { userDefaults.string(forKey: Key.endpoint) ?? Self.defaultEndpoint }
-        set { userDefaults.set(newValue, forKey: Key.endpoint) }
+        get { userDefaults.string(forKey: key(Key.endpoint)) ?? Self.defaultEndpoint }
+        set { userDefaults.set(newValue, forKey: key(Key.endpoint)) }
     }
 
     var selectedWorkspaceID: String? {
-        get { userDefaults.string(forKey: Key.selectedWorkspaceID) }
+        get { userDefaults.string(forKey: key(Key.selectedWorkspaceID)) }
         set {
             if let newValue {
-                userDefaults.set(newValue, forKey: Key.selectedWorkspaceID)
+                userDefaults.set(newValue, forKey: key(Key.selectedWorkspaceID))
             } else {
-                userDefaults.removeObject(forKey: Key.selectedWorkspaceID)
+                userDefaults.removeObject(forKey: key(Key.selectedWorkspaceID))
             }
         }
     }
 
     func loadSessions() -> [SessionSummary] {
-        guard let data = userDefaults.data(forKey: Key.sessions) else { return [] }
+        guard let data = userDefaults.data(forKey: key(Key.sessions)) else { return [] }
         return (try? JSONDecoder().decode([SessionSummary].self, from: data)) ?? []
     }
 
     func saveSessions(_ sessions: [SessionSummary]) {
         guard let data = try? JSONEncoder().encode(sessions) else { return }
-        userDefaults.set(data, forKey: Key.sessions)
+        userDefaults.set(data, forKey: key(Key.sessions))
     }
 
     func performMigrations() {
-        userDefaults.removeObject(forKey: Key.conversationScrollAnchors)
-        userDefaults.removeObject(forKey: Key.manuallyPositionedSessionIDs)
+        userDefaults.removeObject(forKey: key(Key.conversationScrollAnchors))
+        userDefaults.removeObject(forKey: key(Key.manuallyPositionedSessionIDs))
     }
 }

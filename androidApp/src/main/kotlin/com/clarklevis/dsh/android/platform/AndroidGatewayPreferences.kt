@@ -15,9 +15,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
-class AndroidGatewayPreferences(context: Context) : GatewayPreferences {
+class AndroidGatewayPreferences(context: Context, gatewayId: String? = null) : GatewayPreferences {
     private val dataStore: DataStore<Preferences> = PreferenceDataStoreFactory.create(
-        produceFile = { context.preferencesDataStoreFile(FILE_NAME) }
+        produceFile = { context.preferencesDataStoreFile(gatewayId?.let { "host_$it" } ?: FILE_NAME) }
     )
 
     override val snapshots: Flow<GatewayPreferencesSnapshot> = dataStore.data

@@ -32,7 +32,11 @@ class AndroidAppGraph(
     attachmentCacheOverride: GatewayAttachmentCache? = null,
     networkMonitorOverride: GatewayNetworkMonitor? = null,
     clockOverride: GatewayClock? = null,
-    frameDecoderOverride: ((String) -> GatewayFrame)? = null
+    frameDecoderOverride: ((String) -> GatewayFrame)? = null,
+    val gatewayLocalId: String = "legacy",
+    expectedGatewayId: String? = null,
+    trustedEndpoints: List<String> = emptyList(),
+    onIdentity: suspend (GatewayFrame, String) -> Unit = { _, _ -> }
 ) {
     /** 生命周期/UI 提交使用 Main；Gateway decode、MVI 与磁盘协调使用单线程后台 dispatcher。 */
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -43,7 +47,7 @@ class AndroidAppGraph(
     val credentialStore: GatewayCredentialStore =
         credentialStoreOverride ?: AndroidGatewayCredentialStore(application)
     val attachmentCache: GatewayAttachmentCache =
-        attachmentCacheOverride ?: AndroidAttachmentCache(application)
+        attachmentCacheOverride ?: AndroidAttachmentCache(application, gatewayId = gatewayLocalId)
     val attachmentThumbnailer = AndroidAttachmentThumbnailer()
     val imagePreprocessor = AndroidImagePreprocessor(application.contentResolver)
     val networkMonitor: GatewayNetworkMonitor = networkMonitorOverride ?: AndroidNetworkMonitor(application)
@@ -60,8 +64,13 @@ class AndroidAppGraph(
         clock = clockOverride ?: AndroidGatewayClock,
         scope = gatewayScope,
         frameDecoder = frameDecoderOverride ?: GatewayWireDecoder::decode,
-        frameDecodingDispatcher = Dispatchers.Default
+        frameDecodingDispatcher = Dispatchers.Default,
+        expectedGatewayId = expectedGatewayId,
+        trustedEndpoints = trustedEndpoints,
+        onIdentity = onIdentity
     )
+    var pairingHandler: ((String) -> Unit)? = null
+    var gatewayDisplayName: String = ""
     val stateHolder: AndroidSharedStateHolder by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         AndroidSharedStateHolder(graph = this)
     }

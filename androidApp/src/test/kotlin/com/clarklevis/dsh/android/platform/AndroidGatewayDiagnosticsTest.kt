@@ -74,4 +74,20 @@ class AndroidGatewayDiagnosticsTest {
         assertTrue(output.contains("hasTarget=true"))
         assertTrue(output.contains("hasCorrelation=true"))
     }
+
+    @Test
+    fun sessionCreationKindsRemainVisibleInDiagnosticMetadata() {
+        val lines = mutableListOf<String>()
+        val diagnostics = AndroidGatewayDiagnostics.forTest { _, _, message -> lines += message }
+
+        diagnostics.runtimeEvent(
+            GatewayRuntimeEvent.Frame(
+                rawJson = "redacted",
+                frame = GatewayFrame(kind = "session-created", requestId = "redacted"),
+                correlatedSessionId = "redacted"
+            )
+        )
+
+        assertTrue(lines.single().contains("kind=session-created"))
+    }
 }

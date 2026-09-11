@@ -40,6 +40,8 @@ object GatewayPairingPayloadParser {
         if (payload.expiresAt <= nowEpochMilliseconds) {
             throw GatewayPairingPayloadException("二维码配对码已经过期")
         }
+        GatewayIdentity.validate(null, payload.gatewayId)
+        GatewayIdentity.endpoints(payload)
         return payload
     }
 }

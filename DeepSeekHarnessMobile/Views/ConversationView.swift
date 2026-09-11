@@ -243,7 +243,8 @@ struct ConversationView: View {
                     Text("轨迹").tag(1)
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 66).padding(.vertical, 12)
+                .padding(.horizontal, 66)
+                .padding(.vertical, 6)
 
                 PersistentSessionPager(selection: $activeView) {
                     chat
