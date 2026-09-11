@@ -76,7 +76,8 @@ internal sealed interface ConversationTimelineEntry {
 }
 
 internal fun makeConversationTimelineEntries(
-    entries: List<ConversationDisplayEntry>
+    entries: List<ConversationDisplayEntry>,
+    activeStreamingAssistantMessageId: String? = null
 ): List<ConversationTimelineEntry> = buildList {
     entries.forEach { entry ->
         val item = (entry as? ConversationDisplayEntry.Message)?.item
@@ -98,10 +99,27 @@ internal fun makeConversationTimelineEntries(
                 )
             )
         }
-        if (!isStreamingConversationItem(item)) {
+        if (item.id != activeStreamingAssistantMessageId) {
             add(ConversationTimelineEntry.AssistantFooter(item.id, item.text))
         }
     }
+}
+
+/**
+ * 最终回复会保留原来的 stream ID 以维持 LazyColumn 行稳定，因此不能只凭 ID 判断仍在流式输出。
+ * 当前轮次的流式回复必须位于最近一条用户消息之后，并且会话仍处于运行状态。
+ */
+internal fun activeStreamingAssistantMessageId(
+    items: List<ConversationItem>,
+    isSessionRunning: Boolean
+): String? {
+    if (!isSessionRunning) return null
+    val latestUserIndex = items.indexOfLast { it.kind == ConversationItemKind.USER }
+    return items.asSequence()
+        .drop(latestUserIndex + 1)
+        .filter { it.kind == ConversationItemKind.ASSISTANT && it.id.startsWith("stream-") }
+        .lastOrNull()
+        ?.id
 }
 
 /**

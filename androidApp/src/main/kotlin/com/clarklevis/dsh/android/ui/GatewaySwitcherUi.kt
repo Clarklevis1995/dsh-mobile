@@ -38,7 +38,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -63,6 +63,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
@@ -105,13 +106,18 @@ internal fun GatewaySwitcherBar() {
         Modifier
             .background(Color.White.copy(alpha = 0.09f), RoundedCornerShape(30.dp))
             .clickable { expanded = true }
-            .padding(horizontal = 11.dp, vertical = 7.dp),
+            .padding(horizontal = 11.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        HostIcon(hosts.activeProfile?.server == true, Color.White)
+        HostIcon(hosts.activeProfile?.server == true, Color.White, Modifier.size(15.dp))
         Text(hosts.activeProfile?.displayName ?: "选择主机", color = Color.White, fontSize = 12.sp, maxLines = 1)
-        Box(Modifier.size(6.dp).background(if (hosts.activeId in hosts.onlineIds) Color.Green else Color.Gray, CircleShape))
+        val activeOnline = hosts.activeId in hosts.onlineIds
+        StatusIndicatorDot(
+            color = if (activeOnline) DshColors.Success else Color.Gray,
+            modifier = Modifier.size(6.dp),
+            glowing = activeOnline
+        )
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(com.clarklevis.dsh.android.R.drawable.ic_question_chevron_down),
             contentDescription = null,
@@ -160,14 +166,20 @@ internal fun GatewaySwitcherBar() {
                         Text(
                             "我的主机",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 13.sp,
+                            fontSize = 15.sp,
+                            lineHeight = 20.sp,
+                            fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(start = 16.dp, top = 22.dp, bottom = 10.dp)
                         )
+                        val displayedProfiles = activeHostFirst(hosts.profiles, hosts.activeId)
                         LazyColumn(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
                                 .background(hostPanelCardColor())
                         ) {
-                            items(hosts.profiles, key = { it.localId }) { profile ->
+                            itemsIndexed(
+                                items = displayedProfiles,
+                                key = { _, profile -> profile.localId }
+                            ) { index, profile ->
                                 GatewayHostRow(
                                     hosts = hosts,
                                     profile = profile,
@@ -183,6 +195,16 @@ internal fun GatewaySwitcherBar() {
                                     },
                                     onEdit = { editing = profile }
                                 )
+                                if (index < displayedProfiles.lastIndex) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(
+                                            start = if (managing) 86.dp else 50.dp,
+                                            end = 16.dp
+                                        ),
+                                        thickness = 0.5.dp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                                    )
+                                }
                             }
                             if (hosts.profiles.isEmpty()) {
                                 item {
@@ -231,8 +253,8 @@ private fun GatewayHostRow(
     onEdit: () -> Unit
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 76.dp).clickable(onClick = onSelect)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+        Modifier.fillMaxWidth().heightIn(min = 68.dp).clickable(onClick = onSelect)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AnimatedVisibility(
@@ -260,12 +282,19 @@ private fun GatewayHostRow(
                 }
             }
         }
-        HostIcon(profile.server, MaterialTheme.colorScheme.onSurface, Modifier.size(26.dp))
+        HostIcon(profile.server, MaterialTheme.colorScheme.onSurface, Modifier.size(22.dp))
         Column(
             Modifier.weight(1f).padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(profile.displayName, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                profile.displayName,
+                fontSize = 17.sp,
+                lineHeight = 20.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+            )
             Text(
                 if (profile.localId ==
                     hosts.activeId
@@ -275,20 +304,20 @@ private fun GatewayHostRow(
                     "点击连接"
                 },
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                lineHeight = 15.sp,
+                color = if (profile.localId == hosts.activeId) {
+                    DshColors.Ocean
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
             )
         }
-        Box(
-            Modifier.size(8.dp).background(
-                if (profile.localId in
-                    hosts.onlineIds
-                ) {
-                    Color(0xFF32B966)
-                } else {
-                    Color.Gray
-                },
-                CircleShape
-            )
+        val online = profile.localId in hosts.onlineIds
+        StatusIndicatorDot(
+            color = if (online) DshColors.Success else Color.Gray,
+            modifier = Modifier.size(8.dp),
+            glowing = online
         )
         AnimatedVisibility(
             visible = managing,
@@ -301,20 +330,12 @@ private fun GatewayHostRow(
                 shrinkTowards = Alignment.End
             ) + fadeOut(tween(160))
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onEdit) {
-                    Icon(
-                        painter = androidx.compose.ui.res.painterResource(com.clarklevis.dsh.android.R.drawable.ic_pencil_line),
-                        contentDescription = "编辑 ${profile.displayName}",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+            IconButton(onClick = onEdit) {
                 Icon(
-                    painter = androidx.compose.ui.res.painterResource(com.clarklevis.dsh.android.R.drawable.ic_drag_handle),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 8.dp).size(22.dp)
+                    painter = androidx.compose.ui.res.painterResource(com.clarklevis.dsh.android.R.drawable.ic_pencil_line),
+                    contentDescription = "编辑 ${profile.displayName}",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -502,21 +523,30 @@ private fun HostPanelHeader(
     leadingText: String = "取消",
     actionColor: Color = Color.Unspecified
 ) {
+    val buttonBackground = if (isSystemInDarkTheme()) {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+    } else {
+        Color.White.copy(alpha = 0.16f)
+    }
     Box(Modifier.fillMaxWidth().height(44.dp), contentAlignment = Alignment.Center) {
         Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         if (onCancel != null) {
             TextButton(
                 onClick = onCancel,
                 modifier = Modifier.align(Alignment.CenterStart)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), CircleShape)
-            ) { Text(leadingText) }
+                    .background(buttonBackground, CircleShape)
+            ) {
+                Text(leadingText, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+            }
         }
         if (action != null) {
             TextButton(
                 onClick = onAction,
                 modifier = Modifier.align(Alignment.CenterEnd)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), CircleShape)
-            ) { Text(action, color = actionColor) }
+                    .background(buttonBackground, CircleShape)
+            ) {
+                Text(action, color = actionColor, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+            }
         }
     }
 }
@@ -529,6 +559,11 @@ internal fun gatewayDeleteActionLabel(selectionCount: Int): String? = when (sele
 
 internal fun toggleSelection(selectedIds: Set<String>, id: String): Set<String> =
     if (id in selectedIds) selectedIds - id else selectedIds + id
+
+private fun activeHostFirst(profiles: List<GatewayProfile>, activeId: String?): List<GatewayProfile> {
+    val activeProfile = profiles.firstOrNull { it.localId == activeId } ?: return profiles
+    return listOf(activeProfile) + profiles.filterNot { it.localId == activeId }
+}
 
 @Composable
 private fun HostPanelTheme(content: @Composable () -> Unit) {

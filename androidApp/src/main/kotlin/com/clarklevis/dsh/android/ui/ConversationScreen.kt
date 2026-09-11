@@ -192,12 +192,13 @@ internal fun ConversationScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        if (stateHolder.gatewayDisplayName.isNotBlank()) {
-                            Text(stateHolder.gatewayDisplayName, maxLines = 1, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+                    Text(
+                        title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 },
                 navigationIcon = {
                     TopBarCircleButton(
@@ -235,6 +236,7 @@ internal fun ConversationScreen(
                         )
                     }
                 },
+                expandedHeight = 54.dp,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         }
@@ -409,7 +411,7 @@ private fun SegmentedControl(selected: Int, onSelect: (Int) -> Unit) {
     val trackShape = RoundedCornerShape(16.dp)
     val segmentShape = RoundedCornerShape(14.dp)
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 66.dp, vertical = 12.dp)
+        Modifier.fillMaxWidth().padding(horizontal = 66.dp, vertical = 6.dp)
             .height(32.dp)
             .clip(trackShape)
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.075f))
@@ -686,9 +688,15 @@ private fun ConversationTimeline(
     var hasHistoryLoadingRow by remember(selectedSessionId) {
         mutableStateOf(latestHistoryLoading)
     }
+    val selectedSessionIsRunning = stateHolder.snapshot.sessions
+        .firstOrNull { it.id == selectedSessionId }
+        ?.isRunning == true
     val displayEntries = remember(items) { makeConversationDisplayEntries(items) }
-    val timelineEntries = remember(displayEntries) {
-        makeConversationTimelineEntries(displayEntries)
+    val activeStreamingMessageId = remember(items, selectedSessionIsRunning) {
+        activeStreamingAssistantMessageId(items, selectedSessionIsRunning)
+    }
+    val timelineEntries = remember(displayEntries, activeStreamingMessageId) {
+        makeConversationTimelineEntries(displayEntries, activeStreamingMessageId)
     }
     val attachmentIdsByTimelineId = remember(timelineEntries) {
         timelineEntries.associate { entry ->
@@ -747,7 +755,7 @@ private fun ConversationTimeline(
                     markdownPreloader.preload(
                         timelineEntries.subList(start, end + 1)
                             .filterIsInstance<ConversationTimelineEntry.AssistantMarkdown>()
-                            .filterNot { it.messageId.startsWith("stream-") }
+                            .filterNot { it.messageId == activeStreamingMessageId }
                             .map(ConversationTimelineEntry.AssistantMarkdown::markdown)
                     )
                 }
@@ -777,7 +785,7 @@ private fun ConversationTimeline(
             }
         }
     }
-    val hasStreamingItem = items.any(::isStreamingConversationItem)
+    val hasStreamingItem = selectedSessionIsRunning
     LaunchedEffect(
         timelineEntries.size,
         items.lastOrNull()?.text?.length,
@@ -2466,7 +2474,7 @@ private fun AssistantMessage(
         if (item.text.isNotEmpty()) {
             DshStreamingAwareMarkdownText(
                 markdown = item.text,
-                isStreaming = isStreamingConversationItem(item),
+                isStreaming = false,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -2618,9 +2626,6 @@ private fun MarkdownLikeText(text: String) {
     DshMarkdownText(text, Modifier.fillMaxWidth())
 }
 
-internal fun isStreamingConversationItem(item: ConversationItem): Boolean =
-    item.id.startsWith("stream-")
-
 @Composable
 private fun SmallConnectionDot(state: GatewayConnectionState) {
     val color = when (state) {
@@ -2629,7 +2634,11 @@ private fun SmallConnectionDot(state: GatewayConnectionState) {
         GatewayConnectionState.CONNECTING, GatewayConnectionState.AUTHENTICATING, GatewayConnectionState.WAITING_FOR_NETWORK -> DshColors.Amber
         else -> Color.Gray
     }
-    Box(Modifier.size(8.dp).background(color, CircleShape))
+    StatusIndicatorDot(
+        color = color,
+        modifier = Modifier.size(8.dp),
+        glowing = state == GatewayConnectionState.CONNECTED
+    )
 }
 
 private fun permissionTitle(value: String?) = when (value) {

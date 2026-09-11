@@ -2,13 +2,61 @@ package com.clarklevis.dsh.android
 
 import com.clarklevis.dsh.android.platform.AndroidPreparedImage
 import com.clarklevis.dsh.shared.gateway.GatewayOutgoingImage
+import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
+import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidSharedStateHolderTest {
+    @Test
+    fun sessionCreationResponseFromMainRuntimeConsumerCompletesPendingRequest() = runTest {
+        val pending = AndroidPendingSessionCreation()
+        val response = pending.begin("create-1")
+
+        pending.accept(
+            GatewayRuntimeEvent.Frame(
+                rawJson = "redacted",
+                frame = GatewayFrame(
+                    kind = "session-created",
+                    requestId = "create-1",
+                    sessionId = "session-1"
+                ),
+                correlatedSessionId = "session-1"
+            )
+        )
+
+        assertTrue(response.isCompleted)
+        assertEquals(
+            "session-1",
+            (response.await() as GatewayRuntimeEvent.Frame).frame.sessionId
+        )
+    }
+
+    @Test
+    fun unrelatedSessionCreationResponseDoesNotCompletePendingRequest() {
+        val pending = AndroidPendingSessionCreation()
+        val response = pending.begin("create-1")
+
+        pending.accept(
+            GatewayRuntimeEvent.Frame(
+                rawJson = "redacted",
+                frame = GatewayFrame(
+                    kind = "session-created",
+                    requestId = "another-request",
+                    sessionId = "another-session"
+                ),
+                correlatedSessionId = "another-session"
+            )
+        )
+
+        assertEquals(false, response.isCompleted)
+        pending.clear("create-1")
+    }
+
     @Test
     fun workspaceSelectionRestoresAConcreteScopeInsteadOfAllSessions() {
         val workspaces = listOf(

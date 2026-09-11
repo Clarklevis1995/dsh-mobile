@@ -41,10 +41,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -102,6 +99,7 @@ class AndroidSharedStateHolder(
     private var recentlyCreatedWorkspace: GatewayWorkspace? by mutableStateOf(null)
     private var inputGeneration = 0L
     private var pendingSelectedSessionId: String? = null
+    private val pendingSessionCreation = AndroidPendingSessionCreation()
     private val thumbnailCache = BoundedLruCache<String, ImageBitmap>(MAXIMUM_THUMBNAIL_BYTES) {
         it.width.toLong() * it.height * 4
     }
@@ -261,6 +259,9 @@ class AndroidSharedStateHolder(
                 for (eventStream in listOf(appGraph.gatewayRuntime.events, appGraph.gatewayRuntime.conversationEvents)) {
                     launch {
                         eventStream.collect { event ->
+                            // Runtime events 是单消费者流。所有一次性响应也必须由这里分发，
+                            // 否则另起 collector 会与投影竞争并随机吞掉 session-created。
+                            pendingSessionCreation.accept(event)
                             appGraph.diagnostics.runtimeEvent(event)
                             when (event) {
                                 is GatewayRuntimeEvent.Frame -> {
@@ -617,27 +618,19 @@ class AndroidSharedStateHolder(
         try {
             val requestId = UUID.randomUUID().toString()
             val workspaceId = activeWorkspace?.workspaceId
-            val event = withTimeoutOrNull(15_000) {
-                coroutineScope {
-                    // 先监听再发送，避免本地网关快速响应时丢失创建结果。
-                    val response = async(start = CoroutineStart.UNDISPATCHED) {
-                        appGraph.gatewayRuntime.events.first { event ->
-                            when (event) {
-                                is GatewayRuntimeEvent.Frame -> event.frame.requestId == requestId &&
-                                    (event.frame.kind == "session-created" ||
-                                        event.frame.kind == "error" && event.frame.requestType == "session-create")
-                                is GatewayRuntimeEvent.RequestCancelled -> event.correlationId == requestId
-                                is GatewayRuntimeEvent.RequestTimedOut -> event.correlationId == requestId
-                                is GatewayRuntimeEvent.RequestRejected -> event.correlationId == requestId
-                                else -> false
-                            }
-                        }
-                    }
-                    if (!appGraph.gatewayRuntime.sendRequest(GatewayRequests.createSession(requestId, workspaceId))) {
-                        response.cancel()
-                        null
-                    } else response.await()
+            // 先登记再发送，快速返回的本地网关也不会丢失创建结果。
+            val response = pendingSessionCreation.begin(requestId)
+            val event = try {
+                if (!appGraph.gatewayRuntime.sendRequest(
+                        GatewayRequests.createSession(requestId, workspaceId)
+                    )
+                ) {
+                    null
+                } else {
+                    withTimeoutOrNull(15_000) { response.await() }
                 }
+            } finally {
+                pendingSessionCreation.clear(requestId)
             }
             val frame = (event as? GatewayRuntimeEvent.Frame)?.frame
             val sessionId = frame?.sessionId?.takeIf(String::isNotBlank)
@@ -1930,6 +1923,54 @@ class AndroidSharedStateHolder(
         const val DEFAULT_WIRE_PAYLOAD =
             """{"sessionId":"android-demo","seq":4,"time":1786937355,"event":{"type":"assistant/message","turn":1,"step":1,"text":"最终消息会替换流式临时消息。"}}"""
     }
+}
+
+/**
+ * 把唯一 Runtime 事件消费者收到的创建响应交还给发起方。
+ *
+ * 响应可能在调用方开始 await 前到达，因此使用 CompletableDeferred 保存结果；锁只保护一个
+ * 很短的内存状态变更，不跨协程挂起。
+ */
+internal class AndroidPendingSessionCreation {
+    private data class Pending(
+        val requestId: String,
+        val response: CompletableDeferred<GatewayRuntimeEvent>
+    )
+
+    private val lock = Any()
+    private var pending: Pending? = null
+
+    fun begin(requestId: String): CompletableDeferred<GatewayRuntimeEvent> = synchronized(lock) {
+        check(pending == null) { "A session creation request is already pending" }
+        CompletableDeferred<GatewayRuntimeEvent>().also { response ->
+            pending = Pending(requestId, response)
+        }
+    }
+
+    fun accept(event: GatewayRuntimeEvent) {
+        synchronized(lock) {
+            val active = pending ?: return
+            if (!event.matchesSessionCreation(active.requestId)) return
+            active.response.complete(event)
+            pending = null
+        }
+    }
+
+    fun clear(requestId: String) {
+        synchronized(lock) {
+            if (pending?.requestId == requestId) pending = null
+        }
+    }
+}
+
+private fun GatewayRuntimeEvent.matchesSessionCreation(requestId: String): Boolean = when (this) {
+    is GatewayRuntimeEvent.Frame -> frame.requestId == requestId &&
+        (frame.kind == "session-created" ||
+            frame.kind == "error" && frame.requestType == "session-create")
+    is GatewayRuntimeEvent.RequestCancelled -> correlationId == requestId
+    is GatewayRuntimeEvent.RequestTimedOut -> correlationId == requestId
+    is GatewayRuntimeEvent.RequestRejected -> correlationId == requestId
+    else -> false
 }
 
 internal fun resolveWorkspaceSelection(

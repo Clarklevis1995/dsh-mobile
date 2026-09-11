@@ -37,11 +37,19 @@ private struct GatewaySwitcherSheet: View {
     @State private var alias = ""
     @State private var kind = "desktopcomputer"
 
+    private var displayedProfiles: [GatewayProfile] {
+        guard
+            let activeID = hosts.activeID,
+            let activeProfile = hosts.profiles.first(where: { $0.id == activeID })
+        else { return hosts.profiles }
+        return [activeProfile] + hosts.profiles.filter { $0.id != activeID }
+    }
+
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    ForEach(hosts.profiles) { profile in
+                    ForEach(displayedProfiles) { profile in
                         HStack(spacing: 12) {
                             if editMode.isEditing {
                                 Button { toggleSelection(profile.id) } label: {
@@ -66,7 +74,12 @@ private struct GatewaySwitcherSheet: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(profile.displayName).foregroundStyle(Color(uiColor: .label)).lineLimit(1)
                                     Text(hosts.activeID == profile.id ? "当前主机" : "点击连接")
-                                        .font(.caption).foregroundStyle(Color(uiColor: .secondaryLabel))
+                                        .font(.caption)
+                                        .foregroundStyle(
+                                            hosts.activeID == profile.id
+                                                ? Color.accentColor
+                                                : Color(uiColor: .secondaryLabel)
+                                        )
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
@@ -90,10 +103,9 @@ private struct GatewaySwitcherSheet: View {
                                 .transition(.move(edge: .trailing).combined(with: .opacity))
                             }
                         }
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 2)
                         .animation(.easeInOut(duration: 0.2), value: editMode.isEditing)
                     }
-                    .onMove(perform: hosts.move)
                 } header: { Text("我的主机").foregroundStyle(Color(uiColor: .secondaryLabel)) }
                 if hosts.profiles.isEmpty {
                     Text("暂无已连接的主机")

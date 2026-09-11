@@ -24,9 +24,11 @@ struct WorkspaceView: View {
                 .onTapGesture { sessionSearchIsFocused = false }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    header.id("workspace-header")
-                    GatewaySwitcherBar()
-                    Spacer(minLength: 72)
+                    VStack(alignment: .leading, spacing: 6) {
+                        header.id("workspace-header")
+                        GatewaySwitcherBar()
+                    }
+                    Spacer(minLength: 44)
                     VStack(alignment: .leading, spacing: 7) {
                         Text("探索未至之境")
                             .font(.system(size: 32, weight: .bold))

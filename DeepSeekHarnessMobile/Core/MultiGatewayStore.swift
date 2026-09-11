@@ -214,11 +214,6 @@ final class MultiGatewayStore: ObservableObject {
         persist()
     }
 
-    func move(from offsets: IndexSet, to destination: Int) {
-        profiles.move(fromOffsets: offsets, toOffset: destination)
-        persist()
-    }
-
     /// 已配对资料的控制通道短暂验证 hello，不订阅会话、不发业务请求。
     /// 只有列表可见且 App 前台时运行；最多两个探测并发，每地址最多三秒。
     func refreshPresence() async {

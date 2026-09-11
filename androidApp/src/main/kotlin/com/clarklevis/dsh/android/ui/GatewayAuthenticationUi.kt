@@ -267,7 +267,11 @@ internal fun ManualGatewayPairingSheet(
                     modifier = Modifier.fillMaxWidth().height(50.dp)
                         .clickable(enabled = canUsePrimaryAction, role = Role.Button) {
                             if (isConnecting) {
-                                if (hosts != null) hosts.cancelPairing() else stateHolder.disconnect()
+                                if (hosts?.pairing == true) {
+                                    hosts.cancelPairing()
+                                } else {
+                                    stateHolder.disconnect()
+                                }
                             } else {
                                 validationError = null
                                 didAttemptConnection = true

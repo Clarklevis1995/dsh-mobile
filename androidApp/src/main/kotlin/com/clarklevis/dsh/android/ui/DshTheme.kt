@@ -2,15 +2,23 @@ package com.clarklevis.dsh.android.ui
 
 import android.app.Activity
 import android.os.Build
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
 internal object DshColors {
@@ -24,6 +32,28 @@ internal object DshColors {
     val Orange = Color(0xFFF07D14)
     val Amber = Color(0xFFFFAD1F)
     val Success = Color(0xFF2EB85C)
+}
+
+@Composable
+internal fun StatusIndicatorDot(
+    color: Color,
+    modifier: Modifier = Modifier,
+    glowing: Boolean = false
+) {
+    val decoratedModifier = if (glowing) {
+        modifier.dropShadow(
+            shape = CircleShape,
+            shadow = Shadow(
+                radius = 5.dp,
+                spread = 1.dp,
+                color = color.copy(alpha = 0.28f),
+                offset = DpOffset(0.dp, 0.dp)
+            )
+        )
+    } else {
+        modifier
+    }
+    Box(decoratedModifier.background(color, CircleShape))
 }
 
 private val LightColors = lightColorScheme(

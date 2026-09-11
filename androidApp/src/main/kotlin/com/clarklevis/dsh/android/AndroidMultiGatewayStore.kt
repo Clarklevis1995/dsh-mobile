@@ -48,6 +48,7 @@ import kotlinx.serialization.json.Json
 private const val MAX_ENDPOINTS = 16
 private const val MAX_ALIAS_LENGTH = 80
 private const val PAIRING_TIMEOUT_MS = 20_000L
+private const val PAIRING_CANCEL_CLEANUP_TIMEOUT_MS = 2_000L
 private const val PROBE_INTERVAL_MS = 30_000L
 private const val PROBE_TIMEOUT_MS = 3_000L
 private const val PROBE_CONCURRENCY = 2
@@ -274,7 +275,13 @@ class AndroidMultiGatewayStore(private val application: Application) {
                 } finally {
                     if (!committed) {
                         candidate?.let { graph ->
-                            withContext(NonCancellable + graph.gatewayDispatcher) { graph.gatewayRuntime.disconnect() }
+                            withContext(NonCancellable + graph.gatewayDispatcher) {
+                                val disconnected = withTimeoutOrNull(PAIRING_CANCEL_CLEANUP_TIMEOUT_MS) {
+                                    graph.gatewayRuntime.disconnect()
+                                    true
+                                } ?: false
+                                if (!disconnected) runCatching { graph.transport.close() }
+                            }
                             graph.applicationScope.cancel()
                             graph.gatewayScope.cancel()
                         }
@@ -303,8 +310,8 @@ class AndroidMultiGatewayStore(private val application: Application) {
     }
 
     fun cancelPairing() {
+        pairing = false
         pairingJob?.cancel()
-        pairingJob = null
     }
 
     fun remove(profile: GatewayProfile) {

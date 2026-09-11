@@ -160,10 +160,6 @@ private struct ConversationNavigationShell<Content: View>: View {
     var body: some View {
         content()
             .navigationTitle(liveTitle ?? header.title)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                Text(store.gatewayDisplayName).font(.caption2).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity).padding(.vertical, 3)
-            }
             .onReceive(store.$sessions) { sessions in
                 let sessionID = header.sessionID ?? store.selectedSessionId
                 liveTitle = sessions.first { $0.id == sessionID }?.title

@@ -10,10 +10,30 @@ import org.junit.Test
 
 class ConversationDisplayGroupsTest {
     @Test
-    fun `provisional stream ids are detected independently from rendering`() {
-        assertTrue(isStreamingConversationItem(item("stream-text-1-1", ConversationItemKind.ASSISTANT)))
-        assertTrue(isStreamingConversationItem(item("stream-reason-1-1", ConversationItemKind.REASONING)))
-        assertFalse(isStreamingConversationItem(item("session-a-42", ConversationItemKind.ASSISTANT)))
+    fun `only the current turn assistant is treated as streaming`() {
+        val oldAssistant = item("stream-text-1-1", ConversationItemKind.ASSISTANT)
+        val currentUser = item("user-2", ConversationItemKind.USER)
+        val currentAssistant = item("stream-text-2-1", ConversationItemKind.ASSISTANT)
+
+        assertEquals(
+            "stream-text-2-1",
+            activeStreamingAssistantMessageId(
+                listOf(oldAssistant, currentUser, currentAssistant),
+                isSessionRunning = true
+            )
+        )
+        assertNull(
+            activeStreamingAssistantMessageId(
+                listOf(oldAssistant, currentUser),
+                isSessionRunning = true
+            )
+        )
+        assertNull(
+            activeStreamingAssistantMessageId(
+                listOf(oldAssistant, currentUser, currentAssistant),
+                isSessionRunning = false
+            )
+        )
     }
 
     @Test
@@ -25,7 +45,8 @@ class ConversationDisplayGroupsTest {
         val timeline = makeConversationTimelineEntries(
             makeConversationDisplayEntries(
                 listOf(item("stream-text-7-9", ConversationItemKind.ASSISTANT, text = text))
-            )
+            ),
+            activeStreamingAssistantMessageId = "stream-text-7-9"
         )
 
         assertTrue(timeline.first() is ConversationTimelineEntry.AssistantHeader)
@@ -36,6 +57,40 @@ class ConversationDisplayGroupsTest {
             timeline.filterIsInstance<ConversationTimelineEntry.AssistantMarkdown>()
                 .joinToString("\n\n", transform = { it.markdown })
         )
+    }
+
+    @Test
+    fun `completed assistant retaining stream id has a copy footer`() {
+        val completed = item(
+            "stream-text-7-9",
+            ConversationItemKind.ASSISTANT,
+            text = "已完成回复"
+        )
+
+        val timeline = makeConversationTimelineEntries(
+            makeConversationDisplayEntries(listOf(completed)),
+            activeStreamingAssistantMessageId = null
+        )
+
+        val footer = timeline.last() as ConversationTimelineEntry.AssistantFooter
+        assertEquals("已完成回复", footer.text)
+    }
+
+    @Test
+    fun `older completed reply keeps copy footer while next reply streams`() {
+        val oldAssistant = item("stream-text-1-1", ConversationItemKind.ASSISTANT, text = "上一轮回复")
+        val currentUser = item("user-2", ConversationItemKind.USER, text = "下一轮问题")
+        val currentAssistant = item("stream-text-2-1", ConversationItemKind.ASSISTANT, text = "生成中")
+        val items = listOf(oldAssistant, currentUser, currentAssistant)
+        val activeId = activeStreamingAssistantMessageId(items, isSessionRunning = true)
+
+        val timeline = makeConversationTimelineEntries(
+            makeConversationDisplayEntries(items),
+            activeStreamingAssistantMessageId = activeId
+        )
+
+        assertTrue(timeline.any { it.id == "assistant:stream-text-1-1:footer" })
+        assertFalse(timeline.any { it.id == "assistant:stream-text-2-1:footer" })
     }
 
     @Test
