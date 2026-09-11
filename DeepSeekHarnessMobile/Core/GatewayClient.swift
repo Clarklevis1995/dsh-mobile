@@ -166,7 +166,15 @@ final class GatewayClient: ObservableObject {
     /// reconnect loop. A successful `hello` clears recovery mode.
     func applicationDidBecomeActive() {
         isApplicationInBackground = false
-        guard wantsConnection, !state.isConnected, let endpoint else { return }
+        // Also require that no attempt is already in flight. scenePhase `.active`
+        // can be delivered more than once in quick succession (app switcher,
+        // system banners). Without this guard each extra delivery ran
+        // beginConnection() -> disconnect(), cancelling a socket that was still
+        // completing its handshake: the server saw a connect followed ~60ms
+        // later by an abrupt close with no close frame (1006), and URLSession
+        // surfaced ECONNABORTED (-53) to the user. A genuinely stuck attempt is
+        // still bounded by startConnectionTimeout (15s).
+        guard wantsConnection, !state.isConnected, state != .connecting, let endpoint else { return }
         reconnectTask?.cancel()
         reconnectTask = nil
         beginConnection(
@@ -666,7 +674,14 @@ final class GatewayClient: ObservableObject {
         }
         client.onConnectionFailure = { [weak self, weak client] detail in
             guard let self, self.conversationClient === client else { return }
-            self.fail(detail, shouldReconnect: false)
+            // `shouldReconnect: false` sets wantsConnection = false on the whole
+            // transport, after which applicationDidBecomeActive() refuses to
+            // reconnect (`guard wantsConnection`) and no retry is ever scheduled.
+            // One conversation-lane hiccup therefore left the app frozen until
+            // the user relaunched it or reconnected by hand. Recover instead:
+            // the control channel re-opens the conversation lane on its next
+            // hello, and the retry schedule is bounded (2s..30s).
+            self.fail(detail, shouldReconnect: true)
         }
         // 长期凭据已在控制连接 paired 帧中保存，绝不重复使用一次性配对码。
         client.connect(to: endpoint.absoluteString)
