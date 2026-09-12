@@ -10,31 +10,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class DshAndroidApplication : Application(), DefaultLifecycleObserver {
-    lateinit var graph: AndroidAppGraph
+    lateinit var hosts: AndroidMultiGatewayStore
         private set
+    val graph: AndroidAppGraph get() = hosts.activeGraph
 
     override fun onCreate() {
         super<Application>.onCreate()
-        graph = AndroidAppGraph(this)
-        graph.diagnostics.lifecycle(GatewayLifecycleEvent.APPLICATION_CREATED)
+        hosts = AndroidMultiGatewayStore(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
-        graph.applicationScope.launch {
-            graph.attachmentCache.removeExpired()
-        }
-        graph.applicationScope.launch {
-            graph.gatewayRuntime.state
-                .map { it.shouldKeepAliveInBackground }
-                .distinctUntilChanged()
-                .collect { active ->
-                    if (active) {
-                        graph.diagnostics.lifecycle(GatewayLifecycleEvent.KEEP_ALIVE_START, keepAlive = true)
-                        GatewayConnectionService.start(this@DshAndroidApplication)
-                    } else {
-                        graph.diagnostics.lifecycle(GatewayLifecycleEvent.KEEP_ALIVE_STOP, keepAlive = false)
-                        GatewayConnectionService.stop(this@DshAndroidApplication)
-                    }
-                }
-        }
     }
 
     override fun onStart(owner: LifecycleOwner) {
@@ -43,6 +26,8 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
     }
 
     override fun onStop(owner: LifecycleOwner) {
+        hosts.stopPresence()
+        hosts.cancelPairing()
         graph.diagnostics.lifecycle(GatewayLifecycleEvent.BACKGROUND)
         graph.gatewayScope.launch { graph.gatewayRuntime.applicationDidEnterBackground() }
     }

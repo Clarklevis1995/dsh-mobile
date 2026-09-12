@@ -3,6 +3,7 @@ import AVFoundation
 
 struct WorkspaceView: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var hosts: MultiGatewayStore
     let onOpenSession: (SessionSummary) -> Void
     let onNewSession: () -> Void
     let onSettings: () -> Void
@@ -23,8 +24,11 @@ struct WorkspaceView: View {
                 .onTapGesture { sessionSearchIsFocused = false }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    header.id("workspace-header")
-                    Spacer(minLength: 108)
+                    VStack(alignment: .leading, spacing: 6) {
+                        header.id("workspace-header")
+                        GatewaySwitcherBar()
+                    }
+                    Spacer(minLength: 44)
                     VStack(alignment: .leading, spacing: 7) {
                         Text("探索未至之境")
                             .font(.system(size: 32, weight: .bold))
@@ -97,7 +101,7 @@ struct WorkspaceView: View {
             )
         }
         .sheet(isPresented: $showsManualPairing) {
-            ManualGatewayPairingSheet(gateway: store.gateway)
+            ManualGatewayPairingSheet(gateway: hosts.pairingStore?.gateway ?? store.gateway)
                 .environmentObject(store)
         }
     }

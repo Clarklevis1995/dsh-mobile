@@ -248,6 +248,16 @@ private struct AgentPresetSelectionView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 4)
 
+                if let error = store.agentPresetsLoadError {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label(error, systemImage: "exclamationmark.circle")
+                            .foregroundStyle(.secondary)
+                        Button("重试") { store.retryAgentPresets() }
+                            .disabled(store.defaultConfigurationLoadingKinds.contains("agent-presets"))
+                    }
+                    .padding(.vertical, 12)
+                }
+
                 if store.defaultConfigurationLoadingKinds.contains("agent-presets") && store.agentPresets.isEmpty {
                     HStack(spacing: 10) {
                         ProgressView()
@@ -256,11 +266,11 @@ private struct AgentPresetSelectionView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 48)
-                } else if store.agentPresets.isEmpty {
+                } else if store.agentPresets.isEmpty && store.agentPresetsLoadError == nil {
                     ContentUnavailableView(
                         "没有可用的 Agent 预设",
                         systemImage: "point.3.filled.connected.trianglepath.dotted",
-                        description: Text("请确认 Mobile Gateway 已升级到 v0.1.11 并保持连接。")
+                        description: Text("网关暂无可用预设，可下拉刷新。")
                     )
                     .padding(.vertical, 24)
                 } else {

@@ -42,7 +42,8 @@ class AndroidGatewayProjectionTest {
         projection.acceptFrame(finalRaw, GatewayWireDecoder.decode(finalRaw), "session-a")
 
         assertEquals(expected, projection.snapshot().conversation.single().text)
-        assertTrue(projection.snapshot().conversation.none { it.id.startsWith("stream-") })
+        // 共享层终帧使用 replace 保持列表项 ID，避免 Compose 将同一消息视作新行。
+        assertEquals("stream-text-1-1", projection.snapshot().conversation.single().id)
         projection.close()
     }
 

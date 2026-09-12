@@ -141,6 +141,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var sessionStatsSnapshots: [String: GatewaySessionStatsSnapshot] = [:]
     @Published private(set) var sessionControlLoadingKinds: Set<String> = []
     @Published private(set) var agentPresets: [GatewayAgentPreset] = []
+    @Published private(set) var agentPresetsLoadError: String?
     @Published private(set) var agentPresetsAuthorable = false
     @Published private(set) var agentPresetsHasDocument = false
     @Published private(set) var agentPresetDefault: String?
@@ -175,6 +176,9 @@ final class AppStore: ObservableObject {
     @Published var completedWorkspaceFile: WorkspaceLocalFile?
 
     let gateway = GatewayClient()
+    let gatewayLocalID: String
+    var pairingHandler: ((String) throws -> Void)?
+    var gatewayDisplayName = ""
     private let preferences: AppPreferences
     /// SessionList 的唯一业务状态来源；Swift 属性只是 UI/持久化快照。
     private let kmpSessionListStore: KMPSessionListStoreAdapter
@@ -218,7 +222,7 @@ final class AppStore: ObservableObject {
     private var conversationProjectionEpochs: [String: Int] = [:]
     /// Decoded bytes live outside the raw/history message models. A bounded
     /// memory layer fronts a seven-day, purgeable on-disk cache.
-    private let imageAttachmentCache = ImageAttachmentCache()
+    private let imageAttachmentCache: ImageAttachmentCache
     private var attachmentLoader = AttachmentLoader()
     private var pendingModelsSessionId: String?
     private var isPendingGlobalModelsRequest = false
@@ -249,6 +253,7 @@ final class AppStore: ObservableObject {
 
     init(
         preferences: AppPreferences = UserDefaultsAppPreferences(),
+        gatewayLocalID: String = "legacy",
         sessionListBridge: (any KMPSessionListStoreBridging)? = nil,
         questionBridge: (any KMPQuestionStoreBridging)? = nil,
         approvalBridge: (any KMPApprovalStoreBridging)? = nil,
@@ -261,6 +266,8 @@ final class AppStore: ObservableObject {
         sessionControlEffectExecutor: (any GatewaySessionControlEffectExecuting)? = nil,
         backgroundExecutionController: AgentBackgroundExecutionController? = nil
     ) {
+        self.gatewayLocalID = gatewayLocalID
+        imageAttachmentCache = ImageAttachmentCache(directoryURL: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("GatewayAttachments/\(gatewayLocalID)", isDirectory: true))
         slashCommands = kmpSlashCommandStore.snapshot()
         self.preferences = preferences
         self.questionEffectExecutor = questionEffectExecutor ?? gateway
@@ -520,6 +527,20 @@ final class AppStore: ObservableObject {
         return sessions.filter { !groupedSessionIds.contains($0.id) }
     }
 
+    /// 废弃整个业务容器，旧异步工作最多只能触达已断开的旧 GatewayClient。
+    func deactivateGateway() {
+        pairingHandler = nil
+        resetOutstandingRequests()
+        backgroundExecutionController.cancel()
+        gateway.onFrame = nil
+        gateway.onCommandFrame = nil
+        gateway.onConnectionFailure = nil
+        gateway.disconnect()
+        pendingKMPEventDeliveries.removeAll()
+        attachmentLoader.reset()
+        cancelWorkspaceFileDownload()
+    }
+
     func connect() {
         resetOutstandingRequests()
         presentsNextConnectionFailureAsAlert = true
@@ -558,6 +579,7 @@ final class AppStore: ObservableObject {
     }
 
     func pair(usingQRCode rawValue: String, presentsFailureAlert: Bool = true) throws {
+        if let pairingHandler { try pairingHandler(rawValue); return }
         let payload = try PairingPayloadParser.parse(rawValue)
         resetOutstandingRequests()
         presentsNextConnectionFailureAsAlert = presentsFailureAlert
@@ -578,6 +600,13 @@ final class AppStore: ObservableObject {
         dispatchSessionControl(.requestAgentPresets(isConnected: true))
         dispatchSessionControl(.requestDefaults(isConnected: true))
         dispatchSessionControl(.requestDefaultModel(isConnected: true))
+    }
+    func retryAgentPresets() {
+        guard gateway.state.isConnected else {
+            agentPresetsLoadError = String(localized: "请连接网关后重试。")
+            return
+        }
+        dispatchSessionControl(.requestAgentPresets(isConnected: true))
     }
     func setDefaultAgentPreset(_ id: String) {
         setGlobalDefault(target: "agent-preset", value: id)
@@ -1395,7 +1424,16 @@ final class AppStore: ObservableObject {
     private func handleControlRoute(_ route: GatewayControlRoute) {
         switch route {
         case .action(let action, let finishRequest):
+            let tracksPresets = finishRequest == "agent-presets" &&
+                kmpSessionControlStore.snapshot.requestTokens["agent-presets"] != nil
+            if tracksPresets {
+                notice("Agent 预设诊断", "收到响应，开始处理")
+            }
             let transition = dispatchSessionControlAction(action)
+            if tracksPresets {
+                if transition.applied { agentPresetsLoadError = nil }
+                notice("Agent 预设诊断", "响应处理完成 applied=\(transition.applied)")
+            }
             // KMP 响应事务已原子完成 active 并可能启动 queued；
             // 这里不能再按 kind finish，否则会误结束新 generation。
             if let finishRequest { cancelCompletedSessionControlTracker(finishRequest, transition: transition) }
@@ -1709,6 +1747,11 @@ final class AppStore: ObservableObject {
         }
         // 已识别为 SessionControl 的迟到/无关联 error 不属于当前 generation，零 UI 提示。
         guard correlatedControlFailure != false else { return }
+        if payload.requestType == "agent-presets" {
+            agentPresetsLoadError = String(localized: "Agent 预设加载失败，请重试。")
+            notice("Agent 预设诊断", "网关返回错误 code=\(payload.code ?? "unknown")", isError: true)
+            return
+        }
         lastError = detail
         notice(
             String(
@@ -2398,6 +2441,11 @@ final class AppStore: ObservableObject {
     func executeSessionControlEffect(_ effect: KMPSessionControlEffect) {
         let isDefault = Self.defaultConfigurationRequestKinds.contains(effect.requestKey)
         let tracker = isDefault ? defaultConfigurationRequestTracker : sessionControlRequestTracker
+        let startedAt = Date()
+        if effect.requestKey == "agent-presets" {
+            agentPresetsLoadError = nil
+            notice("Agent 预设诊断", "开始请求 token=\(effect.requestToken) connected=\(gateway.state.isConnected)")
+        }
         tracker.begin(effect.requestKey, timeout: .seconds(12)) { [weak self] in
             guard let self,
                   self.kmpSessionControlStore.snapshot.requestTokens[effect.requestKey] == effect.requestToken else {
@@ -2408,9 +2456,12 @@ final class AppStore: ObservableObject {
                 isDefault: isDefault,
                 requestToken: effect.requestToken
             ))
-            self.lastError = isDefault
-                ? String(localized: "control.request.timeout.v0111", defaultValue: "\(effect.requestKey) 请求超时，请检查 Mobile Gateway v0.1.11。")
-                : String(localized: "control.request.timeout", defaultValue: "\(effect.requestKey) 请求超时，请检查 Mobile Gateway。")
+            if effect.requestKey == "agent-presets" {
+                self.agentPresetsLoadError = String(localized: "Agent 预设加载超时，请重试。")
+                self.notice("Agent 预设诊断", "请求超时 token=\(effect.requestToken) elapsed=\(Date().timeIntervalSince(startedAt))s connected=\(self.gateway.state.isConnected)", isError: true)
+                return
+            }
+            self.lastError = String(localized: "control.request.timeout", defaultValue: "\(effect.requestKey) 请求超时，请检查 Mobile Gateway。")
         }
         switch effect.kind {
         case "models":

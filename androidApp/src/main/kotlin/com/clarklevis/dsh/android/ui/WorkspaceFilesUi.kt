@@ -79,7 +79,7 @@ internal fun WorkspaceFilesBottomSheet(
     val sheetHeight = LocalConfiguration.current.screenHeightDp.dp * 0.88f
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val downloadRegistry = remember(context) { AndroidWorkspaceDownloadRegistry(context) }
+    val downloadRegistry = remember(context) { AndroidWorkspaceDownloadRegistry(context, stateHolder.gatewayLocalId) }
     val sessionId = stateHolder.snapshot.selectedSessionId
     var pendingExport by remember { mutableStateOf<AndroidWorkspaceLocalFile?>(null) }
     var codePreviewFile by remember { mutableStateOf<AndroidWorkspaceLocalFile?>(null) }

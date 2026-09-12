@@ -58,10 +58,13 @@ import com.clarklevis.dsh.android.ui.DshTheme
 @Composable
 fun DeepSeekHarnessAndroidApp() {
     val context = LocalContext.current
-    val gatewayViewModel: AndroidGatewayViewModel = viewModel()
-    val stateHolder = gatewayViewModel.stateHolder
+    val hosts = (context.applicationContext as DshAndroidApplication).hosts
+    if (!hosts.ready) return
+    val stateHolder = hosts.activeGraph.stateHolder
+    val imageOwner = remember { androidx.compose.runtime.mutableStateOf<AndroidSharedStateHolder?>(null) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let(stateHolder::prepareImage)
+        if (imageOwner.value === stateHolder) uri?.let(stateHolder::prepareImage)
+        imageOwner.value = null
     }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -78,10 +81,20 @@ fun DeepSeekHarnessAndroidApp() {
     }
     DshTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
+            androidx.compose.runtime.key(stateHolder) {
             DshProductApp(
                 stateHolder = stateHolder,
-                onPickImage = { imagePicker.launch("image/*") }
+                onPickImage = { imageOwner.value = stateHolder; imagePicker.launch("image/*") }
             )
+            }
+            hosts.error?.let { message ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { hosts.error = null },
+                    title = { Text("主机连接") },
+                    text = { Text(message) },
+                    confirmButton = { androidx.compose.material3.TextButton(onClick = { hosts.error = null }) { Text("好") } }
+                )
+            }
         }
     }
 }

@@ -1,0 +1,14 @@
+# 与 Compose 命名约定和现有 140 列 Kotlin 风格保持一致。
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+complexity:
+  TooManyFunctions:
+    ignorePrivate: true
+style:
+  MaxLineLength:
+    maxLineLength: 140
+  MagicNumber:
+    ignoreAnnotated: ['Composable']
+  ReturnCount:
+    excludeGuardClauses: true

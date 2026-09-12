@@ -57,9 +57,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow as TextShadow
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -246,19 +246,22 @@ private fun WorkspaceScreen(
                     Modifier.fillMaxWidth().widthIn(max = 680.dp).padding(horizontal = 22.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
-                    WorkspaceHeader(
-                        state = stateHolder.gatewayState,
-                        onScan = {
-                            stateHolder.clearPlatformError()
-                            showQrScanner = true
-                        },
-                        onManualEntry = {
-                            stateHolder.clearPlatformError()
-                            showManualPairing = true
-                        },
-                        onSettings = onSettings
-                    )
-                    Spacer(Modifier.height(90.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        WorkspaceHeader(
+                            state = stateHolder.gatewayState,
+                            onScan = {
+                                stateHolder.clearPlatformError()
+                                showQrScanner = true
+                            },
+                            onManualEntry = {
+                                stateHolder.clearPlatformError()
+                                showManualPairing = true
+                            },
+                            onSettings = onSettings
+                        )
+                        GatewaySwitcherBar()
+                    }
+                    Spacer(Modifier.height(44.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Text(
                             "探索未至之境",
@@ -443,7 +446,12 @@ private fun WorkspaceCard(
             )
         }
         ConnectionDot(state)
-        Text("⌄", color = Color.White.copy(alpha = 0.55f), fontSize = 13.sp)
+        Image(
+            painter = painterResource(R.drawable.ic_question_chevron_down),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.55f)),
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 
@@ -583,7 +591,11 @@ private fun SessionRow(session: SessionSummary, onClick: () -> Unit, onLongClick
         horizontalArrangement = Arrangement.spacedBy(11.dp)
     ) {
         val dot = if (session.isRunning) DshColors.Success else if (session.hasUnread) DshColors.Ocean else Color.White.copy(alpha = 0.35f)
-        Box(Modifier.size(7.dp).background(dot, CircleShape))
+        StatusIndicatorDot(
+            color = dot,
+            modifier = Modifier.size(7.dp),
+            glowing = session.isRunning
+        )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
                 text = session.title,
@@ -620,11 +632,21 @@ private fun ConnectionDot(state: GatewayRuntimeState) {
         GatewayConnectionState.WAITING_FOR_NETWORK -> DshColors.Amber
         else -> Color.Gray
     }
-    Box(Modifier.size(8.dp).shadow(5.dp, CircleShape, ambientColor = color.copy(alpha = 0.65f)).background(color, CircleShape))
+    StatusIndicatorDot(
+        color = color,
+        modifier = Modifier.size(8.dp),
+        glowing = state.connection == GatewayConnectionState.CONNECTED
+    )
 }
 
 @Composable
 private fun ConnectionStatusText(state: GatewayRuntimeState) {
+    val connected = state.connection == GatewayConnectionState.CONNECTED
+    val color = when (state.connection) {
+        GatewayConnectionState.CONNECTED -> DshColors.Success
+        GatewayConnectionState.FAILED -> Color.Red.copy(alpha = 0.85f)
+        else -> Color.White.copy(alpha = 0.55f)
+    }
     Text(
         when (state.connection) {
             GatewayConnectionState.CONNECTED -> "已连接"
@@ -633,12 +655,15 @@ private fun ConnectionStatusText(state: GatewayRuntimeState) {
             GatewayConnectionState.FAILED -> "连接失败"
             else -> "未连接"
         },
-        color = when (state.connection) {
-            GatewayConnectionState.CONNECTED -> DshColors.Success
-            GatewayConnectionState.FAILED -> Color.Red.copy(alpha = 0.85f)
-            else -> Color.White.copy(alpha = 0.55f)
-        },
-        fontSize = 12.sp
+        color = color,
+        fontSize = 12.sp,
+        style = TextStyle(
+            shadow = if (connected) {
+                TextShadow(color = color.copy(alpha = 0.30f), offset = Offset.Zero, blurRadius = 7f)
+            } else {
+                null
+            }
+        )
     )
 }
 

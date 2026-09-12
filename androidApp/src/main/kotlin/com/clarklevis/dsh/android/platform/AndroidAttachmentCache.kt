@@ -11,9 +11,10 @@ import java.util.LinkedHashMap
 class AndroidAttachmentCache(
     context: Context,
     private val ttlMilliseconds: Long = DEFAULT_TTL_MILLISECONDS,
-    private val now: () -> Long = System::currentTimeMillis
+    private val now: () -> Long = System::currentTimeMillis,
+    gatewayId: String? = null
 ) : GatewayAttachmentCache {
-    private val directory = context.cacheDir.resolve("gateway-image-attachments")
+    private val directory = context.cacheDir.resolve(gatewayId?.let { "gateway-image-attachments/$it" } ?: "gateway-image-attachments")
     private val memory = LinkedHashMap<String, MemoryEntry>(16, 0.75f, true)
     private var memoryBytes = 0
     private val lock = Any()

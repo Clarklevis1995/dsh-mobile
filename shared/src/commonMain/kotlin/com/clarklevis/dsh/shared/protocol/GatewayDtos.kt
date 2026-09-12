@@ -17,6 +17,8 @@ import kotlinx.serialization.json.contentOrNull
 @Serializable
 data class GatewayFrame(
     val kind: String,
+    val gatewayId: String? = null,
+    val gatewayName: String? = null,
     @SerialName("protocol") val protocolVersion: Int? = null,
     val capabilities: List<String>? = null,
     val authenticated: Boolean? = null,
@@ -237,7 +239,10 @@ data class GatewayPairingPayload(
     val version: Int,
     val publicUrl: String,
     val pairingCode: String,
-    val expiresAt: Double
+    val expiresAt: Double,
+    val gatewayId: String? = null,
+    val gatewayName: String? = null,
+    val endpoints: List<String>? = null
 ) {
     override fun toString(): String =
         "GatewayPairingPayload(version=$version, publicUrl=<redacted>, " +

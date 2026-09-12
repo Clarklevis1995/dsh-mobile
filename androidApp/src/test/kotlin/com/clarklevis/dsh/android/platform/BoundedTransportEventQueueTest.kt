@@ -5,6 +5,7 @@ import com.clarklevis.dsh.shared.platform.GatewayTransportFrame
 import com.clarklevis.dsh.shared.platform.GatewayTransportState
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -13,6 +14,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BoundedTransportEventQueueTest {
+    @Test
+    fun endingHandshakeProbeAllowsTransportToPublishClose() = runTest {
+        val queue = BoundedTransportEventQueue(maximumFrameBytes = 64)
+        assertTrue(queue.offerFrame(GatewayTransportFrame(1, "hello", 5)))
+        assertTrue(queue.events.first() is GatewayTransportEvent.Frame)
+        assertTrue(queue.offerState(GatewayTransportState.Closed(1)))
+        assertEquals(GatewayTransportState.Closed(1), (queue.events.first() as GatewayTransportEvent.State).value)
+    }
+
     @Test
     fun failureAndFramesShareOneDeterministicOrder() = runTest {
         val queue = BoundedTransportEventQueue(maximumFrameBytes = 6)

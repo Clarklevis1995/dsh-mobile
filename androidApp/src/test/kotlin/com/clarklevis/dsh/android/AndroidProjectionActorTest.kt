@@ -49,7 +49,8 @@ class AndroidProjectionActorTest {
             """{"sessionId":"session-a","seq":13,"time":13,"event":{"type":"assistant/message","turn":1,"step":1,"text":"$expected"}}"""
         actor.acceptFrame(finalRaw, GatewayWireDecoder.decode(finalRaw), "session-a")
         assertEquals(expected, publications.last().conversation.single().text)
-        assertTrue(publications.last().conversation.none { it.id.startsWith("stream-") })
+        // 共享层终帧使用 replace 保持列表项 ID，避免 Compose 将同一消息视作新行。
+        assertEquals("stream-text-1-1", publications.last().conversation.single().id)
         actor.close()
     }
 
