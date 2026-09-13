@@ -60,6 +60,31 @@ class SharedConversationStore(
         )
     }
 
+    /**
+     * 单个 streaming 增量。DSH 的 `session.seq` 是 turn 级 journal watermark，同一 turn
+     * 内的所有 chunk 共享同一个 seq，因此 [receiveEvent] 的单调性守卫在这里并不适用。
+     *
+     * 该路径只做行内变更：projector 用 per-key stream index 定位目标行，既不重建历史，
+     * 也不重新序列化整个事件列表。缺少已建立基线的 projector 时 fail closed——
+     * 平台据此回退到 [replaceSession]，绝不静默丢弃内容。
+     */
+    fun receiveStreamDelta(eventJson: String): SharedMviDispatchResult = dispatch("stream") {
+        val record = wireJson.decodeFromString<SessionEvent>(eventJson)
+        require(record.sessionId.isNotBlank()) { "sessionId must not be blank" }
+        val projector = projectors[record.sessionId]
+            ?: error("no conversation baseline for session ${record.sessionId}; replace baseline first")
+        val operations = projector.foldWithOperations(listOf(record))
+        if (operations.isEmpty()) return@dispatch null
+        SharedConversationPatch(
+            sessionId = record.sessionId,
+            operations = operations,
+            lastSequence = projector.lastSequence
+        )
+    }
+
+    /** 平台用它决定能否走 streaming 行内路径，否则回退到 baseline。 */
+    fun hasProjection(sessionId: String): Boolean = projectors.containsKey(sessionId)
+
     fun replaceSession(sessionId: String, eventsJson: String): SharedMviDispatchResult =
         dispatch("replace") {
             require(sessionId.isNotBlank()) { "sessionId must not be blank" }

@@ -484,6 +484,15 @@ final class AppStore: ObservableObject {
             await Task.yield()
         }
     }
+
+    /// 投影本身由 display link 按帧节流，测试需要等它真正落盘才能断言渲染文本。
+    /// 这里同样不提供同步旁路：只让出执行权，直到该 session 的投影驱动跑完一次。
+    func awaitConversationProjectionForTesting(sessionID: String, expectedText: String) async {
+        for _ in 0..<200 {
+            if renderedConversationItems[sessionID]?.last?.text == expectedText { return }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
 #endif
     func setTrajectoryProjectionActive(sessionID: String?, isActive: Bool) {
         guard let sessionID else { return }
@@ -2251,6 +2260,12 @@ final class AppStore: ObservableObject {
 
         if let patchKind = change.eventPatchKind {
             events[change.sessionID] = change.events
+            // Only the baseline path can surface events the client has never
+            // scanned (a new image attachment, a new tool row). A streaming chunk
+            // only extends a row that already exists, so rescanning the whole
+            // retained list for it would reintroduce an O(history) cost on every
+            // token.
+            var rebaselined = false
             do {
                 if patchKind == "append", let record = change.eventRecord {
                     try kmpConversationStore.receive(record)
@@ -2258,7 +2273,18 @@ final class AppStore: ObservableObject {
                         pendingTrajectoryEvents[change.sessionID, default: []].append(record)
                         scheduleTrajectoryProjection(for: change.sessionID)
                     }
+                } else if change.eventPatchIsStreamDelta, let record = change.eventRecord,
+                          // The trajectory projection is only kept live while its
+                          // page is on screen and has no same-sequence append path
+                          // yet, so a visible trajectory page keeps the rebaseline
+                          // that already existed for these chunks.
+                          !activeTrajectorySessionIDs.contains(change.sessionID),
+                          // No baseline means no row to mutate; fall through to
+                          // the rebaseline rather than dropping content.
+                          kmpConversationStore.hasProjection(sessionID: change.sessionID) {
+                    try kmpConversationStore.receiveStreamDelta(record)
                 } else {
+                    rebaselined = true
                     conversationProjectionEpochs[change.sessionID, default: 0] &+= 1
                     try kmpConversationStore.replace(sessionID: change.sessionID, events: change.events)
                     if activeTrajectorySessionIDs.contains(change.sessionID) {
@@ -2271,7 +2297,7 @@ final class AppStore: ObservableObject {
                 lastError = error.localizedDescription
                 return
             }
-            if patchKind != "append" {
+            if rebaselined {
                 enqueueImageAttachments(in: change.events, sessionId: change.sessionID)
             }
         }

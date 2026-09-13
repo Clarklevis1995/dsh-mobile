@@ -88,6 +88,8 @@ enum KMPConversationStoreError: LocalizedError, Equatable {
 
 protocol KMPConversationStoreBridging: AnyObject {
     func receiveEvent(eventJson: String) -> SharedMviDispatchResult
+    func receiveStreamDelta(eventJson: String) -> SharedMviDispatchResult
+    func hasProjection(sessionId: String) -> Bool
     func replaceSession(sessionId: String, eventsJson: String) -> SharedMviDispatchResult
     func clearSession(sessionId: String) -> SharedMviDispatchResult
 }
@@ -183,6 +185,22 @@ final class KMPConversationStoreAdapter {
         try dispatch(.event(sessionID: event.sessionId, sequence: event.seq)) {
             store.receiveEvent(eventJson: try encode(event))
         }
+    }
+
+    /// Streaming chunk that shares its `session.seq` with the rest of its turn.
+    /// The store mutates only the affected row, so this must never fall back to
+    /// `replace`: a rebaseline here is the once-per-token whole-history rebuild.
+    func receiveStreamDelta(_ event: SessionEvent) throws {
+        let json = try encode(event)
+        try dispatch(.event(sessionID: event.sessionId, sequence: event.seq)) {
+            store.receiveStreamDelta(eventJson: json)
+        }
+    }
+
+    /// Whether a projection baseline exists for the session. Without one there
+    /// is no row to mutate, so the platform must rebaseline instead.
+    func hasProjection(sessionID: String) -> Bool {
+        store.hasProjection(sessionId: sessionID)
     }
 
     func replace(sessionID: String, events: [SessionEvent]) throws {
@@ -885,6 +903,10 @@ private struct KMPHistoryEventPatch: Decodable {
     let record: SessionEvent?
     let index: Int?
     let replacementEvents: [SessionEvent]?
+    /// Live-delta marker. Optional so payloads and fixtures written before the
+    /// field existed decode unchanged; only an explicit `true` selects the
+    /// row-local lane.
+    let streamDelta: Bool?
 }
 
 private struct KMPHistoryPatch: Decodable {
@@ -984,6 +1006,10 @@ struct KMPHistoryChange {
     let events: [SessionEvent]
     let eventPatchKind: String?
     let eventRecord: SessionEvent?
+    /// True when `eventRecord` is a live assistant delta that continues the row
+    /// the journal already holds at its sequence. Kept separate from
+    /// `eventPatchKind`, which continues to report the wire kind truthfully.
+    let eventPatchIsStreamDelta: Bool
     let hasMore: [String: Bool]
     let loadingSessionIDs: Set<String>
     let loadingOlderSessionIDs: Set<String>
@@ -1219,6 +1245,7 @@ final class KMPHistoryStoreAdapter {
             events: nextEvents,
             eventPatchKind: patch.eventPatch?.kind,
             eventRecord: patch.eventPatch?.record,
+            eventPatchIsStreamDelta: patch.eventPatch?.streamDelta == true,
             outcome: patch.outcome,
             failureCode: patch.failureCode,
             completedEventCount: patch.completedEventCount,
@@ -1234,6 +1261,12 @@ final class KMPHistoryStoreAdapter {
         intent: KMPHistoryIntent,
         to records: inout [SessionEvent]
     ) throws {
+        // The live-delta marker only means anything on a same-sequence upsert.
+        // Any other combination is a producer defect, so refuse it before any
+        // mirror or conversation state is published.
+        if patch.streamDelta == true, patch.kind != "upsert" {
+            throw KMPHistoryStoreError.invalidEvent("stream marker on a \(patch.kind) event patch")
+        }
         switch patch.kind {
         case "append":
             guard case .live(let expectedSession, let expectedSequence) = intent,
@@ -1258,11 +1291,25 @@ final class KMPHistoryStoreAdapter {
                   patch.replacementEvents == nil else {
                 throw KMPHistoryStoreError.invalidEvent("upsert event patch 无效")
             }
-            if index < records.count, records[index].seq == record.seq { records[index] = record }
-            else { records.insert(record, at: index) }
-            guard records.map(\.seq) == records.map(\.seq).sorted(),
-                  Set(records.map(\.seq)).count == records.count else {
-                throw KMPHistoryStoreError.invalidEvent("upsert 后事件顺序无效")
+            if patch.streamDelta == true {
+                // A live assistant delta that continues the row this journal
+                // already holds at the sequence. The record supersedes its own
+                // index, so sequence order provably cannot change — which is why
+                // this path omits the two `records.map` allocations, the sort and
+                // the `Set` build below. Those ran once per streamed token.
+                guard records.indices.contains(index),
+                      records[index].seq == record.seq,
+                      record.event.type == "assistant/chunk" else {
+                    throw KMPHistoryStoreError.invalidEvent("stream event patch 无效")
+                }
+                records[index] = record
+            } else {
+                if index < records.count, records[index].seq == record.seq { records[index] = record }
+                else { records.insert(record, at: index) }
+                guard records.map(\.seq) == records.map(\.seq).sorted(),
+                      Set(records.map(\.seq)).count == records.count else {
+                    throw KMPHistoryStoreError.invalidEvent("upsert 后事件顺序无效")
+                }
             }
         case "replace":
             guard isPageOrClear(intent),
@@ -1285,6 +1332,7 @@ final class KMPHistoryStoreAdapter {
         events: [SessionEvent],
         eventPatchKind: String?,
         eventRecord: SessionEvent?,
+        eventPatchIsStreamDelta: Bool,
         outcome: String,
         failureCode: String?,
         completedEventCount: Int?,
@@ -1297,6 +1345,7 @@ final class KMPHistoryStoreAdapter {
             events: events,
             eventPatchKind: eventPatchKind,
             eventRecord: eventRecord,
+            eventPatchIsStreamDelta: eventPatchIsStreamDelta,
             hasMore: sessions.mapValues(\.hasMore),
             loadingSessionIDs: Set(sessions.compactMap { $0.value.isLoading ? $0.key : nil }),
             loadingOlderSessionIDs: Set(sessions.compactMap { $0.value.isLoadingOlder ? $0.key : nil }),

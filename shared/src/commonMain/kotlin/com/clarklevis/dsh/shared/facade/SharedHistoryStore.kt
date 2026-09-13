@@ -26,7 +26,15 @@ data class SharedHistoryEventPatch(
     val kind: String,
     val record: SessionEvent? = null,
     val index: Int? = null,
-    val replacementEvents: List<SessionEvent>? = null
+    val replacementEvents: List<SessionEvent>? = null,
+    /**
+     * True when this patch's `record` is a live assistant delta that continues the
+     * row the journal already holds at this `seq`, rather than a structural
+     * replacement of it. `kind` stays `"upsert"` so consumers that do not know the
+     * marker keep their existing (correct, if slower) upsert handling; defaulted so
+     * older payloads and hand-written fixtures decode unchanged.
+     */
+    val streamDelta: Boolean = false
 )
 
 @Serializable
@@ -147,6 +155,28 @@ class SharedHistoryStore(
         val merged = HistoryEventMerger.merge(record, oldEvents)
         val index = merged.events.binarySearchBy(record.seq) { it.seq }
         check(index >= 0) { "merged event missing" }
+        // Whether this record continues a live assistant row is decided from the
+        // record that occupied the sequence BEFORE the merge. Reading it back out
+        // of `merged.events` would compare the incoming record with itself and
+        // make the predicate meaningless. A non-null `previousEvent` is exactly
+        // "the record superseded a sequence that already existed" — which is why
+        // the merge result needs no extra flag for this decision.
+        val previousIndex = oldEvents.binarySearchBy(record.seq) { it.seq }
+        val previousEvent = if (previousIndex >= 0) oldEvents[previousIndex].event else null
+        // A same-sequence record is a live delta only when it supersedes another
+        // transient chunk of the SAME turn and step. Anything else — the
+        // authoritative `assistant/message`, a chunk from another turn or step, or
+        // a gap fill — must keep the full rebaseline path. `chunkType` is
+        // deliberately not compared: reasoning, text, tool, block, usage and
+        // finish frames legitimately transition while sharing turn, step and seq.
+        // Duplicate delivery is still indistinguishable from a legitimately
+        // repeated fragment; that needs the host's per-chunk identity and is out of
+        // scope here.
+        val streamDelta = previousEvent != null &&
+            previousEvent.type == "assistant/chunk" &&
+            record.event.type == "assistant/chunk" &&
+            previousEvent.turn == record.event.turn &&
+            previousEvent.step == record.event.step
         val reduction = HistoryReducer.reduce(
             state,
             HistoryAction.LiveEventReceived(record.sessionId, record.time),
@@ -156,9 +186,18 @@ class SharedHistoryStore(
             state = reduction.state,
             eventsBySession = eventsBySession + (record.sessionId to merged.events),
             eventPatch = SharedHistoryEventPatch(
+                // `replacedOrInsertedOutOfOrder` means the merge was not a plain
+                // append. A record that landed on its OWN sequence is the ordinary
+                // shape of a live turn — DSH gives every chunk of a turn the same
+                // `session.seq` — so it is published as an upsert. A record
+                // inserted at a position it did not occupy is a gap fill. The
+                // `streamDelta` marker is what tells the platform this particular
+                // upsert continues a live assistant row and may be folded into it
+                // instead of triggering a rebaseline.
                 kind = if (merged.replacedOrInsertedOutOfOrder) "upsert" else "append",
                 record = record,
-                index = index
+                index = index,
+                streamDelta = streamDelta
             ),
             result = reduction.result,
             sessionId = record.sessionId
