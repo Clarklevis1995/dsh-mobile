@@ -77,7 +77,44 @@ extension Sequence where Element == InlineNode {
 }
 
 private struct TextInlineRenderer {
-  var result = Text("")
+  /// Inline fragments in document order. They are combined only when `result` is
+  /// read, so the concatenation tree can stay balanced (see `balanced(_:)`).
+  private var fragments: [Text] = []
+
+  var result: Text { Self.balanced(self.fragments) }
+
+  /// SwiftUI resolves a concatenated `Text` recursively, so the left-associative
+  /// chain this renderer used to build (`result = result + next`) cost one stack
+  /// frame per inline fragment. A single long paragraph — a few thousand inline
+  /// nodes — then overflowed the main thread's stack while the view was being
+  /// measured, which crashed the app on launch once a session contained a long
+  /// message:
+  ///
+  ///   EXC_BAD_ACCESS (SIGSEGV), "Thread stack size exceeded due to excessive
+  ///   recursion" in `Text.resolve` ⇄ `ConcatenatedTextStorage.resolve`
+  ///
+  /// Combining neighbouring fragments level by level keeps the fragment order and
+  /// the rendered result identical while bounding the resolve depth to O(log n)
+  /// instead of O(n).
+  private static func balanced(_ fragments: [Text]) -> Text {
+    if fragments.isEmpty { return Text("") }
+    var level = fragments
+    while level.count > 1 {
+      var next: [Text] = []
+      next.reserveCapacity((level.count + 1) / 2)
+      var index = 0
+      while index < level.count {
+        if index + 1 < level.count {
+          next.append(level[index] + level[index + 1])
+        } else {
+          next.append(level[index])
+        }
+        index += 2
+      }
+      level = next
+    }
+    return level[0]
+  }
 
   private let baseURL: URL?
   private let textStyles: InlineTextStyles
@@ -160,7 +197,7 @@ private struct TextInlineRenderer {
 
   private mutating func renderImage(_ source: String) {
     if let image = self.images[source] {
-      self.result = self.result + Text(image)
+      self.fragments.append(Text(image))
     }
   }
 
@@ -174,16 +211,15 @@ private struct TextInlineRenderer {
       )
     )
     if #available(iOS 18.0, macOS 15.0, tvOS 18.0, watchOS 11.0, *) {
-      self.result = self.result + text.customAttribute(MarkdownInlineCodeAttribute())
+      self.fragments.append(text.customAttribute(MarkdownInlineCodeAttribute()))
     } else {
-      self.result = self.result + text
+      self.fragments.append(text)
     }
   }
 
   private mutating func defaultRender(_ inline: InlineNode) {
-    self.result =
-      self.result
-      + Text(
+    self.fragments.append(
+      Text(
         inline.renderAttributedString(
           baseURL: self.baseURL,
           textStyles: self.textStyles,
@@ -191,5 +227,6 @@ private struct TextInlineRenderer {
           attributes: self.attributes
         )
       )
+    )
   }
 }
