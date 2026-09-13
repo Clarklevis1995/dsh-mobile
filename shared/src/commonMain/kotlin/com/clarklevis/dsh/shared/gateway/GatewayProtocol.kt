@@ -274,7 +274,8 @@ object GatewayRequests {
         beforeSequence: Int? = null,
         maxMessages: Int = 50,
         maxBytes: Int? = null,
-        view: String? = null
+        view: String? = null,
+        historyFormatVersion: Int? = null
     ): GatewayRequest = request(
         "history",
         "history",
@@ -283,7 +284,11 @@ object GatewayRequests {
     ) {
         put("sessionId", sessionId)
         put("maxMessages", maxMessages)
-        beforeSequence?.let { put("beforeSeq", it) }
+        beforeSequence?.let {
+            require(it >= 0 && historyFormatVersion != null) { "历史游标必须携带读取时的格式版本" }
+            put("beforeSeq", it)
+            put("historyFormatVersion", historyFormatVersion)
+        }
         maxBytes?.let { put("maxBytes", it) }
         view?.takeIf(String::isNotBlank)?.let { put("view", it) }
     }
@@ -355,7 +360,10 @@ object GatewayRequests {
             "subscribed",
             sessionId,
             lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST
-        ) { put("sessionId", sessionId) }
+        ) {
+            put("sessionId", sessionId)
+            put("assistantStream", true)
+        }
     }
 
     /** Stops only the active turn; a later ordinary message resumes the same session. */

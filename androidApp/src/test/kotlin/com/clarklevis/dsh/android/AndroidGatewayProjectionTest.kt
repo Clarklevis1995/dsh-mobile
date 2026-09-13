@@ -71,7 +71,7 @@ class AndroidGatewayProjectionTest {
     fun correlatedHistoryCannotWriteIntoNewSelectionAndLivePatchesRemainIncremental() {
         val requested = mutableListOf<Pair<String, Int?>>()
         val projection = AndroidGatewayProjection(
-            onHistoryPageRequested = { sessionId, before -> requested += sessionId to before }
+            onHistoryPageRequested = { sessionId, before, _ -> requested += sessionId to before }
         )
         projection.selectSession("session-a")
         projection.selectSession("session-b")
@@ -101,7 +101,8 @@ class AndroidGatewayProjectionTest {
 
         val hello = """{"kind":"hello","authenticated":true}"""
         projection.acceptFrame(hello, GatewayWireDecoder.decode(hello), null)
-        assertEquals(listOf("history-a", "final"), projection.snapshot().conversation.map { it.text })
+        // 无格式版本的缓存不能跨握手复用。
+        assertTrue(projection.snapshot().conversation.isEmpty())
         projection.close()
     }
 
@@ -109,7 +110,7 @@ class AndroidGatewayProjectionTest {
     fun historyCancellationEndsLoadingSoSelectionCanRequestAgain() {
         val requested = mutableListOf<Pair<String, Int?>>()
         val projection = AndroidGatewayProjection(
-            onHistoryPageRequested = { sessionId, before -> requested += sessionId to before }
+            onHistoryPageRequested = { sessionId, before, _ -> requested += sessionId to before }
         )
         projection.selectSession("session-a")
         assertTrue(projection.snapshot().selectedHistoryIsLoading)
@@ -125,7 +126,7 @@ class AndroidGatewayProjectionTest {
     fun reconnectHistoryBackfillsMissedUserMessageBeforeLiveAssistantReply() {
         val requested = mutableListOf<Pair<String, Int?>>()
         val projection = AndroidGatewayProjection(
-            onHistoryPageRequested = { sessionId, before -> requested += sessionId to before }
+            onHistoryPageRequested = { sessionId, before, _ -> requested += sessionId to before }
         )
         projection.selectSession("session-a")
         val emptyBaseline = """{"kind":"history","events":[],"hasMore":false,"bytes":0}"""
@@ -259,7 +260,7 @@ class AndroidGatewayProjectionTest {
     fun malformedHistoryPayloadAndEffectCommitNeitherStateNorIoAndStayFailedClosed() {
         val requested = mutableListOf<Pair<String, Int?>>()
         val projection = AndroidGatewayProjection(
-            onHistoryPageRequested = { sessionId, before -> requested += sessionId to before }
+            onHistoryPageRequested = { sessionId, before, _ -> requested += sessionId to before }
         )
         val before = projection.snapshot()
         projection.acceptHistoryMviEventForTest(
@@ -296,7 +297,7 @@ class AndroidGatewayProjectionTest {
 
         val badEffectRequests = mutableListOf<Pair<String, Int?>>()
         val badEffectProjection = AndroidGatewayProjection(
-            onHistoryPageRequested = { sessionId, before -> badEffectRequests += sessionId to before }
+            onHistoryPageRequested = { sessionId, before, _ -> badEffectRequests += sessionId to before }
         )
         badEffectProjection.acceptHistoryMviEventForTest(
             SharedMviEvent(

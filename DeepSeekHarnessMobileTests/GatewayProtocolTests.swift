@@ -1670,7 +1670,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testForegroundHelloHistoryCatchUpRestoresUserMessageBeforeLiveReply() async throws {
+    func testHelloWithoutHistoryFormatInvalidatesOldCoordinatesBeforeReload() async throws {
         let session = SessionSummary(
             id: "session-catch-up",
             title: "Catch Up",
@@ -1699,16 +1699,17 @@ final class GatewayProtocolTests: XCTestCase {
         )))
         await flushDeferredKMPEvents(in: store)
         XCTAssertTrue(store.historyLoadingSessionIds.contains(session.id))
+        XCTAssertTrue(store.events[session.id, default: []].isEmpty)
 
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
-            #"{"kind":"history","events":[{"type":"user/message","seq":2,"time":102,"data":{"content":[{"type":"text","text":"后台期间的问题"}],"source":{"kind":"user"}}},{"type":"assistant/message","seq":3,"time":103,"data":{"content":[{"type":"text","text":"过期的历史回复"}]}}],"hasMore":false,"bytes":128}"#.utf8
+            #"{"kind":"history","events":[{"type":"user/message","seq":2,"time":102,"data":{"content":[{"type":"text","text":"后台期间的问题"}],"source":{"kind":"user"}}},{"type":"assistant/message","seq":3,"time":103,"data":{"message":{"content":[{"type":"text","text":"重新加载的回复"}]}}}],"hasMore":false,"bytes":128}"#.utf8
         )))
         for _ in 0..<100 where store.historyLoadingSessionIds.contains(session.id) {
             try await Task.sleep(for: .milliseconds(10))
             await flushDeferredKMPEvents(in: store)
         }
 
-        XCTAssertEqual(store.events[session.id]?.map(\.event.text), ["后台期间的问题", "Agent 回复"])
+        XCTAssertEqual(store.events[session.id]?.map(\.event.text), ["后台期间的问题", "重新加载的回复"])
         XCTAssertFalse(store.historyLoadingSessionIds.contains(session.id))
     }
 
@@ -1719,6 +1720,67 @@ final class GatewayProtocolTests: XCTestCase {
     /// conversation rebuild plus an `associateBy(seq)` collapse, once per
     /// streamed token. This drives real gateway-shaped frames through `AppStore`
     /// and asserts the row-local path is taken and the fragments accumulate.
+    @MainActor
+    func testRc2InvisiblePersistentEventsKeepTransientWatermarkInSync() throws {
+        let adapter = KMPConversationStoreAdapter()
+        try adapter.replace(sessionID: "s", events: [
+            SessionEvent(sessionId: "s", seq: 40, time: 100, event: GatewayEvent(type: "user/message", text: "Hi"))
+        ])
+        var changes = 0
+        adapter.onChange = { _ in changes += 1 }
+        for (offset, type) in ["turn/start", "step/start", "request/header"].enumerated() {
+            try adapter.receive(SessionEvent(sessionId: "s", seq: 41 + offset, time: 101,
+                event: GatewayEvent(type: type, turn: 2, step: 1)))
+        }
+        XCTAssertEqual(adapter.lastSequenceBySessionID["s"], 43)
+        XCTAssertEqual(changes, 0, "仅推进流水位不应触发对话重绘")
+        try adapter.assistantChunks(sessionID: "s", attemptID: "attempt", chunksJSON:
+            #"[{"time":102,"chunk":{"type":"text-delta","index":0,"text":"Hello"}}]"#)
+        try adapter.receive(SessionEvent(sessionId: "s", seq: 44, time: 103,
+            event: GatewayEvent(type: "step/end", turn: 2, step: 1)))
+        try adapter.clearAssistantChunks(sessionID: "s")
+        XCTAssertEqual(adapter.lastSequenceBySessionID["s"], 44)
+        XCTAssertEqual(adapter.items(for: "s").map(\.text), ["Hi"])
+        XCTAssertNil(adapter.runtimeError)
+    }
+
+    @MainActor
+    func testRc2SnapshotRestoresPrefixAndDeduplicatesFinalMessage() async throws {
+        let session = SessionSummary(id: "s", title: "Stream", lastActivity: Date(timeIntervalSince1970: 100),
+            isRunning: true, hasUnread: false)
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://127.0.0.1:3080/ws/mobile",
+            selectedWorkspaceID: nil, sessions: [session]))
+        let prepared = await store.prepareConversation(for: session)
+        XCTAssertTrue(prepared)
+        func deliver(_ json: String) async throws {
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(json.utf8)))
+            await flushDeferredKMPEvents(in: store)
+        }
+        try await deliver(#"{"kind":"hello","historyFormatVersion":3,"capabilities":["assistant-stream-v1"]}"#)
+        try await deliver(#"{"kind":"subscribed","sessionId":"s","subscriptionId":"sub","assistantStream":true}"#)
+        try await deliver(#"{"kind":"session-snapshot","sessionId":"s","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":41,"events":[],"hasMore":true,"nextBeforeSeq":20,"assistantStream":{"revision":2,"activeAttempt":{"attemptId":"s:1","turn":2,"step":3,"startedAfterSeq":41,"nextIndex":1,"stream":[{"type":"text-chunks","index":0,"time0":100,"texts":["Hello"],"dt":[]}]}}}"#)
+        await store.awaitConversationProjectionForTesting(sessionID: "s", expectedText: "Hello")
+        XCTAssertEqual(store.renderedConversationItems["s", default: []].last?.text, "Hello")
+        XCTAssertTrue(store.events["s", default: []].isEmpty)
+        let chunk = #"{"kind":"assistant-stream","sessionId":"s","subscriptionId":"sub","streamId":"stream","frame":{"type":"chunk","attemptId":"s:1","revision":3,"index":1,"time":101,"turn":2,"step":3,"chunk":{"type":"text-delta","index":0,"text":" world"}}}"#
+        try await deliver(chunk)
+        try await deliver(chunk)
+        await store.awaitConversationProjectionForTesting(sessionID: "s", expectedText: "Hello world")
+        XCTAssertEqual(store.renderedConversationItems["s", default: []].last?.text, "Hello world")
+        try await deliver(#"{"kind":"history","sessionId":"s","historyFormatVersion":3,"events":[],"hasMore":false}"#)
+        await store.awaitConversationProjectionForTesting(sessionID: "s", expectedText: "Hello world")
+        XCTAssertEqual(store.renderedConversationItems["s", default: []].last?.text, "Hello world")
+        let final = #"{"kind":"event","sessionId":"s","subscriptionId":"sub","streamId":"stream","seq":42,"time":102,"event":{"type":"assistant/message","turn":2,"step":3,"text":"Hello world","interrupted":true}}"#
+        try await deliver(final)
+        try await deliver(final)
+        try await deliver(#"{"kind":"assistant-stream","sessionId":"s","subscriptionId":"sub","streamId":"stream","frame":{"type":"end","attemptId":"s:1","revision":4,"index":2,"turn":2,"step":3,"outcome":{"kind":"committed","eventType":"assistant/message","seq":42}}}"#)
+        XCTAssertEqual(store.events["s"]?.map(\.seq), [42])
+        XCTAssertEqual(store.renderedConversationItems["s", default: []].count, 1)
+        await store.awaitConversationProjectionForTesting(sessionID: "s", expectedText: "Hello world")
+        XCTAssertEqual(store.renderedConversationItems["s", default: []].last?.text, "Hello world")
+        XCTAssertNil(store.lastError)
+    }
+
     @MainActor
     func testSameSequenceStreamChunksAccumulateRowLocallyWithoutRebaseline() async throws {
         let session = SessionSummary(

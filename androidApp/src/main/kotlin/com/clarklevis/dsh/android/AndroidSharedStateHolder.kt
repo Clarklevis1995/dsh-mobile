@@ -67,7 +67,11 @@ class AndroidSharedStateHolder(
         })
     }
     private val projectionActor = AndroidProjectionActor(
-        projection = AndroidGatewayProjection(store) { sessionId, beforeSequence ->
+        projection = AndroidGatewayProjection(store, onResubscribe = { sessionId ->
+            graph?.let { appGraph ->
+                appGraph.gatewayScope.launch { appGraph.gatewayRuntime.subscribe(sessionId) }
+            }
+        }) { sessionId, beforeSequence, historyFormatVersion ->
             graph?.let { appGraph ->
                 appGraph.gatewayScope.launch {
                     appGraph.gatewayRuntime.requestHistory(
@@ -75,7 +79,8 @@ class AndroidSharedStateHolder(
                         beforeSequence = beforeSequence,
                         maxMessages = HISTORY_PAGE_MESSAGE_LIMIT,
                         maxBytes = HISTORY_PAGE_BYTE_BUDGET,
-                        view = HISTORY_VIEW
+                        view = HISTORY_VIEW,
+                        historyFormatVersion = historyFormatVersion
                     )
                 }
             }
@@ -247,6 +252,7 @@ class AndroidSharedStateHolder(
                             }
                             lastObservedConnection = state.connection
                         }
+                        if (state.connection != GatewayConnectionState.CONNECTED) projectionActor.disconnected()
                         // 订阅只补发重连后的实时事件。重新拉取 latest history，按 seq 与
                         // 本地 live tail 合并，补齐应用在后台断线期间由其他端发送的用户消息。
                         if (shouldCatchUpSelectedHistory) {

@@ -86,7 +86,7 @@ class AndroidGatewayRuntimeIntegrationTest {
     }
 
     @Test
-    fun androidHostReplaysFakeGatewayWithoutLosingStateAcrossReconnect() = runTest {
+    fun androidHostReconnectResubscribesAndInvalidatesUnversionedHistory() = runTest {
         val transport = FakeTransport()
         val preferences = FakePreferences()
         val network = FakeNetworkMonitor()
@@ -147,7 +147,7 @@ class AndroidGatewayRuntimeIntegrationTest {
         transport.open()
         transport.receive("""{"kind":"hello","protocol":3,"authenticated":true}""")
         runCurrent()
-        assertEquals(listOf("history", "final"), projection.snapshot().conversation.map { it.text })
+        assertTrue(projection.snapshot().conversation.isEmpty())
         assertTrue(transport.sentPayloads.count { "\"type\":\"subscribe\"" in it } >= 2)
         projection.close()
     }

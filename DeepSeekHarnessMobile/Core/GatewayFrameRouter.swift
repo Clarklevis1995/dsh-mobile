@@ -170,7 +170,9 @@ enum GatewayFrameRouter {
                 sessionId: sessionID,
                 seq: sequence,
                 time: time,
-                event: event
+                event: event,
+                surfaceOp: frame.surfaceOp,
+                sourceEventSeqs: frame.sourceEventSeqs
             )))
         case "workspaces":
             return .content(.workspaces(

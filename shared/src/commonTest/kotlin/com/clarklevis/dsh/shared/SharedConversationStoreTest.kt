@@ -19,6 +19,25 @@ import kotlin.test.assertTrue
 
 class SharedConversationStoreTest {
     @Test
+    fun invisiblePersistentEventEmitsWatermarkWithoutRowOperations() {
+        val store = SharedConversationStore()
+        val received = mutableListOf<SharedMviEvent>()
+        store.subscribe(SharedMviEventObserver(received::add))
+        store.receiveEvent(eventJson(1, GatewayEvent("user/message", text = "Hi")))
+        for ((offset, type) in listOf("turn/start", "step/start", "request/header").withIndex()) {
+            val previousCount = received.size
+            assertTrue(store.receiveEvent(eventJson(offset + 2, GatewayEvent(type))).accepted)
+            assertEquals(previousCount + 1, received.size)
+            assertEquals(offset + 2, patch(received.last()).lastSequence)
+            assertTrue(patch(received.last()).operations.isEmpty())
+            assertFalse(patch(received.last()).replacesAll)
+        }
+        assertTrue(store.assistantChunks("s1", "attempt", """[{"time":5,"chunk":{"type":"text-delta","index":0,"text":"Hello"}}]""").accepted)
+        assertEquals(4, patch(received.last()).lastSequence)
+        assertEquals("insert", patch(received.last()).operations.single().kind)
+    }
+
+    @Test
     fun streamingTextUsesInsertThenDeltaOnlyPatchAndFinalReplacement() {
         val store = SharedConversationStore()
         val received = mutableListOf<SharedMviEvent>()

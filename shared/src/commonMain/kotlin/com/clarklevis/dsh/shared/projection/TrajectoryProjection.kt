@@ -65,7 +65,7 @@ data class TrajectoryNode(
 object TrajectoryProjection {
     fun make(source: List<SessionEvent>): List<TrajectoryNode> {
         val events = source.sortedBy(SessionEvent::seq)
-        val completedSteps = events.filter { it.event.type == "assistant/message" }.map(::stepKey).toSet()
+        val completedSteps = events.filter { it.event.type in setOf("assistant/message", "assistant/attempt") }.map(::stepKey).toSet()
         val chunks = events.filter {
             it.event.type == "assistant/chunk" && it.event.chunkType in setOf(
                 "reasoning-delta", "text-delta", "tool-call-delta", "block-start", "block-end", "usage", "finish"
@@ -116,7 +116,7 @@ object TrajectoryProjection {
                         )
                     }
                 }
-                event.type == "assistant/message" -> {
+                event.type == "assistant/message" || event.type == "assistant/attempt" -> {
                     val stepChunks = chunks[key].orEmpty()
                     val start = stepChunks.firstOrNull() ?: record
                     val usage = requestUsage(event.usage ?: event.raw?.get("usage"))

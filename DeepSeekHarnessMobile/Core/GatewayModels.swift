@@ -118,6 +118,18 @@ struct GatewayFrame: Codable, Sendable {
     var gatewayName: String?
     var `protocol`: Int?
     var capabilities: [String]?
+    var dshVersion: String?
+    var historyFormatVersion: Int?
+    var subscriptionId: String?
+    var streamId: String?
+    var cursor: Int?
+    var replace: Bool?
+    var assistantStream: JSONValue?
+    var frame: JSONValue?
+    var retrying: Bool?
+    var resetRequired: Bool?
+    var surfaceOp: JSONValue?
+    var sourceEventSeqs: [Int]?
     var authenticated: Bool?
     var token: String?
     var device: GatewayDevice?
@@ -725,13 +737,18 @@ struct RawSessionEvent: Codable, Hashable, Sendable {
                 reasoning: reasoning,
                 toolCalls: calls,
                 images: imageBlocks(data["message"]?["content"]),
-                raw: data
+                raw: data,
+                interrupted: data["interrupted"]?.boolValue,
+                stream: data["stream"]
             )
+        case "assistant/attempt":
+            return GatewayEvent(type: type, turn: turn, step: step, raw: data, stream: data["stream"])
         case "tool/call":
             return GatewayEvent(type: type, turn: turn, step: step, callId: data["callId"]?.stringValue, name: data["name"]?.stringValue, arguments: data["arguments"], raw: data)
         case "tool/result":
             let preview = toolResultText(data["message"])
-            return GatewayEvent(type: type, turn: turn, step: step, callId: data["message"]?["source"]?["callId"]?.stringValue, isError: data["error"] != nil && data["error"] != .null, preview: preview, raw: data)
+            return GatewayEvent(type: type, turn: turn, step: step, callId: data["message"]?["source"]?["callId"]?.stringValue, isError: (data["error"] != nil && data["error"] != .null && data["error"] != .bool(false)) ||
+                (data["message"]?["content"]?.arrayValue ?? []).contains { $0["type"]?.stringValue == "tool-result" && $0["isError"]?.boolValue == true }, preview: preview, raw: data)
         case "tool/code-dispatch-start":
             return GatewayEvent(
                 type: type,
@@ -829,6 +846,8 @@ struct GatewayEvent: Codable, Hashable, Sendable, Identifiable {
     var shadowedTokenCount: Int?
     var error: String?
     var raw: JSONValue?
+    var interrupted: Bool?
+    var stream: JSONValue?
 
     init(
         type: String,
@@ -861,7 +880,9 @@ struct GatewayEvent: Codable, Hashable, Sendable, Identifiable {
         shadowedItemCount: Int? = nil,
         shadowedTokenCount: Int? = nil,
         error: String? = nil,
-        raw: JSONValue? = nil
+        raw: JSONValue? = nil,
+        interrupted: Bool? = nil,
+        stream: JSONValue? = nil
     ) {
         self.type = type
         self.turn = turn
@@ -894,6 +915,8 @@ struct GatewayEvent: Codable, Hashable, Sendable, Identifiable {
         self.shadowedTokenCount = shadowedTokenCount
         self.error = error
         self.raw = raw
+        self.interrupted = interrupted
+        self.stream = stream
     }
 
     var id: String {
@@ -920,6 +943,8 @@ struct SessionEvent: Codable, Hashable, Sendable, Identifiable {
     var seq: Int
     var time: Double
     var event: GatewayEvent
+    var surfaceOp: JSONValue? = nil
+    var sourceEventSeqs: [Int]? = nil
 
     var id: String { "\(sessionId)-\(seq)" }
     var date: Date { Date(timeIntervalSince1970: time > 10_000_000_000 ? time / 1000 : time) }

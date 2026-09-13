@@ -45,6 +45,7 @@ import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.movement.MovementMethodPlugin
 import org.commonmark.node.Code
 import org.commonmark.node.ThematicBreak
+import org.commonmark.parser.Parser
 import java.util.concurrent.Executors
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -321,6 +322,10 @@ internal fun buildDshMarkwon(
         .usePlugin(CorePlugin.create())
         .usePlugin(
             object : AbstractMarkwonPlugin() {
+                override fun configureParser(builder: Parser.Builder) {
+                    builder.customBlockParserFactory(DshTableBlockParserFactory())
+                }
+
                 override fun configureSpansFactory(builder: MarkwonSpansFactory.Builder) {
                     builder.setFactory(Code::class.java) { configuration, _ ->
                         DshInlineCodeSpan(

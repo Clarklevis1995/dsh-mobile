@@ -116,6 +116,7 @@ extension SharedConversationStore: KMPConversationEventBridging {
 }
 
 private enum KMPConversationIntent {
+    case transient(sessionID: String)
     case event(sessionID: String, sequence: Int)
     case replace(sessionID: String, lastSequence: Int)
     case clear(sessionID: String)
@@ -166,7 +167,8 @@ final class KMPConversationStoreAdapter {
             compactedHistory: String(
                 localized: "command.compacted-history",
                 defaultValue: "已压缩 {items} 条历史记录（约 {tokens} tokens）"
-            )
+            ),
+            interrupted: String(localized: "assistant.interrupted", defaultValue: "生成已中断")
         )
         guard let eventStore = store as? any KMPConversationEventBridging else {
             failClosed(.runtimeFailed("Conversation bridge 不支持 MVI event stream"))
@@ -194,6 +196,22 @@ final class KMPConversationStoreAdapter {
         let json = try encode(event)
         try dispatch(.event(sessionID: event.sessionId, sequence: event.seq)) {
             store.receiveStreamDelta(eventJson: json)
+        }
+    }
+
+    func assistantChunks(sessionID: String, attemptID: String, chunksJSON: String) throws {
+        guard let shared = store as? SharedConversationStore else {
+            throw KMPConversationStoreError.invalidEvent("独立流需要共享 Conversation Store")
+        }
+        try dispatch(.transient(sessionID: sessionID)) {
+            shared.assistantChunks(sessionId: sessionID, attemptId: attemptID, chunksJson: chunksJSON)
+        }
+    }
+
+    func clearAssistantChunks(sessionID: String) throws {
+        guard let shared = store as? SharedConversationStore else { return }
+        try dispatch(.transient(sessionID: sessionID)) {
+            shared.clearAssistantChunks(sessionId: sessionID)
         }
     }
 
@@ -281,7 +299,8 @@ final class KMPConversationStoreAdapter {
             do {
                 let patch = try decoder.decode(KMPConversationPatch.self, from: Data(payload.utf8))
                 let change = try apply(patch, intent: pendingIntent)
-                onChange?(change)
+                // 水位同步不改变展示行，不触发对话重绘。
+                if patch.replacesAll || !patch.operations.isEmpty { onChange?(change) }
             } catch let error as KMPConversationStoreError {
                 failClosed(error)
             } catch {
@@ -300,12 +319,18 @@ final class KMPConversationStoreAdapter {
             throw KMPConversationStoreError.invalidEvent("patch schema 或 sessionId 无效")
         }
         switch intent {
+        case .transient(let sessionID):
+            guard patch.sessionId == sessionID,
+                  patch.lastSequence == (lastSequenceBySessionID[sessionID] ?? -1),
+                  !patch.replacesAll, patch.replacementItems == nil else {
+                throw KMPConversationStoreError.invalidEvent("临时流改变了持久流水位")
+            }
         case .event(let sessionID, let sequence):
             guard patch.sessionId == sessionID,
                   patch.lastSequence == sequence,
                   !patch.replacesAll,
                   patch.replacementItems == nil,
-                  !patch.operations.isEmpty else {
+                  (!patch.operations.isEmpty || sequence > (lastSequenceBySessionID[sessionID] ?? -1)) else {
                 throw KMPConversationStoreError.invalidEvent("live patch 与当前 event intent 不一致")
             }
         case .replace(let sessionID, let lastSequence):
@@ -618,6 +643,10 @@ final class KMPTrajectoryStoreAdapter {
         cancelEventSubscription = eventStore.observeTrajectoryEvents { [weak self] event in
             MainActor.assumeIsolated { self?.receive(event) }
         }
+    }
+
+    func decodeTransientNodes(_ json: String) -> [TrajectoryNode] {
+        (try? decoder.decode([KMPTrajectoryNodeSnapshot].self, from: Data(json.utf8)))?.compactMap(\.node) ?? []
     }
 
     func nodes(for sessionID: String) -> [TrajectoryNode] {
@@ -1109,6 +1138,16 @@ final class KMPHistoryStoreAdapter {
 
     func cancel(sessionID: String) throws {
         try dispatch(.cancel(sessionID: sessionID)) { store.cancelled(sessionId: sessionID) }
+    }
+
+    func installSnapshot(sessionID: String, events: [SessionEvent], hasMore: Bool, nextBeforeSequence: Int?) throws {
+        guard let shared = store as? SharedHistoryStore else {
+            throw KMPHistoryStoreError.invalidEvent("订阅快照需要共享 History Store")
+        }
+        try dispatch(.page(sessionID: sessionID)) {
+            shared.installSnapshot(sessionId: sessionID, eventsJson: try encode(events), hasMore: hasMore,
+                nextBeforeSequence: nextBeforeSequence.map { KotlinInt(int: Int32($0)) })
+        }
     }
 
     func clear(sessionID: String) throws {

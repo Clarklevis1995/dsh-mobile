@@ -146,6 +146,37 @@ class GatewayRuntimeIntegrationTest {
     }
 
     @Test
+    fun splitTransportDeliversEntireRc2SubscriptionOnOneOrderedQueue() = runTest {
+        val control = FakeTransport()
+        val conversation = FakeTransport()
+        val runtime = GatewayRuntime(SplitGatewayTransport(control, conversation), FakePreferences(), FakeCredentials(),
+            FakeAttachmentCache(), FakeNetworkMonitor(), FakeClock(0), backgroundScope)
+        val kinds = mutableListOf<String>()
+        val controlKinds = mutableListOf<String>()
+        backgroundScope.launch { runtime.events.collect { if (it is GatewayRuntimeEvent.Frame) controlKinds += it.frame.kind } }
+        backgroundScope.launch { runtime.conversationEvents.collect { if (it is GatewayRuntimeEvent.Frame) kinds += it.frame.kind } }
+        runCurrent()
+        runtime.connect("ws://localhost/mobile")
+        control.opened()
+        control.receive("""{"kind":"hello","historyFormatVersion":3,"capabilities":["split-channels","assistant-stream-v1"]}""")
+        runCurrent()
+        conversation.opened()
+        conversation.receive("""{"kind":"hello","capabilities":["split-channels"]}""")
+        runCurrent()
+        runtime.subscribe("s")
+        conversation.receive("""{"kind":"subscribed","sessionId":"s","subscriptionId":"sub"}""")
+        conversation.receive("""{"kind":"session-snapshot","sessionId":"s","subscriptionId":"sub","streamId":"stream","cursor":41,"historyFormatVersion":3,"events":[]}""")
+        conversation.receive("""{"kind":"assistant-stream","sessionId":"s","subscriptionId":"sub","streamId":"stream","frame":{"type":"start","revision":1}}""")
+        conversation.receive("""{"kind":"event","sessionId":"s","subscriptionId":"sub","streamId":"stream","seq":42,"time":1,"event":{"type":"assistant/message","text":"Final"}}""")
+        conversation.receive("""{"kind":"assistant-stream","sessionId":"s","subscriptionId":"sub","streamId":"stream","frame":{"type":"end","revision":2}}""")
+        conversation.receive("""{"kind":"session-stream-reset","sessionId":"s","subscriptionId":"sub","streamId":"stream","retrying":true}""")
+        control.receive("""{"kind":"projection-baseline","projections":{}}""")
+        runCurrent()
+        assertEquals(listOf("hello", "subscribed", "session-snapshot", "assistant-stream", "event", "assistant-stream", "session-stream-reset"), kinds)
+        assertEquals(listOf("projection-baseline"), controlKinds)
+    }
+
+    @Test
     fun splitTransportKeepsFilesMovingWhileConversationConsumerIsBlocked() = runTest {
         val control = FakeTransport()
         val conversation = FakeTransport()
@@ -162,7 +193,7 @@ class GatewayRuntimeIntegrationTest {
         backgroundScope.launch {
             runtime.conversationEvents.collect {
                 releaseConversation.await()
-                if (it is GatewayRuntimeEvent.Frame) sequences += requireNotNull(it.frame.seq)
+                if (it is GatewayRuntimeEvent.Frame && it.frame.kind == "event") sequences += requireNotNull(it.frame.seq)
             }
         }
         runCurrent()

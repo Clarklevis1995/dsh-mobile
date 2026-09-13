@@ -6,6 +6,7 @@ import com.clarklevis.dsh.shared.projection.ConversationProjectionOperation
 import com.clarklevis.dsh.shared.projection.ConversationProjector
 import com.clarklevis.dsh.shared.protocol.SessionEvent
 import com.clarklevis.dsh.shared.protocol.wireJson
+import com.clarklevis.dsh.shared.sync.AssistantChunk
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -52,7 +53,8 @@ class SharedConversationStore(
             "event sequence ${record.seq} is not newer than ${projector.lastSequence}; replace baseline first"
         }
         val operations = projector.foldWithOperations(listOf(record))
-        if (operations.isEmpty()) return@dispatch null
+        // 不可见持久事件仍会推进流水位，必须发布给平台镜像。
+        // 否则后续独立流携带正确水位时，iOS 会因镜像滞后而误判协议错误。
         SharedConversationPatch(
             sessionId = record.sessionId,
             operations = operations,
@@ -73,8 +75,9 @@ class SharedConversationStore(
         require(record.sessionId.isNotBlank()) { "sessionId must not be blank" }
         val projector = projectors[record.sessionId]
             ?: error("no conversation baseline for session ${record.sessionId}; replace baseline first")
+        val previousSequence = projector.lastSequence
         val operations = projector.foldWithOperations(listOf(record))
-        if (operations.isEmpty()) return@dispatch null
+        if (operations.isEmpty() && projector.lastSequence == previousSequence) return@dispatch null
         SharedConversationPatch(
             sessionId = record.sessionId,
             operations = operations,
@@ -84,6 +87,24 @@ class SharedConversationStore(
 
     /** 平台用它决定能否走 streaming 行内路径，否则回退到 baseline。 */
     fun hasProjection(sessionId: String): Boolean = projectors.containsKey(sessionId)
+
+    fun assistantChunks(sessionId: String, attemptId: String, chunksJson: String): SharedMviDispatchResult =
+        dispatch("assistant-chunks") {
+            val chunks = wireJson.decodeFromString<List<AssistantChunk>>(chunksJson)
+            val projector = projectors.getOrPut(sessionId) { ConversationProjector(labels) }
+            val operations = projector.foldAssistantChunks(attemptId, chunks)
+            if (operations.isEmpty()) null else SharedConversationPatch(
+                sessionId = sessionId, operations = operations, lastSequence = projector.lastSequence
+            )
+        }
+
+    fun clearAssistantChunks(sessionId: String): SharedMviDispatchResult = dispatch("assistant-clear") {
+        val projector = projectors[sessionId] ?: return@dispatch null
+        val operations = projector.clearAssistantChunks()
+        if (operations.isEmpty()) null else SharedConversationPatch(
+            sessionId = sessionId, operations = operations, lastSequence = projector.lastSequence
+        )
+    }
 
     fun replaceSession(sessionId: String, eventsJson: String): SharedMviDispatchResult =
         dispatch("replace") {

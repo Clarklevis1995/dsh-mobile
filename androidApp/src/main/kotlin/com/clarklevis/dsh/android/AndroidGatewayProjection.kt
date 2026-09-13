@@ -21,6 +21,7 @@ import com.clarklevis.dsh.shared.protocol.JsonValue
 import com.clarklevis.dsh.shared.protocol.SessionEvent
 import com.clarklevis.dsh.shared.sync.HistorySessionState
 import com.clarklevis.dsh.shared.sync.HistorySyncConfiguration
+import com.clarklevis.dsh.shared.sync.AssistantStreamState
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -39,8 +40,11 @@ internal class AndroidGatewayProjection(
         HistorySyncConfiguration(pagesPerBatch = 1)
     ),
     private val conversationStore: SharedConversationStore = SharedConversationStore(mobileConversationLabels()),
-    private val onHistoryPageRequested: (sessionId: String, beforeSequence: Int?) -> Unit = { _, _ -> }
+    private val onResubscribe: (String) -> Unit = {},
+    private val onHistoryPageRequested: (sessionId: String, beforeSequence: Int?, historyFormatVersion: Int?) -> Unit = { _, _, _ -> }
 ) {
+    private var assistantStream = AssistantStreamState()
+    private var usesAssistantStream = false
     private val historyEvents = mutableMapOf<String, List<SessionEvent>>()
     private val historyLastSequences = mutableMapOf<String, Int>()
     private val historyHasMore = mutableMapOf<String, Boolean>()
@@ -100,19 +104,31 @@ internal class AndroidGatewayProjection(
     }
 
     fun selectSession(sessionId: String?): SharedMobileSnapshot {
+        controlSnapshot.selectedSessionId?.let { conversationStore.clearAssistantChunks(it) }
+        assistantStream.selectSession(sessionId)
         controlSnapshot = mobileStore.selectSession(sessionId)
         if (sessionId == null) return snapshot()
-        startHistory(sessionId, older = false)
+        if (!usesAssistantStream) startHistory(sessionId, older = false)
         return snapshot()
     }
 
     fun loadHistory(sessionId: String, older: Boolean): SharedMobileSnapshot {
-        startHistory(sessionId, older)
+        if (usesAssistantStream && !older && sessionId == controlSnapshot.selectedSessionId) {
+            assistantStream.selectSession(sessionId)
+            conversationStore.clearAssistantChunks(sessionId)
+            onResubscribe(sessionId)
+        } else startHistory(sessionId, older)
+        return snapshot()
+    }
+
+    fun disconnected(): SharedMobileSnapshot {
+        assistantStream.disconnect()
+        controlSnapshot.selectedSessionId?.let { conversationStore.clearAssistantChunks(it) }
         return snapshot()
     }
 
     fun catchUpSelectedHistoryAfterReconnect(): SharedMobileSnapshot {
-        controlSnapshot.selectedSessionId?.let { startHistory(it, older = false) }
+        if (!usesAssistantStream) controlSnapshot.selectedSessionId?.let { startHistory(it, older = false) }
         return snapshot()
     }
 
@@ -148,17 +164,49 @@ internal class AndroidGatewayProjection(
 
     fun acceptFrame(rawJson: String, frame: GatewayFrame, correlatedSessionId: String?): SharedMobileSnapshot {
         lastFrameKind = frame.kind
-        lastError = null
+        if (frame.kind == "hello") usesAssistantStream = "assistant-stream-v1" in frame.capabilities.orEmpty()
+        val id = frame.sessionId ?: correlatedSessionId
+        if (frame.kind == "history" && id != null && assistantStream.hasBaseline(id) &&
+            historySessionStates[id]?.isLoadingOlder != true) return snapshot()
+        val update = assistantStream.accept(frame)
+        if (update.accepted) lastError = null
+        update.invalidatedSessionIds.forEach {
+            historyStore.clearSession(it)
+            conversationStore.clearSession(it)
+            historyHasMore.remove(it)
+        }
+        if (update.clearTransient) update.sessionId?.let { conversationStore.clearAssistantChunks(it) }
+        update.error?.let { lastError = it }
+        if (update.resubscribe && id != null) onResubscribe(id)
+        if (!update.accepted) return snapshot()
         when (frame.kind) {
+            "session-snapshot" -> if (id != null) {
+                historyStore.clearSession(id)
+                conversationStore.clearSession(id)
+                val records = frame.events.orEmpty().map { it.normalized(id) }
+                historyStore.installSnapshot(id, adapterJson.encodeToString(records), frame.hasMore == true, frame.nextBeforeSeq)
+                historyHasMore[id] = frame.hasMore == true
+                conversationStore.replaceSession(id, adapterJson.encodeToString(records))
+                controlSnapshot = mobileStore.acceptFrame(rawJson)
+            }
+            "assistant-stream", "session-stream-reset", "subscribed" -> Unit
             "history" -> acceptHistory(frame, correlatedSessionId)
             "event" -> acceptLive(rawJson, frame)
             "paired", "hello", "attachment" -> Unit
-            else -> controlSnapshot = mobileStore.acceptFrame(rawJson)
+            else -> {
+                controlSnapshot = mobileStore.acceptFrame(rawJson)
+                if (frame.kind == "sent") assistantStream.selectSession(controlSnapshot.selectedSessionId)
+            }
+        }
+        if (id != null && update.attemptId != null && update.chunksJson != "[]") {
+            conversationStore.assistantChunks(id, requireNotNull(update.attemptId), update.chunksJson)
         }
         return snapshot()
     }
 
     fun reset(): SharedMobileSnapshot {
+        assistantStream = AssistantStreamState()
+        usesAssistantStream = false
         historyEvents.keys.toList().forEach {
             historyStore.clearSession(it)
             conversationStore.clearSession(it)
@@ -200,7 +248,9 @@ internal class AndroidGatewayProjection(
     }
 
     fun trajectory(sessionId: String?): List<TrajectoryNode> =
-        sessionId?.let(historyEvents::get)?.let(TrajectoryProjection::make).orEmpty()
+        sessionId?.let {
+            TrajectoryProjection.make(historyEvents[it].orEmpty()) + assistantStream.transientTrajectoryNodes(it)
+        }.orEmpty()
 
     internal fun acceptHistoryMviEventForTest(event: SharedMviEvent) = acceptHistoryMviEvent(event)
 
@@ -229,6 +279,9 @@ internal class AndroidGatewayProjection(
         }
         historyHasMore[sessionId] = frame.hasMore == true
         conversationStore.replaceSession(sessionId, adapterJson.encodeToString(historyEvents[sessionId].orEmpty()))
+        assistantStream.activeAttemptId()?.takeIf { assistantStream.hasBaseline(sessionId) }?.let {
+            conversationStore.assistantChunks(sessionId, it, assistantStream.replayChunksJson())
+        }
     }
 
     private fun acceptLive(rawJson: String, frame: GatewayFrame) {
@@ -246,7 +299,7 @@ internal class AndroidGatewayProjection(
         if (gatewayEvent.type != "assistant/chunk") {
             controlSnapshot = mobileStore.acceptFrame(rawJson)
         }
-        val record = SessionEvent(sessionId, sequence, timestamp, gatewayEvent)
+        val record = SessionEvent(sessionId, sequence, timestamp, gatewayEvent, frame.surfaceOp, frame.sourceEventSeqs)
         val recordJson = adapterJson.encodeToString(record)
         val historyResult = historyStore.liveEventReceived(recordJson)
         if (!historyResult.accepted) {
@@ -279,7 +332,7 @@ internal class AndroidGatewayProjection(
         historyEnvelope.commit(event)
         if (event.kind == "error") lastError = event.errorCode ?: "history-store-error"
         plan.effects.forEach { effect ->
-            runCatching { onHistoryPageRequested(effect.sessionId, effect.beforeSequence) }
+            runCatching { onHistoryPageRequested(effect.sessionId, effect.beforeSequence, assistantStream.formatVersion(effect.sessionId)) }
                 .onFailure { lastError = "history-effect-failed" }
         }
     }
@@ -428,7 +481,9 @@ internal class AndroidGatewayProjection(
             return ConversationPlan(next, nextSequences)
         }
         require(patch.replacementItems == null)
-        require(patch.operations.isNotEmpty() && patch.lastSequence > previousSequence)
+        // 不可见持久事件可以只推进水位；独立临时流仍不能使水位倒退。
+        require(patch.lastSequence >= previousSequence)
+        require(patch.operations.isNotEmpty() || patch.lastSequence > previousSequence)
         val items = next[patch.sessionId].orEmpty().toMutableList()
         patch.operations.forEach { operation ->
             when (operation.kind) {
@@ -494,7 +549,8 @@ private fun mobileConversationLabels(): ConversationProjectionLabels {
             commandCompacting = "正在压缩…",
             commandCompleted = "已完成",
             commandFailed = "执行失败",
-            compactedHistory = "已压缩 {items} 条历史记录（约 {tokens} tokens）"
+            compactedHistory = "已压缩 {items} 条历史记录（约 {tokens} tokens）",
+            interrupted = "生成已中断"
         )
     } else {
         ConversationProjectionLabels()

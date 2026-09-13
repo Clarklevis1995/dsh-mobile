@@ -29,7 +29,7 @@ internal class AndroidProjectionActor(
         afterPublish: () -> Unit = {}
     ) = mutate(
         afterPublish = afterPublish,
-        coalesceWithDisplayFrame = frame.kind == "event" && frame.event?.type == "assistant/chunk"
+        coalesceWithDisplayFrame = frame.kind == "assistant-stream" || (frame.kind == "event" && frame.event?.type == "assistant/chunk")
     ) { projection.acceptFrame(rawJson, frame, correlatedSessionId) }
 
     /**
@@ -83,6 +83,8 @@ internal class AndroidProjectionActor(
         older: Boolean,
         afterPublish: () -> Unit = {}
     ) = mutate(afterPublish) { projection.loadHistory(sessionId, older) }
+
+    suspend fun disconnected() = mutate { projection.disconnected() }
 
     suspend fun catchUpSelectedHistoryAfterReconnect() = mutate {
         projection.catchUpSelectedHistoryAfterReconnect()

@@ -8,9 +8,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.platform.LocalView
 import io.noties.markwon.ext.tables.TableRowSpan
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -47,13 +46,47 @@ class DshMarkdownTextDeviceTest {
     }
 
     @Test
+    fun historyTablesImmediatelyAfterBoldLabelsRenderAfterLazySplitting() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val markwon = buildDshMarkwon(context, testPalette())
+        val markdown = """
+            如下（都是实测值，非目测）：
+
+            ## 整体：深灰黑单色调 + 一个蓝色点缀
+
+            **背景与容器**
+            | 用途 | 色值 | 占比 |
+            |---|---|---|
+            | 页面背景（主色，近纯黑带一点冷灰） | `#151517` | 约 67% |
+            | 输入卡片背景 | `#2C2C2E` | 约 25% |
+            | 卡片内高亮/层次（略微偏离） | `#2D2C2F` / `#2B2C2F` | 约 3% |
+            | 全图平均色 | `#1F1F22` | — |
+            **文字与图标**
+            | 用途 | 色值 |
+            |---|---|
+            | 主标题「探索未至之境」、工作区名「测试 2」 | `#FFFFFF` 纯白 |
+        """.trimIndent()
+
+        val rendered = splitMarkdownForLazyLayout(markdown).map(markwon::toMarkdown)
+        val rows = rendered.sumOf {
+            it.getSpans(0, it.length, TableRowSpan::class.java).size
+        }
+        assertEquals("两个历史表格都应渲染，包含表头共七行", 7, rows)
+        assertTrue(rendered.joinToString("\n").contains("背景与容器"))
+        assertTrue(rendered.joinToString("\n").contains("文字与图标"))
+        assertFalse(rendered.joinToString("\n").contains("|---|"))
+    }
+
+    @Test
     fun longStreamingAndFinalMarkdownBothKeepTheDocumentTail() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val paragraphs = List(80) { index ->
             "第${index + 1}段：${"这是一段用于验证安卓长文本不会中断的内容。".repeat(8)}"
         }
         val streamingText = paragraphs.joinToString("\n\n")
+        var rootView: View? = null
         compose.setContent {
+            rootView = LocalView.current
             DshTheme {
                 DshStreamingAwareMarkdownText(
                     markdown = streamingText,
@@ -61,7 +94,16 @@ class DshMarkdownTextDeviceTest {
                 )
             }
         }
-        compose.onNodeWithText(streamingText).assertIsDisplayed()
+        compose.waitForIdle()
+        // Markdown 使用 AndroidView 内的 TextView，正文不在 Compose 的 Text 语义节点中。
+        compose.runOnIdle {
+            val textView = requireNotNull(rootView?.findMarkdownTextView())
+            assertTrue(textView.isShown)
+            assertTrue(textView.text.contains(paragraphs.first()))
+            assertTrue(textView.text.contains(paragraphs.last()))
+            val layout = requireNotNull(textView.layout)
+            assertEquals(textView.text.length, layout.getLineEnd(layout.lineCount - 1))
+        }
 
         val markwon = buildDshMarkwon(
             context,
@@ -146,6 +188,16 @@ class DshMarkdownTextDeviceTest {
             textView.layout.getLineForOffset(longRendered.getSpanStart(longSpan)) <
                 textView.layout.getLineForOffset(longRendered.getSpanEnd(longSpan) - 1)
         )
+    }
+
+    private fun View.findMarkdownTextView(): DshMarkdownTextView? {
+        if (this is DshMarkdownTextView) return this
+        if (this is ViewGroup) {
+            for (index in 0 until childCount) {
+                getChildAt(index).findMarkdownTextView()?.let { return it }
+            }
+        }
+        return null
     }
 
     private fun testPalette() = DshMarkdownPalette(

@@ -186,6 +186,16 @@ class SharedMobileStore(
             lastFrameKind = frame.kind
             lastError = null
             when (frame.kind) {
+                "projection-baseline" -> {
+                    tasksBySession.clear()
+                    goalsBySession.clear()
+                    frame.projections?.objectValue.orEmpty().forEach { (id, projection) ->
+                        installTaskGoalProjection(id, projection)
+                    }
+                }
+                "session-snapshot" -> frame.sessionId?.let { id ->
+                    installTaskGoalProjection(id, frame.projections)
+                }
                 "session-archives", "session-archived" -> frame.archivedSessionIds?.let { ids ->
                     sessionListState = SessionListReducer.reduce(
                         sessionListState, SessionListAction.SetArchivedSessionIds(ids.toSet())
@@ -410,6 +420,19 @@ class SharedMobileStore(
         return makeSnapshot()
     }
 
+    private fun installTaskGoalProjection(sessionId: String, projection: JsonValue?) {
+        val seq = projection?.get("asOfSeq")?.doubleValue?.toLong()
+        val values = projection?.get("values")
+        val todos = values?.get("todos")?.arrayValue?.mapNotNull {
+            runCatching { wireJson.decodeFromJsonElement(GatewayTask.serializer(), it.toJsonElement()) }.getOrNull()
+        }
+        val goal = values?.get("goal")?.let {
+            runCatching { wireJson.decodeFromJsonElement(GatewayGoalSnapshot.serializer(), it.toJsonElement()) }.getOrNull()
+        }
+        tasksBySession[sessionId] = GatewayTaskSnapshot(seq, todos)
+        goalsBySession[sessionId] = GatewayGoalProjection(seq, goal)
+    }
+
     fun loadManualTestFixture(): SharedMobileSnapshot {
         reset()
         acceptFrame("""{"kind":"sessions","items":[{"sessionId":"android-demo","updatedAt":1786937352000,"running":true,"blank":false,"cwd":"/tmp/kmp-demo","agentPreset":"standard"}]}""")
@@ -563,7 +586,8 @@ class SharedMobileFacade {
         commandCompacting: String,
         commandCompleted: String,
         commandFailed: String,
-        compactedHistory: String
+        compactedHistory: String,
+        interrupted: String = "Generation interrupted"
     ): SharedConversationStore = SharedConversationStore(
         ConversationProjectionLabels(
             userMessage = userMessage,
@@ -579,7 +603,8 @@ class SharedMobileFacade {
             commandCompacting = commandCompacting,
             commandCompleted = commandCompleted,
             commandFailed = commandFailed,
-            compactedHistory = compactedHistory
+            compactedHistory = compactedHistory,
+            interrupted = interrupted
         )
     )
 

@@ -21,6 +21,18 @@ data class GatewayFrame(
     val gatewayName: String? = null,
     @SerialName("protocol") val protocolVersion: Int? = null,
     val capabilities: List<String>? = null,
+    val dshVersion: String? = null,
+    val historyFormatVersion: Int? = null,
+    val subscriptionId: String? = null,
+    val streamId: String? = null,
+    val cursor: Int? = null,
+    val replace: Boolean? = null,
+    val assistantStream: JsonValue? = null,
+    val frame: JsonValue? = null,
+    val retrying: Boolean? = null,
+    val resetRequired: Boolean? = null,
+    val surfaceOp: JsonValue? = null,
+    val sourceEventSeqs: List<Int>? = null,
     val authenticated: Boolean? = null,
     val token: String? = null,
     val device: GatewayDevice? = null,
@@ -487,7 +499,9 @@ data class GatewayEvent(
     val shadowedItemCount: Int? = null,
     val shadowedTokenCount: Int? = null,
     val error: String? = null,
-    val raw: JsonValue? = null
+    val raw: JsonValue? = null,
+    val interrupted: Boolean? = null,
+    val stream: JsonValue? = null
 ) {
     override fun toString(): String =
         "GatewayEvent(type=$type, turn=$turn, step=$step, text=<redacted>, tool=<redacted>, " +
@@ -496,7 +510,14 @@ data class GatewayEvent(
 }
 
 @Serializable
-data class SessionEvent(val sessionId: String, val seq: Int, val time: Double, val event: GatewayEvent) {
+data class SessionEvent(
+    val sessionId: String,
+    val seq: Int,
+    val time: Double,
+    val event: GatewayEvent,
+    val surfaceOp: JsonValue? = null,
+    val sourceEventSeqs: List<Int>? = null
+) {
     override fun toString(): String =
         "SessionEvent(sessionId=$sessionId, seq=$seq, time=$time, event=$event)"
 }
@@ -554,6 +575,8 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
                     },
                     images = imageBlocks(data["message"]?.get("content")),
                     usage = data["usage"],
+                    interrupted = data["interrupted"]?.booleanValue,
+                    stream = data["stream"],
                     raw = data
                 )
             }
@@ -563,7 +586,11 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
                 turn,
                 step,
                 callId = data["message"]?.get("source")?.get("callId")?.stringValue,
-                isError = data["error"] != null && data["error"] != JsonValue.NullValue,
+                isError = (data["error"] != null && data["error"] != JsonValue.NullValue &&
+                    data["error"] != JsonValue.BooleanValue(false)) ||
+                    data["message"]?.get("content")?.arrayValue.orEmpty().any {
+                        it["type"]?.stringValue == "tool-result" && it["isError"]?.booleanValue == true
+                    },
                 preview = toolResultText(data["message"]),
                 raw = data
             )
@@ -579,6 +606,7 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
                 raw = data
             )
             "turn/start", "turn/end", "step/start", "step/end" -> GatewayEvent(type, turn, step, reason = data["reason"]?.get("kind")?.stringValue, raw = data)
+            "assistant/attempt" -> GatewayEvent(type, turn, step, stream = data["stream"], raw = data)
             "session/title" -> GatewayEvent(type, text = data["title"]?.stringValue, raw = data)
             else -> GatewayEvent(
                 type = type,

@@ -208,6 +208,8 @@ final class AppStore: ObservableObject {
     private var pendingKMPEventDeliveries: [@MainActor () -> Void] = []
     private var isKMPEventDeliveryScheduled = false
     private let historySyncEngine = HistorySyncEngine()
+    private var assistantStreamState = AssistantStreamState()
+    private var usesAssistantStream = false
     /// The remote session activity timestamp covered by a completed history load.
     /// This intentionally remains an in-memory cache: events are not persisted
     /// across launches, so a fresh process must fetch history again.
@@ -343,7 +345,7 @@ final class AppStore: ObservableObject {
         }
         kmpTrajectoryStore.onChange = { [weak self] change in
             self?.enqueueKMPEventDelivery { [weak self] in
-                self?.trajectoryTimeline(for: change.sessionID).publish(change.nodes)
+                self?.publishTrajectory(sessionID: change.sessionID)
             }
         }
         kmpTrajectoryStore.onError = { [weak self] error in
@@ -445,6 +447,11 @@ final class AppStore: ObservableObject {
         }
         return timeline
     }
+    private func publishTrajectory(sessionID: String) {
+        let transient = kmpTrajectoryStore.decodeTransientNodes(assistantStreamState.transientTrajectoryJson(sessionId: sessionID))
+        trajectoryTimeline(for: sessionID).publish(kmpTrajectoryStore.nodes(for: sessionID) + transient)
+    }
+
     func trajectoryTimeline(for sessionId: String?) -> TrajectoryTimeline {
         let timelineID = sessionId ?? "__no-session__"
         if let timeline = trajectoryTimelines[timelineID] { return timeline }
@@ -674,6 +681,8 @@ final class AppStore: ObservableObject {
     }
 
     func prepareConversation(for session: SessionSummary) async -> Bool {
+        if let previous = selectedSessionId { try? kmpConversationStore.clearAssistantChunks(sessionID: previous) }
+        assistantStreamState.selectSession(sessionId: session.id)
         guard dispatchSessionListIntent(.select(session.id)) else { return false }
         waitingForNewSession = false
         preparedConversationActivationKey = session.id
@@ -707,9 +716,9 @@ final class AppStore: ObservableObject {
 
         if let sessionID {
             markRead(sessionID)
-            gateway.subscribe(sessionId: sessionID)
+            subscribeToSession(sessionID)
         } else {
-            gateway.subscribe(sessionId: nil)
+            subscribeToSession(nil)
         }
 
         await Task.yield()
@@ -720,7 +729,7 @@ final class AppStore: ObservableObject {
             dispatchSessionControl(.requestAgentPresets(isConnected: true))
         }
 
-        if let sessionID,
+        if !usesAssistantStream, let sessionID,
            let session = sessions.first(where: { $0.id == sessionID }),
            shouldRefreshHistory(for: session) {
             loadHistory(for: sessionID)
@@ -755,7 +764,11 @@ final class AppStore: ObservableObject {
             lastError = String(localized: "WebSocket 尚未连接，无法加载历史记录")
             return
         }
-        startHistorySync(for: sessionId, older: older)
+        if usesAssistantStream && !older && sessionId == selectedSessionId {
+            subscribeToSession(sessionId)
+        } else {
+            startHistorySync(for: sessionId, older: older)
+        }
     }
 
     private func startHistorySync(for sessionId: String, older: Bool = false) {
@@ -794,13 +807,14 @@ final class AppStore: ObservableObject {
             beforeSeq: beforeSeq,
             maxMessages: historySyncEngine.configuration.pageMessageLimit,
             maxBytes: historySyncEngine.configuration.pageByteBudget,
-            view: "conversation"
+            view: "conversation",
+            historyFormatVersion: assistantStreamState.formatVersion(sessionId: sessionId)?.intValue
         )
     }
     func resumeWorkspace() {
         preparedConversationActivationKey = nil
         activeConversationActivationKey = nil
-        gateway.subscribe(sessionId: nil)
+        subscribeToSession(nil)
         refreshRemoteState()
     }
     func addKnownSession(_ id: String) {
@@ -1084,7 +1098,69 @@ final class AppStore: ObservableObject {
     }
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
+    private func subscribeToSession(_ sessionID: String?) {
+        if let previous = selectedSessionId {
+            try? kmpConversationStore.clearAssistantChunks(sessionID: previous)
+        }
+        assistantStreamState.selectSession(sessionId: sessionID)
+        gateway.subscribe(sessionId: sessionID)
+    }
+
     private func handle(_ frame: GatewayFrame) {
+        if frame.kind == "hello" { usesAssistantStream = frame.capabilities?.contains("assistant-stream-v1") == true }
+        if frame.subscriptionId != nil { drainKMPEventDeliveries() }
+        defer { if frame.subscriptionId != nil { drainKMPEventDeliveries() } }
+        if frame.kind == "history", let id = frame.sessionId,
+           assistantStreamState.hasBaseline(sessionId: id),
+           !historyLoadingOlderSessionIds.contains(id) { return }
+        if let encoded = try? JSONEncoder().encode(frame) {
+            let update = assistantStreamState.acceptJson(json: String(decoding: encoded, as: UTF8.self))
+            do {
+                for id in update.invalidatedSessionIds {
+                    historySyncEngine.finish(sessionID: id)
+                    try kmpHistoryStore.clear(sessionID: id)
+                    try kmpConversationStore.clear(sessionID: id)
+                    try kmpTrajectoryStore.clear(sessionID: id)
+                    taskProjections[id] = nil
+                    goalProjections[id] = nil
+                }
+                if update.clearTransient, let id = update.sessionId {
+                    try kmpConversationStore.clearAssistantChunks(sessionID: id)
+                    if activeTrajectorySessionIDs.contains(id) { scheduleTrajectoryProjection(for: id) }
+                }
+                if let error = update.error { lastError = error }
+                if update.resubscribe, let id = update.sessionId { subscribeToSession(id) }
+                guard update.accepted else { return }
+                if frame.kind == "session-snapshot", let id = frame.sessionId {
+                    lastError = nil
+                    historySyncEngine.finish(sessionID: id)
+                    try kmpHistoryStore.installSnapshot(sessionID: id,
+                        events: (frame.events ?? []).map { $0.normalized(sessionId: id) },
+                        hasMore: frame.hasMore == true, nextBeforeSequence: frame.nextBeforeSeq)
+                    applyHistoryProjections(frame.projections, sessionId: id)
+                    installTaskGoalBaseline(frame.projections, sessionID: id)
+                    drainKMPEventDeliveries()
+                    return
+                }
+                if let attemptID = update.attemptId, let id = update.sessionId, update.chunksJson != "[]" {
+                    try kmpConversationStore.assistantChunks(sessionID: id, attemptID: attemptID,
+                        chunksJSON: update.chunksJson)
+                    if activeTrajectorySessionIDs.contains(id) { scheduleTrajectoryProjection(for: id) }
+                }
+                if ["assistant-stream", "session-stream-reset"].contains(frame.kind) { return }
+            } catch {
+                lastError = error.localizedDescription
+                return
+            }
+        }
+        if frame.kind == "projection-baseline" {
+            taskProjections = [:]
+            goalProjections = [:]
+            for (id, projection) in frame.projections?.objectValue ?? [:] {
+                installTaskGoalBaseline(projection, sessionID: id)
+            }
+            return
+        }
         if frame.kind == "tasks" || frame.kind == "tasks-updated" {
             applyTasksProjection(frame)
             return
@@ -1205,11 +1281,8 @@ final class AppStore: ObservableObject {
             if let selectedSessionId {
                 refreshSessionControls(for: selectedSessionId)
             }
-            // A restored subscription only receives events emitted after the new
-            // connection. Rebase the visible conversation from latest history so
-            // user messages sent by another client while this app was suspended
-            // are merged back ahead of any live assistant tail.
-            if preparedConversationActivationKey != nil,
+            // rc.2 由订阅原子快照恢复历史和生成前缀。
+            if !usesAssistantStream, preparedConversationActivationKey != nil,
                let selectedSessionId {
                 // Receiving hello is itself the transport-connected boundary. Use
                 // the unguarded sync entry so tests and connection recovery cannot
@@ -1783,7 +1856,7 @@ final class AppStore: ObservableObject {
                 ?? String(localized: "session.preview.id", defaultValue: "\(sessionID.prefix(12))…"),
             sessionId: sessionID
         )
-        gateway.subscribe(sessionId: sessionID)
+        subscribeToSession(sessionID)
         gateway.requestSessions()
         refreshSessionControls(for: sessionID)
     }
@@ -1941,6 +2014,7 @@ final class AppStore: ObservableObject {
             pendingTrajectoryEvents[sessionId] = nil
             return
         }
+        defer { publishTrajectory(sessionID: sessionId) }
         let records = pendingTrajectoryEvents.removeValue(forKey: sessionId) ?? []
         guard !records.isEmpty else { return }
         do {
@@ -2011,6 +2085,11 @@ final class AppStore: ObservableObject {
     }
 
     private func handleConnectionFailure(_ detail: String) {
+        assistantStreamState.disconnect()
+        if let id = selectedSessionId {
+            try? kmpConversationStore.clearAssistantChunks(sessionID: id)
+            publishTrajectory(sessionID: id)
+        }
         // Keep the prepared destination, but require a fresh activation after
         // the transport reconnects and emits its next hello frame.
         activeConversationActivationKey = nil
@@ -2097,6 +2176,15 @@ final class AppStore: ObservableObject {
     private func sessionControlKind(from value: String) -> String? {
         ["permission-options", "select-model", "context-usage", "session-stats", "permission", "models"]
             .first { value.localizedCaseInsensitiveContains($0) }
+    }
+
+    private func installTaskGoalBaseline(_ projection: JSONValue?, sessionID: String) {
+        let sequence = projection?["asOfSeq"]?.doubleValue.map(Int.init)
+        let values = projection?["values"]
+        taskProjections[sessionID] = GatewayTasksProjection(asOfSequence: sequence,
+            todos: values?["todos"]?.decode([GatewayTodoItem].self))
+        goalProjections[sessionID] = GatewayGoalProjection(asOfSequence: sequence,
+            goal: values?["goal"]?.decode(GatewayGoalPayload.self))
     }
 
     private func applyTasksProjection(_ frame: GatewayFrame) {
@@ -2287,6 +2375,11 @@ final class AppStore: ObservableObject {
                     rebaselined = true
                     conversationProjectionEpochs[change.sessionID, default: 0] &+= 1
                     try kmpConversationStore.replace(sessionID: change.sessionID, events: change.events)
+                    if assistantStreamState.hasBaseline(sessionId: change.sessionID),
+                       let attemptID = assistantStreamState.activeAttemptId() {
+                        try kmpConversationStore.assistantChunks(sessionID: change.sessionID, attemptID: attemptID,
+                            chunksJSON: assistantStreamState.replayChunksJson())
+                    }
                     if activeTrajectorySessionIDs.contains(change.sessionID) {
                         pendingTrajectoryEvents[change.sessionID] = nil
                         trajectoryProjectionDrivers[change.sessionID]?.stop()

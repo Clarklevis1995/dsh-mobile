@@ -3,6 +3,10 @@ package com.clarklevis.dsh.shared.projection
 import com.clarklevis.dsh.shared.protocol.GatewayEvent
 import com.clarklevis.dsh.shared.protocol.GatewayImageAttachment
 import com.clarklevis.dsh.shared.protocol.SessionEvent
+import com.clarklevis.dsh.shared.sync.AssistantChunk
+import com.clarklevis.dsh.shared.sync.expandAssistantStream
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -24,7 +28,8 @@ data class ConversationProjectionLabels(
     val commandCompacting: String = "Compacting…",
     val commandCompleted: String = "Completed",
     val commandFailed: String = "Failed",
-    val compactedHistory: String = "Compacted {items} history items (~{tokens} tokens)"
+    val compactedHistory: String = "Compacted {items} history items (~{tokens} tokens)",
+    val interrupted: String = "Generation interrupted"
 )
 
 @Serializable
@@ -56,6 +61,7 @@ class ConversationProjector(
     private val finalizedKeys = mutableSetOf<String>()
     private val commandItemIds = mutableMapOf<String, String>()
     private val compactionCommandIds = mutableMapOf<String, String>()
+    private val transientKeys = mutableSetOf<String>()
 
     val items: List<ConversationItem> get() = mutableItems.toList()
     var lastSequence: Int = -1
@@ -67,6 +73,7 @@ class ConversationProjector(
         finalizedKeys.clear()
         commandItemIds.clear()
         compactionCommandIds.clear()
+        transientKeys.clear()
         lastSequence = -1
     }
 
@@ -85,6 +92,39 @@ class ConversationProjector(
             fold(record, operations)
             lastSequence = maxOf(lastSequence, record.seq)
         }
+        return operations
+    }
+
+    /** 独立流只改变展示行，绝不推进 lastSequence。 */
+    fun foldAssistantChunks(attemptId: String, chunks: List<AssistantChunk>): List<ConversationProjectionOperation> {
+        val operations = mutableListOf<ConversationProjectionOperation>()
+        chunks.forEach { entry ->
+            fun field(name: String) = entry.chunk[name]?.jsonPrimitive?.contentOrNull
+            val type = field("type")
+            val kind = when (type) {
+                "text-delta" -> ConversationItemKind.ASSISTANT
+                "reasoning-delta" -> ConversationItemKind.REASONING
+                "tool-call-delta" -> ConversationItemKind.TOOL
+                else -> return@forEach
+            }
+            val key = "live-$attemptId-$type-${field("index") ?: field("id") ?: "0"}"
+            val title = when (kind) {
+                ConversationItemKind.ASSISTANT -> labels.streamingAssistant
+                ConversationItemKind.REASONING -> labels.streamingReasoning
+                else -> field("name") ?: streamIndexes[key]?.let { mutableItems[it].title } ?: labels.assemblingTool
+            }
+            transientKeys += key
+            appendStream(key, key, kind, title,
+                field(if (type == "tool-call-delta") "argumentsDelta" else "text").orEmpty(),
+                normalizeEpoch(entry.time), operations)
+        }
+        return operations
+    }
+
+    fun clearAssistantChunks(): List<ConversationProjectionOperation> {
+        val operations = mutableListOf<ConversationProjectionOperation>()
+        transientKeys.forEach { removeStream(it, operations) }
+        transientKeys.clear()
         return operations
     }
 
@@ -126,6 +166,16 @@ class ConversationProjector(
                 val kind = if (name.equals("run_code", ignoreCase = true)) ConversationItemKind.JSON_TOOL else ConversationItemKind.TOOL
                 appendStream("stream-tool-$toolKey", "tool-$toolKey", kind, name, event.tool?.argumentsDelta.orEmpty(), date, operations)
             }
+            event.type == "assistant/attempt" -> {
+                val content = (event.stream ?: event.raw?.get("stream"))?.toJsonElement()?.let(::expandAssistantStream).orEmpty()
+                val text = content.mapNotNull { chunk ->
+                    if (chunk.chunk["type"]?.jsonPrimitive?.contentOrNull in setOf("text-delta", "reasoning-delta")) {
+                        chunk.chunk["text"]?.jsonPrimitive?.contentOrNull
+                    } else null
+                }.joinToString("")
+                insert(ConversationItem(eventId(record), ConversationItemKind.ASSISTANT, labels.interrupted,
+                    text.ifEmpty { labels.interrupted }, isError = true, epochSeconds = date), operations)
+            }
             event.type == "assistant/message" -> {
                 finalizedKeys += key
                 val finalReasoning = event.reasoning?.takeIf(String::isNotEmpty)?.let { reasoning ->
@@ -134,6 +184,7 @@ class ConversationProjector(
                         ConversationItemKind.REASONING,
                         labels.finalReasoning,
                         reasoning,
+                        isError = event.interrupted == true,
                         epochSeconds = date
                     )
                 }
@@ -141,9 +192,10 @@ class ConversationProjector(
                     ConversationItem(
                         eventId(record),
                         ConversationItemKind.ASSISTANT,
-                        labels.finalAssistant,
+                        if (event.interrupted == true) labels.interrupted else labels.finalAssistant,
                         event.text.orEmpty(),
                         event.images.orEmpty(),
+                        isError = event.interrupted == true,
                         epochSeconds = date
                     )
                 } else {

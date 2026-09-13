@@ -269,10 +269,16 @@ class GatewayRuntime(
         beforeSequence: Int? = null,
         maxMessages: Int = 50,
         maxBytes: Int? = null,
-        view: String? = null
-    ): Boolean = sendRequest(
-        GatewayRequests.history(sessionId, beforeSequence, maxMessages, maxBytes, view)
-    )
+        view: String? = null,
+        historyFormatVersion: Int? = null
+    ): Boolean = serialized {
+        if (beforeSequence != null && historyFormatVersion == null) {
+            return@serialized sendRequestLocked(GatewayRequests.history(sessionId, maxMessages = maxMessages,
+                maxBytes = maxBytes, view = view))
+        }
+        sendRequestLocked(GatewayRequests.history(sessionId, beforeSequence, maxMessages, maxBytes, view,
+            historyFormatVersion))
+    }
 
     suspend fun requestAttachment(sessionId: String, attachmentId: String): Boolean =
         sendRequest(GatewayRequests.attachment(sessionId, attachmentId))
@@ -523,7 +529,9 @@ class GatewayRuntime(
                     return
                 }
                 val delivery = serialized { handleIncomingFrameLocked(event.value, frame) } ?: return
-                val queue = if (transport is GatewaySplitTransport && frame.kind in setOf("event", "history")) {
+                val queue = if (transport is GatewaySplitTransport && frame.kind in setOf(
+                    "hello", "event", "history", "subscribed", "session-snapshot", "assistant-stream", "session-stream-reset"
+                )) {
                     conversationQueue
                 } else eventQueue
                 queue.emit(delivery.event, delivery.bytes)
@@ -598,6 +606,10 @@ class GatewayRuntime(
         val correlation = correlateLocked(frame)
         if (!correlation.accepted) return null
         if (frame.kind == "error") {
+            if (frame.resetRequired == true) {
+                return FrameDelivery(GatewayRuntimeEvent.Frame(transportFrame.text, frame, correlation.sessionId),
+                    transportFrame.byteCount.toLong())
+            }
             rejectLocked(
                 frame.requestType ?: "gateway",
                 ERROR_GATEWAY_REQUEST,
@@ -1182,7 +1194,8 @@ class GatewayRuntime(
         )
         private val UNCORRELATED_KINDS = setOf(
             "event", "hello", "paired", "pong", "question-requested", "question-resolved",
-            "approval-requested", "approval-resolved", "tasks-updated", "goal-updated"
+            "approval-requested", "approval-resolved", "tasks-updated", "goal-updated",
+            "session-snapshot", "assistant-stream", "session-stream-reset", "projection-baseline"
         )
         private val RESPONSE_KINDS_REQUIRING_ACTIVE_REQUEST = setOf(
             "history", "attachment", "sent", "question-response", "approval-response",

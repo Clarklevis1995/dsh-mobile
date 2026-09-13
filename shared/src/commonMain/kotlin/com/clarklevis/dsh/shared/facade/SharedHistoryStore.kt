@@ -204,6 +204,25 @@ class SharedHistoryStore(
         )
     }
 
+    /** 原子安装订阅窗口。显式 cursor 属于独立流状态，不能从精简 events 推导。 */
+    fun installSnapshot(sessionId: String, eventsJson: String, hasMore: Boolean,
+        nextBeforeSequence: Int?): SharedMviDispatchResult = dispatch("snapshot", sessionId) {
+        val records = wireJson.decodeFromString<List<SessionEvent>>(eventsJson)
+        require(records.all { it.sessionId == sessionId })
+        val normalized = records.associateBy(SessionEvent::seq).values.sortedBy(SessionEvent::seq)
+        Transition(
+            state = state.copy(
+                sessions = state.sessions + (sessionId to HistorySessionState(
+                    hasMore = hasMore, nextBeforeSequence = nextBeforeSequence
+                )),
+                pendingSessionId = state.pendingSessionId?.takeUnless { it == sessionId }
+            ),
+            eventsBySession = eventsBySession + (sessionId to normalized),
+            eventPatch = SharedHistoryEventPatch("replace", replacementEvents = normalized),
+            result = HistoryResult.None
+        )
+    }
+
     fun timedOut(sessionId: String): SharedMviDispatchResult =
         reduce("timeout", sessionId, HistoryAction.TimedOut(sessionId))
 
@@ -246,7 +265,7 @@ class SharedHistoryStore(
         val transition = block()
         val sessionId = transition.sessionId ?: fallbackSessionId
         require(!sessionId.isNullOrBlank()) { "sessionId must not be blank" }
-        if (transition.state == state && transition.eventsBySession == eventsBySession && transition.result == HistoryResult.None) {
+        if (transition.state == state && transition.eventsBySession == eventsBySession && transition.result == HistoryResult.None && transition.eventPatch == null) {
             return SharedMviDispatchResult(true, null, null)
         }
         val patch = SharedHistoryPatch(
