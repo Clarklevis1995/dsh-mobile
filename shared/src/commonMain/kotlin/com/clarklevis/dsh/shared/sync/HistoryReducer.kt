@@ -36,6 +36,7 @@ data class HistoryState(
 )
 
 sealed interface HistoryAction {
+    data class AwaitSnapshot(val sessionId: String) : HistoryAction
     data class Start(val sessionId: String, val older: Boolean, val hasLocalEvents: Boolean, val earliestLocalSequence: Int?) : HistoryAction
     data class ProcessingStarted(val sessionId: String, val rawEventCount: Int, val hasMore: Boolean) : HistoryAction
     data class PageCommitted(
@@ -68,6 +69,20 @@ object HistoryReducer {
         action: HistoryAction,
         configuration: HistorySyncConfiguration = HistorySyncConfiguration()
     ): HistoryReduction = when (action) {
+        is HistoryAction.AwaitSnapshot -> update(
+            state,
+            action.sessionId,
+            (state.sessions[action.sessionId] ?: HistorySessionState()).copy(
+                isLoading = true,
+                isLoadingOlder = false,
+                progress = HistoryLoadProgress(0, null),
+                seenCursors = emptySet(),
+                pageCount = 0,
+                batchKind = HistoryBatchKind.LATEST,
+                loadedEventCount = 0,
+                loadedByteCount = 0
+            )
+        )
         is HistoryAction.Start -> start(state, action)
         is HistoryAction.ProcessingStarted -> {
             val session = state.sessions[action.sessionId]

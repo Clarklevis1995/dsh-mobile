@@ -86,7 +86,8 @@ class AndroidSharedStateHolder(
             }
         },
         uiDispatcher = if (graph == null) Dispatchers.Unconfined else Dispatchers.Main.immediate,
-        publish = ::publishProjectionSnapshot
+        publish = ::publishProjectionSnapshot,
+        backgroundDispatcher = graph?.gatewayDispatcher ?: Dispatchers.Default
     )
     private var pendingStreamingSnapshot: SharedMobileSnapshot? = null
     private var streamingSnapshotPublishJob: Job? = null

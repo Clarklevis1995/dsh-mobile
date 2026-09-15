@@ -68,6 +68,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -465,16 +466,6 @@ private fun ConversationPage(
     LaunchedEffect(imeIsVisible, sessionId) {
         if (imeIsVisible) scrollToBottomToken += 1
     }
-    val isColdHistoryLoad = stateHolder.snapshot.selectedHistoryIsLoading &&
-        !stateHolder.snapshot.selectedHistoryIsLoadingOlder &&
-        stateHolder.snapshot.conversation.isEmpty()
-    var coldHistoryLoadStarted by remember(sessionId) { mutableStateOf(isColdHistoryLoad) }
-    LaunchedEffect(sessionId, isColdHistoryLoad, stateHolder.snapshot.selectedHistoryIsLoading) {
-        when {
-            isColdHistoryLoad -> coldHistoryLoadStarted = true
-            !stateHolder.snapshot.selectedHistoryIsLoading -> coldHistoryLoadStarted = false
-        }
-    }
     val approval = stateHolder.snapshot.pendingApprovals.firstOrNull {
         stateHolder.snapshot.selectedSessionId == null || it.sessionId == stateHolder.snapshot.selectedSessionId
     }
@@ -497,8 +488,7 @@ private fun ConversationPage(
         val showInitialHistoryOverlay = shouldShowInitialHistoryOverlay(
             isLoading = stateHolder.snapshot.selectedHistoryIsLoading,
             isLoadingOlder = stateHolder.snapshot.selectedHistoryIsLoadingOlder,
-            hasLocalContent = stateHolder.snapshot.conversation.isNotEmpty(),
-            coldLoadStarted = coldHistoryLoadStarted
+            hasLocalContent = stateHolder.snapshot.conversation.isNotEmpty()
         )
         AnimatedVisibility(
             visible = showInitialHistoryOverlay,
@@ -601,9 +591,8 @@ private fun ConversationPage(
 internal fun shouldShowInitialHistoryOverlay(
     isLoading: Boolean,
     isLoadingOlder: Boolean,
-    hasLocalContent: Boolean,
-    coldLoadStarted: Boolean = false
-): Boolean = isLoading && !isLoadingOlder && (coldLoadStarted || !hasLocalContent)
+    hasLocalContent: Boolean
+): Boolean = isLoading && !isLoadingOlder && !hasLocalContent
 
 internal fun historyLoadingProgressText(loadedEventCount: Int, totalEventCount: Int?): String = when {
     totalEventCount != null -> "正在加载历史记录 · $loadedEventCount/$totalEventCount"
@@ -868,7 +857,30 @@ private fun ConversationTimeline(
                 }
             }
     ) {
-        if (items.isEmpty()) EmptyConversation(Modifier.align(Alignment.Center).padding(bottom = 150.dp))
+        if (items.isEmpty() && !stateHolder.snapshot.selectedHistoryIsLoading) {
+            val error = stateHolder.snapshot.selectedHistoryError
+            if (error == null) {
+                EmptyConversation(Modifier.align(Alignment.Center).padding(bottom = 150.dp))
+            } else {
+                Column(
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 28.dp).padding(bottom = 150.dp)
+                        .testTag("history-load-failure"),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text("历史记录加载失败", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        if (error.contains("refuses this format")) {
+                            "Host 无法读取旧格式会话，请修复或升级 Host 后重试。原始记录未修改。"
+                        } else error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        maxLines = 6
+                    )
+                    TextButton(onClick = stateHolder::reloadSelectedHistory) { Text("重新加载历史") }
+                }
+            }
+        }
         LazyColumn(
             state = listState,
             modifier = Modifier

@@ -14,6 +14,20 @@ import kotlin.test.*
 
 class AssistantStreamStateTest {
     @Test
+    fun openingFailureIsDeliveredWithoutBaselineAndOldSubscriptionRemainsIgnored() {
+        val state = subscribed()
+        val failure = """{"kind":"session-stream-reset","sessionId":"s","subscriptionId":"sub","streamId":"opening","retrying":false,"message":"Host refuses this format v0 Session"}"""
+        assertFalse(state.acceptJson(failure.replace("\"sub\"", "\"old\"")).accepted)
+        val result = state.acceptJson(failure)
+        assertTrue(result.accepted)
+        assertEquals("Host refuses this format v0 Session", result.error)
+        assertFalse(state.hasBaseline("s"))
+        assertTrue(state.acceptJson(snapshot()).accepted)
+        assertFalse(state.acceptJson(failure).accepted)
+        assertTrue(state.hasBaseline("s"))
+    }
+
+    @Test
     fun prefixAndDeltasUseAttemptIdentityAndNeverAdvancePersistentCursor() {
         val state = subscribed()
         val baseline = state.acceptJson(snapshot())

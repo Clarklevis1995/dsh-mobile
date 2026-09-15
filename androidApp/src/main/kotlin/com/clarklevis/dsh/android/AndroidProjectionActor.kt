@@ -1,10 +1,17 @@
 package com.clarklevis.dsh.android
 
-import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
 import com.clarklevis.dsh.shared.facade.SharedApprovalEffect
-import com.clarklevis.dsh.shared.protocol.GatewayFrame
+import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
+import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -14,9 +21,14 @@ internal class AndroidProjectionActor(
     private val projection: AndroidGatewayProjection,
     private val uiDispatcher: CoroutineDispatcher,
     private val publish: (snapshot: SharedMobileSnapshot, coalesceWithDisplayFrame: Boolean) -> Unit,
-    private val nowNanos: () -> Long = System::nanoTime
+    private val nowNanos: () -> Long = System::nanoTime,
+    backgroundDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val snapshotTimeoutMillis: Long = 20_000
 ) {
     private val mutationLock = Mutex()
+    private val workScope = CoroutineScope(SupervisorJob() + backgroundDispatcher)
+    private var snapshotTimeoutJob: Job? = null
+    private var activeSnapshotWait: Pair<String, Long>? = null
     private var pendingStreamingFrame: PendingStreamingFrame? = null
     private var lastStreamingFlushNanos = 0L
 
@@ -150,6 +162,7 @@ internal class AndroidProjectionActor(
     }
 
     fun close() {
+        workScope.cancel()
         pendingStreamingFrame = null
         projection.close()
     }
@@ -183,6 +196,27 @@ internal class AndroidProjectionActor(
         withContext(uiDispatcher) {
             publish(next, coalesceWithDisplayFrame)
             afterPublish()
+        }
+        reconcileSnapshotTimeout()
+    }
+
+    private fun reconcileSnapshotTimeout() {
+        val wait = projection.snapshotWait
+        if (wait == activeSnapshotWait) return
+        snapshotTimeoutJob?.cancel()
+        activeSnapshotWait = wait
+        snapshotTimeoutJob = wait?.let { expected ->
+            workScope.launch {
+                delay(snapshotTimeoutMillis)
+                mutationLock.withLock {
+                    if (projection.snapshotWait == expected) {
+                        snapshotTimeoutJob = null
+                        activeSnapshotWait = null
+                        projection.historyTimedOut(expected.first)
+                        publishMutationLocked(projection.snapshot(), false)
+                    }
+                }
+            }
         }
     }
 

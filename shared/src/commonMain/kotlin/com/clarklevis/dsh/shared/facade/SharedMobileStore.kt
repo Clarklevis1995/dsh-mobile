@@ -67,6 +67,7 @@ data class SharedMobileSnapshot(
     val selectedHistoryHasMore: Boolean = false,
     val selectedHistoryEarliestSequence: Int? = null,
     val selectedHistoryIsLoading: Boolean = false,
+    val selectedHistoryError: String? = null,
     val selectedHistoryIsLoadingOlder: Boolean = false,
     val selectedHistoryLoadedEventCount: Int = 0,
     val selectedHistoryTotalEventCount: Int? = null,

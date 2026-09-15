@@ -1014,6 +1014,7 @@ extension SharedHistoryStore: KMPHistoryEventBridging {
 }
 
 private enum KMPHistoryIntent {
+    case awaitSnapshot(sessionID: String)
     case start(sessionID: String)
     case processing(sessionID: String)
     case page(sessionID: String)
@@ -1024,7 +1025,7 @@ private enum KMPHistoryIntent {
 
     var sessionID: String {
         switch self {
-        case .start(let id), .processing(let id), .page(let id), .live(let id, _),
+        case .awaitSnapshot(let id), .start(let id), .processing(let id), .page(let id), .live(let id, _),
              .timeout(let id), .cancel(let id), .clear(let id): id
         }
     }
@@ -1138,6 +1139,15 @@ final class KMPHistoryStoreAdapter {
 
     func cancel(sessionID: String) throws {
         try dispatch(.cancel(sessionID: sessionID)) { store.cancelled(sessionId: sessionID) }
+    }
+
+    func awaitSnapshot(sessionID: String) throws {
+        guard let shared = store as? SharedHistoryStore else {
+            throw KMPHistoryStoreError.invalidEvent("订阅快照需要共享 History Store")
+        }
+        try dispatch(.awaitSnapshot(sessionID: sessionID)) {
+            shared.awaitSnapshot(sessionId: sessionID)
+        }
     }
 
     func installSnapshot(sessionID: String, events: [SessionEvent], hasMore: Bool, nextBeforeSequence: Int?) throws {

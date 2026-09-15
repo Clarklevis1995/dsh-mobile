@@ -97,6 +97,10 @@ class SharedHistoryStore(
         HistoryAction.Start(sessionId, older, hasLocalEvents, earliestLocalSequence)
     )
 
+    /** 订阅快照承担首屏历史请求；仅发布加载状态，不额外发起普通分页请求。 */
+    fun awaitSnapshot(sessionId: String): SharedMviDispatchResult =
+        reduce("await-snapshot", sessionId, HistoryAction.AwaitSnapshot(sessionId))
+
     fun processingStarted(
         sessionId: String,
         rawEventCount: Int,

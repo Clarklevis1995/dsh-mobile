@@ -21,6 +21,43 @@ import kotlin.test.assertTrue
 
 class SharedHistoryStoreTest {
     @Test
+    fun snapshotWaitPublishesLoadingWithoutRequestingHistoryAndKeepsCachedPage() {
+        val store = SharedHistoryStore()
+        val received = mutableListOf<SharedMviEvent>()
+        store.subscribe(SharedMviEventObserver(received::add))
+        store.installSnapshot("s1", wireJson.encodeToString(listOf(event(10, "cached"))), true, 10)
+        assertTrue(store.awaitSnapshot("s1").accepted)
+        val waiting = patch(received.last())
+        assertTrue(waiting.session!!.isLoading)
+        assertFalse(waiting.session.isLoadingOlder)
+        assertEquals(10, waiting.session.nextBeforeSequence)
+        assertNull(waiting.eventPatch)
+        assertTrue(effects(received.last()).isEmpty())
+
+        store.installSnapshot("s1", "[]", false, null)
+        assertFalse(patch(received.last()).session!!.isLoading)
+        assertEquals(emptyList(), patch(received.last()).eventPatch!!.replacementEvents)
+        assertTrue(effects(received.last()).isEmpty())
+    }
+
+    @Test
+    fun snapshotWaitCanTimeoutOrCancelWithoutLosingPagination() {
+        val store = SharedHistoryStore()
+        val received = mutableListOf<SharedMviEvent>()
+        store.subscribe(SharedMviEventObserver(received::add))
+        store.installSnapshot("s1", wireJson.encodeToString(listOf(event(10, "cached"))), true, 10)
+        store.awaitSnapshot("s1")
+        store.timedOut("s1")
+        assertFalse(patch(received.last()).session!!.isLoading)
+        assertTrue(patch(received.last()).session!!.hasMore)
+        assertNull(patch(received.last()).eventPatch)
+        store.awaitSnapshot("s1")
+        store.cancelled("s1")
+        assertFalse(patch(received.last()).session!!.isLoading)
+        assertEquals(10, patch(received.last()).session!!.nextBeforeSequence)
+    }
+
+    @Test
     fun paginationStateAndNextCursorEffectShareOneTransaction() {
         val store = SharedHistoryStore()
         val received = mutableListOf<SharedMviEvent>()

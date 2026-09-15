@@ -1,86 +1,6 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
-    "command.compacted-history" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compacted {items} history items (~{tokens} tokens)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已压缩 {items} 条历史记录（约 {tokens} tokens）"
-          }
-        }
-      }
-    },
-    "command.compacting" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compacting…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在压缩…"
-          }
-        }
-      }
-    },
-    "command.completed" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Completed"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已完成"
-          }
-        }
-      }
-    },
-    "command.failed" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Failed"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "执行失败"
-          }
-        }
-      }
-    },
-    "command.running" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Running…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在执行…"
-          }
-        }
-      }
-    },
     " 等工具" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -93,6 +13,12 @@
       }
     },
     "·" : {
+
+    },
+    "· %@" : {
+
+    },
+    "/%@" : {
 
     },
     "#%@" : {
@@ -112,6 +38,9 @@
 
     },
     "%@ Turns" : {
+
+    },
+    "%@ 行 · UTF-8" : {
 
     },
     "%@%%" : {
@@ -484,6 +413,91 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "；服务端原因：%@"
+          }
+        }
+      }
+    },
+    "command.compacted-history" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compacted {items} history items (~{tokens} tokens)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已压缩 {items} 条历史记录（约 {tokens} tokens）"
+          }
+        }
+      }
+    },
+    "command.compacting" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compacting…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在压缩…"
+          }
+        }
+      }
+    },
+    "command.completed" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成"
+          }
+        }
+      }
+    },
+    "command.failed" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "执行失败"
+          }
+        }
+      }
+    },
+    "command.running" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Running…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在执行…"
           }
         }
       }
@@ -2436,6 +2450,9 @@
         }
       }
     },
+    "主机类型" : {
+
+    },
     "二维码中的 publicUrl 不是有效的 WebSocket 地址。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2479,6 +2496,15 @@
           }
         }
       }
+    },
+    "从 App 移除选中的 %@ 台主机及连接凭证；网关上的会话和工作区不会被删除。再次连接需重新配对。" : {
+
+    },
+    "任务" : {
+
+    },
+    "会话将被归档并从列表隐藏，历史记录会保留。" : {
+
     },
     "会话状态" : {
       "extractionState" : "stale",
@@ -2586,6 +2612,9 @@
           }
         }
       }
+    },
+    "删除后，智能体不再持有这个持续目标。" : {
+
     },
     "加载更早记录" : {
       "extractionState" : "stale",
@@ -2782,7 +2811,6 @@
       }
     },
     "失败" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3142,6 +3170,9 @@
         }
       }
     },
+    "我的主机" : {
+
+    },
     "或输入自定义答案" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3455,6 +3486,9 @@
         }
       }
     },
+    "暂无已连接的主机" : {
+
+    },
     "服务端已接收，正在恢复 Agent…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3671,6 +3705,9 @@
           }
         }
       }
+    },
+    "正在下载 · %@%%" : {
+
     },
     "正在准备会话" : {
       "extractionState" : "stale",
@@ -3988,6 +4025,9 @@
         }
       }
     },
+    "留空使用网关提供的名称：%@" : {
+
+    },
     "目录已加载" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -4063,6 +4103,9 @@
           }
         }
       }
+    },
+    "等待结果" : {
+
     },
     "答案必须按原顺序覆盖整组问题。" : {
       "extractionState" : "stale",
@@ -4182,6 +4225,9 @@
           }
         }
       }
+    },
+    "网关暂无可用预设，可下拉刷新。" : {
+
     },
     "耗时" : {
       "extractionState" : "stale",
@@ -4378,6 +4424,7 @@
       }
     },
     "请确认 Mobile Gateway 已升级到 v0.1.11 并保持连接。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {

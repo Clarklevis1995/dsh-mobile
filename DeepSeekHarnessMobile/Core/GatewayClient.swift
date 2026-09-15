@@ -647,7 +647,7 @@ final class GatewayClient: ObservableObject {
                     deliverApplicationFrame(frame, data: data)
                 } catch {
                     // One future or malformed frame must not tear down an otherwise healthy socket.
-                    onFrame?(GatewayFrame(kind: "error", code: "decode-failed", message: error.localizedDescription))
+                    onFrame?(GatewayFrame(kind: "error", code: "decode-failed", message: GatewayWireDecoder.failureDescription(error)))
                 }
             }
         } catch is CancellationError {

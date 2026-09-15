@@ -102,40 +102,35 @@ class ConversationScrollStateTest {
             shouldShowInitialHistoryOverlay(
                 isLoading = true,
                 isLoadingOlder = false,
-                hasLocalContent = false,
-                coldLoadStarted = false
+                hasLocalContent = false
             )
         )
         assertFalse(
             shouldShowInitialHistoryOverlay(
                 isLoading = true,
                 isLoadingOlder = false,
-                hasLocalContent = true,
-                coldLoadStarted = false
+                hasLocalContent = true
             )
         )
         assertFalse(
             shouldShowInitialHistoryOverlay(
                 isLoading = true,
                 isLoadingOlder = true,
-                hasLocalContent = true,
-                coldLoadStarted = true
+                hasLocalContent = true
             )
         )
         assertFalse(
             shouldShowInitialHistoryOverlay(
                 isLoading = false,
                 isLoadingOlder = false,
-                hasLocalContent = false,
-                coldLoadStarted = true
+                hasLocalContent = false
             )
         )
-        assertTrue(
+        assertFalse(
             shouldShowInitialHistoryOverlay(
                 isLoading = true,
                 isLoadingOlder = false,
-                hasLocalContent = true,
-                coldLoadStarted = true
+                hasLocalContent = true
             )
         )
     }

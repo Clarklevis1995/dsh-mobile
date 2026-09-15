@@ -1440,6 +1440,26 @@ final class ConversationProcessProjectionTests: XCTestCase {
 }
 
 final class GatewayProtocolTests: XCTestCase {
+    func testWireDecoderAcceptsWellFormedPreviewAndPreservesUnicodeAndJSONTypes() throws {
+        let data = Data(#"{"kind":"sessions","items":[{"projections":{"values":{"turnOutline":[{"response":"鼓掌 �…"}]}},"text":"👏中文","literal":"\\ud83d","values":[1,1.5,true,false,null]}]}"#.utf8)
+        let frame = try GatewayWireDecoder.decode(data)
+        let item = try XCTUnwrap(frame.items?.first)
+        XCTAssertEqual(item["projections"]?["values"]?["turnOutline"]?.arrayValue?.first?["response"]?.stringValue, "鼓掌 �…")
+        XCTAssertEqual(item["text"]?.stringValue, "👏中文")
+        XCTAssertEqual(item["literal"]?.stringValue, #"\ud83d"#)
+        XCTAssertEqual(item["values"]?.arrayValue, [.number(1), .number(1.5), .bool(true), .bool(false), .null])
+        XCTAssertEqual(try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(item)), item)
+    }
+
+    func testWireDecoderReportsNestedFailureWithoutEchoingFrameContents() {
+        let data = Data(#"{"kind":"models","current":{"provider":123},"token":"private-test-token"}"#.utf8)
+        XCTAssertThrowsError(try GatewayWireDecoder.decode(data)) { error in
+            let description = GatewayWireDecoder.failureDescription(error)
+            XCTAssertTrue(description.contains("current.provider"))
+            XCTAssertFalse(description.contains("private-test-token"))
+        }
+    }
+
     func testConversationRequestsAreSeparatedFromFilesAndSessionControls() {
         for type in ["message", "history", "subscribe", "unsubscribe"] {
             XCTAssertTrue(GatewayClient.usesConversationChannel(type))
@@ -1742,6 +1762,186 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(adapter.lastSequenceBySessionID["s"], 44)
         XCTAssertEqual(adapter.items(for: "s").map(\.text), ["Hi"])
         XCTAssertNil(adapter.runtimeError)
+    }
+
+    @MainActor
+    func testRc2ColdHistoryWaitsForMatchingSnapshotAndPreservesPagination() async throws {
+        let (store, _) = try await makeRc2HistoryLoadingStore()
+        XCTAssertTrue(store.historyLoadingSessionIds.contains("mask-session"))
+        XCTAssertEqual(store.historyLoadProgress["mask-session"]?.loaded, 0)
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
+        XCTAssertTrue(store.historyLoadingSessionIds.contains("mask-session"))
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"old","streamId":"old","historyFormatVersion":3,"cursor":10,"events":[],"hasMore":false}"#)
+        XCTAssertTrue(store.historyLoadingSessionIds.contains("mask-session"), "迟到快照不能撤掉当前遮罩")
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"历史回复"}]}}}],"hasMore":true,"nextBeforeSeq":10}"#)
+        XCTAssertFalse(store.historyLoadingSessionIds.contains("mask-session"))
+        XCTAssertEqual(store.historyHasMore["mask-session"], true)
+        await store.awaitConversationProjectionForTesting(sessionID: "mask-session", expectedText: "历史回复")
+        XCTAssertEqual(store.renderedConversationItems["mask-session"]?.last?.text, "历史回复")
+        XCTAssertNil(store.lastError)
+    }
+
+    @MainActor
+    func testRc2EmptySnapshotEndsLoadingAndCachedRefreshKeepsRows() async throws {
+        let (store, session) = try await makeRc2HistoryLoadingStore()
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"缓存回复"}]}}}],"hasMore":false}"#)
+        await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "缓存回复")
+        let prepared = await store.prepareConversation(for: session)
+        XCTAssertTrue(prepared)
+        XCTAssertTrue(store.historyLoadingSessionIds.contains(session.id))
+        XCTAssertEqual(store.renderedConversationItems[session.id]?.last?.text, "缓存回复", "刷新期间不能清空可读内容")
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"new","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"new","streamId":"new","historyFormatVersion":3,"cursor":0,"events":[],"hasMore":false}"#)
+        XCTAssertFalse(store.historyLoadingSessionIds.contains(session.id))
+        for _ in 0..<100 where !store.renderedConversationItems[session.id, default: []].isEmpty {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertTrue(store.renderedConversationItems[session.id, default: []].isEmpty)
+    }
+
+    @MainActor
+    func testRc2SnapshotWaitCleansUpOnSwitchExitAndDisconnect() async throws {
+        let (store, session) = try await makeRc2HistoryLoadingStore()
+        let next = SessionSummary(id: "next", title: "Next", lastActivity: Date(), isRunning: false, hasUnread: false)
+        let prepared = await store.prepareConversation(for: next)
+        XCTAssertTrue(prepared)
+        XCTAssertFalse(store.historyLoadingSessionIds.contains(session.id))
+        XCTAssertTrue(store.historyLoadingSessionIds.contains(next.id))
+        store.resumeWorkspace()
+        await flushDeferredKMPEvents(in: store)
+        XCTAssertTrue(store.historyLoadingSessionIds.isEmpty)
+        _ = await store.prepareConversation(for: session)
+        store.gateway.onConnectionFailure?("测试断连")
+        await flushDeferredKMPEvents(in: store)
+        XCTAssertTrue(store.historyLoadingSessionIds.isEmpty)
+    }
+
+    @MainActor
+    func testRc2SnapshotWaitTimesOutInsteadOfLeavingMaskForever() async throws {
+        let (store, session) = try await makeRc2HistoryLoadingStore(timeout: .milliseconds(50))
+        for _ in 0..<100 where store.historyLoadingSessionIds.contains(session.id) {
+            try await Task.sleep(for: .milliseconds(10))
+            await flushDeferredKMPEvents(in: store)
+        }
+        XCTAssertFalse(store.historyLoadingSessionIds.contains(session.id))
+        XCTAssertNotNil(store.lastError)
+    }
+
+    @MainActor
+    func testSnapshotDoesNotExposeEmptyStateBeforeConversationProjection() async throws {
+        let (store, _) = try await makeRc2HistoryLoadingStore()
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"已到达的历史"}]}}}],"hasMore":false}"#)
+        XCTAssertTrue(store.isPreparingConversation("mask-session") || !store.renderedConversationItems["mask-session", default: []].isEmpty,
+            "网络结束到列表发布之间必须保持加载态，不能出现空会话")
+        await store.awaitConversationProjectionForTesting(sessionID: "mask-session", expectedText: "已到达的历史")
+        XCTAssertFalse(store.isPreparingConversation("mask-session"))
+        XCTAssertEqual(store.renderedConversationItems["mask-session"]?.last?.text, "已到达的历史")
+    }
+
+    @MainActor
+    func testTrulyEmptySnapshotCompletesPresentation() async throws {
+        let (store, _) = try await makeRc2HistoryLoadingStore()
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":0,"events":[],"hasMore":false}"#)
+        for _ in 0..<200 where store.isPreparingConversation("mask-session") {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertFalse(store.isPreparingConversation("mask-session"))
+        XCTAssertTrue(store.renderedConversationItems["mask-session", default: []].isEmpty)
+    }
+
+    func testStreamValidationSkipsHistoryBodyButPreservesAtomicBaseline() throws {
+        var frame = try GatewayWireDecoder.decode(Data(#"{"kind":"session-snapshot","sessionId":"s","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":65,"events":[{"type":"assistant/message","seq":60,"time":100,"data":{"message":{"content":[{"type":"text","text":"正文"}]}}}],"hasMore":true,"nextBeforeSeq":60,"assistantStream":{"revision":2},"projections":{"asOfSeq":65,"values":{}}}"#.utf8))
+        let envelope = frame.assistantStreamValidationFrame
+        XCTAssertNil(envelope.events)
+        XCTAssertNil(envelope.projections)
+        XCTAssertEqual(envelope.cursor, 65)
+        XCTAssertEqual(envelope.subscriptionId, "sub")
+        XCTAssertEqual(envelope.streamId, "stream")
+        XCTAssertEqual(envelope.historyFormatVersion, 3)
+        XCTAssertEqual(try JSONEncoder().encode(envelope.assistantStream), try JSONEncoder().encode(frame.assistantStream))
+        XCTAssertEqual(frame.events?.count, 1, "校验优化不能修改原始快照")
+        frame.kind = "history"
+        XCTAssertNil(frame.assistantStreamValidationFrame.events)
+        frame.kind = "event"
+        XCTAssertEqual(frame.assistantStreamValidationFrame.events?.count, 1, "其他帧不能被精简")
+    }
+
+    @MainActor
+    func testLargeSnapshotProcessingBenchmarkPreservesEveryMessage() async throws {
+        let (store, session) = try await makeRc2HistoryLoadingStore()
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
+        let body = String(repeating: "历史正文测试。", count: 3_000)
+        let records: [[String: Any]] = (1...60).map { index in
+            ["type": "assistant/message", "seq": index, "time": 100 + index,
+             "turn": index, "step": 1,
+             "data": ["message": ["content": [["type": "text", "text": "\(index):\(body)"]]]]]
+        }
+        let data = try JSONSerialization.data(withJSONObject: [
+            "kind": "session-snapshot", "sessionId": session.id, "subscriptionId": "sub",
+            "streamId": "stream", "historyFormatVersion": 3, "cursor": 65,
+            "events": records, "hasMore": true, "nextBeforeSeq": 1
+        ])
+        let started = CFAbsoluteTimeGetCurrent()
+        try await deliverHistoryLoadingFrame(store, String(decoding: data, as: UTF8.self))
+        await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "60:\(body)")
+        let elapsed = CFAbsoluteTimeGetCurrent() - started
+        print("HISTORY_BENCH bytes=\(data.count) messages=60 processingSeconds=\(elapsed)")
+        let items = (store.renderedConversationItems[session.id] ?? [])
+        XCTAssertEqual(items.filter { $0.kind == .assistant }.count, 60)
+        XCTAssertEqual(items.last?.text, "60:\(body)")
+        XCTAssertEqual(store.historyHasMore[session.id], true)
+        XCTAssertNil(store.lastError)
+    }
+
+    @MainActor
+    func testFailedOpeningKeepsHistoryFailureInsteadOfEmptyWelcome() async throws {
+        let (store, session) = try await makeRc2HistoryLoadingStore()
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"session-stream-reset","sessionId":"mask-session","subscriptionId":"sub","streamId":"opening","retrying":false,"message":"Host refuses this format v0 Session"}"#)
+        XCTAssertFalse(store.isPreparingConversation(session.id))
+        XCTAssertEqual(store.historyLoadErrors[session.id], "Host refuses this format v0 Session")
+        _ = await store.prepareConversation(for: session)
+        XCTAssertNil(store.historyLoadErrors[session.id])
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub2","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub2","streamId":"ok","historyFormatVersion":3,"cursor":0,"events":[],"hasMore":false}"#)
+        XCTAssertNil(store.historyLoadErrors[session.id])
+    }
+
+    @MainActor
+    private func makeRc2HistoryLoadingStore(timeout: Duration = .seconds(20)) async throws -> (AppStore, SessionSummary) {
+        let session = SessionSummary(id: "mask-session", title: "History", lastActivity: Date(),
+            isRunning: false, hasUnread: false)
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://127.0.0.1:3080/ws/mobile",
+            selectedWorkspaceID: nil, sessions: [session]), historyRequestTimeout: timeout)
+        _ = await store.prepareConversation(for: session)
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"hello","historyFormatVersion":3,"capabilities":["assistant-stream-v1"]}"#)
+        return (store, session)
+    }
+
+    @MainActor
+    private func deliverHistoryLoadingFrame(_ store: AppStore, _ json: String) async throws {
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(json.utf8)))
+        await flushDeferredKMPEvents(in: store)
     }
 
     @MainActor

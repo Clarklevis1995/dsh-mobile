@@ -119,8 +119,10 @@ class AssistantStreamState {
         }
         return when {
             frame.kind == "session-snapshot" -> acceptSnapshot(frame)
+            // Opening can fail before any snapshot establishes streamId. Keep subscription
+            // scoping, while still rejecting an obsolete stream reset after a new baseline.
+            frame.kind == "session-stream-reset" && (streamId == null || frame.streamId == streamId) -> acceptReset(frame)
             streamId == null || frame.streamId != streamId -> AssistantStreamUpdate()
-            frame.kind == "session-stream-reset" -> acceptReset(frame)
             frame.kind == "event" -> acceptEvent(frame)
             else -> acceptStream(frame)
         }

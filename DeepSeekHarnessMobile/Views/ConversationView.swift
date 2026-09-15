@@ -228,6 +228,7 @@ struct ConversationView: View {
     @State private var isPreparingHistoryPresentation = false
     @State private var historyPresentationSessionID: String?
     @State private var viewportHasConversationContent = false
+    @State private var viewportContentSessionID: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     // 输入主体是 UIKit UITextView，不需要 SwiftUI FocusState 参与焦点仲裁。
     // 普通 State 作为单向的显式聚焦/失焦请求，UITextView 自己持有第一响应者。
@@ -309,6 +310,7 @@ struct ConversationView: View {
                 onContentAvailabilityChanged: { sessionID, hasContent in
                     Task { @MainActor in
                         guard sessionID == store.selectedSessionId else { return }
+                        viewportContentSessionID = sessionID
                         viewportHasConversationContent = hasContent
                     }
                 },
@@ -335,7 +337,12 @@ struct ConversationView: View {
             .padding(.top, 8)
             .opacity(shouldShowHistoryPresentationMask ? 0 : 1)
 
-            if shouldShowHistoryPresentationMask {
+            if !hasVisibleConversationContent, let error = selectedHistoryError {
+                historyFailureState(error)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.bottom, composerHeight)
+                    .zIndex(1)
+            } else if shouldShowHistoryPresentationMask {
                 historyPresentationMask
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.bottom, composerHeight)
@@ -536,9 +543,31 @@ struct ConversationView: View {
         .padding(.horizontal, 28)
     }
 
+    private var selectedHistoryError: String? {
+        store.selectedSessionId.flatMap { store.historyLoadErrors[$0] }
+    }
+
+    private func historyFailureState(_ error: String) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundStyle(.orange)
+            Text("历史记录加载失败").font(.title3.weight(.semibold))
+            Text(error.contains("refuses this format")
+                 ? "Host 无法读取旧格式会话，请修复或升级 Host 后重试。原始记录未修改。"
+                 : error)
+                .font(.subheadline).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center).lineLimit(6)
+            Button("重新加载历史") {
+                if let id = store.selectedSessionId { store.loadHistory(for: id) }
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(.horizontal, 28)
+        .accessibilityIdentifier("history-load-failure")
+    }
+
     private var isLoadingSelectedHistory: Bool {
         guard let id = store.selectedSessionId else { return false }
-        return store.historyLoadingSessionIds.contains(id)
+        return store.isPreparingConversation(id)
     }
 
     private var isLoadingOlderSelectedHistory: Bool {
@@ -558,11 +587,12 @@ struct ConversationView: View {
             // Session 身份刚切换时，不得沿用上一个 viewport 的可用性。
             return !conversationItems.isEmpty
         }
-        return viewportHasConversationContent || !conversationItems.isEmpty
+        return (viewportContentSessionID == store.selectedSessionId && viewportHasConversationContent) || !conversationItems.isEmpty
     }
 
     private var shouldShowHistoryPresentationMask: Bool {
-        isPreparingHistoryPresentation && !hasVisibleConversationContent
+        isPreparingHistoryPresentation
+            && (viewportContentSessionID != store.selectedSessionId || !viewportHasConversationContent)
     }
 
     private var historyLoadingState: some View {

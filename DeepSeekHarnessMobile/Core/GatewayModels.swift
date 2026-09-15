@@ -12,13 +12,31 @@ enum JSONValue: Codable, Hashable, Sendable {
     case string(String), number(Double), bool(Bool), object([String: JSONValue]), array([JSONValue]), null
 
     init(from decoder: Decoder) throws {
+        // 先确定容器形状，避免 try? 吞掉对象内部的真实解码错误。
+        if let object = try? decoder.container(keyedBy: JSONCodingKey.self) {
+            var result: [String: JSONValue] = [:]
+            for key in object.allKeys { result[key.stringValue] = try object.decode(JSONValue.self, forKey: key) }
+            self = .object(result)
+            return
+        }
+        if var array = try? decoder.unkeyedContainer() {
+            var result: [JSONValue] = []
+            while !array.isAtEnd { result.append(try array.decode(JSONValue.self)) }
+            self = .array(result)
+            return
+        }
         let value = try decoder.singleValueContainer()
         if value.decodeNil() { self = .null }
         else if let decoded = try? value.decode(Bool.self) { self = .bool(decoded) }
         else if let decoded = try? value.decode(Double.self) { self = .number(decoded) }
-        else if let decoded = try? value.decode(String.self) { self = .string(decoded) }
-        else if let decoded = try? value.decode([String: JSONValue].self) { self = .object(decoded) }
-        else { self = .array(try value.decode([JSONValue].self)) }
+        else { self = .string(try value.decode(String.self)) }
+    }
+
+    private struct JSONCodingKey: CodingKey {
+        let stringValue: String
+        var intValue: Int? { nil }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { return nil }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -442,6 +460,19 @@ struct GatewayPairingPayload: Codable, Hashable, Sendable {
 /// even though query/control responses include `kind`. Normalize that wire quirk
 /// here so one malformed discriminator cannot discard an otherwise valid event.
 enum GatewayWireDecoder {
+    static func failureDescription(_ error: Error) -> String {
+        let context: DecodingError.Context
+        switch error {
+        case DecodingError.dataCorrupted(let value): context = value
+        case DecodingError.typeMismatch(_, let value): context = value
+        case DecodingError.valueNotFound(_, let value): context = value
+        case DecodingError.keyNotFound(_, let value): context = value
+        default: return error.localizedDescription
+        }
+        let path = context.codingPath.map { $0.stringValue }.joined(separator: ".")
+        return "\(path.isEmpty ? "$" : path): \(context.debugDescription)"
+    }
+
     static func decode(_ data: Data) throws -> GatewayFrame {
         // 带 kind 的控制响应和大 history 页直接解码，避免先完整解析、
         // 再序列化整个 JSON。只为旧版无 kind 的实时事件走兼容路径。
@@ -989,4 +1020,16 @@ extension JSONEncoder {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return encoder
     }()
+}
+
+// 独立流校验只读取快照/历史的身份、版本、水位和活动 attempt。
+// 正文与控制投影由各自 Store 处理，避免把整页历史再次送入 Kotlin JSON 解码器。
+extension GatewayFrame {
+    var assistantStreamValidationFrame: GatewayFrame {
+        guard kind == "session-snapshot" || kind == "history" else { return self }
+        var envelope = self
+        envelope.events = nil
+        envelope.projections = nil
+        return envelope
+    }
 }

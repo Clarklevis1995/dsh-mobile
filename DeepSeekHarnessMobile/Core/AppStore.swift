@@ -111,6 +111,8 @@ final class AppStore: ObservableObject {
     /// cannot invalidate the header, pager, composer, or trajectory page.
     private(set) var renderedConversationItems: [String: [ConversationItem]] = [:]
     @Published private(set) var conversationContentSessionIds: Set<String> = []
+    @Published private(set) var conversationPreparingSessionIDs: Set<String> = []
+    @Published private(set) var historyLoadErrors: [String: String] = [:]
     @Published private(set) var historyHasMore: [String: Bool] = [:]
     @Published private(set) var historyLoadingSessionIds: Set<String> = []
     @Published private(set) var historyLoadingOlderSessionIds: Set<String> = []
@@ -210,9 +212,8 @@ final class AppStore: ObservableObject {
     private let historySyncEngine = HistorySyncEngine()
     private var assistantStreamState = AssistantStreamState()
     private var usesAssistantStream = false
-    /// The remote session activity timestamp covered by a completed history load.
-    /// This intentionally remains an in-memory cache: events are not persisted
-    /// across launches, so a fresh process must fetch history again.
+    private var pendingSnapshotSessionID: String?
+    private let historyRequestTimeout: Duration
     private var conversationProjectionDrivers: [String: ConversationProjectionDriver] = [:]
     private var conversationTimelines: [String: ConversationTimeline] = [:]
     private var trajectoryTimelines: [String: TrajectoryTimeline] = [:]
@@ -266,8 +267,10 @@ final class AppStore: ObservableObject {
         questionEffectExecutor: (any GatewayQuestionEffectExecuting)? = nil,
         approvalEffectExecutor: (any GatewayApprovalEffectExecuting)? = nil,
         sessionControlEffectExecutor: (any GatewaySessionControlEffectExecuting)? = nil,
-        backgroundExecutionController: AgentBackgroundExecutionController? = nil
+        backgroundExecutionController: AgentBackgroundExecutionController? = nil,
+        historyRequestTimeout: Duration = .seconds(20)
     ) {
+        self.historyRequestTimeout = historyRequestTimeout
         self.gatewayLocalID = gatewayLocalID
         imageAttachmentCache = ImageAttachmentCache(directoryURL: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("GatewayAttachments/\(gatewayLocalID)", isDirectory: true))
         slashCommands = kmpSlashCommandStore.snapshot()
@@ -671,6 +674,7 @@ final class AppStore: ObservableObject {
             }
         }
         guard !Task.isCancelled else { return false }
+        cancelSnapshotWait()
         if let sessionID { addKnownSession(sessionID) }
         guard dispatchSessionListIntent(.select(sessionID)) else { return false }
         waitingForNewSession = false
@@ -681,12 +685,14 @@ final class AppStore: ObservableObject {
     }
 
     func prepareConversation(for session: SessionSummary) async -> Bool {
+        cancelSnapshotWait()
         if let previous = selectedSessionId { try? kmpConversationStore.clearAssistantChunks(sessionID: previous) }
         assistantStreamState.selectSession(sessionId: session.id)
         guard dispatchSessionListIntent(.select(session.id)) else { return false }
         waitingForNewSession = false
         preparedConversationActivationKey = session.id
         activeConversationActivationKey = nil
+        if usesAssistantStream { beginSnapshotWait(for: session.id) }
         await commitPendingKMPEventsAfterViewUpdate()
         return selectedSessionId == session.id
     }
@@ -772,6 +778,7 @@ final class AppStore: ObservableObject {
     }
 
     private func startHistorySync(for sessionId: String, older: Bool = false) {
+        historyLoadErrors[sessionId] = nil
         do {
             try kmpHistoryStore.start(
                 sessionID: sessionId,
@@ -785,8 +792,21 @@ final class AppStore: ObservableObject {
     }
 
     private func requestHistoryPage(for sessionId: String, beforeSeq: Int?) {
-        historySyncEngine.beginRequest(sessionID: sessionId, timeout: .seconds(20)) { [weak self] in
+        beginHistoryRequestTimeout(for: sessionId)
+        gateway.requestHistory(
+            sessionId: sessionId,
+            beforeSeq: beforeSeq,
+            maxMessages: historySyncEngine.configuration.pageMessageLimit,
+            maxBytes: historySyncEngine.configuration.pageByteBudget,
+            view: "conversation",
+            historyFormatVersion: assistantStreamState.formatVersion(sessionId: sessionId)?.intValue
+        )
+    }
+
+    private func beginHistoryRequestTimeout(for sessionId: String) {
+        historySyncEngine.beginRequest(sessionID: sessionId, timeout: historyRequestTimeout) { [weak self] in
             guard let self else { return }
+            if self.pendingSnapshotSessionID == sessionId { self.pendingSnapshotSessionID = nil }
             let hasUsableLocalContent = !self.events[sessionId, default: []].isEmpty
                 || !self.renderedConversationItems[sessionId, default: []].isEmpty
             do { try self.kmpHistoryStore.timedOut(sessionID: sessionId) }
@@ -799,17 +819,11 @@ final class AppStore: ObservableObject {
                     sessionId: sessionId
                 )
             } else {
-                self.lastError = String(localized: "历史记录加载超时，请重试")
+                let message = String(localized: "历史记录加载超时，请重试")
+                self.historyLoadErrors[sessionId] = message
+                self.lastError = message
             }
         }
-        gateway.requestHistory(
-            sessionId: sessionId,
-            beforeSeq: beforeSeq,
-            maxMessages: historySyncEngine.configuration.pageMessageLimit,
-            maxBytes: historySyncEngine.configuration.pageByteBudget,
-            view: "conversation",
-            historyFormatVersion: assistantStreamState.formatVersion(sessionId: sessionId)?.intValue
-        )
     }
     func resumeWorkspace() {
         preparedConversationActivationKey = nil
@@ -1098,22 +1112,47 @@ final class AppStore: ObservableObject {
     }
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
 
+    private func beginSnapshotWait(for sessionID: String) {
+        historyLoadErrors[sessionID] = nil
+        if pendingSnapshotSessionID != sessionID { cancelSnapshotWait() }
+        do {
+            try kmpHistoryStore.awaitSnapshot(sessionID: sessionID)
+            pendingSnapshotSessionID = sessionID
+            beginHistoryRequestTimeout(for: sessionID)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func cancelSnapshotWait() {
+        guard let id = pendingSnapshotSessionID else { return }
+        pendingSnapshotSessionID = nil
+        finishHistoryLoading(id)
+    }
+
     private func subscribeToSession(_ sessionID: String?) {
         if let previous = selectedSessionId {
             try? kmpConversationStore.clearAssistantChunks(sessionID: previous)
         }
         assistantStreamState.selectSession(sessionId: sessionID)
+        if usesAssistantStream, let sessionID {
+            beginSnapshotWait(for: sessionID)
+        } else {
+            cancelSnapshotWait()
+        }
         gateway.subscribe(sessionId: sessionID)
     }
 
     private func handle(_ frame: GatewayFrame) {
-        if frame.kind == "hello" { usesAssistantStream = frame.capabilities?.contains("assistant-stream-v1") == true }
+        if frame.kind == "hello" {
+            usesAssistantStream = frame.capabilities?.contains("assistant-stream-v1") == true
+        }
         if frame.subscriptionId != nil { drainKMPEventDeliveries() }
         defer { if frame.subscriptionId != nil { drainKMPEventDeliveries() } }
         if frame.kind == "history", let id = frame.sessionId,
            assistantStreamState.hasBaseline(sessionId: id),
            !historyLoadingOlderSessionIds.contains(id) { return }
-        if let encoded = try? JSONEncoder().encode(frame) {
+        if let encoded = try? JSONEncoder().encode(frame.assistantStreamValidationFrame) {
             let update = assistantStreamState.acceptJson(json: String(decoding: encoded, as: UTF8.self))
             do {
                 for id in update.invalidatedSessionIds {
@@ -1128,15 +1167,22 @@ final class AppStore: ObservableObject {
                     try kmpConversationStore.clearAssistantChunks(sessionID: id)
                     if activeTrajectorySessionIDs.contains(id) { scheduleTrajectoryProjection(for: id) }
                 }
-                if let error = update.error { lastError = error }
+                if let error = update.error {
+                    lastError = error
+                    if !update.resubscribe, let id = update.sessionId {
+                        recordHistoryFailure(error, sessionID: id)
+                    }
+                }
                 if update.resubscribe, let id = update.sessionId { subscribeToSession(id) }
                 guard update.accepted else { return }
                 if frame.kind == "session-snapshot", let id = frame.sessionId {
+                    historyLoadErrors[id] = nil
                     lastError = nil
                     historySyncEngine.finish(sessionID: id)
                     try kmpHistoryStore.installSnapshot(sessionID: id,
                         events: (frame.events ?? []).map { $0.normalized(sessionId: id) },
                         hasMore: frame.hasMore == true, nextBeforeSequence: frame.nextBeforeSeq)
+                    if pendingSnapshotSessionID == id { pendingSnapshotSessionID = nil }
                     applyHistoryProjections(frame.projections, sessionId: id)
                     installTaskGoalBaseline(frame.projections, sessionID: id)
                     drainKMPEventDeliveries()
@@ -1150,6 +1196,7 @@ final class AppStore: ObservableObject {
                 if ["assistant-stream", "session-stream-reset"].contains(frame.kind) { return }
             } catch {
                 lastError = error.localizedDescription
+                if frame.sessionId == pendingSnapshotSessionID { cancelSnapshotWait() }
                 return
             }
         }
@@ -1160,6 +1207,10 @@ final class AppStore: ObservableObject {
                 installTaskGoalBaseline(projection, sessionID: id)
             }
             return
+        }
+        if frame.kind == "error", frame.requestType == "subscribe",
+           frame.sessionId == nil || frame.sessionId == pendingSnapshotSessionID {
+            cancelSnapshotWait()
         }
         if frame.kind == "tasks" || frame.kind == "tasks-updated" {
             applyTasksProjection(frame)
@@ -1282,12 +1333,16 @@ final class AppStore: ObservableObject {
                 refreshSessionControls(for: selectedSessionId)
             }
             // rc.2 由订阅原子快照恢复历史和生成前缀。
-            if !usesAssistantStream, preparedConversationActivationKey != nil,
-               let selectedSessionId {
+            if preparedConversationActivationKey != nil, let selectedSessionId {
                 // Receiving hello is itself the transport-connected boundary. Use
                 // the unguarded sync entry so tests and connection recovery cannot
                 // race the separately published GatewayClient state mirror.
-                startHistorySync(for: selectedSessionId)
+                if usesAssistantStream {
+                    beginSnapshotWait(for: selectedSessionId)
+                } else {
+                    cancelSnapshotWait()
+                    startHistorySync(for: selectedSessionId)
+                }
             }
             if preparedConversationActivationKey != nil {
                 Task { [weak self] in
@@ -1767,6 +1822,13 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func recordHistoryFailure(_ message: String, sessionID: String) {
+        historyLoadErrors[sessionID] = message
+        conversationPreparingSessionIDs.remove(sessionID)
+        if pendingSnapshotSessionID == sessionID { pendingSnapshotSessionID = nil }
+        finishHistoryLoading(sessionID)
+    }
+
     private func handleFailure(_ payload: GatewayFailurePayload) {
         waitingForNewSession = false
         let onlyCancellingSessionID = cancellingSessionIDs.count == 1 ? cancellingSessionIDs.first : nil
@@ -1784,9 +1846,9 @@ final class AppStore: ObservableObject {
            Self.defaultConfigurationRequestKinds.contains(requestType) {
             correlatedControlFailure = failDefaultConfigurationRequest(requestType)
         }
-        if payload.requestType == "history",
-           let sessionID = payload.sessionID ?? kmpHistoryStore.pendingSessionID {
-            finishHistoryLoading(sessionID)
+        if ["history", "subscribe"].contains(payload.requestType ?? ""),
+           let sessionID = payload.sessionID ?? pendingSnapshotSessionID ?? kmpHistoryStore.pendingSessionID {
+            recordHistoryFailure([payload.code, payload.message].compactMap { $0 }.joined(separator: ": "), sessionID: sessionID)
         }
         let detail = [payload.code, payload.message].compactMap { $0 }.joined(separator: ": ")
         if let requestType = payload.requestType,
@@ -2039,7 +2101,16 @@ final class AppStore: ObservableObject {
         } else if !previouslyHadContent {
             conversationContentSessionIds.insert(sessionId)
         }
+        if conversationPreparingSessionIDs.contains(sessionId) {
+            conversationPreparingSessionIDs.remove(sessionId)
+        }
     }
+    /// 只有 UI 投影发布完成后，空列表才可以被解释为真正的空会话。
+    func isPreparingConversation(_ sessionID: String) -> Bool {
+        historyLoadingSessionIds.contains(sessionID)
+            || conversationPreparingSessionIDs.contains(sessionID)
+    }
+
     private func applyEvent(_ record: SessionEvent) {
         let event = record.event
         if event.type == "turn/end" {
@@ -2110,6 +2181,7 @@ final class AppStore: ObservableObject {
     }
 
     private func resetOutstandingRequests() {
+        cancelSnapshotWait()
         backgroundExecutionController.releaseAllQuestionAnswers()
         for kind in Array(sessionControlLoadingKinds) { sessionControlRequestTracker.finish(kind) }
         for kind in Array(defaultConfigurationLoadingKinds) { defaultConfigurationRequestTracker.finish(kind) }
@@ -2335,6 +2407,10 @@ final class AppStore: ObservableObject {
         return transition
     }
     private func handleHistoryChange(_ change: KMPHistoryChange) {
+        if change.eventPatchKind != nil, !conversationContentSessionIds.contains(change.sessionID),
+           !conversationPreparingSessionIDs.contains(change.sessionID) {
+            conversationPreparingSessionIDs.insert(change.sessionID)
+        }
         // stage10-kmp-write-scope: history-begin
         if change.hasMore != historyHasMore { historyHasMore = change.hasMore }
         if change.loadingSessionIDs != historyLoadingSessionIds {
@@ -2347,6 +2423,7 @@ final class AppStore: ObservableObject {
         // stage10-kmp-write-scope: history-end
 
         if let patchKind = change.eventPatchKind {
+            historyLoadErrors[change.sessionID] = nil
             events[change.sessionID] = change.events
             // Only the baseline path can surface events the client has never
             // scanned (a new image attachment, a new tool row). A streaming chunk
@@ -2387,9 +2464,12 @@ final class AppStore: ObservableObject {
                     }
                 }
             } catch {
+                conversationPreparingSessionIDs.remove(change.sessionID)
                 lastError = error.localizedDescription
                 return
             }
+            // 包括空快照：即使 KMP 没有发出行变化，也必须完成首次呈现。
+            scheduleConversationProjection(for: change.sessionID)
             if rebaselined {
                 enqueueImageAttachments(in: change.events, sessionId: change.sessionID)
             }
@@ -2580,6 +2660,7 @@ final class AppStore: ObservableObject {
                 self.notice("Agent 预设诊断", "请求超时 token=\(effect.requestToken) elapsed=\(Date().timeIntervalSince(startedAt))s connected=\(self.gateway.state.isConnected)", isError: true)
                 return
             }
+            if let sessionID = effect.sessionId, self.preparedConversationActivationKey != sessionID { return }
             self.lastError = String(localized: "control.request.timeout", defaultValue: "\(effect.requestKey) 请求超时，请检查 Mobile Gateway。")
         }
         switch effect.kind {
