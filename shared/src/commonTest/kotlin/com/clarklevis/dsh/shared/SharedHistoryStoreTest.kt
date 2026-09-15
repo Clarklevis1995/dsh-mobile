@@ -21,6 +21,28 @@ import kotlin.test.assertTrue
 
 class SharedHistoryStoreTest {
     @Test
+    fun unchangedSnapshotUpdatesPaginationWithoutReplacingHistory() {
+        val store = SharedHistoryStore()
+        val received = mutableListOf<SharedMviEvent>()
+        store.subscribe(SharedMviEventObserver(received::add))
+        val records = wireJson.encodeToString(listOf(event(10, "cached")))
+        store.installSnapshot("s1", records, true, 10)
+        assertEquals("replace", patch(received.last()).eventPatch?.kind)
+        store.awaitSnapshot("s1")
+        store.installSnapshot("s1", records, false, null)
+        val same = patch(received.last())
+        assertNull(same.eventPatch)
+        assertFalse(same.session!!.isLoading)
+        assertFalse(same.session.hasMore)
+        assertNull(same.session.nextBeforeSequence)
+        store.installSnapshot("s1", wireJson.encodeToString(listOf(event(10, "changed"))), false, null)
+        assertEquals("replace", patch(received.last()).eventPatch?.kind)
+        store.clearSession("s1")
+        store.installSnapshot("s1", "[]", false, null)
+        assertEquals("replace", patch(received.last()).eventPatch?.kind, "清理后首个空快照仍需完成首次呈现")
+    }
+
+    @Test
     fun snapshotWaitPublishesLoadingWithoutRequestingHistoryAndKeepsCachedPage() {
         val store = SharedHistoryStore()
         val received = mutableListOf<SharedMviEvent>()

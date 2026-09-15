@@ -41,6 +41,52 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AndroidAppGraphFakeIntegrationDeviceTest {
     @Test
+    fun queueRoundTripKeepsDraftUntilAckAndEditResubmitsThenSteers() = runBlocking {
+        val transport = FakeTransport()
+        val graph = AndroidAppGraph(
+            application = ApplicationProvider.getApplicationContext<Application>(),
+            transportOverride = transport, preferencesOverride = FakePreferences(),
+            credentialStoreOverride = FakeCredentials, attachmentCacheOverride = FakeCache(),
+            networkMonitorOverride = FakeNetwork, clockOverride = FakeClock
+        )
+        val holder = graph.stateHolder
+        try {
+            waitUntil { transport.specs.isNotEmpty() }
+            transport.open()
+            transport.receive("""{"kind":"hello","authenticated":true,"protocol":3,"capabilities":["queue-control","session-cancel"]}""")
+            waitUntil { holder.gatewayState.connection.name == "CONNECTED" }
+            onMain { holder.loadFixture() }
+            waitUntil { holder.snapshot.selectedSessionId == "android-demo" }
+            onMain { holder.messageDraft = "queue-original"; holder.sendMessage() }
+            waitUntil { transport.sentTypes.contains("message") }
+            assertEquals("queue-original", holder.messageDraft)
+            assertTrue(!holder.canSend)
+            assertEquals("queue", transport.payloadsOfType("message").last().getValue("mode").jsonPrimitive.content)
+            transport.receive("""{"kind":"sent","sessionId":"android-demo","mode":"queue"}""")
+            transport.receive("""{"kind":"session-queue","sessionId":"android-demo","items":[{"id":"q1","placement":"queued","message":{"id":"m1","content":[{"type":"text","text":"queue-original"}]}}]}""")
+            waitUntil { holder.messageDraft.isEmpty() && holder.selectedQueueItems.size == 1 }
+            onMain { holder.updateQueuedMessage("q1", "edit") }
+            waitUntil { transport.payloadsOfType("queue-update").isNotEmpty() }
+            assertEquals("remove", transport.payloadsOfType("queue-update").last().getValue("action").jsonPrimitive.content)
+            onMain { holder.messageDraft = "existing-draft" }
+            transport.receive("""{"kind":"queue-item-updated","sessionId":"android-demo","itemId":"q1","action":"remove","accepted":true}""")
+            waitUntil { holder.messageDraft == "existing-draft\n\nqueue-original" }
+            assertTrue(holder.selectedQueueItems.isEmpty())
+            onMain { holder.messageDraft = "queue-edited"; holder.sendMessage() }
+            waitUntil { transport.payloadsOfType("message").size == 2 }
+            assertEquals("queue-edited", transport.payloadsOfType("message").last().getValue("text").jsonPrimitive.content)
+            transport.receive("""{"kind":"sent","sessionId":"android-demo","mode":"queue"}""")
+            transport.receive("""{"kind":"session-queue","sessionId":"android-demo","items":[{"id":"q2","placement":"queued","message":{"id":"m2","content":[{"type":"text","text":"queue-edited"}]}}]}""")
+            waitUntil { holder.messageDraft.isEmpty() && holder.selectedQueueItems.firstOrNull()?.id == "q2" }
+            onMain { holder.updateQueuedMessage("q2", "steer") }
+            waitUntil { transport.payloadsOfType("queue-update").size == 2 }
+            assertEquals("steer", transport.payloadsOfType("queue-update").last().getValue("action").jsonPrimitive.content)
+            transport.receive("""{"kind":"queue-item-updated","sessionId":"android-demo","itemId":"q2","action":"steer","accepted":true}""")
+            waitUntil { holder.selectedQueueItems.isEmpty() }
+        } finally { onMain { holder.close() } }
+    }
+
+    @Test
     fun injectedProductGraphRunsRuntimeHolderProjectionHistoryAndVisibleAttachment() = runBlocking {
         val transport = FakeTransport()
         val cache = FakeCache()

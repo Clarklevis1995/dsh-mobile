@@ -62,6 +62,8 @@ class ConversationProjector(
     private val commandItemIds = mutableMapOf<String, String>()
     private val compactionCommandIds = mutableMapOf<String, String>()
     private val transientKeys = mutableSetOf<String>()
+    private val steeringMessages = linkedMapOf<String, SessionEvent>()
+    private val committedUserMessageIds = mutableSetOf<String>()
 
     val items: List<ConversationItem> get() = mutableItems.toList()
     var lastSequence: Int = -1
@@ -74,6 +76,8 @@ class ConversationProjector(
         commandItemIds.clear()
         compactionCommandIds.clear()
         transientKeys.clear()
+        steeringMessages.clear()
+        committedUserMessageIds.clear()
         lastSequence = -1
     }
 
@@ -128,6 +132,37 @@ class ConversationProjector(
         return operations
     }
 
+    /** 控制流中的 steering 是已提交的用户消息，但尚未进入持久事件流。 */
+    fun replaceSteeringMessages(records: List<SessionEvent>): List<ConversationProjectionOperation> {
+        val operations = mutableListOf<ConversationProjectionOperation>()
+        val next = records.associateBy { requireNotNull(it.event.raw?.get("id")?.stringValue) }
+            .filterKeys { it !in committedUserMessageIds }
+        (steeringMessages.keys - next.keys).forEach { id ->
+            removeStream("steering-$id", operations)
+        }
+        next.forEach { (id, record) ->
+            val key = "steering-$id"
+            val item = ConversationItem(
+                id = "${record.sessionId}-user-$id", kind = ConversationItemKind.USER,
+                title = labels.userMessage, text = record.event.text.orEmpty(),
+                images = record.event.images.orEmpty(), epochSeconds = normalizeEpoch(record.time)
+            )
+            val index = streamIndexes[key]
+            if (index == null) {
+                streamIndexes[key] = mutableItems.size
+                insert(item, operations)
+            } else if (mutableItems[index].copy(epochSeconds = item.epochSeconds) != item) {
+                // 重复快照保留原显示时间，不让同一条气泡反复更新。
+                val updated = item.copy(epochSeconds = mutableItems[index].epochSeconds)
+                mutableItems[index] = updated
+                operations += ConversationProjectionOperation("replace", item = updated, itemId = updated.id)
+            }
+        }
+        steeringMessages.clear()
+        steeringMessages.putAll(next)
+        return operations
+    }
+
     private fun fold(
         record: SessionEvent,
         operations: MutableList<ConversationProjectionOperation>
@@ -138,14 +173,27 @@ class ConversationProjector(
         when {
             event.type == "user/message" && (event.source == null || event.source == "user") -> {
                 if (!event.text.isNullOrEmpty() || !event.images.isNullOrEmpty()) {
-                    insert(ConversationItem(
-                        id = eventId(record),
+                    val messageId = event.raw?.get("id")?.stringValue
+                    // 旧网关未转发消息 ID 时，只按到达顺序匹配一条临时消息；不能按正文全局去重。
+                    val pendingId = if (messageId != null) messageId.takeIf { it in steeringMessages }
+                    else steeringMessages.entries.firstOrNull { (_, pending) ->
+                        pending.event.text.orEmpty() == event.text.orEmpty() &&
+                            pending.event.images.orEmpty() == event.images.orEmpty()
+                    }?.key
+                    val item = ConversationItem(
+                        id = messageId?.let { "${record.sessionId}-user-$it" } ?: eventId(record),
                         kind = ConversationItemKind.USER,
                         title = labels.userMessage,
                         text = event.text.orEmpty(),
                         images = event.images.orEmpty(),
                         epochSeconds = date
-                    ), operations)
+                    )
+                    if (pendingId != null) {
+                        finalizeStream("steering-$pendingId", item, operations)
+                        steeringMessages.remove(pendingId)
+                        committedUserMessageIds += pendingId
+                    } else insert(item, operations)
+                    if (messageId != null) committedUserMessageIds += messageId
                 }
             }
             event.type == "user/message" && !event.text.isNullOrEmpty() -> insert(ConversationItem(

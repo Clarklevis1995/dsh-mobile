@@ -9,6 +9,40 @@ import org.junit.Test
 
 class AndroidGatewayProjectionTest {
     @Test
+    fun steeringQueueDisplaysUserBubbleAndPromotesWithoutDuplicate() {
+        val projection = AndroidGatewayProjection()
+        projection.selectSession("s")
+        fun accept(raw: String) = projection.acceptFrame(raw, GatewayWireDecoder.decode(raw), "s")
+        accept("""{"kind":"session-queue","sessionId":"s","items":[{"id":"q","placement":"steering","message":{"id":"m","content":[{"type":"text","text":"Go"}]}}]}""")
+        val pending = projection.snapshot().conversation.single()
+        assertEquals("Go", pending.text)
+        assertEquals(com.clarklevis.dsh.shared.projection.ConversationItemKind.USER, pending.kind)
+        accept("""{"kind":"event","sessionId":"s","seq":1,"time":100,"event":{"type":"user/message","text":"Go","raw":{"id":"m"}}}""")
+        accept("""{"kind":"session-queue","sessionId":"s","items":[]}""")
+        assertEquals(pending.id, projection.snapshot().conversation.single().id)
+        assertEquals(null, projection.snapshot().lastError)
+        projection.close()
+    }
+
+    @Test
+    fun fullQueueBaselineClearsAbsentSessionAndHostResetCannotRestoreOldSteering() {
+        val projection = AndroidGatewayProjection()
+        projection.selectSession("s")
+        fun accept(raw: String) = projection.acceptFrame(raw, GatewayWireDecoder.decode(raw), "s")
+        val queue = """{"kind":"session-queues","queues":{"s":[{"id":"q","placement":"steering","message":{"id":"m","content":[{"type":"text","text":"Go"}]}}]}}"""
+        accept(queue)
+        assertEquals(1, projection.snapshot().conversation.size)
+        accept("""{"kind":"session-queues","queues":{}}""")
+        assertTrue(projection.snapshot().conversation.isEmpty())
+        accept(queue)
+        projection.reset()
+        projection.selectSession("s")
+        accept("""{"kind":"history","sessionId":"s","events":[],"hasMore":false}""")
+        assertTrue(projection.snapshot().conversation.isEmpty())
+        projection.close()
+    }
+
+    @Test
     fun assistantChunkBypassesLegacyFullConversationProjection() {
         val projection = AndroidGatewayProjection()
         projection.selectSession("session-a")

@@ -119,6 +119,8 @@ data class GatewayFrame(
     val rpcId: String? = null,
     val questions: List<GatewayQuestion>? = null,
     val replay: Boolean? = null,
+    val queues: Map<String, List<JsonValue>>? = null,
+    val itemId: String? = null,
     val action: String? = null,
     val accepted: Boolean? = null,
     val reason: String? = null,

@@ -230,6 +230,8 @@ struct GatewayFrame: Codable, Sendable {
     var rpcId: String?
     var questions: [GatewayQuestion]?
     var replay: Bool?
+    var queues: [String: [JSONValue]]?
+    var itemId: String?
     var action: String?
     var accepted: Bool?
     var reason: String?

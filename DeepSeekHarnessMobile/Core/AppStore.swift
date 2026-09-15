@@ -203,6 +203,63 @@ final class AppStore: ObservableObject {
     private let kmpWorkspaceFileStore: DeepSeekHarnessShared.SharedWorkspaceFileStore
     /// 斜杠命令目录、UI 描述符、二级选项与请求关联由 commonMain 统一解析。
     private let kmpSlashCommandStore = DeepSeekHarnessShared.SharedSlashCommandStore()
+    private let queueStore = DeepSeekHarnessShared.SharedQueueStore()
+    @Published private(set) var queueState = DeepSeekHarnessShared.SharedQueueSnapshot(queues: [:], pendingItemId: nil, lastError: nil)
+    @Published private(set) var queueRevision = 0
+    @Published private(set) var messageSubmissionPending = false
+    @Published private(set) var messageAcceptedRevision = 0
+    private var messageSubmissionTimeout: Task<Void, Never>?
+    @Published private(set) var supportsQueueControl = false
+    private var queueActionTimeout: Task<Void, Never>?
+    private var queueProjectionSessionIDs: Set<String> = []
+
+    var selectedQueueItems: [DeepSeekHarnessShared.SharedQueueItem] {
+        queueState.queues[selectedSessionId ?? ""] ?? []
+    }
+
+    func takeQueuedDraft() -> String? {
+        guard let id = selectedSessionId else { return nil }
+        return queueStore.takeDraft(sessionId: id)
+    }
+
+    func updateQueuedMessage(_ itemID: String, action: String) {
+        guard supportsQueueControl, gateway.state.isConnected, let id = selectedSessionId,
+              let request = queueStore.beginAction(sessionId: id, itemId: itemID, action: action) else { return }
+        queueState = queueStore.snapshot()
+        gateway.sendRequestPayload(request.payload)
+        queueActionTimeout?.cancel()
+        queueActionTimeout = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(20)) } catch { return }
+            guard let self, self.queueState.pendingItemId == itemID else { return }
+            self.queueState = self.queueStore.failPending(message: "队列操作超时，请检查队列最新状态后重试")
+            self.lastError = self.queueState.lastError
+        }
+    }
+
+    private func acceptQueueFrame(_ frame: GatewayFrame) {
+        guard ["session-queues", "session-queue", "queue-item-updated"].contains(frame.kind) ||
+                (frame.kind == "error" && frame.requestType == "queue-update"),
+              let data = try? JSONEncoder().encode(frame) else { return }
+        do {
+            if frame.kind == "session-queues", let queues = frame.queues {
+                for id in queueProjectionSessionIDs.union(queues.keys) {
+                    try kmpConversationStore.replaceSteeringMessages(sessionID: id, items: queues[id] ?? [])
+                }
+                queueProjectionSessionIDs = Set(queues.keys)
+            } else if frame.kind == "session-queue", let id = frame.sessionId, let items = frame.items {
+                queueProjectionSessionIDs.insert(id)
+                try kmpConversationStore.replaceSteeringMessages(sessionID: id, items: items)
+            }
+        } catch {
+            lastError = error.localizedDescription
+        }
+        queueState = queueStore.acceptFrame(json: String(decoding: data, as: UTF8.self))
+        if queueState.pendingItemId == nil { queueActionTimeout?.cancel() }
+        if let error = queueState.lastError { lastError = error }
+        backgroundExecutionController.updateQueuedSessions(Set(queueState.queues.filter { !$0.value.isEmpty }.keys))
+        queueRevision &+= 1
+    }
+
     /// KMP Store 会在 dispatch Intent 的同一 MainActor 调用栈内同步推送 Event。
     /// SwiftUI 的 `.task`/`.onChange` 或控件 Binding 可能仍处于 view update；直接
     /// 修改 `@Published` 会触发未定义行为。这里保持 FIFO，并统一在下一次
@@ -1017,7 +1074,7 @@ final class AppStore: ObservableObject {
         arguments
     }
     @discardableResult
-    func send(_ text: String, images: [GatewayOutgoingImage] = []) -> Bool {
+    func send(_ text: String, images: [GatewayOutgoingImage] = [], mode: String = "queue") -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !images.isEmpty else { return false }
         guard gateway.state.isConnected else { lastError = String(localized: "请先在设置中连接 DeepSeek Harness"); return false }
@@ -1034,13 +1091,24 @@ final class AppStore: ObservableObject {
             gateway.executeCommand(line: command.line, images: images, sessionId: selectedSessionId)
             return true
         }
+        guard !messageSubmissionPending else { return false }
+        messageSubmissionPending = true
+        messageSubmissionTimeout?.cancel()
+        messageSubmissionTimeout = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(20)) } catch { return }
+            guard let self, self.messageSubmissionPending else { return }
+            self.messageSubmissionPending = false
+            self.waitingForNewSession = false
+            self.lastError = "发送确认超时，请确认队列状态后重试"
+        }
         waitingForNewSession = selectedSessionId == nil
         beginAgentBackgroundExecution(for: selectedSessionId, startsNewTurn: true)
         gateway.sendMessage(
             text: trimmed,
             images: images,
             sessionId: selectedSessionId,
-            workspaceId: selectedSessionId == nil ? activeWorkspace?.id : nil
+            workspaceId: selectedSessionId == nil ? activeWorkspace?.id : nil,
+            mode: mode
         )
         return true
     }
@@ -1144,6 +1212,18 @@ final class AppStore: ObservableObject {
     }
 
     private func handle(_ frame: GatewayFrame) {
+        acceptQueueFrame(frame)
+        if frame.kind == "sent" && messageSubmissionPending {
+            messageSubmissionPending = false
+            messageSubmissionTimeout?.cancel()
+            messageAcceptedRevision &+= 1
+        }
+        if frame.kind == "error" && (frame.requestType == "message" || frame.requestType == nil) && messageSubmissionPending {
+            messageSubmissionPending = false
+            messageSubmissionTimeout?.cancel()
+            waitingForNewSession = false
+        }
+        if ["session-queues", "session-queue", "queue-item-updated"].contains(frame.kind) { return }
         if frame.kind == "hello" {
             usesAssistantStream = frame.capabilities?.contains("assistant-stream-v1") == true
         }
@@ -1179,13 +1259,20 @@ final class AppStore: ObservableObject {
                     historyLoadErrors[id] = nil
                     lastError = nil
                     historySyncEngine.finish(sessionID: id)
-                    try kmpHistoryStore.installSnapshot(sessionID: id,
-                        events: (frame.events ?? []).map { $0.normalized(sessionId: id) },
+                    let records = (frame.events ?? []).map { $0.normalized(sessionId: id) }
+                    let replaced = try kmpHistoryStore.installSnapshot(sessionID: id,
+                        events: records,
                         hasMore: frame.hasMore == true, nextBeforeSequence: frame.nextBeforeSeq)
                     if pendingSnapshotSessionID == id { pendingSnapshotSessionID = nil }
                     applyHistoryProjections(frame.projections, sessionId: id)
                     installTaskGoalBaseline(frame.projections, sessionID: id)
                     drainKMPEventDeliveries()
+                    // 相同持久历史不再发布 replace；新的生成前缀仍须恢复。
+                    if !replaced, let attemptID = assistantStreamState.activeAttemptId() {
+                        try kmpConversationStore.assistantChunks(sessionID: id, attemptID: attemptID,
+                            chunksJSON: assistantStreamState.replayChunksJson())
+                        drainKMPEventDeliveries()
+                    }
                     return
                 }
                 if let attemptID = update.attemptId, let id = update.sessionId, update.chunksJson != "[]" {
@@ -1299,6 +1386,8 @@ final class AppStore: ObservableObject {
             // hello 定义新的连接代际。必须先清除上一代 request identity/quarantine，
             // 再发送本代 refresh，避免旧 token 或迟到响应跨连接污染新请求。
             resetOutstandingRequests()
+            // 主动后台挂起不触发 onConnectionFailure，也必须重新激活订阅。
+            activeConversationActivationKey = nil
             backgroundExecutionController.releaseAllQuestionAnswers()
             dispatchQuestionIntent(.reset)
             dispatchApprovalIntent(.reset)
@@ -1309,6 +1398,10 @@ final class AppStore: ObservableObject {
             supportsTasks = payload.capabilities.contains("tasks")
             supportsGoals = payload.capabilities.contains("goals")
             supportsSessionCancel = payload.capabilities.contains("session-cancel")
+            supportsQueueControl = payload.capabilities.contains("queue-control")
+            queueActionTimeout?.cancel()
+            queueState = queueStore.resetConnection()
+            queueRevision &+= 1
             cancellingSessionIDs = []
             applySlashCommandTransition(kmpSlashCommandStore.reset(sessionId: selectedSessionId))
             applyWorkspaceFileTransition(kmpWorkspaceFileStore.reset(sessionId: selectedSessionId))
@@ -1909,7 +2002,7 @@ final class AppStore: ObservableObject {
     }
 
     private func handleSent(sessionID: String, command: JSONValue?) {
-        backgroundExecutionController.associateSessionIfNeeded(sessionID)
+        backgroundExecutionController.messageAccepted(sessionID: sessionID)
         waitingForNewSession = false
         dispatchSessionListIntent(.messageSent(sessionID: sessionID, agentPreset: agentPresetDefault))
         notice(
@@ -1918,7 +2011,9 @@ final class AppStore: ObservableObject {
                 ?? String(localized: "session.preview.id", defaultValue: "\(sessionID.prefix(12))…"),
             sessionId: sessionID
         )
-        subscribeToSession(sessionID)
+        if selectedSessionId == sessionID && !assistantStreamState.hasBaseline(sessionId: sessionID) {
+            subscribeToSession(sessionID)
+        }
         gateway.requestSessions()
         refreshSessionControls(for: sessionID)
     }
@@ -2107,12 +2202,15 @@ final class AppStore: ObservableObject {
     }
     /// 只有 UI 投影发布完成后，空列表才可以被解释为真正的空会话。
     func isPreparingConversation(_ sessionID: String) -> Bool {
-        historyLoadingSessionIds.contains(sessionID)
-            || conversationPreparingSessionIDs.contains(sessionID)
+        !conversationContentSessionIds.contains(sessionID) && (
+            historyLoadingSessionIds.contains(sessionID)
+                || conversationPreparingSessionIDs.contains(sessionID)
+        )
     }
 
     private func applyEvent(_ record: SessionEvent) {
         let event = record.event
+        if event.type == "turn/start" { backgroundExecutionController.begin(sessionID: record.sessionId, startsNewTurn: false) }
         if event.type == "turn/end" {
             backgroundExecutionController.turnEnded(sessionID: record.sessionId)
         }
@@ -2156,6 +2254,10 @@ final class AppStore: ObservableObject {
     }
 
     private func handleConnectionFailure(_ detail: String) {
+        messageSubmissionTimeout?.cancel()
+        messageSubmissionPending = false
+        queueActionTimeout?.cancel()
+        if queueState.pendingItemId != nil { queueState = queueStore.failPending(message: "连接已中断，请重新连接后确认队列状态") }
         assistantStreamState.disconnect()
         if let id = selectedSessionId {
             try? kmpConversationStore.clearAssistantChunks(sessionID: id)

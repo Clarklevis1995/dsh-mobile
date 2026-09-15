@@ -215,6 +215,14 @@ final class KMPConversationStoreAdapter {
         }
     }
 
+    func replaceSteeringMessages(sessionID: String, items: [JSONValue]) throws {
+        guard let shared = store as? SharedConversationStore else { return }
+        let json = try encode(items)
+        try dispatch(.transient(sessionID: sessionID)) {
+            shared.replaceSteeringMessages(sessionId: sessionID, itemsJson: json)
+        }
+    }
+
     /// Whether a projection baseline exists for the session. Without one there
     /// is no row to mutate, so the platform must rebaseline instead.
     func hasProjection(sessionID: String) -> Bool {
@@ -1054,6 +1062,7 @@ struct KMPHistoryChange {
 
 @MainActor
 final class KMPHistoryStoreAdapter {
+    private var replacementRevision = 0
     private let store: any KMPHistoryStoreBridging
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -1150,14 +1159,17 @@ final class KMPHistoryStoreAdapter {
         }
     }
 
-    func installSnapshot(sessionID: String, events: [SessionEvent], hasMore: Bool, nextBeforeSequence: Int?) throws {
+    @discardableResult
+    func installSnapshot(sessionID: String, events: [SessionEvent], hasMore: Bool, nextBeforeSequence: Int?) throws -> Bool {
         guard let shared = store as? SharedHistoryStore else {
             throw KMPHistoryStoreError.invalidEvent("订阅快照需要共享 History Store")
         }
+        let previousRevision = replacementRevision
         try dispatch(.page(sessionID: sessionID)) {
             shared.installSnapshot(sessionId: sessionID, eventsJson: try encode(events), hasMore: hasMore,
                 nextBeforeSequence: nextBeforeSequence.map { KotlinInt(int: Int32($0)) })
         }
+        return replacementRevision != previousRevision
     }
 
     func clear(sessionID: String) throws {
@@ -1232,6 +1244,7 @@ final class KMPHistoryStoreAdapter {
                 let effects = try decoder.decode([KMPHistoryEffect].self, from: Data(event.effectsJson.utf8))
                 guard effects.count <= 1 else { throw KMPHistoryStoreError.invalidEvent("effect 数量无效") }
                 let change = try apply(patch, effect: effects.first, intent: pendingIntent)
+                if change.eventPatchKind == "replace" { replacementRevision &+= 1 }
                 onChange?(change)
             } catch let error as KMPHistoryStoreError {
                 failClosed(error)

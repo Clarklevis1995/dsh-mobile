@@ -208,6 +208,7 @@ final class CommandTextView: UITextView {
 struct ConversationView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var activeView = 0
     @State private var draft = ""
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
@@ -221,6 +222,10 @@ struct ConversationView: View {
     @State private var goalObjectiveDraft = ""
     @State private var confirmsGoalClear = false
     @State private var isPinnedToBottom = true
+    @State private var queueExpanded = false
+    @State private var submittedQueueDraft: String?
+    @State private var submittedQueueImages: [GatewayOutgoingImage] = []
+    @State private var submittedQueueSessionID: String?
     @State private var composerHeight: CGFloat = 168
     @State private var viewportScrollToBottomToken = 0
     @State private var viewportProxy = ConversationViewportProxy()
@@ -699,6 +704,24 @@ struct ConversationView: View {
     }
 
     private var composer: some View {
+        VStack(spacing: store.selectedQueueItems.isEmpty ? 0 : -24) {
+            if !store.selectedQueueItems.isEmpty {
+                queueDock
+                    .padding(.horizontal, 14)
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            }
+            composerCard
+                .zIndex(1)
+        }
+        .animation(queueLayoutAnimation, value: store.selectedQueueItems.isEmpty)
+        .animation(queueLayoutAnimation, value: queueExpanded)
+    }
+
+    private var queueLayoutAnimation: Animation {
+        reduceMotion ? .easeOut(duration: 0.15) : .easeInOut(duration: 0.25)
+    }
+
+    private var composerCard: some View {
         let slashPresentation = slashCommandComposerPresentation(
             draft: draft,
             token: store.slashCommands.commandToken,
@@ -766,6 +789,12 @@ struct ConversationView: View {
                     let content = store.composedSlashMessage(arguments: draft)
                     let images = pendingImages
                     guard store.send(content, images: images) else { return }
+                    if store.messageSubmissionPending {
+                        submittedQueueDraft = draft
+                        submittedQueueImages = images
+                        submittedQueueSessionID = store.selectedSessionId
+                        return
+                    }
                     if store.commandSubmissionPending {
                         composerIsFocused = false
                         return
@@ -799,7 +828,7 @@ struct ConversationView: View {
                 .disabled(
                     showsSessionStopButton
                         ? store.isCancellingSelectedSession
-                        : (!composerHasContent || store.waitingForNewSession || isImportingImages || store.commandSubmissionPending)
+                        : (!composerHasContent || store.waitingForNewSession || isImportingImages || store.commandSubmissionPending || store.messageSubmissionPending)
                 )
                 .opacity(
                     showsSessionStopButton
@@ -824,6 +853,24 @@ struct ConversationView: View {
         .shadow(color: glassShadow, radius: 18, y: 8)
         .padding(.horizontal, 14)
         .padding(.bottom, composerBottomPadding)
+        .onChange(of: store.messageAcceptedRevision) { _, _ in
+            guard let submitted = submittedQueueDraft else { return }
+            defer { submittedQueueDraft = nil; submittedQueueImages = [] }
+            guard (submittedQueueSessionID == nil || submittedQueueSessionID == store.selectedSessionId),
+                  draft == submitted, pendingImages == submittedQueueImages else { return }
+            draft = ""
+            pendingImages = []
+            selectedPhotoItems = []
+            store.clearActiveSlashCommand()
+            composerIsFocused = false
+            viewportScrollToBottomToken &+= 1
+        }
+        .onChange(of: store.queueRevision) { _, _ in restoreQueuedDraft() }
+        .onChange(of: store.selectedSessionId) { _, _ in
+            queueExpanded = false
+            restoreQueuedDraft()
+        }
+        .onAppear { restoreQueuedDraft() }
         .onChange(of: selectedPhotoItems) { _, items in
             guard !items.isEmpty else { return }
             Task { await importPhotos(items) }
@@ -938,12 +985,116 @@ struct ConversationView: View {
         }
     }
 
+    private func restoreQueuedDraft() {
+        guard let text = store.takeQueuedDraft() else { return }
+        // 编辑队列期间用户可能继续输入，保留已有草稿。
+        draft = draft.isEmpty ? text : draft + "\n\n" + text
+        store.clearActiveSlashCommand()
+        composerIsFocused = true
+    }
+
+    @ViewBuilder
+    private var queueDock: some View {
+        let items = store.selectedQueueItems
+        if !items.isEmpty {
+            let shape = UnevenRoundedRectangle(
+                topLeadingRadius: 24,
+                bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 24
+            )
+            VStack(spacing: 0) {
+                if items.count > 1 {
+                    Button { queueExpanded.toggle() } label: {
+                        HStack {
+                            Image(systemName: "text.bubble")
+                            Text("排队消息 · \(items.count)")
+                            Spacer()
+                            Image(systemName: "chevron.up")
+                                .rotationEffect(.degrees(queueExpanded ? 180 : 0))
+                        }
+                        .font(.subheadline)
+                        .padding(10)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if items.count == 1 || queueExpanded {
+                    Group {
+                        if items.count <= 3 {
+                            queueRows
+                        } else {
+                            ScrollView { queueRows }
+                                .frame(maxHeight: 192)
+                        }
+                    }
+                    .transition(.opacity)
+                }
+            }
+            // 底部延伸到输入框圆角后方，队列操作区域完整位于输入框外。
+            .padding(.bottom, 24)
+            .background(Color(uiColor: .secondarySystemBackground), in: shape)
+            .overlay {
+                shape.strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.22 : 0.14), lineWidth: 0.5)
+                    .allowsHitTesting(false)
+            }
+            .clipped()
+            // 让标题与背景使用同一份逐帧几何尺寸，避免父布局和内部位置分别插值。
+            .geometryGroup()
+        }
+    }
+
+    // 少量条目按内容高度布局，避免 ScrollView 撑满 maxHeight 留出空白。
+    private var queueRows: some View {
+        let items = store.selectedQueueItems
+        return VStack(spacing: 0) {
+            ForEach(items, id: \.id) { item in
+                HStack(spacing: 4) {
+                    if items.count == 1 {
+                        Image(systemName: "text.bubble").foregroundStyle(.secondary)
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.preview).font(.subheadline).lineLimit(2)
+                        if item.attachmentCount > 0 {
+                            Text("\(item.attachmentCount) 个附件").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if store.queueState.pendingItemId == item.id {
+                        ProgressView().frame(width: 36, height: 40)
+                    } else {
+                        queueActionButton("pencil", label: "编辑排队消息", itemID: item.id, action: "edit", enabled: item.editable)
+                        queueActionButton("trash", label: "删除排队消息", itemID: item.id, action: "remove")
+                        queueActionButton("arrow.up", label: "立即插话", itemID: item.id, action: "steer", enabled: store.selectedSession?.isRunning == true)
+                    }
+                }
+                .padding(.leading, 10)
+                if item.id != items.last?.id {
+                    Rectangle()
+                        .fill(Color.primary.opacity(colorScheme == .dark ? 0.14 : 0.08))
+                        .frame(height: 0.5)
+                        .padding(.horizontal, 10)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+    }
+
+    private func queueActionButton(_ symbol: String, label: String, itemID: String, action: String, enabled: Bool = true) -> some View {
+        Button { store.updateQueuedMessage(itemID, action: action) } label: {
+            Image(systemName: symbol).font(.system(size: 15)).frame(width: 36, height: 40)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel(label)
+        .disabled(!enabled || !store.supportsQueueControl || !store.gateway.state.isConnected || store.queueState.pendingItemId != nil)
+    }
+
     private var composerHasContent: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
     }
 
     private var showsSessionStopButton: Bool {
-        store.supportsSessionCancel && store.selectedSession?.isRunning == true
+        store.supportsSessionCancel && store.selectedSession?.isRunning == true && !composerHasContent
     }
 
     private var pendingImageStrip: some View {

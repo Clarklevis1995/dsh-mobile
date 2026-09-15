@@ -5,6 +5,9 @@ import com.clarklevis.dsh.shared.projection.ConversationProjectionLabels
 import com.clarklevis.dsh.shared.projection.ConversationProjectionOperation
 import com.clarklevis.dsh.shared.projection.ConversationProjector
 import com.clarklevis.dsh.shared.protocol.SessionEvent
+import com.clarklevis.dsh.shared.protocol.RawSessionEvent
+import com.clarklevis.dsh.shared.protocol.JsonValue
+import kotlin.time.Clock
 import com.clarklevis.dsh.shared.protocol.wireJson
 import com.clarklevis.dsh.shared.sync.AssistantChunk
 import kotlinx.serialization.Serializable
@@ -33,6 +36,7 @@ class SharedConversationStore(
     private val labels: ConversationProjectionLabels = ConversationProjectionLabels()
 ) {
     private val projectors = mutableMapOf<String, ConversationProjector>()
+    private val steeringRecords = mutableMapOf<String, List<SessionEvent>>()
     private val events = SharedMviEventEmitter("conversation")
 
     fun subscribe(observer: SharedMviEventObserver): SharedMviSubscription = try {
@@ -106,6 +110,24 @@ class SharedConversationStore(
         )
     }
 
+    fun replaceSteeringMessages(sessionId: String, itemsJson: String): SharedMviDispatchResult = dispatch("steering") {
+        require(sessionId.isNotBlank())
+        val items = requireNotNull(JsonValue.fromJsonElement(wireJson.parseToJsonElement(itemsJson)).arrayValue)
+        val now = Clock.System.now().toEpochMilliseconds().toDouble()
+        val records = items.filter { it["placement"]?.stringValue == "steering" }.map { row ->
+            val message = requireNotNull(row["message"])
+            require(!message["id"]?.stringValue.isNullOrBlank())
+            requireNotNull(message["content"]?.arrayValue)
+            RawSessionEvent("user/message", 0, now, message).normalized(sessionId)
+        }
+        steeringRecords[sessionId] = records
+        val projector = projectors.getOrPut(sessionId) { ConversationProjector(labels) }
+        val operations = projector.replaceSteeringMessages(records)
+        if (operations.isEmpty()) null else SharedConversationPatch(
+            sessionId = sessionId, operations = operations, lastSequence = projector.lastSequence
+        )
+    }
+
     fun replaceSession(sessionId: String, eventsJson: String): SharedMviDispatchResult =
         dispatch("replace") {
             require(sessionId.isNotBlank()) { "sessionId must not be blank" }
@@ -113,6 +135,7 @@ class SharedConversationStore(
             require(records.all { it.sessionId == sessionId }) { "baseline contains another session" }
             val normalized = records.associateBy(SessionEvent::seq).values.sortedBy(SessionEvent::seq)
             val projector = ConversationProjector(labels).apply { rebuild(normalized) }
+            projector.replaceSteeringMessages(steeringRecords[sessionId].orEmpty())
             projectors[sessionId] = projector
             SharedConversationPatch(
                 sessionId = sessionId,
@@ -125,6 +148,7 @@ class SharedConversationStore(
     fun clearSession(sessionId: String): SharedMviDispatchResult = dispatch("clear") {
         require(sessionId.isNotBlank()) { "sessionId must not be blank" }
         projectors.remove(sessionId)
+        steeringRecords.remove(sessionId)
         SharedConversationPatch(
             sessionId = sessionId,
             replacesAll = true,

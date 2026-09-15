@@ -1,5 +1,8 @@
 package com.clarklevis.dsh.android.ui
 
+import androidx.compose.runtime.key
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -8,12 +11,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -93,6 +99,7 @@ import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -1081,6 +1088,14 @@ private fun Composer(
     val glassEdge = dshGlassEdge(isDark)
     val composerHasContent = stateHolder.messageDraft.trim().isNotEmpty() || stateHolder.preparedImages.isNotEmpty()
     val keyboardController = LocalSoftwareKeyboardController.current
+    val queueEditFocusRequester = remember { FocusRequester() }
+    var observedQueueEditCount by remember { mutableStateOf(stateHolder.queueDraftRestoreCount) }
+    LaunchedEffect(stateHolder.queueDraftRestoreCount) {
+        if (stateHolder.queueDraftRestoreCount > observedQueueEditCount) {
+            observedQueueEditCount = stateHolder.queueDraftRestoreCount
+            queueEditFocusRequester.requestFocus()
+        }
+    }
     var inputIsFocused by remember { mutableStateOf(false) }
     var observedSuccessfulSendCount by remember(stateHolder) {
         mutableStateOf(stateHolder.successfulMessageSendCount)
@@ -1110,153 +1125,267 @@ private fun Composer(
             )
         }
     }
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).padding(bottom = 10.dp)
-            .dropShadow(
-                shape = shape,
-                shadow = Shadow(
-                    radius = 10.dp,
-                    spread = 0.dp,
-                    color = shadowColor,
-                    offset = DpOffset(x = 0.dp, y = 4.dp)
-                )
-        ),
-        shape = shape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge)
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp).padding(bottom = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(if (stateHolder.selectedQueueItems.isEmpty()) 0.dp else (-24).dp)
     ) {
-        Column(
-            Modifier.padding(horizontal = 14.dp).padding(top = 14.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        AnimatedVisibility(
+            visible = stateHolder.selectedQueueItems.isNotEmpty(),
+            enter = expandVertically(tween(280), expandFrom = Alignment.Bottom) + fadeIn(tween(180)),
+            exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Bottom) + fadeOut(tween(120)),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            if (stateHolder.preparedImages.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(stateHolder.preparedImages.size) { index ->
-                        val image = stateHolder.preparedImages[index]
-                        Box(
-                            Modifier.height(72.dp).width(82.dp).background(DshColors.Ocean.copy(alpha = 0.11f), RoundedCornerShape(10.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("${image.width}×${image.height}", fontSize = 11.sp)
-                            Text(
-                                "×",
-                                modifier = Modifier.align(Alignment.TopEnd).clickable { stateHolder.removePreparedImage(index) }.padding(4.dp),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-            val commandToken = stateHolder.slashCommands.commandToken
-            val commandHint = stateHolder.slashCommands.argumentHint
-            BasicTextField(
-                value = inputValue,
-                onValueChange = {
-                    inputValue = it
-                    stateHolder.messageDraft = it.text
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 3.dp)
-                    .heightIn(min = 38.dp, max = 120.dp)
-                    .onFocusChanged { inputIsFocused = it.isFocused }
-                    .testTag("composer-input"),
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(DshColors.Ocean),
-                visualTransformation = slashCommandVisualTransformation(commandToken),
-                decorationBox = { field ->
-                    Box {
-                        if (stateHolder.messageDraft.isEmpty()) {
-                            Text(
-                                "描述你想要构建的内容",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
-                            )
-                        } else if (
-                            commandToken != null &&
-                            commandHint != null &&
-                            stateHolder.messageDraft.trimEnd() == commandToken
-                        ) {
-                            Text(
-                                buildAnnotatedString {
-                                    withStyle(SpanStyle(color = Color.Transparent)) {
-                                        append(stateHolder.messageDraft)
-                                    }
-                                    if (!stateHolder.messageDraft.last().isWhitespace()) append(" ")
-                                    withStyle(
-                                        SpanStyle(
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
-                                        )
-                                    ) {
-                                        append(commandHint)
-                                    }
-                                },
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
-                        field()
-                    }
-                }
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            QueueDock(stateHolder)
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth()
+                .dropShadow(
+                    shape = shape,
+                    shadow = Shadow(
+                        radius = 10.dp,
+                        spread = 0.dp,
+                        color = shadowColor,
+                        offset = DpOffset(x = 0.dp, y = 4.dp)
+                    )
+            ),
+            shape = shape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge)
+        ) {
+            Column(
+                Modifier.padding(horizontal = 14.dp).padding(top = 14.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                ComposerIconButton(R.drawable.ic_photo_stack, "添加图片", onPickImage)
-                PermissionControl(stateHolder, Modifier.width(82.dp))
-                Spacer(Modifier.width(2.dp))
-                ModelControl(
-                    stateHolder = stateHolder,
-                    modifier = Modifier.weight(1f)
+                if (stateHolder.preparedImages.isNotEmpty()) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(stateHolder.preparedImages.size) { index ->
+                            val image = stateHolder.preparedImages[index]
+                            Box(
+                                Modifier.height(72.dp).width(82.dp).background(DshColors.Ocean.copy(alpha = 0.11f), RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("${image.width}×${image.height}", fontSize = 11.sp)
+                                Text(
+                                    "×",
+                                    modifier = Modifier.align(Alignment.TopEnd).clickable { stateHolder.removePreparedImage(index) }.padding(4.dp),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+                val commandToken = stateHolder.slashCommands.commandToken
+                val commandHint = stateHolder.slashCommands.argumentHint
+                BasicTextField(
+                    value = inputValue,
+                    onValueChange = {
+                        inputValue = it
+                        stateHolder.messageDraft = it.text
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 3.dp)
+                        .heightIn(min = 38.dp, max = 120.dp)
+                        .onFocusChanged { inputIsFocused = it.isFocused }
+                        .focusRequester(queueEditFocusRequester)
+                        .testTag("composer-input"),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(DshColors.Ocean),
+                    visualTransformation = slashCommandVisualTransformation(commandToken),
+                    decorationBox = { field ->
+                        Box {
+                            if (stateHolder.messageDraft.isEmpty()) {
+                                Text(
+                                    "描述你想要构建的内容",
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
+                                )
+                            } else if (
+                                commandToken != null &&
+                                commandHint != null &&
+                                stateHolder.messageDraft.trimEnd() == commandToken
+                            ) {
+                                Text(
+                                    buildAnnotatedString {
+                                        withStyle(SpanStyle(color = Color.Transparent)) {
+                                            append(stateHolder.messageDraft)
+                                        }
+                                        if (!stateHolder.messageDraft.last().isWhitespace()) append(" ")
+                                        withStyle(
+                                            SpanStyle(
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
+                                            )
+                                        ) {
+                                            append(commandHint)
+                                        }
+                                    },
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                            field()
+                        }
+                    }
                 )
-                ContextUsageRing(stateHolder)
-                Box(
-                    Modifier.size(42.dp)
-                        .alpha(
-                            if (stateHolder.showsSessionStopButton) {
-                                if (stateHolder.canCancelSelectedSession) 1f else 0.66f
-                            } else if (composerHasContent) 1f else 0.48f
-                        )
-                        .clip(CircleShape)
-                        .background(DshColors.Ocean)
-                        .clickable(
-                            enabled = if (stateHolder.showsSessionStopButton) {
-                                stateHolder.canCancelSelectedSession
-                            } else {
-                                stateHolder.canSend
-                            },
-                            onClick = if (stateHolder.showsSessionStopButton) {
-                                stateHolder::cancelSelectedSession
-                            } else {
-                                stateHolder::sendMessage
-                            }
-                        )
-                        .semantics {
-                            contentDescription = if (stateHolder.showsSessionStopButton) {
-                                "停止生成"
-                            } else {
-                                "发送"
-                            }
-                        },
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
-                    if (stateHolder.showsSessionStopButton) {
-                        Box(
-                            Modifier.size(14.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(Color.White)
-                        )
-                    } else {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_arrow_up),
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = Color.White
-                        )
+                    ComposerIconButton(R.drawable.ic_photo_stack, "添加图片", onPickImage)
+                    PermissionControl(stateHolder, Modifier.width(82.dp))
+                    Spacer(Modifier.width(2.dp))
+                    ModelControl(
+                        stateHolder = stateHolder,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ContextUsageRing(stateHolder)
+                    Box(
+                        Modifier.size(42.dp)
+                            .alpha(
+                                if (stateHolder.showsSessionStopButton) {
+                                    if (stateHolder.canCancelSelectedSession) 1f else 0.66f
+                                } else if (composerHasContent) 1f else 0.48f
+                            )
+                            .clip(CircleShape)
+                            .background(DshColors.Ocean)
+                            .clickable(
+                                enabled = if (stateHolder.showsSessionStopButton) {
+                                    stateHolder.canCancelSelectedSession
+                                } else {
+                                    stateHolder.canSend
+                                },
+                                onClick = if (stateHolder.showsSessionStopButton) {
+                                    stateHolder::cancelSelectedSession
+                                } else {
+                                    { stateHolder.sendMessage() }
+                                }
+                            )
+                            .semantics {
+                                contentDescription = if (stateHolder.showsSessionStopButton) {
+                                    "停止生成"
+                                } else {
+                                    "发送"
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (stateHolder.showsSessionStopButton) {
+                            Box(
+                                Modifier.size(14.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(Color.White)
+                            )
+                        } else {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_arrow_up),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = Color.White
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun QueueDock(stateHolder: AndroidSharedStateHolder) {
+    QueueDock(
+        sessionId = stateHolder.snapshot.selectedSessionId,
+        items = stateHolder.selectedQueueItems,
+        pendingItemId = stateHolder.queueState.pendingItemId,
+        enabled = stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED &&
+            "queue-control" in stateHolder.gatewayState.capabilities,
+        running = stateHolder.snapshot.sessions.firstOrNull { it.id == stateHolder.snapshot.selectedSessionId }?.isRunning == true,
+        onAction = stateHolder::updateQueuedMessage
+    )
+}
+
+@Composable
+internal fun QueueDock(
+    sessionId: String?,
+    items: List<com.clarklevis.dsh.shared.facade.SharedQueueItem>,
+    pendingItemId: String?,
+    enabled: Boolean,
+    running: Boolean,
+    onAction: (String, String) -> Unit
+) {
+    var expanded by remember(sessionId) { mutableStateOf(false) }
+    if (items.isEmpty()) return
+    val actionsEnabled = enabled && pendingItemId == null
+    val shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    Column(
+        Modifier.fillMaxWidth()
+            .dropShadow(
+                shape = shape,
+                shadow = Shadow(radius = 8.dp, color = Color.Black.copy(alpha = 0.06f), offset = DpOffset(0.dp, 2.dp))
+            )
+            .background(
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f).compositeOver(MaterialTheme.colorScheme.surface),
+                shape
+            )
+            // 底部延伸到输入框圆角后方，按钮保留在输入框外。
+            .padding(bottom = 24.dp)
+    ) {
+        if (items.size > 1) {
+            Row(
+                Modifier.fillMaxWidth().clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { expanded = !expanded }.padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(painterResource(R.drawable.ic_question_bubble), contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(16.dp))
+                Text("排队消息 · ${items.size}", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                Icon(painterResource(if (expanded) R.drawable.ic_question_chevron_down else R.drawable.ic_chevron_up),
+                    contentDescription = if (expanded) "收起排队消息" else "展开排队消息", modifier = Modifier.size(18.dp))
+            }
+        }
+        if (items.size == 1 || expanded) {
+            Column(Modifier.heightIn(max = 192.dp).verticalScroll(rememberScrollState())) {
+                items.forEachIndexed { index, item ->
+                    key(item.id) {
+                        Row(Modifier.fillMaxWidth().padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (items.size == 1) {
+                                Icon(painterResource(R.drawable.ic_question_bubble), contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(item.preview, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                                if (item.attachmentCount > 0) Text("${item.attachmentCount} 个附件", style = MaterialTheme.typography.labelSmall)
+                            }
+                            if (pendingItemId == item.id) {
+                                CircularProgressIndicator(Modifier.padding(10.dp).size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                QueueAction(R.drawable.ic_pencil_line, "编辑排队消息", actionsEnabled && item.editable) { onAction(item.id, "edit") }
+                                QueueAction(R.drawable.ic_trash, "删除排队消息", actionsEnabled) { onAction(item.id, "remove") }
+                                QueueAction(R.drawable.ic_arrow_up, "立即插话", actionsEnabled && running) { onAction(item.id, "steer") }
+                            }
+                        }
+                        if (index < items.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 10.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QueueAction(icon: Int, label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(Modifier.size(40.dp).alpha(if (enabled) 1f else 0.38f).clickable(
+        interactionSource = remember { MutableInteractionSource() },
+        indication = null,
+        enabled = enabled,
+        onClick = onClick
+    )
+        .semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

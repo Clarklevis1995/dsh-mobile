@@ -52,6 +52,53 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class GatewayRuntimeIntegrationTest {
     @Test
+    fun queuedAndSteeringPromptsDoNotLeakBackgroundTurnCounts() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport)
+        backgroundScope.launch { runtime.events.collect { } }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        for (mode in listOf("queue", "queue", "steer")) {
+            assertTrue(runtime.sendMessage("test", emptyList(), "s", null, "UTC", mode))
+            transport.receive("""{"kind":"sent","sessionId":"s","mode":"$mode"}""")
+            runCurrent()
+        }
+        transport.receive("""{"kind":"session-queue","sessionId":"s","items":[{"placement":"queued"}]}""")
+        transport.receive("""{"sessionId":"s","seq":9,"time":1,"event":{"type":"turn/end"}}""")
+        runCurrent()
+        assertTrue(runtime.state.value.shouldKeepAliveInBackground)
+        transport.receive("""{"kind":"session-queue","sessionId":"s","items":[]}""")
+        runCurrent()
+        assertFalse(runtime.state.value.shouldKeepAliveInBackground)
+    }
+
+    @Test
+    fun queueAcknowledgementMustMatchItemAndFailureAllowsNextAction() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport)
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        assertTrue(runtime.sendRequest(GatewayRequests.queueUpdate("a", "q1", "steer")))
+        transport.receive("""{"kind":"queue-item-updated","sessionId":"a","itemId":"other","action":"steer","accepted":true}""")
+        runCurrent()
+        assertFalse(events.filterIsInstance<GatewayRuntimeEvent.Frame>().any { it.frame.kind == "queue-item-updated" })
+        transport.receive("""{"kind":"error","requestType":"queue-update","sessionId":"a","itemId":"q1","message":"no longer pending"}""")
+        runCurrent()
+        assertTrue(runtime.sendRequest(GatewayRequests.queueUpdate("a", "q2", "remove")))
+        transport.receive("""{"kind":"queue-item-updated","sessionId":"a","itemId":"q2","action":"remove","accepted":true}""")
+        runCurrent()
+        assertEquals("q2", events.filterIsInstance<GatewayRuntimeEvent.Frame>().last { it.frame.kind == "queue-item-updated" }.frame.itemId)
+    }
+
+    @Test
     fun pairingMustPersistTokenBeforeAcceptingHello() = runTest {
         val transport = FakeTransport()
         val credentials = FakeCredentials()

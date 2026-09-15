@@ -18,6 +18,7 @@ final class AgentBackgroundExecutionController {
     private(set) var applicationIsInBackground = false
     private(set) var outstandingTurnsBySessionID: [String: Int] = [:]
     private(set) var unassociatedOutstandingTurns = 0
+    private var queuedSessionIDs: Set<String> = []
     private(set) var questionAllowanceSessionIDs: [String: String] = [:]
 
     var outstandingTurns: Int {
@@ -29,6 +30,7 @@ final class AgentBackgroundExecutionController {
         guard unassociatedOutstandingTurns == 0 else { return nil }
         let sessionIDs = Set(outstandingTurnsBySessionID.keys)
             .union(questionAllowanceSessionIDs.values)
+            .union(queuedSessionIDs)
         return sessionIDs.count == 1 ? sessionIDs.first : nil
     }
 
@@ -40,7 +42,7 @@ final class AgentBackgroundExecutionController {
     }
 
     var isAgentWorkActive: Bool {
-        outstandingTurns > 0 || !questionAllowanceSessionIDs.isEmpty
+        outstandingTurns > 0 || !questionAllowanceSessionIDs.isEmpty || !queuedSessionIDs.isEmpty
     }
 
     convenience init() {
@@ -129,6 +131,18 @@ final class AgentBackgroundExecutionController {
         unassociatedOutstandingTurns = 0
     }
 
+    func messageAccepted(sessionID: String) {
+        associateSessionIfNeeded(sessionID)
+        // 排队/插话并不各自代表一个新 turn，不能按点击发送次数累计保活。
+        outstandingTurnsBySessionID[sessionID] = 1
+    }
+
+    func updateQueuedSessions(_ sessionIDs: Set<String>) {
+        queuedSessionIDs = sessionIDs
+        if applicationIsInBackground && isAgentWorkActive { beginTaskIfNeeded() }
+        finishIfInactive()
+    }
+
     func turnEnded(sessionID: String) {
         releaseQuestionAnswers(sessionID: sessionID)
         if let count = outstandingTurnsBySessionID[sessionID] {
@@ -142,6 +156,7 @@ final class AgentBackgroundExecutionController {
     }
 
     func cancel() {
+        queuedSessionIDs.removeAll()
         outstandingTurnsBySessionID.removeAll()
         unassociatedOutstandingTurns = 0
         questionAllowanceSessionIDs.removeAll()
@@ -154,6 +169,7 @@ final class AgentBackgroundExecutionController {
     }
 
     private func expire() {
+        queuedSessionIDs.removeAll()
         // UIKit 已撤销保活额度，内部状态也必须在通知平台层前原子清空。
         outstandingTurnsBySessionID.removeAll()
         unassociatedOutstandingTurns = 0

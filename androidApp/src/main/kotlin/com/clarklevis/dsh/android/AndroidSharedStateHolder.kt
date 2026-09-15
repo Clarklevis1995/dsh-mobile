@@ -203,6 +203,44 @@ class AndroidSharedStateHolder(
         private set
     var goalMutationKind: String? by mutableStateOf(null)
         private set
+    private val queueStore = com.clarklevis.dsh.shared.facade.SharedQueueStore()
+    var queueState by mutableStateOf(queueStore.snapshot())
+        private set
+    val selectedQueueItems get() = queueState.queues[snapshot.selectedSessionId].orEmpty()
+
+    fun updateQueuedMessage(itemId: String, action: String) {
+        val appGraph = graph ?: return
+        val sessionId = snapshot.selectedSessionId ?: return
+        if ("queue-control" !in gatewayState.capabilities || gatewayState.connection != GatewayConnectionState.CONNECTED) return
+        val request = queueStore.beginAction(sessionId, itemId, action) ?: return
+        queueState = queueStore.snapshot()
+        appGraph.gatewayScope.launch {
+            val sent = appGraph.gatewayRuntime.sendRequest(request)
+            if (!sent) withContext(Dispatchers.Main.immediate) {
+                queueState = queueStore.failPending("队列操作未发送，请重试")
+                platformError = queueState.lastError
+            }
+        }
+    }
+
+    private fun acceptQueueFrame(json: String) {
+        queueState = queueStore.acceptFrame(json)
+        queueState.lastError?.let { platformError = it }
+        restoreQueuedDraft()
+    }
+
+    private fun restoreQueuedDraft() {
+        val sessionId = snapshot.selectedSessionId ?: return
+        val text = queueStore.takeDraft(sessionId) ?: return
+        clearActiveSlashCommand()
+        messageDraft = if (messageDraft.isEmpty()) text else messageDraft + "\n\n" + text
+        queueDraftRestoreCount += 1
+    }
+
+    private var pendingMessageSubmission: MessageSubmission? by mutableStateOf(null)
+    var queueDraftRestoreCount by mutableLongStateOf(0L)
+        private set
+
     var cancellingSessionIds: Set<String> by mutableStateOf(emptySet())
         private set
 
@@ -229,7 +267,9 @@ class AndroidSharedStateHolder(
                             val didReconnect = state.connection == GatewayConnectionState.CONNECTED &&
                                 lastObservedConnection != GatewayConnectionState.CONNECTED
                             gatewayState = state
+                            if (didReconnect) queueState = queueStore.resetConnection()
                             if (state.connection != GatewayConnectionState.CONNECTED) {
+                                pendingMessageSubmission = null
                                 cancellingSessionIds = emptySet()
                             }
                             if (state.connection != GatewayConnectionState.CONNECTED &&
@@ -274,6 +314,13 @@ class AndroidSharedStateHolder(
                                 is GatewayRuntimeEvent.Frame -> {
                                     withContext(Dispatchers.Main.immediate) {
                                         handleSessionCancellationFrame(event.frame)
+                                        if (event.frame.kind == "sent") {
+                                            pendingMessageSubmission?.let { applyMessageSendResult(it, true) }
+                                            pendingMessageSubmission = null
+                                        }
+                                        if (event.frame.kind in setOf("session-queues", "session-queue", "queue-item-updated") ||
+                                            (event.frame.kind == "error" && event.frame.requestType == "queue-update")
+                                        ) acceptQueueFrame(event.rawJson)
                                     }
                                     if (event.frame.kind in GOAL_MUTATION_RESPONSE_KINDS) {
                                         withContext(Dispatchers.Main.immediate) { goalMutationKind = null }
@@ -365,6 +412,11 @@ class AndroidSharedStateHolder(
                                 is GatewayRuntimeEvent.RequestCancelled -> {
                                     withContext(Dispatchers.Main.immediate) {
                                         handleSessionCancellationFailure(event.requestType, event.targetSessionId)
+                                        if (event.requestType == "message") pendingMessageSubmission = null
+                                        if (event.requestType == "queue-update") {
+                                            queueState = queueStore.failPending("队列操作未完成，请检查最新状态后重试")
+                                            platformError = queueState.lastError
+                                        }
                                     }
                                     if (event.requestType == "command-execute") {
                                         pendingCommandSubmission = null
@@ -415,6 +467,11 @@ class AndroidSharedStateHolder(
                                 is GatewayRuntimeEvent.RequestTimedOut -> {
                                     withContext(Dispatchers.Main.immediate) {
                                         handleSessionCancellationFailure(event.requestType, event.targetSessionId)
+                                        if (event.requestType == "message") pendingMessageSubmission = null
+                                        if (event.requestType == "queue-update") {
+                                            queueState = queueStore.failPending("队列操作未完成，请检查最新状态后重试")
+                                            platformError = queueState.lastError
+                                        }
                                     }
                                     if (event.requestType == "command-execute") {
                                         pendingCommandSubmission = null
@@ -466,6 +523,11 @@ class AndroidSharedStateHolder(
                                 is GatewayRuntimeEvent.RequestRejected -> {
                                     withContext(Dispatchers.Main.immediate) {
                                         handleSessionCancellationFailure(event.requestType, event.targetSessionId)
+                                        if (event.requestType == "message") pendingMessageSubmission = null
+                                        if (event.requestType == "queue-update") {
+                                            queueState = queueStore.failPending("队列操作未完成，请检查最新状态后重试")
+                                            platformError = queueState.lastError
+                                        }
                                     }
                                     if (event.requestType == "command-execute") {
                                         pendingCommandSubmission = null
@@ -653,7 +715,9 @@ class AndroidSharedStateHolder(
                 visibleAttachmentKeys = emptySet()
                 pruneAttachmentStateForSession()
             }
-            appGraph.gatewayRuntime.subscribe(sessionId)
+            if (snapshot.selectedSessionId == sessionId && snapshot.selectedHistoryLoadedEventCount == 0) {
+                appGraph.gatewayRuntime.subscribe(sessionId)
+            }
             appGraph.gatewayRuntime.requestSessions()
             requestSessionControls(appGraph, sessionId)
             return true
@@ -1250,9 +1314,11 @@ class AndroidSharedStateHolder(
         applySlashCommandTransition(slashCommandStore.clearActiveCommand())
     }
 
-    fun sendMessage() {
+    fun sendMessage(mode: String = "queue") {
         val appGraph = graph ?: return
+        if (pendingMessageSubmission != null) return
         val submission = captureMessageSubmission()
+        pendingMessageSubmission = submission
         appGraph.diagnostics.intent(
             GatewayDiagnosticAction.SEND_MESSAGE,
             hasSession = submission.sessionId != null,
@@ -1263,6 +1329,7 @@ class AndroidSharedStateHolder(
             if (commandExecution != null) {
                 if (submission.images.isNotEmpty() && !commandExecution.allowsImages) {
                     withContext(Dispatchers.Main.immediate) {
+                        pendingMessageSubmission = null
                         platformError = "此命令不支持图片"
                     }
                     return@launch
@@ -1273,6 +1340,7 @@ class AndroidSharedStateHolder(
                     sessionId = submission.sessionId
                 )
                 withContext(Dispatchers.Main.immediate) {
+                    pendingMessageSubmission = null
                     if (sent) {
                         pendingCommandSubmission = submission
                     }
@@ -1283,9 +1351,10 @@ class AndroidSharedStateHolder(
                     images = submission.images.map(AndroidPreparedImage::outgoing),
                     sessionId = submission.sessionId,
                     workspaceId = activeWorkspace?.workspaceId,
-                    clientTimeZone = TimeZone.getDefault().id
+                    clientTimeZone = TimeZone.getDefault().id,
+                    mode = mode
                 )
-                withContext(Dispatchers.Main.immediate) { applyMessageSendResult(submission, sent) }
+                if (!sent) withContext(Dispatchers.Main.immediate) { pendingMessageSubmission = null }
             }
         }
     }
@@ -1431,13 +1500,14 @@ class AndroidSharedStateHolder(
 
     val canSend: Boolean
         get() = gatewayState.connection == GatewayConnectionState.CONNECTED &&
-            pendingCommandSubmission == null &&
+            pendingCommandSubmission == null && pendingMessageSubmission == null &&
             (composedMessageText().isNotBlank() || preparedImages.isNotEmpty())
 
     val showsSessionStopButton: Boolean
         get() {
             val sessionId = snapshot.selectedSessionId ?: return false
-            return "session-cancel" in gatewayState.capabilities &&
+            return composedMessageText().isBlank() && preparedImages.isEmpty() &&
+                "session-cancel" in gatewayState.capabilities &&
                 snapshot.sessions.firstOrNull { it.id == sessionId }?.isRunning == true
         }
 
@@ -1570,6 +1640,7 @@ class AndroidSharedStateHolder(
 
     private fun publishSnapshot(next: SharedMobileSnapshot) {
         snapshot = next
+        restoreQueuedDraft()
         val runningSessionIds = next.sessions
             .filter { it.isRunning }
             .mapTo(mutableSetOf()) { it.id }

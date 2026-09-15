@@ -381,7 +381,8 @@ object GatewayRequests {
         images: List<GatewayOutgoingImage>,
         sessionId: String?,
         workspaceId: String?,
-        clientTimeZone: String
+        clientTimeZone: String,
+        mode: String = "queue"
     ): GatewayRequest = request(
         "message",
         "sent",
@@ -402,7 +403,19 @@ object GatewayRequests {
         if (sessionId.isNullOrBlank()) {
             workspaceId?.takeIf(String::isNotBlank)?.let { put("workspaceId", it) }
         }
+        require(mode == "queue" || mode == "steer")
+        put("mode", mode)
         put("clientTimeZone", clientTimeZone)
+    }
+
+    fun queueUpdate(sessionId: String, itemId: String, action: String): GatewayRequest = request(
+        "queue-update", "queue-item-updated", targetSessionId = sessionId, correlationId = itemId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        require(action == "remove" || action == "steer")
+        put("sessionId", sessionId)
+        put("itemId", itemId)
+        put("action", action)
     }
 
     fun commandExecute(

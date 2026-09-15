@@ -1,4 +1,5 @@
 import XCTest
+import class DeepSeekHarnessShared.SharedQueueStore
 import UIKit
 import SwiftUI
 import ChatLayout
@@ -1440,6 +1441,20 @@ final class ConversationProcessProjectionTests: XCTestCase {
 }
 
 final class GatewayProtocolTests: XCTestCase {
+    func testQueueFramesSurviveSwiftDecodeAndSharedBridge() throws {
+        let json = #"{"kind":"session-queues","queues":{"s":[{"id":"q","placement":"queued","message":{"id":"m","content":[{"type":"text","text":"再写一个 👏"}]}}]}}"#
+        let frame = try JSONDecoder().decode(GatewayFrame.self, from: Data(json.utf8))
+        let queue = DeepSeekHarnessShared.SharedQueueStore()
+        let encoded = try JSONEncoder().encode(frame)
+        let snapshot = queue.acceptFrame(json: String(decoding: encoded, as: UTF8.self))
+        XCTAssertEqual(snapshot.queues["s"]?.first?.text, "再写一个 👏")
+        XCTAssertNotNil(queue.beginAction(sessionId: "s", itemId: "q", action: "edit"))
+        let ack = GatewayFrame(kind: "queue-item-updated", sessionId: "s", itemId: "q", action: "remove", accepted: true)
+        _ = queue.acceptFrame(json: String(decoding: try JSONEncoder().encode(ack), as: UTF8.self))
+        XCTAssertEqual(queue.takeDraft(sessionId: "s"), "再写一个 👏")
+        XCTAssertNil(queue.takeDraft(sessionId: "s"))
+    }
+
     func testWireDecoderAcceptsWellFormedPreviewAndPreservesUnicodeAndJSONTypes() throws {
         let data = Data(#"{"kind":"sessions","items":[{"projections":{"values":{"turnOutline":[{"response":"鼓掌 �…"}]}},"text":"👏中文","literal":"\\ud83d","values":[1,1.5,true,false,null]}]}"#.utf8)
         let frame = try GatewayWireDecoder.decode(data)
@@ -1805,6 +1820,45 @@ final class GatewayProtocolTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(5))
         }
         XCTAssertTrue(store.renderedConversationItems[session.id, default: []].isEmpty)
+    }
+
+    @MainActor
+    func testRc2ReconnectKeepsVisibleHistoryAndSkipsIdenticalReplacement() async throws {
+        let (store, session) = try await makeRc2HistoryLoadingStore()
+        let snapshot = #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"已有历史"}]}}}],"hasMore":true,"nextBeforeSeq":10}"#
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store, snapshot)
+        await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "已有历史")
+        let revision = store.conversationTimeline(for: session.id).currentSnapshot.revision
+        // 主动后台挂起后的 hello，没有先调用 onConnectionFailure。
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"hello","historyFormatVersion":3,"capabilities":["assistant-stream-v1"]}"#)
+        XCTAssertTrue(store.historyLoadingSessionIds.contains(session.id))
+        XCTAssertFalse(store.isPreparingConversation(session.id), "有可用行时重连同步不能变成首屏等待")
+        XCTAssertEqual(store.renderedConversationItems[session.id]?.last?.text, "已有历史")
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store, snapshot)
+        XCTAssertFalse(store.historyLoadingSessionIds.contains(session.id))
+        XCTAssertEqual(store.conversationTimeline(for: session.id).currentSnapshot.revision, revision,
+            "相同快照不应重建投影或重新发布 UIKit 列表")
+        XCTAssertTrue(store.historyHasMore[session.id] == true)
+    }
+
+    @MainActor
+    func testRc2UnchangedEmptyHistoryStillRestoresNewAssistantPrefix() async throws {
+        let (store, session) = try await makeRc2HistoryLoadingStore()
+        for (subscription, text) in [("first", "旧前缀"), ("second", "恢复后的新前缀")] {
+            try await deliverHistoryLoadingFrame(store,
+                #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"SUB","assistantStream":true}"#.replacingOccurrences(of: "SUB", with: subscription))
+            let snapshot = #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"SUB","streamId":"SUB","historyFormatVersion":3,"cursor":0,"events":[],"hasMore":false,"assistantStream":{"revision":2,"activeAttempt":{"attemptId":"attempt","turn":1,"step":1,"startedAfterSeq":0,"nextIndex":1,"stream":[{"type":"text-chunks","index":0,"time0":100,"texts":["TEXT"],"dt":[]}]}}}"#
+                .replacingOccurrences(of: "SUB", with: subscription).replacingOccurrences(of: "TEXT", with: text)
+            try await deliverHistoryLoadingFrame(store, snapshot)
+            await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: text)
+            XCTAssertEqual(store.renderedConversationItems[session.id]?.map(\.text), [text],
+                "持久历史不变时仍须恢复新前缀，且只恢复一次")
+        }
     }
 
     @MainActor
@@ -2185,6 +2239,24 @@ final class GatewayProtocolTests: XCTestCase {
 
         try adapter.clear(sessionID: "s1")
         XCTAssertTrue(adapter.items(for: "s1").isEmpty)
+    }
+
+    @MainActor
+    func testSteeringBubblePromotesToDurableUserMessageWithoutDuplicate() throws {
+        let adapter = KMPConversationStoreAdapter()
+        let rows = try JSONDecoder().decode([JSONValue].self, from: Data("""
+        [{"id":"q","placement":"steering","message":{"id":"m","content":[{"type":"text","text":"Go"}]}}]
+        """.utf8))
+        try adapter.replaceSteeringMessages(sessionID: "s", items: rows)
+        let pending = try XCTUnwrap(adapter.items(for: "s").first)
+        XCTAssertEqual(pending.kind, .user)
+        XCTAssertEqual(pending.text, "Go")
+        try adapter.receive(SessionEvent(sessionId: "s", seq: 1, time: 100,
+            event: GatewayEvent(type: "user/message", text: "Go", raw: .object(["id": .string("m")]))))
+        try adapter.replaceSteeringMessages(sessionID: "s", items: rows)
+        try adapter.replaceSteeringMessages(sessionID: "s", items: [])
+        XCTAssertEqual(adapter.items(for: "s").map(\.id), [pending.id])
+        XCTAssertTrue(adapter.isOperational)
     }
 
     @MainActor
@@ -3093,6 +3165,21 @@ final class GatewayProtocolTests: XCTestCase {
         loader.reset()
         XCTAssertTrue(loader.inFlightAttachmentIDs.isEmpty)
         XCTAssertTrue(loader.queuedAttachmentIDs.isEmpty)
+    }
+
+    @MainActor
+    func testQueueAndSteerDoNotLeakBackgroundTurnCounts() {
+        let controller = AgentBackgroundExecutionController(application: BackgroundTaskApplicationSpy())
+        controller.begin(sessionID: "s", startsNewTurn: true)
+        controller.messageAccepted(sessionID: "s")
+        controller.begin(sessionID: "s", startsNewTurn: true)
+        controller.messageAccepted(sessionID: "s")
+        XCTAssertEqual(controller.outstandingTurns, 1)
+        controller.updateQueuedSessions(["s"])
+        controller.turnEnded(sessionID: "s")
+        XCTAssertTrue(controller.isAgentWorkActive)
+        controller.updateQueuedSessions([])
+        XCTAssertFalse(controller.isAgentWorkActive)
     }
 
     @MainActor

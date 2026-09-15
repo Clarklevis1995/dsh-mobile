@@ -124,6 +124,7 @@ class GatewayRuntime(
     private val pendingLanes = mutableMapOf<String, PendingLane>()
     private val deferredRequests = ArrayDeque<GatewayRequest>()
     private val activeTurnCountsBySession = mutableMapOf<String, Int>()
+    private val queuedSessionIds = mutableSetOf<String>()
     private var unassociatedTurnCount = 0
     private var desiredConnection = false
     private var reconnectBlocked = false
@@ -296,7 +297,8 @@ class GatewayRuntime(
         images: List<GatewayOutgoingImage>,
         sessionId: String?,
         workspaceId: String?,
-        clientTimeZone: String
+        clientTimeZone: String,
+        mode: String = "queue"
     ): Boolean = serialized {
         if (text.isBlank() && images.isEmpty()) return@serialized false
         if (!outgoingImagesAreWithinLimits(images)) {
@@ -305,7 +307,7 @@ class GatewayRuntime(
         }
         markTurnLocked(sessionId)
         val sent = sendRequestLocked(
-            GatewayRequests.message(text.trim(), images, sessionId, workspaceId, clientTimeZone)
+            GatewayRequests.message(text.trim(), images, sessionId, workspaceId, clientTimeZone, mode)
         )
         if (!sent) releaseTurnLocked(sessionId)
         sent
@@ -625,6 +627,20 @@ class GatewayRuntime(
                 activeTurnCountsBySession.getOrElse(frame.sessionId) { 0 } + 1
             publishTurnStateLocked()
         }
+        if ((frame.kind == "sent" || (frame.kind == "event" && frame.event?.type == "turn/start")) && !frame.sessionId.isNullOrBlank()) {
+            activeTurnCountsBySession[frame.sessionId] = 1
+            publishTurnStateLocked()
+        }
+        if (frame.kind == "session-queues" && frame.queues != null) {
+            queuedSessionIds.clear()
+            queuedSessionIds.addAll(frame.queues.filterValues { items -> items.any { it["placement"]?.stringValue == "queued" } }.keys)
+            publishTurnStateLocked()
+        }
+        if (frame.kind == "session-queue" && !frame.sessionId.isNullOrBlank()) {
+            if (frame.items.orEmpty().any { it["placement"]?.stringValue == "queued" }) queuedSessionIds.add(frame.sessionId)
+            else queuedSessionIds.remove(frame.sessionId)
+            publishTurnStateLocked()
+        }
         val endedLastBackgroundTurn = frame.kind == "event" && frame.event?.type == "turn/end"
         if (endedLastBackgroundTurn) releaseTurnLocked(frame.sessionId)
         if (frame.kind == "attachment") {
@@ -644,7 +660,7 @@ class GatewayRuntime(
         } else {
             transportFrame.byteCount.toLong() * FRAME_RETENTION_MULTIPLIER + FRAME_OBJECT_OVERHEAD_BYTES
         }
-        if (endedLastBackgroundTurn) suspendBackgroundConnectionIfIdleLocked()
+        if (endedLastBackgroundTurn || frame.kind == "session-queue" || frame.kind == "session-queues") suspendBackgroundConnectionIfIdleLocked()
         return FrameDelivery(GatewayRuntimeEvent.Frame(safeRaw, safeFrame, correlation.sessionId), estimatedBytes)
     }
 
@@ -727,6 +743,7 @@ class GatewayRuntime(
 
     private fun responseCorrelationMatches(request: GatewayRequest, frame: GatewayFrame): Boolean =
         when (request.responseKind) {
+            "queue-item-updated" -> request.correlationId == frame.itemId
             "attachment" -> request.correlationId == frame.attachment?.attachmentId
             "question-response", "approval-response" -> request.correlationId == frame.rpcId
             "session-created", "file-list", "file-download-opened" -> request.correlationId == frame.requestId
@@ -736,11 +753,12 @@ class GatewayRuntime(
         }
 
     private fun responseCorrelation(frame: GatewayFrame): String? =
-        frame.attachment?.attachmentId ?: frame.rpcId ?: frame.requestId ?: frame.transferId ?:
+        frame.itemId ?: frame.attachment?.attachmentId ?: frame.rpcId ?: frame.requestId ?: frame.transferId ?:
             frame.command?.stringValue
 
     private fun explicitResponseCorrelation(request: GatewayRequest, frame: GatewayFrame): String? =
         when (request.responseKind) {
+            "queue-item-updated" -> frame.itemId
             "attachment" -> frame.attachment?.attachmentId
             "question-response", "approval-response" -> frame.rpcId
             "session-created", "file-list", "file-download-opened" -> frame.requestId
@@ -878,6 +896,7 @@ class GatewayRuntime(
     }
 
     private fun clearTurnsLocked() {
+        queuedSessionIds.clear()
         activeTurnCountsBySession.clear()
         unassociatedTurnCount = 0
         publishTurnStateLocked()
@@ -977,7 +996,7 @@ class GatewayRuntime(
 
     private fun publishTurnStateLocked() {
         mutableState.value = mutableState.value.copy(
-            activeTurnSessionIds = activeTurnCountsBySession.keys.toSet(),
+            activeTurnSessionIds = activeTurnCountsBySession.keys.toSet() + queuedSessionIds,
             hasUnassociatedTurn = unassociatedTurnCount > 0
         )
     }
@@ -1200,7 +1219,7 @@ class GatewayRuntime(
         private val RESPONSE_KINDS_REQUIRING_ACTIVE_REQUEST = setOf(
             "history", "attachment", "sent", "question-response", "approval-response",
             "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled",
-            "session-cancelled", "session-created"
+            "session-cancelled", "session-created", "queue-item-updated"
         )
         private val IDEMPOTENT_CONNECTION_STATES = setOf(
             GatewayConnectionState.CONNECTING,

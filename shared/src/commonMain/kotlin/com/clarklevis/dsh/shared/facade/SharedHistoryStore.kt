@@ -214,6 +214,7 @@ class SharedHistoryStore(
         val records = wireJson.decodeFromString<List<SessionEvent>>(eventsJson)
         require(records.all { it.sessionId == sessionId })
         val normalized = records.associateBy(SessionEvent::seq).values.sortedBy(SessionEvent::seq)
+        val unchanged = eventsBySession[sessionId] == normalized
         Transition(
             state = state.copy(
                 sessions = state.sessions + (sessionId to HistorySessionState(
@@ -221,8 +222,8 @@ class SharedHistoryStore(
                 )),
                 pendingSessionId = state.pendingSessionId?.takeUnless { it == sessionId }
             ),
-            eventsBySession = eventsBySession + (sessionId to normalized),
-            eventPatch = SharedHistoryEventPatch("replace", replacementEvents = normalized),
+            eventsBySession = if (unchanged) eventsBySession else eventsBySession + (sessionId to normalized),
+            eventPatch = if (unchanged) null else SharedHistoryEventPatch("replace", replacementEvents = normalized),
             result = HistoryResult.None
         )
     }

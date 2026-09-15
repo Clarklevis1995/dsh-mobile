@@ -58,6 +58,7 @@ internal class AndroidGatewayProjection(
     private val conversationLastSequences = mutableMapOf<String, Int>()
     private var controlSnapshot = mobileStore.snapshot()
     private var lastFrameKind: String? = null
+    private var queueSessionIds = emptySet<String>()
     private var lastError: String? = null
     private val historyEnvelope = MviEnvelopeValidator("history")
     private val conversationEnvelope = MviEnvelopeValidator("conversation")
@@ -180,6 +181,19 @@ internal class AndroidGatewayProjection(
 
     fun acceptFrame(rawJson: String, frame: GatewayFrame, correlatedSessionId: String?): SharedMobileSnapshot {
         lastFrameKind = frame.kind
+        if (frame.kind == "session-queues" && frame.queues != null) {
+            val queues = requireNotNull(frame.queues)
+            (queueSessionIds + queues.keys).forEach { sessionId ->
+                val result = conversationStore.replaceSteeringMessages(sessionId, adapterJson.encodeToString(queues[sessionId].orEmpty()))
+                if (!result.accepted) lastError = result.errorMessage
+            }
+            queueSessionIds = queues.keys
+        } else if (frame.kind == "session-queue" && frame.sessionId != null && frame.items != null) {
+            val sessionId = requireNotNull(frame.sessionId)
+            queueSessionIds = queueSessionIds + sessionId
+            val result = conversationStore.replaceSteeringMessages(sessionId, adapterJson.encodeToString(requireNotNull(frame.items)))
+            if (!result.accepted) lastError = result.errorMessage
+        }
         if (frame.kind == "hello") {
             cancelSnapshotWait()
             usesAssistantStream = "assistant-stream-v1" in frame.capabilities.orEmpty()
@@ -247,7 +261,7 @@ internal class AndroidGatewayProjection(
         cancelSnapshotWait()
         assistantStream = AssistantStreamState()
         usesAssistantStream = false
-        historyEvents.keys.toList().forEach {
+        (historyEvents.keys + queueSessionIds).toSet().forEach {
             historyStore.clearSession(it)
             conversationStore.clearSession(it)
         }
@@ -259,6 +273,7 @@ internal class AndroidGatewayProjection(
         historyPendingSessionId = null
         conversationItems.clear()
         conversationLastSequences.clear()
+        queueSessionIds = emptySet()
         controlSnapshot = mobileStore.reset()
         lastFrameKind = null
         lastError = null
