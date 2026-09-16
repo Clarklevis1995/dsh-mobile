@@ -10,6 +10,8 @@ struct RootView: View {
     var body: some View {
         RootNavigationHost(store: store)
             .equatable()
+            // 直接观察当前 AppStore，避免外层主机容器漏掉外观设置更新。
+            .preferredColorScheme(store.interfaceStyle.colorScheme)
             .alert("DeepSeek Harness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
                 Button(String(localized: "好"), role: .cancel) { store.lastError = nil }
             } message: { Text(store.lastError ?? "") }
@@ -108,7 +110,8 @@ private struct RootNavigationHost: View, Equatable {
     /// Conversation content can then load and stream independently without
     /// participating in navigation-bar preference resolution.
     private func conversationHeader(for session: SessionSummary?) -> ConversationNavigationHeader {
-        let presetID = session?.agentPreset ?? store.agentPresetDefault
+        let presetID = (store.sessionAgentPreset.sessionId == session?.id ? store.sessionAgentPreset.agentPreset : nil)
+            ?? session?.agentPreset ?? store.agentPresetDefault
         return ConversationNavigationHeader(
             sessionID: session?.id,
             title: session?.title ?? String(localized: "session.new.fallback", defaultValue: "新建 DeepSeek Harness"),
@@ -156,6 +159,7 @@ private struct ConversationNavigationShell<Content: View>: View {
     @ViewBuilder let content: () -> Content
     @State private var showsWorkspaceFiles = false
     @State private var liveTitle: String?
+    @State private var livePresetTitle: String?
 
     var body: some View {
         content()
@@ -163,6 +167,10 @@ private struct ConversationNavigationShell<Content: View>: View {
             .onReceive(store.$sessions) { sessions in
                 let sessionID = header.sessionID ?? store.selectedSessionId
                 liveTitle = sessions.first { $0.id == sessionID }?.title
+            }
+            .onReceive(store.$sessionAgentPreset) { state in
+                guard state.sessionId == (header.sessionID ?? store.selectedSessionId), let id = state.agentPreset else { return }
+                livePresetTitle = state.presets.first { $0.id == id }?.name ?? L10n.presetModeName(for: id)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarRole(.editor)
@@ -172,7 +180,7 @@ private struct ConversationNavigationShell<Content: View>: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         ConversationNavigationStatus(
                             gateway: gateway,
-                            agentPresetTitle: header.agentPresetTitle
+                            agentPresetTitle: livePresetTitle ?? header.agentPresetTitle
                         )
                     }
                     .sharedBackgroundVisibility(.hidden)
@@ -182,7 +190,7 @@ private struct ConversationNavigationShell<Content: View>: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         ConversationNavigationStatus(
                             gateway: gateway,
-                            agentPresetTitle: header.agentPresetTitle
+                            agentPresetTitle: livePresetTitle ?? header.agentPresetTitle
                         )
                     }
                 }

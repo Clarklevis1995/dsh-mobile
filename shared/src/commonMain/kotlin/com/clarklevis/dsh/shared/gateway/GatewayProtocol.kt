@@ -73,6 +73,23 @@ data class GatewayRequest(
 
 /** 请求字段逐项复制现有 iOS GatewayClient 与 Mobile Gateway 已验证协议。 */
 object GatewayRequests {
+    fun sessionAgentPreset(sessionId: String, requestId: String): GatewayRequest = request(
+        "session-agent-preset", "session-agent-preset", targetSessionId = sessionId,
+        correlationId = requestId
+    ) {
+        put("sessionId", sessionId)
+        put("requestId", requestId)
+    }
+
+    fun selectAgentPreset(sessionId: String, agentPreset: String, requestId: String): GatewayRequest = request(
+        "select-agent-preset", "select-agent-preset", targetSessionId = sessionId,
+        correlationId = requestId, lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("sessionId", sessionId)
+        put("agentPreset", agentPreset)
+        put("requestId", requestId)
+    }
+
     fun simple(type: String, responseKind: String = type): GatewayRequest =
         request(type, responseKind, lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST)
 

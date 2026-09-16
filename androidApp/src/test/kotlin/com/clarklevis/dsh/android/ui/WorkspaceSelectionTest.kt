@@ -7,6 +7,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class WorkspaceSelectionTest {
+    @Test
+    fun blankSessionsAreHiddenInWorkspaceAndUngroupedHistory() {
+        val draftSessions = sessions.map { it.copy(hasConversation = false) }
+        assertEquals(emptyList<SessionSummary>(), workspaceScopedSessions(draftSessions, workspaces, "w1"))
+        assertEquals(emptyList<SessionSummary>(), workspaceScopedSessions(
+            draftSessions, workspaces, AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID
+        ))
+        val started = draftSessions.map { if (it.id == "s1") it.copy(hasConversation = true) else it }
+        assertEquals(listOf("s1"), workspaceScopedSessions(started, workspaces, "w1").map { it.id })
+    }
+
     private val sessions = listOf("s1", "s2", "loose").map { id ->
         SessionSummary(id, id, 1.0, isRunning = false, hasUnread = false)
     }

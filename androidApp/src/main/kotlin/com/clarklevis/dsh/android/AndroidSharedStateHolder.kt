@@ -14,6 +14,8 @@ import com.clarklevis.dsh.android.platform.GatewayDiagnosticAction
 import com.clarklevis.dsh.android.platform.AndroidImagePreprocessor
 import com.clarklevis.dsh.android.platform.AndroidPreparedImage
 import com.clarklevis.dsh.android.platform.BoundedLruCache
+import com.clarklevis.dsh.shared.facade.SharedSessionAgentPresetStore
+import com.clarklevis.dsh.shared.facade.SharedSessionAgentPresetTransition
 import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
 import com.clarklevis.dsh.shared.facade.SharedMobileStore
 import com.clarklevis.dsh.shared.facade.SharedSlashCommandSnapshot
@@ -59,6 +61,9 @@ class AndroidSharedStateHolder(
 ) {
     private val workspaceFileStore = SharedWorkspaceFileStore()
     private val slashCommandStore = SharedSlashCommandStore()
+    private val sessionAgentPresetStore = SharedSessionAgentPresetStore()
+    var sessionAgentPreset by mutableStateOf(sessionAgentPresetStore.snapshot())
+        private set
     private val scope = graph?.let { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     private var runtimeCollection: Job? = null
     private val gatewayFollowUps = graph?.let { appGraph ->
@@ -269,6 +274,7 @@ class AndroidSharedStateHolder(
                             gatewayState = state
                             if (didReconnect) queueState = queueStore.resetConnection()
                             if (state.connection != GatewayConnectionState.CONNECTED) {
+                                applySessionAgentPresetTransition(sessionAgentPresetStore.disconnected())
                                 pendingMessageSubmission = null
                                 cancellingSessionIds = emptySet()
                             }
@@ -313,6 +319,11 @@ class AndroidSharedStateHolder(
                             when (event) {
                                 is GatewayRuntimeEvent.Frame -> {
                                     withContext(Dispatchers.Main.immediate) {
+                                        applySessionAgentPresetTransition(sessionAgentPresetStore.accept(
+                                            if (event.frame.sessionId == null && event.correlatedSessionId != null) {
+                                                event.frame.copy(sessionId = event.correlatedSessionId)
+                                            } else event.frame
+                                        ))
                                         handleSessionCancellationFrame(event.frame)
                                         if (event.frame.kind == "sent") {
                                             pendingMessageSubmission?.let { applyMessageSendResult(it, true) }
@@ -411,6 +422,9 @@ class AndroidSharedStateHolder(
                                 is GatewayRuntimeEvent.RequestQueued -> Unit
                                 is GatewayRuntimeEvent.RequestCancelled -> {
                                     withContext(Dispatchers.Main.immediate) {
+                                        applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
+                                            event.requestType, event.targetSessionId, event.correlationId, "请求未完成，请重试"
+                                        ))
                                         handleSessionCancellationFailure(event.requestType, event.targetSessionId)
                                         if (event.requestType == "message") pendingMessageSubmission = null
                                         if (event.requestType == "queue-update") {
@@ -466,6 +480,9 @@ class AndroidSharedStateHolder(
                                 }
                                 is GatewayRuntimeEvent.RequestTimedOut -> {
                                     withContext(Dispatchers.Main.immediate) {
+                                        applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
+                                            event.requestType, event.targetSessionId, event.correlationId, "请求未完成，请重试"
+                                        ))
                                         handleSessionCancellationFailure(event.requestType, event.targetSessionId)
                                         if (event.requestType == "message") pendingMessageSubmission = null
                                         if (event.requestType == "queue-update") {
@@ -522,6 +539,9 @@ class AndroidSharedStateHolder(
                                 }
                                 is GatewayRuntimeEvent.RequestRejected -> {
                                     withContext(Dispatchers.Main.immediate) {
+                                        applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
+                                            event.requestType, event.targetSessionId, event.correlationId, "请求未完成，请重试"
+                                        ))
                                         handleSessionCancellationFailure(event.requestType, event.targetSessionId)
                                         if (event.requestType == "message") pendingMessageSubmission = null
                                         if (event.requestType == "queue-update") {
@@ -640,6 +660,7 @@ class AndroidSharedStateHolder(
 
     fun selectSession(sessionId: String) {
         graph?.diagnostics?.intent(GatewayDiagnosticAction.SELECT_SESSION, hasSession = true)
+        applySessionAgentPresetTransition(sessionAgentPresetStore.leave())
         pendingSelectedSessionId = sessionId
         inputGeneration += 1
         applySlashCommandTransition(slashCommandStore.reset(sessionId))
@@ -1054,6 +1075,48 @@ class AndroidSharedStateHolder(
         }
     }
 
+    fun refreshSessionAgentPreset() {
+        applySessionAgentPresetTransition(sessionAgentPresetStore.open(
+            snapshot.selectedSessionId,
+            "session-agent-preset" in gatewayState.capabilities,
+            gatewayState.connection == GatewayConnectionState.CONNECTED
+        ))
+    }
+
+    fun leaveSessionAgentPreset() {
+        applySessionAgentPresetTransition(sessionAgentPresetStore.leave())
+    }
+
+    fun selectSessionAgentPreset(presetId: String) {
+        applySessionAgentPresetTransition(sessionAgentPresetStore.select(presetId))
+    }
+
+    private fun applySessionAgentPresetTransition(transition: SharedSessionAgentPresetTransition) {
+        sessionAgentPreset = transition.snapshot
+        transition.error?.let { platformError = it }
+        if (transition.refreshCommands) transition.snapshot.sessionId?.let { sessionId ->
+            applySlashCommandTransition(slashCommandStore.invalidateCatalog(
+                sessionId, "commands" in gatewayState.capabilities, Locale.getDefault().toLanguageTag()
+            ))
+        }
+        if (transition.invalidSession) {
+            refreshSessions()
+            graph?.gatewayScope?.launch { projectionActor.selectSession(null) }
+        }
+        val appGraph = graph ?: return
+        transition.requests.forEach { request ->
+            gatewayFollowUps?.submit {
+                if (!appGraph.gatewayRuntime.sendRequest(request)) {
+                    withContext(Dispatchers.Main.immediate) {
+                        applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
+                            request.requestType, request.targetSessionId, request.correlationId, "请求发送失败，请重试"
+                        ))
+                    }
+                }
+            }
+        }
+    }
+
     fun refreshContextUsage() {
         val sessionId = snapshot.selectedSessionId ?: return
         val appGraph = graph ?: return
@@ -1072,6 +1135,9 @@ class AndroidSharedStateHolder(
     }
 
     private suspend fun requestSessionControls(appGraph: AndroidAppGraph, sessionId: String) {
+        withContext(Dispatchers.Main.immediate) {
+            if (snapshot.selectedSessionId == sessionId) refreshSessionAgentPreset()
+        }
         appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("models", sessionId))
         appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("permission-options", sessionId))
         appGraph.gatewayRuntime.sendRequest(GatewayRequests.sessionControl("context-usage", sessionId))
@@ -1316,8 +1382,12 @@ class AndroidSharedStateHolder(
 
     fun sendMessage(mode: String = "queue") {
         val appGraph = graph ?: return
-        if (pendingMessageSubmission != null) return
+        if (pendingMessageSubmission != null || sessionAgentPreset.blocksSending) return
         val submission = captureMessageSubmission()
+        val commandExecution = slashCommandStore.commandExecutionForInput(submission.draft)
+        if (commandExecution == null || submission.images.isEmpty() || commandExecution.allowsImages) {
+            applySessionAgentPresetTransition(sessionAgentPresetStore.beginMessage())
+        }
         pendingMessageSubmission = submission
         appGraph.diagnostics.intent(
             GatewayDiagnosticAction.SEND_MESSAGE,
@@ -1325,7 +1395,6 @@ class AndroidSharedStateHolder(
             imageCount = submission.images.size
         )
         appGraph.gatewayScope.launch {
-            val commandExecution = slashCommandStore.commandExecutionForInput(submission.draft)
             if (commandExecution != null) {
                 if (submission.images.isNotEmpty() && !commandExecution.allowsImages) {
                     withContext(Dispatchers.Main.immediate) {
@@ -1343,6 +1412,10 @@ class AndroidSharedStateHolder(
                     pendingMessageSubmission = null
                     if (sent) {
                         pendingCommandSubmission = submission
+                    } else {
+                        applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
+                            "command-execute", submission.sessionId, null, null
+                        ))
                     }
                 }
             } else {
@@ -1354,7 +1427,12 @@ class AndroidSharedStateHolder(
                     clientTimeZone = TimeZone.getDefault().id,
                     mode = mode
                 )
-                if (!sent) withContext(Dispatchers.Main.immediate) { pendingMessageSubmission = null }
+                if (!sent) withContext(Dispatchers.Main.immediate) {
+                    pendingMessageSubmission = null
+                    applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
+                        "message", submission.sessionId, null, null
+                    ))
+                }
             }
         }
     }
@@ -1500,6 +1578,7 @@ class AndroidSharedStateHolder(
 
     val canSend: Boolean
         get() = gatewayState.connection == GatewayConnectionState.CONNECTED &&
+            !sessionAgentPreset.blocksSending &&
             pendingCommandSubmission == null && pendingMessageSubmission == null &&
             (composedMessageText().isNotBlank() || preparedImages.isNotEmpty())
 
@@ -1567,6 +1646,8 @@ class AndroidSharedStateHolder(
     }
 
     private fun sendSlashCommandImmediately(text: String) {
+        if (sessionAgentPreset.blocksSending) return
+        applySessionAgentPresetTransition(sessionAgentPresetStore.beginMessage())
         val appGraph = graph ?: return
         val sessionId = snapshot.selectedSessionId ?: return
         appGraph.gatewayScope.launch {
@@ -1577,8 +1658,11 @@ class AndroidSharedStateHolder(
                 workspaceId = null,
                 clientTimeZone = TimeZone.getDefault().id
             )
-            if (sent) withContext(Dispatchers.Main.immediate) {
-                successfulMessageSendCount += 1
+            withContext(Dispatchers.Main.immediate) {
+                if (sent) successfulMessageSendCount += 1
+                else applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
+                    "message", sessionId, null, null
+                ))
             }
         }
     }
@@ -1586,8 +1670,16 @@ class AndroidSharedStateHolder(
     private fun executeSlashCommandImmediately(command: com.clarklevis.dsh.shared.facade.SharedSlashCommandExecution) {
         val appGraph = graph ?: return
         val sessionId = snapshot.selectedSessionId ?: return
+        if (sessionAgentPreset.blocksSending) return
+        applySessionAgentPresetTransition(sessionAgentPresetStore.beginMessage())
         appGraph.gatewayScope.launch {
-            appGraph.gatewayRuntime.executeCommand(command.line, emptyList(), sessionId)
+            if (!appGraph.gatewayRuntime.executeCommand(command.line, emptyList(), sessionId)) {
+                withContext(Dispatchers.Main.immediate) {
+                    applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
+                        "command-execute", sessionId, null, null
+                    ))
+                }
+            }
         }
     }
 

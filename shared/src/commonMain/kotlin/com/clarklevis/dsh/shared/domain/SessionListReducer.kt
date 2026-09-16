@@ -9,8 +9,12 @@ data class SessionSummary(
     val lastActivityEpochSeconds: Double,
     val isRunning: Boolean,
     val hasUnread: Boolean,
-    val agentPreset: String? = null
-)
+    val agentPreset: String? = null,
+    // null 兼容旧缓存；网关列表到达后使用 Host 的 blank 标记决定历史可见性。
+    val hasConversation: Boolean? = null
+) {
+    val isVisibleInHistory: Boolean get() = hasConversation != false
+}
 
 data class SessionListLabels(
     val newSessionTitle: String = "New session",
@@ -39,7 +43,8 @@ sealed interface SessionListAction {
     ) : SessionListAction
     data class KnownSessionAdded(
         val sessionId: String,
-        val insertedAtEpochSeconds: Double
+        val insertedAtEpochSeconds: Double,
+        val hasConversation: Boolean = false
     ) : SessionListAction
     data class EventReceived(
         val event: SessionEvent,
@@ -65,7 +70,7 @@ object SessionListReducer {
                 labels,
                 action.insertedAtEpochSeconds
             ).map {
-                if (it.id == action.sessionId) it.copy(agentPreset = action.agentPreset) else it
+                if (it.id == action.sessionId) it.copy(agentPreset = action.agentPreset, hasConversation = true) else it
             }
             state.copy(
                 sessions = sessions,
@@ -79,7 +84,9 @@ object SessionListReducer {
                 labels.remoteTitle(action.sessionId),
                 labels,
                 action.insertedAtEpochSeconds
-            )
+            ).map {
+                if (it.id == action.sessionId && action.hasConversation) it.copy(hasConversation = true) else it
+            }
         )
         is SessionListAction.EventReceived -> applyEvent(
             state,
@@ -99,24 +106,28 @@ object SessionListReducer {
         remote: List<GatewaySessionSummary>,
         labels: SessionListLabels
     ): SessionListState {
-        val sessions = state.sessions.associateBy(SessionSummary::id).toMutableMap()
+        val previous = state.sessions.associateBy(SessionSummary::id)
+        // sessions 是 Host 的完整列表，不能将已消失的缓存会话再次并入。
+        val sessions = mutableMapOf<String, SessionSummary>()
         remote.filterNot { it.sessionId in state.archivedSessionIds }.forEach { item ->
             val fallback = item.cwd?.trimEnd('/')?.substringAfterLast('/')?.takeIf(String::isNotEmpty)
             val title = item.projectedTitle ?: fallback ?: labels.remoteTitle(item.sessionId)
             val timestamp = normalizeEpochSeconds(item.updatedAt)
-            val existing = sessions[item.sessionId]
+            val existing = previous[item.sessionId]
             sessions[item.sessionId] = existing?.copy(
                 title = title,
                 lastActivityEpochSeconds = timestamp,
                 isRunning = item.running,
-                agentPreset = item.agentPreset ?: existing.agentPreset
+                agentPreset = item.agentPreset ?: existing.agentPreset,
+                hasConversation = !item.blank
             ) ?: SessionSummary(
                 id = item.sessionId,
                 title = if (item.blank) labels.blankTitle(item.sessionId) else title,
                 lastActivityEpochSeconds = timestamp,
                 isRunning = item.running,
                 hasUnread = false,
-                agentPreset = item.agentPreset
+                agentPreset = item.agentPreset,
+                hasConversation = !item.blank
             )
         }
         return state.copy(sessions = sessions.values
@@ -156,6 +167,7 @@ object SessionListReducer {
             if (session.id != record.sessionId) return@map session
             session.copy(
                 lastActivityEpochSeconds = normalizeEpochSeconds(record.time),
+                hasConversation = true,
                 isRunning = when (event.type) {
                     "turn/start" -> true
                     "turn/end" -> false
@@ -182,7 +194,8 @@ object SessionListReducer {
                     title ?: labels.remoteTitle(id),
                     insertedAtEpochSeconds,
                     false,
-                    false
+                    false,
+                    hasConversation = false
                 )
             ) + sessions
         }

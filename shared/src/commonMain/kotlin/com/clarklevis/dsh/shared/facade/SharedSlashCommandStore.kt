@@ -85,13 +85,27 @@ data class SharedSlashCommandExecution(
 class SharedSlashCommandStore {
     private var state = SharedSlashCommandSnapshot()
     private var catalogRequested = false
+    private var discardNextCatalog = false
 
     fun snapshot(): SharedSlashCommandSnapshot = state
 
     fun reset(sessionId: String?): SharedSlashCommandTransition {
         catalogRequested = false
+        discardNextCatalog = false
         state = SharedSlashCommandSnapshot(sessionId = sessionId?.takeIf(String::isNotBlank))
         return SharedSlashCommandTransition(state)
+    }
+
+    /** commands 响应已包含 skills 分组；模式改变后两者一起失效并刷新。 */
+    fun invalidateCatalog(sessionId: String, isSupported: Boolean, locale: String?): SharedSlashCommandTransition {
+        if (state.sessionId != sessionId) reset(sessionId)
+        discardNextCatalog = discardNextCatalog || state.catalogLoading
+        val input = state.inputText
+        state = SharedSlashCommandSnapshot(sessionId = sessionId, inputText = input, catalogLoading = isSupported)
+        catalogRequested = isSupported
+        return SharedSlashCommandTransition(
+            state, if (isSupported) GatewayRequests.slashCommands(sessionId, locale) else null
+        )
     }
 
     fun updateInput(
@@ -263,7 +277,7 @@ class SharedSlashCommandStore {
 
     fun requestFailed(requestType: String, message: String?): SharedSlashCommandTransition {
         if (requestType !in REQUEST_TYPES) return SharedSlashCommandTransition(state)
-        if (requestType == "commands") catalogRequested = false
+        if (requestType == "commands") { catalogRequested = false; discardNextCatalog = false }
         state = state.copy(
             catalogLoading = if (requestType == "commands") false else state.catalogLoading,
             optionsLoading = if (requestType == "command-options") false else state.optionsLoading,
@@ -290,6 +304,7 @@ class SharedSlashCommandStore {
 
     private fun acceptCatalog(frame: GatewayFrame): SharedSlashCommandTransition {
         if (frame.sessionId != state.sessionId) return SharedSlashCommandTransition(state)
+        if (discardNextCatalog) { discardNextCatalog = false; return SharedSlashCommandTransition(state) }
         val groups = decodeCatalogGroups(frame) ?: return fail("command-catalog-invalid")
         val commands = groups.flatMap(GatewaySlashCommandGroup::items)
         if (commands.any { command ->

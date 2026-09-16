@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -66,7 +67,6 @@ import com.clarklevis.dsh.shared.protocol.GatewayAgentPreset
 import com.clarklevis.dsh.shared.protocol.GatewayModelGroup
 import com.clarklevis.dsh.shared.protocol.GatewayModelItem
 import com.clarklevis.dsh.shared.protocol.GatewayReasoningEffort
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -172,11 +172,11 @@ internal fun SettingsScreen(
                     }
                     SettingsSection(
                         title = "外观",
-                        footer = "语言设置将在重新启动应用后生效。"
+                        footer = "语言设置将在重新启动应用后生效。当前仅支持简体中文，其他系统语言将显示中文。"
                     ) {
-                        SettingsValueRow("界面", "跟随系统")
+                        InterfaceStyleSettingsRow()
                         SettingsDivider()
-                        SettingsValueRow("语言", Locale.getDefault().displayLanguage.ifBlank { "简体中文" })
+                        LanguageSettingsRow()
                     }
                     stateHolder.platformError?.let { error ->
                         Text(error, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
@@ -670,11 +670,62 @@ private fun SettingsValueRow(
             )
         }
         if (onClick != null) {
-            Text(
-                "  ›",
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.30f else 0.15f),
-                fontSize = 20.sp
+            Icon(
+                painterResource(R.drawable.ic_chevron_right),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.30f else 0.15f),
+                modifier = Modifier.padding(start = 8.dp).size(12.dp)
             )
+        }
+    }
+}
+
+@Composable
+internal fun InterfaceStyleSettingsRow() {
+    val appearance = LocalAppearanceSettings.current
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        SettingsValueRow("界面", appearance.interfaceStyle.title) { expanded = true }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            InterfaceStyle.entries.forEach { style ->
+                DropdownMenuItem(
+                    text = { Text(style.title) },
+                    trailingIcon = {
+                        if (style == appearance.interfaceStyle) {
+                            Icon(painterResource(R.drawable.ic_menu_check), contentDescription = "当前选中")
+                        }
+                    },
+                    onClick = {
+                        appearance.selectInterfaceStyle(style)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun LanguageSettingsRow() {
+    val appearance = LocalAppearanceSettings.current
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        SettingsValueRow("语言", appearance.language.title) { expanded = true }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            AppLanguage.entries.forEach { language ->
+                DropdownMenuItem(
+                    text = { Text(language.title) },
+                    trailingIcon = {
+                        if (language == appearance.language) {
+                            Icon(painterResource(R.drawable.ic_menu_check), contentDescription = "当前选中")
+                        }
+                    },
+                    onClick = {
+                        appearance.selectLanguage(language)
+                        expanded = false
+                    }
+                )
+            }
         }
     }
 }

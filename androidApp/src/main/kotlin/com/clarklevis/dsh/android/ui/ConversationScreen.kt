@@ -173,7 +173,9 @@ internal fun ConversationScreen(
 ) {
     val session = stateHolder.snapshot.sessions.firstOrNull { it.id == stateHolder.snapshot.selectedSessionId }
     val title = session?.title ?: "新建 DeepSeek Harness"
-    val agentPresetId = session?.agentPreset ?: stateHolder.snapshot.agentPresetDefault
+    val agentPresetId = stateHolder.sessionAgentPreset.agentPreset
+        .takeIf { stateHolder.sessionAgentPreset.sessionId == stateHolder.snapshot.selectedSessionId }
+        ?: session?.agentPreset ?: stateHolder.snapshot.agentPresetDefault
     val agentPresetName = stateHolder.snapshot.agentPresets
         .firstOrNull { it.id == agentPresetId }
         ?.name
@@ -189,10 +191,16 @@ internal fun ConversationScreen(
     }
     var showStats by remember { mutableStateOf(false) }
     var showWorkspaceFiles by remember { mutableStateOf(false) }
-    LaunchedEffect(stateHolder.snapshot.selectedSessionId) { stateHolder.refreshSessionControls() }
+    LaunchedEffect(stateHolder.snapshot.selectedSessionId) {
+        if (stateHolder.snapshot.selectedSessionId == null) onBack()
+        else stateHolder.refreshSessionControls()
+    }
     LaunchedEffect(pagerState.currentPage) { stateHolder.setTrajectoryActive(pagerState.currentPage == 1) }
     DisposableEffect(stateHolder) {
-        onDispose { stateHolder.setTrajectoryActive(false) }
+        onDispose {
+            stateHolder.setTrajectoryActive(false)
+            stateHolder.leaveSessionAgentPreset()
+        }
     }
 
     Scaffold(
@@ -565,12 +573,24 @@ private fun ConversationPage(
                         // Pending interaction cards replace normal composer
                         // chrome. Stats/tasks/goals must not consume height and
                         // push the approval or question actions off screen.
-                        stateHolder.snapshot.statsSnapshot?.let { snapshot ->
-                            SessionStatsBanner(
-                                snapshot = snapshot,
-                                sessionId = sessionId,
-                                onViewFullStats = onShowFullStats
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            SessionAgentPresetControl(
+                                state = stateHolder.sessionAgentPreset,
+                                onSelect = stateHolder::selectSessionAgentPreset,
+                                onRetry = stateHolder::refreshSessionAgentPreset
                             )
+                            stateHolder.snapshot.statsSnapshot?.let { snapshot ->
+                                SessionStatsBanner(
+                                    snapshot = snapshot,
+                                    sessionId = sessionId,
+                                    modifier = Modifier.weight(1f),
+                                    onViewFullStats = onShowFullStats
+                                )
+                            }
                         }
                         TaskGoalPanels(
                             stateHolder = stateHolder,
@@ -1539,6 +1559,107 @@ private fun ComposerIconButton(iconRes: Int, description: String, onClick: () ->
             modifier = Modifier.size(22.dp),
             tint = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@Composable
+internal fun SessionAgentPresetControl(
+    state: com.clarklevis.dsh.shared.facade.SharedSessionAgentPresetSnapshot,
+    onSelect: (String) -> Unit,
+    onRetry: () -> Unit
+) {
+    if (!state.visible) return
+    var expanded by remember(state.sessionId) { mutableStateOf(false) }
+    val current = state.presets.firstOrNull { it.id == state.agentPreset }
+    val retry = !state.loading && !state.saving && (!state.known || !state.catalogLoaded)
+    val shape = RoundedCornerShape(13.dp)
+    val isDark = isSystemInDarkTheme()
+    val shadowColor = dshFloatingSurfaceShadow(isDark)
+    Box {
+        Surface(
+            shape = shape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            border = androidx.compose.foundation.BorderStroke(0.8.dp, dshGlassEdge(isDark)),
+            modifier = Modifier.testTag("session-agent-preset-capsule")
+                .dropShadow(
+                    shape = shape,
+                    shadow = Shadow(
+                        radius = 10.dp,
+                        spread = 0.dp,
+                        color = shadowColor,
+                        offset = DpOffset(0.dp, 4.dp)
+                    )
+                )
+                .clip(shape)
+                .clickable(enabled = state.canSelect || (retry && state.connected)) {
+                    if (retry) onRetry() else expanded = true
+                }
+        ) {
+            Row(
+                Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_agent_mode), contentDescription = null,
+                    modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    when {
+                        state.saving -> "切换中…"
+                        state.agentPreset != null -> current?.name?.takeIf(String::isNotBlank)
+                            ?: agentPresetDisplayName(state.agentPreset)
+                        state.loading -> "读取模式…"
+                        else -> "重试模式"
+                    },
+                    modifier = Modifier.widthIn(max = 132.dp),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    painterResource(R.drawable.ic_question_chevron_down), contentDescription = "选择会话模式",
+                    modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                )
+            }
+        }
+        ComposerPopupMenu(
+            expanded = expanded && state.canSelect,
+            onDismissRequest = { expanded = false },
+            width = 292.dp, alignment = Alignment.BottomStart, horizontalCompensation = (-20).dp
+        ) {
+            state.presets.forEach { preset ->
+                DropdownMenuItem(
+                    modifier = Modifier.testTag("session-agent-preset-${preset.id}"),
+                    enabled = preset.broken != true,
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                preset.name?.takeIf(String::isNotBlank) ?: agentPresetDisplayName(preset.id),
+                                fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                if (preset.broken == true) preset.brokenReason ?: "模式不可用"
+                                else agentPresetCompactDescription(preset.id, preset.description),
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    },
+                    trailingIcon = {
+                        if (preset.id == state.agentPreset) Icon(
+                            painterResource(R.drawable.ic_menu_check), contentDescription = "已选择",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+                    onClick = { expanded = false; onSelect(preset.id) }
+                )
+            }
+        }
     }
 }
 

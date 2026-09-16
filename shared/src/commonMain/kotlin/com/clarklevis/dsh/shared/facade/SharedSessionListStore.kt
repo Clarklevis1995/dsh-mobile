@@ -20,7 +20,8 @@ data class SharedSessionSummarySnapshot(
     val lastActivityEpochSeconds: Double,
     val isRunning: Boolean,
     val hasUnread: Boolean,
-    val agentPreset: String? = null
+    val agentPreset: String? = null,
+    val hasConversation: Boolean? = null
 )
 
 /** iOS 发布和持久化适配器所需的完整会话列表快照。 */
@@ -192,7 +193,8 @@ private fun SharedSessionSummarySnapshot.toDomain(): SessionSummary = SessionSum
     lastActivityEpochSeconds = lastActivityEpochSeconds,
     isRunning = isRunning,
     hasUnread = hasUnread,
-    agentPreset = agentPreset
+    agentPreset = agentPreset,
+    hasConversation = hasConversation
 )
 
 private fun SessionSummary.toSnapshot(): SharedSessionSummarySnapshot = SharedSessionSummarySnapshot(
@@ -201,7 +203,8 @@ private fun SessionSummary.toSnapshot(): SharedSessionSummarySnapshot = SharedSe
     lastActivityEpochSeconds = lastActivityEpochSeconds,
     isRunning = isRunning,
     hasUnread = hasUnread,
-    agentPreset = agentPreset
+    agentPreset = agentPreset,
+    hasConversation = hasConversation
 )
 
 private fun SessionListState.toSnapshot(): SharedSessionListSnapshot = SharedSessionListSnapshot(

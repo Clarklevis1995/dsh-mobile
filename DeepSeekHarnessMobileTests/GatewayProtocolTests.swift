@@ -6643,3 +6643,136 @@ final class MarkdownLargeMessageTests: XCTestCase {
         XCTAssertGreaterThan(size.height, 0)
     }
 }
+
+final class SessionAgentPresetProtocolTests: XCTestCase {
+    func testCatalogDecodesBrokenReasonAndHostVisibilitySetting() throws {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"agent-presets","modeSelectionEnabled":false,"presets":[{"id":"standard","isDefault":true},{"id":"custom","name":"自定义模式","broken":"缺少插件"}]}"#.utf8))
+        XCTAssertEqual(frame.modeSelectionEnabled, false)
+        XCTAssertEqual(frame.presets?.last?.broken, true)
+        XCTAssertEqual(frame.presets?.last?.brokenReason, "缺少插件")
+        XCTAssertEqual(frame.presets?.last?.isDefault, false)
+        let roundTrip = try JSONDecoder().decode(GatewayFrame.self, from: JSONEncoder().encode(frame))
+        XCTAssertEqual(roundTrip.presets?.last?.brokenReason, "缺少插件")
+    }
+
+    func testLockNotificationDoesNotInventPresetOrRequestIdentity() throws {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"session-agent-preset-updated","sessionId":"s1","locked":true,"seq":15}"#.utf8))
+        XCTAssertEqual(frame.locked, true)
+        XCTAssertNil(frame.agentPreset)
+        XCTAssertNil(frame.requestId)
+        let response = try GatewayWireDecoder.decode(Data(#"{"kind":"select-agent-preset","sessionId":"s1","requestId":"select1","agentPreset":"minimal"}"#.utf8))
+        XCTAssertEqual(response.agentPreset, "minimal")
+        XCTAssertEqual(response.requestId, "select1")
+        XCTAssertNil(response.locked)
+    }
+}
+
+final class InterfaceStylePresentationTests: XCTestCase {
+    @MainActor
+    func testRootAppliesLiveAppearanceChangesAndReturnsToSystem() async throws {
+        let suite = "appearance-presentation-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let hosts = MultiGatewayStore(defaults: defaults)
+        let store = hosts.activeStore
+        // 本测试仅验证外观，避免根视图首次显示时弹出未配对提示。
+        store.connectOnColdLaunchIfPaired()
+        store.lastError = nil
+        let controller = UIHostingController(rootView:
+            RootView().environmentObject(store).environmentObject(hosts)
+        )
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let originalSystemStyle: UIUserInterfaceStyle? = scene.traitOverrides.contains(UITraitUserInterfaceStyle.self)
+            ? scene.traitOverrides.userInterfaceStyle : nil
+        // 从 Scene 注入系统外观，避免与 SwiftUI 管理的 Window override 相互覆盖。
+        scene.traitOverrides.userInterfaceStyle = .light
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            store.deactivateGateway()
+            if let originalSystemStyle {
+                scene.traitOverrides.userInterfaceStyle = originalSystemStyle
+            } else {
+                scene.traitOverrides.remove(UITraitUserInterfaceStyle.self)
+            }
+        }
+
+        await assertAppearance(.light, in: controller)
+        store.interfaceStyle = .dark
+        await assertAppearance(.dark, in: controller)
+        store.interfaceStyle = .light
+        await assertAppearance(.light, in: controller)
+        // App 指定浅色时不受系统深色影响；恢复跟随系统后立即继承。
+        scene.traitOverrides.userInterfaceStyle = .dark
+        await assertAppearance(.light, in: controller)
+        store.interfaceStyle = .system
+        await assertAppearance(.dark, in: controller)
+        scene.traitOverrides.userInterfaceStyle = .light
+        await assertAppearance(.light, in: controller)
+    }
+
+    @MainActor
+    private func assertAppearance(
+        _ expected: UIUserInterfaceStyle,
+        in controller: UIViewController,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<100 {
+            controller.view.layoutIfNeeded()
+            if controller.traitCollection.userInterfaceStyle == expected { return }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(controller.traitCollection.userInterfaceStyle, expected, file: file, line: line)
+    }
+}
+
+final class SessionHistoryVisibilityTests: XCTestCase {
+    @MainActor
+    func testBlankSessionRemainsAvailableForConfigurationButNotHistory() async throws {
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "", selectedWorkspaceID: nil, sessions: []))
+        defer { store.deactivateGateway() }
+        store.addKnownSession("draft")
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        XCTAssertEqual(store.sessions.map(\.id), ["draft"])
+        XCTAssertTrue(store.historySessions.isEmpty)
+        XCTAssertTrue(store.ungroupedSessions.isEmpty)
+        store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"sent","sessionId":"draft"}"#.utf8
+        )))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        XCTAssertEqual(store.historySessions.map(\.id), ["draft"])
+    }
+
+    @MainActor
+    func testHostListRemovesMissingCachedSessionsAndHidesBlankOnes() throws {
+        let cached = SessionSummary(id: "gone", title: "本地旧会话", lastActivity: .now,
+                                    isRunning: false, hasUnread: false)
+        let adapter = KMPSessionListStoreAdapter(sessions: [cached])
+        let snapshot = try adapter.reduce(.remoteSessionsReceived([
+            GatewaySessionSummary(sessionId: "blank", updatedAt: 200, running: false, blank: true),
+            GatewaySessionSummary(sessionId: "real", updatedAt: 100, running: false, blank: false)
+        ]))
+        XCTAssertEqual(snapshot.persistedSessions.filter(\.isVisibleInHistory).map(\.id), ["real"])
+        XCTAssertFalse(snapshot.persistedSessions.contains { $0.id == "gone" })
+        let restored = KMPSessionListStoreAdapter(sessions: snapshot.persistedSessions)
+        XCTAssertEqual(restored.snapshot.persistedSessions.filter(\.isVisibleInHistory).map(\.id), ["real"])
+        let empty = try restored.reduce(.remoteSessionsReceived([]))
+        XCTAssertTrue(empty.persistedSessions.isEmpty)
+    }
+
+    func testLegacySessionCacheStillDecodesAndNewVisibilityRoundTrips() throws {
+        let old = Data(#"{"id":"legacy","title":"已有会话","lastActivity":0,"isRunning":false,"hasUnread":false}"#.utf8)
+        let cached = try JSONDecoder().decode(SessionSummary.self, from: old)
+        XCTAssertNil(cached.hasConversation)
+        XCTAssertTrue(cached.isVisibleInHistory)
+        var blank = cached
+        blank.hasConversation = false
+        let restored = try JSONDecoder().decode(SessionSummary.self, from: JSONEncoder().encode(blank))
+        XCTAssertFalse(restored.isVisibleInHistory)
+    }
+}

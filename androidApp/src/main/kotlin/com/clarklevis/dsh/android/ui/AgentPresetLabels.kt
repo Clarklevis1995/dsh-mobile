@@ -19,3 +19,12 @@ internal fun agentPresetDisplayDescription(id: String, gatewayDescription: Strin
         "cordis" -> "用于创建和维护自定义 Agent 预设。"
         else -> "由 DeepSeek Harness 提供的 Agent 预设。"
     }
+
+/** 输入框菜单保持单行，完整介绍仍用于设置页。 */
+internal fun agentPresetCompactDescription(id: String, description: String?): String = when (id) {
+    "standard" -> "完整工具，适合日常开发"
+    "code" -> "用代码组合多步工具操作"
+    "minimal" -> "仅用 Shell，轻量直接"
+    "cordis" -> "创建和调试自定义 Agent"
+    else -> description?.replace(Regex("\\s+"), " ")?.trim().orEmpty().ifBlank { "自定义 Agent 模式" }
+}

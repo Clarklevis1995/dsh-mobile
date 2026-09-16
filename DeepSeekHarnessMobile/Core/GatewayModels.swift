@@ -218,6 +218,9 @@ struct GatewayFrame: Codable, Sendable {
     var tokenUsage: GatewayTokenUsage?
     var contextPressure: GatewayContextPressure?
     var projections: JSONValue?
+    var agentPreset: String?
+    var locked: Bool?
+    var modeSelectionEnabled: Bool?
     var presets: [GatewayAgentPreset]?
     var authorable: Bool?
     var hasDocument: Bool?
@@ -640,6 +643,7 @@ struct GatewayAgentPreset: Codable, Hashable, Sendable, Identifiable {
     var name: String?
     var description: String?
     var broken: Bool?
+    var brokenReason: String? = nil
 
     var displayName: String {
         if let name, !name.isEmpty { return name }
@@ -649,6 +653,24 @@ struct GatewayAgentPreset: Codable, Hashable, Sendable, Identifiable {
     var displayDescription: String {
         if let description, !description.isEmpty { return description }
         return L10n.presetModeBlurb(for: id)
+    }
+}
+
+extension GatewayAgentPreset {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        trust = try values.decodeIfPresent(JSONValue.self, forKey: .trust)
+        isDefault = try values.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
+        name = try values.decodeIfPresent(String.self, forKey: .name)
+        description = try values.decodeIfPresent(String.self, forKey: .description)
+        brokenReason = try values.decodeIfPresent(String.self, forKey: .brokenReason)
+        if let reason = try? values.decode(String.self, forKey: .broken) {
+            broken = !reason.isEmpty
+            brokenReason = reason
+        } else {
+            broken = try values.decodeIfPresent(Bool.self, forKey: .broken)
+        }
     }
 }
 
@@ -990,6 +1012,8 @@ struct SessionSummary: Codable, Hashable, Identifiable {
     var isRunning: Bool
     var hasUnread: Bool
     var agentPreset: String? = nil
+    var hasConversation: Bool? = nil
+    var isVisibleInHistory: Bool { hasConversation != false }
 }
 
 struct GatewayNotice: Identifiable, Hashable {

@@ -128,6 +128,7 @@ internal object SessionStatsFormatter {
 internal fun SessionStatsBanner(
     snapshot: GatewaySessionStatsSnapshot,
     sessionId: String?,
+    modifier: Modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
     onViewFullStats: () -> Unit
 ) {
     var expanded by remember(sessionId) { mutableStateOf(false) }
@@ -135,7 +136,7 @@ internal fun SessionStatsBanner(
     val glassEdge = dshGlassEdge(isDark)
     val shadowColor = dshFloatingSurfaceShadow(isDark)
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+        modifier = modifier,
         horizontalArrangement = Arrangement.End
     ) {
         Box {

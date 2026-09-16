@@ -206,6 +206,7 @@ final class CommandTextView: UITextView {
 }
 
 struct ConversationView: View {
+    @Environment(\.dismiss) private var dismissConversation
     @EnvironmentObject private var store: AppStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -238,6 +239,8 @@ struct ConversationView: View {
     // 输入主体是 UIKit UITextView，不需要 SwiftUI FocusState 参与焦点仲裁。
     // 普通 State 作为单向的显式聚焦/失焦请求，UITextView 自己持有第一响应者。
     @State private var composerIsFocused = false
+    @State private var showsAgentPresetMenu = false
+    @ScaledMetric(relativeTo: .caption) private var composerCapsuleHeight: CGFloat = 34
     private let conversationBottomClearance: CGFloat = 22
 
     var body: some View {
@@ -401,9 +404,16 @@ struct ConversationView: View {
                         // interaction layers. Lower-priority composer chrome is
                         // only mounted when neither one is waiting, so task and
                         // goal panels cannot push an action card off screen.
-                        if let snapshot = store.selectedSessionStatsSnapshot {
-                            sessionStatsBanner(snapshot)
+                        HStack(spacing: 8) {
+                            sessionAgentPresetControl
+                            if let snapshot = store.selectedSessionStatsSnapshot {
+                                sessionStatsBanner(snapshot)
+                            } else {
+                                Spacer(minLength: 0)
+                            }
                         }
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 6)
                         if let tasks = store.selectedTaskProjection?.todos,
                            let goal = store.selectedGoalProjection?.goal {
                             TaskGoalPanels(
@@ -517,7 +527,15 @@ struct ConversationView: View {
             // `onBottomAlignmentCompleted` above.
             viewportScrollToBottomToken &+= 1
         }
+        .onDisappear { store.leaveSessionAgentPreset() }
+        .onChange(of: store.selectedSessionId) { previous, current in
+            if previous != nil && current == nil { dismissConversation() }
+        }
+        .onChange(of: store.sessionAgentPreset.canSelect) { _, canSelect in
+            if !canSelect { showsAgentPresetMenu = false }
+        }
         .task(id: store.selectedSessionId) {
+            store.refreshSessionAgentPreset()
             // 每次进入会话先收起历史任务；用户在当前会话手动展开后不会被后续推送重置。
             tasksExpanded = false
             guard let sessionID = store.selectedSessionId else {
@@ -828,7 +846,7 @@ struct ConversationView: View {
                 .disabled(
                     showsSessionStopButton
                         ? store.isCancellingSelectedSession
-                        : (!composerHasContent || store.waitingForNewSession || isImportingImages || store.commandSubmissionPending || store.messageSubmissionPending)
+                        : (store.sessionAgentPreset.blocksSending || !composerHasContent || store.waitingForNewSession || isImportingImages || store.commandSubmissionPending || store.messageSubmissionPending)
                 )
                 .opacity(
                     showsSessionStopButton
@@ -1224,6 +1242,104 @@ struct ConversationView: View {
         }
     }
 
+    @ViewBuilder
+    private var sessionAgentPresetControl: some View {
+        let state = store.sessionAgentPreset
+        if state.visible {
+            let current = state.presets.first { $0.id == state.agentPreset }
+            let retry = !state.loading && !state.saving && (!state.known || !state.catalogLoaded)
+            Button {
+                if retry { store.refreshSessionAgentPreset() }
+                else {
+                    viewportProxy.prepareForOverlayPresentation()
+                    showsAgentPresetMenu = true
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image("DshAgentPreset")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 16, height: 16)
+                        .accessibilityHidden(true)
+                    Text(state.saving ? "切换中…" : current?.name ?? state.agentPreset.map(agentPresetTitle)
+                         ?? (state.loading ? "读取模式…" : "重试模式"))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .font(.subheadline.weight(.medium))
+                .padding(.horizontal, 12)
+                .frame(height: composerCapsuleHeight)
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .glassSurface(radius: 16, tint: glassTint.opacity(0.88))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(glassEdge.opacity(0.9), lineWidth: 0.6)
+            }
+            .disabled(!store.gateway.state.isConnected || !(state.canSelect || retry))
+            .accessibilityLabel("选择会话模式")
+            .accessibilityIdentifier("session-agent-preset-capsule")
+            .popover(isPresented: $showsAgentPresetMenu, arrowEdge: .bottom) {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(state.presets, id: \.id) { preset in
+                            Button {
+                                showsAgentPresetMenu = false
+                                store.selectSessionAgentPreset(preset.id)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(preset.name ?? agentPresetTitle(preset.id))
+                                            .font(.body.weight(.medium))
+                                        Text(preset.broken?.boolValue == true
+                                             ? preset.brokenReason ?? "模式不可用"
+                                             : agentPresetCompactDescription(preset.id, description: preset.description_))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    Spacer(minLength: 0)
+                                    if preset.id == state.agentPreset {
+                                        Image(systemName: "checkmark").font(.body.weight(.medium))
+                                    }
+                                }
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(preset.broken?.boolValue == true)
+                            .opacity(preset.broken?.boolValue == true ? 0.45 : 1)
+                            .accessibilityIdentifier("session-agent-preset-\(preset.id)")
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+                .frame(width: 292, height: min(CGFloat(state.presets.count) * 68 + 12, 380))
+                .presentationCompactAdaptation(.popover)
+            }
+        }
+    }
+
+    private func agentPresetCompactDescription(_ id: String, description: String?) -> String {
+        switch id {
+        case "standard": return "完整工具，适合日常开发"
+        case "code": return "用代码组合多步工具操作"
+        case "minimal": return "仅用 Shell，轻量直接"
+        case "cordis": return "创建和调试自定义 Agent"
+        default: return description ?? "自定义 Agent 模式"
+        }
+    }
+
     private func sessionStatsBanner(_ snapshot: GatewaySessionStatsSnapshot) -> some View {
         HStack(spacing: 0) {
             Spacer(minLength: 0)
@@ -1243,7 +1359,7 @@ struct ConversationView: View {
                 }
                 .contentShape(Rectangle())
                 .padding(.horizontal, 16)
-                .padding(.vertical, 9)
+                .frame(height: composerCapsuleHeight)
             }
             .buttonStyle(.plain)
             .glassSurface(radius: 16, tint: glassTint.opacity(0.88))
@@ -1262,8 +1378,7 @@ struct ConversationView: View {
                 .presentationCompactAdaptation(.popover)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 6)
+
     }
 
     @ViewBuilder

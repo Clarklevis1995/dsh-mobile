@@ -158,6 +158,10 @@ final class AppStore: ObservableObject {
     @Published private(set) var supportsFileDownloads = false
     @Published private(set) var supportsSlashCommands = false
     private var supportsSessionCreation = false
+    private var supportsSessionAgentPreset = false
+    @Published private(set) var sessionAgentPreset = SharedSessionAgentPresetStore().snapshot()
+    private let sessionAgentPresetStore = SharedSessionAgentPresetStore()
+    private var sessionAgentPresetTimeout: Task<Void, Never>?
     private var isPreparingNewConversation = false
     @Published private(set) var supportsTasks = false
     @Published private(set) var supportsGoals = false
@@ -600,8 +604,9 @@ final class AppStore: ObservableObject {
     }
     var ungroupedSessions: [SessionSummary] {
         let groupedSessionIds = Set(workspaces.flatMap(\.sessionIds))
-        return sessions.filter { !groupedSessionIds.contains($0.id) }
+        return historySessions.filter { !groupedSessionIds.contains($0.id) }
     }
+    var historySessions: [SessionSummary] { sessions.filter(\.isVisibleInHistory) }
 
     /// 废弃整个业务容器，旧异步工作最多只能触达已断开的旧 GatewayClient。
     func deactivateGateway() {
@@ -647,6 +652,9 @@ final class AppStore: ObservableObject {
             gateway.applicationDidEnterBackground(
                 keepConnectionAlive: backgroundExecutionController.keepsConnectionAlive
             )
+            if !gateway.state.isConnected {
+                applySessionAgentPresetTransition(sessionAgentPresetStore.disconnected())
+            }
         case .inactive:
             break
         @unknown default:
@@ -719,6 +727,7 @@ final class AppStore: ObservableObject {
     }
     func prepareNewConversation() async -> Bool {
         guard !isPreparingNewConversation else { return false }
+        leaveSessionAgentPreset()
         isPreparingNewConversation = true
         defer { isPreparingNewConversation = false }
         var sessionID: String?
@@ -742,6 +751,7 @@ final class AppStore: ObservableObject {
     }
 
     func prepareConversation(for session: SessionSummary) async -> Bool {
+        leaveSessionAgentPreset()
         cancelSnapshotWait()
         if let previous = selectedSessionId { try? kmpConversationStore.clearAssistantChunks(sessionID: previous) }
         assistantStreamState.selectSession(sessionId: session.id)
@@ -969,12 +979,93 @@ final class AppStore: ObservableObject {
     }
     func refreshSessionControls(for sessionId: String) {
         guard gateway.state.isConnected else { return }
+        if sessionId == selectedSessionId { refreshSessionAgentPreset() }
         dispatchSessionControl(.requestModels(sessionID: sessionId, isConnected: true))
         dispatchSessionControl(.requestPermissionOptions(sessionID: sessionId, isConnected: true))
         dispatchSessionControl(.requestContextUsage(sessionID: sessionId, isConnected: true))
         dispatchSessionControl(.requestSessionStats(sessionID: sessionId, isConnected: true))
         if supportsTasks { gateway.requestTasks(sessionId: sessionId) }
         if supportsGoals { gateway.requestGoal(sessionId: sessionId) }
+    }
+
+    func refreshSessionAgentPreset() {
+        applySessionAgentPresetTransition(sessionAgentPresetStore.open(
+            sessionId: selectedSessionId, supported: supportsSessionAgentPreset,
+            connected: gateway.state.isConnected
+        ))
+    }
+
+    func leaveSessionAgentPreset() {
+        sessionAgentPresetTimeout?.cancel()
+        applySessionAgentPresetTransition(sessionAgentPresetStore.leave())
+    }
+
+    func selectSessionAgentPreset(_ presetId: String) {
+        guard gateway.state.isConnected else { return }
+        applySessionAgentPresetTransition(sessionAgentPresetStore.select(presetId: presetId))
+    }
+
+    private func applySessionAgentPresetTransition(_ transition: SharedSessionAgentPresetTransition) {
+        sessionAgentPreset = transition.snapshot
+        if !sessionAgentPreset.loading && !sessionAgentPreset.saving { sessionAgentPresetTimeout?.cancel() }
+        if let error = transition.error { lastError = error }
+        if transition.refreshCommands, let id = transition.snapshot.sessionId {
+            applySlashCommandTransition(kmpSlashCommandStore.invalidateCatalog(
+                sessionId: id, isSupported: supportsSlashCommands, locale: Locale.current.identifier
+            ))
+        }
+        if transition.invalidSession {
+            dispatchSessionListIntent(.select(nil))
+            gateway.requestSessions()
+        }
+        for request in transition.requests {
+            if request.requestType == "agent-presets" {
+                dispatchSessionControl(.requestAgentPresets(isConnected: gateway.state.isConnected))
+                continue
+            }
+            gateway.sendRequestPayload(request.payload)
+            sessionAgentPresetTimeout?.cancel()
+            sessionAgentPresetTimeout = Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+                guard let self else { return }
+                self.applySessionAgentPresetTransition(self.sessionAgentPresetStore.requestFailed(
+                    type: request.requestType, sessionId: request.targetSessionId,
+                    requestId: request.correlationId, message: "模式请求超时，请重试"
+                ))
+            }
+        }
+    }
+
+    private func beginCommandPresetSubmission() {
+        applySessionAgentPresetTransition(sessionAgentPresetStore.beginMessage())
+        guard sessionAgentPreset.submitting else { return }
+        let sessionID = sessionAgentPreset.sessionId
+        sessionAgentPresetTimeout = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(20)) } catch { return }
+            guard let self else { return }
+            self.applySessionAgentPresetTransition(self.sessionAgentPresetStore.requestFailed(
+                type: "command-execute", sessionId: sessionID, requestId: nil, message: nil
+            ))
+        }
+    }
+
+    private func acceptSessionAgentPresetFrame(_ frame: GatewayFrame) {
+        let kinds = ["agent-presets", "session-agent-preset", "select-agent-preset",
+                     "session-agent-preset-updated", "sent", "command-executed", "history", "session-snapshot"]
+        guard kinds.contains(frame.kind) || (frame.kind == "error" &&
+            ["session-agent-preset", "select-agent-preset", "message", "command-execute"].contains(frame.requestType)) else { return }
+        // 共享模式状态仅需要历史投影，避免重复序列化整页对话。
+        var presetFrame = frame
+        if (frame.kind == "command-executed" || (frame.kind == "error" && ["message", "command-execute"].contains(frame.requestType))) && presetFrame.sessionId == nil {
+            presetFrame.sessionId = sessionAgentPreset.sessionId
+        }
+        if frame.kind == "history" || frame.kind == "session-snapshot" {
+            presetFrame = GatewayFrame(kind: frame.kind, sessionId: frame.sessionId)
+            presetFrame.projections = frame.projections
+        }
+        if let data = try? JSONEncoder().encode(presetFrame) {
+            applySessionAgentPresetTransition(sessionAgentPresetStore.acceptJson(json: String(decoding: data, as: UTF8.self)))
+        }
     }
 
     func editGoal(objective: String) {
@@ -1082,22 +1173,28 @@ final class AppStore: ObservableObject {
             lastError = String(localized: "当前 Mobile Gateway 不支持图片，请升级并重启 dsh web。")
             return false
         }
+        guard !sessionAgentPreset.blocksSending else { return false }
         if let command = kmpSlashCommandStore.commandExecutionForInput(text: trimmed) {
             guard images.isEmpty || command.allowsImages else {
                 lastError = String(localized: "此命令不支持图片")
                 return false
             }
+            beginCommandPresetSubmission()
             commandSubmissionPending = true
             gateway.executeCommand(line: command.line, images: images, sessionId: selectedSessionId)
             return true
         }
         guard !messageSubmissionPending else { return false }
+        applySessionAgentPresetTransition(sessionAgentPresetStore.beginMessage())
         messageSubmissionPending = true
         messageSubmissionTimeout?.cancel()
         messageSubmissionTimeout = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(20)) } catch { return }
             guard let self, self.messageSubmissionPending else { return }
             self.messageSubmissionPending = false
+            self.applySessionAgentPresetTransition(self.sessionAgentPresetStore.requestFailed(
+                type: "message", sessionId: self.selectedSessionId, requestId: nil, message: nil
+            ))
             self.waitingForNewSession = false
             self.lastError = "发送确认超时，请确认队列状态后重试"
         }
@@ -1138,7 +1235,8 @@ final class AppStore: ObservableObject {
         if let text = transition.submitText {
             _ = send(text)
         }
-        if let command = transition.commandExecution {
+        if let command = transition.commandExecution, !sessionAgentPreset.blocksSending {
+            beginCommandPresetSubmission()
             gateway.executeCommand(line: command.line, sessionId: selectedSessionId)
         }
     }
@@ -1212,6 +1310,9 @@ final class AppStore: ObservableObject {
     }
 
     private func handle(_ frame: GatewayFrame) {
+        acceptSessionAgentPresetFrame(frame)
+        if ["session-agent-preset", "select-agent-preset", "session-agent-preset-updated"].contains(frame.kind) ||
+            (frame.kind == "error" && ["session-agent-preset", "select-agent-preset"].contains(frame.requestType)) { return }
         acceptQueueFrame(frame)
         if frame.kind == "sent" && messageSubmissionPending {
             messageSubmissionPending = false
@@ -1395,6 +1496,7 @@ final class AppStore: ObservableObject {
             supportsFileDownloads = payload.protocolVersion >= 3 && payload.capabilities.contains("file-downloads")
             supportsSlashCommands = payload.capabilities.contains("commands")
             supportsSessionCreation = payload.capabilities.contains("session-create")
+            supportsSessionAgentPreset = payload.capabilities.contains("session-agent-preset")
             supportsTasks = payload.capabilities.contains("tasks")
             supportsGoals = payload.capabilities.contains("goals")
             supportsSessionCancel = payload.capabilities.contains("session-cancel")
@@ -2283,6 +2385,8 @@ final class AppStore: ObservableObject {
     }
 
     private func resetOutstandingRequests() {
+        sessionAgentPresetTimeout?.cancel()
+        applySessionAgentPresetTransition(sessionAgentPresetStore.disconnected())
         cancelSnapshotWait()
         backgroundExecutionController.releaseAllQuestionAnswers()
         for kind in Array(sessionControlLoadingKinds) { sessionControlRequestTracker.finish(kind) }

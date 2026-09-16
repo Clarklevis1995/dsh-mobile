@@ -52,6 +52,35 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class GatewayRuntimeIntegrationTest {
     @Test
+    fun presetRequestsCorrelateIdsAndPreserveHostErrorsAndUnsubscribedNotifications() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport)
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true,"capabilities":["session-agent-preset"]}""")
+        runCurrent()
+        runtime.sendRequest(GatewayRequests.sessionAgentPreset("s1", "q1"))
+        transport.receive("""{"kind":"session-agent-preset","sessionId":"s1","requestId":"old","agentPreset":"wrong","locked":false}""")
+        runCurrent()
+        assertTrue(events.filterIsInstance<GatewayRuntimeEvent.Frame>().none { it.frame.kind == "session-agent-preset" })
+        transport.receive("""{"kind":"session-agent-preset-updated","sessionId":"other","locked":true,"seq":99}""")
+        transport.receive("""{"kind":"session-agent-preset","sessionId":"s1","requestId":"q1","agentPreset":"standard","locked":false}""")
+        runCurrent()
+        assertTrue(events.filterIsInstance<GatewayRuntimeEvent.Frame>().any { it.frame.sessionId == "other" })
+        runtime.sendRequest(GatewayRequests.selectAgentPreset("s1", "minimal", "select1"))
+        transport.receive("""{"kind":"error","requestType":"select-agent-preset","sessionId":"s1","requestId":"select1","code":"agent-preset/locked","message":"对话开始后不可修改"}""")
+        runCurrent()
+        val error = events.filterIsInstance<GatewayRuntimeEvent.Frame>().last().frame
+        assertEquals("agent-preset/locked", error.code)
+        assertEquals("select1", error.requestId)
+        assertEquals("对话开始后不可修改", error.message)
+        assertTrue(runtime.sendRequest(GatewayRequests.sessionAgentPreset("s1", "q2")))
+    }
+
+    @Test
     fun queuedAndSteeringPromptsDoNotLeakBackgroundTurnCounts() = runTest {
         val transport = FakeTransport()
         val runtime = newRuntime(transport)

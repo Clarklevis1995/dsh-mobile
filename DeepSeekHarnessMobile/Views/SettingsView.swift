@@ -154,6 +154,7 @@ struct SettingsView: View {
                         Text($0.title).tag($0)
                     }
                 }
+                .pickerStyle(.navigationLink)
                 Picker("语言", selection: $store.appLanguage) {
                     ForEach(AppLanguage.allCases) { language in
                         Text(verbatim: language.title).tag(language)

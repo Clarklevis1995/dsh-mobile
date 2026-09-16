@@ -17,6 +17,70 @@ import kotlin.test.assertTrue
 
 class SharedSessionListStoreTest {
     @Test
+    fun blankSessionsStayHiddenAcrossMetadataChangesAndPersistenceUntilFirstMessage() {
+        val store = makeStore()
+        store.addKnownSession("draft", 100.0)
+        store.selectSession("draft")
+        store.receiveEvent(
+            """{"sessionId":"draft","seq":1,"time":101,"event":{"type":"session/title","text":"测试 2"}}""",
+            101.0
+        )
+        store.receiveRemoteSessions("""[{"sessionId":"draft","updatedAt":102,"running":false,"blank":true,"agentPreset":"minimal","cwd":"/test"}]""")
+        val blank = decode(store.snapshot().snapshotJson)
+        assertEquals(false, blank.sessions.single().hasConversation)
+        assertEquals("draft", blank.selectedSessionId)
+        val restored = makeStore()
+        restored.restore(wireJson.encodeToString(blank))
+        assertEquals(false, decode(restored.snapshot().snapshotJson).sessions.single().hasConversation)
+        restored.messageSent("draft", "minimal", 103.0)
+        assertEquals(true, decode(restored.snapshot().snapshotJson).sessions.single().hasConversation)
+    }
+
+    @Test
+    fun hostFullListReplacesCachedRowsAndItsBlankFlagIsAuthoritative() {
+        val store = makeStore()
+        store.restore(wireJson.encodeToString(SharedSessionListSnapshot(sessions = listOf(
+            SharedSessionSummarySnapshot("gone", "本地旧记录", 99.0, false, false),
+            SharedSessionSummarySnapshot("blank", "旧版缓存空会话", 100.0, false, false)
+        ))))
+        store.receiveRemoteSessions("""[
+            {"sessionId":"blank","updatedAt":100,"running":false,"blank":true},
+            {"sessionId":"real","updatedAt":90,"running":false,"blank":false}
+        ]""")
+        var snapshot = decode(store.snapshot().snapshotJson)
+        assertEquals(listOf("real"), snapshot.sessions.filter { it.hasConversation != false }.map { it.id })
+        assertFalse(snapshot.sessions.any { it.id == "gone" })
+        store.messageSent("blank", null, 101.0)
+        store.receiveRemoteSessions("""[{"sessionId":"blank","updatedAt":102,"running":false,"blank":true}]""")
+        snapshot = decode(store.snapshot().snapshotJson)
+        assertEquals(false, snapshot.sessions.single().hasConversation)
+        store.receiveRemoteSessions("[]")
+        assertTrue(decode(store.snapshot().snapshotJson).sessions.isEmpty())
+    }
+
+    @Test
+    fun remoteTurnMakesBlankSessionVisibleAndCompletionDoesNotHideIt() {
+        val store = makeStore()
+        store.addKnownSession("remote", 100.0)
+        for ((index, type) in listOf("user/message", "turn/start", "turn/end").withIndex()) {
+            store.receiveEvent(
+                """{"sessionId":"remote","seq":${index + 1},"time":${101 + index},"event":{"type":"$type"}}""",
+                101.0 + index
+            )
+            assertEquals(true, decode(store.snapshot().snapshotJson).sessions.single().hasConversation)
+        }
+    }
+
+    @Test
+    fun mobileHistoryDistinguishesEmptyMetadataFromConversationContent() {
+        val store = com.clarklevis.dsh.shared.facade.SharedMobileStore()
+        store.acceptFrame("""{"kind":"history","sessionId":"draft","events":[]}""")
+        assertFalse(store.snapshot().sessions.single().isVisibleInHistory)
+        val snapshot = store.acceptFrame("""{"kind":"history","sessionId":"draft","events":[{"type":"user/message","seq":1,"time":1,"data":{"content":[{"type":"text","text":"你好"}]}}]}""")
+        assertTrue(snapshot.sessions.single().isVisibleInHistory)
+    }
+
+    @Test
     fun titleNotificationsReplaceExistingNamesAndIgnoreDuplicateOrOlderEvents() {
         val store = makeStore()
         store.restore(wireJson.encodeToString(SharedSessionListSnapshot(

@@ -32,6 +32,21 @@ class SharedSlashCommandStoreTest {
     """.trimIndent()
 
     @Test
+    fun presetInvalidationDropsOldCatalogAndRefreshesCommandsAndSkillsTogether() {
+        val store = SharedSlashCommandStore()
+        store.updateInput("s1", "/", true, true)
+        val refresh = store.invalidateCatalog("s1", true, "zh-CN")
+        assertEquals("commands", refresh.request?.requestType)
+        assertTrue(store.acceptFrame(catalog).snapshot.commands.isEmpty())
+        val fresh = store.acceptFrame(groupedCatalog).snapshot
+        assertEquals(listOf("commands", "skills"), fresh.groups.map { it.id })
+        assertFalse(fresh.catalogLoading)
+        store.invalidateCatalog("s1", true, "zh-CN")
+        assertTrue(store.snapshot().commands.isEmpty())
+        assertTrue(store.snapshot().selections.isEmpty())
+    }
+
+    @Test
     fun slashLookupLoadsAndFiltersCatalog() {
         val store = SharedSlashCommandStore()
         val opened = store.updateInput("s1", "/", isConnected = true, isSupported = true)

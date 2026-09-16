@@ -1466,6 +1466,7 @@ struct KMPSessionSummarySnapshot: Codable, Equatable {
     var isRunning: Bool
     var hasUnread: Bool
     var agentPreset: String?
+    var hasConversation: Bool?
 
     init(_ session: SessionSummary) {
         id = session.id
@@ -1474,6 +1475,7 @@ struct KMPSessionSummarySnapshot: Codable, Equatable {
         isRunning = session.isRunning
         hasUnread = session.hasUnread
         agentPreset = session.agentPreset
+        hasConversation = session.hasConversation
     }
 
     var persistedSession: SessionSummary {
@@ -1483,7 +1485,8 @@ struct KMPSessionSummarySnapshot: Codable, Equatable {
             lastActivity: Date(timeIntervalSince1970: lastActivityEpochSeconds),
             isRunning: isRunning,
             hasUnread: hasUnread,
-            agentPreset: agentPreset
+            agentPreset: agentPreset,
+            hasConversation: hasConversation
         )
     }
 }

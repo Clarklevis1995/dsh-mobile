@@ -109,6 +109,9 @@ data class GatewayFrame(
     val contextPressure: GatewayContextPressure? = null,
     val projections: JsonValue? = null,
     val presets: List<GatewayAgentPreset>? = null,
+    val agentPreset: String? = null,
+    val locked: Boolean? = null,
+    val modeSelectionEnabled: Boolean? = null,
     val authorable: Boolean? = null,
     val hasDocument: Boolean? = null,
     val agentPresetDefault: String? = null,
@@ -402,10 +405,11 @@ data class GatewayHostSnapshot(
 data class GatewayAgentPreset(
     val id: String,
     val trust: JsonValue? = null,
-    val isDefault: Boolean,
+    val isDefault: Boolean = false,
     val name: String? = null,
     val description: String? = null,
-    val broken: Boolean? = null
+    val broken: Boolean? = null,
+    val brokenReason: String? = null
 )
 
 @Serializable

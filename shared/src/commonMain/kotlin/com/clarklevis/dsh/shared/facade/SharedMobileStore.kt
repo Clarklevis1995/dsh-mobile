@@ -346,7 +346,13 @@ class SharedMobileStore(
                             ?: nowEpochSeconds()
                         sessionListState = SessionListReducer.reduce(
                             sessionListState,
-                            SessionListAction.KnownSessionAdded(sessionId, insertedAtEpochSeconds)
+                            SessionListAction.KnownSessionAdded(
+                                sessionId,
+                                insertedAtEpochSeconds,
+                                hasConversation = normalized.any {
+                                    it.event.type in setOf("user/message", "assistant/message", "turn/start", "turn/end")
+                                }
+                            )
                         )
                     }
                 }

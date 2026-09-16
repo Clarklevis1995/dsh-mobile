@@ -608,7 +608,7 @@ class GatewayRuntime(
         val correlation = correlateLocked(frame)
         if (!correlation.accepted) return null
         if (frame.kind == "error") {
-            if (frame.resetRequired == true) {
+            if (frame.resetRequired == true || frame.requestType in setOf("session-agent-preset", "select-agent-preset")) {
                 return FrameDelivery(GatewayRuntimeEvent.Frame(transportFrame.text, frame, correlation.sessionId),
                     transportFrame.byteCount.toLong())
             }
@@ -746,7 +746,7 @@ class GatewayRuntime(
             "queue-item-updated" -> request.correlationId == frame.itemId
             "attachment" -> request.correlationId == frame.attachment?.attachmentId
             "question-response", "approval-response" -> request.correlationId == frame.rpcId
-            "session-created", "file-list", "file-download-opened" -> request.correlationId == frame.requestId
+            "session-created", "session-agent-preset", "select-agent-preset", "file-list", "file-download-opened" -> request.correlationId == frame.requestId
             "file-download-chunk", "file-download-cancelled" -> request.correlationId == frame.transferId
             "command-options", "command-selected" -> request.correlationId == frame.command?.stringValue
             else -> true
@@ -761,7 +761,7 @@ class GatewayRuntime(
             "queue-item-updated" -> frame.itemId
             "attachment" -> frame.attachment?.attachmentId
             "question-response", "approval-response" -> frame.rpcId
-            "session-created", "file-list", "file-download-opened" -> frame.requestId
+            "session-created", "session-agent-preset", "select-agent-preset", "file-list", "file-download-opened" -> frame.requestId
             "file-download-chunk", "file-download-cancelled" -> frame.transferId
             "command-options", "command-selected" -> frame.command?.stringValue
             else -> null
@@ -1214,12 +1214,14 @@ class GatewayRuntime(
         private val UNCORRELATED_KINDS = setOf(
             "event", "hello", "paired", "pong", "question-requested", "question-resolved",
             "approval-requested", "approval-resolved", "tasks-updated", "goal-updated",
-            "session-snapshot", "assistant-stream", "session-stream-reset", "projection-baseline"
+            "session-snapshot", "assistant-stream", "session-stream-reset", "projection-baseline",
+            "session-agent-preset-updated"
         )
         private val RESPONSE_KINDS_REQUIRING_ACTIVE_REQUEST = setOf(
             "history", "attachment", "sent", "question-response", "approval-response",
             "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled",
-            "session-cancelled", "session-created", "queue-item-updated"
+            "session-cancelled", "session-created", "queue-item-updated",
+            "session-agent-preset", "select-agent-preset"
         )
         private val IDEMPOTENT_CONNECTION_STATES = setOf(
             GatewayConnectionState.CONNECTING,

@@ -277,7 +277,7 @@ private fun WorkspaceScreen(
                             workspace = selectedWorkspace,
                             ungrouped = ungroupedSelected,
                             ungroupedCount = stateHolder.snapshot.sessions.count { session ->
-                                workspaces.none { session.id in it.sessionIds }
+                                session.isVisibleInHistory && workspaces.none { session.id in it.sessionIds }
                             },
                             state = stateHolder.gatewayState,
                             onClick = { showWorkspaceMenu = true }
@@ -679,9 +679,9 @@ internal fun workspaceScopedSessions(
         selected == null
     ) {
         val assigned = workspaces.flatMapTo(mutableSetOf()) { it.sessionIds }
-        return sessions.filterNot { it.id in assigned }
+        return sessions.filter { it.isVisibleInHistory && it.id !in assigned }
     }
-    return sessions.filter { it.id in selected.sessionIds }
+    return sessions.filter { it.isVisibleInHistory && it.id in selected.sessionIds }
 }
 
 internal fun relativeTime(

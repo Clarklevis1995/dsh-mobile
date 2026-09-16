@@ -273,9 +273,9 @@ struct WorkspaceView: View {
             workspaceSessions = store.ungroupedSessions
         } else if let workspace = store.activeWorkspace {
             let ids = Set(workspace.sessionIds)
-            workspaceSessions = store.sessions.filter { ids.contains($0.id) }
+            workspaceSessions = store.historySessions.filter { ids.contains($0.id) }
         } else {
-            workspaceSessions = store.sessions
+            workspaceSessions = store.historySessions
         }
         guard !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return workspaceSessions.filter { !store.archivedSessionIds.contains($0.id) }
