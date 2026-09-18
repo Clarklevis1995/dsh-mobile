@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
@@ -130,6 +131,7 @@ internal fun ApprovalRequestCard(
                         fontSize = 13.sp,
                         lineHeight = 19.sp,
                         modifier = Modifier
+                            .testTag("approval-command-preview")
                             .heightIn(max = 148.dp)
                             .verticalScroll(rememberScrollState())
                     )
@@ -153,7 +155,9 @@ internal fun ApprovalRequestCard(
                     )
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("approval-actions"),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
