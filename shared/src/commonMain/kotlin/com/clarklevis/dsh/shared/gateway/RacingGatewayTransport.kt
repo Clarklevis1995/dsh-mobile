@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.shared.gateway
 
 import com.clarklevis.dsh.shared.platform.GatewayConnectionSpec
+import com.clarklevis.dsh.shared.platform.GatewaySplitTransport
 import com.clarklevis.dsh.shared.platform.GatewayTransport
 import com.clarklevis.dsh.shared.platform.GatewayTransportEvent
 import com.clarklevis.dsh.shared.platform.GatewayTransportState
@@ -37,12 +38,13 @@ import kotlinx.coroutines.withTimeoutOrNull
  *   整场竞速不超过 [totalBudgetMilliseconds]，因此一个永久挂起的候选不会拖死连接。
  */
 class RacingGatewayTransport(
+    /** 平台侧为"一个地址的一条通道"造一条空闲连接；竞速为每个候选造控制/会话两条。 */
     private val factory: GatewaySocketFactory,
     private val scope: CoroutineScope,
     private val maximumConcurrentCandidates: Int = DEFAULT_MAXIMUM_CONCURRENT_CANDIDATES,
     private val totalBudgetMilliseconds: Long = DEFAULT_TOTAL_BUDGET_MILLISECONDS,
     private val channelCapacity: Int = DEFAULT_CHANNEL_CAPACITY
-) : GatewayTransport {
+) : GatewaySplitTransport {
 
     private val mutableState = MutableStateFlow<GatewayTransportState>(GatewayTransportState.Closed())
     override val state: StateFlow<GatewayTransportState> = mutableState.asStateFlow()
@@ -75,11 +77,33 @@ class RacingGatewayTransport(
     private var raceOutcome: GatewayRaceFailure? = null
     private var lastAdoptedEndpoint: String? = null
     private var raceJobs: List<Job> = emptyList()
+    private var conversationJob: Job? = null
+
+    /**
+     * 会话（conversation）流。运行时只在 `transport is GatewaySplitTransport` 时把
+     * hello / history / session-snapshot 路由到会话队列，因此竞速必须实现该接口，
+     * 否则这些帧会被改道，界面会永远停在"正在加载历史记录"。转正后只转发胜者的会话流。
+     */
+    private val conversationStream = Channel<GatewayTransportEvent>(capacity = channelCapacity)
+
+    override val conversationEvents: Flow<GatewayTransportEvent> = conversationStream.receiveAsFlow()
+        .filter { event ->
+            val eventGeneration = when (event) {
+                is GatewayTransportEvent.Frame -> event.value.generation
+                is GatewayTransportEvent.State -> event.value.generation
+            }
+            eventGeneration == currentGeneration
+        }
+
+    /** 采纳时已由 split 通道内部确认；此处转交给胜者，保证至多一次。 */
+    override suspend fun confirmControlHandshake() {
+        lock.withLock { adopted }?.channel?.confirmControlHandshake()
+    }
 
     /** 被采纳的候选：它就是那条已经握好手的连接，转正不重连。 */
     private class Adopted(
         val endpoint: String,
-        val channel: GatewayTransport,
+        val channel: GatewaySplitTransport,
         /** 胜者的握手帧：由 open() 在转正后立即交付，保证"先宣告、后数据"且不丢帧。 */
         val handshake: com.clarklevis.dsh.shared.platform.GatewayTransportFrame
     )
@@ -154,6 +178,8 @@ class RacingGatewayTransport(
             lastAdoptedEndpoint = winner.endpoint
         }
         mutableState.value = GatewayTransportState.Open(spec.generation, winner.endpoint)
+        // 胜者的会话流必须有人收集，否则会话队列永远收不到 hello/history/session-snapshot。
+        conversationJob = scope.launch { runConversation(spec, winner.channel) }
         // 转正完成后再交付握手帧：运行时据此进入 CONNECTED，顺序与单通道实现一致。
         runCatching {
             outbound.send(
@@ -188,6 +214,7 @@ class RacingGatewayTransport(
         jobs.forEach { it.cancel() }
         withContext(NonCancellable) {
             jobs.joinAll()
+            conversationJob?.cancel()
             runCatching { winner?.channel?.close() }
         }
         currentGeneration = 0
@@ -230,10 +257,12 @@ class RacingGatewayTransport(
         failures: MutableList<GatewayCandidateFailure>,
         failuresLock: Mutex
     ): Adopted? {
-        val channel = factory.createChannel(spec, endpoint)
+        val control = factory.createChannel(spec, endpoint, "control")
+        val conversation = factory.createChannel(spec, endpoint, "conversation")
+        val channel = SplitGatewayTransport(control, conversation)
         var won: Adopted? = null
         try {
-            channel.open(spec.toCandidateSpec(endpoint))
+            channel.open(spec.toCandidateSpec(endpoint, "control"))
             channel.events.collect { event ->
                 if (won != null) {
                     forward(spec, event)
@@ -293,6 +322,31 @@ class RacingGatewayTransport(
             }
         }
         return won
+    }
+
+    /** 胜者的会话流：独立收集，帧改写为外层代次后进入 [conversationEvents]。 */
+    private suspend fun runConversation(
+        spec: GatewayConnectionSpec,
+        channel: com.clarklevis.dsh.shared.platform.GatewaySplitTransport
+    ) {
+        runCatching {
+            channel.conversationEvents.collect { event ->
+                val translated = when (event) {
+                    is GatewayTransportEvent.Frame ->
+                        GatewayTransportEvent.Frame(event.value.copy(generation = spec.generation))
+                    is GatewayTransportEvent.State -> GatewayTransportEvent.State(
+                        when (val value = event.value) {
+                            is GatewayTransportState.Failed -> value.copy(generation = spec.generation)
+                            is GatewayTransportState.Closed -> GatewayTransportState.Closed(spec.generation)
+                            is GatewayTransportState.Open ->
+                                GatewayTransportState.Open(spec.generation, value.endpoint)
+                            is GatewayTransportState.Opening -> GatewayTransportState.Opening(spec.generation)
+                        }
+                    )
+                }
+                conversationStream.send(translated)
+            }
+        }
     }
 
     /** 胜者的后续事件：同一收集协程转发，代次改写为外层代次。 */
@@ -363,6 +417,9 @@ class RacingGatewayTransport(
     }
 }
 
-/** 候选通道只认一个地址：把该地址写进 `endpoint`，候选集置空避免重复展开。 */
-private fun GatewayConnectionSpec.toCandidateSpec(endpoint: String): GatewayConnectionSpec =
-    copy(endpoint = endpoint, candidates = emptyList())
+/**
+ * 候选通道只认一个地址与一个通道：写进 `endpoint` / `channel`，候选集置空避免重复展开。
+ * 通道名必须由竞速层决定（control / conversation），平台工厂不得自行覆盖。
+ */
+private fun GatewayConnectionSpec.toCandidateSpec(endpoint: String, channel: String): GatewayConnectionSpec =
+    copy(endpoint = endpoint, channel = channel, candidates = emptyList())

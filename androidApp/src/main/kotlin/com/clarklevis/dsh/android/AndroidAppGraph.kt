@@ -11,6 +11,7 @@ import com.clarklevis.dsh.android.platform.AndroidImagePreprocessor
 import com.clarklevis.dsh.android.platform.AndroidNetworkMonitor
 import com.clarklevis.dsh.android.platform.OkHttpGatewayTransport
 import com.clarklevis.dsh.shared.gateway.GatewayRuntime
+import com.clarklevis.dsh.shared.gateway.RacingGatewayTransport
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import com.clarklevis.dsh.shared.platform.GatewayAttachmentCache
@@ -52,20 +53,11 @@ class AndroidAppGraph(
     val imagePreprocessor = AndroidImagePreprocessor(application.contentResolver)
     val networkMonitor: GatewayNetworkMonitor = networkMonitorOverride ?: AndroidNetworkMonitor(application)
     /**
-     * 并发候选采纳：每条候选是一条独立的控制+会话通道，首个完成应用层握手的候选转正。
-     * 平台侧只负责"为一个地址造一条通道"，拨号策略留在共享层。
+     * 竞速必须位于 split 之下：运行时按 `transport is GatewaySplitTransport` 决定帧进哪个队列，
+     * hello / history / session-snapshot 走会话队列。若把竞速放在外层，运行时看到的就不是 split，
+     * 历史帧会被改道进普通队列，界面会永远停在"正在加载历史记录"。
      */
-    val transport: GatewayTransport = transportOverride ?: com.clarklevis.dsh.shared.gateway.RacingGatewayTransport(
-        // 平台侧唯一职责：为一个候选地址造一条控制+会话通道。不重试、不轮换、不判断哪个地址更好。
-        factory = { _, _ ->
-            com.clarklevis.dsh.shared.gateway.SplitGatewayTransport(
-                OkHttpGatewayTransport(diagnostics = diagnostics),
-                OkHttpGatewayTransport(diagnostics = diagnostics)
-            )
-        },
-        scope = gatewayScope,
-        totalBudgetMilliseconds = RACE_TOTAL_BUDGET_MILLISECONDS
-    )
+    val transport: GatewayTransport = transportOverride ?: racingChannel(diagnostics, gatewayScope)
     val gatewayRuntime = GatewayRuntime(
         transport = transport,
         // 竞速预算必须小于运行时的单次尝试超时，否则运行时兜底会先触发，
@@ -89,8 +81,20 @@ class AndroidAppGraph(
         AndroidSharedStateHolder(graph = this)
     }
 
-    private companion object {
+    internal companion object {
         const val RACE_TOTAL_BUDGET_MILLISECONDS = 12_000L
         const val RUNTIME_TIMEOUT_MARGIN_MILLISECONDS = 3_000L
     }
 }
+
+/** 一条逻辑通道（控制或会话）内部并发竞赛候选地址。竞速位于 split 之下。 */
+private fun racingChannel(
+    diagnostics: AndroidGatewayDiagnostics,
+    scope: CoroutineScope
+): GatewayTransport = RacingGatewayTransport(
+    // 平台侧唯一职责：为一个候选地址的一条通道造一条空闲连接。
+    // 不重试、不轮换、不判断哪个地址更好。
+    factory = { _, _, _ -> OkHttpGatewayTransport(diagnostics = diagnostics) },
+    scope = scope,
+    totalBudgetMilliseconds = AndroidAppGraph.RACE_TOTAL_BUDGET_MILLISECONDS
+)

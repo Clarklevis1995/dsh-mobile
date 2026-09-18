@@ -60,7 +60,11 @@ class RacingGatewayTransportTest {
         racer.open(spec("ws://lan-a", "ws://lan-b", "wss://public"))
         runCurrent()
 
-        assertEquals("三条候选必须全部拨号", 3, factory.created.size)
+        assertEquals(
+            "三条候选必须全部拨号（每候选控制+会话两条通道）",
+            3,
+            factory.created.count { it.channel == "control" }
+        )
         assertEquals("胜者就是那条已握好手的连接", "wss://public", racer.adoptedEndpoint())
         assertTrue(factory.transport("wss://public").closeCount == 0)
     }
@@ -230,7 +234,11 @@ class RacingGatewayTransportTest {
         )
         runCurrent()
 
-        assertEquals("一次性配对码只能在一个地址上兑换", 1, factory.created.size)
+        assertEquals(
+            "一次性配对码只能在一个地址上兑换",
+            1,
+            factory.created.count { it.channel == "control" }
+        )
         assertEquals("ws://lan-a", racer.adoptedEndpoint())
     }
 
@@ -244,33 +252,37 @@ class RacingGatewayTransportTest {
     ) : GatewaySocketFactory {
         val created = mutableListOf<ScriptedTransport>()
 
-        override fun createChannel(spec: GatewayConnectionSpec, endpoint: String): GatewayTransport =
+        override fun createChannel(spec: GatewayConnectionSpec, endpoint: String, channel: String): GatewayTransport =
             ScriptedTransport(
                 endpoint = endpoint,
+                channel = channel,
                 handshakeOnOpen = endpoint in handshakeOnOpen,
                 failReasonOnOpen = failOnOpen[endpoint],
                 failStatusOnOpen = failStatusOnOpen[endpoint]
             ).also { created += it }
 
-        fun transport(endpoint: String): ScriptedTransport = created.first { it.endpoint == endpoint }
+        fun transport(endpoint: String): ScriptedTransport =
+            created.first { it.endpoint == endpoint && it.channel == "control" }
     }
 
     private class ScriptedTransport(
         val endpoint: String,
+        val channel: String,
         private val handshakeOnOpen: Boolean,
         private val failReasonOnOpen: String?,
         private val failStatusOnOpen: Int? = null
     ) : GatewayTransport {
         private val mutableState = MutableStateFlow<GatewayTransportState>(GatewayTransportState.Closed())
-        private val channel = Channel<GatewayTransportEvent>(Channel.UNLIMITED)
+        private val eventChannel = Channel<GatewayTransportEvent>(Channel.UNLIMITED)
         override val state: StateFlow<GatewayTransportState> = mutableState
-        override val events: Flow<GatewayTransportEvent> = channel.receiveAsFlow()
+        override val events: Flow<GatewayTransportEvent> = eventChannel.receiveAsFlow()
         var closeCount = 0
             private set
 
         override suspend fun open(spec: GatewayConnectionSpec) {
             mutableState.value = GatewayTransportState.Opening(spec.generation)
-            channel.trySend(GatewayTransportEvent.State(mutableState.value))
+            eventChannel.trySend(GatewayTransportEvent.State(mutableState.value))
+            if (channel != "control") return
             val failure = failReasonOnOpen
             if (failure != null) {
                 // 带 HTTP 状态的失败（401/4003）按不可恢复处理，与真实网关行为一致。
@@ -287,7 +299,7 @@ class RacingGatewayTransportTest {
         }
 
         fun receive(text: String) {
-            channel.trySend(GatewayTransportEvent.Frame(GatewayTransportFrame(1, text, text.length)))
+            eventChannel.trySend(GatewayTransportEvent.Frame(GatewayTransportFrame(1, text, text.length)))
         }
 
         fun fail(
@@ -298,14 +310,14 @@ class RacingGatewayTransportTest {
         ) {
             val value = GatewayTransportState.Failed(1, httpStatus, closeCode, reason, recoverable)
             mutableState.value = value
-            channel.trySend(GatewayTransportEvent.State(value))
+            eventChannel.trySend(GatewayTransportEvent.State(value))
         }
 
         override suspend fun send(text: String) = Unit
 
         override suspend fun close() {
             closeCount += 1
-            channel.close()
+            eventChannel.close()
         }
     }
 }

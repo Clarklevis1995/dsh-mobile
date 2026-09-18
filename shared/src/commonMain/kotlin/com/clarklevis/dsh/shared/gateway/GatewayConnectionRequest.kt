@@ -20,9 +20,9 @@ fun GatewayConnectionSpec.connectionCandidates(): List<String> =
 fun GatewayConnectionSpec.pairingCandidates(): List<String> =
     if (pairingCode.isNullOrBlank()) connectionCandidates() else listOf(endpoint)
 
-/** 平台唯一职责：为一个候选地址造一条空闲的有序通道。纯装配，不做任何 I/O 与判断。 */
+/** 平台唯一职责：为一个候选地址的某条通道造一条空闲连接。纯装配，不做任何 I/O 与判断。 */
 fun interface GatewaySocketFactory {
-    fun createChannel(spec: GatewayConnectionSpec, endpoint: String): GatewayTransport
+    fun createChannel(spec: GatewayConnectionSpec, endpoint: String, channel: String): GatewayTransport
 }
 
 /** 单个候选的失败记录；endpoint 已脱敏（无 query / 无凭据）。 */
