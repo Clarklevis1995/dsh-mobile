@@ -121,12 +121,17 @@ internal fun ApprovalRequestCard(
                     fontWeight = FontWeight.Medium
                 )
                 commandPreview?.takeIf(String::isNotBlank)?.let { command ->
+                    // 长命令（例如多行脚本）在固定高度内滚动，避免撑高整张卡片，
+                    // 把“拒绝 / 允许一次”按钮推出屏幕外。
                     Text(
                         text = command,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
-                        lineHeight = 19.sp
+                        lineHeight = 19.sp,
+                        modifier = Modifier
+                            .heightIn(max = 148.dp)
+                            .verticalScroll(rememberScrollState())
                     )
                 }
                 details?.let { value ->
