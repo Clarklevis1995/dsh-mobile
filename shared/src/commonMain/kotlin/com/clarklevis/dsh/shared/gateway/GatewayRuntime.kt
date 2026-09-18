@@ -372,6 +372,18 @@ class GatewayRuntime(
 
     private suspend fun sendRequestLocked(request: GatewayRequest): Boolean {
         if (mutableState.value.connection != GatewayConnectionState.CONNECTED) {
+            // 握手进行中（socket 已开、hello 未到）时请求是"还没轮到发"，不是"发不了"。
+            // 这里必须排队而不是拒绝：调用方（例如前台恢复后的刷新）看到 CONNECTED 后立刻
+            // 提交请求，而运行时进入 CONNECTED 与其事件发布之间存在窗口，拒绝会让用户看到
+            // 随机出现的 "sessions: not-connected"。排入既有 deferred 队列后由
+            // replayAfterHelloLocked 在 hello 时按序补发，语义与 lanes 排队一致。
+            if (isTransientlyConnectingLocked()) {
+                deferredRequests.addLast(request)
+                emitEventLocked(
+                    GatewayRuntimeEvent.RequestQueued(request.requestType, request.responseKind)
+                )
+                return true
+            }
             rejectLocked(
                 request.requestType,
                 ERROR_NOT_CONNECTED,
@@ -405,6 +417,11 @@ class GatewayRuntime(
         }
         return sendAsActiveLocked(request)
     }
+
+    /** socket 已开但握手未完成：请求应当排队等待 hello，而不是被判为"未连接"。 */
+    private fun isTransientlyConnectingLocked(): Boolean =
+        mutableState.value.connection == GatewayConnectionState.CONNECTING ||
+            mutableState.value.connection == GatewayConnectionState.AUTHENTICATING
 
     private suspend fun sendAsActiveLocked(request: GatewayRequest): Boolean {
         val pendingId = ++requestGeneration

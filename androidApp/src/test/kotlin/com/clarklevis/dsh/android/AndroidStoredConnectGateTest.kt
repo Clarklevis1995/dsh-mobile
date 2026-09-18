@@ -2,6 +2,7 @@ package com.clarklevis.dsh.android
 
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import com.clarklevis.dsh.shared.gateway.GatewayRuntime
+import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
 import com.clarklevis.dsh.shared.platform.GatewayAttachmentCache
 import com.clarklevis.dsh.shared.platform.GatewayClock
 import com.clarklevis.dsh.shared.platform.GatewayConnectionSpec
@@ -14,6 +15,7 @@ import com.clarklevis.dsh.shared.platform.GatewayTransport
 import com.clarklevis.dsh.shared.platform.GatewayTransportEvent
 import com.clarklevis.dsh.shared.platform.GatewayTransportState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -119,6 +121,53 @@ class AndroidStoredConnectGateTest {
             scope = scope
         )
 
+    /**
+     * 回归：握手进行中（socket 已开、hello 未到）提交的请求必须**排队**而不是被拒绝。
+     *
+     * 前台恢复后 UI 会立刻刷新，而"运行时进入 CONNECTED"与"事件发布到 UI"之间存在窗口。
+     * 此前该窗口内的请求被 sendRequestLocked 判为 not-connected（用户看到的
+     * "sessions: not-connected"），因此同一个操作有时报错、有时正常。
+     */
+    @Test
+    fun requestsSubmittedDuringHandshakeAreQueuedThenReplayedOnHello() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(
+            transport,
+            CountingCredentials(token = "stored-token"),
+            backgroundScope,
+            testScheduler
+        )
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        runCurrent()
+
+        // socket 已开、hello 未到：运行时处于 AUTHENTICATING。
+        transport.opened()
+        runCurrent()
+        assertEquals(GatewayConnectionState.AUTHENTICATING, runtime.state.value.connection)
+
+        val rejections = mutableListOf<GatewayRuntimeEvent.RequestRejected>()
+        backgroundScope.launch {
+            runtime.events.collect { if (it is GatewayRuntimeEvent.RequestRejected) rejections += it }
+        }
+        runCurrent()
+
+        assertTrue("握手窗口内的请求应当被接受（排队）", runtime.requestSessions())
+        runCurrent()
+        assertFalse(
+            "握手窗口内的请求不得被判为未连接：${rejections.map { it.reason }}",
+            rejections.any { it.reason == "not-connected" }
+        )
+
+        transport.receive("""{"kind":"hello","protocol":3,"authenticated":true}""")
+        runCurrent()
+        assertEquals(GatewayConnectionState.CONNECTED, runtime.state.value.connection)
+        assertTrue(
+            "排队的 sessions 请求必须在 hello 之后补发",
+            transport.sentPayloads.any { it.contains("\"type\":\"sessions\"") }
+        )
+    }
+
     private class CountingCredentials(
         private val token: String?,
         private val unreadableLoads: Int = 0,
@@ -145,6 +194,7 @@ class AndroidStoredConnectGateTest {
         private val mutableState = MutableStateFlow<GatewayTransportState>(GatewayTransportState.Closed())
         private val eventsFlow = MutableSharedFlow<GatewayTransportEvent>(extraBufferCapacity = 32)
         val specs = mutableListOf<GatewayConnectionSpec>()
+        val sentPayloads = mutableListOf<String>()
         override val state: StateFlow<GatewayTransportState> = mutableState
         override val events: Flow<GatewayTransportEvent> = eventsFlow
 
@@ -153,7 +203,23 @@ class AndroidStoredConnectGateTest {
             emitState(GatewayTransportState.Opening(spec.generation))
         }
 
-        override suspend fun send(text: String) = Unit
+        fun opened() = emitState(GatewayTransportState.Open(specs.last().generation))
+
+        fun receive(json: String) {
+            eventsFlow.tryEmit(
+                GatewayTransportEvent.Frame(
+                    com.clarklevis.dsh.shared.platform.GatewayTransportFrame(
+                        specs.last().generation,
+                        json,
+                        json.encodeToByteArray().size
+                    )
+                )
+            )
+        }
+
+        override suspend fun send(text: String) {
+            sentPayloads += text
+        }
         override suspend fun close() = emitState(GatewayTransportState.Closed(specs.lastOrNull()?.generation ?: 0))
 
         private fun emitState(value: GatewayTransportState) {
