@@ -191,6 +191,35 @@ class GatewayRuntime(
         openTransportLocked(preserveTurns = false)
     }
 
+    /**
+     * 启动时的自动连接。凭据可能尚未可读（Keystore 未就绪、DataStore 首次读取失败、
+     * 配对写入仍在进行），此时单次调用会静默返回 false，`desiredConnection` 保持
+     * false，回前台也不会自愈——用户只能手动点“连接”。这里在有限时间窗内重试，
+     * 并把结果回报给平台层用于显示可见状态。
+     */
+    suspend fun connectStoredIfPairedWithRetry(
+        timeoutMilliseconds: Long = STORED_CONNECT_RETRY_TIMEOUT_MILLISECONDS,
+        retryDelayMilliseconds: Long = STORED_CONNECT_RETRY_DELAY_MILLISECONDS,
+        maxAttempts: Int = STORED_CONNECT_MAX_ATTEMPTS
+    ): Boolean {
+        val deadline = clock.nowEpochMilliseconds() + timeoutMilliseconds
+        var attempts = 0
+        while (true) {
+            attempts += 1
+            val started = connectStoredIfPaired()
+            if (started) return true
+            // 凭据读取异常是终态：重试没有意义，且不应被当成“尚未配对”。
+            if (mutableState.value.lastError == ERROR_CREDENTIAL_ACCESS) return false
+            // 凭据“缺失”必须重试而不是立即放弃：设备上“从未配对”和“此刻读不到”
+            // （DataStore 未就绪、解密失败后密文被删）都表现为 null，无法区分。
+            // 原实现因此从不重试，desiredConnection 保持 false，回前台也不会自愈，
+            // 用户只能手动点“连接”。次数与时间双上限保证不空转、不无限自旋。
+            if (attempts >= maxAttempts.coerceAtLeast(1)) return false
+            if (clock.nowEpochMilliseconds() >= deadline) return false
+            clock.delay(retryDelayMilliseconds)
+        }
+    }
+
     suspend fun connectStoredIfPaired(): Boolean = serialized {
         val stored = preferences.load()
         if (
@@ -203,7 +232,12 @@ class GatewayRuntime(
             failOpenLocked(ERROR_CREDENTIAL_ACCESS)
             return@serialized false
         }
-        if (token.isNullOrBlank()) return@serialized false
+        if (token.isNullOrBlank()) {
+            // 必须留下可见状态：静默返回 false 会让 UI 停在“未连接”，
+            // 用户看不出是没配对还是读不到凭据，只能靠手动点“连接”。
+            failOpenLocked(ERROR_STORED_CREDENTIAL_MISSING)
+            return@serialized false
+        }
         requireWebSocketEndpoint(stored.endpoint)
         endpoint = stored.endpoint
         pairingCode = null
@@ -460,7 +494,9 @@ class GatewayRuntime(
             deviceId = credentialSnapshot.first,
             bearerToken = credentialSnapshot.second,
             pairingCode = immutablePairingCode,
-            expectedGatewayId = expectedGatewayId
+            expectedGatewayId = expectedGatewayId,
+            // 候选集即信任边界：并发实现只允许在这个集合内拨号。
+            candidates = trustedEndpoints.filter { it != target }
         )
         cancelPendingLocked(ERROR_CONNECTION_REPLACED)
         if (!preserveTurns) {
@@ -486,9 +522,20 @@ class GatewayRuntime(
             is GatewayTransportState.Opening -> mutableState.value = mutableState.value.copy(
                 connection = GatewayConnectionState.CONNECTING
             )
-            is GatewayTransportState.Open -> mutableState.value = mutableState.value.copy(
-                connection = GatewayConnectionState.AUTHENTICATING
-            )
+            is GatewayTransportState.Open -> {
+                // 竞速实现会在这里给出实际被采纳的地址：它才是本次连接的 endpoint，
+                // 后续 `onIdentity`、优先地址学习与 401 清理都必须以它为准。
+                val adopted = transportState.endpoint
+                    ?.takeIf { trustedEndpoints.isEmpty() || it in trustedEndpoints }
+                if (adopted != null && adopted != endpoint) {
+                    endpoint = adopted
+                    deferredRequests.isEmpty()
+                }
+                mutableState.value = mutableState.value.copy(
+                    connection = GatewayConnectionState.AUTHENTICATING,
+                    endpoint = adopted ?: endpoint
+                )
+            }
             is GatewayTransportState.Failed -> handleTransportFailureLocked(transportState)
         }
     }
@@ -1060,9 +1107,8 @@ class GatewayRuntime(
             }
             serialized {
                 if (canReconnectLocked()) {
-                    if (trustedEndpoints.size > 1) {
-                        endpoint = trustedEndpoints[(trustedEndpoints.indexOf(endpoint) + 1) % trustedEndpoints.size]
-                    }
+                    // 地址选择已移入并发实现：每次尝试都会覆盖全部候选，
+                    // 这里再轮转只会让重试看到"轮转后的子集"。
                     openTransportLocked(preserveTurns = true)
                 }
             }
@@ -1206,6 +1252,12 @@ class GatewayRuntime(
         private const val ERROR_NETWORK_LOST = "network-lost"
         private const val ERROR_RECOVERY_TIMEOUT = "recovery-timeout"
         private const val ERROR_CONNECTION_TIMEOUT = "connection-timeout"
+        private const val ERROR_STORED_CREDENTIAL_MISSING = "stored-credential-missing"
+
+        /** 启动时等待凭据可读的总时长；覆盖 Keystore/DataStore 冷启动窗口。 */
+        private const val STORED_CONNECT_RETRY_TIMEOUT_MILLISECONDS = 5_000L
+        private const val STORED_CONNECT_RETRY_DELAY_MILLISECONDS = 250L
+        private const val STORED_CONNECT_MAX_ATTEMPTS = 4
         private val STABLE_TRANSPORT_CODES = setOf(
             "incoming-overflow",
             "incoming-message-too-large",

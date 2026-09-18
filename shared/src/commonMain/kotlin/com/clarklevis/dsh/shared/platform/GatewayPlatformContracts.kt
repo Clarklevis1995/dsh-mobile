@@ -13,12 +13,17 @@ data class GatewayConnectionSpec(
     val bearerToken: String? = null,
     val pairingCode: String? = null,
     val channel: String? = null,
-    val expectedGatewayId: String? = null
+    val expectedGatewayId: String? = null,
+    /**
+     * 该主机允许被访问的全部地址（= GatewayRuntime.trustedEndpoints）。
+     * 实现只允许在这个集合内拨号；空表示只有 [endpoint] 一个候选。
+     */
+    val candidates: List<String> = emptyList()
 ) {
     override fun toString(): String =
         "GatewayConnectionSpec(generation=$generation, endpoint=<redacted>, deviceId=<redacted>, " +
             "bearerToken=${bearerToken?.let { "<redacted>" }}, " +
-            "pairingCode=${pairingCode?.let { "<redacted>" }})"
+            "pairingCode=${pairingCode?.let { "<redacted>" }}, candidates=${candidates.size})"
 }
 
 sealed interface GatewayTransportState {
@@ -26,14 +31,20 @@ sealed interface GatewayTransportState {
 
     data class Closed(override val generation: Long = 0) : GatewayTransportState
     data class Opening(override val generation: Long) : GatewayTransportState
-    data class Open(override val generation: Long) : GatewayTransportState
+    /** endpoint 为实际被采纳的候选地址（竞速时为胜者）；单通道实现可为 null。 */
+    data class Open(
+        override val generation: Long,
+        val endpoint: String? = null
+    ) : GatewayTransportState
 
     data class Failed(
         override val generation: Long,
         val httpStatus: Int? = null,
         val closeCode: Int? = null,
         val reason: String? = null,
-        val recoverable: Boolean = true
+        val recoverable: Boolean = true,
+        /** 多候选竞速全部失败时携带的逐候选记录；单候选通道为 null。 */
+        val race: com.clarklevis.dsh.shared.gateway.GatewayRaceFailure? = null
     ) : GatewayTransportState
 }
 
@@ -60,6 +71,10 @@ interface GatewayTransport {
     /** frame 与 failure 必须共享同一有序事件流。 */
     val events: Flow<GatewayTransportEvent>
 
+    /**
+     * 打开连接。**候选集是接口契约的一部分**：同一主机的多个候选地址共享一份身份与凭据，
+     * 首个完成应用层握手的候选即为本次连接。`listOf(spec)` 表示单候选，语义与旧的单地址一致。
+     */
     suspend fun open(spec: GatewayConnectionSpec)
     suspend fun send(text: String)
     suspend fun close()

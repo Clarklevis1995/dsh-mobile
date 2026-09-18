@@ -612,7 +612,16 @@ class AndroidSharedStateHolder(
                     }
                 }
                 launch {
-                    runCatching { appGraph.gatewayRuntime.connectStoredIfPaired() }
+                    // 启动自动连接必须在有限窗口内重试：Keystore/DataStore 冷启动时
+                    // 凭据可能还读不到。单次调用会静默失败，用户只能手动点“连接”。
+                    runCatching { appGraph.gatewayRuntime.connectStoredIfPairedWithRetry() }
+                        .onSuccess { started ->
+                            if (!started) {
+                                withContext(Dispatchers.Main.immediate) {
+                                    platformError = storedConnectFailureMessage(appGraph)
+                                }
+                            }
+                        }
                         .onFailure {
                             withContext(Dispatchers.Main.immediate) {
                                 platformError = "stored-connect-failed"
@@ -1323,6 +1332,16 @@ class AndroidSharedStateHolder(
             appGraph.gatewayScope.launch { appGraph.gatewayRuntime.disconnect() }
         }
     }
+
+    /**
+     * 启动自动连接失败时的可见原因。凭据读取异常与“从未配对”必须区分：
+     * 前者需要重新配对或恢复 Keystore，后者只需要扫码。
+     */
+    private fun storedConnectFailureMessage(appGraph: AndroidAppGraph): String =
+        when (appGraph.gatewayRuntime.state.value.lastError) {
+            "credential-access-failed" -> "无法读取已保存的设备凭据（Keystore/存储不可用），请重新配对。"
+            else -> "尚未连接这台主机，请扫描配对二维码或手动输入配对信息。"
+        }
 
     fun refreshSessions() {
         graph?.let { appGraph ->
