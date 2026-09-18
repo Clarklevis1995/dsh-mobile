@@ -302,7 +302,9 @@ final class AppStore: ObservableObject {
     private var preparedConversationActivationKey: String?
     private var activeConversationActivationKey: String?
     private var presentsNextConnectionFailureAsAlert = true
-    private var hasHandledColdLaunchConnection = false
+    /// 只有在确实发起了自动连接（或确认这台主机从未配对）之后才置位；
+    /// 凭据暂时不可读时保持待重试状态。
+    private var hasCompletedColdLaunchConnection = false
     private let backgroundExecutionController: AgentBackgroundExecutionController
     private static let defaultConfigurationRequestKinds: Set<String> = [
         "agent-presets", "defaults", "default-model", "set-default", "save-default-model"
@@ -631,14 +633,33 @@ final class AppStore: ObservableObject {
 
     /// Restores a previously paired gateway without turning the initial,
     /// intentionally unpaired state into a transport error.
+    ///
+    /// 记账必须发生在“真的发起了自动连接”之后：冷启动时 Keychain 条目可能还不可读
+    /// （设备未首次解锁、App 预热）。此前的实现先消费一次性标记再检查凭据，一次读
+    /// 不到就永久放弃，只能靠用户手动点“连接”恢复。现在凭据暂时读不到时保留标记，
+    /// 由 `handleScenePhase(.active)` 在设备解锁后重试。
     func connectOnColdLaunchIfPaired() {
-        guard !hasHandledColdLaunchConnection else { return }
-        hasHandledColdLaunchConnection = true
-        guard gateway.hasStoredCredential(for: endpoint) else {
+        switch gateway.credentialState(for: endpoint) {
+        case .available:
+            hasCompletedColdLaunchConnection = true
+            connect()
+        case .temporarilyUnavailable:
+            // 设备/App 还没到能读 Keychain 的状态：等回前台重试，且不把它变成错误弹窗。
+            hasCompletedColdLaunchConnection = false
+        case .missing:
+            hasCompletedColdLaunchConnection = true
             lastError = String(localized: "尚未连接到 DeepSeek Harness。请点击主页右上角的 🔑 按钮，扫描配对二维码或手动输入 Token 进行连接。")
-            return
         }
-        connect()
+    }
+
+    /// 对已经配对过的主机在回到前台时补齐自动连接：冷启动凭据暂时读不到、
+    /// 或者恢复尝试没等到 `hello`，都会在这里重试，直到真正建立连接。
+    private func retryAutomaticConnectionIfNeeded() {
+        guard !hasCompletedColdLaunchConnection else { return }
+        // `applicationDidBecomeActive()` 可能刚刚已经重开了一次；正在连接时不要
+        // 再拆掉刚建好的 socket（那只会把 `hello` 又推后一轮）。
+        if case .connecting = gateway.state { return }
+        connectOnColdLaunchIfPaired()
     }
 
     func handleScenePhase(_ phase: ScenePhase) {
@@ -646,6 +667,7 @@ final class AppStore: ObservableObject {
         case .active:
             backgroundExecutionController.applicationDidBecomeActive()
             gateway.applicationDidBecomeActive()
+            retryAutomaticConnectionIfNeeded()
         case .background:
             backgroundExecutionController.applicationDidEnterBackground()
             imageAttachmentCache.removeExpiredFiles()

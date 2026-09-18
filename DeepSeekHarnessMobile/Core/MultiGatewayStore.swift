@@ -230,6 +230,21 @@ final class MultiGatewayStore: ObservableObject {
         }
     }
 
+    /// 设备首次解锁前 Keychain 条目可能暂时读不到。这不等于“这台主机没有凭据”，
+    /// 所以短暂重试后才放弃，避免主机列表把在线主机显示成灰灯。
+    private func waitForReadableCredential(_ client: GatewayClient, endpoint: String) async -> Bool {
+        for attempt in 0..<4 {
+            switch client.credentialState(for: endpoint) {
+            case .available: return true
+            case .missing: return false
+            case .temporarilyUnavailable:
+                if attempt == 3 { return false }
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return false }
+            }
+        }
+        return false
+    }
+
     private func probe(_ profile: GatewayProfile) async {
         let client = GatewayClient()
         client.credentialID = profile.id
@@ -245,7 +260,7 @@ final class MultiGatewayStore: ObservableObject {
         defer { client.disconnect(); probes.removeAll { $0 === client } }
         for endpoint in profile.connectionEndpoints {
             guard !Task.isCancelled, profiles.contains(where: { $0.id == profile.id }) else { return }
-            guard client.hasStoredCredential(for: endpoint) else { return }
+            guard await waitForReadableCredential(client, endpoint: endpoint) else { continue }
             client.connect(to: endpoint)
             for _ in 0..<12 {
                 do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
