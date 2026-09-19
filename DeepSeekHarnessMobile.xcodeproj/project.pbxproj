@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D5C0FFEE0000000000000002 /* GatewayCredentialRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5C0FFEE0000000000000001 /* GatewayCredentialRecoveryTests.swift */; };
 		3459A8BD9696202CAC9D85A5 /* GatewaySwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B6B2953247E15BDA40F0BB /* GatewaySwitcherView.swift */; };
 		375D401B1B6F03015EC9073D /* GatewayProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E638ED93D0BBFD018966FB52 /* GatewayProfile.swift */; };
 		39FD319C875F4B4A6893D676 /* GatewayProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */; };
@@ -63,6 +64,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		D5C0FFEE0000000000000001 /* GatewayCredentialRecoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayCredentialRecoveryTests.swift; sourceTree = "<group>"; };
 		0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayProtocolTests.swift; sourceTree = "<group>"; };
 		12863E736F832D8F502B94A0 /* Theme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		152A3874C0D169644C9C7B6D /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -162,6 +164,7 @@
 				0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */,
 				CA11E0000000000000000011 /* LocalizationCatalogTests.swift */,
 				FEABDA4B6DAF199B320B1BA1 /* MultiGatewayTests.swift */,
+				D5C0FFEE0000000000000001 /* GatewayCredentialRecoveryTests.swift */,
 			);
 			path = DeepSeekHarnessMobileTests;
 			sourceTree = "<group>";
@@ -395,6 +398,7 @@
 				39FD319C875F4B4A6893D676 /* GatewayProtocolTests.swift in Sources */,
 				CA11E000000000000000000F /* LocalizationCatalogTests.swift in Sources */,
 				75392054CB69B9596796C57A /* MultiGatewayTests.swift in Sources */,
+				D5C0FFEE0000000000000002 /* GatewayCredentialRecoveryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

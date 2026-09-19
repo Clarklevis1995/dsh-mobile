@@ -17,18 +17,50 @@ final class GatewayClient: ObservableObject {
     private var outboundTask: Task<Void, Never>?
     private let transportSession = URLSession(configuration: .ephemeral, delegate: GatewayRedirectBlocker(), delegateQueue: nil)
 
+    /// 冷启动时 Keychain 条目可能暂时不可读（设备未首次解锁、App 预热）。
+    /// 这既不是“没有凭据”，也不能当成传输失败或触发“自动连接已完成”的记账。
+    enum CredentialState: Equatable {
+        case available(String)
+        case missing
+        case temporarilyUnavailable
+    }
+
+    /// 仅测试替换；生产路径始终使用 Keychain。
+    static var credentialStore: GatewayCredentialStoring = GatewayTokenStore()
+
     static func forgetCredential(for profileID: String) {
-        GatewayTokenStore.delete(for: URL(string: "https://gateway-credential.invalid/\(profileID)")!)
+        credentialStore.delete(for: URL(string: "https://gateway-credential.invalid/\(profileID)")!)
     }
 
     private func credentialURL(_ endpoint: URL) -> URL {
         credentialID.map { URL(string: "https://gateway-credential.invalid/\($0)")! } ?? endpoint
     }
 
+    func credentialState(for rawEndpoint: String) -> CredentialState {
+        switch readCredential(for: rawEndpoint) {
+        case .available(let token): return token.isEmpty ? .missing : .available(token)
+        case .missing: return .missing
+        case .temporarilyUnavailable: return .temporarilyUnavailable
+        }
+    }
+
+    private func readCredential(for rawEndpoint: String) -> CredentialState {
+        guard let url = URL(string: rawEndpoint),
+              ["ws", "wss"].contains(url.scheme?.lowercased() ?? "") else {
+            return .missing
+        }
+        do {
+            guard let token = try Self.credentialStore.load(for: credentialURL(url)) else { return .missing }
+            return .available(token)
+        } catch {
+            return .temporarilyUnavailable
+        }
+    }
+
     func migrateCredential(from endpoint: URL) throws {
-        guard credentialID != nil, GatewayTokenStore.load(for: credentialURL(endpoint)) == nil,
-              let token = GatewayTokenStore.load(for: endpoint) else { return }
-        try GatewayTokenStore.save(token, for: credentialURL(endpoint))
+        guard credentialID != nil, try Self.credentialStore.load(for: credentialURL(endpoint)) == nil,
+              let token = try Self.credentialStore.load(for: endpoint) else { return }
+        try Self.credentialStore.save(token, for: credentialURL(endpoint))
     }
 
     private var conversationClient: GatewayClient?
@@ -42,6 +74,8 @@ final class GatewayClient: ObservableObject {
     /// larger transport ceiling for the documented case where one indivisible
     /// event is itself larger than the page budget.
     private static let maximumIncomingMessageSize = 64 * 1024 * 1024
+    /// 单次连接尝试的上限；回前台判断“这次尝试是否已经超期”也使用同一常量。
+    static let connectionAttemptTimeout: TimeInterval = 15
 
     @Published private(set) var state: ConnectionState = .disconnected
     @Published private(set) var serverPort: Int?
@@ -119,6 +153,8 @@ final class GatewayClient: ObservableObject {
     /// error when the app returns to the foreground.
     private var isApplicationInBackground = false
     private var isRecoveringFromBackground = false
+    /// 每次真实发起连接时记录，用于判断回前台时这次尝试是否已经超期。
+    private var connectionAttemptStartedAt: Date?
 
     deinit {
         outboundTask?.cancel()
@@ -138,12 +174,12 @@ final class GatewayClient: ObservableObject {
     /// Cold launch should only restore a connection for a device that has
     /// already completed pairing. Opening an unauthenticated socket merely to
     /// discover that pairing is required produces a misleading failure alert.
+    ///
+    /// 需要区分“从未配对”和“此刻读不到凭据”的调用方应改用
+    /// `credentialState(for:)`；只想知道“现在能不能带 token 连”才用这个。
     func hasStoredCredential(for rawEndpoint: String) -> Bool {
-        guard let url = URL(string: rawEndpoint),
-              ["ws", "wss"].contains(url.scheme?.lowercased() ?? "") else {
-            return false
-        }
-        return GatewayTokenStore.load(for: credentialURL(url))?.isEmpty == false
+        if case .available = credentialState(for: rawEndpoint) { return true }
+        return false
     }
 
     func connectForPairing(_ payload: GatewayPairingPayload) {
@@ -166,7 +202,14 @@ final class GatewayClient: ObservableObject {
     /// reconnect loop. A successful `hello` clears recovery mode.
     func applicationDidBecomeActive() {
         isApplicationInBackground = false
+        // 恢复模式只用于抑制“App 在后台时”的失败上报。回到前台后必须清除，
+        // 否则一次没等到 `hello` 的尝试会让后续失败的告警永久静默。
+        isRecoveringFromBackground = false
         guard wantsConnection, !state.isConnected, let endpoint else { return }
+        // iOS 冻结 socket 时既不会回调失败，连接超时任务也可能已被暂停。
+        // 回到前台发现这次尝试已经超期，直接重开而不是继续等。
+        let elapsed = connectionAttemptStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        if case .connecting = state, elapsed < Self.connectionAttemptTimeout { return }
         reconnectTask?.cancel()
         reconnectTask = nil
         beginConnection(
@@ -198,6 +241,7 @@ final class GatewayClient: ObservableObject {
         self.pairingCode = pairingCode
         isManualPairingAttempt = pairingCode != nil
         if resetReportedFailure { lastReportedFailure = nil }
+        connectionAttemptStartedAt = Date()
         state = .connecting
         var request = URLRequest(url: url)
         request.setValue(channel, forHTTPHeaderField: "X-DSH-Channel")
@@ -209,13 +253,13 @@ final class GatewayClient: ObservableObject {
         }
         if let pairingCode {
             request.setValue("dsh-mobile-v1, dsh-pair.\(pairingCode)", forHTTPHeaderField: "Sec-WebSocket-Protocol")
-        } else if let token = GatewayTokenStore.load(for: credentialURL(url)) {
+        } else if case .available(let token) = credentialState(for: url.absoluteString) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             request.setValue("dsh-mobile-v1", forHTTPHeaderField: "Sec-WebSocket-Protocol")
         } else {
-            // This still permits the explicitly documented local Debug mode.
-            // A production gateway responds with HTTP 401 and the UI routes the
-            // user to pairing instead of silently treating the socket as ready.
+            // 没有凭据，或凭据此刻不可读（设备尚未首次解锁、App 预热），或设备
+            // 标识读取失败。仍按文档允许的本地 Debug 模式打开连接：生产网关会返回
+            // HTTP 401，UI 引导用户重新配对，而不是把这次尝试当作已完成的恢复。
             request.setValue("dsh-mobile-v1", forHTTPHeaderField: "Sec-WebSocket-Protocol")
         }
         let socket = transportSession.webSocketTask(with: request)
@@ -620,7 +664,7 @@ final class GatewayClient: ObservableObject {
                             return
                         }
                         do {
-                            try GatewayTokenStore.save(token, for: credentialURL(endpoint))
+                            try Self.credentialStore.save(token, for: credentialURL(endpoint))
                             pairingCode = nil
                         } catch {
                             fail(String(localized: "pairing.token.keychain-failed", defaultValue: "配对成功，但无法将设备 token 写入 Keychain：\(error.localizedDescription)"), shouldReconnect: false)
@@ -712,7 +756,7 @@ final class GatewayClient: ObservableObject {
         let shouldReportFailure: Bool
         switch (statusCode, closeCode) {
         case (401, _):
-            if pairingCode == nil, let endpoint { GatewayTokenStore.delete(for: credentialURL(endpoint)) }
+            if pairingCode == nil, let endpoint { Self.credentialStore.delete(for: credentialURL(endpoint)) }
             detail = String(localized: "auth.failed.401", defaultValue: "鉴权失败（HTTP 401）：设备 token 无效、已被吊销，或配对码已过期/使用过，请重新扫码配对。")
             shouldReconnect = false
             shouldReportFailure = true
@@ -785,7 +829,7 @@ final class GatewayClient: ObservableObject {
     private func startConnectionTimeout(for socket: URLSessionWebSocketTask) {
         connectionTimeoutTask?.cancel()
         connectionTimeoutTask = Task { [weak self, weak socket] in
-            try? await Task.sleep(for: .seconds(15))
+            try? await Task.sleep(for: .seconds(Self.connectionAttemptTimeout))
             guard let self,
                   let socket,
                   self.socket === socket,
@@ -852,7 +896,7 @@ private struct GatewayCommandExecuteRequest: Encodable, Sendable {
     var images: [GatewayMessageRequest.Image]
 }
 
-private enum GatewayDeviceIdentityStore {
+enum GatewayDeviceIdentityStore {
     private static let service = "ai.dsh.mobile.ios.device-identity"
     private static let account = "installation"
 
@@ -894,28 +938,60 @@ private enum GatewayDeviceIdentityStore {
     }
 }
 
-private enum GatewayTokenStore {
+struct GatewayTokenStore {
     private static let service = "ai.dsh.mobile.ios.gateway-token"
 
-    static func load(for endpoint: URL) -> String? {
+    static func account(for endpoint: URL) -> String {
+        endpoint.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    /// 让回归测试可以在不接触真实 Keychain 的前提下复现“已配对”状态。
+    static func seedForTesting(_ token: String, for endpoint: URL) throws {
+        try GatewayTokenStore().save(token, for: endpoint)
+    }
+}
+
+/// 设备回调里同一个 Keychain 条目可能是 404（确实没配对），也可能是
+/// “现在读不到”（设备未首次解锁）。只有 Keychain 自己的错误才代表后者。
+enum GatewayCredentialError: Error, Equatable {
+    case unavailable(OSStatus)
+}
+
+protocol GatewayCredentialStoring {
+    func load(for endpoint: URL) throws -> String?
+    func save(_ token: String, for endpoint: URL) throws
+    func delete(for endpoint: URL)
+}
+
+extension GatewayTokenStore: GatewayCredentialStoring {
+    func load(for endpoint: URL) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account(for: endpoint),
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: Self.account(for: endpoint),
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        switch status {
+        case errSecSuccess:
+            guard let data = result as? Data else { return nil }
+            return String(data: data, encoding: .utf8)
+        case errSecItemNotFound:
+            return nil
+        default:
+            // errSecInteractionNotAllowed（首次解锁前）、errSecNotAvailable 等
+            // 都必须与“没有凭据”区分，否则自动连接会被静默放弃。
+            throw GatewayCredentialError.unavailable(status)
+        }
     }
 
-    static func save(_ token: String, for endpoint: URL) throws {
-        let account = account(for: endpoint)
+    func save(_ token: String, for endpoint: URL) throws {
+        let account = Self.account(for: endpoint)
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
+            kSecAttrService as String: Self.service,
             kSecAttrAccount as String: account
         ]
         let attributes: [String: Any] = [
@@ -933,17 +1009,13 @@ private enum GatewayTokenStore {
         }
     }
 
-    static func delete(for endpoint: URL) {
+    func delete(for endpoint: URL) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account(for: endpoint)
+            kSecAttrService as String: Self.service,
+            kSecAttrAccount as String: Self.account(for: endpoint)
         ]
         SecItemDelete(query as CFDictionary)
-    }
-
-    private static func account(for endpoint: URL) -> String {
-        endpoint.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
     private struct KeychainError: LocalizedError {
