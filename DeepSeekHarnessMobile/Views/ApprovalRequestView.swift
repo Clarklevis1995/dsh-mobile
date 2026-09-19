@@ -78,11 +78,19 @@ struct ApprovalRequestView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let commandPreview, !commandPreview.isEmpty {
-                    Text(commandPreview)
-                        .font(.system(.subheadline, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // 长命令（例如多行脚本）不允许撑高整张卡片，否则操作按钮
+                    // 会被推出屏幕外。命令预览在固定高度内滚动，按钮始终可见。
+                    ScrollView(.vertical) {
+                        Text(commandPreview)
+                            .font(.system(.subheadline, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 1)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .frame(maxHeight: 148)
                 }
 
                 if let details {
