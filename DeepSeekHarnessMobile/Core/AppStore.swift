@@ -1,6 +1,205 @@
 import SwiftUI
 import DeepSeekHarnessShared
 
+struct AgentLiveActivityProgress: Equatable {
+    let headline: String
+    let detail: String?
+    let kind: AgentActivityStepKind
+    let toolName: String?
+}
+
+private struct AgentLiveActivityStreamBuffer {
+    var attemptID: String
+    var chunkType: String
+    var text: String
+    var toolName: String?
+    var step: Int?
+}
+
+/// 把 Gateway 的执行轨迹压缩成实时活动可显示的一行当前状态。
+enum AgentLiveActivityEventProjection {
+    static func progress(
+        for event: GatewayEvent,
+        completedToolLabel: String? = nil
+    ) -> AgentLiveActivityProgress? {
+        switch event.type {
+        case "user/message" where event.source?.isEmpty == false && event.source != "user":
+            return progress(
+                "上下文注入 · \(event.source!)",
+                detail: preview(event.text),
+                kind: .context
+            )
+        case "step/start":
+            return progress(
+                "正在分析执行步骤",
+                detail: event.step.map { "第 \($0) 步" },
+                kind: .reasoning
+            )
+        case "step/end":
+            return progress(
+                event.step.map { "第 \($0) 步已完成" } ?? "当前步骤已完成",
+                detail: "正在准备下一步",
+                kind: .result
+            )
+        case "request/context":
+            let source = firstText(
+                event.raw?["source"]?["kind"], event.raw?["source"], event.raw?["catalog"],
+                event.raw?["skill"], event.raw?["name"]
+            )
+            return progress(
+                source.map { "上下文注入 · \($0)" } ?? "上下文注入",
+                detail: preview(firstText(event.raw?["text"], event.raw?["content"])),
+                kind: .context
+            )
+        case "request/header":
+            let provider = event.raw?["header"]?["config"]?["provider"]?.stringValue
+            let model = event.raw?["header"]?["config"]?["model"]?.stringValue
+            return progress(
+                "准备 Agent 上下文",
+                detail: preview([provider, model].compactMap { $0 }.joined(separator: " · ")),
+                kind: .context
+            )
+        case "assistant/message":
+            if let text = preview(event.text), !text.isEmpty {
+                return progress("Agent 回复", detail: text, kind: .message)
+            }
+            if let reasoning = preview(event.reasoning), !reasoning.isEmpty {
+                return progress("思考", detail: reasoning, kind: .reasoning)
+            }
+            if let call = event.toolCalls?.first {
+                return toolProgress(name: call.name, arguments: call.arguments)
+            }
+            return nil
+        case "assistant/attempt":
+            return progress("正在重新生成回复", detail: "Agent 正在重试当前步骤", kind: .reasoning)
+        case "tool/call", "tool/code-dispatch-start":
+            return toolProgress(name: event.name, arguments: event.arguments)
+        case "tool/result", "tool/code-dispatch":
+            let failed = event.isError == true
+            let label = completedToolLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let headline = label?.isEmpty == false
+                ? "\(label!)\(failed ? "失败" : "完成")"
+                : (failed ? "工具执行失败" : "工具执行完成")
+            return progress(
+                headline,
+                detail: preview(event.preview ?? event.error),
+                kind: failed ? .tool : .result,
+                toolName: event.name
+            )
+        case "command/run":
+            return progress(
+                "执行命令",
+                detail: preview(event.args ?? firstText(event.raw?["command"], event.raw?["text"])),
+                kind: .command
+            )
+        case "command/done":
+            return progress(
+                event.isError == true ? "命令执行失败" : "命令执行完成",
+                detail: preview(event.error ?? event.outcome ?? event.text),
+                kind: event.isError == true ? .command : .result
+            )
+        case "compaction/start":
+            return progress("正在整理会话上下文", detail: "压缩历史记录以继续执行", kind: .context)
+        case "compaction/end":
+            return progress("会话上下文已整理", detail: "Agent 正在继续执行", kind: .result)
+        case "artifact/delivered", "file/delivered", "delivery/file":
+            return progress(
+                "交付文件",
+                detail: preview(firstText(event.raw?["path"], event.raw?["file"]) ?? event.text),
+                kind: .delivery
+            )
+        case "permission/preset":
+            return progress(
+                "应用权限配置",
+                detail: preview(firstText(event.raw?["preset"], event.raw?["name"])),
+                kind: .preparing
+            )
+        default:
+            return nil
+        }
+    }
+
+    static func streamingProgress(
+        chunkType: String,
+        text: String?,
+        toolName: String?
+    ) -> AgentLiveActivityProgress? {
+        switch chunkType {
+        case "reasoning-delta":
+            return progress("思考", detail: preview(text), kind: .reasoning)
+        case "text-delta":
+            return progress("正在生成回复", detail: preview(text), kind: .message)
+        case "tool-call-delta":
+            return progress(
+                toolName?.isEmpty == false ? "准备调用 \(toolName!)" : "正在准备工具调用",
+                detail: nil,
+                kind: .tool,
+                toolName: toolName
+            )
+        default:
+            return nil
+        }
+    }
+
+    private static func toolProgress(name: String?, arguments: JSONValue?) -> AgentLiveActivityProgress {
+        let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = ToolActivitySummaryFormatter.shared.summarize(
+            name: displayName?.isEmpty == false ? displayName! : "工具",
+            arguments: arguments?.jsonDisplayText ?? ""
+        )
+        let detail = [summary.detail, summary.annotation]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: " · ")
+        let kind: AgentActivityStepKind
+        switch summary.label {
+        case "写入": kind = .writing
+        case "修改": kind = .editing
+        case "读取": kind = .reading
+        case "执行": kind = .command
+        case "搜索", "列出", "获取": kind = .searching
+        default: kind = .tool
+        }
+        return progress(
+            summary.label,
+            detail: preview(detail),
+            kind: kind,
+            toolName: name
+        )
+    }
+
+    private static func progress(
+        _ headline: String,
+        detail: String?,
+        kind: AgentActivityStepKind,
+        toolName: String? = nil
+    ) -> AgentLiveActivityProgress {
+        AgentLiveActivityProgress(
+            headline: headline,
+            detail: detail?.isEmpty == false ? detail : nil,
+            kind: kind,
+            toolName: toolName
+        )
+    }
+
+    private static func firstText(_ values: JSONValue?...) -> String? {
+        for value in values {
+            if let text = value?.stringValue, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return text
+            }
+        }
+        return nil
+    }
+
+    private static func preview(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        return String(normalized.prefix(180))
+    }
+}
+
 @MainActor
 protocol GatewayQuestionEffectExecuting: AnyObject {
     func answerQuestion(rpcId: String, sessionId: String, answers: [GatewayQuestionAnswer])
@@ -272,6 +471,9 @@ final class AppStore: ObservableObject {
     private var isKMPEventDeliveryScheduled = false
     private let historySyncEngine = HistorySyncEngine()
     private var assistantStreamState = AssistantStreamState()
+    private var liveActivityStreamBuffers: [String: AgentLiveActivityStreamBuffer] = [:]
+    private var liveActivityStreamTasks: [String: Task<Void, Never>] = [:]
+    private var liveActivityToolLabels: [String: [String: String]] = [:]
     private var usesAssistantStream = false
     private var pendingSnapshotSessionID: String?
     private let historyRequestTimeout: Duration
@@ -438,6 +640,10 @@ final class AppStore: ObservableObject {
         self.backgroundExecutionController.onBackgroundAllowanceExpired = { [weak self] in
             self?.gateway.backgroundExecutionDidExpire()
         }
+        self.backgroundExecutionController.onKeepAlivePulse = { [weak self] in
+            if self?.gateway.state.isConnected == true { self?.gateway.ping() }
+            AgentLiveActivityManager.shared.refreshActiveActivities()
+        }
     }
 
     var selectedEvents: [SessionEvent] {
@@ -478,7 +684,7 @@ final class AppStore: ObservableObject {
 
     func approvalArguments(for request: GatewayPendingApprovalRequest) -> JSONValue? {
         guard let callID = request.callId else { return nil }
-        return selectedEvents
+        return events[request.sessionId, default: []]
             .last(where: { $0.event.callId == callID })?
             .event
             .arguments?
@@ -491,7 +697,8 @@ final class AppStore: ObservableObject {
             return command
         }
         guard let callID = request.callId,
-              let rawText = selectedConversationItems.last(where: { $0.id == "tool-\(callID)" })?.text else {
+              let rawText = renderedConversationItems[request.sessionId, default: []]
+              .last(where: { $0.id == "tool-\(callID)" })?.text else {
             return nil
         }
         let normalized = JSONValue.string(rawText).normalizedValue
@@ -783,9 +990,12 @@ final class AppStore: ObservableObject {
               // KMP state so it cannot lose the destination `.task` race.
               sessionID == kmpSessionListStore.snapshot.selectedSessionId,
               gateway.state.isConnected else { return }
-
-        activeConversationActivationKey = activationKey
         guard !Task.isCancelled else { return }
+
+        // Do not claim activation from a task that was already cancelled by a
+        // NavigationStack replacement. Otherwise a later valid activation sees
+        // the key and skips the subscribe request even though none was sent.
+        activeConversationActivationKey = activationKey
 
         if let sessionID {
             markRead(sessionID)
@@ -1270,13 +1480,41 @@ final class AppStore: ObservableObject {
         _ request: GatewayPendingApprovalRequest,
         outcome: GatewayApprovalOutcome
     ) {
-        dispatchApprovalIntent(.submitDecision(
+        let command = commandPreview(for: request)
+        let transition = dispatchApprovalIntent(.submitDecision(
             rpcID: request.rpcId,
             outcome: outcome,
             isConnected: gateway.state.isConnected
         ))
+        if transition.effect != nil {
+            AgentLiveActivityManager.shared.approvalSubmitting(
+                gatewayID: gatewayLocalID,
+                request: request,
+                outcome: outcome,
+                title: title(for: request.sessionId),
+                command: command,
+                sourceLabel: liveActivitySourceLabel(for: request.sessionId)
+            )
+        } else {
+            AgentLiveActivityManager.shared.approvalFailed(
+                gatewayID: gatewayLocalID,
+                sessionID: request.sessionId,
+                rpcID: request.rpcId,
+                title: title(for: request.sessionId),
+                reason: transition.error?.localizedDescription,
+                sourceLabel: liveActivitySourceLabel(for: request.sessionId)
+            )
+        }
     }
     func title(for sessionId: String) -> String { sessions.first(where: { $0.id == sessionId })?.title ?? "DeepSeek Harness" }
+    private func liveActivitySourceLabel(for sessionID: String) -> String {
+        let host = gatewayDisplayName.isEmpty ? "DeepSeek Harness" : gatewayDisplayName
+        guard let workspace = workspaces.first(where: { $0.sessionIds.contains(sessionID) }) else { return host }
+        let workspaceName = workspace.title.isEmpty
+            ? URL(fileURLWithPath: workspace.path).lastPathComponent
+            : workspace.title
+        return workspaceName.isEmpty ? host : "\(host) · \(workspaceName)"
+    }
 
     private func beginSnapshotWait(for sessionID: String) {
         historyLoadErrors[sessionID] = nil
@@ -1356,6 +1594,21 @@ final class AppStore: ObservableObject {
                 }
                 if update.resubscribe, let id = update.sessionId { subscribeToSession(id) }
                 guard update.accepted else { return }
+                if frame.kind == "assistant-stream", let id = frame.sessionId {
+                    let streamType = frame.frame?["type"]?.stringValue
+                    if streamType == "start" {
+                        cancelLiveActivityStreamUpdate(sessionID: id)
+                    } else if streamType == "chunk", let chunk = frame.frame?["chunk"] {
+                        enqueueLiveActivityStreamChunk(
+                            sessionID: id,
+                            attemptID: frame.frame?["attemptId"]?.stringValue ?? "assistant-stream",
+                            chunkType: chunk["type"]?.stringValue ?? "",
+                            text: chunk["text"]?.stringValue ?? chunk["argumentsDelta"]?.stringValue,
+                            toolName: chunk["name"]?.stringValue,
+                            step: frame.frame?["step"]?.doubleValue.map(Int.init)
+                        )
+                    }
+                }
                 if frame.kind == "session-snapshot", let id = frame.sessionId {
                     historyLoadErrors[id] = nil
                     lastError = nil
@@ -1724,8 +1977,23 @@ final class AppStore: ObservableObject {
                 time: time ?? sessions.first(where: { $0.id == id })?.lastActivity.timeIntervalSince1970 ?? 0,
                 event: GatewayEvent(type: "session/title", text: title)
             )))
+            AgentLiveActivityManager.shared.sessionTitleUpdated(
+                gatewayID: gatewayLocalID,
+                sessionID: id,
+                title: title
+            )
         case .sessions(let received):
             dispatchSessionListIntent(.remoteSessionsReceived(received))
+            let runningBySessionID = received.reduce(into: [String: Bool]()) { result, session in
+                result[session.sessionId] = session.running
+            }
+            AgentLiveActivityManager.shared.reconcileSessions(
+                gatewayID: gatewayLocalID,
+                runningBySessionID: runningBySessionID
+            )
+            backgroundExecutionController.reconcileSessions(
+                runningBySessionID: runningBySessionID
+            )
             isRefreshing = false
             notice(
                 String(localized: "notice.sessions.synced", defaultValue: "会话列表已同步"),
@@ -1975,6 +2243,13 @@ final class AppStore: ObservableObject {
                 "selectedMatch=\(selectedSessionId == request.sessionId) pendingBefore=\(pendingApprovalRequests.count)"
             )
             dispatchApprovalIntent(.requestReceived(request))
+            AgentLiveActivityManager.shared.awaitingApproval(
+                gatewayID: gatewayLocalID,
+                request: request,
+                title: title(for: request.sessionId),
+                command: commandPreview(for: request),
+                sourceLabel: liveActivitySourceLabel(for: request.sessionId)
+            )
             if isNewRequest {
                 notice(
                     request.replay ? String(localized: "待审批操作已恢复") : String(localized: "Agent 正在等待审批"),
@@ -1992,13 +2267,35 @@ final class AppStore: ObservableObject {
             )
         case .response(let rpcID, let outcome, let accepted, let reason):
             gatewayApprovalTrace("router response accepted=\(accepted) outcome=\(outcome.rawValue)")
-            let pendingSessionID = pendingApprovalRequests.first { $0.rpcId == rpcID }?.sessionId
+            let pendingRequest = pendingApprovalRequests.first { $0.rpcId == rpcID }
+            let pendingSessionID = pendingRequest?.sessionId
             dispatchApprovalIntent(.responseReceived(
                 rpcID: rpcID,
                 outcome: outcome,
                 accepted: accepted,
                 reason: reason
             ))
+            if let pendingRequest {
+                if accepted {
+                    AgentLiveActivityManager.shared.approvalResolved(
+                        gatewayID: gatewayLocalID,
+                        sessionID: pendingRequest.sessionId,
+                        rpcID: rpcID,
+                        outcome: outcome,
+                        title: title(for: pendingRequest.sessionId),
+                        sourceLabel: liveActivitySourceLabel(for: pendingRequest.sessionId)
+                    )
+                } else {
+                    AgentLiveActivityManager.shared.approvalFailed(
+                        gatewayID: gatewayLocalID,
+                        sessionID: pendingRequest.sessionId,
+                        rpcID: rpcID,
+                        title: title(for: pendingRequest.sessionId),
+                        reason: reason,
+                        sourceLabel: liveActivitySourceLabel(for: pendingRequest.sessionId)
+                    )
+                }
+            }
             if !accepted && reason == "not-pending" {
                 notice(
                     String(localized: "审批已在其他端处理"),
@@ -2008,8 +2305,30 @@ final class AppStore: ObservableObject {
             }
         case .resolved(let rpcID, let sessionID, let outcome):
             gatewayApprovalTrace("router resolved outcome=\(outcome ?? "none")")
-            let pendingSessionID = pendingApprovalRequests.first { $0.rpcId == rpcID }?.sessionId
+            let pendingRequest = pendingApprovalRequests.first { $0.rpcId == rpcID }
+            let pendingSessionID = pendingRequest?.sessionId
             dispatchApprovalIntent(.resolved(rpcID: rpcID))
+            if let resolvedSessionID = sessionID ?? pendingSessionID {
+                if let resolvedOutcome = outcome.flatMap(GatewayApprovalOutcome.init(rawValue:)) {
+                    AgentLiveActivityManager.shared.approvalResolved(
+                        gatewayID: gatewayLocalID,
+                        sessionID: resolvedSessionID,
+                        rpcID: rpcID,
+                        outcome: resolvedOutcome,
+                        title: title(for: resolvedSessionID),
+                        sourceLabel: liveActivitySourceLabel(for: resolvedSessionID)
+                    )
+                } else {
+                    AgentLiveActivityManager.shared.approvalFailed(
+                        gatewayID: gatewayLocalID,
+                        sessionID: resolvedSessionID,
+                        rpcID: rpcID,
+                        title: title(for: resolvedSessionID),
+                        reason: nil,
+                        sourceLabel: liveActivitySourceLabel(for: resolvedSessionID)
+                    )
+                }
+            }
             let detail = outcome == GatewayApprovalOutcome.allowedOnce.rawValue
                 ? String(localized: "已允许本次操作。")
                 : String(localized: "操作未获允许。")
@@ -2293,6 +2612,14 @@ final class AppStore: ObservableObject {
         let previouslyHadContent = conversationContentSessionIds.contains(sessionId)
         renderedConversationItems[sessionId] = items
         conversationTimeline(for: sessionId).publish(items)
+        if let request = pendingApprovalRequests.last(where: { $0.sessionId == sessionId }) {
+            AgentLiveActivityManager.shared.enrichApprovalCommand(
+                gatewayID: gatewayLocalID,
+                sessionID: sessionId,
+                rpcID: request.rpcId,
+                command: commandPreview(for: request)
+            )
+        }
         if items.isEmpty {
             if previouslyHadContent { conversationContentSessionIds.remove(sessionId) }
         } else if !previouslyHadContent {
@@ -2312,9 +2639,60 @@ final class AppStore: ObservableObject {
 
     private func applyEvent(_ record: SessionEvent) {
         let event = record.event
-        if event.type == "turn/start" { backgroundExecutionController.begin(sessionID: record.sessionId, startsNewTurn: false) }
+        if event.type == "turn/start" {
+            cancelLiveActivityStreamUpdate(sessionID: record.sessionId)
+            liveActivityToolLabels[record.sessionId] = [:]
+            backgroundExecutionController.begin(sessionID: record.sessionId, startsNewTurn: false)
+            AgentLiveActivityManager.shared.sessionStarted(
+                gatewayID: gatewayLocalID,
+                sessionID: record.sessionId,
+                title: title(for: record.sessionId),
+                turn: event.turn,
+                sourceLabel: liveActivitySourceLabel(for: record.sessionId)
+            )
+        }
+        if event.type == "assistant/chunk", let chunkType = event.chunkType {
+            enqueueLiveActivityStreamChunk(
+                sessionID: record.sessionId,
+                attemptID: "legacy-\(event.turn ?? 0)-\(event.step ?? 0)",
+                chunkType: chunkType,
+                text: event.text ?? event.tool?.argumentsDelta,
+                toolName: event.tool?.name,
+                step: event.step
+            )
+        } else if event.type != "turn/start" && event.type != "turn/end" {
+            cancelLiveActivityStreamUpdate(sessionID: record.sessionId)
+            let callID = event.callId ?? event.subCallId
+            let completedToolLabel = callID.flatMap { liveActivityToolLabels[record.sessionId]?[$0] }
+            if let progress = AgentLiveActivityEventProjection.progress(
+                for: event,
+                completedToolLabel: completedToolLabel
+            ) {
+                publishLiveActivityProgress(progress, sessionID: record.sessionId, step: event.step)
+                if ["tool/call", "tool/code-dispatch-start"].contains(event.type), let callID {
+                    liveActivityToolLabels[record.sessionId, default: [:]][callID] = progress.headline
+                }
+            }
+            if ["tool/result", "tool/code-dispatch"].contains(event.type), let callID {
+                liveActivityToolLabels[record.sessionId]?[callID] = nil
+            }
+        }
         if event.type == "turn/end" {
+            cancelLiveActivityStreamUpdate(sessionID: record.sessionId)
+            liveActivityToolLabels[record.sessionId] = nil
             backgroundExecutionController.turnEnded(sessionID: record.sessionId)
+            let failureReasons = Set(["error", "failed", "cancelled", "canceled", "interrupted", "aborted"])
+            let failed = event.isError == true
+                || event.interrupted == true
+                || event.error?.isEmpty == false
+                || event.reason.map { failureReasons.contains($0.lowercased()) } == true
+            AgentLiveActivityManager.shared.sessionEnded(
+                gatewayID: gatewayLocalID,
+                sessionID: record.sessionId,
+                title: title(for: record.sessionId),
+                failed: failed,
+                sourceLabel: liveActivitySourceLabel(for: record.sessionId)
+            )
         }
         if event.type == "turn/end", record.sessionId == selectedSessionId {
             dispatchSessionControl(.requestContextUsage(
@@ -2349,6 +2727,91 @@ final class AppStore: ObservableObject {
         // invalidate the complete app hierarchy, re-sort the sidebar, encode
         // it and write UserDefaults while the user was trying to scroll.
         dispatchSessionListIntent(.eventReceived(record))
+    }
+
+    private func enqueueLiveActivityStreamChunk(
+        sessionID: String,
+        attemptID: String,
+        chunkType: String,
+        text: String?,
+        toolName: String?,
+        step: Int?
+    ) {
+        guard AgentLiveActivityEventProjection.streamingProgress(
+            chunkType: chunkType,
+            text: text,
+            toolName: toolName
+        ) != nil else { return }
+
+        var buffer = liveActivityStreamBuffers[sessionID]
+        if buffer?.attemptID != attemptID || buffer?.chunkType != chunkType {
+            liveActivityStreamTasks.removeValue(forKey: sessionID)?.cancel()
+            buffer = AgentLiveActivityStreamBuffer(
+                attemptID: attemptID,
+                chunkType: chunkType,
+                text: "",
+                toolName: toolName,
+                step: step
+            )
+        }
+        guard var currentBuffer = buffer else { return }
+        if let text, !text.isEmpty {
+            currentBuffer.text = String((currentBuffer.text + text).suffix(240))
+        }
+        currentBuffer.toolName = toolName ?? currentBuffer.toolName
+        currentBuffer.step = step ?? currentBuffer.step
+        liveActivityStreamBuffers[sessionID] = currentBuffer
+
+        guard liveActivityStreamTasks[sessionID] == nil else { return }
+        liveActivityStreamTasks[sessionID] = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(650)) } catch { return }
+            guard let self, let latest = self.liveActivityStreamBuffers[sessionID] else { return }
+            self.liveActivityStreamTasks[sessionID] = nil
+            guard let progress = AgentLiveActivityEventProjection.streamingProgress(
+                chunkType: latest.chunkType,
+                text: latest.text,
+                toolName: latest.toolName
+            ) else { return }
+            self.publishLiveActivityProgress(progress, sessionID: sessionID, step: latest.step)
+        }
+    }
+
+    private func cancelLiveActivityStreamUpdate(sessionID: String) {
+        liveActivityStreamTasks.removeValue(forKey: sessionID)?.cancel()
+        liveActivityStreamBuffers[sessionID] = nil
+    }
+
+    private func publishLiveActivityProgress(
+        _ progress: AgentLiveActivityProgress,
+        sessionID: String,
+        step: Int?
+    ) {
+        let detail: String?
+        if let step, let progressDetail = progress.detail, !progressDetail.hasPrefix("第 \(step) 步") {
+            detail = "第 \(step) 步 · \(progressDetail)"
+        } else if let step, progress.detail == nil {
+            detail = "第 \(step) 步"
+        } else {
+            detail = progress.detail
+        }
+        if let request = pendingApprovalRequests.last(where: { $0.sessionId == sessionID }) {
+            AgentLiveActivityManager.shared.enrichApprovalCommand(
+                gatewayID: gatewayLocalID,
+                sessionID: sessionID,
+                rpcID: request.rpcId,
+                command: commandPreview(for: request)
+            )
+        }
+        AgentLiveActivityManager.shared.progressUpdated(
+            gatewayID: gatewayLocalID,
+            sessionID: sessionID,
+            title: title(for: sessionID),
+            headline: progress.headline,
+            detail: detail,
+            kind: progress.kind,
+            toolName: progress.toolName,
+            sourceLabel: liveActivitySourceLabel(for: sessionID)
+        )
     }
     private func notice(_ title: String, _ text: String, sessionId: String? = nil, isError: Bool = false) {
         protocolNotices.append(GatewayNotice(sessionId: sessionId, title: title, text: text, isError: isError))

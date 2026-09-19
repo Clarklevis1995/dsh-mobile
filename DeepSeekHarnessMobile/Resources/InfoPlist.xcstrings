@@ -60,6 +60,40 @@
           }
         }
       }
+    },
+    "NSLocationAlwaysAndWhenInUseUsageDescription" : {
+      "comment" : "Privacy - Location Always and When In Use Usage Description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "While an Agent is running, DshMobile uses low-accuracy background location to keep the task connected. Location data is never stored or uploaded."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 执行期间使用低精度后台定位维持任务连接；位置数据不会保存或上传。"
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription" : {
+      "comment" : "Privacy - Location When In Use Usage Description",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "While an Agent is running, DshMobile uses low-accuracy location to keep the task connected. Location data is never stored or uploaded."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 执行期间使用低精度定位维持任务连接；位置数据不会保存或上传。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

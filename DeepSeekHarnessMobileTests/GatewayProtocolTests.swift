@@ -26,6 +26,106 @@ private enum GatewayProtocolParityFixtures {
     static let historyImage = #"{"kind":"history","events":[{"type":"user/message","seq":1,"time":1786937352,"data":{"content":[{"type":"image","attachment":{"attachmentId":"att-history","mediaType":"image/webp","bytes":42,"width":100,"height":80,"name":"image.webp"}}],"source":{"kind":"user"}}}],"hasMore":false}"#
 }
 
+final class AgentLiveActivityEventProjectionTests: XCTestCase {
+    func testRunningProgressCannotOverwritePendingApproval() {
+        let pending = activityState(phase: .awaitingApproval, rpcID: "rpc-1")
+        let running = activityState(phase: .running)
+
+        XCTAssertFalse(AgentLiveActivityUpdatePolicy.allows(current: pending, incoming: running))
+    }
+
+    func testRunningProgressCannotOverwriteApprovalSubmissionOrUnknownResult() {
+        let running = activityState(phase: .running)
+
+        XCTAssertFalse(AgentLiveActivityUpdatePolicy.allows(
+            current: activityState(phase: .submittingApproval, rpcID: "rpc-1"),
+            incoming: running
+        ))
+        XCTAssertFalse(AgentLiveActivityUpdatePolicy.allows(
+            current: activityState(phase: .failed, rpcID: "rpc-1"),
+            incoming: running
+        ))
+    }
+
+    func testRunningProgressResumesAfterApprovalIsConfirmed() {
+        let approved = activityState(phase: .approved, rpcID: "rpc-1")
+        let running = activityState(phase: .running)
+
+        XCTAssertTrue(AgentLiveActivityUpdatePolicy.allows(current: approved, incoming: running))
+    }
+
+    func testPluginContextMessageKeepsItsSourceAndContent() throws {
+        let projected = try XCTUnwrap(AgentLiveActivityEventProjection.progress(for: GatewayEvent(
+            type: "user/message",
+            text: "Use the repository skill catalog before choosing a workflow.",
+            source: "skill-catalog"
+        )))
+
+        XCTAssertEqual(projected.headline, "上下文注入 · skill-catalog")
+        XCTAssertEqual(projected.detail, "Use the repository skill catalog before choosing a workflow.")
+        XCTAssertEqual(projected.kind, .context)
+    }
+
+    func testWriteToolUsesTheSameHumanReadableSummaryAsConversation() throws {
+        let projected = try XCTUnwrap(AgentLiveActivityEventProjection.progress(for: GatewayEvent(
+            type: "tool/call",
+            turn: 1,
+            step: 2,
+            name: "write_file",
+            arguments: .object([
+                "path": .string("articles/北京中轴线.md"),
+                "content": .string("第一行\n第二行")
+            ])
+        )))
+
+        XCTAssertEqual(projected.headline, "写入")
+        XCTAssertEqual(projected.detail, "articles/北京中轴线.md · 2 行")
+        XCTAssertEqual(projected.kind, .writing)
+    }
+
+    func testReasoningStreamIsCondensedForTheLiveActivity() throws {
+        let projected = try XCTUnwrap(AgentLiveActivityEventProjection.streamingProgress(
+            chunkType: "reasoning-delta",
+            text: "Now   check\ncharacter count",
+            toolName: nil
+        ))
+
+        XCTAssertEqual(projected.headline, "思考")
+        XCTAssertEqual(projected.detail, "Now check character count")
+        XCTAssertEqual(projected.kind, .reasoning)
+    }
+
+    func testToolResultRetainsTheStartedToolLabel() throws {
+        let projected = try XCTUnwrap(AgentLiveActivityEventProjection.progress(
+            for: GatewayEvent(type: "tool/result", isError: false, preview: "saved"),
+            completedToolLabel: "写入"
+        ))
+
+        XCTAssertEqual(projected.headline, "写入完成")
+        XCTAssertEqual(projected.detail, "saved")
+        XCTAssertEqual(projected.kind, .result)
+    }
+
+    private func activityState(
+        phase: AgentActivityPhase,
+        rpcID: String? = nil
+    ) -> AgentActivityAttributes.ContentState {
+        AgentActivityAttributes.ContentState(
+            phase: phase,
+            status: phase.rawValue,
+            detail: nil,
+            secondaryDetail: nil,
+            sourceLabel: nil,
+            command: nil,
+            rpcID: rpcID,
+            approvalID: nil,
+            toolName: nil,
+            stepKind: nil,
+            updatedAt: .now
+        )
+    }
+}
+
 private func swiftAuditRange(
     from startMarker: String,
     through endMarker: String,
@@ -3207,6 +3307,31 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
+    func testSessionSnapshotStopsMissedTurnAndLongRunningKeepAlive() {
+        let application = BackgroundTaskApplicationSpy()
+        let keepAlive = AgentLongRunningKeepAliveSpy()
+        let controller = AgentBackgroundExecutionController(
+            application: application,
+            longRunningKeepAlive: keepAlive
+        )
+
+        controller.begin(sessionID: "finished", startsNewTurn: true)
+        controller.beginQuestionAnswer(rpcID: "rpc-finished", sessionID: "finished")
+        controller.updateQueuedSessions(["finished"])
+        controller.applicationDidEnterBackground()
+
+        XCTAssertTrue(controller.isAgentWorkActive)
+        XCTAssertTrue(keepAlive.agentWorkIsActive)
+        controller.reconcileSessions(runningBySessionID: ["finished": false])
+
+        XCTAssertFalse(controller.isAgentWorkActive)
+        XCTAssertFalse(keepAlive.agentWorkIsActive)
+        XCTAssertTrue(controller.outstandingTurnsBySessionID.isEmpty)
+        XCTAssertTrue(controller.questionAllowanceSessionIDs.isEmpty)
+        XCTAssertEqual(application.endedIdentifiers.count, 1)
+    }
+
+    @MainActor
     func testQuestionBackgroundAllowanceDoesNotEndAnotherTurnAndAcceptedRestoresTurn() {
         let application = BackgroundTaskApplicationSpy()
         let controller = AgentBackgroundExecutionController(application: application)
@@ -3329,6 +3454,38 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertNil(controller.sessionID)
         XCTAssertTrue(controller.questionAllowanceSessionIDs.isEmpty)
         XCTAssertEqual(application.endedIdentifiers.count, 1)
+        XCTAssertEqual(expirationCount, 1)
+    }
+
+    @MainActor
+    func testLongRunningKeepAlivePreservesTurnWhenFiniteTaskExpires() async {
+        let application = BackgroundTaskApplicationSpy()
+        let keepAlive = AgentLongRunningKeepAliveSpy()
+        let controller = AgentBackgroundExecutionController(
+            application: application,
+            longRunningKeepAlive: keepAlive
+        )
+        var expirationCount = 0
+        var pulseCount = 0
+        controller.onBackgroundAllowanceExpired = { expirationCount += 1 }
+        controller.onKeepAlivePulse = { pulseCount += 1 }
+
+        controller.begin(sessionID: "s1", startsNewTurn: true)
+        XCTAssertTrue(keepAlive.agentWorkIsActive)
+        controller.applicationDidEnterBackground()
+        keepAlive.isKeepingAlive = true
+        keepAlive.onPulse?()
+        application.expirationHandler?()
+        await Task.yield()
+
+        XCTAssertEqual(controller.outstandingTurns, 1)
+        XCTAssertTrue(controller.keepsConnectionAlive)
+        XCTAssertEqual(application.endedIdentifiers.count, 1)
+        XCTAssertEqual(expirationCount, 0)
+        XCTAssertEqual(pulseCount, 1)
+
+        controller.turnEnded(sessionID: "s1")
+        XCTAssertFalse(keepAlive.agentWorkIsActive)
         XCTAssertEqual(expirationCount, 1)
     }
 
@@ -3675,6 +3832,17 @@ final class GatewayProtocolTests: XCTestCase {
         let event = try XCTUnwrap(frame.events?.first?.normalized(sessionId: "s1"))
         XCTAssertEqual(event.event.type, "user/message")
         XCTAssertEqual(event.event.text, "历史消息")
+    }
+
+    func testNormalizesTurnEndReasonFromGatewayAndRawHistoryShapes() throws {
+        let stringReason = #"{"kind":"history","events":[{"type":"turn/end","seq":2,"time":1786937353,"data":{"turn":1,"step":3,"reason":"error"}}],"hasMore":false}"#
+        let objectReason = #"{"kind":"history","events":[{"type":"turn/end","seq":3,"time":1786937354,"data":{"turn":1,"step":3,"reason":{"kind":"cancelled"}}}],"hasMore":false}"#
+
+        let stringFrame = try JSONDecoder().decode(GatewayFrame.self, from: Data(stringReason.utf8))
+        let objectFrame = try JSONDecoder().decode(GatewayFrame.self, from: Data(objectReason.utf8))
+
+        XCTAssertEqual(stringFrame.events?.first?.normalized(sessionId: "s1").event.reason, "error")
+        XCTAssertEqual(objectFrame.events?.first?.normalized(sessionId: "s1").event.reason, "cancelled")
     }
 
     @MainActor
@@ -6585,6 +6753,22 @@ private final class BackgroundTaskApplicationSpy: BackgroundTaskApplication {
     func endBackgroundTask(_ identifier: UIBackgroundTaskIdentifier) {
         endedIdentifiers.append(identifier)
     }
+}
+
+@MainActor
+private final class AgentLongRunningKeepAliveSpy: AgentLongRunningKeepAlive {
+    var isKeepingAlive = false
+    var onPulse: (() -> Void)?
+    private(set) var agentWorkIsActive = false
+
+    func setAgentWorkActive(_ active: Bool) {
+        agentWorkIsActive = active
+        if !active { isKeepingAlive = false }
+    }
+
+    func applicationDidBecomeActive() {}
+    func applicationDidEnterBackground() {}
+    func prepareForTermination() {}
 }
 
 /// Regression coverage for a launch-time crash on a physical device.

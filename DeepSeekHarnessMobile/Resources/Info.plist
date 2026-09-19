@@ -18,6 +18,17 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.5.3</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.clarklevis.dshmobile.session</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dshmobile</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>12</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -31,6 +42,14 @@
 	<string>允许 DshMobile 扫描 DeepSeek Harness WebUI 生成的设备配对二维码。</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>连接局域网中的 DeepSeek Harness Mobile Gateway。</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Agent 执行期间使用低精度后台定位维持任务连接；位置数据不会保存或上传。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Agent 执行期间使用低精度定位维持任务连接；位置数据不会保存或上传。</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -38,6 +57,11 @@
 	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>location</string>
+	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

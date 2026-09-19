@@ -49,9 +49,46 @@ final class MultiGatewayStore: ObservableObject {
                 installPairingHandler(on: activeStore)
             }
         } catch { self.error = "读取或迁移主机资料失败：\(error.localizedDescription)" }
+        AgentLiveActivityIntentBridge.install { [weak self] request in
+            self?.handleLiveActivityApproval(request) ?? false
+        }
     }
 
     var activeProfile: GatewayProfile? { profiles.first { $0.id == activeID } }
+
+    private func handleLiveActivityApproval(_ intent: AgentApprovalIntentRequest) -> Bool {
+        let store = activeStore
+        guard store.gatewayLocalID == intent.gatewayID else { return false }
+        guard let request = store.pendingApprovalRequests.first(where: {
+            $0.rpcId == intent.rpcID
+                && $0.sessionId == intent.sessionID
+                && $0.approvalId == intent.approvalID
+        }) else {
+            AgentLiveActivityManager.shared.approvalFailed(
+                gatewayID: intent.gatewayID,
+                sessionID: intent.sessionID,
+                rpcID: intent.rpcID,
+                title: store.title(for: intent.sessionID),
+                reason: "该审批已失效或已在其他设备处理"
+            )
+            return false
+        }
+        guard store.gateway.state.isConnected else {
+            AgentLiveActivityManager.shared.approvalFailed(
+                gatewayID: intent.gatewayID,
+                sessionID: intent.sessionID,
+                rpcID: intent.rpcID,
+                title: store.title(for: intent.sessionID),
+                reason: "当前未连接 Gateway，请打开 App 后重试"
+            )
+            return false
+        }
+        store.respondToApproval(
+            request,
+            outcome: intent.outcome == .allowedOnce ? .allowedOnce : .rejected
+        )
+        return true
+    }
 
     func select(_ profile: GatewayProfile, connect: Bool = true) {
         guard profiles.contains(where: { $0.id == profile.id }) else { return }

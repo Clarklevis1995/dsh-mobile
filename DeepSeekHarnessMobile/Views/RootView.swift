@@ -28,6 +28,7 @@ private struct RootNavigationHost: View, Equatable {
     let store: AppStore
     @State private var navigationPath: [AppRoute] = []
     @State private var newConversationTask: Task<Void, Never>?
+    @State private var pendingLiveActivitySessionID: String?
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.store === rhs.store
@@ -76,6 +77,12 @@ private struct RootNavigationHost: View, Equatable {
         }
         .onChange(of: navigationPath) { _, path in
             if path.isEmpty { store.resumeWorkspace() }
+        }
+        .onOpenURL(perform: openLiveActivityURL)
+        .onReceive(store.$sessions) { sessions in
+            guard let sessionID = pendingLiveActivitySessionID,
+                  let session = sessions.first(where: { $0.id == sessionID }) else { return }
+            openLiveActivitySession(session)
         }
     }
 
@@ -130,6 +137,43 @@ private struct RootNavigationHost: View, Equatable {
     private func navigate(to route: AppRoute) {
         guard navigationPath.last != route else { return }
         navigationPath.append(route)
+    }
+
+    private func openLiveActivityURL(_ url: URL) {
+        guard url.scheme == "dshmobile", url.host == "session",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let gatewayID = components.queryItems?.first(where: { $0.name == "gateway" })?.value,
+              gatewayID == store.gatewayLocalID,
+              let sessionID = components.queryItems?.first(where: { $0.name == "id" })?.value else { return }
+        pendingLiveActivitySessionID = sessionID
+        guard let session = store.sessions.first(where: { $0.id == sessionID }) else { return }
+        openLiveActivitySession(session)
+    }
+
+    private func openLiveActivitySession(_ session: SessionSummary) {
+        pendingLiveActivitySessionID = nil
+        newConversationTask?.cancel()
+        let header = conversationHeader(for: session)
+        newConversationTask = Task { @MainActor in
+            defer { newConversationTask = nil }
+            guard await store.prepareConversation(for: session), !Task.isCancelled else { return }
+            // Replace the route in one published mutation. Clearing the stack first
+            // briefly made `onChange` call `resumeWorkspace()`, which sent an
+            // unsubscribe immediately after a Live Activity deep link opened the
+            // conversation. When SwiftUI reused the same destination, its `.task`
+            // did not necessarily run again, leaving both chat and Live Activity
+            // without the Host -> Mobile event stream.
+            navigationPath = [.conversation(header)]
+
+            // A deep link may target the conversation already on screen. In that
+            // case the destination is reused and has no lifecycle callback to
+            // reactivate it, so complete activation from the deep-link transaction
+            // as well. The store method is idempotent when the destination task has
+            // already activated the same session.
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            await store.activatePreparedConversation(sessionID: session.id)
+        }
     }
 
     private enum AppRoute: Hashable {

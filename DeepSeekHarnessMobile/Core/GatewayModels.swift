@@ -827,7 +827,13 @@ struct RawSessionEvent: Codable, Hashable, Sendable {
                 raw: data
             )
         case "turn/start", "turn/end", "step/start", "step/end":
-            return GatewayEvent(type: type, turn: turn, step: step, reason: data["reason"]?["kind"]?.stringValue, raw: data)
+            return GatewayEvent(
+                type: type,
+                turn: turn,
+                step: step,
+                reason: data["reason"]?.stringValue ?? data["reason"]?["kind"]?.stringValue,
+                raw: data
+            )
         case "session/title":
             return GatewayEvent(type: type, text: data["title"]?.stringValue, raw: data)
         default:
