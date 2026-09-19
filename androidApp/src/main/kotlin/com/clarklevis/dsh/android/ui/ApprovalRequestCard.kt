@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
@@ -121,12 +122,18 @@ internal fun ApprovalRequestCard(
                     fontWeight = FontWeight.Medium
                 )
                 commandPreview?.takeIf(String::isNotBlank)?.let { command ->
+                    // 长命令（例如多行脚本）在固定高度内滚动，避免撑高整张卡片，
+                    // 把“拒绝 / 允许一次”按钮推出屏幕外。
                     Text(
                         text = command,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
-                        lineHeight = 19.sp
+                        lineHeight = 19.sp,
+                        modifier = Modifier
+                            .testTag("approval-command-preview")
+                            .heightIn(max = 148.dp)
+                            .verticalScroll(rememberScrollState())
                     )
                 }
                 details?.let { value ->
@@ -148,7 +155,9 @@ internal fun ApprovalRequestCard(
                     )
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("approval-actions"),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
