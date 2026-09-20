@@ -2694,14 +2694,20 @@ final class AppStore: ObservableObject {
                 sourceLabel: liveActivitySourceLabel(for: record.sessionId)
             )
         }
-        if event.type == "turn/end", record.sessionId == selectedSessionId {
+        // These two are convenience refreshes fired on every turn end, not
+        // user-initiated requests. Passing the live `isConnected` straight into
+        // KMP makes it return `rejected("not-connected", ...)` whenever the
+        // socket happens to be mid-reconnect, which surfaces a modal error for
+        // a refresh nobody asked for. Gate like refreshSessionControls does:
+        // skip while disconnected (the data is re-fetched on reconnect).
+        if event.type == "turn/end", record.sessionId == selectedSessionId, gateway.state.isConnected {
             dispatchSessionControl(.requestContextUsage(
                 sessionID: record.sessionId,
-                isConnected: gateway.state.isConnected
+                isConnected: true
             ))
             dispatchSessionControl(.requestSessionStats(
                 sessionID: record.sessionId,
-                isConnected: gateway.state.isConnected
+                isConnected: true
             ))
         }
         if event.type == "permission/preset",
