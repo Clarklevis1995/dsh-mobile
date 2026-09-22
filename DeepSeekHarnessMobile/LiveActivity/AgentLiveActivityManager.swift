@@ -18,6 +18,8 @@ final class AgentLiveActivityManager {
     private var endingSessionKeys: Set<String> = []
     private var recentlyEndedActivities: [String: Activity<AgentActivityAttributes>] = [:]
     private var recentlyEndedCleanupTasks: [String: Task<Void, Never>] = [:]
+    private var dismissingActivityIDs: Set<String> = []
+    private var rebuildingActivityKeys: Set<String> = []
 
     private init() {
         // ActivityKit can restore more than one activity after an app/widget
@@ -27,17 +29,24 @@ final class AgentLiveActivityManager {
         // session, so retain only the newest restorable activity.
         let restored = Activity<AgentActivityAttributes>.activities
             .sorted { $0.content.state.updatedAt > $1.content.state.updatedAt }
-        for (index, activity) in restored.enumerated() {
-            guard index == 0, !activity.content.state.phase.isTerminal else {
-                Task { await activity.end(nil, dismissalPolicy: .immediate) }
-                continue
-            }
+        if let newest = restored.first(where: { !$0.content.state.phase.isTerminal }) {
             let activityKey = key(
-                gatewayID: activity.attributes.gatewayID,
-                sessionID: activity.attributes.sessionID
+                gatewayID: newest.attributes.gatewayID,
+                sessionID: newest.attributes.sessionID
             )
-            activities[activityKey] = activity
-            latestStates[activityKey] = activity.content.state
+            activities[activityKey] = newest
+            latestStates[activityKey] = newest.content.state
+            if rebuildSystemActivitiesIfNeeded(
+                attributes: newest.attributes,
+                activityKey: activityKey,
+                state: newest.content.state,
+                maximumAllowedCount: 1
+            ) {
+                return
+            }
+        }
+        for activity in restored where activity.id != activities.values.first?.id {
+            dismissImmediately(activity)
         }
     }
 
@@ -204,8 +213,7 @@ final class AgentLiveActivityManager {
         sourceLabel: String? = nil
     ) {
         let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
-        guard let activity = activities[activityKey] else { return }
-        let current = latestStates[activityKey] ?? activity.content.state
+        guard let current = latestStates[activityKey] ?? activities[activityKey]?.content.state else { return }
         guard current.phase == .awaitingChoice, current.rpcID == rpcID else { return }
 
         updateExisting(
@@ -236,9 +244,8 @@ final class AgentLiveActivityManager {
               !command.isEmpty else { return }
         let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
         guard !endingSessionKeys.contains(activityKey),
-              let activity = activities[activityKey] else { return }
+              var current = latestStates[activityKey] ?? activities[activityKey]?.content.state else { return }
 
-        var current = latestStates[activityKey] ?? activity.content.state
         guard current.rpcID == rpcID,
               current.command?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false else {
             return
@@ -247,7 +254,11 @@ final class AgentLiveActivityManager {
         case .awaitingApproval, .submittingApproval, .failed:
             current.command = command
             current.updatedAt = .now
-            enqueueUpdate(activityKey: activityKey, activity: activity, state: current)
+            if let activity = activities[activityKey] {
+                enqueueUpdate(activityKey: activityKey, activity: activity, state: current)
+            } else if rebuildingActivityKeys.contains(activityKey) {
+                latestStates[activityKey] = current
+            }
         case .running, .awaitingChoice, .approved, .rejected, .completed:
             return
         }
@@ -259,13 +270,16 @@ final class AgentLiveActivityManager {
         guard let title = normalizedTitle(title) else { return }
         let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
         guard !endingSessionKeys.contains(activityKey),
-              let activity = activities[activityKey] else { return }
+              var current = latestStates[activityKey] ?? activities[activityKey]?.content.state else { return }
 
-        var current = latestStates[activityKey] ?? activity.content.state
         guard current.sessionTitle != title else { return }
         current.sessionTitle = title
         current.updatedAt = .now
-        enqueueUpdate(activityKey: activityKey, activity: activity, state: current)
+        if let activity = activities[activityKey] {
+            enqueueUpdate(activityKey: activityKey, activity: activity, state: current)
+        } else if rebuildingActivityKeys.contains(activityKey) {
+            latestStates[activityKey] = current
+        }
     }
 
     func approvalSubmitting(
@@ -351,9 +365,8 @@ final class AgentLiveActivityManager {
         sourceLabel: String? = nil
     ) {
         let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
-        guard !endingSessionKeys.contains(activityKey), let activity = activities[activityKey] else { return }
-
-        let current = latestStates[activityKey] ?? activity.content.state
+        guard !endingSessionKeys.contains(activityKey),
+              let current = latestStates[activityKey] ?? activities[activityKey]?.content.state else { return }
         var finalState: AgentActivityAttributes.ContentState
         if current.phase == .rejected {
             finalState = state(
@@ -379,9 +392,10 @@ final class AgentLiveActivityManager {
         endingSessionKeys.insert(activityKey)
         latestStates[activityKey] = finalState
         let runningWorker = cancelRunningUpdate(activityKey: activityKey)
-        activities[activityKey] = nil
+        let activity = activities.removeValue(forKey: activityKey)
         recentlyEndedActivities[activityKey] = nil
         recentlyEndedCleanupTasks.removeValue(forKey: activityKey)?.cancel()
+        guard let activity else { return }
         enqueue(activityKey: activityKey) {
             if let runningWorker { await runningWorker.value }
             let content = ActivityContent(state: finalState, staleDate: nil)
@@ -421,7 +435,7 @@ final class AgentLiveActivityManager {
 
             if sessionEnded || duplicate || terminal {
                 removeTracking(activityKey: activityKey, activityID: activity.id)
-                Task { await activity.end(nil, dismissalPolicy: .immediate) }
+                dismissImmediately(activity)
             } else if activity.id == newestRunningActivity?.id {
                 // ActivityKit 可能在 App 被系统终止后恢复 Activity。重新登记系统中
                 // 的唯一有效实例，让后续进度和 turn/end 能继续更新同一张卡片。
@@ -453,7 +467,10 @@ final class AgentLiveActivityManager {
         guard !endingSessionKeys.contains(activityKey) else { return }
         let currentState = latestStates[activityKey] ?? activities[activityKey]?.content.state
         guard AgentLiveActivityUpdatePolicy.allows(current: currentState, incoming: state) else { return }
-        latestStates[activityKey] = state
+        if rebuildingActivityKeys.contains(activityKey) {
+            latestStates[activityKey] = state
+            return
+        }
         if let activity = activities[activityKey] {
             enqueueUpdate(activityKey: activityKey, activity: activity, state: state)
             return
@@ -474,20 +491,28 @@ final class AgentLiveActivityManager {
             activities[activityKey] = restored
             latestStates[activityKey] = restored.content.state
             for duplicate in restoredMatches.dropFirst() {
-                Task { await duplicate.end(nil, dismissalPolicy: .immediate) }
+                dismissImmediately(duplicate)
             }
             enqueueUpdate(activityKey: activityKey, activity: restored, state: state)
             return
         }
 
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-        dismissOtherActivities(except: activityKey)
         let attributes = AgentActivityAttributes(
             gatewayID: gatewayID,
             sessionID: sessionID,
             sessionTitle: title,
             startedAt: .now
         )
+        if rebuildSystemActivitiesIfNeeded(
+            attributes: attributes,
+            activityKey: activityKey,
+            state: state,
+            maximumAllowedCount: 0
+        ) {
+            return
+        }
+        dismissOtherActivities(except: activityKey)
         do {
             let activity = try Activity.request(
                 attributes: attributes,
@@ -498,6 +523,7 @@ final class AgentLiveActivityManager {
                 pushType: nil
             )
             activities[activityKey] = activity
+            latestStates[activityKey] = state
         } catch {
 #if DEBUG
             print("[AgentLiveActivity] 无法创建实时活动：\(error.localizedDescription)")
@@ -531,6 +557,19 @@ final class AgentLiveActivityManager {
         state: AgentActivityAttributes.ContentState
     ) {
         guard !endingSessionKeys.contains(activityKey) else { return }
+        if rebuildSystemActivitiesIfNeeded(
+            attributes: activity.attributes,
+            activityKey: activityKey,
+            state: state,
+            maximumAllowedCount: 1
+        ) {
+            return
+        }
+        let previousState = latestStates[activityKey] ?? activity.content.state
+        let shouldAlert = AgentLiveActivityAlertPolicy.shouldAlert(
+            current: previousState,
+            incoming: state
+        )
         latestStates[activityKey] = state
 
         if state.phase == .running {
@@ -545,13 +584,15 @@ final class AgentLiveActivityManager {
             await activity.update(ActivityContent(
                 state: state,
                 staleDate: state.phase.isTerminal ? nil : Date().addingTimeInterval(self.staleInterval)
-            ), alertConfiguration: self.alertConfiguration(for: state))
+            ), alertConfiguration: self.alertConfiguration(for: state, shouldAlert: shouldAlert))
         }
     }
 
     private func alertConfiguration(
-        for state: AgentActivityAttributes.ContentState
+        for state: AgentActivityAttributes.ContentState,
+        shouldAlert: Bool
     ) -> AlertConfiguration? {
+        guard shouldAlert else { return nil }
         switch state.phase {
         case .awaitingApproval:
             return AlertConfiguration(
@@ -652,7 +693,7 @@ final class AgentLiveActivityManager {
             latestStates[key] = nil
             operationTails[key] = nil
             endingSessionKeys.remove(key)
-            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+            dismissImmediately(activity)
         }
 
         let endedKeys = recentlyEndedActivities.keys.filter { $0 != activityKey }
@@ -669,7 +710,82 @@ final class AgentLiveActivityManager {
             )
             guard systemKey != activityKey else { continue }
             removeTracking(activityKey: systemKey, activityID: activity.id)
-            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+            dismissImmediately(activity)
+        }
+    }
+
+    /// 同时存在多个 DshMobile Activity 时，仅结束竞争实例仍可能让系统保留一个
+    /// 无法渲染的黑色主岛。这里先结束全部旧实例，等待 ActivityKit 确认结束，
+    /// 再用最新状态创建唯一的新实例，让系统重新计算主岛归属。
+    @discardableResult
+    private func rebuildSystemActivitiesIfNeeded(
+        attributes: AgentActivityAttributes,
+        activityKey: String,
+        state: AgentActivityAttributes.ContentState,
+        maximumAllowedCount: Int
+    ) -> Bool {
+        let systemActivities = Activity<AgentActivityAttributes>.activities
+        guard systemActivities.count > maximumAllowedCount else { return false }
+
+#if DEBUG
+        print("[AgentLiveActivity] 检测到 \(systemActivities.count) 个实时活动，开始重建唯一实例")
+#endif
+        latestStates[activityKey] = state
+        guard rebuildingActivityKeys.insert(activityKey).inserted else { return true }
+
+        for key in Array(activities.keys) {
+            cancelRunningUpdate(activityKey: key)
+            operationTails[key] = nil
+        }
+        activities.removeAll()
+        for key in Array(latestStates.keys) where key != activityKey {
+            latestStates[key] = nil
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            for activity in systemActivities {
+                self.dismissingActivityIDs.insert(activity.id)
+                await activity.end(nil, dismissalPolicy: .immediate)
+                self.dismissingActivityIDs.remove(activity.id)
+            }
+
+            guard !self.endingSessionKeys.contains(activityKey),
+                  let latestState = self.latestStates[activityKey],
+                  !latestState.phase.isTerminal,
+                  ActivityAuthorizationInfo().areActivitiesEnabled else {
+                self.rebuildingActivityKeys.remove(activityKey)
+                return
+            }
+
+            do {
+                let replacement = try Activity.request(
+                    attributes: attributes,
+                    content: ActivityContent(
+                        state: latestState,
+                        staleDate: Date().addingTimeInterval(self.staleInterval)
+                    ),
+                    pushType: nil
+                )
+                self.activities[activityKey] = replacement
+#if DEBUG
+                print("[AgentLiveActivity] 实时活动重建完成 id=\(replacement.id)")
+#endif
+            } catch {
+#if DEBUG
+                print("[AgentLiveActivity] 无法重建重复实时活动：\(error.localizedDescription)")
+#endif
+            }
+            self.rebuildingActivityKeys.remove(activityKey)
+        }
+        return true
+    }
+
+    private func dismissImmediately(_ activity: Activity<AgentActivityAttributes>) {
+        guard dismissingActivityIDs.insert(activity.id).inserted else { return }
+        Task { @MainActor [weak self] in
+            await activity.end(nil, dismissalPolicy: .immediate)
+            self?.dismissingActivityIDs.remove(activity.id)
         }
     }
 
@@ -690,7 +806,7 @@ final class AgentLiveActivityManager {
     private func dismissRecentlyEndedActivity(activityKey: String) {
         recentlyEndedCleanupTasks.removeValue(forKey: activityKey)?.cancel()
         guard let activity = recentlyEndedActivities.removeValue(forKey: activityKey) else { return }
-        Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        dismissImmediately(activity)
     }
 
     private func state(
@@ -742,6 +858,23 @@ enum AgentLiveActivityUpdatePolicy {
             return current.rpcID == nil
         case .running, .approved, .rejected, .completed:
             return true
+        }
+    }
+}
+
+/// 只有首次进入某个需要用户处理的请求时才触发系统提醒。
+/// 同一 RPC 的重放、命令补全、标题刷新和保活更新只刷新卡片内容，
+/// 避免 ActivityKit 将每次内容更新都显示成一条新的灵动岛通知。
+enum AgentLiveActivityAlertPolicy {
+    static func shouldAlert(
+        current: AgentActivityAttributes.ContentState?,
+        incoming: AgentActivityAttributes.ContentState
+    ) -> Bool {
+        switch incoming.phase {
+        case .awaitingApproval, .awaitingChoice:
+            return current?.phase != incoming.phase || current?.rpcID != incoming.rpcID
+        case .running, .submittingApproval, .approved, .rejected, .failed, .completed:
+            return false
         }
     }
 }

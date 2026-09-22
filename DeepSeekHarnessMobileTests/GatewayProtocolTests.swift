@@ -27,6 +27,29 @@ private enum GatewayProtocolParityFixtures {
 }
 
 final class AgentLiveActivityEventProjectionTests: XCTestCase {
+    func testPendingApprovalOnlyAlertsOnceForTheSameRPC() {
+        let running = activityState(phase: .running)
+        let pending = activityState(phase: .awaitingApproval, rpcID: "rpc-1")
+        var enriched = pending
+        enriched.command = "git status"
+
+        XCTAssertTrue(AgentLiveActivityAlertPolicy.shouldAlert(current: running, incoming: pending))
+        XCTAssertFalse(AgentLiveActivityAlertPolicy.shouldAlert(current: pending, incoming: pending))
+        XCTAssertFalse(AgentLiveActivityAlertPolicy.shouldAlert(current: pending, incoming: enriched))
+        XCTAssertTrue(AgentLiveActivityAlertPolicy.shouldAlert(
+            current: pending,
+            incoming: activityState(phase: .awaitingApproval, rpcID: "rpc-2")
+        ))
+    }
+
+    func testPendingChoiceOnlyAlertsOnceForTheSameRPC() {
+        let running = activityState(phase: .running)
+        let pending = activityState(phase: .awaitingChoice, rpcID: "question-1")
+
+        XCTAssertTrue(AgentLiveActivityAlertPolicy.shouldAlert(current: running, incoming: pending))
+        XCTAssertFalse(AgentLiveActivityAlertPolicy.shouldAlert(current: pending, incoming: pending))
+    }
+
     func testRunningProgressCannotOverwritePendingApproval() {
         let pending = activityState(phase: .awaitingApproval, rpcID: "rpc-1")
         let running = activityState(phase: .running)

@@ -23,25 +23,28 @@ struct AgentLiveActivityWidget: Widget {
                         .padding(.top, AgentActivityMetrics.expandedBrandTopInset)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    HStack(spacing: 1) {
-                        Image(systemName: expandedStatusSymbol(context))
-                            .foregroundStyle(expandedStatusColor(context))
-                            .font(.system(size: 10, weight: .semibold))
-                            .frame(width: 12)
-                            .layoutPriority(1)
-                        Text(expandedStatusText(context))
-                            .foregroundStyle(expandedStatusColor(context))
-                            .minimumScaleFactor(0.8)
-                            .frame(width: 28, alignment: .leading)
+                    HStack(alignment: .center, spacing: 1) {
+                        HStack(alignment: .center, spacing: 2) {
+                            Image(systemName: expandedStatusSymbol(context))
+                                .foregroundStyle(expandedStatusColor(context))
+                                .font(.system(size: 8.5, weight: .semibold))
+                                .frame(width: 12, height: 14, alignment: .center)
+                                .layoutPriority(1)
+                            Text(expandedStatusText(context))
+                                .foregroundStyle(expandedStatusColor(context))
+                                .minimumScaleFactor(0.9)
+                                .frame(width: 28, height: 14, alignment: .leading)
+                        }
                         AgentElapsedTime(context: context)
                             .foregroundStyle(AgentActivityColors.islandDimmed)
                             .monospacedDigit()
                             .minimumScaleFactor(0.75)
-                            .frame(width: 36, alignment: .trailing)
+                            .frame(width: 36, height: 14, alignment: .trailing)
                     }
                     .font(.system(size: 10, weight: .semibold))
                     .lineLimit(1)
-                    .padding(.horizontal, 5)
+                    .padding(.leading, AgentActivityMetrics.expandedStatusCapsuleLeadingInset)
+                    .padding(.trailing, AgentActivityMetrics.expandedStatusCapsuleTrailingInset)
                     .frame(
                         width: AgentActivityMetrics.expandedStatusCapsuleWidth,
                         height: AgentActivityMetrics.expandedStatusCapsuleHeight
@@ -122,15 +125,20 @@ private enum AgentActivityMetrics {
     // The expanded island is clipped by a much rounder mask near its lower
     // corners than its visible bounding box suggests. Keep the content inside
     // that safe shape instead of relying on the rectangular region bounds.
-    static let expandedHorizontalInset: CGFloat = 23
-    static let expandedTopInset: CGFloat = 5
+    static let expandedHorizontalInset: CGFloat = 22
+    static let expandedTopInset: CGFloat = 6
     // 顶部左侧需要避开灵动岛圆角遮罩。只移动品牌整体，不缩放或裁剪鲸鱼。
     static let expandedBrandLeadingInset: CGFloat = 8
+    // 胶囊的前后位置padding
     static let expandedBrandTopInset: CGFloat = 8
-    static let expandedTrailingInset: CGFloat = 12
-    static let expandedStatusCapsuleWidth: CGFloat = 88
+    static let expandedTrailingInset: CGFloat = 10
+    // 胶囊的长度和高度
+    static let expandedStatusCapsuleWidth: CGFloat = 92
     static let expandedStatusCapsuleHeight: CGFloat = 24
-    static let headerToStatusSpacing: CGFloat = 5
+    // 胶囊的内部padding
+    static let expandedStatusCapsuleLeadingInset: CGFloat = 8
+    static let expandedStatusCapsuleTrailingInset: CGFloat = 8
+    static let headerToContentSpacing: CGFloat = 5
     static let operationMargin: CGFloat = 7
     static let actionSpacing: CGFloat = 8
     static let actionHeight: CGFloat = 36
@@ -280,7 +288,8 @@ private struct AgentDynamicIslandExpandedContent: View {
             .foregroundStyle(AgentActivityColors.islandDimmed)
             .padding(.bottom, 2)
             .frame(height: 18, alignment: .bottom)
-            .padding(.horizontal, 8)
+            .padding(.leading, 10)
+            .padding(.trailing, 8)
             .overlay(alignment: .top) {
                 Rectangle()
                     .fill(AgentActivityColors.islandDivider)
@@ -347,9 +356,8 @@ private struct AgentActivityCard: View {
     var body: some View {
         VStack(spacing: 0) {
             if showsHeader {
-                header.padding(.bottom, AgentActivityMetrics.headerToStatusSpacing)
+                header.padding(.bottom, AgentActivityMetrics.headerToContentSpacing)
             }
-            statusRow
             if showsOperation { operation } else { progress }
 
             if state.phase == .awaitingApproval && !context.isStale {
@@ -397,23 +405,6 @@ private struct AgentActivityCard: View {
                 .foregroundStyle(foreground)
                 .frame(minHeight: 26)
             }
-        }
-    }
-
-    private var statusRow: some View {
-        HStack(spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: statusSymbol)
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 14, height: 14)
-                Text(statusText).lineLimit(1)
-            }
-            .font(.system(size: 12))
-            .foregroundStyle(AgentActivityColors.status(for: state.phase))
-            Spacer(minLength: 6)
-            AgentElapsedTime(context: context)
-                .font(.system(size: 12).monospacedDigit())
-                .foregroundStyle(dimmed)
         }
     }
 
@@ -504,14 +495,6 @@ private struct AgentActivityCard: View {
         .foregroundStyle(foreground)
     }
 
-    private var statusText: String {
-        context.isStale && !state.phase.isTerminal ? "等待状态同步" : state.status
-    }
-    private var statusSymbol: String {
-        context.isStale && !state.phase.isTerminal
-            ? "exclamationmark.circle"
-            : AgentActivityPresentation.symbol(for: state.phase)
-    }
     private var stepSymbol: String {
         AgentActivityPresentation.stepSymbol(for: state)
     }
