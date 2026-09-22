@@ -34,6 +34,13 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
         XCTAssertFalse(AgentLiveActivityUpdatePolicy.allows(current: pending, incoming: running))
     }
 
+    func testRunningProgressCannotOverwritePendingChoice() {
+        let pending = activityState(phase: .awaitingChoice, rpcID: "rpc-question-1")
+        let running = activityState(phase: .running)
+
+        XCTAssertFalse(AgentLiveActivityUpdatePolicy.allows(current: pending, incoming: running))
+    }
+
     func testRunningProgressCannotOverwriteApprovalSubmissionOrUnknownResult() {
         let running = activityState(phase: .running)
 

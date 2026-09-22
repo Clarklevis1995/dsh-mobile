@@ -46,6 +46,7 @@ enum AgentActivityStepKind: String, Codable, Hashable {
 
 enum AgentActivityPhase: String, Codable, Hashable {
     case running
+    case awaitingChoice
     case awaitingApproval
     case submittingApproval
     case approved
@@ -57,7 +58,7 @@ enum AgentActivityPhase: String, Codable, Hashable {
         switch self {
         // 允许/拒绝只是一次操作的中间结果，Agent 仍可能继续执行并更新下一步。
         case .failed, .completed: true
-        case .running, .awaitingApproval, .submittingApproval, .approved, .rejected: false
+        case .running, .awaitingChoice, .awaitingApproval, .submittingApproval, .approved, .rejected: false
         }
     }
 }

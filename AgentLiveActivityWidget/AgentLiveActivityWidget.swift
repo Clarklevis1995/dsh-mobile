@@ -106,6 +106,7 @@ private func expandedStatusText(
     }
     switch context.state.phase {
     case .running: return "执行中"
+    case .awaitingChoice: return "待选择"
     case .awaitingApproval: return "待审批"
     case .submittingApproval: return "提交中"
     case .approved: return "已允许"
@@ -126,7 +127,7 @@ private enum AgentActivityMetrics {
     // 顶部左侧需要避开灵动岛圆角遮罩。只移动品牌整体，不缩放或裁剪鲸鱼。
     static let expandedBrandLeadingInset: CGFloat = 8
     static let expandedBrandTopInset: CGFloat = 8
-    static let expandedTrailingInset: CGFloat = 8
+    static let expandedTrailingInset: CGFloat = 12
     static let expandedStatusCapsuleWidth: CGFloat = 88
     static let expandedStatusCapsuleHeight: CGFloat = 24
     static let headerToStatusSpacing: CGFloat = 5
@@ -171,7 +172,7 @@ private struct AgentDynamicIslandExpandedContent: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(displaySessionTitle)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .tracking(-0.2)
                     .lineLimit(1)
                 Spacer(minLength: 8)
@@ -217,12 +218,13 @@ private struct AgentDynamicIslandExpandedContent: View {
 
     private var approvalOperation: some View {
         Text(state.command?.isEmpty == false ? state.command! : (state.detail ?? "等待操作详情"))
-            .font(.system(size: 11, design: .monospaced))
+            .font(.system(size: 12, design: .monospaced))
             .tracking(-0.3)
+            .lineSpacing(2)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 9)
-            .padding(.vertical, 4)
+            .padding(.vertical, 5)
             .background(
                 AgentActivityColors.islandTile,
                 in: RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -233,32 +235,33 @@ private struct AgentDynamicIslandExpandedContent: View {
     private func resultRow(symbol: String, text: String) -> some View {
         HStack(alignment: islandStepDetail == nil ? .center : .top, spacing: 6) {
             Image(systemName: symbol)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(AgentActivityColors.status(for: state.phase))
-                .frame(width: 14, height: 14, alignment: .center)
+                .frame(width: 16, height: 16, alignment: .center)
                 .padding(.top, islandStepDetail == nil ? 0 : 1)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(text)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AgentActivityColors.islandText)
                     .lineLimit(1)
                 if let islandStepDetail {
                     Text(islandStepDetail)
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
+                        .lineSpacing(2)
                         .foregroundStyle(AgentActivityColors.islandDimmed)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(.top, 3)
-        .padding(.bottom, 3)
+        .padding(.top, 5)
+        .padding(.bottom, 5)
     }
 
     /// 运行中的具体步骤对判断实时进展有用；终态和过期状态保持精简，
     /// 避免重复结果信息占用展开岛高度。
     private var islandStepDetail: String? {
-        guard state.phase == .running,
+        guard state.phase == .running || state.phase == .awaitingChoice,
               !context.isStale,
               let detail = state.secondaryDetail?.trimmingCharacters(in: .whitespacesAndNewlines),
               !detail.isEmpty else {
@@ -656,7 +659,7 @@ private enum AgentActivityColors {
     static func status(for phase: AgentActivityPhase) -> Color {
         switch phase {
         case .running: accent
-        case .awaitingApproval, .submittingApproval: pending
+        case .awaitingChoice, .awaitingApproval, .submittingApproval: pending
         case .approved, .completed: approved
         case .rejected: rejected
         case .failed: failed
@@ -687,6 +690,7 @@ private enum AgentActivityPresentation {
     static func symbol(for phase: AgentActivityPhase) -> String {
         switch phase {
         case .running: "waveform.path.ecg"
+        case .awaitingChoice: "questionmark.bubble"
         case .awaitingApproval: "exclamationmark.shield"
         case .submittingApproval: "arrow.triangle.2.circlepath"
         case .approved: "checkmark"
@@ -699,6 +703,7 @@ private enum AgentActivityPresentation {
     static func compactText(for phase: AgentActivityPhase, status: String) -> String {
         switch phase {
         case .running: ""
+        case .awaitingChoice: "待选择"
         case .awaitingApproval: "待审批"
         case .submittingApproval: "提交中"
         case .approved: "已允许"
@@ -711,6 +716,7 @@ private enum AgentActivityPresentation {
     static func stepTitle(for phase: AgentActivityPhase) -> String {
         switch phase {
         case .running: "Agent 正在处理"
+        case .awaitingChoice: "请打开 App 完成选择"
         case .approved: "批准已送达"
         case .rejected: "本次命令未执行"
         case .completed: "任务已完成"
@@ -722,6 +728,7 @@ private enum AgentActivityPresentation {
     static func stepDetail(for phase: AgentActivityPhase) -> String {
         switch phase {
         case .running: "正在等待下一步"
+        case .awaitingChoice: "Agent 正在等待你的回答"
         case .approved: "等待 Agent 更新下一步"
         case .rejected: "决定已送达，等待 Agent 后续状态"
         case .completed: "Agent 已完成本次任务"
@@ -765,6 +772,7 @@ private func previewState(
     phase: AgentActivityPhase,
     status: String,
     detail: String,
+    secondaryDetail: String? = nil,
     command: String? = nil,
     stepKind: AgentActivityStepKind? = nil
 ) -> AgentActivityAttributes.ContentState {
@@ -773,7 +781,7 @@ private func previewState(
         phase: phase,
         status: status,
         detail: detail,
-        secondaryDetail: nil,
+        secondaryDetail: secondaryDetail,
         sourceLabel: "Mac Studio · dsh-mobile",
         command: command,
         rpcID: command == nil ? nil : "preview-rpc",
@@ -814,6 +822,28 @@ private func previewState(
         status: "需要批准 · 仅限本次",
         detail: "运行构建命令",
         command: "./gradlew :androidApp:assembleDebug"
+    )
+}
+
+#Preview("等待选择 · 展开", as: .dynamicIsland(.expanded), using: previewAttributes) {
+    AgentLiveActivityWidget()
+} contentStates: {
+    previewState(
+        phase: .awaitingChoice,
+        status: "需要选择",
+        detail: "请打开 App 完成选择",
+        secondaryDetail: "请选择希望 Agent 接下来处理的方向"
+    )
+}
+
+#Preview("等待选择 · 锁屏", as: .content, using: previewAttributes) {
+    AgentLiveActivityWidget()
+} contentStates: {
+    previewState(
+        phase: .awaitingChoice,
+        status: "需要选择",
+        detail: "请打开 App 完成选择",
+        secondaryDetail: "请选择希望 Agent 接下来处理的方向"
     )
 }
 

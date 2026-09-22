@@ -2182,6 +2182,13 @@ final class AppStore: ObservableObject {
         switch route {
         case .requested(let request, let sessionID, let preview, let replay):
             dispatchQuestionIntent(.requestReceived(request))
+            AgentLiveActivityManager.shared.awaitingChoice(
+                gatewayID: gatewayLocalID,
+                request: request,
+                title: title(for: request.sessionId),
+                prompt: preview,
+                sourceLabel: liveActivitySourceLabel(for: request.sessionId)
+            )
             notice(
                 replay ? String(localized: "待回答问题已恢复") : String(localized: "Agent 正在等待回答"),
                 preview.isEmpty ? String(localized: "请回答 Agent 的问题") : preview,
@@ -2220,6 +2227,16 @@ final class AppStore: ObservableObject {
             let pendingSessionID = pendingQuestionRequests.first { $0.rpcId == rpcID }?.sessionId
             let wasAnswerInFlight = questionRequestStatuses[rpcID]?.isAnswerInFlight == true
             dispatchQuestionIntent(.resolved(rpcID: rpcID))
+            if let resolvedSessionID = sessionID ?? pendingSessionID {
+                AgentLiveActivityManager.shared.choiceResolved(
+                    gatewayID: gatewayLocalID,
+                    sessionID: resolvedSessionID,
+                    rpcID: rpcID,
+                    cancelled: cancelled,
+                    title: title(for: resolvedSessionID),
+                    sourceLabel: liveActivitySourceLabel(for: resolvedSessionID)
+                )
+            }
             if wasAnswerInFlight && !cancelled {
                 backgroundExecutionController.questionAnswerAccepted(rpcID: rpcID)
             } else {

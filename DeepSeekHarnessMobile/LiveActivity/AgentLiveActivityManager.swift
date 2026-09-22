@@ -169,6 +169,61 @@ final class AgentLiveActivityManager {
         )
     }
 
+    func awaitingChoice(
+        gatewayID: String,
+        request: GatewayPendingQuestionRequest,
+        title: String,
+        prompt: String?,
+        sourceLabel: String? = nil
+    ) {
+        let normalizedPrompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        upsert(
+            gatewayID: gatewayID,
+            sessionID: request.sessionId,
+            title: title,
+            state: state(
+                phase: .awaitingChoice,
+                status: "需要选择",
+                detail: "请打开 App 完成选择",
+                secondaryDetail: normalizedPrompt?.isEmpty == false
+                    ? normalizedPrompt
+                    : "Agent 正在等待你的回答",
+                sourceLabel: sourceLabel,
+                rpcID: request.rpcId,
+                stepKind: .message
+            )
+        )
+    }
+
+    func choiceResolved(
+        gatewayID: String,
+        sessionID: String,
+        rpcID: String,
+        cancelled: Bool,
+        title: String,
+        sourceLabel: String? = nil
+    ) {
+        let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
+        guard let activity = activities[activityKey] else { return }
+        let current = latestStates[activityKey] ?? activity.content.state
+        guard current.phase == .awaitingChoice, current.rpcID == rpcID else { return }
+
+        updateExisting(
+            gatewayID: gatewayID,
+            sessionID: sessionID,
+            fallbackTitle: title,
+            state: state(
+                phase: .running,
+                status: "正在执行",
+                detail: cancelled ? "已跳过选择" : "选择已提交",
+                secondaryDetail: "等待 Agent 继续执行",
+                sourceLabel: sourceLabel,
+                rpcID: rpcID,
+                stepKind: .message
+            )
+        )
+    }
+
     /// 审批请求有时先于对应的工具参数到达。工具事件补齐命令后，只更新审批卡片内容，
     /// 保持当前审批阶段，避免尾随的普通进度把“等待审批”覆盖成“正在执行”。
     func enrichApprovalCommand(
@@ -193,7 +248,7 @@ final class AgentLiveActivityManager {
             current.command = command
             current.updatedAt = .now
             enqueueUpdate(activityKey: activityKey, activity: activity, state: current)
-        case .running, .approved, .rejected, .completed:
+        case .running, .awaitingChoice, .approved, .rejected, .completed:
             return
         }
     }
@@ -497,12 +552,22 @@ final class AgentLiveActivityManager {
     private func alertConfiguration(
         for state: AgentActivityAttributes.ContentState
     ) -> AlertConfiguration? {
-        guard state.phase == .awaitingApproval else { return nil }
-        return AlertConfiguration(
-            title: "需要审批",
-            body: "Agent 请求批准本次操作",
-            sound: .default
-        )
+        switch state.phase {
+        case .awaitingApproval:
+            return AlertConfiguration(
+                title: "需要审批",
+                body: "Agent 请求批准本次操作",
+                sound: .default
+            )
+        case .awaitingChoice:
+            return AlertConfiguration(
+                title: "需要选择",
+                body: "Agent 正在等待你的回答",
+                sound: .default
+            )
+        case .running, .submittingApproval, .approved, .rejected, .failed, .completed:
+            return nil
+        }
     }
 
     private func normalizedTitle(_ title: String?) -> String? {
@@ -670,7 +735,7 @@ enum AgentLiveActivityUpdatePolicy {
     ) -> Bool {
         guard incoming.phase == .running, let current else { return true }
         switch current.phase {
-        case .awaitingApproval, .submittingApproval:
+        case .awaitingChoice, .awaitingApproval, .submittingApproval:
             return false
         case .failed:
             // 带 rpcID 的失败是“审批结果未确认”，必须保留检查入口。
