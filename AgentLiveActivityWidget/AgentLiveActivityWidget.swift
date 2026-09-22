@@ -18,8 +18,37 @@ struct AgentLiveActivityWidget: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     AgentDynamicIslandBrand()
+                        .frame(height: AgentActivityMetrics.expandedStatusCapsuleHeight)
                         .padding(.leading, AgentActivityMetrics.expandedBrandLeadingInset)
                         .padding(.top, AgentActivityMetrics.expandedBrandTopInset)
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    HStack(spacing: 1) {
+                        Image(systemName: expandedStatusSymbol(context))
+                            .foregroundStyle(expandedStatusColor(context))
+                            .font(.system(size: 10, weight: .semibold))
+                            .frame(width: 12)
+                            .layoutPriority(1)
+                        Text(expandedStatusText(context))
+                            .foregroundStyle(expandedStatusColor(context))
+                            .minimumScaleFactor(0.8)
+                            .frame(width: 28, alignment: .leading)
+                        AgentElapsedTime(context: context)
+                            .foregroundStyle(AgentActivityColors.islandDimmed)
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.75)
+                            .frame(width: 36, alignment: .trailing)
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 5)
+                    .frame(
+                        width: AgentActivityMetrics.expandedStatusCapsuleWidth,
+                        height: AgentActivityMetrics.expandedStatusCapsuleHeight
+                    )
+                    .background(AgentActivityColors.islandTile, in: Capsule())
+                    .padding(.trailing, AgentActivityMetrics.expandedTrailingInset)
+                    .padding(.top, AgentActivityMetrics.expandedBrandTopInset)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     AgentDynamicIslandExpandedContent(context: context)
@@ -38,13 +67,51 @@ struct AgentLiveActivityWidget: Widget {
             .contentMargins(.horizontal, AgentActivityMetrics.expandedHorizontalInset, for: .expanded)
             .contentMargins(
                 .bottom,
-                AgentActivityMetrics.expandedBottomInset(for: context.state),
+                AgentActivityMetrics.expandedBottomInset(
+                    for: context.state,
+                    isStale: context.isStale
+                ),
                 for: .expanded
             )
             .keylineTint(AgentActivityColors.status(for: context.state.phase))
             .widgetURL(AgentActivityLink.session(context))
         }
         .contentMarginsDisabled()
+    }
+}
+
+private func expandedStatusSymbol(
+    _ context: ActivityViewContext<AgentActivityAttributes>
+) -> String {
+    if context.isStale && !context.state.phase.isTerminal {
+        return "exclamationmark.circle"
+    }
+    return AgentActivityPresentation.symbol(for: context.state.phase)
+}
+
+private func expandedStatusColor(
+    _ context: ActivityViewContext<AgentActivityAttributes>
+) -> Color {
+    if context.isStale && !context.state.phase.isTerminal {
+        return AgentActivityColors.failed
+    }
+    return AgentActivityColors.status(for: context.state.phase)
+}
+
+private func expandedStatusText(
+    _ context: ActivityViewContext<AgentActivityAttributes>
+) -> String {
+    if context.isStale && !context.state.phase.isTerminal {
+        return "待同步"
+    }
+    switch context.state.phase {
+    case .running: return "执行中"
+    case .awaitingApproval: return "待审批"
+    case .submittingApproval: return "提交中"
+    case .approved: return "已允许"
+    case .rejected: return "已拒绝"
+    case .failed: return "失败"
+    case .completed: return "已完成"
     }
 }
 
@@ -59,18 +126,24 @@ private enum AgentActivityMetrics {
     // 顶部左侧需要避开灵动岛圆角遮罩。只移动品牌整体，不缩放或裁剪鲸鱼。
     static let expandedBrandLeadingInset: CGFloat = 8
     static let expandedBrandTopInset: CGFloat = 8
+    static let expandedTrailingInset: CGFloat = 8
+    static let expandedStatusCapsuleWidth: CGFloat = 88
+    static let expandedStatusCapsuleHeight: CGFloat = 24
     static let headerToStatusSpacing: CGFloat = 5
     static let operationMargin: CGFloat = 7
     static let actionSpacing: CGFloat = 8
     static let actionHeight: CGFloat = 36
     static let islandActionHeight: CGFloat = 30
 
-    /// 系统会在展开态底部额外预留一段圆角安全区。普通状态没有按钮，
-    /// 可以收紧这段区域；审批与失败操作态保留更大的安全区，避免按钮被裁切。
-    static func expandedBottomInset(for state: AgentActivityAttributes.ContentState) -> CGFloat {
-        let hasApprovalActions = state.phase == .awaitingApproval
-        let hasFailureActions = state.phase == .failed && state.command?.isEmpty == false
-        return hasApprovalActions || hasFailureActions ? -4 : -18
+    /// 展开岛的外形高度由内容和 content margin 一起决定。
+    /// 带按钮的状态必须保留正的底部边距，否则系统会收缩外形并裁掉按钮。
+    static func expandedBottomInset(
+        for state: AgentActivityAttributes.ContentState,
+        isStale: Bool
+    ) -> CGFloat {
+        let showsApprovalButtons = state.phase == .awaitingApproval && !isStale
+        let showsFailureButtons = state.phase == .failed && state.command?.isEmpty == false
+        return showsApprovalButtons || showsFailureButtons ? 16 : 12
     }
 }
 
@@ -113,21 +186,6 @@ private struct AgentDynamicIslandExpandedContent: View {
                 }
             }
 
-            HStack(spacing: 6) {
-                Image(systemName: statusSymbol)
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 14, height: 14)
-                Text(statusText)
-                    .font(.system(size: 12))
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                AgentElapsedTime(context: context)
-                    .font(.system(size: 12).monospacedDigit())
-                    .foregroundStyle(AgentActivityColors.islandDimmed)
-            }
-            .foregroundStyle(AgentActivityColors.status(for: state.phase))
-            .padding(.top, 4)
-
             if state.phase == .awaitingApproval && !context.isStale {
                 approvalOperation
                 AgentApprovalButtons(
@@ -154,22 +212,14 @@ private struct AgentDynamicIslandExpandedContent: View {
         }
         .foregroundStyle(AgentActivityColors.islandText)
         .frame(maxWidth: .infinity, alignment: .top)
-        .padding(.top, expandedContentTopSpacing)
-    }
-
-    /// 普通状态的内容较短，向下使用系统为展开态预留的空间；
-    /// 带操作按钮的状态保持紧凑，确保底部按钮完整可见。
-    private var expandedContentTopSpacing: CGFloat {
-        let hasApprovalActions = state.phase == .awaitingApproval
-        let hasFailureActions = state.phase == .failed && state.command?.isEmpty == false
-        return hasApprovalActions || hasFailureActions ? 3 : 12
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var approvalOperation: some View {
         Text(state.command?.isEmpty == false ? state.command! : (state.detail ?? "等待操作详情"))
             .font(.system(size: 11, design: .monospaced))
             .tracking(-0.3)
-            .lineLimit(1)
+            .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
@@ -181,46 +231,59 @@ private struct AgentDynamicIslandExpandedContent: View {
     }
 
     private func resultRow(symbol: String, text: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: islandStepDetail == nil ? .center : .top, spacing: 6) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AgentActivityColors.status(for: state.phase))
-                .frame(width: 14, height: 20, alignment: .center)
-            Text(text)
-                .font(.system(size: 12))
-                .foregroundStyle(AgentActivityColors.islandText)
-                .lineLimit(1)
+                .frame(width: 14, height: 14, alignment: .center)
+                .padding(.top, islandStepDetail == nil ? 0 : 1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(text)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AgentActivityColors.islandText)
+                    .lineLimit(1)
+                if let islandStepDetail {
+                    Text(islandStepDetail)
+                        .font(.system(size: 10))
+                        .foregroundStyle(AgentActivityColors.islandDimmed)
+                        .lineLimit(1)
+                }
+            }
             Spacer(minLength: 0)
         }
-        .padding(.top, 6)
+        .padding(.top, 3)
+        .padding(.bottom, 3)
+    }
+
+    /// 运行中的具体步骤对判断实时进展有用；终态和过期状态保持精简，
+    /// 避免重复结果信息占用展开岛高度。
+    private var islandStepDetail: String? {
+        guard state.phase == .running,
+              !context.isStale,
+              let detail = state.secondaryDetail?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !detail.isEmpty else {
+            return nil
+        }
+        return detail
     }
 
     /// 简单状态使用底部信息行占满展开卡片的安全区域。它既补足运行、允许、
     /// 拒绝等状态下的下半部空白，也把所有内容限制在底部圆角开始收窄之前。
     private var compactFooter: some View {
-        HStack(spacing: 7) {
-            Text(state.sourceLabel?.isEmpty == false ? state.sourceLabel! : "DeepSeek Harness")
-                .lineLimit(1)
-            Spacer(minLength: 10)
-            Link(destination: AgentActivityLink.session(context)) {
-                HStack(spacing: 3) {
-                    Text("查看会话")
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                }
-                .foregroundStyle(AgentActivityColors.islandDimmed)
+        Text(state.sourceLabel?.isEmpty == false ? state.sourceLabel! : "DeepSeek Harness")
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .font(.system(size: 10))
+            .foregroundStyle(AgentActivityColors.islandDimmed)
+            .padding(.bottom, 2)
+            .frame(height: 18, alignment: .bottom)
+            .padding(.horizontal, 8)
+            .overlay(alignment: .top) {
+                Rectangle()
+                    .fill(AgentActivityColors.islandDivider)
+                    .frame(height: 0.5)
+                    .padding(.top, 2)
             }
-        }
-        .font(.system(size: 10))
-        .foregroundStyle(AgentActivityColors.islandDimmed)
-        .frame(height: 20, alignment: .bottom)
-        .padding(.horizontal, 1)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(AgentActivityColors.islandDivider)
-                .frame(height: 0.5)
-                .padding(.top, 3)
-        }
     }
 
     private var failureActions: some View {
@@ -244,16 +307,6 @@ private struct AgentDynamicIslandExpandedContent: View {
     private var displaySessionTitle: String {
         let updatedTitle = state.sessionTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
         return updatedTitle?.isEmpty == false ? updatedTitle! : context.attributes.sessionTitle
-    }
-
-    private var statusText: String {
-        context.isStale && !state.phase.isTerminal ? "等待状态同步" : state.status
-    }
-
-    private var statusSymbol: String {
-        context.isStale && !state.phase.isTerminal
-            ? "exclamationmark.circle"
-            : AgentActivityPresentation.symbol(for: state.phase)
     }
 
     private var stepTitle: String {
@@ -634,7 +687,7 @@ private enum AgentActivityPresentation {
     static func symbol(for phase: AgentActivityPhase) -> String {
         switch phase {
         case .running: "waveform.path.ecg"
-        case .awaitingApproval: "questionmark.shield"
+        case .awaitingApproval: "exclamationmark.shield"
         case .submittingApproval: "arrow.triangle.2.circlepath"
         case .approved: "checkmark"
         case .rejected: "xmark.shield"
