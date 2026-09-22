@@ -40,6 +40,7 @@
 		A9F900000000000000000001 /* AttachmentLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F900000000000000000002 /* AttachmentLoader.swift */; };
 		A9FA00000000000000000001 /* AgentBackgroundExecutionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */; };
 		A9FD00000000000000000001 /* AgentBackgroundKeepAliveManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FD00000000000000000002 /* AgentBackgroundKeepAliveManager.swift */; };
+		A9FE00000000000000000001 /* AgentUserNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FE00000000000000000002 /* AgentUserNotificationManager.swift */; };
 		A9FB00000000000000000001 /* GatewayFrameRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FB00000000000000000002 /* GatewayFrameRouter.swift */; };
 		A9FC00000000000000000001 /* KMPSharedAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FC00000000000000000002 /* KMPSharedAdapter.swift */; };
 		AFAE90EEB4462AD84169D356 /* GatewayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */; };
@@ -109,6 +110,7 @@
 		A9F900000000000000000002 /* AttachmentLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AttachmentLoader.swift; sourceTree = "<group>"; };
 		A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentBackgroundExecutionController.swift; sourceTree = "<group>"; };
 		A9FD00000000000000000002 /* AgentBackgroundKeepAliveManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentBackgroundKeepAliveManager.swift; sourceTree = "<group>"; };
+		A9FE00000000000000000002 /* AgentUserNotificationManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentUserNotificationManager.swift; sourceTree = "<group>"; };
 		A9FB00000000000000000002 /* GatewayFrameRouter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayFrameRouter.swift; sourceTree = "<group>"; };
 		A9FC00000000000000000002 /* KMPSharedAdapter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KMPSharedAdapter.swift; sourceTree = "<group>"; };
 		B0C0FFEE0000000000000002 /* HarnessAnimatedBackground.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HarnessAnimatedBackground.swift; sourceTree = "<group>"; };
@@ -172,6 +174,7 @@
 				A9F900000000000000000002 /* AttachmentLoader.swift */,
 				A9FA00000000000000000002 /* AgentBackgroundExecutionController.swift */,
 				A9FD00000000000000000002 /* AgentBackgroundKeepAliveManager.swift */,
+				A9FE00000000000000000002 /* AgentUserNotificationManager.swift */,
 				A9FB00000000000000000002 /* GatewayFrameRouter.swift */,
 				A9FC00000000000000000002 /* KMPSharedAdapter.swift */,
 				61A1F439244BA594BF547C92 /* AppStore.swift */,
@@ -528,6 +531,7 @@
 				A9F900000000000000000001 /* AttachmentLoader.swift in Sources */,
 				A9FA00000000000000000001 /* AgentBackgroundExecutionController.swift in Sources */,
 				A9FD00000000000000000001 /* AgentBackgroundKeepAliveManager.swift in Sources */,
+				A9FE00000000000000000001 /* AgentUserNotificationManager.swift in Sources */,
 				A9FB00000000000000000001 /* GatewayFrameRouter.swift in Sources */,
 				A9FC00000000000000000001 /* KMPSharedAdapter.swift in Sources */,
 				5ED39F22065A71FC54D755AC /* AppStore.swift in Sources */,

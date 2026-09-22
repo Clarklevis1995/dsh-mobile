@@ -152,14 +152,11 @@ final class GatewayClient: ObservableObject {
         beginConnection(to: payload.publicUrl, pairingCode: payload.pairingCode, resetReportedFailure: true)
     }
 
-    /// Records the scene transition and optionally keeps the transport alive
-    /// while AppStore owns a finite UIKit background-task assertion.
-    func applicationDidEnterBackground(keepConnectionAlive: Bool) {
+    /// 只记录场景状态。连接的生命周期由用户的连接意图与真实传输故障决定；
+    /// 进入后台本身不再主动关闭 WebSocket。
+    func applicationDidEnterBackground() {
         isApplicationInBackground = true
         isRecoveringFromBackground = true
-        if !keepConnectionAlive {
-            suspendTransportForBackground()
-        }
     }
 
     /// Restores the transport immediately instead of waiting for the delayed
@@ -174,13 +171,6 @@ final class GatewayClient: ObservableObject {
             pairingCode: pairingCode,
             resetReportedFailure: false
         )
-    }
-
-    /// Called when iOS revokes the finite background execution allowance.
-    /// Closing deliberately avoids repeatedly reconnecting while suspended.
-    func backgroundExecutionDidExpire() {
-        guard isApplicationInBackground else { return }
-        suspendTransportForBackground()
     }
 
     private func beginConnection(to rawEndpoint: String, pairingCode: String?, resetReportedFailure: Bool) {
@@ -797,22 +787,6 @@ final class GatewayClient: ObservableObject {
                 shouldReconnect: !self.isManualPairingAttempt && !self.probeOnly
             )
         }
-    }
-
-    private func suspendTransportForBackground() {
-        conversationClient?.disconnect()
-        conversationClient = nil
-        failSessionCreations()
-        wantsConnection = true
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        connectionTimeoutTask?.cancel()
-        connectionTimeoutTask = nil
-        receiveTask?.cancel()
-        receiveTask = nil
-        socket?.cancel(with: .goingAway, reason: nil)
-        socket = nil
-        state = .disconnected
     }
 
     private static func httpResponse(from socket: URLSessionWebSocketTask?, error: NSError) -> HTTPURLResponse? {

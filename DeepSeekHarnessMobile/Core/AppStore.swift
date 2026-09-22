@@ -637,9 +637,6 @@ final class AppStore: ObservableObject {
         gateway.onConnectionFailure = { [weak self] detail in
             self?.handleConnectionFailure(detail)
         }
-        self.backgroundExecutionController.onBackgroundAllowanceExpired = { [weak self] in
-            self?.gateway.backgroundExecutionDidExpire()
-        }
         self.backgroundExecutionController.onKeepAlivePulse = { [weak self] in
             if self?.gateway.state.isConnected == true { self?.gateway.ping() }
             AgentLiveActivityManager.shared.refreshActiveActivities()
@@ -856,9 +853,7 @@ final class AppStore: ObservableObject {
         case .background:
             backgroundExecutionController.applicationDidEnterBackground()
             imageAttachmentCache.removeExpiredFiles()
-            gateway.applicationDidEnterBackground(
-                keepConnectionAlive: backgroundExecutionController.keepsConnectionAlive
-            )
+            gateway.applicationDidEnterBackground()
             if !gateway.state.isConnected {
                 applySessionAgentPresetTransition(sessionAgentPresetStore.disconnected())
             }
@@ -2268,6 +2263,13 @@ final class AppStore: ObservableObject {
                 sourceLabel: liveActivitySourceLabel(for: request.sessionId)
             )
             if isNewRequest {
+                AgentUserNotificationManager.shared.notifyApprovalRequired(
+                    gatewayID: gatewayLocalID,
+                    requestID: request.rpcId,
+                    sessionID: request.sessionId,
+                    sessionTitle: title(for: request.sessionId),
+                    detail: request.reason ?? request.toolName
+                )
                 notice(
                     request.replay ? String(localized: "待审批操作已恢复") : String(localized: "Agent 正在等待审批"),
                     request.reason ?? request.toolName,
@@ -2710,15 +2712,27 @@ final class AppStore: ObservableObject {
                 failed: failed,
                 sourceLabel: liveActivitySourceLabel(for: record.sessionId)
             )
+            AgentUserNotificationManager.shared.notifyExecutionEnded(
+                gatewayID: gatewayLocalID,
+                eventID: record.id,
+                sessionID: record.sessionId,
+                sessionTitle: title(for: record.sessionId),
+                failed: failed
+            )
         }
-        if event.type == "turn/end", record.sessionId == selectedSessionId {
+        // turn/end 可能在应用切回前台或重连期间从投递队列中到达。
+        // 此时只完成本地状态与通知更新；会话统计会在 hello 后由
+        // refreshSessionControls 统一刷新，避免把短暂未连接显示成错误弹窗。
+        if event.type == "turn/end",
+           record.sessionId == selectedSessionId,
+           gateway.state.isConnected {
             dispatchSessionControl(.requestContextUsage(
                 sessionID: record.sessionId,
-                isConnected: gateway.state.isConnected
+                isConnected: true
             ))
             dispatchSessionControl(.requestSessionStats(
                 sessionID: record.sessionId,
-                isConnected: gateway.state.isConnected
+                isConnected: true
             ))
         }
         if event.type == "permission/preset",

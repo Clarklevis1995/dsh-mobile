@@ -241,27 +241,27 @@ private struct AgentDynamicIslandExpandedContent: View {
     }
 
     private func resultRow(symbol: String, text: String) -> some View {
-        HStack(alignment: islandStepDetail == nil ? .center : .top, spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(AgentActivityColors.status(for: state.phase))
-                .frame(width: 16, height: 16, alignment: .center)
-                .padding(.top, islandStepDetail == nil ? 0 : 1)
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AgentActivityColors.status(for: state.phase))
+                    .frame(width: 16, height: 16, alignment: .center)
                 Text(text)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AgentActivityColors.islandText)
                     .lineLimit(1)
-                if let islandStepDetail {
-                    Text(islandStepDetail)
-                        .font(.system(size: 11))
-                        .lineSpacing(2)
-                        .foregroundStyle(AgentActivityColors.islandDimmed)
-                        .lineLimit(2)
-                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            if let islandStepDetail {
+                Text(islandStepDetail)
+                    .font(.system(size: 11))
+                    .lineSpacing(2)
+                    .foregroundStyle(AgentActivityColors.islandDimmed)
+                    .lineLimit(2)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 5)
         .padding(.bottom, 5)
     }
@@ -438,7 +438,7 @@ private struct AgentActivityCard: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.top, surface == .dynamicIsland ? 9 : 12)
+        .padding(.top, surface == .dynamicIsland ? 9 : 7)
         .padding(.bottom, surface == .dynamicIsland ? 7 : 8)
     }
 
