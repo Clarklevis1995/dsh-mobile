@@ -86,6 +86,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.core.view.WindowCompat
+import com.clarklevis.dsh.android.AndroidNotificationSessionRoute
 import com.clarklevis.dsh.android.AndroidSharedStateHolder
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.shared.domain.SessionSummary
@@ -105,9 +106,21 @@ private const val ROUTE_SETTINGS_DEFAULT_MODEL = "settings/default-model"
 @Composable
 internal fun DshProductApp(
     stateHolder: AndroidSharedStateHolder,
-    onPickImage: () -> Unit
+    onPickImage: () -> Unit,
+    notificationRoute: AndroidNotificationSessionRoute?,
+    onNotificationRouteOpened: (AndroidNotificationSessionRoute) -> Unit
 ) {
     val navController = rememberNavController()
+    LaunchedEffect(notificationRoute, stateHolder.snapshot.sessions) {
+        val route = notificationRoute ?: return@LaunchedEffect
+        if (stateHolder.snapshot.sessions.none { it.id == route.sessionId }) return@LaunchedEffect
+        stateHolder.selectSession(route.sessionId)
+        navController.navigate(ROUTE_CONVERSATION) {
+            popUpTo(ROUTE_WORKSPACE)
+            launchSingleTop = true
+        }
+        onNotificationRouteOpened(route)
+    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val isWorkspace = backStackEntry?.destination?.route == null ||
         backStackEntry?.destination?.route == ROUTE_WORKSPACE

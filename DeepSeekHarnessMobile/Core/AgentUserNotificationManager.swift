@@ -1,5 +1,12 @@
+import Combine
 import Foundation
+import UIKit
 import UserNotifications
+
+struct AgentNotificationSessionRoute: Equatable {
+    let gatewayID: String
+    let sessionID: String
+}
 
 /// 将需要用户关注的 Agent 状态转换为系统本地通知。
 /// 事件标识会持久化并限制数量，避免网关重连或事件重放时重复提醒。
@@ -12,6 +19,7 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
     private let maximumRememberedIdentifierCount = 256
     private var recentIdentifiers: [String]
     private var recentIdentifierSet: Set<String>
+    @Published private(set) var pendingSessionRoute: AgentNotificationSessionRoute?
 
     private override init() {
         let identifiers = UserDefaults.standard.stringArray(forKey: defaultsKey) ?? []
@@ -38,6 +46,8 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
         scheduleOnce(
             identifier: "agent.approval.\(gatewayID).\(requestID)",
             threadIdentifier: "agent.session.\(gatewayID).\(sessionID)",
+            gatewayID: gatewayID,
+            sessionID: sessionID,
             title: "需要审批",
             body: normalizedDetail?.isEmpty == false
                 ? "\(sessionTitle)：\(normalizedDetail!)"
@@ -55,6 +65,8 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
         scheduleOnce(
             identifier: "agent.execution-ended.\(gatewayID).\(eventID)",
             threadIdentifier: "agent.session.\(gatewayID).\(sessionID)",
+            gatewayID: gatewayID,
+            sessionID: sessionID,
             title: failed ? "执行失败" : "执行完成",
             body: failed
                 ? "\(sessionTitle)：打开 App 查看执行结果"
@@ -65,6 +77,8 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
     private func scheduleOnce(
         identifier: String,
         threadIdentifier: String,
+        gatewayID: String,
+        sessionID: String,
         title: String,
         body: String
     ) {
@@ -78,18 +92,37 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
         }
         UserDefaults.standard.set(recentIdentifiers, forKey: defaultsKey)
 
+        // 前台事件已经在会话界面展示；仍记录标识，避免重连后补弹旧通知。
+        guard UIApplication.shared.applicationState == .background else { return }
+
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         content.threadIdentifier = threadIdentifier
+        content.userInfo = ["gatewayID": gatewayID, "sessionID": sessionID]
         center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+    }
+
+    func clearPendingSessionRoute(_ route: AgentNotificationSessionRoute) {
+        if pendingSessionRoute == route { pendingSessionRoute = nil }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+              let gatewayID = response.notification.request.content.userInfo["gatewayID"] as? String,
+              let sessionID = response.notification.request.content.userInfo["sessionID"] as? String,
+              !gatewayID.isEmpty, !sessionID.isEmpty else { return }
+        pendingSessionRoute = AgentNotificationSessionRoute(gatewayID: gatewayID, sessionID: sessionID)
     }
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        []
     }
 }

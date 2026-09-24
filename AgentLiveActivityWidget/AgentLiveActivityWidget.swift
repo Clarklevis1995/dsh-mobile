@@ -143,6 +143,7 @@ private enum AgentActivityMetrics {
     static let actionSpacing: CGFloat = 8
     static let actionHeight: CGFloat = 36
     static let islandActionHeight: CGFloat = 30
+    static let islandActionTopSpacing: CGFloat = 8
 
     /// 展开岛的外形高度由内容和 content margin 一起决定。
     /// 带按钮的状态必须保留正的底部边距，否则系统会收缩外形并裁掉按钮。
@@ -152,7 +153,7 @@ private enum AgentActivityMetrics {
     ) -> CGFloat {
         let showsApprovalButtons = state.phase == .awaitingApproval && !isStale
         let showsFailureButtons = state.phase == .failed && state.command?.isEmpty == false
-        return showsApprovalButtons || showsFailureButtons ? 16 : 12
+        return showsApprovalButtons || showsFailureButtons ? 18 : 12
     }
 }
 
@@ -203,14 +204,14 @@ private struct AgentDynamicIslandExpandedContent: View {
                     tile: AgentActivityColors.islandTile,
                     height: AgentActivityMetrics.islandActionHeight
                 )
-                .padding(.top, 5)
+                .padding(.top, AgentActivityMetrics.islandActionTopSpacing)
             } else if state.phase == .submittingApproval {
                 resultRow(symbol: "hourglass", text: stepTitle)
                 compactFooter
             } else if state.phase == .failed && state.command?.isEmpty == false {
                 approvalOperation
                 failureActions
-                    .padding(.top, 5)
+                    .padding(.top, AgentActivityMetrics.islandActionTopSpacing)
             } else {
                 resultRow(
                     symbol: AgentActivityPresentation.stepSymbol(for: state),
@@ -226,10 +227,10 @@ private struct AgentDynamicIslandExpandedContent: View {
 
     private var approvalOperation: some View {
         Text(state.command?.isEmpty == false ? state.command! : (state.detail ?? "等待操作详情"))
-            .font(.system(size: 12, design: .monospaced))
+            .font(.system(size: 13, design: .monospaced))
             .tracking(-0.3)
-            .lineSpacing(2)
-            .lineLimit(2)
+            .lineLimit(1)
+            .truncationMode(.tail)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
@@ -248,14 +249,14 @@ private struct AgentDynamicIslandExpandedContent: View {
                     .foregroundStyle(AgentActivityColors.status(for: state.phase))
                     .frame(width: 16, height: 16, alignment: .center)
                 Text(text)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AgentActivityColors.islandText)
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
             if let islandStepDetail {
                 Text(islandStepDetail)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .lineSpacing(2)
                     .foregroundStyle(AgentActivityColors.islandDimmed)
                     .lineLimit(2)
@@ -410,7 +411,7 @@ private struct AgentActivityCard: View {
 
     private var operation: some View {
         Text(state.command?.isEmpty == false ? state.command! : "等待操作详情")
-            .font(.system(size: 11, design: .monospaced))
+            .font(.system(size: 12, design: .monospaced))
             .tracking(-0.4)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -428,11 +429,11 @@ private struct AgentActivityCard: View {
                 .frame(width: 20, height: 20, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(stepTitle)
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .foregroundStyle(foreground)
                     .lineLimit(1)
                 Text(stepDetail)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(dimmed)
                     .lineLimit(1)
             }
@@ -471,7 +472,7 @@ private struct AgentActivityCard: View {
             Text(state.detail?.isEmpty == false ? state.detail! : "正在等待主机确认")
                 .lineLimit(1)
         }
-        .font(.system(size: 12))
+        .font(.system(size: 13))
         .foregroundStyle(dimmed)
         .frame(maxWidth: .infinity, minHeight: AgentActivityMetrics.actionHeight)
         .background(tile, in: Capsule())

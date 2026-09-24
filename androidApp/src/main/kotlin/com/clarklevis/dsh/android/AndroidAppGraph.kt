@@ -50,6 +50,9 @@ class AndroidAppGraph(
         attachmentCacheOverride ?: AndroidAttachmentCache(application, gatewayId = gatewayLocalId)
     val attachmentThumbnailer = AndroidAttachmentThumbnailer()
     val imagePreprocessor = AndroidImagePreprocessor(application.contentResolver)
+    internal val agentNotifications by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        AndroidAgentNotificationManager(application)
+    }
     val networkMonitor: GatewayNetworkMonitor = networkMonitorOverride ?: AndroidNetworkMonitor(application)
     val transport: GatewayTransport = transportOverride ?: com.clarklevis.dsh.shared.gateway.SplitGatewayTransport(
         OkHttpGatewayTransport(diagnostics = diagnostics),

@@ -58,8 +58,17 @@ import com.clarklevis.dsh.android.ui.DshTheme
 @Composable
 fun DeepSeekHarnessAndroidApp() {
     val context = LocalContext.current
-    val hosts = (context.applicationContext as DshAndroidApplication).hosts
+    val application = context.applicationContext as DshAndroidApplication
+    val hosts = application.hosts
     if (!hosts.ready) return
+    val notificationRoute = application.pendingNotificationSession
+    LaunchedEffect(notificationRoute, hosts.activeId) {
+        if (notificationRoute != null && notificationRoute.gatewayId != hosts.activeId) {
+            val profile = hosts.profiles.firstOrNull { it.localId == notificationRoute.gatewayId }
+            if (profile != null) hosts.select(profile)
+            else application.clearNotificationSession(notificationRoute)
+        }
+    }
     val stateHolder = hosts.activeGraph.stateHolder
     val imageOwner = remember { androidx.compose.runtime.mutableStateOf<AndroidSharedStateHolder?>(null) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -69,9 +78,8 @@ fun DeepSeekHarnessAndroidApp() {
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
-    LaunchedEffect(stateHolder.gatewayState.shouldKeepAliveInBackground) {
+    LaunchedEffect(Unit) {
         if (
-            stateHolder.gatewayState.shouldKeepAliveInBackground &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
@@ -84,7 +92,9 @@ fun DeepSeekHarnessAndroidApp() {
             androidx.compose.runtime.key(stateHolder) {
             DshProductApp(
                 stateHolder = stateHolder,
-                onPickImage = { imageOwner.value = stateHolder; imagePicker.launch("image/*") }
+                onPickImage = { imageOwner.value = stateHolder; imagePicker.launch("image/*") },
+                notificationRoute = notificationRoute?.takeIf { it.gatewayId == hosts.activeId },
+                onNotificationRouteOpened = application::clearNotificationSession
             )
             }
             hosts.error?.let { message ->

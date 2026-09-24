@@ -6,4 +6,13 @@
     <string name="gateway_active_notification_title">DeepSeek Harness Agent 正在运行</string>
     <string name="gateway_active_notification_text">保持 Gateway 连接，直到当前回合完成</string>
     <string name="gateway_disconnect_action">断开</string>
+    <string name="agent_alert_notification_channel">Agent 提醒</string>
+    <string name="agent_alert_notification_channel_description">审批请求和任务执行结果</string>
+    <string name="agent_approval_notification_title">需要审批</string>
+    <string name="agent_approval_notification_detail">%1$s：%2$s</string>
+    <string name="agent_approval_notification_generic">%1$s：Agent 请求批准本次操作</string>
+    <string name="agent_execution_completed_notification_title">执行完成</string>
+    <string name="agent_execution_completed_notification_body">%1$s：Agent 已完成本次任务</string>
+    <string name="agent_execution_failed_notification_title">执行失败</string>
+    <string name="agent_execution_failed_notification_body">%1$s：打开 App 查看执行结果</string>
 </resources>

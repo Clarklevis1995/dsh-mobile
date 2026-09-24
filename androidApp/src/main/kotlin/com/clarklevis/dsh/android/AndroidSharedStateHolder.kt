@@ -402,6 +402,7 @@ class AndroidSharedStateHolder(
                                                     }
                                                 )
                                             }
+                                            notifyUserForAgentFrame(appGraph, event.frame)
                                         }
                                         if (event.frame.kind in setOf("session-archives", "session-archived")) {
                                             gatewayFollowUps?.submit { appGraph.gatewayRuntime.requestSessions() }
@@ -1604,6 +1605,46 @@ class AndroidSharedStateHolder(
             }
             frame.kind == "event" && frame.event?.type == "turn/end" -> {
                 cancellingSessionIds = cancellingSessionIds - sessionId
+            }
+        }
+    }
+
+    private fun notifyUserForAgentFrame(appGraph: AndroidAppGraph, frame: GatewayFrame) {
+        if (frame.kind != "approval-requested" &&
+            (frame.kind != "event" || frame.event?.type != "turn/end")
+        ) return
+        val sessionId = frame.sessionId?.takeIf(String::isNotBlank) ?: return
+        val sessionTitle = snapshot.sessions.firstOrNull { it.id == sessionId }
+            ?.title?.takeIf(String::isNotBlank) ?: "DeepSeek Harness"
+        when {
+            frame.kind == "approval-requested" -> {
+                val request = snapshot.pendingApprovals.firstOrNull {
+                    it.sessionId == sessionId && it.rpcId == frame.rpcId
+                } ?: return
+                appGraph.agentNotifications.notifyApprovalRequired(
+                    gatewayId = appGraph.gatewayLocalId,
+                    requestId = request.rpcId,
+                    sessionId = sessionId,
+                    sessionTitle = sessionTitle,
+                    detail = request.reason ?: request.toolName
+                )
+            }
+            frame.kind == "event" && frame.event?.type == "turn/end" -> {
+                val sequence = frame.seq ?: return
+                if (frame.time == null) return
+                val event = frame.event ?: return
+                val failed = event.isError == true || event.interrupted == true ||
+                    !event.error.isNullOrBlank() ||
+                    event.reason?.lowercase(Locale.ROOT) in setOf(
+                        "error", "failed", "cancelled", "canceled", "interrupted", "aborted"
+                    )
+                appGraph.agentNotifications.notifyExecutionEnded(
+                    gatewayId = appGraph.gatewayLocalId,
+                    sessionId = sessionId,
+                    sequence = sequence,
+                    sessionTitle = sessionTitle,
+                    failed = failed
+                )
             }
         }
     }

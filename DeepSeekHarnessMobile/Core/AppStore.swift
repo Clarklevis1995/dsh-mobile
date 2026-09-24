@@ -503,6 +503,8 @@ final class AppStore: ObservableObject {
     /// from the destination lifecycle, after NavigationStack installs its bar.
     private var preparedConversationActivationKey: String?
     private var activeConversationActivationKey: String?
+    /// 返回主页后仍在运行的会话需要保留事件订阅，供实时活动和通知使用。
+    private var backgroundMonitoredSessionID: String?
     private var presentsNextConnectionFailureAsAlert = true
     private var hasHandledColdLaunchConnection = false
     private let backgroundExecutionController: AgentBackgroundExecutionController
@@ -945,6 +947,7 @@ final class AppStore: ObservableObject {
         cancelSnapshotWait()
         if let sessionID { addKnownSession(sessionID) }
         guard dispatchSessionListIntent(.select(sessionID)) else { return false }
+        backgroundMonitoredSessionID = nil
         waitingForNewSession = false
         preparedConversationActivationKey = sessionID ?? Self.newConversationActivationKey
         activeConversationActivationKey = nil
@@ -958,6 +961,7 @@ final class AppStore: ObservableObject {
         if let previous = selectedSessionId { try? kmpConversationStore.clearAssistantChunks(sessionID: previous) }
         assistantStreamState.selectSession(sessionId: session.id)
         guard dispatchSessionListIntent(.select(session.id)) else { return false }
+        backgroundMonitoredSessionID = nil
         waitingForNewSession = false
         preparedConversationActivationKey = session.id
         activeConversationActivationKey = nil
@@ -1100,7 +1104,17 @@ final class AppStore: ObservableObject {
     func resumeWorkspace() {
         preparedConversationActivationKey = nil
         activeConversationActivationKey = nil
-        subscribeToSession(nil)
+        if let sessionID = selectedSessionId,
+           backgroundExecutionController.isAgentWorkActive(sessionID: sessionID)
+            || sessions.first(where: { $0.id == sessionID })?.isRunning == true
+            || pendingApprovalRequests.contains(where: { $0.sessionId == sessionID }) {
+            backgroundMonitoredSessionID = sessionID
+            // 返回手势可能早于目标页的订阅激活；显式订阅保证主页也能接收事件。
+            subscribeToSession(sessionID)
+        } else {
+            backgroundMonitoredSessionID = nil
+            subscribeToSession(nil)
+        }
         refreshRemoteState()
     }
     func addKnownSession(_ id: String) {
@@ -1792,6 +1806,8 @@ final class AppStore: ObservableObject {
                     guard let self else { return }
                     await self.activatePreparedConversation(sessionID: self.selectedSessionId)
                 }
+            } else if let backgroundMonitoredSessionID {
+                subscribeToSession(backgroundMonitoredSessionID)
             }
         case .pong(let timestamp):
             let detail = timestamp.map {
@@ -2719,6 +2735,11 @@ final class AppStore: ObservableObject {
                 sessionTitle: title(for: record.sessionId),
                 failed: failed
             )
+            if backgroundMonitoredSessionID == record.sessionId,
+               !backgroundExecutionController.isAgentWorkActive(sessionID: record.sessionId) {
+                backgroundMonitoredSessionID = nil
+                subscribeToSession(nil)
+            }
         }
         // turn/end 可能在应用切回前台或重连期间从投递队列中到达。
         // 此时只完成本地状态与通知更新；会话统计会在 hello 后由

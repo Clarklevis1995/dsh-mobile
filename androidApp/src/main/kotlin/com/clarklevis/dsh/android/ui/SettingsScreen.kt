@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,14 +26,11 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -48,18 +44,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import com.clarklevis.dsh.android.AndroidSharedStateHolder
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
@@ -686,22 +678,16 @@ internal fun InterfaceStyleSettingsRow() {
     var expanded by remember { mutableStateOf(false) }
     Box {
         SettingsValueRow("界面", appearance.interfaceStyle.title) { expanded = true }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            InterfaceStyle.entries.forEach { style ->
-                DropdownMenuItem(
-                    text = { Text(style.title) },
-                    trailingIcon = {
-                        if (style == appearance.interfaceStyle) {
-                            Icon(painterResource(R.drawable.ic_menu_check), contentDescription = "当前选中")
-                        }
-                    },
-                    onClick = {
-                        appearance.selectInterfaceStyle(style)
-                        expanded = false
-                    }
-                )
+        DshSelectionPopup(
+            expanded = expanded,
+            options = InterfaceStyle.entries.map { DshSelectionOption(it.name, it.title) },
+            selectedKey = appearance.interfaceStyle.name,
+            onDismissRequest = { expanded = false },
+            onSelect = { key ->
+                appearance.selectInterfaceStyle(InterfaceStyle.valueOf(key))
+                expanded = false
             }
-        }
+        )
     }
 }
 
@@ -711,22 +697,16 @@ internal fun LanguageSettingsRow() {
     var expanded by remember { mutableStateOf(false) }
     Box {
         SettingsValueRow("语言", appearance.language.title) { expanded = true }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            AppLanguage.entries.forEach { language ->
-                DropdownMenuItem(
-                    text = { Text(language.title) },
-                    trailingIcon = {
-                        if (language == appearance.language) {
-                            Icon(painterResource(R.drawable.ic_menu_check), contentDescription = "当前选中")
-                        }
-                    },
-                    onClick = {
-                        appearance.selectLanguage(language)
-                        expanded = false
-                    }
-                )
+        DshSelectionPopup(
+            expanded = expanded,
+            options = AppLanguage.entries.map { DshSelectionOption(it.name, it.title) },
+            selectedKey = appearance.language.name,
+            onDismissRequest = { expanded = false },
+            onSelect = { key ->
+                appearance.selectLanguage(AppLanguage.valueOf(key))
+                expanded = false
             }
-        }
+        )
     }
 }
 
@@ -746,70 +726,26 @@ private fun PermissionSettingsRow(
             enabled = enabled,
             onClick = { onExpandedChange(true) }
         )
-        if (expanded) {
-            val density = LocalDensity.current
-            Popup(
-                alignment = Alignment.TopStart,
-                offset = with(density) {
-                    IntOffset(
-                        x = 22.dp.roundToPx(),
-                        y = (-20).dp.roundToPx()
-                    )
-                },
-                onDismissRequest = { onExpandedChange(false) },
-                properties = PopupProperties(
-                    focusable = true,
-                    clippingEnabled = false
-                )
-            ) {
-                Box(Modifier.padding(20.dp)) {
-                    Surface(
-                        modifier = Modifier.width(230.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 10.dp,
-                        border = androidx.compose.foundation.BorderStroke(
-                            0.7.dp,
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.055f)
-                        )
-                    ) {
-                        Column {
-                            DEFAULT_PERMISSIONS.forEach { permission ->
-                                val isSelected = permission.first == selectedPermission
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = permission.second,
-                                            fontSize = 17.sp,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        if (isSelected) {
-                                            Icon(
-                                                painter = painterResource(R.drawable.ic_menu_check),
-                                                contentDescription = "当前选中",
-                                                modifier = Modifier.size(22.dp),
-                                                tint = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        } else {
-                                            Spacer(Modifier.size(22.dp))
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth().height(54.dp),
-                                    contentPadding = PaddingValues(horizontal = 20.dp),
-                                    onClick = {
-                                        onExpandedChange(false)
-                                        onPermissionSelected(permission.first)
-                                    }
-                                )
-                            }
-                        }
+        DshSelectionPopup(
+            expanded = expanded,
+            options = DEFAULT_PERMISSIONS.map { permission ->
+                DshSelectionOption(
+                    permission.first,
+                    permission.second,
+                    when (permission.first) {
+                        "read-only" -> R.drawable.ic_permission_read
+                        "workspace-write" -> R.drawable.ic_menu_check
+                        else -> R.drawable.ic_permission_warning
                     }
-                }
+                )
+            },
+            selectedKey = selectedPermission,
+            onDismissRequest = { onExpandedChange(false) },
+            onSelect = { key ->
+                onExpandedChange(false)
+                onPermissionSelected(key)
             }
-        }
+        )
     }
 }
 

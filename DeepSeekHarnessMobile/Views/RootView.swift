@@ -5,6 +5,7 @@ import DeepSeekHarnessShared
 
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
+    @EnvironmentObject private var hosts: MultiGatewayStore
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -17,6 +18,11 @@ struct RootView: View {
             } message: { Text(store.lastError ?? "") }
             .onChange(of: scenePhase) { _, phase in
                 store.handleScenePhase(phase)
+            }
+            .onReceive(AgentUserNotificationManager.shared.$pendingSessionRoute) { route in
+                guard let route, route.gatewayID != hosts.activeID,
+                      let profile = hosts.profiles.first(where: { $0.id == route.gatewayID }) else { return }
+                hosts.select(profile)
             }
     }
 }
@@ -79,9 +85,20 @@ private struct RootNavigationHost: View, Equatable {
             if path.isEmpty { store.resumeWorkspace() }
         }
         .onOpenURL(perform: openLiveActivityURL)
+        .onReceive(AgentUserNotificationManager.shared.$pendingSessionRoute) { route in
+            guard let route, route.gatewayID == store.gatewayLocalID else { return }
+            pendingLiveActivitySessionID = route.sessionID
+            guard let session = store.sessions.first(where: { $0.id == route.sessionID }) else { return }
+            AgentUserNotificationManager.shared.clearPendingSessionRoute(route)
+            openLiveActivitySession(session)
+        }
         .onReceive(store.$sessions) { sessions in
             guard let sessionID = pendingLiveActivitySessionID,
                   let session = sessions.first(where: { $0.id == sessionID }) else { return }
+            if let route = AgentUserNotificationManager.shared.pendingSessionRoute,
+               route.gatewayID == store.gatewayLocalID, route.sessionID == sessionID {
+                AgentUserNotificationManager.shared.clearPendingSessionRoute(route)
+            }
             openLiveActivitySession(session)
         }
     }

@@ -49,6 +49,12 @@ final class AgentBackgroundExecutionController {
         outstandingTurns > 0 || !questionAllowanceSessionIDs.isEmpty || !queuedSessionIDs.isEmpty
     }
 
+    func isAgentWorkActive(sessionID: String) -> Bool {
+        outstandingTurnsBySessionID[sessionID, default: 0] > 0
+            || questionAllowanceSessionIDs.values.contains(sessionID)
+            || queuedSessionIDs.contains(sessionID)
+    }
+
     convenience init() {
         self.init(
             application: UIApplication.shared,
