@@ -111,8 +111,6 @@ sealed interface SessionControlAction {
 }
 
 object SessionControlReducer {
-    private val supportedPermissionPresets = setOf("read-only", "workspace-write", "danger-full-access")
-
     fun reduce(state: SessionControlState, action: SessionControlAction): SessionControlState = when (action) {
         is SessionControlAction.AgentPresetsReceived -> state.copy(
             agentPresets = action.presets,
@@ -142,7 +140,9 @@ object SessionControlReducer {
         is SessionControlAction.PermissionsReceived -> state.copy(
             sessionPermissions = state.sessionPermissions + (
                 action.sessionId to action.permissions.copy(
-                    options = action.permissions.options.orEmpty().filter { it.value in supportedPermissionPresets }
+                    // 候选项由服务端定义，客户端不得按本地白名单过滤：DSH 0.1.6 起
+                    // preset 表可由部署配置，Auto review 还会动态贡献 auto 选项。
+                    options = action.permissions.options.orEmpty()
                 )
             )
         )

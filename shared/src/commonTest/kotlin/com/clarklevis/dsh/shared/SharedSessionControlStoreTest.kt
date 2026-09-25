@@ -225,7 +225,7 @@ class SharedSessionControlStoreTest {
     }
 
     @Test
-    fun mergesControlResponsesAndFiltersUnsupportedPermissions() {
+    fun mergesControlResponsesAndKeepsServerProvidedPermissions() {
         val store = SharedSessionControlStore()
         store.mergeContextProjection(
             sessionId = "session-1",
@@ -248,23 +248,30 @@ class SharedSessionControlStoreTest {
         assertEquals(30, context?.pressure?.pressureTokens)
         assertEquals(4, context?.breakdown?.systemTokens)
 
+        // 服务端下发的候选项必须原样保留，未知名称不等于协议错误。
         store.mergePermissionsProjection(
             "session-1",
-            """{"options":[{"value":"read-only","name":"Read"},{"value":"future","name":"Future"}],"currentValue":"read-only"}"""
+            """{"options":[{"value":"read-only","name":"Read"},{"value":"auto","name":"Auto review"}],"currentValue":"read-only"}"""
         )
         val permissions = store.currentState().sessionPermissions["session-1"]
-        assertEquals(listOf("read-only"), permissions?.options?.map { it.value })
+        assertEquals(listOf("read-only", "auto"), permissions?.options?.map { it.value })
 
-        val rejected = store.mergePermissionProjection("session-1", "future")
+        // DSH 在 knob 组合不匹配任何 preset 时会给出派生的 custom，客户端必须接受。
+        val accepted = store.mergePermissionProjection("session-1", "custom")
+        assertNull(accepted.errorCode)
+        assertEquals("custom", store.currentState().sessionPermissions["session-1"]?.currentValue)
+
+        val acceptedProjection = store.mergePermissionsProjection(
+            "session-1",
+            """{"options":[],"currentValue":"custom"}"""
+        )
+        assertNull(acceptedProjection.errorCode)
+        assertEquals("custom", store.currentState().sessionPermissions["session-1"]?.currentValue)
+
+        // 只有空值仍然被拒绝。
+        val rejected = store.mergePermissionProjection("session-1", "")
         assertEquals("invalid-permission-state", rejected.errorCode)
         assertNull(rejected.snapshotJson)
-
-        val invalidProjection = store.mergePermissionsProjection(
-            "session-1",
-            """{"options":[],"currentValue":"future"}"""
-        )
-        assertEquals("session-control-merge-permissions-projection-failed", invalidProjection.errorCode)
-        assertNull(invalidProjection.snapshotJson)
     }
 
     @Test
@@ -302,9 +309,12 @@ class SharedSessionControlStoreTest {
         val setDefault = store.setDefault("agent-preset", "standard", isConnected = true)
         assertEquals("set-default", setDefault.effects().single().kind)
         assertEquals("invalid-agent-preset", store.setDefault("agent-preset", "broken", true).errorCode)
+        // 默认权限不再按本地白名单校验：服务端新增 preset（如 auto）必须能保存，
+        // 只有空值仍然被拒绝。
+        assertNull(store.setDefault("permission", "auto", isConnected = true).errorCode)
         assertEquals(
             "unsupported-default-permission",
-            store.setDefault("permission", "ask", isConnected = true).errorCode
+            store.setDefault("permission", "", isConnected = true).errorCode
         )
 
         store.requestSessionStats("session-1", true)

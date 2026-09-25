@@ -270,7 +270,7 @@ class ProtocolAndReducerTest {
     }
 
     @Test
-    fun sessionControlReducerFiltersPermissionsAndClearsLoadingTarget() {
+    fun sessionControlReducerKeepsServerProvidedPermissionsAndClearsLoadingTarget() {
         var state = SessionControlReducer.reduce(
             SessionControlState(),
             SessionControlAction.ModelsRequestTargeted("s1")
@@ -283,12 +283,13 @@ class ProtocolAndReducerTest {
                 GatewaySessionPermissions(
                     options = listOf(
                         GatewayPermissionOption("read-only", "Read only"),
-                        GatewayPermissionOption("unsupported", "Unsupported")
+                        // 服务端可以下发本地未知的 preset（DSH 0.1.6 的 auto 即由插件动态贡献）。
+                        GatewayPermissionOption("auto", "Auto review")
                     )
                 )
             )
         )
-        assertEquals(listOf("read-only"), state.sessionPermissions["s1"]?.options?.map { it.value })
+        assertEquals(listOf("read-only", "auto"), state.sessionPermissions["s1"]?.options?.map { it.value })
         state = SessionControlReducer.reduce(state, SessionControlAction.RequestFinished("models"))
         assertNull(state.pendingModelsSessionId)
         assertTrue("models" !in state.loadingKinds)
