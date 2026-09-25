@@ -156,7 +156,9 @@ class SharedSessionControlStore {
     } catch (error: Throwable) { failure("select-model", error) }
 
     fun setPermission(sessionId: String, value: String, isConnected: Boolean): SharedSessionControlResult {
-        if (value !in supportedPermissionPresets) return rejected("unsupported-permission", value)
+        // 合法 preset 由服务端定义（DSH 0.1.6 起可由部署配置，Auto review 还会
+        // 动态贡献 auto）。客户端只拒绝空值，未知名称交由服务端裁决。
+        if (value.isBlank()) return rejected("unsupported-permission", value)
         return request(SessionControlRequestTarget("permission", false, sessionId = sessionId, value = value), isConnected)
     }
 
@@ -172,7 +174,9 @@ class SharedSessionControlStore {
 
     fun setDefault(target: String, value: String, isConnected: Boolean): SharedSessionControlResult {
         when (target) {
-            "permission" -> if (value !in supportedPermissionPresets) {
+            // 默认权限同样只做非空校验：服务端新增 preset（例如 auto）时，
+            // 本地白名单会把它误判为非法并让设置页无法保存。
+            "permission" -> if (value.isBlank()) {
                 return rejected("unsupported-default-permission", value)
             }
             "agent-preset" -> if (state.agentPresets.none { it.id == value && it.broken != true }) {
@@ -239,7 +243,7 @@ class SharedSessionControlStore {
         "permission-options", sessionId?.let { SessionControlRequestTarget("permission-options", false, sessionId = it) }
     ) {
         val active = state.activeRequestTargets["permission-options"] ?: return@decodeResponse null
-        val permissions = decodeValidPermissions(permissionsJson)
+        val permissions = wireJson.decodeFromString<GatewaySessionPermissions>(permissionsJson)
         SessionControlAction.PermissionsReceived(sessionId ?: active.sessionId ?: return@decodeResponse null, permissions)
     }
 
@@ -247,7 +251,8 @@ class SharedSessionControlStore {
         val active = state.activeRequestTargets["permission"] ?: return unchanged()
         if (sessionId != null && sessionId != active.sessionId) return unchanged()
         if (active.value != value) return unchanged()
-        if (value !in supportedPermissionPresets) return rejected("invalid-permission-state", value)
+        // 这里比对的是服务端对本次请求的回显，名称合法性由服务端保证。
+        if (value.isBlank()) return rejected("invalid-permission-state", value)
         return response(
             "permission", sessionId?.let { SessionControlRequestTarget("permission", false, sessionId = it) },
             SessionControlAction.PermissionSelected(sessionId ?: active.sessionId ?: return unchanged(), value)
@@ -300,7 +305,7 @@ class SharedSessionControlStore {
     fun mergePermissionsProjection(sessionId: String, permissionsJson: String) =
         decodeAndReduce("merge-permissions-projection") {
             SessionControlAction.PermissionsReceived(
-                sessionId, decodeValidPermissions(permissionsJson)
+                sessionId, wireJson.decodeFromString<GatewaySessionPermissions>(permissionsJson)
             )
         }
 
@@ -309,7 +314,8 @@ class SharedSessionControlStore {
     }
 
     fun mergePermissionProjection(sessionId: String, value: String): SharedSessionControlResult {
-        if (value !in supportedPermissionPresets) return rejected("invalid-permission-state", value)
+        // 会话事件里的 preset 可能是本地白名单之外的名称（DSH 的 auto 就是其中之一）。
+        if (value.isBlank()) return rejected("invalid-permission-state", value)
         return reduce("merge-permission-projection", SessionControlAction.PermissionSelected(sessionId, value))
     }
 
@@ -567,15 +573,6 @@ class SharedSessionControlStore {
         )
     }
 
-    private fun decodeValidPermissions(permissionsJson: String): GatewaySessionPermissions {
-        val permissions = wireJson.decodeFromString<GatewaySessionPermissions>(permissionsJson)
-        val current = permissions.currentValue ?: permissions.preset
-        require(current == null || current in supportedPermissionPresets) {
-            "invalid-permission-state:$current"
-        }
-        return permissions
-    }
-
     private fun reduce(operation: String, action: SessionControlAction) = mutate(operation) {
         Transition(SessionControlReducer.reduce(state, action), applied = true)
     }
@@ -708,8 +705,4 @@ class SharedSessionControlStore {
 
     private fun <T> removedKeys(before: Map<String, T>, after: Map<String, T>): Set<String> =
         if (before === after) emptySet() else before.keys - after.keys
-
-    private companion object {
-        val supportedPermissionPresets = setOf("read-only", "workspace-write", "danger-full-access")
-    }
 }
