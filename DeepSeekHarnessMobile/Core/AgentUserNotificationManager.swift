@@ -48,10 +48,16 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
             threadIdentifier: "agent.session.\(gatewayID).\(sessionID)",
             gatewayID: gatewayID,
             sessionID: sessionID,
-            title: "需要审批",
+            title: String(localized: "agent.notification.approval.title", defaultValue: "需要审批"),
             body: normalizedDetail?.isEmpty == false
-                ? "\(sessionTitle)：\(normalizedDetail!)"
-                : "\(sessionTitle)：Agent 请求批准本次操作"
+                ? String(
+                    localized: "agent.notification.approval.body",
+                    defaultValue: "\(sessionTitle)：\(normalizedDetail!)"
+                )
+                : String(
+                    localized: "agent.notification.approval.body.generic",
+                    defaultValue: "\(sessionTitle)：Agent 请求批准本次操作"
+                )
         )
     }
 
@@ -67,10 +73,18 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
             threadIdentifier: "agent.session.\(gatewayID).\(sessionID)",
             gatewayID: gatewayID,
             sessionID: sessionID,
-            title: failed ? "执行失败" : "执行完成",
+            title: failed
+                ? String(localized: "agent.notification.execution.failed.title", defaultValue: "执行失败")
+                : String(localized: "agent.notification.execution.completed.title", defaultValue: "执行完成"),
             body: failed
-                ? "\(sessionTitle)：打开 App 查看执行结果"
-                : "\(sessionTitle)：Agent 已完成本次任务"
+                ? String(
+                    localized: "agent.notification.execution.failed.body",
+                    defaultValue: "\(sessionTitle)：打开 App 查看执行结果"
+                )
+                : String(
+                    localized: "agent.notification.execution.completed.body",
+                    defaultValue: "\(sessionTitle)：Agent 已完成本次任务"
+                )
         )
     }
 
