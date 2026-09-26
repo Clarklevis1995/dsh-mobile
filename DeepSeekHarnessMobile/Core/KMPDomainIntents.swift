@@ -16,7 +16,7 @@ enum KMPSessionListIntent {
 /// 状态转换与校验只存在于 commonMain。
 enum KMPSessionControlAction {
     case agentPresetsReceived([GatewayAgentPreset], authorable: Bool, hasDocument: Bool)
-    case defaultsReceived(agentPreset: String?, permission: String?)
+    case defaultsReceived(agentPreset: String?, permission: String?, permissionOptions: [GatewayPermissionOption])
     case defaultModelReceived(GatewayModelSelection?)
     case globalDefaultApplied(target: String, value: String)
     case modelsReceived(

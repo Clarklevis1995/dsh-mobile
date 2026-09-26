@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 import class DeepSeekHarnessShared.SharedQuestionResult
 import class DeepSeekHarnessShared.SharedMviEvent
 import class DeepSeekHarnessShared.SharedMviDispatchResult
+import class DeepSeekHarnessShared.SharedTrajectoryStore
 import class DeepSeekHarnessShared.SharedSessionControlResult
 import class DeepSeekHarnessShared.SharedSessionControlStore
 import class DeepSeekHarnessShared.SharedSessionListResult
@@ -2554,11 +2555,12 @@ final class GatewayProtocolTests: XCTestCase {
 
     @MainActor
     func testAppStoreActivatesTrajectoryProjectionOnlyForVisiblePage() async {
+        let bridge = CountingTrajectoryBridge()
         let store = AppStore(preferences: AppPreferencesSpy(
             endpoint: "ws://127.0.0.1:3080/ws/mobile",
             selectedWorkspaceID: nil,
             sessions: []
-        ))
+        ), trajectoryBridge: bridge)
         store.events["s1"] = [
             SessionEvent(
                 sessionId: "s1", seq: 1, time: 1,
@@ -2571,7 +2573,11 @@ final class GatewayProtocolTests: XCTestCase {
         store.setTrajectoryProjectionActive(sessionID: "s1", isActive: true)
         await flushDeferredKMPEvents(in: store)
         XCTAssertEqual(timeline.nodes.map(\.subtitle), ["one"])
+        XCTAssertEqual(bridge.replaceCount, 1)
 
+        store.setTrajectoryProjectionActive(sessionID: "s1", isActive: false)
+        store.setTrajectoryProjectionActive(sessionID: "s1", isActive: true)
+        XCTAssertEqual(bridge.replaceCount, 1)
         store.setTrajectoryProjectionActive(sessionID: "s1", isActive: false)
         store.events["s1"]?.append(SessionEvent(
             sessionId: "s1", seq: 2, time: 2,
@@ -2581,6 +2587,7 @@ final class GatewayProtocolTests: XCTestCase {
         store.setTrajectoryProjectionActive(sessionID: "s1", isActive: true)
         await flushDeferredKMPEvents(in: store)
         XCTAssertEqual(timeline.nodes.map(\.subtitle), ["one", "two"])
+        XCTAssertEqual(bridge.replaceCount, 2)
     }
 
     @MainActor
@@ -6180,7 +6187,11 @@ private extension KMPSessionControlStoreBridging {
     func clearSessionData(sessionId: String) -> SharedSessionControlResult { unimplemented() }
     func clearSessionsData(sessionIdsJson: String) -> SharedSessionControlResult { unimplemented() }
     func agentPresetsReceived(presetsJson: String, authorable: Bool, hasDocument: Bool) -> SharedSessionControlResult { unimplemented() }
-    func defaultsReceived(agentPreset: String?, permission: String?) -> SharedSessionControlResult { unimplemented() }
+    func defaultsReceived(
+        agentPreset: String?,
+        permission: String?,
+        permissionOptionsJson: String?
+    ) -> SharedSessionControlResult { unimplemented() }
     func defaultModelReceived(selectionJson: String?) -> SharedSessionControlResult { unimplemented() }
     func globalDefaultApplied(target: String, value: String) -> SharedSessionControlResult { unimplemented() }
     func modelsReceived(sessionId: String?, currentJson: String?, routable: Bool, groupsJson: String, isGlobalRequest: Bool) -> SharedSessionControlResult { unimplemented() }
@@ -6641,6 +6652,32 @@ private final class MalformedConversationEventBridge:
             accepted: false, transactionId: nil, eventSequence: nil,
             errorCode: "unsupported", errorMessage: nil
         )
+    }
+}
+
+private final class CountingTrajectoryBridge: KMPTrajectoryStoreBridging, KMPTrajectoryEventBridging {
+    private let store = SharedTrajectoryStore()
+    private(set) var replaceCount = 0
+
+    func observeTrajectoryEvents(_ handler: @escaping (SharedMviEvent) -> Void) -> () -> Void {
+        store.observeTrajectoryEvents(handler)
+    }
+
+    func receiveEvent(eventJson: String) -> SharedMviDispatchResult {
+        store.receiveEvent(eventJson: eventJson)
+    }
+
+    func receiveEvents(eventsJson: String) -> SharedMviDispatchResult {
+        store.receiveEvents(eventsJson: eventsJson)
+    }
+
+    func replaceSession(sessionId: String, eventsJson: String) -> SharedMviDispatchResult {
+        replaceCount += 1
+        return store.replaceSession(sessionId: sessionId, eventsJson: eventsJson)
+    }
+
+    func clearSession(sessionId: String) -> SharedMviDispatchResult {
+        store.clearSession(sessionId: sessionId)
     }
 }
 

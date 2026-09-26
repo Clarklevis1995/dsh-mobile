@@ -3,14 +3,15 @@ import SwiftUI
 /// 仅轨迹页订阅的展示通道，避免高频节点 patch 触发整个 AppStore/ConversationView。
 @MainActor
 final class TrajectoryTimeline: ObservableObject {
-    @Published private(set) var nodes: [TrajectoryNode]
+    @Published fileprivate var presentation: TrajectoryPresentation
+    var nodes: [TrajectoryNode] { presentation.nodes }
 
     init(initialNodes: [TrajectoryNode] = []) {
-        _nodes = Published(initialValue: initialNodes)
+        _presentation = Published(initialValue: TrajectoryPresentation(nodes: initialNodes))
     }
 
     func publish(_ nodes: [TrajectoryNode]) {
-        self.nodes = nodes
+        presentation = TrajectoryPresentation(nodes: nodes)
     }
 }
 
@@ -47,7 +48,7 @@ struct TrajectoryView: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 12)
                         }
-                        ForEach(displayRows) { row in
+                        ForEach(timeline.presentation.rows) { row in
                             if row.startsTurn, let turn = row.turn {
                                 TrajectoryTurnHeader(turn: turn)
                             }
@@ -79,10 +80,10 @@ struct TrajectoryView: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Label("Duration", systemImage: "clock")
-                Text("\(turnCount) Turns")
-                Text("\(toolCount) Calls")
+                Text("\(timeline.presentation.turnCount) Turns")
+                Text("\(timeline.presentation.toolCount) Calls")
                 Spacer()
-                Text(durationText).monospacedDigit()
+                Text(timeline.presentation.durationText).monospacedDigit()
             }
             .font(.caption)
             .foregroundStyle(.primary)
@@ -95,10 +96,10 @@ struct TrajectoryView: View {
                 }
                 .font(.caption2).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
 
-                TimelineOverviewCanvas(nodes: visibleNodes, onSelect: onSelect)
+                TimelineOverviewCanvas(nodes: timeline.presentation.visibleNodes, onSelect: onSelect)
                 .frame(height: 52)
             }
-            HStack { Text("0s"); Spacer(); Text(durationText) }
+            HStack { Text("0s"); Spacer(); Text(timeline.presentation.durationText) }
                 .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 20).padding(.vertical, 12)
@@ -115,22 +116,30 @@ struct TrajectoryView: View {
     }
 
     private var nodes: [TrajectoryNode] { timeline.nodes }
-    private var duration: TimeInterval {
-        nodes.lazy.filter { $0.kind != .request }.reduce(0) { partial, node in
-            partial + max(0, node.end.timeIntervalSince(node.start))
-        }
-    }
-    private var turnCount: Int {
-        Set(nodes.flatMap(\.records).compactMap(\.event.turn)).count
-    }
-    private var toolCount: Int {
-        nodes.lazy.filter { $0.kind == .tool || $0.kind == .subtool }.count
-    }
-    private var durationText: String { String(format: "%.2f s", duration) }
-    private var visibleNodes: [TrajectoryNode] { nodes.filter { $0.kind != .request } }
+}
 
-    private var displayRows: [TrajectoryDisplayRow] {
-        let visible = visibleNodes
+fileprivate struct TrajectoryPresentation {
+    let nodes: [TrajectoryNode]
+    let visibleNodes: [TrajectoryNode]
+    let rows: [TrajectoryDisplayRow]
+    let turnCount: Int
+    let toolCount: Int
+    let durationText: String
+
+    init(nodes: [TrajectoryNode]) {
+        self.nodes = nodes
+        let visible = nodes.filter { $0.kind != .request }
+        visibleNodes = visible
+        let duration = visible.reduce(0) { $0 + max(0, $1.end.timeIntervalSince($1.start)) }
+        durationText = String(format: "%.2f s", duration)
+        var turnNumbers = Set<Int>()
+        for node in nodes {
+            for record in node.records {
+                if let turn = record.event.turn { turnNumbers.insert(turn) }
+            }
+        }
+        turnCount = turnNumbers.count
+        toolCount = nodes.lazy.filter { $0.kind == .tool || $0.kind == .subtool }.count
         let requestsByStep = Dictionary(
             nodes.compactMap { node -> (String, TrajectoryNode)? in
                 guard node.kind == .request,
@@ -140,13 +149,17 @@ struct TrajectoryView: View {
             },
             uniquingKeysWith: { _, latest in latest }
         )
+        var nextTurn: Int?
+        var resolvedTurns = Array<Int?>(repeating: nil, count: visible.count)
+        for index in visible.indices.reversed() {
+            if let direct = visible[index].records.lazy.compactMap(\.event.turn).first {
+                nextTurn = direct
+            }
+            resolvedTurns[index] = nextTurn
+        }
         var previousTurn: Int?
-        return visible.enumerated().map { index, node in
-            let directTurn = node.records.lazy.compactMap(\.event.turn).first
-            let turn = directTurn ?? visible[index...].lazy
-                .flatMap(\.records)
-                .compactMap(\.event.turn)
-                .first
+        rows = visible.enumerated().map { index, node in
+            let turn = resolvedTurns[index]
             let startsTurn = turn != nil && turn != previousTurn
             if let turn { previousTurn = turn }
             let step = node.records.lazy.compactMap(\.event.step).first
@@ -262,7 +275,7 @@ private struct TimelineOverviewCanvas: View {
     }
 }
 
-private struct TrajectoryDisplayRow: Identifiable {
+fileprivate struct TrajectoryDisplayRow: Identifiable {
     let node: TrajectoryNode
     let request: TrajectoryNode?
     let turn: Int?

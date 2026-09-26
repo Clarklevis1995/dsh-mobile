@@ -79,6 +79,8 @@ object TrajectoryProjection {
         val nodes = mutableListOf<TrajectoryNode>()
         val assistantIndexes = mutableMapOf<String, Int>()
         val requestIndexes = mutableMapOf<String, Int>()
+        val streamingRecords = mutableMapOf<String, MutableList<SessionEvent>>()
+        val streamingText = mutableMapOf<String, StringBuilder>()
         val toolIndexes = mutableMapOf<String, Int>()
         val subtoolIndexes = mutableMapOf<String, Int>()
         var requestNumber = 0
@@ -93,27 +95,22 @@ object TrajectoryProjection {
                 event.type == "user/message" && !event.text.isNullOrEmpty() ->
                     nodes += node("context-${eventId(record)}", TrajectoryNodeKind.CONTEXT, event.source ?: "Context", event.text, record)
                 event.type == "assistant/chunk" && key !in completedSteps && event.chunkType in setOf("reasoning-delta", "text-delta") && !event.text.isNullOrEmpty() -> {
+                    val records = streamingRecords.getOrPut(key) { mutableListOf() }
+                    records += record
                     if (requestIndexes[key] == null) {
                         requestNumber += 1
                         val usage = requestUsage(event.usage)
                         cumulativeUsage += usage
                         requestIndexes[key] = nodes.size
                         nodes += requestNode(requestNumber, key, record, record, metadata + record, options, context, usage, cumulativeUsage, null, events)
-                    } else {
-                        val index = requestIndexes.getValue(key)
-                        nodes[index] = nodes[index].copy(endSequence = record.seq, endEpochSeconds = epoch(record), records = nodes[index].records + record)
                     }
                     val index = assistantIndexes[key]
                     if (index == null) {
                         assistantIndexes[key] = nodes.size
                         nodes += node("assistant-stream-$key", TrajectoryNodeKind.ASSISTANT, "Assistant", event.text, record)
+                        streamingText[key] = StringBuilder(event.text)
                     } else {
-                        nodes[index] = nodes[index].copy(
-                            subtitle = nodes[index].subtitle + event.text,
-                            endSequence = record.seq,
-                            endEpochSeconds = epoch(record),
-                            records = nodes[index].records + record
-                        )
+                        streamingText.getValue(key).append(event.text)
                     }
                 }
                 event.type == "assistant/message" || event.type == "assistant/attempt" -> {
@@ -177,6 +174,22 @@ object TrajectoryProjection {
                     }
                 }
             }
+        }
+        streamingRecords.forEach { (key, records) ->
+            val last = records.last()
+            val requestIndex = requestIndexes.getValue(key)
+            nodes[requestIndex] = nodes[requestIndex].copy(
+                endSequence = last.seq,
+                endEpochSeconds = epoch(last),
+                records = metadata + records
+            )
+            val assistantIndex = assistantIndexes.getValue(key)
+            nodes[assistantIndex] = nodes[assistantIndex].copy(
+                subtitle = streamingText.getValue(key).toString(),
+                endSequence = last.seq,
+                endEpochSeconds = epoch(last),
+                records = records.toList()
+            )
         }
         return nodes.sortedWith(compareBy(TrajectoryNode::startSequence, { priority(it.kind) }))
     }

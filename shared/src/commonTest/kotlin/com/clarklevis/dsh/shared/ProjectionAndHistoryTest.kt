@@ -118,6 +118,21 @@ class ProjectionAndHistoryTest {
     }
 
     @Test
+    fun trajectoryProjectionCollectsLongStreamingStepWithoutLosingRecords() {
+        val chunks = (1..200).map { sequence ->
+            event(sequence, GatewayEvent("assistant/chunk", turn = 1, step = 1, chunkType = "text-delta", text = "x"))
+        }
+
+        val nodes = TrajectoryProjection.make(chunks)
+        val request = nodes.single { it.kind == TrajectoryNodeKind.REQUEST }
+        val assistant = nodes.single { it.kind == TrajectoryNodeKind.ASSISTANT }
+        assertEquals(200, request.records.size)
+        assertEquals(200, assistant.records.size)
+        assertEquals("x".repeat(200), assistant.subtitle)
+        assertEquals(200, assistant.endSequence)
+    }
+
+    @Test
     fun historyReducerRejectsCursorLoopAndMergerKeepsSequenceOrder() {
         var state = HistoryState(sessions = mapOf("s1" to HistorySessionState(hasMore = true, nextBeforeSequence = 100)))
         state = HistoryReducer.reduce(state, HistoryAction.Start("s1", older = true, hasLocalEvents = true, earliestLocalSequence = 100)).state

@@ -96,6 +96,7 @@ data class SharedSessionControlPatch(
     val agentPresetDefault: String? = null,
     val permissionDefaultChanged: Boolean = false,
     val permissionDefault: String? = null,
+    val permissionDefaultOptions: List<GatewayPermissionOption>? = null,
     val defaultModelSelectionChanged: Boolean = false,
     val defaultModelSelection: GatewayModelSelection? = null,
     val control: SharedSessionControlControlPatch? = null
@@ -156,7 +157,10 @@ class SharedSessionControlStore {
     } catch (error: Throwable) { failure("select-model", error) }
 
     fun setPermission(sessionId: String, value: String, isConnected: Boolean): SharedSessionControlResult {
-        if (value !in supportedPermissionPresets) return rejected("unsupported-permission", value)
+        val options = state.sessionPermissions[sessionId]?.options.orEmpty()
+        if (value.isBlank() || (options.isNotEmpty() && options.none { it.value == value })) {
+            return rejected("unsupported-permission", value)
+        }
         return request(SessionControlRequestTarget("permission", false, sessionId = sessionId, value = value), isConnected)
     }
 
@@ -172,7 +176,8 @@ class SharedSessionControlStore {
 
     fun setDefault(target: String, value: String, isConnected: Boolean): SharedSessionControlResult {
         when (target) {
-            "permission" -> if (value !in supportedPermissionPresets) {
+            "permission" -> if (value.isBlank() || (state.permissionDefaultOptions.isNotEmpty() &&
+                state.permissionDefaultOptions.none { it.value == value })) {
                 return rejected("unsupported-default-permission", value)
             }
             "agent-preset" -> if (state.agentPresets.none { it.id == value && it.broken != true }) {
@@ -191,9 +196,14 @@ class SharedSessionControlStore {
             )
         }
 
-    fun defaultsReceived(agentPreset: String?, permission: String?) = response(
-        "defaults", null, SessionControlAction.DefaultsReceived(agentPreset, permission)
-    )
+    fun defaultsReceived(agentPreset: String?, permission: String?, permissionOptionsJson: String? = null) = decodeResponse(
+        "defaults", null
+    ) {
+        SessionControlAction.DefaultsReceived(
+            agentPreset, permission,
+            permissionOptionsJson?.let { wireJson.decodeFromString<List<GatewayPermissionOption>>(it) }.orEmpty()
+        )
+    }
 
     fun defaultModelReceived(selectionJson: String?) = decodeResponse("default-model", null) {
         SessionControlAction.DefaultModelReceived(selectionJson?.let(wireJson::decodeFromString))
@@ -247,7 +257,7 @@ class SharedSessionControlStore {
         val active = state.activeRequestTargets["permission"] ?: return unchanged()
         if (sessionId != null && sessionId != active.sessionId) return unchanged()
         if (active.value != value) return unchanged()
-        if (value !in supportedPermissionPresets) return rejected("invalid-permission-state", value)
+        if (value.isBlank()) return rejected("invalid-permission-state", value)
         return response(
             "permission", sessionId?.let { SessionControlRequestTarget("permission", false, sessionId = it) },
             SessionControlAction.PermissionSelected(sessionId ?: active.sessionId ?: return unchanged(), value)
@@ -309,7 +319,7 @@ class SharedSessionControlStore {
     }
 
     fun mergePermissionProjection(sessionId: String, value: String): SharedSessionControlResult {
-        if (value !in supportedPermissionPresets) return rejected("invalid-permission-state", value)
+        if (value.isBlank()) return rejected("invalid-permission-state", value)
         return reduce("merge-permission-projection", SessionControlAction.PermissionSelected(sessionId, value))
     }
 
@@ -570,9 +580,10 @@ class SharedSessionControlStore {
     private fun decodeValidPermissions(permissionsJson: String): GatewaySessionPermissions {
         val permissions = wireJson.decodeFromString<GatewaySessionPermissions>(permissionsJson)
         val current = permissions.currentValue ?: permissions.preset
-        require(current == null || current in supportedPermissionPresets) {
+        require(current == null || current.isNotBlank()) {
             "invalid-permission-state:$current"
         }
+        require(permissions.options.orEmpty().all { it.value.isNotBlank() }) { "invalid-permission-options" }
         return permissions
     }
 
@@ -680,6 +691,9 @@ class SharedSessionControlStore {
             agentPresetDefault = next.agentPresetDefault.takeIf { agentPresetDefault != next.agentPresetDefault },
             permissionDefaultChanged = permissionDefault != next.permissionDefault,
             permissionDefault = next.permissionDefault.takeIf { permissionDefault != next.permissionDefault },
+            permissionDefaultOptions = next.permissionDefaultOptions.takeIf {
+                permissionDefaultOptions != next.permissionDefaultOptions
+            },
             defaultModelSelectionChanged = defaultModelSelection != next.defaultModelSelection,
             defaultModelSelection = next.defaultModelSelection.takeIf {
                 defaultModelSelection != next.defaultModelSelection
@@ -709,7 +723,4 @@ class SharedSessionControlStore {
     private fun <T> removedKeys(before: Map<String, T>, after: Map<String, T>): Set<String> =
         if (before === after) emptySet() else before.keys - after.keys
 
-    private companion object {
-        val supportedPermissionPresets = setOf("read-only", "workspace-write", "danger-full-access")
-    }
 }

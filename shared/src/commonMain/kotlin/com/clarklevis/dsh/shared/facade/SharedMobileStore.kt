@@ -26,6 +26,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayGoalSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewayModelCatalog
 import com.clarklevis.dsh.shared.protocol.GatewayModelGroup
 import com.clarklevis.dsh.shared.protocol.GatewayModelSelection
+import com.clarklevis.dsh.shared.protocol.GatewayPermissionOption
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAction
 import com.clarklevis.dsh.shared.protocol.GatewaySessionPermissions
 import com.clarklevis.dsh.shared.protocol.GatewaySessionStatsSnapshot
@@ -56,6 +57,7 @@ data class SharedMobileSnapshot(
     val agentPresets: List<GatewayAgentPreset> = emptyList(),
     val agentPresetDefault: String? = null,
     val permissionDefault: String? = null,
+    val permissionDefaultOptions: List<GatewayPermissionOption> = emptyList(),
     val defaultModel: GatewayModelSelection? = null,
     val modelCatalog: GatewayModelCatalog? = null,
     val permissions: GatewaySessionPermissions? = null,
@@ -111,6 +113,7 @@ class SharedMobileStore(
     private var agentPresets = emptyList<GatewayAgentPreset>()
     private var agentPresetDefault: String? = null
     private var permissionDefault: String? = null
+    private var permissionDefaultOptions = emptyList<GatewayPermissionOption>()
     private var defaultModel: GatewayModelSelection? = null
     private var modelCatalog: GatewayModelCatalog? = null
     private var permissions: GatewaySessionPermissions? = null
@@ -266,6 +269,7 @@ class SharedMobileStore(
                 "defaults" -> {
                     agentPresetDefault = frame.agentPresetDefault ?: agentPresetDefault
                     permissionDefault = frame.permissionDefault ?: permissionDefault
+                    permissionDefaultOptions = frame.permissionDefaultOptions.orEmpty()
                 }
                 "set-default" -> if (frame.applied != false) {
                     when (frame.target) {
@@ -461,6 +465,7 @@ class SharedMobileStore(
         agentPresets = emptyList()
         agentPresetDefault = null
         permissionDefault = null
+        permissionDefaultOptions = emptyList()
         defaultModel = null
         modelCatalog = null
         permissions = null
@@ -508,6 +513,7 @@ class SharedMobileStore(
             agentPresets = agentPresets,
             agentPresetDefault = agentPresetDefault,
             permissionDefault = permissionDefault,
+            permissionDefaultOptions = permissionDefaultOptions,
             defaultModel = defaultModel,
             modelCatalog = modelCatalog,
             permissions = permissions,

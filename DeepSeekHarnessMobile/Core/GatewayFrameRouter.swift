@@ -228,7 +228,8 @@ enum GatewayFrameRouter {
         case "defaults":
             return .control(.action(.defaultsReceived(
                 agentPreset: frame.agentPresetDefault,
-                permission: frame.permissionDefault
+                permission: frame.permissionDefault,
+                permissionOptions: frame.permissionDefaultOptions ?? []
             ), finishRequest: "defaults"))
         case "default-model":
             return .control(.action(

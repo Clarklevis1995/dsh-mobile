@@ -164,6 +164,8 @@ class AndroidSharedStateHolder(
     var trajectoryNodes: List<TrajectoryNode> by mutableStateOf(emptyList())
         private set
     private var trajectoryIsActive = false
+    private var trajectoryPublishJob: Job? = null
+    private var trajectoryPublishPending = false
     private var messageDraftState: String by mutableStateOf("")
     private var pendingCommandSubmission: MessageSubmission? = null
     var messageDraft: String
@@ -413,8 +415,16 @@ class AndroidSharedStateHolder(
                                             }
                                         }
                                     }
-                                    if (trajectoryIsActive && (!isStreamingChunk || streamingProjectionFlushed)) {
-                                        publishTrajectory()
+                                    if (trajectoryIsActive &&
+                                        (!isStreamingChunk || streamingProjectionFlushed) &&
+                                        event.frame.kind in TRAJECTORY_FRAME_KINDS &&
+                                        (event.frame.sessionId ?: event.correlatedSessionId).let {
+                                            it == null || it == snapshot.selectedSessionId
+                                        }
+                                    ) {
+                                        requestTrajectoryPublish(
+                                            streaming = isStreamingChunk || event.frame.kind == "assistant-stream"
+                                        )
                                     }
                                 }
                                 is GatewayRuntimeEvent.AttachmentCached -> withContext(Dispatchers.Main.immediate) {
@@ -1010,13 +1020,46 @@ class AndroidSharedStateHolder(
 
     fun setTrajectoryActive(active: Boolean) {
         trajectoryIsActive = active
+        if (!active) {
+            trajectoryPublishJob?.cancel()
+            trajectoryPublishJob = null
+            trajectoryPublishPending = false
+        }
         if (active) graph?.gatewayScope?.launch { publishTrajectory() }
     }
 
-    private suspend fun publishTrajectory() {
-        val nodes = projectionActor.trajectory(snapshot.selectedSessionId)
+    private suspend fun requestTrajectoryPublish(streaming: Boolean) {
         withContext(Dispatchers.Main.immediate) {
-            if (trajectoryIsActive) trajectoryNodes = nodes
+            if (streaming) {
+                trajectoryPublishPending = true
+                scheduleTrajectoryPublish()
+            } else {
+                trajectoryPublishJob?.cancel()
+                trajectoryPublishJob = null
+                trajectoryPublishPending = false
+            }
+        }
+        if (!streaming) publishTrajectory()
+    }
+
+    private fun scheduleTrajectoryPublish() {
+        if (!trajectoryIsActive || trajectoryPublishJob?.isActive == true) return
+        trajectoryPublishPending = false
+        trajectoryPublishJob = graph?.gatewayScope?.launch {
+            delay(TRAJECTORY_STREAM_INTERVAL_MILLISECONDS)
+            publishTrajectory()
+            withContext(Dispatchers.Main.immediate) {
+                trajectoryPublishJob = null
+                if (trajectoryPublishPending) scheduleTrajectoryPublish()
+            }
+        }
+    }
+
+    private suspend fun publishTrajectory() {
+        val sessionId = snapshot.selectedSessionId
+        val nodes = projectionActor.trajectory(sessionId)
+        withContext(Dispatchers.Main.immediate) {
+            if (trajectoryIsActive && snapshot.selectedSessionId == sessionId) trajectoryNodes = nodes
         }
     }
 
@@ -1764,7 +1807,7 @@ class AndroidSharedStateHolder(
         pendingStreamingSnapshot = next
         if (streamingSnapshotPublishJob?.isActive == true) return
         streamingSnapshotPublishJob = holderScope.launch {
-            delay(STREAMING_SNAPSHOT_INTERVAL_MILLISECONDS)
+            delay(if (trajectoryIsActive) TRAJECTORY_STREAM_INTERVAL_MILLISECONDS else STREAMING_SNAPSHOT_INTERVAL_MILLISECONDS)
             pendingStreamingSnapshot?.let(::publishSnapshot)
             pendingStreamingSnapshot = null
             streamingSnapshotPublishJob = null
@@ -2106,6 +2149,11 @@ class AndroidSharedStateHolder(
 
     companion object {
         private const val STREAMING_SNAPSHOT_INTERVAL_MILLISECONDS = 32L
+        private const val TRAJECTORY_STREAM_INTERVAL_MILLISECONDS = 100L
+        private val TRAJECTORY_FRAME_KINDS = setOf(
+            "session-snapshot", "history", "event", "assistant-stream",
+            "session-stream-reset", "subscribed", "hello", "error"
+        )
         private const val HISTORY_PAGE_MESSAGE_LIMIT = 60
         private const val HISTORY_PAGE_BYTE_BUDGET = 4 * 1_024 * 1_024
         private const val HISTORY_VIEW = "conversation"

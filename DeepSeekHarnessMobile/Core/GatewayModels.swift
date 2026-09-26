@@ -226,6 +226,7 @@ struct GatewayFrame: Codable, Sendable {
     var hasDocument: Bool?
     var agentPresetDefault: String?
     var permissionDefault: String?
+    var permissionDefaultOptions: [GatewayPermissionOption]?
     var target: String?
     var value: JSONValue?
     var applied: Bool?
@@ -633,6 +634,7 @@ struct GatewayModelCatalog: Codable, Hashable, Sendable {
 struct GatewayPermissionOption: Codable, Hashable, Sendable, Identifiable {
     var value: String
     var name: String
+    var description: String?
     var id: String { value }
 }
 

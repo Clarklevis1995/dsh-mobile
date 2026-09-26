@@ -1454,7 +1454,7 @@ struct ConversationView: View {
                         store.setPermission(option.value)
                     } label: {
                         Label(
-                            permissionTitle(option.value),
+                            option.name,
                             systemImage: option.value == currentPermission ? "checkmark" : permissionIcon(option.value)
                         )
                     }
@@ -1551,7 +1551,7 @@ struct ConversationView: View {
 
     private var permissionOptions: [GatewayPermissionOption] { store.selectedPermissions?.options ?? [] }
     private var currentPermission: String {
-        store.selectedPermissions?.currentValue ?? store.selectedPermissions?.preset ?? "workspace-write"
+        store.selectedPermissions?.currentValue ?? store.selectedPermissions?.preset ?? store.permissionDefault ?? ""
     }
     private var defaultConfigurationIsLoading: Bool {
         !store.defaultConfigurationLoadingKinds.isDisjoint(with: ["defaults", "agent-presets"])
@@ -1619,7 +1619,9 @@ struct ConversationView: View {
     }
 
     private func permissionTitle(_ value: String) -> String {
-        L10n.permissionName(for: value)
+        permissionOptions.first(where: { $0.value == value })?.name
+            ?? store.permissionDefaultOptions.first(where: { $0.value == value })?.name
+            ?? L10n.permissionName(for: value)
     }
     private func permissionIcon(_ value: String) -> String {
         switch value {

@@ -90,18 +90,27 @@ final class ConversationProjectionDriver {
     }
 
     private let action: () async -> Void
+    private let preferredFramesPerSecond: Float?
     private let target = DisplayLinkTarget()
     private lazy var displayLink: CADisplayLink = {
         let link = CADisplayLink(target: target, selector: #selector(DisplayLinkTarget.tick))
         link.add(to: .main, forMode: .common)
+        if let preferredFramesPerSecond {
+            link.preferredFrameRateRange = CAFrameRateRange(
+                minimum: preferredFramesPerSecond,
+                maximum: preferredFramesPerSecond,
+                preferred: preferredFramesPerSecond
+            )
+        }
         link.isPaused = true
         return link
     }()
     private var isDirty = false
     private var isProjecting = false
 
-    init(action: @escaping () async -> Void) {
+    init(preferredFramesPerSecond: Float? = nil, action: @escaping () async -> Void) {
         self.action = action
+        self.preferredFramesPerSecond = preferredFramesPerSecond
         target.owner = self
         _ = displayLink
     }

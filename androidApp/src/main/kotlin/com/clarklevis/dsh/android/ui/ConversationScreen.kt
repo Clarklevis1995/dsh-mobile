@@ -1671,7 +1671,6 @@ private fun PermissionControl(
     var expanded by remember { mutableStateOf(false) }
     val selected = stateHolder.snapshot.permissions?.currentValue
         ?: stateHolder.snapshot.permissionDefault
-        ?: "workspace-write"
     val options = stateHolder.snapshot.permissions?.options.orEmpty()
     val enabled = stateHolder.snapshot.selectedSessionId != null && options.isNotEmpty()
     Box(modifier) {
@@ -1687,7 +1686,9 @@ private fun PermissionControl(
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
             )
             Text(
-                permissionTitle(selected),
+                options.firstOrNull { it.value == selected }?.name
+                    ?: stateHolder.snapshot.permissionDefaultOptions.firstOrNull { it.value == selected }?.name
+                    ?: permissionTitle(selected),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
@@ -1706,7 +1707,7 @@ private fun PermissionControl(
                 DropdownMenuItem(
                     text = {
                         Text(
-                            permissionTitle(option.value),
+                            option.name,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Medium
                         )

@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import com.clarklevis.dsh.shared.protocol.GatewayPermissionOption
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -127,8 +128,11 @@ internal fun SettingsScreen(
                         }
                         SettingsDivider()
                         PermissionSettingsRow(
-                            value = permissionName(stateHolder.snapshot.permissionDefault),
+                            value = stateHolder.snapshot.permissionDefaultOptions
+                                .firstOrNull { it.value == stateHolder.snapshot.permissionDefault }?.name
+                                ?: permissionName(stateHolder.snapshot.permissionDefault),
                             selectedPermission = stateHolder.snapshot.permissionDefault,
+                            options = stateHolder.snapshot.permissionDefaultOptions,
                             expanded = showPermissionPicker,
                             enabled = isConnected(stateHolder) &&
                                 "set-default" !in stateHolder.defaultConfigurationLoadingKinds,
@@ -181,7 +185,7 @@ internal fun SettingsScreen(
     pendingPermission?.let { value ->
         DshAlertDialog(
             title = "修改全局默认权限？",
-            message = "将新会话的默认权限改为“${permissionName(value)}”。这会更新部署级设置，并同步影响 WebUI。",
+            message = "将新会话的默认权限改为“${stateHolder.snapshot.permissionDefaultOptions.firstOrNull { it.value == value }?.name ?: permissionName(value)}”。这会更新部署级设置，并同步影响 WebUI。",
             confirmLabel = "确认修改",
             onDismissRequest = { pendingPermission = null },
             onConfirm = {
@@ -714,6 +718,7 @@ internal fun LanguageSettingsRow() {
 private fun PermissionSettingsRow(
     value: String,
     selectedPermission: String?,
+    options: List<GatewayPermissionOption>,
     expanded: Boolean,
     enabled: Boolean,
     onExpandedChange: (Boolean) -> Unit,
@@ -728,11 +733,11 @@ private fun PermissionSettingsRow(
         )
         DshSelectionPopup(
             expanded = expanded,
-            options = DEFAULT_PERMISSIONS.map { permission ->
+            options = options.map { permission ->
                 DshSelectionOption(
-                    permission.first,
-                    permission.second,
-                    when (permission.first) {
+                    permission.value,
+                    permission.name,
+                    when (permission.value) {
                         "read-only" -> R.drawable.ic_permission_read
                         "workspace-write" -> R.drawable.ic_menu_check
                         else -> R.drawable.ic_permission_warning
@@ -866,9 +871,3 @@ private fun statusColor(holder: AndroidSharedStateHolder) = when (holder.gateway
     GatewayConnectionState.FAILED -> Color.Red
     else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
 }
-
-private val DEFAULT_PERMISSIONS = listOf(
-    Triple("read-only", "只读", "允许读取工作区，不允许修改文件"),
-    Triple("workspace-write", "工作区写入", "允许在当前工作区内读取和写入"),
-    Triple("danger-full-access", "完全访问", "允许不受沙箱限制地访问宿主环境")
-)

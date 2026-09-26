@@ -85,9 +85,11 @@ internal object TrajectoryUiProjection {
     fun overview(nodes: List<TrajectoryNode>): TrajectoryOverviewSummary {
         val visible = nodes.filter { it.kind != TrajectoryNodeKind.REQUEST }
         val duration = visible.sumOf { (it.endEpochSeconds - it.startEpochSeconds).coerceAtLeast(0.0) }
+        val turns = mutableSetOf<Int>()
+        nodes.forEach { node -> node.records.forEach { record -> record.event.turn?.let(turns::add) } }
         return TrajectoryOverviewSummary(
             durationSeconds = duration,
-            turnCount = nodes.flatMap(TrajectoryNode::records).mapNotNull { it.event.turn }.toSet().size,
+            turnCount = turns.size,
             toolCount = nodes.count {
                 it.kind == TrajectoryNodeKind.TOOL || it.kind == TrajectoryNodeKind.SUBTOOL
             },
@@ -105,12 +107,16 @@ internal object TrajectoryUiProjection {
             }
             "${request.turn}-${request.step}" to node
         }.toMap()
+        var nextTurn: Int? = null
+        val turns = arrayOfNulls<Int>(visible.size)
+        for (index in visible.indices.reversed()) {
+            val directTurn = visible[index].records.firstNotNullOfOrNull { it.event.turn }
+            if (directTurn != null) nextTurn = directTurn
+            turns[index] = nextTurn
+        }
         var previousTurn: Int? = null
         return visible.mapIndexed { index, node ->
-            val directTurn = node.records.firstNotNullOfOrNull { it.event.turn }
-            val turn = directTurn ?: visible.subList(index, visible.size)
-                .asSequence().flatMap { it.records.asSequence() }
-                .mapNotNull { it.event.turn }.firstOrNull()
+            val turn = turns[index]
             val startsTurn = turn != null && turn != previousTurn
             if (turn != null) previousTurn = turn
             val step = node.records.firstNotNullOfOrNull { it.event.step }

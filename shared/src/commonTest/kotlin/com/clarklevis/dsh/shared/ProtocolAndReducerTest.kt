@@ -270,7 +270,7 @@ class ProtocolAndReducerTest {
     }
 
     @Test
-    fun sessionControlReducerFiltersPermissionsAndClearsLoadingTarget() {
+    fun sessionControlReducerKeepsCatalogPermissionsAndClearsLoadingTarget() {
         var state = SessionControlReducer.reduce(
             SessionControlState(),
             SessionControlAction.ModelsRequestTargeted("s1")
@@ -288,7 +288,7 @@ class ProtocolAndReducerTest {
                 )
             )
         )
-        assertEquals(listOf("read-only"), state.sessionPermissions["s1"]?.options?.map { it.value })
+        assertEquals(listOf("read-only", "unsupported"), state.sessionPermissions["s1"]?.options?.map { it.value })
         state = SessionControlReducer.reduce(state, SessionControlAction.RequestFinished("models"))
         assertNull(state.pendingModelsSessionId)
         assertTrue("models" !in state.loadingKinds)

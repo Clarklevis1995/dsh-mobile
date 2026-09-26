@@ -111,6 +111,20 @@ class AssistantStreamStateTest {
     }
 
     @Test
+    fun v3CacheIsReplacedByV4Baseline() {
+        val state = subscribed()
+        state.acceptJson(snapshot())
+        assertEquals(3, state.formatVersion("s"))
+        val update = state.acceptJson("""{"kind":"hello","historyFormatVersion":4,"capabilities":["assistant-stream-v1"]}""")
+        assertEquals(listOf("s"), update.invalidatedSessionIds)
+        assertNull(state.persistentCursor)
+        state.acceptJson(ack)
+        assertTrue(state.acceptJson(snapshot().replace("\"historyFormatVersion\":3", "\"historyFormatVersion\":4")).accepted)
+        assertEquals(4, state.formatVersion("s"))
+        assertEquals(41, state.persistentCursor)
+    }
+
+    @Test
     fun unversionedHistoryInvalidatesCurrentCacheAndRequestsNewBaseline() {
         val state = subscribed()
         state.acceptJson(snapshot())
@@ -189,6 +203,26 @@ class AssistantStreamStateTest {
         val projector = ConversationProjector().apply { rebuild(records) }
         assertEquals("Attempt", projector.items.last().text)
         assertTrue(projector.items.last().isError)
+    }
+
+    @Test
+    fun v4ToolResultKeepsTextAndFailure() {
+        val frame = GatewayWireDecoder.decode("""{"kind":"history","historyFormatVersion":4,"events":[{"type":"tool/result","seq":1,"time":1,"data":{"turn":1,"step":0,"message":{"role":"tool","toolCallId":"call-1","source":{"kind":"tool","callId":"call-1"},"isError":true,"content":[{"type":"text","text":"permission denied"}]},"error":{"code":"permission-denied","reason":"rejected"}}}]}""")
+        val result = frame.events.orEmpty().single().normalized("s").event
+        assertEquals("call-1", result.callId)
+        assertEquals("permission denied", result.preview)
+        assertTrue(result.isError == true)
+        assertEquals("rejected", result.raw?.get("error")?.get("reason")?.stringValue)
+    }
+
+    @Test
+    fun defaultPermissionCatalogReachesMobileSnapshot() {
+        val snapshot = SharedMobileStore().acceptFrame(
+            """{"kind":"defaults","agentPresetDefault":"standard","permissionDefault":"ask","permissionDefaultOptions":[{"value":"ask","name":"Ask"},{"value":"code","name":"Code","description":"Code access"}]}"""
+        )
+        assertEquals("ask", snapshot.permissionDefault)
+        assertEquals(listOf("ask", "code"), snapshot.permissionDefaultOptions.map { it.value })
+        assertEquals("Code access", snapshot.permissionDefaultOptions.last().description)
     }
 
     private fun decode(json: String) = wireJson.decodeFromString<List<AssistantChunk>>(json)

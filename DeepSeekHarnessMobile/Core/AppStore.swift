@@ -290,6 +290,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
+private struct TrajectoryHistoryVersion: Equatable {
+    let revision: Int
+    let count: Int
+    let lastSequence: Int?
+}
+
 @MainActor
 final class AppStore: ObservableObject {
     static let ungroupedWorkspaceID = "__ungrouped__"
@@ -347,6 +353,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var agentPresetsHasDocument = false
     @Published private(set) var agentPresetDefault: String?
     @Published private(set) var permissionDefault: String?
+    @Published private(set) var permissionDefaultOptions: [GatewayPermissionOption] = []
     @Published private(set) var defaultModelSelection: GatewayModelSelection?
     @Published private(set) var defaultConfigurationLoadingKinds: Set<String> = []
     @Published private(set) var pendingQuestionRequests: [GatewayPendingQuestionRequest] = []
@@ -483,6 +490,9 @@ final class AppStore: ObservableObject {
     private var activeTrajectorySessionIDs: Set<String> = []
     private var trajectoryProjectionDrivers: [String: ConversationProjectionDriver] = [:]
     private var pendingTrajectoryEvents: [String: [SessionEvent]] = [:]
+    private var trajectoryBatchSessionID: String?
+    private var trajectoryHistoryRevisions: [String: Int] = [:]
+    private var trajectoryProjectedVersions: [String: TrajectoryHistoryVersion] = [:]
     /// Invalidates an in-flight cold projection when a completed history
     /// baseline is atomically installed for the same session.
     private var conversationProjectionEpochs: [String: Int] = [:]
@@ -612,8 +622,9 @@ final class AppStore: ObservableObject {
             }
         }
         kmpTrajectoryStore.onChange = { [weak self] change in
+            let publishedByBatch = self?.trajectoryBatchSessionID == change.sessionID
             self?.enqueueKMPEventDelivery { [weak self] in
-                self?.publishTrajectory(sessionID: change.sessionID)
+                if !publishedByBatch { self?.publishTrajectory(sessionID: change.sessionID) }
             }
         }
         kmpTrajectoryStore.onError = { [weak self] error in
@@ -722,6 +733,15 @@ final class AppStore: ObservableObject {
         trajectoryTimeline(for: sessionID).publish(kmpTrajectoryStore.nodes(for: sessionID) + transient)
     }
 
+    private func trajectoryHistoryVersion(for sessionID: String) -> TrajectoryHistoryVersion {
+        let records = events[sessionID, default: []]
+        return TrajectoryHistoryVersion(
+            revision: trajectoryHistoryRevisions[sessionID, default: 0],
+            count: records.count,
+            lastSequence: records.last?.seq
+        )
+    }
+
     func trajectoryTimeline(for sessionId: String?) -> TrajectoryTimeline {
         let timelineID = sessionId ?? "__no-session__"
         if let timeline = trajectoryTimelines[timelineID] { return timeline }
@@ -776,13 +796,19 @@ final class AppStore: ObservableObject {
         if isActive {
             guard activeTrajectorySessionIDs.insert(sessionID).inserted else { return }
             pendingTrajectoryEvents[sessionID] = nil
-            do {
-                try kmpTrajectoryStore.replace(
-                    sessionID: sessionID,
-                    events: events[sessionID, default: []]
-                )
-            } catch {
-                lastError = error.localizedDescription
+            let version = trajectoryHistoryVersion(for: sessionID)
+            if trajectoryProjectedVersions[sessionID] == version {
+                publishTrajectory(sessionID: sessionID)
+            } else {
+                do {
+                    try kmpTrajectoryStore.replace(
+                        sessionID: sessionID,
+                        events: events[sessionID, default: []]
+                    )
+                    trajectoryProjectedVersions[sessionID] = version
+                } catch {
+                    lastError = error.localizedDescription
+                }
             }
         } else {
             activeTrajectorySessionIDs.remove(sessionID)
@@ -1588,6 +1614,7 @@ final class AppStore: ObservableObject {
                     try kmpHistoryStore.clear(sessionID: id)
                     try kmpConversationStore.clear(sessionID: id)
                     try kmpTrajectoryStore.clear(sessionID: id)
+                    trajectoryProjectedVersions[id] = nil
                     taskProjections[id] = nil
                     goalProjections[id] = nil
                 }
@@ -2615,7 +2642,7 @@ final class AppStore: ObservableObject {
         if let existing = trajectoryProjectionDrivers[sessionId] {
             driver = existing
         } else {
-            driver = ConversationProjectionDriver { [weak self] in
+            driver = ConversationProjectionDriver(preferredFramesPerSecond: 10) { [weak self] in
                 self?.flushTrajectoryProjection(for: sessionId)
             }
             trajectoryProjectionDrivers[sessionId] = driver
@@ -2630,8 +2657,11 @@ final class AppStore: ObservableObject {
         defer { publishTrajectory(sessionID: sessionId) }
         let records = pendingTrajectoryEvents.removeValue(forKey: sessionId) ?? []
         guard !records.isEmpty else { return }
+        trajectoryBatchSessionID = sessionId
+        defer { trajectoryBatchSessionID = nil }
         do {
             try kmpTrajectoryStore.receive(records)
+            trajectoryProjectedVersions[sessionId] = trajectoryHistoryVersion(for: sessionId)
         } catch {
             lastError = error.localizedDescription
         }
@@ -3053,6 +3083,8 @@ final class AppStore: ObservableObject {
                     try kmpHistoryStore.clear(sessionID: sessionID)
                     try kmpConversationStore.clear(sessionID: sessionID)
                     try kmpTrajectoryStore.clear(sessionID: sessionID)
+                    trajectoryProjectedVersions[sessionID] = nil
+                    trajectoryHistoryRevisions[sessionID] = nil
                     activeTrajectorySessionIDs.remove(sessionID)
                     pendingTrajectoryEvents[sessionID] = nil
                     trajectoryProjectionDrivers[sessionID]?.stop()
@@ -3146,6 +3178,7 @@ final class AppStore: ObservableObject {
         if let patchKind = change.eventPatchKind {
             historyLoadErrors[change.sessionID] = nil
             events[change.sessionID] = change.events
+            trajectoryHistoryRevisions[change.sessionID, default: 0] &+= 1
             // Only the baseline path can surface events the client has never
             // scanned (a new image attachment, a new tool row). A streaming chunk
             // only extends a row that already exists, so rescanning the whole
@@ -3182,6 +3215,7 @@ final class AppStore: ObservableObject {
                         pendingTrajectoryEvents[change.sessionID] = nil
                         trajectoryProjectionDrivers[change.sessionID]?.stop()
                         try kmpTrajectoryStore.replace(sessionID: change.sessionID, events: change.events)
+                        trajectoryProjectedVersions[change.sessionID] = trajectoryHistoryVersion(for: change.sessionID)
                     }
                 }
             } catch {
@@ -3319,6 +3353,9 @@ final class AppStore: ObservableObject {
         }
         if patch == nil || patch?.permissionDefaultChanged == true {
             permissionDefault = state.permissionDefault
+        }
+        if patch == nil || patch?.permissionDefaultOptions != nil {
+            permissionDefaultOptions = state.permissionDefaultOptions
         }
         if patch == nil || patch?.defaultModelSelectionChanged == true {
             defaultModelSelection = state.defaultModelSelection

@@ -2399,6 +2399,7 @@ struct KMPSessionControlSnapshot: Codable, Equatable {
     var agentPresetsHasDocument: Bool
     var agentPresetDefault: String?
     var permissionDefault: String?
+    var permissionDefaultOptions: [GatewayPermissionOption]
     var defaultModelSelection: GatewayModelSelection?
     var loadingKinds: Set<String>
     var defaultConfigurationLoadingKinds: Set<String>
@@ -2425,6 +2426,7 @@ struct KMPSessionControlSnapshot: Codable, Equatable {
         agentPresetsHasDocument: false,
         agentPresetDefault: nil,
         permissionDefault: nil,
+        permissionDefaultOptions: [],
         defaultModelSelection: nil,
         loadingKinds: [],
         defaultConfigurationLoadingKinds: [],
@@ -2554,6 +2556,7 @@ struct KMPSessionControlPatch: Codable, Equatable {
     var agentPresetDefault: String?
     var permissionDefaultChanged: Bool
     var permissionDefault: String?
+    var permissionDefaultOptions: [GatewayPermissionOption]?
     var defaultModelSelectionChanged: Bool
     var defaultModelSelection: GatewayModelSelection?
     var control: KMPSessionControlControlPatch?
@@ -2578,6 +2581,7 @@ struct KMPSessionControlPatch: Codable, Equatable {
         agentPresetDefault: nil,
         permissionDefaultChanged: false,
         permissionDefault: nil,
+        permissionDefaultOptions: nil,
         defaultModelSelectionChanged: false,
         defaultModelSelection: nil,
         control: nil
@@ -2720,7 +2724,7 @@ protocol KMPSessionControlStoreBridging: AnyObject {
     func clearSessionData(sessionId: String) -> SharedSessionControlResult
     func clearSessionsData(sessionIdsJson: String) -> SharedSessionControlResult
     func agentPresetsReceived(presetsJson: String, authorable: Bool, hasDocument: Bool) -> SharedSessionControlResult
-    func defaultsReceived(agentPreset: String?, permission: String?) -> SharedSessionControlResult
+    func defaultsReceived(agentPreset: String?, permission: String?, permissionOptionsJson: String?) -> SharedSessionControlResult
     func defaultModelReceived(selectionJson: String?) -> SharedSessionControlResult
     func globalDefaultApplied(target: String, value: String) -> SharedSessionControlResult
     func modelsReceived(
@@ -3021,8 +3025,12 @@ final class KMPSessionControlStoreAdapter {
                 authorable: authorable,
                 hasDocument: hasDocument
             )
-        case .defaultsReceived(let agentPreset, let permission):
-            return store.defaultsReceived(agentPreset: agentPreset, permission: permission)
+        case .defaultsReceived(let agentPreset, let permission, let permissionOptions):
+            return store.defaultsReceived(
+                agentPreset: agentPreset,
+                permission: permission,
+                permissionOptionsJson: try encode(permissionOptions)
+            )
         case .defaultModelReceived(let selection):
             return store.defaultModelReceived(selectionJson: try selection.map(encode))
         case .globalDefaultApplied(let target, let value):
@@ -3370,6 +3378,13 @@ final class KMPSessionControlStoreAdapter {
             assign: { next.permissionDefault = $0 },
             changed: &changed
         )
+        if let options = patch.permissionDefaultOptions {
+            guard old.permissionDefaultOptions != options else {
+                throw KMPSessionControlStoreError.invalidSnapshot("permissionDefaultOptions patch 没有变化")
+            }
+            next.permissionDefaultOptions = options
+            changed = true
+        }
         try applyNullable(
             changedFlag: patch.defaultModelSelectionChanged,
             value: patch.defaultModelSelection,
@@ -3927,7 +3942,7 @@ final class KMPSessionControlStoreAdapter {
             "agentPresetsChanged", "agentPresets", "agentPresetsAuthorable",
             "agentPresetsHasDocument", "agentPresetDefaultChanged", "agentPresetDefault",
             "permissionDefaultChanged", "permissionDefault", "defaultModelSelectionChanged",
-            "defaultModelSelection", "control"
+            "permissionDefaultOptions", "defaultModelSelection", "control"
         ]
         let strictPatch = try allow(patch, keys: topKeys, path: "$")
         try validateObjectMap(strictPatch["modelCatalogsUpsert"], path: "$.modelCatalogsUpsert", validator: validateCatalog)

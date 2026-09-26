@@ -225,7 +225,7 @@ class SharedSessionControlStoreTest {
     }
 
     @Test
-    fun mergesControlResponsesAndFiltersUnsupportedPermissions() {
+    fun mergesControlResponsesAndPreservesDynamicPermissions() {
         val store = SharedSessionControlStore()
         store.mergeContextProjection(
             sessionId = "session-1",
@@ -253,15 +253,24 @@ class SharedSessionControlStoreTest {
             """{"options":[{"value":"read-only","name":"Read"},{"value":"future","name":"Future"}],"currentValue":"read-only"}"""
         )
         val permissions = store.currentState().sessionPermissions["session-1"]
-        assertEquals(listOf("read-only"), permissions?.options?.map { it.value })
+        assertEquals(listOf("read-only", "future"), permissions?.options?.map { it.value })
+        assertEquals("permission", store.setPermission("session-1", "future", true).effects().single().kind)
+        assertEquals("unsupported-permission", store.setPermission("session-1", "missing", true).errorCode)
 
-        val rejected = store.mergePermissionProjection("session-1", "future")
-        assertEquals("invalid-permission-state", rejected.errorCode)
-        assertNull(rejected.snapshotJson)
+        assertTrue(store.mergePermissionProjection("session-1", "future").isSuccess)
+        assertEquals("future", store.currentState().sessionPermissions["session-1"]?.currentValue)
+        store.mergePermissionsProjection("session-1", """{"currentValue":"future"}""")
+        assertEquals(listOf("read-only", "future"), store.currentState().sessionPermissions["session-1"]?.options?.map { it.value })
 
-        val invalidProjection = store.mergePermissionsProjection(
+        val updatedProjection = store.mergePermissionsProjection(
             "session-1",
             """{"options":[],"currentValue":"future"}"""
+        )
+        assertTrue(updatedProjection.isSuccess)
+        assertEquals(emptyList(), store.currentState().sessionPermissions["session-1"]?.options)
+        val invalidProjection = store.mergePermissionsProjection(
+            "session-1",
+            """{"currentValue":""}"""
         )
         assertEquals("session-control-merge-permissions-projection-failed", invalidProjection.errorCode)
         assertNull(invalidProjection.snapshotJson)
@@ -293,7 +302,7 @@ class SharedSessionControlStoreTest {
             hasDocument = true
         )
         store.requestDefaults(isConnected = true)
-        store.defaultsReceived("standard", "workspace-write")
+        store.defaultsReceived("standard", "workspace-write", """[{"value":"workspace-write","name":"Workspace Write"},{"value":"ask","name":"Ask"}]""")
         var state = store.currentState()
         assertEquals("standard", state.agentPresetDefault)
         assertEquals("workspace-write", state.permissionDefault)
@@ -302,10 +311,8 @@ class SharedSessionControlStoreTest {
         val setDefault = store.setDefault("agent-preset", "standard", isConnected = true)
         assertEquals("set-default", setDefault.effects().single().kind)
         assertEquals("invalid-agent-preset", store.setDefault("agent-preset", "broken", true).errorCode)
-        assertEquals(
-            "unsupported-default-permission",
-            store.setDefault("permission", "ask", isConnected = true).errorCode
-        )
+        assertEquals(listOf("workspace-write", "ask"), state.permissionDefaultOptions.map { it.value })
+        assertEquals("unsupported-default-permission", store.setDefault("permission", "missing", true).errorCode)
 
         store.requestSessionStats("session-1", true)
         store.statsReceived(

@@ -49,6 +49,9 @@ internal class AndroidGatewayProjection(
     var snapshotWait: Pair<String, Long>? = null
         private set
     private val historyEvents = mutableMapOf<String, List<SessionEvent>>()
+    private var trajectoryHistorySessionId: String? = null
+    private var trajectoryHistoryEvents: List<SessionEvent>? = null
+    private var trajectoryHistoryNodes: List<TrajectoryNode> = emptyList()
     private val historyLastSequences = mutableMapOf<String, Int>()
     private val historyErrors = mutableMapOf<String, String>()
     private val historyHasMore = mutableMapOf<String, Boolean>()
@@ -266,6 +269,9 @@ internal class AndroidGatewayProjection(
             conversationStore.clearSession(it)
         }
         historyEvents.clear()
+        trajectoryHistorySessionId = null
+        trajectoryHistoryEvents = null
+        trajectoryHistoryNodes = emptyList()
         historyLastSequences.clear()
         historyErrors.clear()
         historyHasMore.clear()
@@ -321,10 +327,17 @@ internal class AndroidGatewayProjection(
         snapshotWait = null
     }
 
-    fun trajectory(sessionId: String?): List<TrajectoryNode> =
-        sessionId?.let {
-            TrajectoryProjection.make(historyEvents[it].orEmpty()) + assistantStream.transientTrajectoryNodes(it)
-        }.orEmpty()
+    fun trajectory(sessionId: String?): List<TrajectoryNode> {
+        if (sessionId == null) return emptyList()
+        val events = historyEvents[sessionId].orEmpty()
+        if (trajectoryHistorySessionId != sessionId || trajectoryHistoryEvents !== events) {
+            trajectoryHistoryNodes = TrajectoryProjection.make(events)
+            trajectoryHistoryEvents = events
+            trajectoryHistorySessionId = sessionId
+        }
+        val transient = assistantStream.transientTrajectoryNodes(sessionId)
+        return if (transient.isEmpty()) trajectoryHistoryNodes else trajectoryHistoryNodes + transient
+    }
 
     internal fun acceptHistoryMviEventForTest(event: SharedMviEvent) = acceptHistoryMviEvent(event)
 

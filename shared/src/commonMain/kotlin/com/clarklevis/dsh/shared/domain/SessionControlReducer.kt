@@ -7,6 +7,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayContextSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewayModelCatalog
 import com.clarklevis.dsh.shared.protocol.GatewayModelGroup
 import com.clarklevis.dsh.shared.protocol.GatewayModelSelection
+import com.clarklevis.dsh.shared.protocol.GatewayPermissionOption
 import com.clarklevis.dsh.shared.protocol.GatewaySessionPermissions
 import com.clarklevis.dsh.shared.protocol.GatewaySessionStats
 import com.clarklevis.dsh.shared.protocol.GatewaySessionStatsSnapshot
@@ -39,6 +40,7 @@ data class SessionControlState(
     val agentPresetsHasDocument: Boolean = false,
     val agentPresetDefault: String? = null,
     val permissionDefault: String? = null,
+    val permissionDefaultOptions: List<GatewayPermissionOption> = emptyList(),
     val defaultModelSelection: GatewayModelSelection? = null,
     val loadingKinds: Set<String> = emptySet(),
     val defaultConfigurationLoadingKinds: Set<String> = emptySet(),
@@ -70,7 +72,10 @@ data class SessionControlState(
 
 sealed interface SessionControlAction {
     data class AgentPresetsReceived(val presets: List<GatewayAgentPreset>, val authorable: Boolean, val hasDocument: Boolean) : SessionControlAction
-    data class DefaultsReceived(val agentPreset: String?, val permission: String?) : SessionControlAction
+    data class DefaultsReceived(
+        val agentPreset: String?, val permission: String?,
+        val permissionOptions: List<GatewayPermissionOption> = emptyList()
+    ) : SessionControlAction
     data class DefaultModelReceived(val selection: GatewayModelSelection?) : SessionControlAction
     data class GlobalDefaultApplied(val target: String, val value: String) : SessionControlAction
     data class ModelsReceived(
@@ -111,8 +116,6 @@ sealed interface SessionControlAction {
 }
 
 object SessionControlReducer {
-    private val supportedPermissionPresets = setOf("read-only", "workspace-write", "danger-full-access")
-
     fun reduce(state: SessionControlState, action: SessionControlAction): SessionControlState = when (action) {
         is SessionControlAction.AgentPresetsReceived -> state.copy(
             agentPresets = action.presets,
@@ -120,7 +123,11 @@ object SessionControlReducer {
             agentPresetsHasDocument = action.hasDocument,
             agentPresetDefault = state.agentPresetDefault ?: action.presets.firstOrNull { it.isDefault }?.id
         )
-        is SessionControlAction.DefaultsReceived -> state.copy(agentPresetDefault = action.agentPreset, permissionDefault = action.permission)
+        is SessionControlAction.DefaultsReceived -> state.copy(
+            agentPresetDefault = action.agentPreset,
+            permissionDefault = action.permission,
+            permissionDefaultOptions = action.permissionOptions
+        )
         is SessionControlAction.DefaultModelReceived -> state.copy(defaultModelSelection = action.selection)
         is SessionControlAction.GlobalDefaultApplied -> when (action.target) {
             "agent-preset" -> state.copy(agentPresetDefault = action.value)
@@ -142,7 +149,7 @@ object SessionControlReducer {
         is SessionControlAction.PermissionsReceived -> state.copy(
             sessionPermissions = state.sessionPermissions + (
                 action.sessionId to action.permissions.copy(
-                    options = action.permissions.options.orEmpty().filter { it.value in supportedPermissionPresets }
+                    options = action.permissions.options ?: state.sessionPermissions[action.sessionId]?.options
                 )
             )
         )

@@ -116,6 +116,7 @@ data class GatewayFrame(
     val hasDocument: Boolean? = null,
     val agentPresetDefault: String? = null,
     val permissionDefault: String? = null,
+    val permissionDefaultOptions: List<GatewayPermissionOption>? = null,
     val target: String? = null,
     val value: JsonValue? = null,
     val applied: Boolean? = null,
@@ -399,7 +400,7 @@ data class GatewayHostSnapshot(
 @Serializable data class GatewayModelItem(val id: String, val name: String, val reasoning: GatewayModelReasoning? = null)
 @Serializable data class GatewayModelGroup(val id: String, val name: String, val models: List<GatewayModelItem>)
 @Serializable data class GatewayModelCatalog(val current: GatewayModelSelection?, val routable: Boolean, val groups: List<GatewayModelGroup>)
-@Serializable data class GatewayPermissionOption(val value: String, val name: String)
+@Serializable data class GatewayPermissionOption(val value: String, val name: String, val description: String? = null)
 
 @Serializable
 data class GatewayAgentPreset(
@@ -591,9 +592,11 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
                 type,
                 turn,
                 step,
-                callId = data["message"]?.get("source")?.get("callId")?.stringValue,
+                callId = data["message"]?.get("toolCallId")?.stringValue
+                    ?: data["message"]?.get("source")?.get("callId")?.stringValue,
                 isError = (data["error"] != null && data["error"] != JsonValue.NullValue &&
                     data["error"] != JsonValue.BooleanValue(false)) ||
+                    data["message"]?.get("isError")?.booleanValue == true ||
                     data["message"]?.get("content")?.arrayValue.orEmpty().any {
                         it["type"]?.stringValue == "tool-result" && it["isError"]?.booleanValue == true
                     },
@@ -654,7 +657,7 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
     }
 
     private fun toolResultText(message: JsonValue?): String = message?.get("content")?.arrayValue.orEmpty()
-        .flatMap { it["content"]?.arrayValue.orEmpty() }
+        .flatMap { block -> block["content"]?.arrayValue ?: listOf(block) }
         .filter { it["type"]?.stringValue == "text" }
         .mapNotNull { it["text"]?.stringValue }
         .joinToString("")

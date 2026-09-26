@@ -3,10 +3,28 @@ package com.clarklevis.dsh.android
 import com.clarklevis.dsh.shared.projection.TrajectoryNodeKind
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidTrajectoryRealtimeProjectionTest {
+    @Test
+    fun unchangedHistoryReusesProjectedNodesAndNewHistoryInvalidatesThem() {
+        val projection = AndroidGatewayProjection()
+        projection.selectSession("session-a")
+        projection.accept(frame(1, "assistant/message", "第一条", null))
+
+        val first = projection.trajectory("session-a").single { it.kind == TrajectoryNodeKind.ASSISTANT }
+        val repeated = projection.trajectory("session-a").single { it.kind == TrajectoryNodeKind.ASSISTANT }
+        assertSame(first, repeated)
+
+        projection.accept(frame(2, "assistant/message", "第二条", null))
+        val updated = projection.trajectory("session-a").first { it.id == first.id }
+        assertNotSame(first, updated)
+        projection.close()
+    }
+
     @Test
     fun streamingFramesContinuouslyUpdateTrajectoryBeforeFinalMessage() {
         val projection = AndroidGatewayProjection()
