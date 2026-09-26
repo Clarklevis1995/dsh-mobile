@@ -249,11 +249,14 @@ adb reverse tcp:3080 tcp:3080
 | --- | --- |
 | iOS Simulator | `ws://127.0.0.1:3080/ws/mobile` |
 | Android Emulator + `adb reverse` | `ws://127.0.0.1:3080/ws/mobile` |
-| 同一局域网内的真机 | `ws://<HOST-LAN-IP>:3080/ws/mobile` |
+| 同一局域网内的真机 | `ws://<HOST-LAN-IP>:3081/ws/mobile` |
 | 公网部署 | `wss://<your-domain>/ws/mobile` |
 
 > [!IMPORTANT]
 > 真机不能使用 `127.0.0.1` 访问电脑。表中的 `ws://` 仅用于受信任的本地开发环境；公网或不可信网络必须使用 `wss://` 并正确配置 TLS 与设备鉴权。一次性配对 Token 不应写入日志、Issue 或聊天记录。
+
+> [!NOTE]
+> 局域网真机走的是 `dsh-plugin-mobile-gateway` 独立监听的 `3081` 端口，该端口只提供经过鉴权的 `/ws/mobile`，其余路径返回 404。`3080` 是 DSH WebUI 自身的端口且仅监听回环，真机无法通过它连接。
 
 ## 构建与测试
 
