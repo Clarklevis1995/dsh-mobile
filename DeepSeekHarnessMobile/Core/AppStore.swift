@@ -2311,11 +2311,11 @@ final class AppStore: ObservableObject {
                     requestID: request.rpcId,
                     sessionID: request.sessionId,
                     sessionTitle: title(for: request.sessionId),
-                    detail: request.reason ?? request.toolName
+                    detail: request.localizedReason ?? request.toolName
                 )
                 notice(
                     request.replay ? String(localized: "待审批操作已恢复") : String(localized: "Agent 正在等待审批"),
-                    request.reason ?? request.toolName,
+                    request.localizedReason ?? request.toolName,
                     sessionId: request.sessionId
                 )
             }

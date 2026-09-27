@@ -12,7 +12,7 @@ object GatewayProtocolFixtures {
         """{"kind":"question-requested","rpcId":"rpc-1","sessionId":"s1","replay":true,"questions":[{"id":"direction","header":"研究方向","question":"你想研究哪个方向？","detail":"请选择最感兴趣的方向","options":[{"label":"核心架构 (推荐)","description":"了解插件分层"},{"label":"移动端"}],"multiSelect":true},{"id":"notes","question":"还有什么要求？","multiSelect":false}]}"""
 
     const val REPLAYED_APPROVAL_REQUEST =
-        """{"kind":"approval-requested","rpcId":"rpc-approval-1","sessionId":"s1","approvalId":"approval-1","toolName":"Bash","callId":"call-1","reason":"需要读取系统版本","replay":true}"""
+        """{"kind":"approval-requested","rpcId":"rpc-approval-1","sessionId":"s1","approvalId":"approval-1","toolName":"Bash","callId":"call-1","reason":"需要读取系统版本","displayReason":{"en":"Allow reading system version?","zh-CN":"允许读取系统版本？"},"replay":true}"""
 
     const val IMAGE_ATTACHMENT =
         """{"kind":"attachment","sessionId":"s1","attachment":{"attachmentId":"att-1","mediaType":"image/png","bytes":8,"width":1,"height":1},"data":"iVBORw0K"}"""

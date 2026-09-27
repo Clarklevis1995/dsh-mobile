@@ -176,9 +176,7 @@ struct ApprovalRequestView: View {
     }
 
     private var requestReason: String {
-        request.reason?.isEmpty == false
-            ? request.reason!
-            : String(localized: "\(request.toolName) 请求执行需要审批的操作")
+        request.localizedReason ?? String(localized: "\(request.toolName) 请求执行需要审批的操作")
     }
 }
 

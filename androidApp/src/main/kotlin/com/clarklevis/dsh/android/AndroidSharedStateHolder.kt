@@ -653,7 +653,7 @@ class AndroidSharedStateHolder(
                     projectionActor.acceptFrameImmediate(payload, frame, frame.sessionId)
                     handleWorkspaceFrame(frame)
                 }
-                .onFailure { platformError = "decode-failed" }
+                .onFailure { error -> platformError = GatewayWireDecoder.failureSummary(payload, error) }
             return
         }
         appGraph.gatewayScope.launch {
@@ -663,8 +663,10 @@ class AndroidSharedStateHolder(
                         pruneAttachmentStateForSession()
                     }
                 }
-                .onFailure {
-                    withContext(Dispatchers.Main.immediate) { platformError = "decode-failed" }
+                .onFailure { error ->
+                    withContext(Dispatchers.Main.immediate) {
+                        platformError = GatewayWireDecoder.failureSummary(payload, error)
+                    }
                 }
         }
     }
@@ -1669,7 +1671,7 @@ class AndroidSharedStateHolder(
                     requestId = request.rpcId,
                     sessionId = sessionId,
                     sessionTitle = sessionTitle,
-                    detail = request.reason ?: request.toolName
+                    detail = request.localizedReason(Locale.getDefault().toLanguageTag()) ?: request.toolName
                 )
             }
             frame.kind == "event" && frame.event?.type == "turn/end" -> {

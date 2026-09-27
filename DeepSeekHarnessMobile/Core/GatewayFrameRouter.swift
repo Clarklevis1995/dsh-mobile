@@ -355,6 +355,7 @@ enum GatewayFrameRouter {
                 toolName: toolName,
                 callId: frame.callId,
                 reason: frame.reason,
+                displayReason: frame.displayReason,
                 replay: frame.replay == true
             )))
         case "approval-response":
@@ -375,6 +376,12 @@ enum GatewayFrameRouter {
                 sessionID: frame.sessionId,
                 outcome: frame.outcome
             ))
+        case "schedule-catalog", "schedule-list", "schedule-history",
+             "schedule-update", "schedule-delete", "schedule-changed":
+            // The wire model preserves these frames for the schedule client.
+            // Until a management screen consumes them, they are recognized
+            // protocol frames and must not surface as unknown-response alerts.
+            return .ignored
         case "error":
             return .failure(GatewayFailurePayload(
                 requestType: frame.requestType,

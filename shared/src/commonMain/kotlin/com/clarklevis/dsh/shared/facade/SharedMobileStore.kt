@@ -406,6 +406,7 @@ class SharedMobileStore(
                                 toolName = toolName,
                                 callId = frame.callId,
                                 reason = frame.reason,
+                                displayReason = frame.displayReason,
                                 replay = frame.replay == true
                             ))
                         )

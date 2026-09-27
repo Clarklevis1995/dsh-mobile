@@ -526,8 +526,9 @@ class GatewayRuntime(
                     } ?: frameDecoder(event.value.text)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Throwable) {
-                    serialized { rejectLocked("decode", ERROR_DECODE_FAILED) }
+                } catch (error: Throwable) {
+                    val detail = GatewayWireDecoder.failureSummary(event.value.text, error)
+                    serialized { rejectLocked("decode", detail) }
                     return
                 }
                 val delivery = serialized { handleIncomingFrameLocked(event.value, frame) } ?: return
@@ -1181,7 +1182,6 @@ class GatewayRuntime(
         private const val ERROR_NOT_CONNECTED = "not-connected"
         private const val ERROR_SEND_FAILED = "send-failed"
         private const val ERROR_OPEN_FAILED = "open-failed"
-        private const val ERROR_DECODE_FAILED = "decode-failed"
         private const val ERROR_STALE_FRAME = "stale-frame"
         private const val ERROR_NO_ACTIVE_REQUEST = "no-active-request"
         private const val ERROR_SESSION_MISMATCH = "session-mismatch"

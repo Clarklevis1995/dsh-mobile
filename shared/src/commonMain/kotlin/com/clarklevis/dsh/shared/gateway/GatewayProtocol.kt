@@ -4,6 +4,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayPairingPayload
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayGoalRef
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
+import com.clarklevis.dsh.shared.protocol.JsonValue
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonArray
@@ -125,6 +126,49 @@ object GatewayRequests {
     ) { put("sessionId", sessionId) }
 
     fun tasks(sessionId: String): GatewayRequest = sessionControl("tasks", sessionId)
+
+    fun scheduleCatalog(): GatewayRequest = simple("schedule-catalog")
+
+    fun scheduleList(sessionId: String): GatewayRequest = sessionControl("schedule-list", sessionId)
+
+    fun scheduleHistory(sessionId: String, id: String, limit: Int, before: String? = null): GatewayRequest = request(
+        "schedule-history", "schedule-history", targetSessionId = sessionId
+    ) {
+        put("sessionId", sessionId)
+        put("id", id)
+        put("limit", limit)
+        before?.let { put("before", it) }
+    }
+
+    fun scheduleUpdate(
+        sessionId: String,
+        id: String,
+        expected: JsonValue,
+        title: String? = null,
+        prompt: String? = null,
+        change: JsonValue? = null,
+        requestId: String? = null
+    ): GatewayRequest = request(
+        "schedule-update", "schedule-update", targetSessionId = sessionId,
+        correlationId = requestId, lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("sessionId", sessionId)
+        put("id", id)
+        put("expected", expected.toJsonElement())
+        title?.let { put("title", it) }
+        prompt?.let { put("prompt", it) }
+        change?.let { put("change", it.toJsonElement()) }
+        requestId?.let { put("requestId", it) }
+    }
+
+    fun scheduleDelete(sessionId: String, id: String, requestId: String? = null): GatewayRequest = request(
+        "schedule-delete", "schedule-delete", targetSessionId = sessionId,
+        correlationId = requestId, lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("sessionId", sessionId)
+        put("id", id)
+        requestId?.let { put("requestId", it) }
+    }
 
     fun goal(sessionId: String): GatewayRequest = sessionControl("goal", sessionId)
 

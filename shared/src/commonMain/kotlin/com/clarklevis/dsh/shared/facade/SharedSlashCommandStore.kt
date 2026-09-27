@@ -351,7 +351,14 @@ class SharedSlashCommandStore {
         if (frame.sessionId != state.sessionId || frame.command?.stringValue != command.name) {
             return SharedSlashCommandTransition(state)
         }
-        val options = frame.options.orEmpty()
+        val options = frame.options.orEmpty().map { rawOption ->
+            runCatching {
+                wireJson.decodeFromJsonElement(
+                    GatewayCommandOption.serializer(),
+                    rawOption.toJsonElement()
+                )
+            }.getOrNull() ?: return fail("command-options-invalid")
+        }
         if (options.any { it.id.isBlank() || it.label.isBlank() }) return fail("command-options-invalid")
         state = state.copy(options = options, optionsLoading = false, lastError = null)
         return SharedSlashCommandTransition(state)

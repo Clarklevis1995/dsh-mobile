@@ -6,6 +6,7 @@ import androidx.compose.ui.focus.focusRequester
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.util.Base64
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.MutableTransitionState
@@ -35,6 +36,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -86,6 +89,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -102,6 +106,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
@@ -148,6 +153,8 @@ import androidx.compose.ui.zIndex
 import com.clarklevis.dsh.android.AndroidSharedStateHolder
 import com.clarklevis.dsh.android.AttachmentLoadState
 import com.clarklevis.dsh.android.R
+import com.clarklevis.dsh.android.platform.AndroidAttachmentThumbnailer
+import com.clarklevis.dsh.android.platform.AndroidPreparedImage
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import com.clarklevis.dsh.shared.protocol.GatewayModelItem
 import com.clarklevis.dsh.shared.protocol.GatewayReasoningEffort
@@ -162,7 +169,9 @@ import com.clarklevis.dsh.shared.projection.TrajectoryNodeKind
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -252,7 +261,7 @@ internal fun ConversationScreen(
                         )
                     }
                 },
-                expandedHeight = 54.dp,
+                expandedHeight = 80.dp,
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         }
@@ -1180,16 +1189,8 @@ private fun Composer(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(stateHolder.preparedImages.size) { index ->
                             val image = stateHolder.preparedImages[index]
-                            Box(
-                                Modifier.height(72.dp).width(82.dp).background(DshColors.Ocean.copy(alpha = 0.11f), RoundedCornerShape(10.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("${image.width}×${image.height}", fontSize = 11.sp)
-                                Text(
-                                    "×",
-                                    modifier = Modifier.align(Alignment.TopEnd).clickable { stateHolder.removePreparedImage(index) }.padding(4.dp),
-                                    fontWeight = FontWeight.Bold
-                                )
+                            key(image.outgoing.base64Data) {
+                                PreparedImagePreview(image) { stateHolder.removePreparedImage(index) }
                             }
                         }
                     }
@@ -1307,6 +1308,53 @@ private fun Composer(
             }
         }
     }
+}
+
+@Composable
+private fun PreparedImagePreview(image: AndroidPreparedImage, onRemove: () -> Unit) {
+    val preview by produceState<PreparedImagePreviewState>(PreparedImagePreviewState.Loading, image.outgoing.base64Data) {
+        val bytes = withContext(Dispatchers.IO) {
+            runCatching { Base64.decode(image.outgoing.base64Data, Base64.NO_WRAP) }.getOrNull()
+        }
+        val bitmap = bytes?.let { AndroidAttachmentThumbnailer().decode(it, 256, 256)?.asImageBitmap() }
+        value = bitmap?.let(PreparedImagePreviewState::Ready) ?: PreparedImagePreviewState.Unavailable
+    }
+    val shape = RoundedCornerShape(10.dp)
+    Box(
+        Modifier.size(width = 82.dp, height = 72.dp)
+            .clip(shape)
+            .background(DshColors.Ocean.copy(alpha = 0.11f)),
+        contentAlignment = Alignment.Center
+    ) {
+        when (val state = preview) {
+            is PreparedImagePreviewState.Ready -> Image(
+                bitmap = state.bitmap,
+                contentDescription = image.outgoing.name ?: "待发送图片",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+            PreparedImagePreviewState.Loading -> Text("正在加载图片…", fontSize = 10.sp)
+            PreparedImagePreviewState.Unavailable -> Text("无法预览图片", fontSize = 10.sp)
+        }
+        Text(
+            "×",
+            modifier = Modifier.align(Alignment.TopEnd)
+                .padding(4.dp)
+                .size(20.dp)
+                .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                .clickable(onClick = onRemove)
+                .semantics { contentDescription = "移除图片" },
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+private sealed interface PreparedImagePreviewState {
+    data object Loading : PreparedImagePreviewState
+    data class Ready(val bitmap: ImageBitmap) : PreparedImagePreviewState
+    data object Unavailable : PreparedImagePreviewState
 }
 
 @Composable

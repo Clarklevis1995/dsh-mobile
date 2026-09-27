@@ -130,6 +130,44 @@ extension KeyedDecodingContainer {
     }
 }
 
+@propertyWrapper
+struct GatewayEventError: Codable, Hashable, Sendable {
+    var wrappedValue: String?
+
+    init(wrappedValue: String? = nil) {
+        self.wrappedValue = wrappedValue
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            wrappedValue = nil
+        } else if let string = try? container.decode(String.self) {
+            wrappedValue = string
+        } else if let value = try? container.decode(JSONValue.self) {
+            wrappedValue = ["reason", "message", "code", "name"]
+                .compactMap { value[$0]?.stringValue }.first
+        } else {
+            wrappedValue = nil
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        if let wrappedValue {
+            try container.encode(wrappedValue)
+        } else {
+            try container.encodeNil()
+        }
+    }
+}
+
+extension KeyedDecodingContainer {
+    func decode(_ type: GatewayEventError.Type, forKey key: Key) throws -> GatewayEventError {
+        try decodeIfPresent(type, forKey: key) ?? GatewayEventError()
+    }
+}
+
 struct GatewayFrame: Codable, Sendable {
     var kind: String
     var gatewayId: String?
@@ -168,6 +206,15 @@ struct GatewayFrame: Codable, Sendable {
     var result: JSONValue?
     var requestType: String?
     var items: [JSONValue]?
+    var id: String?
+    var record: JSONValue?
+    var records: [JSONValue]?
+    var updated: Bool?
+    var deleted: Bool?
+    var earlierRecordsUnavailable: Bool?
+    var earlierRecordsPruned: Bool?
+    var retention: JSONValue?
+    var nextBefore: String?
     var events: [RawSessionEvent]?
     var hasMore: Bool?
     var nextBeforeSeq: Int?
@@ -239,6 +286,7 @@ struct GatewayFrame: Codable, Sendable {
     var action: String?
     var accepted: Bool?
     var reason: String?
+    var displayReason: [String: String]?
     var outcome: String?
     // Human-in-the-loop approval protocol (Mobile Gateway v0.6.6).
     var approvalId: String?
@@ -420,8 +468,17 @@ struct GatewayPendingApprovalRequest: Codable, Hashable, Sendable, Identifiable 
     var toolName: String
     var callId: String?
     var reason: String?
+    var displayReason: [String: String]?
     var replay: Bool
     var id: String { rpcId }
+
+    var localizedReason: String? {
+        let locale = Locale.current.identifier.replacingOccurrences(of: "_", with: "-")
+        let language = locale.split(separator: "-").first.map(String.init)
+        return [locale, language, "en"].compactMap { $0 }
+            .compactMap { displayReason?[$0] }
+            .first(where: { !$0.isEmpty }) ?? reason.flatMap { $0.isEmpty ? nil : $0 }
+    }
 }
 
 enum GatewayApprovalOutcome: String, Codable, Hashable, Sendable {
@@ -907,7 +964,7 @@ struct GatewayEvent: Codable, Hashable, Sendable, Identifiable {
     var sourceCommandId: String?
     var shadowedItemCount: Int?
     var shadowedTokenCount: Int?
-    var error: String?
+    @GatewayEventError var error: String?
     var raw: JSONValue?
     var interrupted: Bool?
     var stream: JSONValue?
@@ -976,7 +1033,7 @@ struct GatewayEvent: Codable, Hashable, Sendable, Identifiable {
         self.sourceCommandId = sourceCommandId
         self.shadowedItemCount = shadowedItemCount
         self.shadowedTokenCount = shadowedTokenCount
-        self.error = error
+        self._error = GatewayEventError(wrappedValue: error)
         self.raw = raw
         self.interrupted = interrupted
         self.stream = stream

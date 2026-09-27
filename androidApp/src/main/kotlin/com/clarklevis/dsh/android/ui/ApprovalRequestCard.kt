@@ -48,6 +48,7 @@ import com.clarklevis.dsh.shared.facade.SharedApprovalStatusSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayPendingApprovalRequest
 import com.clarklevis.dsh.shared.protocol.JsonValue
+import java.util.Locale
 
 @Composable
 internal fun ApprovalRequestCard(
@@ -62,7 +63,7 @@ internal fun ApprovalRequestCard(
     val amber = Color(0xFFF59E0B)
     val busy = status.kind == "submitting" || status.kind == "accepted"
     val shape = RoundedCornerShape(24.dp)
-    val reason = request.reason?.takeIf(String::isNotBlank)
+    val reason = request.localizedReason(Locale.getDefault().toLanguageTag())
         ?: "${request.toolName} 请求执行需要审批的操作"
 
     LaunchedEffect(request.rpcId, status.kind, collapsed, detailsExpanded) {

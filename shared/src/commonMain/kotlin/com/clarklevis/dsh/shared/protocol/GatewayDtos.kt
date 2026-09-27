@@ -53,9 +53,20 @@ data class GatewayFrame(
     val result: JsonValue? = null,
     val commands: List<GatewaySlashCommand>? = null,
     val skills: List<GatewaySlashCommand>? = null,
-    val options: List<GatewayCommandOption>? = null,
+    // command-options uses id/label; permission-options uses value/name.
+    // Keep the shared wire shape raw and decode it after inspecting kind.
+    val options: List<JsonValue>? = null,
     val requestType: String? = null,
     val items: List<JsonValue>? = null,
+    val id: String? = null,
+    val record: JsonValue? = null,
+    val records: List<JsonValue>? = null,
+    val updated: Boolean? = null,
+    val deleted: Boolean? = null,
+    val earlierRecordsUnavailable: Boolean? = null,
+    val earlierRecordsPruned: Boolean? = null,
+    val retention: JsonValue? = null,
+    val nextBefore: String? = null,
     val events: List<RawSessionEvent>? = null,
     val hasMore: Boolean? = null,
     val nextBeforeSeq: Int? = null,
@@ -128,6 +139,7 @@ data class GatewayFrame(
     val action: String? = null,
     val accepted: Boolean? = null,
     val reason: String? = null,
+    val displayReason: Map<String, String>? = null,
     val outcome: String? = null,
     val approvalId: String? = null,
     val toolName: String? = null,
@@ -210,6 +222,29 @@ object GatewayEventSourceSerializer : KSerializer<String?> {
             is JsonObject -> value["kind"]?.let { kind ->
                 (kind as? JsonPrimitive)?.contentOrNull
             }
+            else -> null
+        }
+    }
+}
+
+/** DSH tool failures can carry a structured error instead of a string. */
+@OptIn(ExperimentalSerializationApi::class)
+object GatewayEventErrorSerializer : KSerializer<String?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor(
+        "GatewayEventError",
+        PrimitiveKind.STRING
+    )
+
+    override fun serialize(encoder: Encoder, value: String?) {
+        if (value == null) encoder.encodeNull() else encoder.encodeString(value)
+    }
+
+    override fun deserialize(decoder: Decoder): String? {
+        val jsonDecoder = decoder as? JsonDecoder ?: return decoder.decodeString()
+        return when (val value = jsonDecoder.decodeJsonElement()) {
+            is JsonPrimitive -> value.contentOrNull
+            is JsonObject -> listOf("reason", "message", "code", "name")
+                .firstNotNullOfOrNull { key -> (value[key] as? JsonPrimitive)?.contentOrNull }
             else -> null
         }
     }
@@ -344,11 +379,18 @@ data class GatewayPendingApprovalRequest(
     val toolName: String,
     val callId: String? = null,
     val reason: String? = null,
+    val displayReason: Map<String, String>? = null,
     val replay: Boolean = false
 ) {
+    fun localizedReason(languageTag: String): String? =
+        listOf(languageTag, languageTag.substringBefore('-'), "en")
+            .firstNotNullOfOrNull { displayReason?.get(it)?.takeIf(String::isNotBlank) }
+            ?: reason?.takeIf(String::isNotBlank)
+
     override fun toString(): String =
         "GatewayPendingApprovalRequest(rpcId=<redacted>, sessionId=$sessionId, " +
-            "approvalId=<redacted>, toolName=$toolName, callId=<redacted>, reason=<redacted>, replay=$replay)"
+            "approvalId=<redacted>, toolName=$toolName, callId=<redacted>, reason=<redacted>, " +
+            "displayReason=<redacted>, replay=$replay)"
 }
 
 @Serializable
@@ -505,6 +547,7 @@ data class GatewayEvent(
     val sourceCommandId: String? = null,
     val shadowedItemCount: Int? = null,
     val shadowedTokenCount: Int? = null,
+    @Serializable(with = GatewayEventErrorSerializer::class)
     val error: String? = null,
     val raw: JsonValue? = null,
     val interrupted: Boolean? = null,

@@ -22,7 +22,7 @@ private enum GatewayProtocolParityFixtures {
     // 这些样本与 shared/commonTest/GatewayProtocolFixtures.kt 逐字保持一致。
     static let liveEventWithoutKind = #"{"sessionId":"s1","seq":7,"time":1001,"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"reasoning-delta","text":"thinking"}}"#
     static let replayedQuestionRequest = #"{"kind":"question-requested","rpcId":"rpc-1","sessionId":"s1","replay":true,"questions":[{"id":"direction","header":"研究方向","question":"你想研究哪个方向？","detail":"请选择最感兴趣的方向","options":[{"label":"核心架构 (推荐)","description":"了解插件分层"},{"label":"移动端"}],"multiSelect":true},{"id":"notes","question":"还有什么要求？","multiSelect":false}]}"#
-    static let replayedApprovalRequest = #"{"kind":"approval-requested","rpcId":"rpc-approval-1","sessionId":"s1","approvalId":"approval-1","toolName":"Bash","callId":"call-1","reason":"需要读取系统版本","replay":true}"#
+    static let replayedApprovalRequest = #"{"kind":"approval-requested","rpcId":"rpc-approval-1","sessionId":"s1","approvalId":"approval-1","toolName":"Bash","callId":"call-1","reason":"需要读取系统版本","displayReason":{"en":"Allow reading system version?","zh-CN":"允许读取系统版本？"},"replay":true}"#
     static let imageAttachment = #"{"kind":"attachment","sessionId":"s1","attachment":{"attachmentId":"att-1","mediaType":"image/png","bytes":8,"width":1,"height":1},"data":"iVBORw0K"}"#
     static let historyImage = #"{"kind":"history","events":[{"type":"user/message","seq":1,"time":1786937352,"data":{"content":[{"type":"image","attachment":{"attachmentId":"att-history","mediaType":"image/webp","bytes":42,"width":100,"height":80,"name":"image.webp"}}],"source":{"kind":"user"}}}],"hasMore":false}"#
 }
@@ -3199,6 +3199,37 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(sessionID, "s1")
     }
 
+    func testScheduleFramesPreserveCatalogHistoryAndConflict() throws {
+        let catalog = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"schedule-catalog","items":[{"id":"task-1","sessionId":"s1","status":"active","kind":"every","title":"检查构建","prompt":"检查结果","everySeconds":300,"scheduledAt":"2099-01-01T00:00:00.000Z"}]}"#.utf8
+        ))
+        XCTAssertEqual(catalog.items?.first?["sessionId"]?.stringValue, "s1")
+        let history = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"schedule-history","sessionId":"s1","id":"task-1","records":[{"scheduledAt":"2099-01-01T00:00:00.000Z","deliveredAt":"2099-01-01T00:00:01.000Z","messageId":"message-1"}],"earlierRecordsUnavailable":false,"earlierRecordsPruned":false,"retention":{"days":30,"records":200},"nextBefore":"message-1"}"#.utf8
+        ))
+        XCTAssertEqual(history.records?.first?["messageId"]?.stringValue, "message-1")
+        XCTAssertEqual(history.nextBefore, "message-1")
+        let conflict = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"schedule-update","sessionId":"s1","id":"task-1","updated":false,"code":"schedule_conflict"}"#.utf8
+        ))
+        XCTAssertEqual(conflict.code, "schedule_conflict")
+        XCTAssertEqual(conflict.updated, false)
+        let context = GatewayFrameRoutingContext(
+            selectedSessionID: "s1",
+            pendingHistorySessionID: nil,
+            pendingModelsSessionID: nil,
+            isPendingGlobalModelsRequest: false,
+            pendingModelSelectionSessionID: nil,
+            pendingPermissionOptionsSessionID: nil
+        )
+        let changed = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-changed"}"#.utf8))
+        for frame in [catalog, history, conflict, changed] {
+            guard case .ignored = GatewayFrameRouter.route(frame, context: context) else {
+                return XCTFail("已识别的定时任务帧不应触发未知响应提示")
+            }
+        }
+    }
+
     @MainActor
     func testApprovalRequestRoutesThroughSharedReducerAndBuildsOneShotEffect() throws {
         let context = GatewayFrameRoutingContext(
@@ -3221,6 +3252,7 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(request.toolName, "Bash")
         XCTAssertEqual(request.callId, "call-1")
         XCTAssertEqual(request.reason, "需要读取系统版本")
+        XCTAssertEqual(request.displayReason?["zh-CN"], "允许读取系统版本？")
         XCTAssertTrue(request.replay)
 
         let adapter = KMPApprovalStoreAdapter()
@@ -3731,6 +3763,16 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertEqual(frame.sessionId, "s1")
         XCTAssertEqual(frame.event?.name, "Bash")
         XCTAssertEqual(frame.event?.arguments?.displayText.contains("pwd"), true)
+    }
+
+    func testDecodesStructuredToolFailure() throws {
+        let structured = #"{"kind":"event","sessionId":"s1","seq":9000,"time":1,"event":{"type":"tool/result","isError":true,"error":{"name":"ToolError","code":"DENIED","reason":"permission denied"}}}"#
+        let frame = try GatewayWireDecoder.decode(Data(structured.utf8))
+        XCTAssertEqual(frame.event?.error, "permission denied")
+        XCTAssertEqual(frame.event?.isError, true)
+
+        let legacy = #"{"kind":"event","sessionId":"s1","seq":9001,"time":2,"event":{"type":"tool/result","error":"legacy error"}}"#
+        XCTAssertEqual(try GatewayWireDecoder.decode(Data(legacy.utf8)).event?.error, "legacy error")
     }
 
     func testDecodesAssistantChunk() throws {

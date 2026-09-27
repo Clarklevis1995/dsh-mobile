@@ -113,8 +113,14 @@ internal class AndroidGatewayDiagnostics private constructor(
             }
             is GatewayRuntimeEvent.RequestRejected -> {
                 priority = Log.WARN
+                val reason = if (event.requestType == "decode" &&
+                    event.reason.startsWith("decode-failed [")) {
+                    event.reason
+                } else {
+                    safeProtocolValue(event.reason)
+                }
                 message = "runtime request-rejected type=${safeProtocolValue(event.requestType)} " +
-                    "reason=${safeProtocolValue(event.reason)} hasTarget=${event.targetSessionId != null} " +
+                    "reason=$reason hasTarget=${event.targetSessionId != null} " +
                     "hasCorrelation=${event.correlationId != null}"
             }
         }

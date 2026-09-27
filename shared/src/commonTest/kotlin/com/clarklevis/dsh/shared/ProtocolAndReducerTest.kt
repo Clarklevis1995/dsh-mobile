@@ -57,6 +57,47 @@ class ProtocolAndReducerTest {
     }
 
     @Test
+    fun scheduleRequestsCarrySessionBindingAndCompleteExpectedRecord() {
+        assertEquals("{\"type\":\"schedule-catalog\"}", GatewayRequests.scheduleCatalog().payload)
+        assertEquals("{\"type\":\"schedule-list\",\"sessionId\":\"s1\"}", GatewayRequests.scheduleList("s1").payload)
+        assertEquals(
+            "{\"type\":\"schedule-history\",\"sessionId\":\"s1\",\"id\":\"task-1\",\"limit\":20,\"before\":\"message-1\"}",
+            GatewayRequests.scheduleHistory("s1", "task-1", 20, "message-1").payload
+        )
+        val expected = JsonValue.ObjectValue(mapOf(
+            "id" to JsonValue.StringValue("task-1"),
+            "kind" to JsonValue.StringValue("every"),
+            "title" to JsonValue.StringValue("检查构建"),
+            "prompt" to JsonValue.StringValue("检查结果"),
+            "everySeconds" to JsonValue.NumberValue(300.0),
+            "scheduledAt" to JsonValue.StringValue("2099-01-01T00:00:00.000Z")
+        ))
+        val update = GatewayRequests.scheduleUpdate("s1", "task-1", expected, title = "检查新构建", requestId = "edit-1")
+        assertEquals(GatewayRequestLanePolicy.REJECT_IF_BUSY, update.lanePolicy)
+        assertTrue(update.payload.contains("\"expected\":{\"id\":\"task-1\""))
+        assertTrue(update.payload.contains("\"requestId\":\"edit-1\""))
+        assertEquals(GatewayRequestLanePolicy.REJECT_IF_BUSY, GatewayRequests.scheduleDelete("s1", "task-1").lanePolicy)
+    }
+
+    @Test
+    fun scheduleResponsesKeepCatalogHistoryAndConflictFields() {
+        val catalog = GatewayWireDecoder.decode(
+            """{"kind":"schedule-catalog","items":[{"id":"task-1","sessionId":"s1","status":"active","kind":"every","title":"检查构建","prompt":"检查结果","everySeconds":300,"scheduledAt":"2099-01-01T00:00:00.000Z"}]}"""
+        )
+        assertEquals("s1", catalog.items?.single()?.get("sessionId")?.stringValue)
+        val history = GatewayWireDecoder.decode(
+            """{"kind":"schedule-history","sessionId":"s1","id":"task-1","records":[{"scheduledAt":"2099-01-01T00:00:00.000Z","deliveredAt":"2099-01-01T00:00:01.000Z","messageId":"message-1"}],"earlierRecordsUnavailable":false,"earlierRecordsPruned":false,"retention":{"days":30,"records":200},"nextBefore":"message-1"}"""
+        )
+        assertEquals("message-1", history.records?.single()?.get("messageId")?.stringValue)
+        assertEquals("message-1", history.nextBefore)
+        val conflict = GatewayWireDecoder.decode(
+            """{"kind":"schedule-update","sessionId":"s1","id":"task-1","updated":false,"code":"schedule_conflict"}"""
+        )
+        assertEquals("schedule_conflict", conflict.code)
+        assertEquals(false, conflict.updated)
+    }
+
+    @Test
     fun workspaceDirectoryRequestsMatchTheIosGatewayContract() {
         assertEquals("{\"type\":\"directories\"}", GatewayRequests.directories().payload)
         assertEquals(
@@ -90,6 +131,62 @@ class ProtocolAndReducerTest {
     }
 
     @Test
+    fun wireDecoderAcceptsPermissionOptionsWithValueAndName() {
+        val frame = GatewayWireDecoder.decode(
+            """{"kind":"permission-options","sessionId":"s1","options":[{"value":"ask","name":"Ask"}],"defaultOptions":[{"value":"ask","name":"Ask"}],"defaultPreset":"ask","sessionPermissions":{"currentValue":"ask","options":[{"value":"ask","name":"Ask"}]}}"""
+        )
+        assertEquals("permission-options", frame.kind)
+        assertEquals(1, frame.options?.size)
+        assertEquals("ask", frame.sessionPermissions?.currentValue)
+        assertEquals("ask", frame.sessionPermissions?.options?.single()?.value)
+    }
+
+    @Test
+    fun wireDecoderReportsMissingPermissionOptionField() {
+        val payload =
+            """{"kind":"permission-options","sessionPermissions":{"options":[{"value":"ask"}]}}"""
+        val failure = runCatching { GatewayWireDecoder.decode(payload) }.exceptionOrNull()
+        assertTrue(failure != null)
+        assertTrue(GatewayWireDecoder.failureSummary(payload, failure).contains("缺少必填字段 name"))
+    }
+
+    @Test
+    fun wireDecoderAcceptsStructuredToolFailureFromGateway() {
+        val frame = GatewayWireDecoder.decode(
+            """{"kind":"event","sessionId":"s1","seq":9000,"time":1,"event":{"type":"tool/result","turn":1,"step":0,"callId":"failed-call","isError":true,"preview":"failed","error":{"name":"ToolError","code":"DENIED","reason":"permission denied"}}}"""
+        )
+        assertEquals("tool/result", frame.event?.type)
+        assertEquals("permission denied", frame.event?.error)
+        assertEquals(true, frame.event?.isError)
+
+        val legacy = GatewayWireDecoder.decode(
+            """{"kind":"event","sessionId":"s1","seq":9001,"time":2,"event":{"type":"tool/result","error":"legacy error"}}"""
+        )
+        assertEquals("legacy error", legacy.event?.error)
+    }
+
+    @Test
+    fun wireDecoderFailureReportsFrameAndFieldWithoutPayload() {
+        val payload = """{"kind":"event","sessionId":"private-session","event":{"type":"tool/result","turn":"wrong-type","preview":"private-message"}}"""
+        val failure = runCatching { GatewayWireDecoder.decode(payload) }.exceptionOrNull()
+        assertTrue(failure != null)
+        val detail = GatewayWireDecoder.failureSummary(payload, failure)
+        assertTrue(detail.contains("event/tool/result"))
+        assertTrue(detail.contains("decode-failed"))
+        assertTrue(detail.contains("\$.event.turn"), detail)
+        assertTrue(!detail.contains("private-session"))
+        assertTrue(!detail.contains("private-message"))
+
+        val explicit = GatewayWireDecoder.failureSummary(
+            payload,
+            IllegalArgumentException("Expected an int at path: \$.event.turn; value=private-message")
+        )
+        assertTrue(explicit.contains("\$.event.turn"))
+        assertTrue(explicit.contains("需要 integer，收到 string"))
+        assertTrue(!explicit.contains("private-message"))
+    }
+
+    @Test
     fun wireDecoderDecodesQuestionAndImageMetadataFixtures() {
         val question = GatewayWireDecoder.decode(GatewayProtocolFixtures.REPLAYED_QUESTION_REQUEST)
         assertEquals("rpc-1", question.rpcId)
@@ -118,6 +215,7 @@ class ProtocolAndReducerTest {
         assertEquals("Bash", frame.toolName)
         assertEquals("call-1", frame.callId)
         assertEquals("需要读取系统版本", frame.reason)
+        assertEquals("允许读取系统版本？", frame.displayReason?.get("zh-CN"))
         assertEquals(true, frame.replay)
 
         val request = GatewayPendingApprovalRequest(
@@ -127,8 +225,11 @@ class ProtocolAndReducerTest {
             toolName = "Bash",
             callId = "call-1",
             reason = "需要读取系统版本",
+            displayReason = frame.displayReason,
             replay = true
         )
+        assertEquals("允许读取系统版本？", request.localizedReason("zh-CN"))
+        assertEquals("Allow reading system version?", request.localizedReason("en-US"))
         var state = ApprovalReducer.reduce(
             ApprovalState(),
             ApprovalAction.RequestReceived(request)

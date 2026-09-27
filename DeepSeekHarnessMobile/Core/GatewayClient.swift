@@ -288,6 +288,40 @@ final class GatewayClient: ObservableObject {
     func requestTasks(sessionId: String) {
         send(["type": "tasks", "sessionId": sessionId])
     }
+    func requestScheduleCatalog() {
+        send(["type": "schedule-catalog"])
+    }
+    func requestScheduleList(sessionId: String) {
+        send(["type": "schedule-list", "sessionId": sessionId])
+    }
+    func requestScheduleHistory(sessionId: String, id: String, limit: Int, before: String? = nil) {
+        var payload: [String: Any] = ["type": "schedule-history", "sessionId": sessionId, "id": id, "limit": limit]
+        if let before { payload["before"] = before }
+        send(payload)
+    }
+    func updateSchedule(
+        sessionId: String, id: String, expected: JSONValue,
+        title: String? = nil, prompt: String? = nil, change: JSONValue? = nil,
+        requestId: String? = nil
+    ) {
+        guard let data = try? JSONEncoder().encode(expected),
+              let expectedObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        var payload: [String: Any] = ["type": "schedule-update", "sessionId": sessionId, "id": id, "expected": expectedObject]
+        if let title { payload["title"] = title }
+        if let prompt { payload["prompt"] = prompt }
+        if let change {
+            guard let data = try? JSONEncoder().encode(change),
+                  let changeObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+            payload["change"] = changeObject
+        }
+        if let requestId { payload["requestId"] = requestId }
+        send(payload)
+    }
+    func deleteSchedule(sessionId: String, id: String, requestId: String? = nil) {
+        var payload: [String: Any] = ["type": "schedule-delete", "sessionId": sessionId, "id": id]
+        if let requestId { payload["requestId"] = requestId }
+        send(payload)
+    }
     func requestGoal(sessionId: String) {
         send(["type": "goal", "sessionId": sessionId])
     }
