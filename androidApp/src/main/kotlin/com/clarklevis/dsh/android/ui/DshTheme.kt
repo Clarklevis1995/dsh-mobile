@@ -8,6 +8,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -105,6 +106,8 @@ internal fun DshTheme(
         LocalAppearanceSettings provides appearance,
         LocalConfiguration provides configuration
     ) {
-        MaterialTheme(colorScheme = if (dark) DarkColors else LightColors, content = content)
+        MaterialTheme(colorScheme = if (dark) DarkColors else LightColors) {
+            CompositionLocalProvider(LocalRippleConfiguration provides null, content = content)
+        }
     }
 }

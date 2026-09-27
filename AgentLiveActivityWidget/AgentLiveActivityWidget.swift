@@ -438,6 +438,14 @@ private struct AgentActivityCard: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            if surface == .lockScreen {
+                AgentElapsedTime(context: context)
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
+                    .foregroundStyle(dimmed)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(width: 56, alignment: .trailing)
+            }
         }
         .padding(.top, surface == .dynamicIsland ? 9 : 7)
         .padding(.bottom, surface == .dynamicIsland ? 7 : 8)

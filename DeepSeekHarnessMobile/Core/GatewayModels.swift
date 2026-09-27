@@ -1081,6 +1081,37 @@ struct SessionSummary: Codable, Hashable, Identifiable {
     var isVisibleInHistory: Bool { hasConversation != false }
 }
 
+struct ScheduledTask: Identifiable, Hashable {
+    let id: String
+    let sessionID: String
+    let title: String
+    let prompt: String
+    let kind: String
+    let status: String
+    let scheduledAt: String
+    let raw: JSONValue
+    let lastDelivery: JSONValue?
+
+    init?(_ raw: JSONValue) {
+        guard let id = raw["id"]?.stringValue,
+              let sessionID = raw["sessionId"]?.stringValue,
+              let title = raw["title"]?.stringValue,
+              let prompt = raw["prompt"]?.stringValue,
+              let kind = raw["kind"]?.stringValue,
+              let status = raw["status"]?.stringValue,
+              let scheduledAt = raw["scheduledAt"]?.stringValue else { return nil }
+        self.id = id
+        self.sessionID = sessionID
+        self.title = title
+        self.prompt = prompt
+        self.kind = kind
+        self.status = status
+        self.scheduledAt = scheduledAt
+        self.raw = raw
+        self.lastDelivery = raw["lastDelivery"]
+    }
+}
+
 struct GatewayNotice: Identifiable, Hashable {
     let id = UUID()
     var sessionId: String?

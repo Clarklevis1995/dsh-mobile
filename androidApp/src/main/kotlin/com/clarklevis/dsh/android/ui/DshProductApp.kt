@@ -102,6 +102,8 @@ private const val ROUTE_CONVERSATION = "conversation"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_AGENT_PRESETS = "settings/agent-presets"
 private const val ROUTE_SETTINGS_DEFAULT_MODEL = "settings/default-model"
+private const val ROUTE_PLUGINS = "plugins"
+private const val ROUTE_SCHEDULED_TASKS = "scheduled-tasks"
 
 @Composable
 internal fun DshProductApp(
@@ -164,7 +166,9 @@ internal fun DshProductApp(
                         }
                     }
                 },
-                onSettings = { navController.navigate(ROUTE_SETTINGS) }
+                onSettings = { navController.navigate(ROUTE_SETTINGS) },
+                onPlugins = { navController.navigate(ROUTE_PLUGINS) },
+                onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) }
             )
         }
         composable(ROUTE_CONVERSATION) {
@@ -183,6 +187,22 @@ internal fun DshProductApp(
         }
         composable(ROUTE_SETTINGS_DEFAULT_MODEL) {
             DefaultModelSelectionScreen(stateHolder, navController::popBackStack)
+        }
+        composable(ROUTE_PLUGINS) {
+            DrawerDestinationScreen("插件", "插件功能尚未接入", navController::popBackStack)
+        }
+        composable(ROUTE_SCHEDULED_TASKS) {
+            ScheduledTasksScreen(
+                stateHolder = stateHolder,
+                onBack = navController::popBackStack,
+                onOpenSession = { sessionId ->
+                    stateHolder.selectSession(sessionId)
+                    navController.navigate(ROUTE_CONVERSATION) {
+                        popUpTo(ROUTE_WORKSPACE)
+                        launchSingleTop = true
+                    }
+                }
+            )
         }
     }
     stateHolder.platformError?.let { error ->
@@ -203,11 +223,40 @@ internal fun DshProductApp(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun DrawerDestinationScreen(title: String, message: String, onBack: () -> Unit) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
+                navigationIcon = {
+                    TopBarCircleButton(
+                        iconRes = R.drawable.ic_back_chevron,
+                        description = "返回",
+                        onClick = onBack,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            )
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier.fillMaxSize().padding(paddingValues),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(message, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun WorkspaceScreen(
     stateHolder: AndroidSharedStateHolder,
     onOpenSession: (String) -> Unit,
     onNewSession: () -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    onPlugins: () -> Unit,
+    onScheduledTasks: () -> Unit
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showManualPairing by rememberSaveable { mutableStateOf(false) }
@@ -246,79 +295,83 @@ private fun WorkspaceScreen(
         }
     }
 
-    DshLiquidGlassHost(
-        modifier = Modifier.fillMaxSize().testTag("workspace-screen"),
-        background = { backdropModifier -> HarnessAnimatedBackground(backdropModifier) }
-    ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().safeDrawingPadding(),
-            horizontalAlignment = Alignment.CenterHorizontally
+    WorkspaceDrawer(onPlugins = onPlugins, onScheduledTasks = onScheduledTasks) { openDrawer, canScrollVertically ->
+        DshLiquidGlassHost(
+            modifier = Modifier.fillMaxSize().testTag("workspace-screen"),
+            background = { backdropModifier -> HarnessAnimatedBackground(backdropModifier) }
         ) {
-            item {
-                Column(
-                    Modifier.fillMaxWidth().widthIn(max = 680.dp).padding(horizontal = 22.dp, vertical = 18.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        WorkspaceHeader(
-                            state = stateHolder.gatewayState,
-                            onScan = {
-                                stateHolder.clearPlatformError()
-                                showQrScanner = true
-                            },
-                            onManualEntry = {
-                                stateHolder.clearPlatformError()
-                                showManualPairing = true
-                            },
-                            onSettings = onSettings
-                        )
-                        GatewaySwitcherBar()
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().safeDrawingPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                userScrollEnabled = canScrollVertically
+            ) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().widthIn(max = 680.dp).padding(horizontal = 22.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            WorkspaceHeader(
+                                state = stateHolder.gatewayState,
+                                onScan = {
+                                    stateHolder.clearPlatformError()
+                                    showQrScanner = true
+                                },
+                                onManualEntry = {
+                                    stateHolder.clearPlatformError()
+                                    showManualPairing = true
+                                },
+                                onSettings = onSettings,
+                                onOpenDrawer = openDrawer
+                            )
+                            GatewaySwitcherBar()
+                        }
+                        Spacer(Modifier.height(44.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Text(
+                                "探索未至之境",
+                                color = Color.White,
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.semantics { heading() }.testTag("workspace-hero-title")
+                            )
+                            Text("DeepSeek Harness 预览版", color = Color.White.copy(alpha = 0.65f), fontSize = 14.sp)
+                        }
+                        Box(Modifier.fillMaxWidth()) {
+                            WorkspaceCard(
+                                workspace = selectedWorkspace,
+                                ungrouped = ungroupedSelected,
+                                ungroupedCount = stateHolder.snapshot.sessions.count { session ->
+                                    session.isVisibleInHistory && workspaces.none { session.id in it.sessionIds }
+                                },
+                                state = stateHolder.gatewayState,
+                                onClick = { showWorkspaceMenu = true }
+                            )
+                            WorkspaceSelectionMenu(
+                                expanded = showWorkspaceMenu,
+                                workspaces = workspaces,
+                                selectedWorkspaceId = stateHolder.selectedWorkspaceId,
+                                onSelect = { workspaceId ->
+                                    stateHolder.selectWorkspace(workspaceId)
+                                    showWorkspaceMenu = false
+                                },
+                                onAddWorkspace = {
+                                    showWorkspaceMenu = false
+                                    showDirectoryBrowser = true
+                                },
+                                onDismiss = { showWorkspaceMenu = false }
+                            )
+                        }
+                        GlassActionButton("＋", "新建会话", onNewSession)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("最近会话", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                            Spacer(Modifier.weight(1f))
+                            ConnectionStatusText(stateHolder.gatewayState)
+                        }
+                        SessionSearch(searchQuery) { searchQuery = it }
+                        if (sessions.isEmpty()) EmptySessions() else SessionList(sessions, onOpenSession, stateHolder::renameSession, stateHolder::archiveSession)
+                        Spacer(Modifier.height(24.dp))
                     }
-                    Spacer(Modifier.height(44.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Text(
-                            "探索未至之境",
-                            color = Color.White,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.semantics { heading() }.testTag("workspace-hero-title")
-                        )
-                        Text("DeepSeek Harness 预览版", color = Color.White.copy(alpha = 0.65f), fontSize = 14.sp)
-                    }
-                    Box(Modifier.fillMaxWidth()) {
-                        WorkspaceCard(
-                            workspace = selectedWorkspace,
-                            ungrouped = ungroupedSelected,
-                            ungroupedCount = stateHolder.snapshot.sessions.count { session ->
-                                session.isVisibleInHistory && workspaces.none { session.id in it.sessionIds }
-                            },
-                            state = stateHolder.gatewayState,
-                            onClick = { showWorkspaceMenu = true }
-                        )
-                        WorkspaceSelectionMenu(
-                            expanded = showWorkspaceMenu,
-                            workspaces = workspaces,
-                            selectedWorkspaceId = stateHolder.selectedWorkspaceId,
-                            onSelect = { workspaceId ->
-                                stateHolder.selectWorkspace(workspaceId)
-                                showWorkspaceMenu = false
-                            },
-                            onAddWorkspace = {
-                                showWorkspaceMenu = false
-                                showDirectoryBrowser = true
-                            },
-                            onDismiss = { showWorkspaceMenu = false }
-                        )
-                    }
-                    GlassActionButton("＋", "新建会话", onNewSession)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("最近会话", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-                        Spacer(Modifier.weight(1f))
-                        ConnectionStatusText(stateHolder.gatewayState)
-                    }
-                    SessionSearch(searchQuery) { searchQuery = it }
-                    if (sessions.isEmpty()) EmptySessions() else SessionList(sessions, onOpenSession, stateHolder::renameSession, stateHolder::archiveSession)
-                    Spacer(Modifier.height(24.dp))
                 }
             }
         }
@@ -353,10 +406,11 @@ private fun WorkspaceHeader(
     state: GatewayRuntimeState,
     onScan: () -> Unit,
     onManualEntry: () -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    onOpenDrawer: () -> Unit
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        HarnessMark()
+        HarnessMark(onOpenDrawer)
         Spacer(Modifier.weight(1f))
         GatewayAuthenticationMenu(
             state = state,
@@ -369,8 +423,15 @@ private fun WorkspaceHeader(
 }
 
 @Composable
-private fun HarnessMark() {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+private fun HarnessMark(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.clip(RoundedCornerShape(12.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = "打开侧边栏" }
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
         WhaleIcon(Modifier.width(27.dp).height(20.dp), Color.White)
         Text("deepseek", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
         Text(

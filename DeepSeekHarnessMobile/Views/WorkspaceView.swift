@@ -2,11 +2,14 @@ import SwiftUI
 import AVFoundation
 
 struct WorkspaceView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var hosts: MultiGatewayStore
     let onOpenSession: (SessionSummary) -> Void
     let onNewSession: () -> Void
     let onSettings: () -> Void
+    let onPlugins: () -> Void
+    let onScheduledTasks: () -> Void
     @State private var searchQuery = ""
     @State private var renamingSession: SessionSummary?
     @State private var renamedTitle = ""
@@ -15,47 +18,66 @@ struct WorkspaceView: View {
     @State private var showsDirectoryBrowser = false
     @State private var showsQRScanner = false
     @State private var showsManualPairing = false
+    @State private var drawerOffset: CGFloat = 0
+    @State private var drawerDragStart: CGFloat?
     @FocusState private var sessionSearchIsFocused: Bool
 
     var body: some View {
-        ZStack {
-            DeepOceanBackground()
-                .contentShape(Rectangle())
-                .onTapGesture { sessionSearchIsFocused = false }
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        header.id("workspace-header")
-                        GatewaySwitcherBar()
+        GeometryReader { geometry in
+            let drawerWidth = min(geometry.size.width * 0.76, 360)
+            let progress = min(max(drawerOffset / max(drawerWidth, 1), 0), 1)
+            let dimProgress = min(max((progress - 0.45) / 0.55, 0), 1)
+            let dimOpacity = 0.16 * dimProgress * dimProgress * (3 - 2 * dimProgress)
+            let topInset = geometry.safeAreaInsets.top
+            let fullHeight = geometry.size.height + topInset + geometry.safeAreaInsets.bottom
+
+            ZStack(alignment: .leading) {
+                (colorScheme == .dark
+                    ? Color(red: 36.0 / 255, green: 36.0 / 255, blue: 38.0 / 255)
+                    : Color.white)
+                drawerContent(progress: progress, topInset: topInset, width: drawerWidth)
+                    .frame(width: drawerWidth, height: fullHeight, alignment: .topLeading)
+
+                workspaceContent(openDrawer: { openDrawer(width: drawerWidth) }, topInset: topInset)
+                    .frame(width: geometry.size.width, height: fullHeight)
+                    .background(DSHColor.navy)
+                    .overlay {
+                        Color.black.opacity(dimOpacity)
+                            .allowsHitTesting(false)
                     }
-                    Spacer(minLength: 44)
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("探索未至之境")
-                            .font(.system(size: 32, weight: .bold))
-                        Text("DeepSeek Harness 预览版")
-                            .font(.subheadline).foregroundStyle(.white.opacity(0.65))
+                    .clipShape(RoundedRectangle(cornerRadius: 48, style: .continuous))
+                    .compositingGroup()
+                    .shadow(
+                        color: .black.opacity(0.12 * progress),
+                        radius: 9 * progress,
+                        x: -2 * progress,
+                        y: 0
+                    )
+                    .shadow(
+                        color: .black.opacity(0.30 * progress),
+                        radius: 26 * progress,
+                        x: -4 * progress,
+                        y: 0
+                    )
+                    .overlay(alignment: .leading) {
+                        if progress > 0.98 {
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .onTapGesture { closeDrawer() }
+                                .accessibilityLabel("关闭侧边栏")
+                                .accessibilityAddTraits(.isButton)
+                        }
                     }
-                    .id("workspace-hero")
-                    workspaceCard.id("workspace-card")
-                    newSessionButton.id("workspace-new-session")
-                    sessionsHeader.id("workspace-sessions-header")
-                    sessionSearch.id("workspace-session-search")
-                    if displayedSessions.isEmpty {
-                        emptySessions.id("workspace-sessions-empty")
-                    } else {
-                        sessionsList
-                    }
-                    Spacer(minLength: 24)
-                }
-                .padding(.horizontal, 22).padding(.top, 18)
+                    .offset(x: drawerOffset)
             }
-            .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.interactively)
+            .frame(width: geometry.size.width, height: fullHeight)
+            .offset(y: -topInset)
+            .simultaneousGesture(drawerDrag(width: drawerWidth))
         }
-        // A tap handled by empty layout content does not reach the background
-        // layer. Keep a container-level fallback; controls retain their own
-        // actions and the search field consumes its tap while becoming focused.
-        .onTapGesture { sessionSearchIsFocused = false }
+        .background(DSHColor.navy.ignoresSafeArea())
+        .onChange(of: drawerOffset) { _, value in
+            if value > 0 { sessionSearchIsFocused = false }
+        }
         .foregroundStyle(.white)
         .onAppear {
             store.refreshRemoteState()
@@ -106,9 +128,53 @@ struct WorkspaceView: View {
         }
     }
 
-    private var header: some View {
+    private func workspaceContent(openDrawer: @escaping () -> Void, topInset: CGFloat) -> some View {
+        ZStack {
+            DeepOceanBackground()
+                .contentShape(Rectangle())
+                .onTapGesture { sessionSearchIsFocused = false }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        header(openDrawer: openDrawer).id("workspace-header")
+                        GatewaySwitcherBar()
+                    }
+                    Spacer(minLength: 44)
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("探索未至之境")
+                            .font(.system(size: 32, weight: .bold))
+                        Text("DeepSeek Harness 预览版")
+                            .font(.subheadline).foregroundStyle(.white.opacity(0.65))
+                    }
+                    .id("workspace-hero")
+                    workspaceCard.id("workspace-card")
+                    newSessionButton.id("workspace-new-session")
+                    sessionsHeader.id("workspace-sessions-header")
+                    sessionSearch.id("workspace-session-search")
+                    if displayedSessions.isEmpty {
+                        emptySessions.id("workspace-sessions-empty")
+                    } else {
+                        sessionsList
+                    }
+                    Spacer(minLength: 24)
+                }
+                .padding(.horizontal, 22).padding(.top, topInset + 18)
+            }
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .scrollDisabled(drawerDragStart != nil || drawerOffset > 0)
+        }
+        // A tap handled by empty layout content does not reach the background
+        // layer. Keep a container-level fallback; controls retain their own
+        // actions and the search field consumes its tap while becoming focused.
+        .onTapGesture { sessionSearchIsFocused = false }
+    }
+
+    private func header(openDrawer: @escaping () -> Void) -> some View {
         HStack {
-            HarnessMark()
+            Button(action: openDrawer) { HarnessMark() }
+                .buttonStyle(.plain)
+                .accessibilityLabel("打开侧边栏")
             Spacer()
             authenticationMenu
             settingsButton
@@ -116,6 +182,101 @@ struct WorkspaceView: View {
                 .padding(.trailing, -4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func drawerContent(progress: CGFloat, topInset: CGFloat, width: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Image("DshBrandWordmark")
+                .resizable()
+                .scaledToFit()
+                .colorInvertIfNeeded(colorScheme == .dark)
+                .frame(width: min(width - 48, 216), alignment: .leading)
+                .accessibilityLabel("DeepSeek Harness")
+                .padding(.leading, 12)
+                .padding(.bottom, 16)
+
+            drawerItem("插件", icon: {
+                Image("DshPluginPinwheel")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 22, height: 22)
+                    .frame(width: 24)
+            }, action: { selectDrawerItem(onPlugins) })
+            drawerItem("定时任务", icon: {
+                Image(systemName: "clock")
+                    .font(.system(size: 20, weight: .medium))
+                    .frame(width: 24)
+            }, action: { selectDrawerItem(onScheduledTasks) })
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, topInset + 18)
+        .foregroundStyle(Color(uiColor: .label))
+        .opacity(0.6 + 0.4 * progress)
+        .scaleEffect(0.9 + 0.1 * progress, anchor: .leading)
+        .accessibilityHidden(progress == 0)
+    }
+
+    private func drawerItem<Icon: View>(
+        _ title: String,
+        @ViewBuilder icon: () -> Icon,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                icon()
+                Text(title).font(.system(size: 17))
+                Spacer(minLength: 0)
+            }
+            .frame(height: 52)
+            .padding(.horizontal, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func drawerDrag(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { value in
+                if drawerDragStart == nil {
+                    guard abs(value.translation.width) > abs(value.translation.height) * 1.2 else { return }
+                    drawerDragStart = drawerOffset
+                }
+                drawerOffset = min(max((drawerDragStart ?? 0) + value.translation.width, 0), width)
+            }
+            .onEnded { value in
+                guard let start = drawerDragStart else { return }
+                drawerDragStart = nil
+                let open = start + value.predictedEndTranslation.width > width * 0.5
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    drawerOffset = open ? width : 0
+                }
+            }
+    }
+
+    private func openDrawer(width: CGFloat) {
+        sessionSearchIsFocused = false
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+            drawerOffset = width
+        }
+    }
+
+    private func closeDrawer() {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+            drawerOffset = 0
+        }
+    }
+
+    private func selectDrawerItem(_ action: @escaping () -> Void) {
+        // Start the destination push immediately. Reset the workspace behind it
+        // without a closing animation so Back reveals the main page.
+        action()
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            drawerOffset = 0
+        }
     }
 
     @ViewBuilder
@@ -369,6 +530,13 @@ struct WorkspaceView: View {
         }
         .frame(maxWidth: .infinity).frame(height: 38)
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func colorInvertIfNeeded(_ inverted: Bool) -> some View {
+        if inverted { colorInvert() } else { self }
     }
 }
 

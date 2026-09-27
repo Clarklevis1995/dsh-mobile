@@ -3204,6 +3204,10 @@ final class GatewayProtocolTests: XCTestCase {
             #"{"kind":"schedule-catalog","items":[{"id":"task-1","sessionId":"s1","status":"active","kind":"every","title":"检查构建","prompt":"检查结果","everySeconds":300,"scheduledAt":"2099-01-01T00:00:00.000Z"}]}"#.utf8
         ))
         XCTAssertEqual(catalog.items?.first?["sessionId"]?.stringValue, "s1")
+        let task = try XCTUnwrap(catalog.items?.first.flatMap(ScheduledTask.init))
+        XCTAssertEqual(task.title, "检查构建")
+        XCTAssertEqual(task.status, "active")
+        XCTAssertEqual(task.raw["everySeconds"]?.doubleValue, 300)
         let history = try GatewayWireDecoder.decode(Data(
             #"{"kind":"schedule-history","sessionId":"s1","id":"task-1","records":[{"scheduledAt":"2099-01-01T00:00:00.000Z","deliveredAt":"2099-01-01T00:00:01.000Z","messageId":"message-1"}],"earlierRecordsUnavailable":false,"earlierRecordsPruned":false,"retention":{"days":30,"records":200},"nextBefore":"message-1"}"#.utf8
         ))
@@ -3214,6 +3218,16 @@ final class GatewayProtocolTests: XCTestCase {
         ))
         XCTAssertEqual(conflict.code, "schedule_conflict")
         XCTAssertEqual(conflict.updated, false)
+        let updated = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"schedule-update","sessionId":"s1","id":"task-1","requestId":"edit-1","updated":true,"record":{"id":"task-1","kind":"daily","title":"检查构建","prompt":"检查结果","time":"09:00:00.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-01T01:00:00.000Z"}}"#.utf8
+        ))
+        XCTAssertEqual(updated.requestId, "edit-1")
+        XCTAssertEqual(updated.updated, true)
+        let deleted = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"schedule-delete","sessionId":"s1","id":"task-1","requestId":"delete-1","deleted":true}"#.utf8
+        ))
+        XCTAssertEqual(deleted.requestId, "delete-1")
+        XCTAssertEqual(deleted.deleted, true)
         let context = GatewayFrameRoutingContext(
             selectedSessionID: "s1",
             pendingHistorySessionID: nil,
@@ -3223,7 +3237,7 @@ final class GatewayProtocolTests: XCTestCase {
             pendingPermissionOptionsSessionID: nil
         )
         let changed = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-changed"}"#.utf8))
-        for frame in [catalog, history, conflict, changed] {
+        for frame in [catalog, history, conflict, updated, deleted, changed] {
             guard case .ignored = GatewayFrameRouter.route(frame, context: context) else {
                 return XCTFail("已识别的定时任务帧不应触发未知响应提示")
             }

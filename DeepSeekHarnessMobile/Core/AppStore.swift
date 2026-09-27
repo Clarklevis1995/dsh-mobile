@@ -302,6 +302,15 @@ final class AppStore: ObservableObject {
 
     @Published private(set) var selectedSessionId: String?
     @Published private(set) var sessions: [SessionSummary] = []
+    @Published private(set) var scheduledTasks: [ScheduledTask] = []
+    @Published private(set) var scheduledTasksLoading = false
+    @Published private(set) var scheduledTasksError: String?
+    private var scheduledTasksRequestID = UUID()
+    @Published private(set) var scheduledTaskPendingID: String?
+    @Published private(set) var scheduledTaskCompletedRequestID: String?
+    @Published private(set) var scheduledTaskMutationError: String?
+    private var scheduledTaskMutationRequestID: String?
+    private var scheduledTaskMutationKind: String?
     @Published var workspaces: [GatewayWorkspace] = []
     @Published var selectedWorkspaceId: String? {
         didSet { preferences.selectedWorkspaceID = selectedWorkspaceId }
@@ -996,6 +1005,80 @@ final class AppStore: ObservableObject {
         return selectedSessionId == session.id
     }
 
+    func refreshScheduledTasks() {
+        guard gateway.state.isConnected else {
+            scheduledTasksLoading = false
+            scheduledTasksError = "连接网关后可查看定时任务"
+            return
+        }
+        scheduledTasksLoading = true
+        scheduledTasksError = nil
+        let requestID = UUID()
+        scheduledTasksRequestID = requestID
+        gateway.requestScheduleCatalog()
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(12))
+            guard let self, self.scheduledTasksRequestID == requestID,
+                  self.scheduledTasksLoading else { return }
+            self.scheduledTasksLoading = false
+            self.scheduledTasksError = "定时任务请求超时，请重试"
+        }
+    }
+
+    @discardableResult
+    func updateScheduledTask(_ task: ScheduledTask, title: String, prompt: String, change: JSONValue?) -> String? {
+        guard beginScheduledTaskMutation(task, kind: "schedule-update") else { return nil }
+        let requestID = scheduledTaskMutationRequestID!
+        gateway.updateSchedule(
+            sessionId: task.sessionID, id: task.id, expected: task.raw,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
+            change: change, requestId: requestID
+        )
+        return requestID
+    }
+
+    @discardableResult
+    func deleteScheduledTask(_ task: ScheduledTask) -> String? {
+        guard beginScheduledTaskMutation(task, kind: "schedule-delete") else { return nil }
+        let requestID = scheduledTaskMutationRequestID!
+        gateway.deleteSchedule(sessionId: task.sessionID, id: task.id, requestId: requestID)
+        return requestID
+    }
+
+    private func beginScheduledTaskMutation(_ task: ScheduledTask, kind: String) -> Bool {
+        guard gateway.state.isConnected else {
+            scheduledTaskMutationError = "连接网关后才能修改定时任务"
+            return false
+        }
+        guard scheduledTaskPendingID == nil else { return false }
+        guard scheduledTasks.first(where: { $0.id == task.id && $0.sessionID == task.sessionID })?.raw == task.raw else {
+            scheduledTaskMutationError = "任务已变化，列表已刷新，请重新操作"
+            refreshScheduledTasks()
+            return false
+        }
+        let requestID = UUID().uuidString
+        scheduledTaskMutationRequestID = requestID
+        scheduledTaskMutationKind = kind
+        scheduledTaskPendingID = task.id
+        scheduledTaskMutationError = nil
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(15))
+            guard let self, self.scheduledTaskMutationRequestID == requestID else { return }
+            self.finishScheduledTaskMutation(error: "操作超时，请刷新任务后重试")
+        }
+        return true
+    }
+
+    private func finishScheduledTaskMutation(error: String?) {
+        if error == nil { scheduledTaskCompletedRequestID = scheduledTaskMutationRequestID }
+        scheduledTaskMutationError = error
+        scheduledTaskPendingID = nil
+        scheduledTaskMutationRequestID = nil
+        scheduledTaskMutationKind = nil
+        refreshScheduledTasks()
+    }
+
     /// UI Intent 可能来自 SwiftUI 正在更新的调用栈，因此 KMP Event 仍延迟
     /// 到下一次 MainActor turn 发布；导航必须等待该发布完成，避免目标页面首帧
     /// 读取上一个 Session 的 UI 镜像。
@@ -1583,6 +1666,35 @@ final class AppStore: ObservableObject {
     }
 
     private func handle(_ frame: GatewayFrame) {
+        if frame.kind == scheduledTaskMutationKind,
+           frame.requestId == scheduledTaskMutationRequestID {
+            let succeeded = frame.kind == "schedule-update" ? frame.updated == true : frame.deleted == true
+            finishScheduledTaskMutation(error: succeeded ? nil : scheduledTaskFailureMessage(frame.code, frame.message))
+            return
+        }
+        if frame.kind == "error", frame.requestType == scheduledTaskMutationKind,
+           (frame.requestId == nil || frame.requestId == scheduledTaskMutationRequestID) {
+            finishScheduledTaskMutation(error: scheduledTaskFailureMessage(frame.code, frame.message))
+            return
+        }
+        if frame.kind == "schedule-catalog" {
+            scheduledTasks = (frame.items ?? []).compactMap(ScheduledTask.init).sorted {
+                if $0.status != $1.status { return $0.status == "active" }
+                return $0.scheduledAt < $1.scheduledAt
+            }
+            scheduledTasksLoading = false
+            scheduledTasksError = nil
+            return
+        }
+        if frame.kind == "schedule-changed" {
+            if gateway.state.isConnected { gateway.requestScheduleCatalog() }
+            return
+        }
+        if frame.kind == "error" && frame.requestType == "schedule-catalog" {
+            scheduledTasksLoading = false
+            scheduledTasksError = frame.message ?? "定时任务加载失败"
+            return
+        }
         acceptSessionAgentPresetFrame(frame)
         if ["session-agent-preset", "select-agent-preset", "session-agent-preset-updated"].contains(frame.kind) ||
             (frame.kind == "error" && ["session-agent-preset", "select-agent-preset"].contains(frame.requestType)) { return }
@@ -1736,6 +1848,15 @@ final class AppStore: ObservableObject {
         )
         let route = GatewayFrameRouter.route(frame, context: context)
         handle(route)
+    }
+
+    private func scheduledTaskFailureMessage(_ code: String?, _ message: String?) -> String {
+        switch code {
+        case "schedule_conflict": "任务已被其他设备修改，列表已刷新，请重新打开编辑"
+        case "schedule_ended": "任务已结束，无法再编辑"
+        case "schedule_not_found": "任务已不存在，列表已刷新"
+        default: message ?? "操作失败，请稍后重试"
+        }
     }
 
     private func handleCommandExecutionResult(_ frame: GatewayFrame) {

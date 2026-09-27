@@ -75,7 +75,18 @@ class ProtocolAndReducerTest {
         val update = GatewayRequests.scheduleUpdate("s1", "task-1", expected, title = "检查新构建", requestId = "edit-1")
         assertEquals(GatewayRequestLanePolicy.REJECT_IF_BUSY, update.lanePolicy)
         assertTrue(update.payload.contains("\"expected\":{\"id\":\"task-1\""))
+        assertTrue(update.payload.contains("\"everySeconds\":300"))
         assertTrue(update.payload.contains("\"requestId\":\"edit-1\""))
+        val dailyChange = JsonValue.ObjectValue(mapOf(
+            "kind" to JsonValue.StringValue("daily"),
+            "daily" to JsonValue.ObjectValue(mapOf(
+                "time" to JsonValue.StringValue("09:00:00"),
+                "time_zone" to JsonValue.StringValue("Asia/Shanghai")
+            ))
+        ))
+        val timedUpdate = GatewayRequests.scheduleUpdate("s1", "task-1", expected, change = dailyChange)
+        assertTrue(timedUpdate.payload.contains("\"kind\":\"daily\""))
+        assertTrue(timedUpdate.payload.contains("\"time_zone\":\"Asia/Shanghai\""))
         assertEquals(GatewayRequestLanePolicy.REJECT_IF_BUSY, GatewayRequests.scheduleDelete("s1", "task-1").lanePolicy)
     }
 

@@ -252,12 +252,7 @@ internal fun ConversationScreen(
                             canBrowseFiles = stateHolder.snapshot.selectedSessionId != null &&
                                 stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED &&
                                 "file-downloads" in stateHolder.gatewayState.capabilities,
-                            canReloadHistory = stateHolder.snapshot.selectedSessionId != null &&
-                                stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED,
-                            canPing = stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED,
-                            onBrowseFiles = { showWorkspaceFiles = true },
-                            onReloadHistory = stateHolder::reloadSelectedHistory,
-                            onPing = stateHolder::pingGateway
+                            onBrowseFiles = { showWorkspaceFiles = true }
                         )
                     }
                 },
@@ -347,11 +342,7 @@ internal fun TopBarCircleButton(
 @Composable
 internal fun ConversationMoreMenu(
     canBrowseFiles: Boolean,
-    canReloadHistory: Boolean,
-    canPing: Boolean,
-    onBrowseFiles: () -> Unit,
-    onReloadHistory: () -> Unit,
-    onPing: () -> Unit
+    onBrowseFiles: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -381,22 +372,6 @@ internal fun ConversationMoreMenu(
             ) {
                 expanded = false
                 onBrowseFiles()
-            }
-            ConversationMoreMenuItem(
-                title = "重新加载历史",
-                iconRes = R.drawable.ic_history_reload,
-                enabled = canReloadHistory
-            ) {
-                expanded = false
-                onReloadHistory()
-            }
-            ConversationMoreMenuItem(
-                title = "发送 Ping",
-                iconRes = R.drawable.ic_ping_waves,
-                enabled = canPing
-            ) {
-                expanded = false
-                onPing()
             }
         }
     }

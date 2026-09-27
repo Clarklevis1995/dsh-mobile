@@ -35,6 +35,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayGoalRef
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
+import com.clarklevis.dsh.shared.protocol.JsonValue
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import java.util.TimeZone
@@ -121,6 +122,20 @@ class AndroidSharedStateHolder(
     var wirePayload: String by mutableStateOf(DEFAULT_WIRE_PAYLOAD)
     var gatewayState: GatewayRuntimeState by mutableStateOf(GatewayRuntimeState())
         private set
+    var scheduledTasks: List<MobileScheduledTask> by mutableStateOf(emptyList())
+        private set
+    var scheduledTasksLoading: Boolean by mutableStateOf(false)
+        private set
+    var scheduledTasksError: String? by mutableStateOf(null)
+        private set
+    var scheduledTaskPendingId: String? by mutableStateOf(null)
+        private set
+    var scheduledTaskCompletedRequestId: String? by mutableStateOf(null)
+        private set
+    var scheduledTaskMutationError: String? by mutableStateOf(null)
+        private set
+    private var scheduledTaskMutationRequestId: String? = null
+    private var scheduledTaskMutationKind: String? = null
     var endpoint: String by mutableStateOf(AndroidGatewayPreferences.DEFAULT_ENDPOINT)
     var pairingPayload: String by mutableStateOf("")
     var selectedWorkspaceId: String? by mutableStateOf(null)
@@ -327,6 +342,34 @@ class AndroidSharedStateHolder(
                                             } else event.frame
                                         ))
                                         handleSessionCancellationFrame(event.frame)
+                                        if (event.frame.kind == scheduledTaskMutationKind &&
+                                            event.frame.requestId == scheduledTaskMutationRequestId
+                                        ) {
+                                            val succeeded = if (event.frame.kind == "schedule-update") {
+                                                event.frame.updated == true
+                                            } else event.frame.deleted == true
+                                            finishScheduledTaskMutation(
+                                                if (succeeded) null else scheduledTaskFailureMessage(event.frame.code, event.frame.message)
+                                            )
+                                        } else if (event.frame.kind == "error" &&
+                                            event.frame.requestType == scheduledTaskMutationKind &&
+                                            (event.frame.requestId == null || event.frame.requestId == scheduledTaskMutationRequestId)
+                                        ) {
+                                            finishScheduledTaskMutation(scheduledTaskFailureMessage(event.frame.code, event.frame.message))
+                                        }
+                                        when (event.frame.kind) {
+                                            "schedule-catalog" -> {
+                                                scheduledTasks = event.frame.items.orEmpty().mapNotNull(MobileScheduledTask::from)
+                                                    .sortedWith(compareBy<MobileScheduledTask> { it.status != "active" }.thenBy { it.scheduledAt })
+                                                scheduledTasksLoading = false
+                                                scheduledTasksError = null
+                                            }
+                                            "schedule-changed" -> refreshScheduledTasks()
+                                            "error" -> if (event.frame.requestType == "schedule-catalog") {
+                                                scheduledTasksLoading = false
+                                                scheduledTasksError = event.frame.message ?: "定时任务加载失败"
+                                            }
+                                        }
                                         if (event.frame.kind == "sent") {
                                             pendingMessageSubmission?.let { applyMessageSendResult(it, true) }
                                             pendingMessageSubmission = null
@@ -432,6 +475,11 @@ class AndroidSharedStateHolder(
                                 }
                                 is GatewayRuntimeEvent.RequestQueued -> Unit
                                 is GatewayRuntimeEvent.RequestCancelled -> {
+                                    if (event.requestType == scheduledTaskMutationKind &&
+                                        event.correlationId == scheduledTaskMutationRequestId
+                                    ) withContext(Dispatchers.Main.immediate) {
+                                        finishScheduledTaskMutation("操作已取消，请刷新任务后重试")
+                                    }
                                     withContext(Dispatchers.Main.immediate) {
                                         applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
                                             event.requestType, event.targetSessionId, event.correlationId, "请求未完成，请重试"
@@ -490,6 +538,17 @@ class AndroidSharedStateHolder(
                                     )
                                 }
                                 is GatewayRuntimeEvent.RequestTimedOut -> {
+                                    if (event.requestType == scheduledTaskMutationKind &&
+                                        event.correlationId == scheduledTaskMutationRequestId
+                                    ) withContext(Dispatchers.Main.immediate) {
+                                        finishScheduledTaskMutation("操作超时，请刷新任务后重试")
+                                    }
+                                    if (event.requestType == "schedule-catalog") {
+                                        withContext(Dispatchers.Main.immediate) {
+                                            scheduledTasksLoading = false
+                                            scheduledTasksError = "定时任务请求超时，请重试"
+                                        }
+                                    }
                                     withContext(Dispatchers.Main.immediate) {
                                         applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
                                             event.requestType, event.targetSessionId, event.correlationId, "请求未完成，请重试"
@@ -549,6 +608,11 @@ class AndroidSharedStateHolder(
                                     )
                                 }
                                 is GatewayRuntimeEvent.RequestRejected -> {
+                                    if (event.requestType == scheduledTaskMutationKind &&
+                                        event.correlationId == scheduledTaskMutationRequestId
+                                    ) withContext(Dispatchers.Main.immediate) {
+                                        finishScheduledTaskMutation("操作未被接受，请刷新任务后重试")
+                                    }
                                     withContext(Dispatchers.Main.immediate) {
                                         applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
                                             event.requestType, event.targetSessionId, event.correlationId, "请求未完成，请重试"
@@ -702,6 +766,93 @@ class AndroidSharedStateHolder(
                 }
             }
         }
+    }
+
+    fun refreshScheduledTasks() {
+        val appGraph = graph
+        if (appGraph == null || gatewayState.connection != GatewayConnectionState.CONNECTED) {
+            scheduledTasksLoading = false
+            scheduledTasksError = "连接网关后可查看定时任务"
+            return
+        }
+        scheduledTasksLoading = true
+        scheduledTasksError = null
+        appGraph.gatewayScope.launch {
+            val sent = appGraph.gatewayRuntime.sendRequest(GatewayRequests.scheduleCatalog())
+            if (!sent) withContext(Dispatchers.Main.immediate) {
+                scheduledTasksLoading = false
+                scheduledTasksError = "定时任务请求未发送，请重试"
+            }
+        }
+    }
+
+    fun updateScheduledTask(
+        task: MobileScheduledTask,
+        title: String,
+        prompt: String,
+        change: JsonValue?
+    ): String? {
+        val requestId = beginScheduledTaskMutation(task, "schedule-update") ?: return null
+        val appGraph = graph ?: return null
+        appGraph.gatewayScope.launch {
+            val sent = appGraph.gatewayRuntime.sendRequest(GatewayRequests.scheduleUpdate(
+                task.sessionId, task.id, task.raw,
+                title = title.trim(), prompt = prompt.trim(), change = change, requestId = requestId
+            ))
+            if (!sent) withContext(Dispatchers.Main.immediate) {
+                if (scheduledTaskMutationRequestId == requestId) finishScheduledTaskMutation("操作未发送，请重试")
+            }
+        }
+        return requestId
+    }
+
+    fun deleteScheduledTask(task: MobileScheduledTask): String? {
+        val requestId = beginScheduledTaskMutation(task, "schedule-delete") ?: return null
+        val appGraph = graph ?: return null
+        appGraph.gatewayScope.launch {
+            val sent = appGraph.gatewayRuntime.sendRequest(GatewayRequests.scheduleDelete(
+                task.sessionId, task.id, requestId
+            ))
+            if (!sent) withContext(Dispatchers.Main.immediate) {
+                if (scheduledTaskMutationRequestId == requestId) finishScheduledTaskMutation("操作未发送，请重试")
+            }
+        }
+        return requestId
+    }
+
+    private fun beginScheduledTaskMutation(task: MobileScheduledTask, kind: String): String? {
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) {
+            scheduledTaskMutationError = "连接网关后才能修改定时任务"
+            return null
+        }
+        if (scheduledTaskPendingId != null) return null
+        if (scheduledTasks.firstOrNull { it.id == task.id && it.sessionId == task.sessionId }?.raw != task.raw) {
+            scheduledTaskMutationError = "任务已变化，列表已刷新，请重新操作"
+            refreshScheduledTasks()
+            return null
+        }
+        val requestId = UUID.randomUUID().toString()
+        scheduledTaskMutationRequestId = requestId
+        scheduledTaskMutationKind = kind
+        scheduledTaskPendingId = task.id
+        scheduledTaskMutationError = null
+        return requestId
+    }
+
+    private fun finishScheduledTaskMutation(error: String?) {
+        if (error == null) scheduledTaskCompletedRequestId = scheduledTaskMutationRequestId
+        scheduledTaskMutationError = error
+        scheduledTaskPendingId = null
+        scheduledTaskMutationRequestId = null
+        scheduledTaskMutationKind = null
+        refreshScheduledTasks()
+    }
+
+    private fun scheduledTaskFailureMessage(code: String?, message: String?): String = when (code) {
+        "schedule_conflict" -> "任务已被其他设备修改，列表已刷新，请重新打开编辑"
+        "schedule_ended" -> "任务已结束，无法再编辑"
+        "schedule_not_found" -> "任务已不存在，列表已刷新"
+        else -> message ?: "操作失败，请稍后重试"
     }
 
     private var preparingNewSession = false

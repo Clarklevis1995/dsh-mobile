@@ -7,6 +7,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -50,5 +52,19 @@ class AndroidUiParityDeviceTest {
         compose.onNode(hasText("新建会话")).performClick()
         compose.onNode(hasTestTag("composer-input")).assertIsDisplayed()
         compose.onNode(hasText("unsubscribe: not-connected")).assertDoesNotExist()
+    }
+
+    @Test
+    fun drawerOpensFromDeepSeekMarkAndNavigatesToPluginPage() {
+        compose.onNode(hasContentDescription("打开侧边栏")).performClick()
+        compose.onNode(hasTestTag("drawer-plugins")).assertIsDisplayed().performClick()
+        compose.onNode(hasText("插件功能尚未接入")).assertIsDisplayed()
+    }
+
+    @Test
+    fun swipingWorkspaceRightOpensScheduledTasksEntry() {
+        compose.onNode(hasTestTag("workspace-drawer-main")).performTouchInput { swipeRight() }
+        compose.onNode(hasTestTag("drawer-scheduled-tasks")).assertIsDisplayed().performClick()
+        compose.onNode(hasText("定时任务功能尚未接入")).assertIsDisplayed()
     }
 }

@@ -41,30 +41,23 @@ class ConversationChromeUiDeviceTest {
     val compose = createComposeRule()
 
     @Test
-    fun moreButtonOpensIosParityActions() {
-        var reloadCount = 0
-        var pingCount = 0
+    fun moreButtonOnlyShowsWorkspaceFiles() {
+        var browseCount = 0
         compose.setContent {
             DshTheme {
                 ConversationMoreMenu(
-                    canBrowseFiles = false,
-                    canReloadHistory = true,
-                    canPing = true,
-                    onBrowseFiles = {},
-                    onReloadHistory = { reloadCount += 1 },
-                    onPing = { pingCount += 1 }
+                    canBrowseFiles = true,
+                    onBrowseFiles = { browseCount += 1 }
                 )
             }
         }
 
         compose.onNode(hasContentDescription("更多")).performClick()
         compose.onNode(hasTestTag("conversation-more-menu")).assertIsDisplayed()
-        compose.onNodeWithText("重新加载历史").performClick()
-        assertEquals(1, reloadCount)
-
-        compose.onNode(hasContentDescription("更多")).performClick()
-        compose.onNodeWithText("发送 Ping").performClick()
-        assertEquals(1, pingCount)
+        compose.onNodeWithText("重新加载历史").assertDoesNotExist()
+        compose.onNodeWithText("发送 Ping").assertDoesNotExist()
+        compose.onNodeWithText("工作区文件").performClick()
+        assertEquals(1, browseCount)
     }
 
     @Test

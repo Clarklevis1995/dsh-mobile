@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <!-- IconPluginPinwheelOutlineMedium from the DeepSeek Harness Web UI (MIT). -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M7.84457,5.06199C11.6605,4.93876 14.7962,6.14848 14.8484,7.76397C14.8875,8.97461 13.1838,10.0696 10.7215,10.5942"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.3" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M5.12742,8.07731C5.00419,4.26138 6.21391,1.12568 7.8294,1.07351C9.04004,1.03441 10.135,2.73808 10.6596,5.20037"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.3" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M8.02457,10.6802C4.20865,10.8034 1.07294,9.5937 1.02077,7.97821C0.981678,6.76758 2.68535,5.67262 5.14763,5.14798"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.3" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10.7476,7.89535C10.8708,11.7113 9.66109,14.847 8.0456,14.8991C6.83496,14.9382 5.74,13.2346 5.21536,10.7723"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.3" />
+</vector>

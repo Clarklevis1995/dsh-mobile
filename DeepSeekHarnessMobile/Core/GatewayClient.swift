@@ -55,6 +55,7 @@ final class GatewayClient: ObservableObject {
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var connectionTimeoutTask: Task<Void, Never>?
+    private var heartbeatTask: Task<Void, Never>?
     private var sessionCreationContinuations: [String: CheckedContinuation<String, Error>] = [:]
 
     func createSession(workspaceId: String?) async throws -> String {
@@ -125,6 +126,7 @@ final class GatewayClient: ObservableObject {
         receiveTask?.cancel()
         reconnectTask?.cancel()
         connectionTimeoutTask?.cancel()
+        heartbeatTask?.cancel()
         socket?.cancel(with: .goingAway, reason: nil)
         transportSession.invalidateAndCancel()
     }
@@ -229,6 +231,8 @@ final class GatewayClient: ObservableObject {
         reconnectTask = nil
         connectionTimeoutTask?.cancel()
         connectionTimeoutTask = nil
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
         receiveTask?.cancel()
         receiveTask = nil
         socket?.cancel(with: .normalClosure, reason: nil)
@@ -661,6 +665,7 @@ final class GatewayClient: ObservableObject {
                         isManualPairingAttempt = false
                         reconnectAttempt = 0
                         state = .connected
+                        startHeartbeat(for: socket)
                         lastReportedFailure = nil
                         isRecoveringFromBackground = false
                         serverPort = frame.port
@@ -696,8 +701,14 @@ final class GatewayClient: ObservableObject {
             self.onFrame?(frame)
         }
         client.onConnectionFailure = { [weak self, weak client] detail in
-            guard let self, self.conversationClient === client else { return }
-            self.fail(detail, shouldReconnect: false)
+            guard let self, let client, self.conversationClient === client else { return }
+            // A transient failure on the split conversation socket must restore
+            // both channels. Keep non-recoverable authentication failures terminal.
+            self.fail(
+                detail,
+                shouldReconnect: client.wantsConnection,
+                reportFailure: !(self.isApplicationInBackground || self.isRecoveringFromBackground)
+            )
         }
         // 长期凭据已在控制连接 paired 帧中保存，绝不重复使用一次性配对码。
         client.connect(to: endpoint.absoluteString)
@@ -768,6 +779,8 @@ final class GatewayClient: ObservableObject {
     private func fail(_ detail: String, shouldReconnect: Bool, reportFailure: Bool = true) {
         outboundTask?.cancel()
         outboundTask = nil
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
         pendingConversationPayloads.removeAll()
         pendingConversationBytes = 0
         conversationClient?.disconnect()
@@ -803,6 +816,24 @@ final class GatewayClient: ObservableObject {
                 pairingCode: self.pairingCode,
                 resetReportedFailure: false
             )
+        }
+    }
+
+    /// Keep both control and conversation sockets active through idle tunnels.
+    /// WebSocket ping frames do not add application-level requests or responses.
+    private func startHeartbeat(for socket: URLSessionWebSocketTask) {
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { [weak self, weak socket] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+                guard let self, let socket, self.socket === socket, self.state.isConnected else { return }
+                socket.sendPing { [weak self, weak socket] error in
+                    guard let error else { return }
+                    Task { @MainActor [weak self, weak socket] in
+                        self?.handleFailure(error, socket: socket)
+                    }
+                }
+            }
         }
     }
 
