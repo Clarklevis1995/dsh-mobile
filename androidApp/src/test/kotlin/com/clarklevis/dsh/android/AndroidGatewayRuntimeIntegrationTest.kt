@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Assert.assertEquals
@@ -32,6 +33,97 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AndroidGatewayRuntimeIntegrationTest {
+    @Test
+    fun oneTimePairingTimeoutDoesNotRetryOrReuseCodeOnForeground() = runTest {
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport, FakePreferences(), FakeCredentials(), FakeAttachmentCache(),
+            FakeNetworkMonitor(), ImmediateClock, backgroundScope,
+            connectionAttemptTimeoutMilliseconds = 100
+        )
+        backgroundScope.launch { runtime.events.collect { } }
+        runCurrent()
+        val payload = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+            """{"version":2,"publicUrl":"wss://gateway.example/ws/mobile","pairingCode":"fixture-code","expiresAt":100000}""".toByteArray()
+        )
+        runtime.pair(payload)
+        runCurrent()
+        advanceTimeBy(101)
+        runCurrent()
+        runtime.applicationDidEnterBackground()
+        runtime.applicationDidBecomeActive()
+        runCurrent()
+        assertEquals(GatewayConnectionState.FAILED, runtime.state.value.connection)
+        assertEquals("connection-timeout", runtime.state.value.lastError)
+        assertEquals(1, transport.specs.size)
+    }
+
+    @Test
+    fun unauthorizedStoredDeviceDoesNotRetryOnForeground() = runTest {
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport, FakePreferences(), FakeCredentials(), FakeAttachmentCache(),
+            FakeNetworkMonitor(), ImmediateClock, backgroundScope
+        )
+        backgroundScope.launch { runtime.events.collect { } }
+        runCurrent()
+        assertTrue(runtime.connectStoredIfPaired())
+        runCurrent()
+        transport.failUnauthorized()
+        runCurrent()
+        runtime.applicationDidEnterBackground()
+        runtime.applicationDidBecomeActive()
+        runCurrent()
+        assertEquals(GatewayConnectionState.FAILED, runtime.state.value.connection)
+        assertEquals(1, transport.specs.size)
+    }
+
+    @Test
+    fun storedSingleEndpointRetriesAfterHandshakeTimeout() = runTest {
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport, FakePreferences(), FakeCredentials(), FakeAttachmentCache(),
+            FakeNetworkMonitor(), ImmediateClock, backgroundScope,
+            connectionAttemptTimeoutMilliseconds = 100
+        )
+        backgroundScope.launch { runtime.events.collect { } }
+        runCurrent()
+        assertTrue(runtime.connectStoredIfPaired())
+        runCurrent()
+        advanceTimeBy(101)
+        runCurrent()
+        assertTrue("A transient timeout must retry the stored single endpoint", transport.specs.size > 1)
+        transport.open()
+        transport.receive("""{"kind":"hello","protocol":3,"authenticated":true}""")
+        runCurrent()
+        assertEquals(GatewayConnectionState.CONNECTED, runtime.state.value.connection)
+    }
+
+    @Test
+    fun backgroundHandshakeTimeoutRecoversOnReturnToForeground() = runTest {
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport, FakePreferences(), FakeCredentials(), FakeAttachmentCache(),
+            FakeNetworkMonitor(), ImmediateClock, backgroundScope,
+            connectionAttemptTimeoutMilliseconds = 100
+        )
+        backgroundScope.launch { runtime.events.collect { } }
+        runCurrent()
+        assertTrue(runtime.connectStoredIfPaired())
+        runCurrent()
+        runtime.applicationDidEnterBackground()
+        advanceTimeBy(101)
+        runCurrent()
+        assertEquals(1, transport.specs.size)
+        runtime.applicationDidBecomeActive()
+        runCurrent()
+        assertEquals("Returning to foreground must recover a stored connection", 2, transport.specs.size)
+        transport.open()
+        transport.receive("""{"kind":"hello","protocol":3,"authenticated":true}""")
+        runCurrent()
+        assertEquals(GatewayConnectionState.CONNECTED, runtime.state.value.connection)
+    }
+
     @Test
     fun fileFollowUpDoesNotDeadlockWhenConversationFillsRuntimeQueue() = runTest {
         val transport = FakeTransport()
@@ -171,6 +263,12 @@ class AndroidGatewayRuntimeIntegrationTest {
         }
         fun open() {
             emitState(GatewayTransportState.Open(specs.last().generation))
+        }
+        fun failUnauthorized() {
+            emitState(GatewayTransportState.Failed(
+                generation = specs.last().generation,
+                httpStatus = 401, reason = "websocket-failure", recoverable = false
+            ))
         }
         fun receive(json: String) {
             assertTrue(

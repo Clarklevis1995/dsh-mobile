@@ -1105,10 +1105,15 @@ class GatewayRuntime(
                 ) {
                     return@serialized
                 }
-                if (!isManualPairingAttempt && trustedEndpoints.size > 1) {
+                // 已配对设备的握手超时是临时网络故障；单地址也必须允许恢复。
+                // 一次性配对仍走下方 fail-closed 分支，不能自动重用配对码。
+                if (!isManualPairingAttempt) {
+                    connectionGeneration += 1
+                    cancelPendingLocked(ERROR_CONNECTION_TIMEOUT)
                     runCatching { transport.close() }
                     mutableState.value = mutableState.value.copy(connection = GatewayConnectionState.FAILED, lastError = ERROR_CONNECTION_TIMEOUT)
-                    scheduleReconnectLocked(immediate = false)
+                    connectionAttemptTimeoutJob = null
+                    if (canReconnectLocked()) scheduleReconnectLocked(immediate = false)
                     return@serialized
                 }
                 // 一次性配对超时后不自动重用原配对码。
