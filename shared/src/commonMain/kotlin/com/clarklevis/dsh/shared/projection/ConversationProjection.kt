@@ -5,6 +5,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayImageAttachment
 import com.clarklevis.dsh.shared.protocol.SessionEvent
 import com.clarklevis.dsh.shared.sync.AssistantChunk
 import com.clarklevis.dsh.shared.sync.expandAssistantStream
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.Serializable
@@ -221,10 +222,26 @@ class ConversationProjector(
                         chunk.chunk["text"]?.jsonPrimitive?.contentOrNull
                     } else null
                 }.joinToString("")
+                val finish = content.lastOrNull { it.chunk["type"]?.jsonPrimitive?.contentOrNull == "finish" }
+                    ?.chunk?.get("reason") as? JsonObject
+                // Empty failed requests are retry status, not separate assistant replies.
+                // Keep partial content, cancellation and attempts without a step identity intact.
+                val emptyFailure = text.isEmpty() && event.turn != null && event.step != null &&
+                    finish?.get("kind")?.jsonPrimitive?.contentOrNull == "error" &&
+                    content.none { it.chunk["type"]?.jsonPrimitive?.contentOrNull == "tool-call-delta" }
+                val failureMessage = (finish?.get("failure") as? JsonObject)
+                    ?.get("message")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                if (emptyFailure) {
+                    removeStream("empty-attempt-$key", operations)
+                    streamIndexes["empty-attempt-$key"] = mutableItems.size
+                }
                 insert(ConversationItem(eventId(record), ConversationItemKind.ASSISTANT, labels.interrupted,
-                    text.ifEmpty { labels.interrupted }, isError = true, epochSeconds = date), operations)
+                    text.ifEmpty { failureMessage ?: labels.interrupted }, isError = true, epochSeconds = date), operations)
             }
+            event.type == "llm/retry-started" && event.turn != null && event.step != null ->
+                removeStream("empty-attempt-$key", operations)
             event.type == "assistant/message" -> {
+                if (event.turn != null && event.step != null) removeStream("empty-attempt-$key", operations)
                 finalizedKeys += key
                 val finalReasoning = event.reasoning?.takeIf(String::isNotEmpty)?.let { reasoning ->
                     ConversationItem(
