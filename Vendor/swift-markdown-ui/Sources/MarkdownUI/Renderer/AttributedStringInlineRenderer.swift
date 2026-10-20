@@ -5,7 +5,10 @@ extension InlineNode {
     baseURL: URL?,
     textStyles: InlineTextStyles,
     softBreakMode: SoftBreak.Mode,
-    attributes: AttributeContainer
+    attributes: AttributeContainer,
+    // UIKit hosts convert the result to `NSAttributedString`, which cannot carry
+    // SwiftUI `Font`; they keep the structured `fontProperties` instead.
+    resolveFonts: Bool = true
   ) -> AttributedString {
     var renderer = AttributedStringInlineRenderer(
       baseURL: baseURL,
@@ -14,7 +17,7 @@ extension InlineNode {
       attributes: attributes
     )
     renderer.render(self)
-    return renderer.result.resolvingFonts()
+    return resolveFonts ? renderer.result.resolvingFonts() : renderer.result
   }
 }
 

@@ -2393,7 +2393,7 @@ final class StreamingAssistantCell: StableSelfSizingCollectionViewCell {
         let view = UITextView()
         view.backgroundColor = .clear
         view.isEditable = false
-        view.isSelectable = false
+        view.isSelectable = true
         view.isScrollEnabled = false
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0

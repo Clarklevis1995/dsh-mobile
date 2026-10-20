@@ -4350,7 +4350,10 @@ private struct ConversationFallbackEventRow: View {
                     } else if shouldRenderJSON {
                         MarkdownContent("```json\n\(text)\n```", compact: true)
                     } else {
-                        MarkdownContent(text, compact: true).foregroundStyle(.secondary)
+                        // The selectable body is a UITextView, which does not
+                        // inherit SwiftUI's foregroundStyle; opacity keeps the
+                        // de-emphasised look.
+                        MarkdownContent(text, compact: true).opacity(0.7)
                     }
                 }
                 .padding(.leading, 5).padding(.top, 5).padding(.bottom, 3)
@@ -4554,6 +4557,7 @@ private extension Theme {
                                 FontFamilyVariant(.monospaced)
                                 FontSize(UIFontMetrics.default.scaledValue(for: compact ? 11 : 13) * scale)
                             }
+                            .textSelection(.enabled)
                     }
                     // A horizontal ScrollView has no useful UIKit intrinsic
                     // height of its own. Preserve the code content's ideal
