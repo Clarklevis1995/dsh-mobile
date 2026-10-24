@@ -16,7 +16,7 @@ struct RootView: View {
             .alert("Whaleness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
                 Button(String(localized: "好"), role: .cancel) { store.lastError = nil }
             } message: { Text(store.lastError ?? "") }
-            .onChange(of: scenePhase) { _, phase in
+            .onChangeCompat(of: scenePhase) { _, phase in
                 store.handleScenePhase(phase)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
@@ -90,7 +90,7 @@ private struct RootNavigationHost: View, Equatable {
                 await store.connectOnColdLaunchIfPaired()
             }
         }
-        .onChange(of: navigationPath) { _, path in
+        .onChangeCompat(of: navigationPath) { _, path in
             if path.isEmpty { store.resumeWorkspace() }
         }
         .onOpenURL(perform: openLiveActivityURL)
@@ -298,7 +298,7 @@ private struct ScheduledTasksView: View {
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
             } else if let error = store.scheduledTasksError, store.scheduledTasks.isEmpty {
-                ContentUnavailableView {
+                DshEmptyState {
                     Label("无法显示定时任务", systemImage: "wifi.exclamationmark")
                 } description: {
                     Text(error)
@@ -309,12 +309,12 @@ private struct ScheduledTasksView: View {
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
             } else if store.scheduledTasks.isEmpty {
-                ContentUnavailableView("暂无定时任务", systemImage: "clock", description: Text("在会话中创建的定时任务会显示在这里"))
+                DshEmptyState("暂无定时任务", systemImage: "clock", description: Text("在会话中创建的定时任务会显示在这里"))
                     .padding(.top, 40)
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
             } else if visibleTasks.isEmpty {
-                ContentUnavailableView(
+                DshEmptyState(
                     "没有符合条件的定时任务",
                     systemImage: "line.3.horizontal.decrease.circle",
                     description: Text(searchQuery.isEmpty
@@ -357,7 +357,6 @@ private struct ScheduledTasksView: View {
         .listStyle(.plain)
         .adaptiveListWidth()
         .scrollContentBackground(.hidden)
-        .scrollBounceBehavior(.always)
         .refreshable { store.refreshScheduledTasks() }
         .background(Color(uiColor: .systemBackground))
         .navigationTitle(isSearching ? "" : String(localized: "定时任务"))
@@ -378,7 +377,7 @@ private struct ScheduledTasksView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
-        .onChange(of: store.scheduledTaskMutationError) { _, error in
+        .onChangeCompat(of: store.scheduledTaskMutationError) { _, error in
             if let error, editingTask == nil { activeAlert = .error(error) }
         }
         .alert(item: $activeAlert) { alert in
@@ -532,9 +531,8 @@ struct ScheduledTaskCard: View {
                     Image(systemName: "chevron.down")
                         .appFont(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.26)) { icon in
-                            icon.rotationEffect(.degrees(expanded ? 180 : 0))
-                        }
+                        .rotationEffect(.degrees(expanded ? 180 : 0))
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.26), value: expanded)
                         .frame(width: 36, height: 34)
                 }
                 .frame(maxWidth: .infinity)
@@ -733,10 +731,10 @@ private struct ScheduledTaskEditSheet: View {
         }
         .background(Color(uiColor: .systemBackground))
         .interactiveDismissDisabled(pendingRequestID != nil)
-        .onChange(of: store.scheduledTaskCompletedRequestID) { _, completedID in
+        .onChangeCompat(of: store.scheduledTaskCompletedRequestID) { _, completedID in
             if completedID != nil && completedID == pendingRequestID { dismiss() }
         }
-        .onChange(of: store.scheduledTaskPendingID) { _, pendingID in
+        .onChangeCompat(of: store.scheduledTaskPendingID) { _, pendingID in
             if pendingRequestID != nil && pendingID == nil {
                 if store.scheduledTaskCompletedRequestID == pendingRequestID {
                     dismiss()
@@ -965,7 +963,7 @@ private struct WorkspaceFilesSheet: View {
                     ProgressView("正在读取工作区文件…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if store.workspaceFileEntries.isEmpty {
-                    ContentUnavailableView(
+                    DshEmptyState(
                         "此目录为空",
                         systemImage: "folder",
                         description: Text(store.workspaceFilePath)
@@ -1026,10 +1024,10 @@ private struct WorkspaceFilesSheet: View {
             store.browseWorkspaceFiles(path: initialPath)
             refreshDownloadedPaths()
         }
-        .onChange(of: store.workspaceFileEntries) { _, _ in
+        .onChangeCompat(of: store.workspaceFileEntries) { _, _ in
             refreshDownloadedPaths()
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChangeCompat(of: scenePhase) { _, phase in
             if phase == .active { refreshDownloadedPaths() }
         }
         .onDisappear {
@@ -1391,7 +1389,7 @@ struct WorkspaceCodePreview: View {
             if let document {
                 WorkspaceCodeDocumentView(document: document)
             } else if let errorMessage {
-                ContentUnavailableView {
+                DshEmptyState {
                     Label("无法在应用内预览", systemImage: "doc.text.magnifyingglass")
                 } description: {
                     Text(errorMessage)

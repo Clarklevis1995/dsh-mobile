@@ -1,0 +1,167 @@
+name: Build iOS 16.1 IPA (TrollStore)
+
+# 产物：未上传 App Store、ad-hoc 签名的 .ipa，供 TrollStore 2 安装（iOS 14.0–16.6.1）。
+# 触发方式：Actions 页面手动 Run workflow，或推送到 main / ios-16.1 分支。
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_id:
+        description: "Bundle ID（留空则用 config/Debug.xcconfig 里的默认值）"
+        required: false
+        default: ""
+  push:
+    branches: [main, ios-16.1]
+
+env:
+  PROJECT: DeepSeekHarnessMobile.xcodeproj
+  SCHEME: DeepSeekHarnessMobile
+
+jobs:
+  build:
+    # Xcode 26 只在 macos-26（或 macos-15 上的 Xcode 26 镜像）可用
+    runs-on: macos-26
+    timeout-minutes: 120
+
+    steps:
+      - name: 检出代码（含 Vendor 子模块目录）
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: 确认 Xcode 版本
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          if [ -d /Applications/Xcode_26.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.app
+          fi
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos || true
+          # Xcode 26 支持的最低部署目标为 iOS 15，16.1 在允许范围内
+          xcodebuild -list -project "$PROJECT"
+
+      - name: 下载 Metal 工具链（Xcode 26 起需单独下载）
+        run: |
+          xcodebuild -downloadComponent MetalToolchain || echo "::warning::Metal 工具链下载失败，若构建阶段报 metal 缺失请检查此步"
+
+      - name: 安装 JDK 17（Gradle 构建 KMP framework 需要）
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 配置 Android SDK（shared 模块含 android 目标，Gradle 配置期需要）
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
+          if [ ! -d "$SDK" ]; then
+            echo "::error::未找到 Android SDK，$SDK 不存在"
+            exit 1
+          fi
+          echo "sdk.dir=$SDK" > local.properties
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          ls "$SDK/platforms" 2>/dev/null || true
+
+      - name: 预构建 KMP framework（release/iosArm64）
+        run: ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-daemon --stacktrace
+
+      - name: 归档 App（关闭代码签名）
+        run: |
+          BUNDLE_ID="${{ github.event.inputs.bundle_id }}"
+          xcodebuild archive \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/DshMobile.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            DEVELOPMENT_TEAM="" \
+            LOCAL_DEVELOPMENT_TEAM="" \
+            ${BUNDLE_ID:+LOCAL_BUNDLE_IDENTIFIER="$BUNDLE_ID"} \
+            -quiet
+
+      - name: 组装 Payload 并 ad-hoc 签名
+        run: |
+          set -uo pipefail
+          APP="build/DshMobile.xcarchive/Products/Applications/DshMobile.app"
+          if [ ! -d "$APP" ]; then
+            echo "::error::未找到 $APP"
+            ls -R build/DshMobile.xcarchive/Products | head -60
+            exit 1
+          fi
+
+          rm -rf build/Payload build/*.ipa
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/
+          echo "--- Payload 结构 ---"
+          find build/Payload -maxdepth 4 \( -name "*.appex" -o -name "DshMobile" -o -name "*.framework" \) | head -20
+
+          # ad-hoc 签名：优先 codesign（macOS 原生、更可靠），失败再退 ldid
+          sign_target() {
+            local t="$1"
+            if codesign --force --sign - --timestamp=none "$t" 2>&1; then
+              echo "  OK codesign: $t"
+            elif ldid -S "$t" 2>&1; then
+              echo "  OK ldid: $t"
+            else
+              echo "  FAILED: $t"
+              return 1
+            fi
+          }
+
+          if ! command -v ldid >/dev/null; then
+            brew install ldid >/dev/null 2>&1 || echo "::warning::ldid 安装失败，仅用 codesign"
+          fi
+
+          FAIL=0
+          for appex in build/Payload/DshMobile.app/PlugIns/*.appex; do
+            [ -e "$appex" ] || continue
+            EXEC=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$appex/Info.plist" 2>/dev/null || basename "$appex" .appex)
+            echo "extension: $appex (CFBundleExecutable=$EXEC)"
+            sign_target "$appex/$EXEC" || FAIL=1
+            sign_target "$appex" || FAIL=1
+          done
+
+          if [ -d build/Payload/DshMobile.app/Frameworks ]; then
+            while IFS= read -r item; do
+              case "$item" in
+                *.framework) sign_target "$item/$(basename "$item" .framework)" || FAIL=1 ;;
+                *.dylib) sign_target "$item" || FAIL=1 ;;
+              esac
+            done < <(find build/Payload/DshMobile.app/Frameworks \( -name "*.dylib" -o -name "*.framework" \) -maxdepth 2)
+          fi
+
+          sign_target build/Payload/DshMobile.app/DshMobile || FAIL=1
+          sign_target build/Payload/DshMobile.app || FAIL=1
+
+          codesign -dv build/Payload/DshMobile.app 2>&1 | head -5 || true
+
+          cd build
+          zip -qry "Whaleness-iOS16.1-trollstore.ipa" Payload
+          cd ..
+          ls -lh build/*.ipa
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist" || true
+          /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist" || true
+          if [ "$FAIL" -ne 0 ]; then echo "::error::存在签名失败项"; exit 1; fi
+
+      - name: 上传 ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: Whaleness-iOS16.1-trollstore
+          path: build/Whaleness-iOS16.1-trollstore.ipa
+          if-no-files-found: error
+
+      - name: 失败时上传构建日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build/DshMobile.xcarchive
+            ~/Library/Logs/gradle
+          if-no-files-found: ignore
+          retention-days: 3

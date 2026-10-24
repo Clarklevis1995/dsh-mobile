@@ -66,27 +66,17 @@ struct AgentLiveActivityWidget: Widget {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(AgentActivityColors.status(for: context.state.phase))
             }
-            .contentMargins(.top, AgentActivityMetrics.expandedTopInset, for: .expanded)
-            .contentMargins(.horizontal, AgentActivityMetrics.expandedHorizontalInset, for: .expanded)
-            .contentMargins(
-                .bottom,
-                AgentActivityMetrics.expandedBottomInset(
-                    for: context.state,
-                    isStale: context.isStale
-                ),
-                for: .expanded
-            )
+            // iOS 16.1 无 Dynamic Island 区域 contentMargins，使用默认边距。
             .keylineTint(AgentActivityColors.status(for: context.state.phase))
             .widgetURL(AgentActivityLink.session(context))
         }
-        .contentMarginsDisabled()
     }
 }
 
 private func expandedStatusSymbol(
     _ context: ActivityViewContext<AgentActivityAttributes>
 ) -> String {
-    if context.isStale && !context.state.phase.isTerminal {
+    if context.isStaleCompat && !context.state.phase.isTerminal {
         return "exclamationmark.circle"
     }
     return AgentActivityPresentation.symbol(for: context.state.phase)
@@ -95,7 +85,7 @@ private func expandedStatusSymbol(
 private func expandedStatusColor(
     _ context: ActivityViewContext<AgentActivityAttributes>
 ) -> Color {
-    if context.isStale && !context.state.phase.isTerminal {
+    if context.isStaleCompat && !context.state.phase.isTerminal {
         return AgentActivityColors.failed
     }
     return AgentActivityColors.status(for: context.state.phase)
@@ -104,7 +94,7 @@ private func expandedStatusColor(
 private func expandedStatusText(
     _ context: ActivityViewContext<AgentActivityAttributes>
 ) -> String {
-    if context.isStale && !context.state.phase.isTerminal {
+    if context.isStaleCompat && !context.state.phase.isTerminal {
         return "待同步"
     }
     switch context.state.phase {
@@ -196,7 +186,7 @@ private struct AgentDynamicIslandExpandedContent: View {
                 }
             }
 
-            if state.phase == .awaitingApproval && !context.isStale {
+            if state.phase == .awaitingApproval && !context.isStaleCompat {
                 approvalOperation
                 AgentApprovalButtons(
                     context: context,
@@ -270,7 +260,7 @@ private struct AgentDynamicIslandExpandedContent: View {
     /// 避免重复结果信息占用展开岛高度。
     private var islandStepDetail: String? {
         guard state.phase == .running || state.phase == .awaitingChoice,
-              !context.isStale,
+              !context.isStaleCompat,
               let detail = state.secondaryDetail?.trimmingCharacters(in: .whitespacesAndNewlines),
               !detail.isEmpty else {
             return nil
@@ -322,7 +312,7 @@ private struct AgentDynamicIslandExpandedContent: View {
     }
 
     private var stepTitle: String {
-        if context.isStale && !state.phase.isTerminal { return "打开 App 获取最新进度" }
+        if context.isStaleCompat && !state.phase.isTerminal { return "打开 App 获取最新进度" }
         return state.detail?.isEmpty == false
             ? state.detail!
             : AgentActivityPresentation.stepTitle(for: state.phase)
@@ -360,7 +350,7 @@ private struct AgentActivityCard: View {
             }
             if showsOperation { operation } else { progress }
 
-            if state.phase == .awaitingApproval && !context.isStale {
+            if state.phase == .awaitingApproval && !context.isStaleCompat {
                 AgentApprovalButtons(context: context, foreground: foreground, tile: tile)
                     .padding(.top, AgentActivityMetrics.operationMargin)
             } else if state.phase == .submittingApproval {
@@ -507,7 +497,7 @@ private struct AgentActivityCard: View {
         AgentActivityPresentation.stepSymbol(for: state)
     }
     private var stepTitle: String {
-        if context.isStale && !state.phase.isTerminal { return "打开 App 获取最新进度" }
+        if context.isStaleCompat && !state.phase.isTerminal { return "打开 App 获取最新进度" }
         return state.detail?.isEmpty == false ? state.detail! : AgentActivityPresentation.stepTitle(for: state.phase)
     }
     private var stepDetail: String {
@@ -542,34 +532,50 @@ private struct AgentApprovalButtons: View {
 
     var body: some View {
         if let rpcID = context.state.rpcID, let approvalID = context.state.approvalID {
-            HStack(spacing: AgentActivityMetrics.actionSpacing) {
-                Button(intent: RejectAgentActionIntent(
-                    gatewayID: context.attributes.gatewayID,
-                    sessionID: context.attributes.sessionID,
-                    rpcID: rpcID,
-                    approvalID: approvalID
-                )) {
-                    Label("拒绝", systemImage: "xmark")
-                        .frame(maxWidth: .infinity, minHeight: height)
-                        .foregroundStyle(foreground)
-                        .background(tile, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                Button(intent: AllowAgentActionIntent(
-                    gatewayID: context.attributes.gatewayID,
-                    sessionID: context.attributes.sessionID,
-                    rpcID: rpcID,
-                    approvalID: approvalID
-                )) {
-                    Label("允许一次", systemImage: "checkmark")
-                        .frame(maxWidth: .infinity, minHeight: height)
-                        .foregroundStyle(Color(red: 0.09, green: 0.16, blue: 0.19))
-                        .background(AgentActivityColors.accent, in: Capsule())
-                }
-                .buttonStyle(.plain)
+            if #available(iOS 17.0, *) {
+                // 交互式 Button(intent:) 需要 iOS 17。
+                approvalButtons(rpcID: rpcID, approvalID: approvalID)
+            } else {
+                // iOS 16.1 不支持实时活动内的交互按钮，提示回 App 处理。
+                Label("在 App 内处理审批", systemImage: "hand.tap")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(maxWidth: .infinity, minHeight: height)
+                    .foregroundStyle(foreground)
+                    .background(tile, in: Capsule())
             }
-            .font(.system(size: 13, weight: .medium))
         }
+    }
+
+    @available(iOS 17.0, *)
+    @ViewBuilder
+    private func approvalButtons(rpcID: String, approvalID: String) -> some View {
+        HStack(spacing: AgentActivityMetrics.actionSpacing) {
+            Button(intent: RejectAgentActionIntent(
+                gatewayID: context.attributes.gatewayID,
+                sessionID: context.attributes.sessionID,
+                rpcID: rpcID,
+                approvalID: approvalID
+            )) {
+                Label("拒绝", systemImage: "xmark")
+                    .frame(maxWidth: .infinity, minHeight: height)
+                    .foregroundStyle(foreground)
+                    .background(tile, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            Button(intent: AllowAgentActionIntent(
+                gatewayID: context.attributes.gatewayID,
+                sessionID: context.attributes.sessionID,
+                rpcID: rpcID,
+                approvalID: approvalID
+            )) {
+                Label("允许一次", systemImage: "checkmark")
+                    .frame(maxWidth: .infinity, minHeight: height)
+                    .foregroundStyle(Color(red: 0.09, green: 0.16, blue: 0.19))
+                    .background(AgentActivityColors.accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .font(.system(size: 13, weight: .medium))
     }
 }
 
@@ -577,7 +583,7 @@ private struct AgentCompactStatus: View {
     let context: ActivityViewContext<AgentActivityAttributes>
 
     var body: some View {
-        if context.isStale && !context.state.phase.isTerminal {
+        if context.isStaleCompat && !context.state.phase.isTerminal {
             Image(systemName: "exclamationmark.circle")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(AgentActivityColors.failed)
@@ -882,3 +888,16 @@ private func previewState(
     )
 }
 #endif
+
+
+// MARK: - iOS 16.1 兼容层
+
+extension ActivityViewContext {
+    /// `isStale` 自 iOS 16.2 起提供；iOS 16.1 上按“未过期”处理。
+    var isStaleCompat: Bool {
+        if #available(iOS 16.2, *) {
+            return isStale
+        }
+        return false
+    }
+}

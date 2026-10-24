@@ -103,7 +103,6 @@ struct HumanQuestionView: View {
                 .padding(.horizontal, 17)
                 .padding(.vertical, 16)
             }
-            .scrollBounceBehavior(.basedOnSize)
             .frame(maxHeight: 390)
 
             Divider().opacity(0.55)

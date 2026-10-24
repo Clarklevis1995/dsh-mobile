@@ -23,7 +23,7 @@ struct PluginsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let error = store.pluginsError {
-                    ContentUnavailableView(error, systemImage: "puzzlepiece.extension",
+                    DshEmptyState(error, systemImage: "puzzlepiece.extension",
                         description: Text("请检查网关连接后重试"))
                         .frame(maxWidth: .infinity)
                 }
@@ -48,9 +48,16 @@ struct PluginsView: View {
             .padding(.horizontal, 20).padding(.vertical, 20)
             .readableContentWidth()
         }
-        .onGeometryChange(for: CGFloat.self) { geometry in
-            geometry.size.width
-        } action: { containerWidth = $0 }
+        .background {
+            // iOS 16.1 无 onGeometryChange，改用 GeometryReader 上报宽度。
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { containerWidth = proxy.size.width }
+                    .onChangeCompat(of: proxy.size.width) { _, width in
+                        containerWidth = width
+                    }
+            }
+        }
         .background(Color(uiColor: .systemBackground))
         .navigationTitle("插件")
         .navigationBarTitleDisplayMode(.inline)
@@ -497,8 +504,12 @@ private final class PluginSVGImageRenderer: NSObject, WKNavigationDelegate {
         let job = queue.removeFirst()
         active = job
         // 离屏视图不会自动经历显示周期，加载 SVG 前显式刷新其主题环境。
-        webView.traitOverrides.userInterfaceStyle = job.request.isDark ? .dark : .light
-        webView.updateTraitsIfNeeded()
+        if #available(iOS 17.0, *) {
+            webView.traitOverrides.userInterfaceStyle = job.request.isDark ? .dark : .light
+            webView.updateTraitsIfNeeded()
+        } else {
+            webView.overrideUserInterfaceStyle = job.request.isDark ? .dark : .light
+        }
         navigation = webView.loadHTMLString("""
         <html><head><meta name='viewport' content='width=device-width,initial-scale=1'>
         <meta name='color-scheme' content='\(job.request.isDark ? "dark" : "light")'>

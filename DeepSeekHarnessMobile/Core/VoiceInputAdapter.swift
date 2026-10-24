@@ -30,9 +30,20 @@ final class VoiceInputAdapter: ObservableObject {
     init(
         shared: SharedVoiceInputStore = SharedVoiceInputStore(),
         recorder: any VoiceAudioCapturing = IOSVoiceRecorder(),
-        permissionGranted: @escaping () -> Bool = { AVAudioApplication.shared.recordPermission == .granted },
+        permissionGranted: @escaping () -> Bool = {
+            if #available(iOS 17.0, *) {
+                return AVAudioApplication.shared.recordPermission == .granted
+            }
+            return AVAudioSession.sharedInstance().recordPermission == .granted
+        },
         requestPermission: @escaping (@escaping @Sendable (Bool) -> Void) -> Void = { completion in
-            AVAudioApplication.requestRecordPermission { completion($0) }
+            if #available(iOS 17.0, *) {
+                AVAudioApplication.requestRecordPermission { completion($0) }
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    completion(granted)
+                }
+            }
         }
     ) {
         self.permissionGranted = permissionGranted

@@ -73,18 +73,33 @@ private struct HarnessFluidLayer: View {
     let time: TimeInterval
     let style: HarnessBackgroundStyle
 
+    @ViewBuilder
     var body: some View {
-        Rectangle()
-            .fill(DSHColor.navy)
-            .visualEffect { content, proxy in
-                content.colorEffect(
-                    ShaderLibrary.harnessFluid(
-                        .float2(proxy.size),
-                        .float(Float(time)),
-                        .float(style == .pad ? 1 : 0)
+        if #available(iOS 17.0, *) {
+            // Metal 流体场依赖 iOS 17 的 ShaderLibrary 与 visualEffect。
+            Rectangle()
+                .fill(DSHColor.navy)
+                .visualEffect { content, proxy in
+                    content.colorEffect(
+                        ShaderLibrary.harnessFluid(
+                            .float2(proxy.size),
+                            .float(Float(time)),
+                            .float(style == .pad ? 1 : 0)
+                        )
                     )
-                )
-            }
+                }
+        } else {
+            // iOS 16.1 兜底：用静态深色渐变替代流体场，其余图层（网格/鲸鱼粒子）不受影响。
+            LinearGradient(
+                colors: [
+                    DSHColor.navy,
+                    DSHColor.navy.opacity(0.82),
+                    Color.black.opacity(0.92)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
     }
 }
 

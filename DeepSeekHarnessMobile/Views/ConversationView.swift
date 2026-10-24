@@ -431,12 +431,12 @@ struct ConversationView: View {
             WindowBottomSafeAreaReader(bottomInset: $bottomSafeAreaInset, windowHeight: $voiceWindowHeight)
         }
         .foregroundStyle(.primary)
-        .onChange(of: activeView) { _, view in
+        .onChangeCompat(of: activeView) { _, view in
             if view != 0 { composerIsFocused = false }
             showsSessionStatsPopover = false
             showsAgentPresetMenu = false
         }
-        .onChange(of: store.selectedSessionId) { _, _ in
+        .onChangeCompat(of: store.selectedSessionId) { _, _ in
             showsSessionStatsPopover = false
             showsAgentPresetMenu = false
             hasScrolledFromTop = false
@@ -763,18 +763,18 @@ struct ConversationView: View {
             guard height > 0, abs(height - composerHeight) > 0.5 else { return }
             composerHeight = height
         }
-        .onChange(of: composerIsFocused) { _, isFocused in
+        .onChangeCompat(of: composerIsFocused) { _, isFocused in
             store.voiceInput.keyboardChanged(isFocused)
             guard isFocused else { return }
             showsSessionStatsPopover = false
             viewportScrollToBottomToken &+= 1
         }
-        .onChange(of: store.selectedPendingQuestionRequest?.rpcId) { _, rpcId in
+        .onChangeCompat(of: store.selectedPendingQuestionRequest?.rpcId) { _, rpcId in
             guard rpcId != nil else { return }
             composerIsFocused = false
             if isPinnedToBottom { viewportScrollToBottomToken &+= 1 }
         }
-        .onChange(of: store.selectedPendingApprovalRequest?.rpcId) { _, rpcId in
+        .onChangeCompat(of: store.selectedPendingApprovalRequest?.rpcId) { _, rpcId in
             guard rpcId != nil else { return }
             composerIsFocused = false
             if isPinnedToBottom { viewportScrollToBottomToken &+= 1 }
@@ -791,7 +791,7 @@ struct ConversationView: View {
         } message: {
             Text("删除后，智能体不再持有这个持续目标。")
         }
-        .onChange(of: isLoadingSelectedHistory) { wasLoading, isLoading in
+        .onChangeCompat(of: isLoadingSelectedHistory) { wasLoading, isLoading in
             guard historyPresentationSessionID == store.selectedSessionId,
                   isPreparingHistoryPresentation,
                   wasLoading,
@@ -835,7 +835,7 @@ struct ConversationView: View {
             store.voiceInput.leave()
             store.leaveSessionAgentPreset()
         }
-        .onChange(of: store.selectedSessionId) { previous, current in
+        .onChangeCompat(of: store.selectedSessionId) { previous, current in
             if let previous {
                 memberDrafts[previous] = draft
                 memberImages[previous] = pendingImages
@@ -846,7 +846,7 @@ struct ConversationView: View {
             store.voiceInput.open(context: current ?? "new-session", draft: draft)
             if previous != nil && current == nil { dismissConversation() }
         }
-        .onChange(of: store.sessionAgentPreset.canSelect) { _, canSelect in
+        .onChangeCompat(of: store.sessionAgentPreset.canSelect) { _, canSelect in
             if !canSelect { showsAgentPresetMenu = false }
         }
         .task(id: store.selectedSessionId) {
@@ -1171,7 +1171,6 @@ struct ConversationView: View {
                 .accessibilityLabel(String(localized: "a11y.context.percent", defaultValue: "上下文已用 \(Int(contextProgress * 100))%"))
                 .popover(isPresented: $showsContextUsage, arrowEdge: .bottom) {
                     ContextUsagePopover(snapshot: store.selectedContextSnapshot)
-                        .presentationCompactAdaptation(.popover)
                 }
 
                 Button {
@@ -1269,7 +1268,7 @@ struct ConversationView: View {
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.10), radius: 10, x: 0, y: 2)
         .padding(.horizontal, 14)
         .padding(.bottom, composerBottomPadding)
-        .onChange(of: store.messageAcceptedRevision) { _, _ in
+        .onChangeCompat(of: store.messageAcceptedRevision) { _, _ in
             guard let submitted = submittedQueueDraft else { return }
             defer { submittedQueueDraft = nil; submittedQueueImages = [] }
             if let target = submittedQueueSessionID, target != store.selectedSessionId {
@@ -1288,8 +1287,8 @@ struct ConversationView: View {
             composerIsFocused = false
             viewportScrollToBottomToken &+= 1
         }
-        .onChange(of: store.queueRevision) { _, _ in restoreQueuedDraft() }
-        .onChange(of: store.selectedSessionId) { _, _ in
+        .onChangeCompat(of: store.queueRevision) { _, _ in restoreQueuedDraft() }
+        .onChangeCompat(of: store.selectedSessionId) { _, _ in
             store.fileUploads.select(sessionID: store.selectedSessionId, allowed: !store.isViewingTeamMember)
             queueExpanded = false
             restoreQueuedDraft()
@@ -1298,17 +1297,17 @@ struct ConversationView: View {
             store.fileUploads.select(sessionID: store.selectedSessionId, allowed: !store.isViewingTeamMember)
             restoreQueuedDraft()
         }
-        .onChange(of: selectedPhotoItems) { _, items in
+        .onChangeCompat(of: selectedPhotoItems) { _, items in
             guard !items.isEmpty else { return }
             store.voiceInput.setVoiceMode(false)
             let target = store.selectedSessionId
             Task { await importPhotos(items, targetSessionID: target) }
         }
-        .onChange(of: draft) { _, value in
+        .onChangeCompat(of: draft) { _, value in
             store.voiceInput.draftChanged(value)
             store.updateSlashCommandInput(value)
         }
-        .onChange(of: store.commandDraftClearToken) {
+        .onChangeCompat(of: store.commandDraftClearToken) { _, _ in
             draft = ""
             pendingImages = []
             selectedPhotoItems = []
@@ -1469,7 +1468,6 @@ struct ConversationView: View {
             }
             .clipped()
             // 让标题与背景使用同一份逐帧几何尺寸，避免父布局和内部位置分别插值。
-            .geometryGroup()
         }
     }
 
@@ -2881,10 +2879,15 @@ private struct ContentSizedCommandScrollView<Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0, content: content)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .onGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.size.height
-                } action: { height in
-                    contentHeight = height
+                .background {
+                    // iOS 16.1 无 onGeometryChange，改用 GeometryReader 上报高度。
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { contentHeight = proxy.size.height }
+                            .onChangeCompat(of: proxy.size.height) { _, height in
+                                contentHeight = height
+                            }
+                    }
                 }
         }
         .frame(height: min(contentHeight, 300))
@@ -3099,7 +3102,7 @@ private struct SessionStatsSheet: View {
                                 .foregroundStyle(.tertiary)
                         }
                     } else {
-                        ContentUnavailableView("正在读取会话统计", systemImage: "chart.bar.xaxis", description: Text("统计会在本轮结束后自动更新。"))
+                        DshEmptyState("正在读取会话统计", systemImage: "chart.bar.xaxis", description: Text("统计会在本轮结束后自动更新。"))
                             .frame(maxWidth: .infinity, minHeight: 220)
                     }
                 }
@@ -3114,7 +3117,7 @@ private struct SessionStatsSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .presentationBackground(.regularMaterial)
+        .background(.regularMaterial)
     }
 
     @ViewBuilder
@@ -3234,9 +3237,16 @@ private struct ComposerPopoverOverlay<Content: View>: View {
 
                 ScrollView {
                     content
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+                        .background {
+                            GeometryReader { proxy in
+                                Color.clear
+                                    .onAppear { contentHeight = proxy.size.height }
+                                    .onChangeCompat(of: proxy.size.height) { _, height in
+                                        contentHeight = height
+                                    }
+                            }
+                        }
                 }
-                .scrollBounceBehavior(.basedOnSize)
                 .frame(width: width, height: height - arrowHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .padding(displaysAbove ? .bottom : .top, arrowHeight)
@@ -3406,7 +3416,7 @@ private struct ContextUsagePopover: View {
         }
         .padding(18)
         .frame(width: 300)
-        .presentationBackground(.ultraThinMaterial)
+        .background(.ultraThinMaterial)
     }
 
     private func usageRow(_ title: String, value: Int?, color: Color) -> some View {
@@ -4546,7 +4556,6 @@ private struct ToolOutputView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
                 }
-                .defaultScrollAnchor(.topLeading)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(height: 280)
             } else {

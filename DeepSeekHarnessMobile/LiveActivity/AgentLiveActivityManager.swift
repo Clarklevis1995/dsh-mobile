@@ -9,7 +9,7 @@ final class AgentLiveActivityManager {
     static let shared = AgentLiveActivityManager()
 
     private let applicationState: @MainActor () -> UIApplication.State
-    private let requestActivity: @MainActor (AgentActivityAttributes, ActivityContent<AgentActivityAttributes.ContentState>) throws -> Activity<AgentActivityAttributes>
+    private let requestActivity: @MainActor (AgentActivityAttributes, AgentActivityAttributes.ContentState, Date?) throws -> Activity<AgentActivityAttributes>
     private let staleInterval: TimeInterval = 90
     private let updateCoalescingDelay: Duration = .milliseconds(700)
     private var activities: [String: Activity<AgentActivityAttributes>] = [:]
@@ -31,8 +31,8 @@ final class AgentLiveActivityManager {
 
     init(
         applicationState: @escaping @MainActor () -> UIApplication.State = { UIApplication.shared.applicationState },
-        requestActivity: @escaping @MainActor (AgentActivityAttributes, ActivityContent<AgentActivityAttributes.ContentState>) throws -> Activity<AgentActivityAttributes> = {
-            try Activity.request(attributes: $0, content: $1, pushType: nil)
+        requestActivity: @escaping @MainActor (AgentActivityAttributes, AgentActivityAttributes.ContentState, Date?) throws -> Activity<AgentActivityAttributes> = { attributes, state, staleDate in
+            try Activity.requestCompat(attributes: attributes, state: state, staleDate: staleDate)
         },
         restoresSystemActivities: Bool = true
     ) {
@@ -45,18 +45,18 @@ final class AgentLiveActivityManager {
         // like an empty black pill. This product presents the current Agent
         // session, so retain only the newest restorable activity.
         let restored = Activity<AgentActivityAttributes>.activities
-            .sorted { $0.content.state.updatedAt > $1.content.state.updatedAt }
-        if let newest = restored.first(where: { !$0.content.state.phase.isTerminal }) {
+            .sorted { $0.stateCompat.updatedAt > $1.stateCompat.updatedAt }
+        if let newest = restored.first(where: { !$0.stateCompat.phase.isTerminal }) {
             let activityKey = key(
                 gatewayID: newest.attributes.gatewayID,
                 sessionID: newest.attributes.sessionID
             )
             activities[activityKey] = newest
-            latestStates[activityKey] = newest.content.state
+            latestStates[activityKey] = newest.stateCompat
             if rebuildSystemActivitiesIfNeeded(
                 attributes: newest.attributes,
                 activityKey: activityKey,
-                state: newest.content.state,
+                state: newest.stateCompat,
                 maximumAllowedCount: 1
             ) {
                 return
@@ -257,7 +257,7 @@ final class AgentLiveActivityManager {
         sourceLabel: String? = nil
     ) {
         let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
-        guard let current = latestStates[activityKey] ?? activities[activityKey]?.content.state else { return }
+        guard let current = latestStates[activityKey] ?? activities[activityKey]?.stateCompat else { return }
         guard current.phase == .awaitingChoice, current.rpcID == rpcID else { return }
 
         updateExisting(
@@ -288,7 +288,7 @@ final class AgentLiveActivityManager {
               !command.isEmpty else { return }
         let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
         guard !endingSessionKeys.contains(activityKey),
-              var current = latestStates[activityKey] ?? activities[activityKey]?.content.state else { return }
+              var current = latestStates[activityKey] ?? activities[activityKey]?.stateCompat else { return }
 
         guard current.rpcID == rpcID,
               current.command?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false else {
@@ -314,7 +314,7 @@ final class AgentLiveActivityManager {
         guard let title = normalizedTitle(title) else { return }
         let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
         guard !endingSessionKeys.contains(activityKey),
-              var current = latestStates[activityKey] ?? activities[activityKey]?.content.state else { return }
+              var current = latestStates[activityKey] ?? activities[activityKey]?.stateCompat else { return }
 
         guard current.sessionTitle != title else { return }
         current.sessionTitle = title
@@ -410,7 +410,7 @@ final class AgentLiveActivityManager {
     ) {
         let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
         guard !endingSessionKeys.contains(activityKey),
-              let current = latestStates[activityKey] ?? activities[activityKey]?.content.state else { return }
+              let current = latestStates[activityKey] ?? activities[activityKey]?.stateCompat else { return }
         var finalState: AgentActivityAttributes.ContentState
         if current.phase == .rejected {
             finalState = state(
@@ -446,7 +446,7 @@ final class AgentLiveActivityManager {
         enqueue(activityKey: activityKey) {
             if let runningWorker { await runningWorker.value }
             guard self.deferredEndTokens[activityKey] == endToken else { return }
-            await activity.update(ActivityContent(state: finalState, staleDate: nil))
+            await activity.updateCompat(state: finalState)
         }
         deferredEndTasks[activityKey] = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -458,7 +458,7 @@ final class AgentLiveActivityManager {
                 self.activities[activityKey] = nil
                 self.deferredEndTokens[activityKey] = nil
                 self.deferredEndTasks[activityKey] = nil
-                await activity.end(ActivityContent(state: finalState, staleDate: nil), dismissalPolicy: .immediate)
+                await activity.endCompat(state: finalState, dismissalPolicy: .immediate)
             }
         }
     }
@@ -482,9 +482,9 @@ final class AgentLiveActivityManager {
             .filter {
                 $0.attributes.gatewayID == gatewayID
                     && runningBySessionID[$0.attributes.sessionID] == true
-                    && !$0.content.state.phase.isTerminal
+                    && !$0.stateCompat.phase.isTerminal
             }
-            .max { $0.content.state.updatedAt < $1.content.state.updatedAt }
+            .max { $0.stateCompat.updatedAt < $1.stateCompat.updatedAt }
 
         for activity in systemActivities {
             let activityKey = key(
@@ -494,7 +494,7 @@ final class AgentLiveActivityManager {
             let sessionEnded = runningBySessionID[activity.attributes.sessionID] == false
             let duplicate = runningBySessionID[activity.attributes.sessionID] == true
                 && activity.id != newestRunningActivity?.id
-            let terminal = activity.content.state.phase.isTerminal
+            let terminal = activity.stateCompat.phase.isTerminal
 
             // turn/end 的保留窗口内，不让会话快照提前结束系统实例。
             if deferredEndTokens[activityKey] != nil,
@@ -506,7 +506,7 @@ final class AgentLiveActivityManager {
                 // ActivityKit 可能在 App 被系统终止后恢复 Activity。重新登记系统中
                 // 的唯一有效实例，让后续进度和 turn/end 能继续更新同一张卡片。
                 activities[activityKey] = activity
-                latestStates[activityKey] = activity.content.state
+                latestStates[activityKey] = activity.stateCompat
             }
         }
     }
@@ -514,7 +514,7 @@ final class AgentLiveActivityManager {
     /// 后台保活脉冲不改变业务状态，只延长当前实时活动的有效期。
     func refreshActiveActivities() {
         for (activityKey, activity) in activities where !endingSessionKeys.contains(activityKey) {
-            var currentState = latestStates[activityKey] ?? activity.content.state
+            var currentState = latestStates[activityKey] ?? activity.stateCompat
             guard !currentState.phase.isTerminal else { continue }
             currentState.updatedAt = .now
             enqueueUpdate(activityKey: activityKey, activity: activity, state: currentState)
@@ -531,7 +531,7 @@ final class AgentLiveActivityManager {
         state.sessionTitle = normalizedTitle(title) ?? state.sessionTitle
         let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
         guard !endingSessionKeys.contains(activityKey) else { return }
-        let currentState = latestStates[activityKey] ?? activities[activityKey]?.content.state
+        let currentState = latestStates[activityKey] ?? activities[activityKey]?.stateCompat
         guard AgentLiveActivityUpdatePolicy.allows(current: currentState, incoming: state) else { return }
         if rebuildingActivityKeys.contains(activityKey) {
             latestStates[activityKey] = state
@@ -550,12 +550,12 @@ final class AgentLiveActivityManager {
                 key(
                     gatewayID: $0.attributes.gatewayID,
                     sessionID: $0.attributes.sessionID
-                ) == activityKey && !$0.content.state.phase.isTerminal
+                ) == activityKey && !$0.stateCompat.phase.isTerminal
             }
-            .sorted { $0.content.state.updatedAt > $1.content.state.updatedAt }
+            .sorted { $0.stateCompat.updatedAt > $1.stateCompat.updatedAt }
         if let restored = restoredMatches.first {
             activities[activityKey] = restored
-            latestStates[activityKey] = restored.content.state
+            latestStates[activityKey] = restored.stateCompat
             for duplicate in restoredMatches.dropFirst() {
                 dismissImmediately(duplicate)
             }
@@ -591,10 +591,8 @@ final class AgentLiveActivityManager {
         do {
             let activity = try requestActivity(
                 attributes,
-                ActivityContent(
-                    state: state,
-                    staleDate: Date().addingTimeInterval(staleInterval)
-                )
+                state,
+                Date().addingTimeInterval(staleInterval)
             )
             activities[activityKey] = activity
             latestStates[activityKey] = state
@@ -618,7 +616,7 @@ final class AgentLiveActivityManager {
         let activityKey = key(gatewayID: gatewayID, sessionID: sessionID)
         if let activity = activities[activityKey] {
             var merged = state
-            let current = latestStates[activityKey] ?? activity.content.state
+            let current = latestStates[activityKey] ?? activity.stateCompat
             merged.sessionTitle = normalizedTitle(fallbackTitle) ?? current.sessionTitle
             merged.sourceLabel = merged.sourceLabel ?? current.sourceLabel
             if preservesCommand { merged.command = merged.command ?? current.command }
@@ -642,7 +640,7 @@ final class AgentLiveActivityManager {
         ) {
             return
         }
-        let previousState = latestStates[activityKey] ?? activity.content.state
+        let previousState = latestStates[activityKey] ?? activity.stateCompat
         let shouldAlert = AgentLiveActivityAlertPolicy.shouldAlert(
             current: previousState,
             incoming: state
@@ -658,10 +656,11 @@ final class AgentLiveActivityManager {
         let runningWorker = cancelRunningUpdate(activityKey: activityKey)
         enqueue(activityKey: activityKey) {
             if let runningWorker { await runningWorker.value }
-            await activity.update(ActivityContent(
+            await activity.updateCompat(
                 state: state,
-                staleDate: state.phase.isTerminal ? nil : Date().addingTimeInterval(self.staleInterval)
-            ), alertConfiguration: self.alertConfiguration(for: state, shouldAlert: shouldAlert))
+                staleDate: state.phase.isTerminal ? nil : Date().addingTimeInterval(self.staleInterval),
+                alertConfiguration: self.alertConfiguration(for: state, shouldAlert: shouldAlert)
+            )
         }
     }
 
@@ -729,10 +728,10 @@ final class AgentLiveActivityManager {
                     await criticalOperation.value
                 }
                 guard !Task.isCancelled, !self.endingSessionKeys.contains(activityKey) else { return }
-                await activity.update(ActivityContent(
+                await activity.updateCompat(
                     state: state,
                     staleDate: Date().addingTimeInterval(self.staleInterval)
-                ))
+                )
 
                 if self.pendingRunningStates[activityKey] == nil { return }
             }
@@ -834,7 +833,7 @@ final class AgentLiveActivityManager {
             guard let self else { return }
             for activity in systemActivities {
                 self.dismissingActivityIDs.insert(activity.id)
-                await activity.end(nil, dismissalPolicy: .immediate)
+                await activity.endCompat(state: nil, dismissalPolicy: .immediate)
                 self.dismissingActivityIDs.remove(activity.id)
             }
 
@@ -854,10 +853,8 @@ final class AgentLiveActivityManager {
             do {
                 let replacement = try self.requestActivity(
                     attributes,
-                    ActivityContent(
-                        state: latestState,
-                        staleDate: Date().addingTimeInterval(self.staleInterval)
-                    )
+                    latestState,
+                    Date().addingTimeInterval(self.staleInterval)
                 )
                 self.activities[activityKey] = replacement
                 self.pendingCreations[activityKey] = nil
@@ -879,7 +876,7 @@ final class AgentLiveActivityManager {
     private func dismissImmediately(_ activity: Activity<AgentActivityAttributes>) {
         guard dismissingActivityIDs.insert(activity.id).inserted else { return }
         Task { @MainActor [weak self] in
-            await activity.end(nil, dismissalPolicy: .immediate)
+            await activity.endCompat(state: nil, dismissalPolicy: .immediate)
             self?.dismissingActivityIDs.remove(activity.id)
         }
     }
@@ -972,6 +969,62 @@ enum AgentLiveActivityAlertPolicy {
             return current?.phase != incoming.phase || current?.rpcID != incoming.rpcID
         case .running, .submittingApproval, .approved, .rejected, .failed, .completed:
             return false
+        }
+    }
+}
+
+// MARK: - ActivityKit iOS 16.1 兼容层
+//
+// `ActivityContent` / `activity.content` / `update(_:alertConfiguration:)` /
+// `end(_:dismissalPolicy:)` 均为 iOS 16.2 起可用；iOS 16.1 走 contentState 版 API。
+
+private extension Activity where Attributes == AgentActivityAttributes {
+    static func requestCompat(
+        attributes: AgentActivityAttributes,
+        state: AgentActivityAttributes.ContentState,
+        staleDate: Date?
+    ) throws -> Activity<AgentActivityAttributes> {
+        if #available(iOS 16.2, *) {
+            return try request(
+                attributes: attributes,
+                content: ActivityContent(state: state, staleDate: staleDate),
+                pushType: nil
+            )
+        }
+        return try request(attributes: attributes, contentState: state, pushType: nil)
+    }
+
+    var stateCompat: AgentActivityAttributes.ContentState {
+        if #available(iOS 16.2, *) {
+            return content.state
+        }
+        return contentState
+    }
+
+    func updateCompat(
+        state: AgentActivityAttributes.ContentState,
+        staleDate: Date? = nil,
+        alertConfiguration: AlertConfiguration? = nil
+    ) async {
+        if #available(iOS 16.2, *) {
+            await update(
+                ActivityContent(state: state, staleDate: staleDate),
+                alertConfiguration: alertConfiguration
+            )
+        } else {
+            await update(using: state)
+        }
+    }
+
+    func endCompat(
+        state: AgentActivityAttributes.ContentState?,
+        dismissalPolicy: ActivityUIDismissalPolicy = .default
+    ) async {
+        if #available(iOS 16.2, *) {
+            let content = state.map { ActivityContent(state: $0, staleDate: nil) }
+            await end(content, dismissalPolicy: dismissalPolicy)
+        } else {
+            await end(using: state ?? contentState, dismissalPolicy: dismissalPolicy)
         }
     }
 }

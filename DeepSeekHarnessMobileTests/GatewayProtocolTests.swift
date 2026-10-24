@@ -124,8 +124,8 @@ final class AgentLiveActivityLifecycleTests: XCTestCase {
         var requestedDetails: [String?] = []
         let manager = AgentLiveActivityManager(
             applicationState: { appState },
-            requestActivity: { _, content in
-                requestedDetails.append(content.state.detail)
+            requestActivity: { _, state, _ in
+                requestedDetails.append(state.detail)
                 throw URLError(.unknown)
             },
             restoresSystemActivities: false
@@ -153,7 +153,7 @@ final class AgentLiveActivityLifecycleTests: XCTestCase {
         var requestCount = 0
         let manager = AgentLiveActivityManager(
             applicationState: { appState },
-            requestActivity: { _, _ in
+            requestActivity: { _, _, _ in
                 requestCount += 1
                 throw URLError(.unknown)
             },
@@ -171,7 +171,7 @@ final class AgentLiveActivityLifecycleTests: XCTestCase {
         var requestCount = 0
         let manager = AgentLiveActivityManager(
             applicationState: { appState },
-            requestActivity: { _, _ in
+            requestActivity: { _, _, _ in
                 requestCount += 1
                 throw URLError(.unknown)
             },

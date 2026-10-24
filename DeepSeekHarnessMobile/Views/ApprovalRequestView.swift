@@ -35,7 +35,7 @@ struct ApprovalRequestView: View {
                 "hasCommand=\(commandPreview?.isEmpty == false) hasDetails=\(details != nil)"
             )
         }
-        .onChange(of: isCollapsed) { _, collapsed in
+        .onChangeCompat(of: isCollapsed) { _, collapsed in
             gatewayApprovalTrace("ui card collapsed=\(collapsed) rpcId=\(request.rpcId)")
         }
     }
@@ -89,7 +89,6 @@ struct ApprovalRequestView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 1)
                     }
-                    .scrollBounceBehavior(.basedOnSize)
                     .frame(maxHeight: 148)
                 }
 
@@ -160,7 +159,6 @@ struct ApprovalRequestView: View {
                 ApprovalDetailsView(value: value.normalizedValue)
                     .padding(.top, 8)
             }
-            .scrollBounceBehavior(.basedOnSize)
             .frame(maxHeight: 190)
         } label: {
             Label(String(localized: "审批详情"), systemImage: "curlybraces")
@@ -170,7 +168,7 @@ struct ApprovalRequestView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .onChange(of: showsDetails) { _, expanded in
+        .onChangeCompat(of: showsDetails) { _, expanded in
             gatewayApprovalTrace("ui details expanded=\(expanded) rpcId=\(request.rpcId)")
         }
     }

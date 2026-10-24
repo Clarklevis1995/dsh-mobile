@@ -34,7 +34,8 @@ final class AgentBackgroundKeepAliveManager: NSObject, AgentLongRunningKeepAlive
     private var applicationIsInBackground = false
     private var didRequestAlwaysAuthorization = false
     private var locationStartTask: Task<Void, Never>?
-    private var backgroundActivitySession: CLBackgroundActivitySession?
+    // CLBackgroundActivitySession 为 iOS 17 起可用，这里用 AnyObject 承载以兼容 16.1。
+    private var backgroundActivitySession: AnyObject?
     private var isUpdatingLocation = false
 
     private var audioEngine: AVAudioEngine?
@@ -168,11 +169,15 @@ final class AgentBackgroundKeepAliveManager: NSObject, AgentLongRunningKeepAlive
         guard agentWorkIsActive,
               !applicationIsInBackground,
               backgroundActivitySession == nil else { return }
-        backgroundActivitySession = CLBackgroundActivitySession()
+        if #available(iOS 17.0, *) {
+            backgroundActivitySession = CLBackgroundActivitySession()
+        }
     }
 
     private func endBackgroundActivitySession() {
-        backgroundActivitySession?.invalidate()
+        if #available(iOS 17.0, *), let session = backgroundActivitySession as? CLBackgroundActivitySession {
+            session.invalidate()
+        }
         backgroundActivitySession = nil
     }
 

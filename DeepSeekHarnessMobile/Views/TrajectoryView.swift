@@ -530,7 +530,7 @@ private struct EventDetailSheet: View {
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { dismiss() } } }
         }
         .presentationDetents([.medium, .large])
-        .presentationBackground(.ultraThinMaterial)
+        .background(.ultraThinMaterial)
     }
 
     private func scrollPage<Content: View>(_ content: Content) -> some View {
@@ -541,7 +541,6 @@ private struct EventDetailSheet: View {
                 .padding(.top, 22)
                 .padding(.bottom, 52)
         }
-        .scrollBounceBehavior(.basedOnSize)
         .mask {
             VStack(spacing: 0) {
                 LinearGradient(
