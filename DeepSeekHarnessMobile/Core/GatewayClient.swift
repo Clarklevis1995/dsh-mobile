@@ -54,6 +54,8 @@ final class GatewayClient: ObservableObject {
     var onIdentity: ((GatewayFrame, String) throws -> Void)?
     var probeOnly = false
     private var reconnectAttempt = 0
+    /// 本轮网络环境下局域网地址已确认不可达；网络路径变化时重置。
+    private var localNetworkUnavailable = false
     private var networkPathMonitor: NWPathMonitor?
     private lazy var networkRecovery = GatewayNetworkRecovery(
         canRecover: { [weak self] in
@@ -844,6 +846,7 @@ final class GatewayClient: ObservableObject {
                         isManualPairingAttempt = false
                         startMonitoringNetworkChanges()
                         reconnectAttempt = 0
+                        localNetworkUnavailable = false
                         state = .connected
                         onConnectionReady?()
                         traceLifecycle("hello-connected")
@@ -993,6 +996,11 @@ final class GatewayClient: ObservableObject {
     }
 
     private func fail(_ detail: String, shouldReconnect: Bool, reportFailure: Bool = true) {
+        // 局域网地址连接失败 → 标记本轮网络环境下局域网不可用，
+        // 后续重连跳过其余局域网地址，直接尝试公网地址。
+        if shouldReconnect, let endpoint, Self.isLocalNetworkEndpoint(endpoint) {
+            localNetworkUnavailable = true
+        }
         connectionGeneration = UUID()
         connectionPreparationTask?.cancel()
         connectionPreparationTask = nil
@@ -1033,9 +1041,18 @@ final class GatewayClient: ObservableObject {
             do { try await Task.sleep(for: .seconds(delay)) } catch { return }
             guard let self, !Task.isCancelled, self.wantsConnection, var endpoint = self.endpoint else { return }
             if self.trustedEndpoints.count > 1,
-               let index = self.trustedEndpoints.firstIndex(of: endpoint.absoluteString),
-               let next = URL(string: self.trustedEndpoints[(index + 1) % self.trustedEndpoints.count]) {
-                endpoint = next
+               let index = self.trustedEndpoints.firstIndex(of: endpoint.absoluteString) {
+                // 局域网已确认不可用时，跳过其余局域网地址，避免逐个等超时。
+                let count = self.trustedEndpoints.count
+                var candidateIndex = (index + 1) % count
+                for _ in 0..<count {
+                    if let candidate = URL(string: self.trustedEndpoints[candidateIndex]),
+                       !(self.localNetworkUnavailable && Self.isLocalNetworkEndpoint(candidate)) {
+                        endpoint = candidate
+                        break
+                    }
+                    candidateIndex = (candidateIndex + 1) % count
+                }
             }
             self.beginConnection(
                 to: endpoint.absoluteString,
@@ -1061,6 +1078,8 @@ final class GatewayClient: ObservableObject {
     private func recoverNetworkConnection() {
         traceLifecycle("network-path-recovery")
         reconnectAttempt = 0
+        // 网络环境可能已变化（如从家到公司），重新评估局域网可用性。
+        localNetworkUnavailable = false
         if state.isConnected {
             // 两条 socket 都可能停留在旧网络，即使控制通道的 ping 已成功。
             probeForegroundConnection()
@@ -1126,10 +1145,29 @@ final class GatewayClient: ObservableObject {
         }
     }
 
+    /// 判断 endpoint 是否指向局域网/私有网段地址。
+    /// 目的：局域网地址失败时应快速超时跳到公网地址，而不是等满 15 秒。
+    static func isLocalNetworkEndpoint(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        if host.hasSuffix(".local") { return true }
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4 else { return false }
+        switch (parts[0], parts[1]) {
+        case (10, _): return true                                  // 10.0.0.0/8
+        case (192, 168): return true                               // 192.168.0.0/16
+        case (172, 16...31): return true                           // 172.16.0.0/12
+        case (169, 254): return true                               // 169.254.0.0/16 链路本地
+        default: return false
+        }
+    }
+
     private func startConnectionTimeout(for socket: URLSessionWebSocketTask) {
         connectionTimeoutTask?.cancel()
         connectionTimeoutTask = Task { [weak self, weak socket] in
-            try? await Task.sleep(for: .seconds(15))
+            // 局域网地址快速失败（3s），公网地址沿用 15s：
+            // 出门时逐个试局域网地址不应各等 15 秒。
+            let isLocal = self?.endpoint.map(Self.isLocalNetworkEndpoint) ?? false
+            try? await Task.sleep(for: .seconds(isLocal ? 3 : 15))
             guard let self,
                   let socket,
                   self.socket === socket,
