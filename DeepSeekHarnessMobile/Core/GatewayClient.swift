@@ -54,6 +54,9 @@ final class GatewayClient: ObservableObject {
     var onIdentity: ((GatewayFrame, String) throws -> Void)?
     var probeOnly = false
     private var reconnectAttempt = 0
+    /// 本轮网络环境下**已超时失败**的局域网地址（精确到具体 endpoint）。
+    /// 只记录超时，不记录鉴权/DNS 等其他失败——避免一个地址的问题波及全部局域网地址。
+    private var timedOutLocalEndpoints: Set<String> = []
     private var networkPathMonitor: NWPathMonitor?
     private lazy var networkRecovery = GatewayNetworkRecovery(
         canRecover: { [weak self] in
@@ -844,6 +847,7 @@ final class GatewayClient: ObservableObject {
                         isManualPairingAttempt = false
                         startMonitoringNetworkChanges()
                         reconnectAttempt = 0
+                        timedOutLocalEndpoints.removeAll()
                         state = .connected
                         onConnectionReady?()
                         traceLifecycle("hello-connected")
@@ -1033,9 +1037,18 @@ final class GatewayClient: ObservableObject {
             do { try await Task.sleep(for: .seconds(delay)) } catch { return }
             guard let self, !Task.isCancelled, self.wantsConnection, var endpoint = self.endpoint else { return }
             if self.trustedEndpoints.count > 1,
-               let index = self.trustedEndpoints.firstIndex(of: endpoint.absoluteString),
-               let next = URL(string: self.trustedEndpoints[(index + 1) % self.trustedEndpoints.count]) {
-                endpoint = next
+               let index = self.trustedEndpoints.firstIndex(of: endpoint.absoluteString) {
+                // 跳过本轮已超时的局域网地址（精确到地址，不是整个局域网）。
+                let count = self.trustedEndpoints.count
+                var candidateIndex = (index + 1) % count
+                for _ in 0..<count {
+                    if let candidate = URL(string: self.trustedEndpoints[candidateIndex]),
+                       !self.timedOutLocalEndpoints.contains(candidate.absoluteString) {
+                        endpoint = candidate
+                        break
+                    }
+                    candidateIndex = (candidateIndex + 1) % count
+                }
             }
             self.beginConnection(
                 to: endpoint.absoluteString,
@@ -1061,6 +1074,8 @@ final class GatewayClient: ObservableObject {
     private func recoverNetworkConnection() {
         traceLifecycle("network-path-recovery")
         reconnectAttempt = 0
+        // 网络环境可能已变化（如从家到公司），之前超时的地址可能已恢复。
+        timedOutLocalEndpoints.removeAll()
         if state.isConnected {
             // 两条 socket 都可能停留在旧网络，即使控制通道的 ping 已成功。
             probeForegroundConnection()
@@ -1126,16 +1141,40 @@ final class GatewayClient: ObservableObject {
         }
     }
 
+    /// 判断 endpoint 是否指向局域网/私有网段地址。
+    /// 目的：局域网地址失败时应快速超时跳到公网地址，而不是等满 15 秒。
+    static func isLocalNetworkEndpoint(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        if host.hasSuffix(".local") { return true }
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4 else { return false }
+        switch (parts[0], parts[1]) {
+        case (10, _): return true                                  // 10.0.0.0/8
+        case (192, 168): return true                               // 192.168.0.0/16
+        case (172, 16...31): return true                           // 172.16.0.0/12
+        case (169, 254): return true                               // 169.254.0.0/16 链路本地
+        default: return false
+        }
+    }
+
     private func startConnectionTimeout(for socket: URLSessionWebSocketTask) {
         connectionTimeoutTask?.cancel()
         connectionTimeoutTask = Task { [weak self, weak socket] in
-            try? await Task.sleep(for: .seconds(15))
+            // 局域网地址快速失败（3s），公网地址沿用 15s：
+            // 出门时逐个试局域网地址不应各等 15 秒。
+            let isLocal = self?.endpoint.map(Self.isLocalNetworkEndpoint) ?? false
+            try? await Task.sleep(for: .seconds(isLocal ? 3 : 15))
             guard let self,
                   let socket,
                   self.socket === socket,
                   self.wantsConnection,
                   !self.state.isConnected else { return }
             socket.cancel(with: .goingAway, reason: nil)
+            // 只有「超时」才说明该地址在当前网络下不可达，记录具体地址；
+            // 鉴权失败、DNS 解析失败等不记录，避免误伤其他局域网地址。
+            if let ep = self.endpoint, Self.isLocalNetworkEndpoint(ep) {
+                self.timedOutLocalEndpoints.insert(ep.absoluteString)
+            }
             self.fail(
                 String(localized: "connection.timeout", defaultValue: "连接超时，请检查网络或配对信息后重试。"),
                 shouldReconnect: !self.isManualPairingAttempt && !self.probeOnly
