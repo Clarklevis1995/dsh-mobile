@@ -259,7 +259,7 @@ struct ConversationSidebar: View {
                     .lineLimit(1)
                     .appFont(.system(size: 15, weight: selected ? .medium : .regular))
                 Spacer(minLength: 6)
-                Text(Self.shortAge(of: session.lastActivity))
+                Text(session.lastActivity.formatted(.relative(presentation: .named)))
                     .lineLimit(1)
                     .appFont(.system(size: 12))
                     .foregroundStyle(.secondary)
@@ -279,17 +279,6 @@ struct ConversationSidebar: View {
     }
 
     /// 网页版侧栏那样的简短时间：19 小时 / 15 天 / 1 个月。
-    private static func shortAge(of date: Date, now: Date = .now) -> String {
-        let seconds = max(0, now.timeIntervalSince(date))
-        switch seconds {
-        case ..<60: return String(localized: "刚刚")
-        case ..<3_600: return String(localized: "\(Int(seconds / 60))分钟")
-        case ..<86_400: return String(localized: "\(Int(seconds / 3_600))小时")
-        case ..<(30 * 86_400): return String(localized: "\(Int(seconds / 86_400))天")
-        case ..<(365 * 86_400): return String(localized: "\(Int(seconds / (30 * 86_400)))个月")
-        default: return String(localized: "\(Int(seconds / (365 * 86_400)))年")
-        }
-    }
 
     /// 一次遍历把可见会话分到所属工作区（同一会话属于多个工作区时各列一份），
     /// 不属于任何工作区的归入「未分组」，与 AppStore.ungroupedSessions 口径一致。
