@@ -154,11 +154,11 @@ enum AdaptiveLayout {
     static let workspaceWidth: CGFloat = 1_440
 
     static func workspaceUsesColumns(size: CGSize, accessibilityText: Bool = false) -> Bool {
-        // 860 而非 900：iPhone Duo 展开（890×626）恰好落在 900 以下 10px，
-        // 会退化成单栏并浪费横向空间。双栏每栏最少 300px，
-        // 会话列表 320 + 内容 540 = 860 是分界点；
-        // 626 / 678 等窄宽度仍保持单栏。height >= 500 用于挡住横屏手机（852×393）。
-        size.width >= 860 && size.height >= 500 && !accessibilityText
+        guard !accessibilityText, size.height >= 500 else { return false }
+        // 900 是原来的分界（双栏每栏最少 300px）。iPhone Duo 展开横拿约 890×626，
+        // 差一点到 900，所以额外允许「横向且宽 ≥ 700」也分栏；
+        // 折叠（466×678）与展开竖拿（626×890）仍保持单栏。
+        return size.width >= 900 || (size.width >= 700 && size.width > size.height)
     }
 
     static func horizontalInset(width: CGFloat, maximumWidth: CGFloat) -> CGFloat {
