@@ -14,6 +14,7 @@
 		CF2030000000000000000001 /* ChatSessionPrefetcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2030000000000000000002 /* ChatSessionPrefetcherTests.swift */; };
 		CF2020000000000000000001 /* ChatSessionPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2020000000000000000002 /* ChatSessionPrefetcher.swift */; };
 		CF2010000000000000000003 /* ChatHistoryCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2010000000000000000004 /* ChatHistoryCacheTests.swift */; };
+		EAAE88B94CBECC20963D9646 /* AdaptiveLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D3FFEFFB831B9A6454ECA0E /* AdaptiveLayoutTests.swift */; };
 		CF2010000000000000000001 /* ChatHistoryCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2010000000000000000002 /* ChatHistoryCache.swift */; };
 		AF19C0000000000000000001 /* WorkspaceLoadingLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF19C0000000000000000002 /* WorkspaceLoadingLogo.swift */; };
         AF18C0000000000000000001 /* WorkspacePreviewCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF18C0000000000000000002 /* WorkspacePreviewCache.swift */; };
@@ -122,6 +123,7 @@
 		CF2030000000000000000002 /* ChatSessionPrefetcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSessionPrefetcherTests.swift; sourceTree = "<group>"; };
 		CF2020000000000000000002 /* ChatSessionPrefetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSessionPrefetcher.swift; sourceTree = "<group>"; };
 		CF2010000000000000000004 /* ChatHistoryCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryCacheTests.swift; sourceTree = "<group>"; };
+		5D3FFEFFB831B9A6454ECA0E /* AdaptiveLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayoutTests.swift; sourceTree = "<group>"; };
 		CF2010000000000000000002 /* ChatHistoryCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryCache.swift; sourceTree = "<group>"; };
 		AF19C0000000000000000002 /* WorkspaceLoadingLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceLoadingLogo.swift; sourceTree = "<group>"; };
         AF18C0000000000000000002 /* WorkspacePreviewCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspacePreviewCache.swift; sourceTree = "<group>"; };
@@ -273,6 +275,7 @@
 				AF17C0000000000000000004 /* FileIconAssetTests.swift */,
                 AF18C0000000000000000004 /* WorkspacePreviewCacheTests.swift */,
 				CF2010000000000000000004 /* ChatHistoryCacheTests.swift */,
+				5D3FFEFFB831B9A6454ECA0E /* AdaptiveLayoutTests.swift */,
 				CF2030000000000000000002 /* ChatSessionPrefetcherTests.swift */,
 				CA11E0000000000000000011 /* LocalizationCatalogTests.swift */,
 				FEABDA4B6DAF199B320B1BA1 /* MultiGatewayTests.swift */,
@@ -639,6 +642,7 @@
 				AF17C0000000000000000003 /* FileIconAssetTests.swift in Sources */,
                 AF18C0000000000000000003 /* WorkspacePreviewCacheTests.swift in Sources */,
 				CF2010000000000000000003 /* ChatHistoryCacheTests.swift in Sources */,
+				EAAE88B94CBECC20963D9646 /* AdaptiveLayoutTests.swift in Sources */,
 				CF2030000000000000000001 /* ChatSessionPrefetcherTests.swift in Sources */,
 				CA11E000000000000000000F /* LocalizationCatalogTests.swift in Sources */,
 				75392054CB69B9596796C57A /* MultiGatewayTests.swift in Sources */,

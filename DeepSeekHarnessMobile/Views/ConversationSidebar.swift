@@ -295,23 +295,7 @@ struct ConversationSidebar: View {
     /// 不属于任何工作区的归入「未分组」，与 AppStore.ungroupedSessions 口径一致。
     /// 只在会话或工作区列表变化时调用。
     private func regroup() {
-        var owners: [String: [String]] = [:]
-        for workspace in workspaces {
-            for sessionID in workspace.sessionIds {
-                owners[sessionID, default: []].append(workspace.id)
-            }
-        }
-        var result = SessionGroups()
-        for session in sessions where session.isVisibleInHistory {
-            if let workspaceIDs = owners[session.id] {
-                for workspaceID in workspaceIDs {
-                    result.byWorkspace[workspaceID, default: []].append(session)
-                }
-            } else {
-                result.ungrouped.append(session)
-            }
-        }
-        groups = result
+        groups = SessionGroups.group(sessions: sessions, workspaces: workspaces)
     }
 
     private func sortedByActivity(_ sessions: [SessionSummary]) -> [SessionSummary] {
@@ -367,7 +351,30 @@ struct ConversationSidebar: View {
 }
 
 /// 侧栏按工作区分好的会话（未排序；展开时再按最近活动排序）。
-private struct SessionGroups {
+/// 侧栏的工作区分组结果。抽成独立类型是为了可以单测 —— 原本是 View 内部的私有逻辑。
+struct SessionGroups: Equatable {
     var byWorkspace: [String: [SessionSummary]] = [:]
     var ungrouped: [SessionSummary] = []
+
+    /// 同一会话属于多个工作区时，每个工作区各列一份；
+    /// 不属于任何工作区的会话归入「未分组」。没有会话内容的会话不进入任何一组。
+    static func group(sessions: [SessionSummary], workspaces: [GatewayWorkspace]) -> SessionGroups {
+        var owners: [String: [String]] = [:]
+        for workspace in workspaces {
+            for sessionID in workspace.sessionIds {
+                owners[sessionID, default: []].append(workspace.id)
+            }
+        }
+        var result = SessionGroups()
+        for session in sessions where session.isVisibleInHistory {
+            if let workspaceIDs = owners[session.id] {
+                for workspaceID in workspaceIDs {
+                    result.byWorkspace[workspaceID, default: []].append(session)
+                }
+            } else {
+                result.ungrouped.append(session)
+            }
+        }
+        return result
+    }
 }
