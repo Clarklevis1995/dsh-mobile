@@ -59,17 +59,23 @@ enum GatewayIdentity {
         return octets[0] == 10 || octets[0] == 127 ||
             (octets[0] == 192 && octets[1] == 168) ||
             (octets[0] == 172 && (16...31).contains(octets[1])) ||
-            (octets[0] == 169 && octets[1] == 254)
+            (octets[0] == 169 && octets[1] == 254) ||
+            // Tailscale hands out 100.64.0.0/10 from the carrier-grade NAT range.
+            // Traffic there is already inside a WireGuard tunnel, so plain ws://
+            // is no less private than the LAN case above.
+            (octets[0] == 100 && (64...127).contains(octets[1]))
     }
 
+    /// 候选地址里混进一个坏的（旧局域网 IP、被回收的隧道域名）不应该让整次配对失败：
+    /// 跳过它，只要还剩至少一个可用地址就继续。全部不合格才报错。
     static func endpoints(_ payload: GatewayPairingPayload) throws -> [String] {
         guard (payload.endpoints?.count ?? 0) <= 16 else { throw GatewayProfileError.address }
         var values: [String] = []
         for raw in [payload.publicUrl] + (payload.endpoints ?? []) {
-            let value = try endpoint(raw)
+            guard let value = try? endpoint(raw) else { continue }
             if !values.contains(value) { values.append(value) }
         }
-        guard values.count <= 16 else { throw GatewayProfileError.address }
+        guard !values.isEmpty, values.count <= 16 else { throw GatewayProfileError.address }
         return values
     }
 }
