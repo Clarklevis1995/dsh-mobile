@@ -65,6 +65,7 @@
 		E20191A4C7B1C0A8FF57CAC1 /* Glass.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF581253EBCFEB43865AB51 /* Glass.swift */; };
 		E73A2DB9D678DA4B8C01E349 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 4CE3D78565179C422C796509 /* MarkdownUI */; };
 		E7585B9F7F89A3084B6E0182 /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D610757C1FF81FD953A9D000 /* WorkspaceView.swift */; };
+		65B1D361C78618DBA4550C4F /* ConversationSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCB5E4921392A6503AD87B74 /* ConversationSidebar.swift */; };
 		F1A000000000000000000001 /* AgentActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A000000000000000000011 /* AgentActivityAttributes.swift */; };
 		F1A000000000000000000002 /* AgentActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A000000000000000000011 /* AgentActivityAttributes.swift */; };
 		F1A000000000000000000003 /* AgentApprovalIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A000000000000000000012 /* AgentApprovalIntents.swift */; };
@@ -168,6 +169,7 @@
 		CA11E000000000000000000E /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		CA11E0000000000000000011 /* LocalizationCatalogTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalizationCatalogTests.swift; sourceTree = "<group>"; };
 		D610757C1FF81FD953A9D000 /* WorkspaceView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
+		DCB5E4921392A6503AD87B74 /* ConversationSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationSidebar.swift; sourceTree = "<group>"; };
 		D98111628697EC1C4FF9878B /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E5FF365A80AA28B4D4CF2347 /* MultiGatewayStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MultiGatewayStore.swift; sourceTree = "<group>"; };
 		E61E231D0CD3E07857F861B0 /* GatewayClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayClient.swift; sourceTree = "<group>"; };
@@ -376,6 +378,7 @@
 				D98111628697EC1C4FF9878B /* SettingsView.swift */,
 				65009160A0642089906B54DF /* TrajectoryView.swift */,
 				D610757C1FF81FD953A9D000 /* WorkspaceView.swift */,
+				DCB5E4921392A6503AD87B74 /* ConversationSidebar.swift */,
 				65B6B2953247E15BDA40F0BB /* GatewaySwitcherView.swift */,
 			);
 			path = Views;
@@ -690,6 +693,7 @@
 				7B8DAA4E77DE3665B7E1C087 /* SettingsView.swift in Sources */,
 				C5F737EBF5077A9BF35E9F64 /* TrajectoryView.swift in Sources */,
 				E7585B9F7F89A3084B6E0182 /* WorkspaceView.swift in Sources */,
+				65B1D361C78618DBA4550C4F /* ConversationSidebar.swift in Sources */,
 				375D401B1B6F03015EC9073D /* GatewayProfile.swift in Sources */,
 				C075849EE750C3CCD2C87FC7 /* MultiGatewayStore.swift in Sources */,
 				3459A8BD9696202CAC9D85A5 /* GatewaySwitcherView.swift in Sources */,

@@ -37,13 +37,42 @@ private struct RootNavigationHost: View, Equatable {
     let store: AppStore
     @State private var navigationPath: [AppRoute] = []
     @State private var newConversationTask: Task<Void, Never>?
+    /// 侧栏切换 / 新建会话的当前操作编号：被取消的旧任务收尾时，
+    /// 只有编号仍是自己的才清空 newConversationTask，避免误清掉新任务的句柄。
+    @State private var conversationOperationID = UUID()
     @State private var pendingLiveActivitySessionID: String?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @AppStorage(ConversationSidebar.collapsedKey) private var sidebarCollapsed = false
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.store === rhs.store
     }
 
+    /// 折叠屏展开横拿 / iPad 等宽屏，进入首页之后的页面时，左侧常驻会话侧栏。
+    /// 侧栏放在 NavigationStack 外面，导航栏（会话标题、状态、更多）只占右侧。
+    private var showsSidebar: Bool {
+        horizontalSizeClass == .regular
+            && verticalSizeClass == .regular
+            && !navigationPath.isEmpty
+            && !sidebarCollapsed
+    }
+
     var body: some View {
+        HStack(spacing: 0) {
+            if showsSidebar {
+                ConversationSidebar(store: store)
+                    .transition(.move(edge: .leading))
+            }
+            navigationStack
+        }
+        // 侧栏出现 / 消失时，对话区宽度会一下子变化 300pt，输入框随之重新排版、长高。
+        // 让这次宽度变化在同一个动画里平滑过渡；去掉后进入会话会明显抖一下（真机实测）。
+        .animation(.easeInOut(duration: 0.22), value: showsSidebar)
+        .environment(\.conversationSidebarActions, sidebarActions)
+    }
+
+    private var navigationStack: some View {
         NavigationStack(path: $navigationPath) {
             WorkspaceView(
                 onOpenSession: { session in
@@ -57,8 +86,10 @@ private struct RootNavigationHost: View, Equatable {
                 },
                 onNewSession: {
                     guard newConversationTask == nil else { return }
+                    let operationID = UUID()
+                    conversationOperationID = operationID
                     newConversationTask = Task { @MainActor in
-                        defer { newConversationTask = nil }
+                        defer { if conversationOperationID == operationID { newConversationTask = nil } }
                         guard await store.prepareNewConversation(),
                               !Task.isCancelled else { return }
                         let header = ConversationNavigationHeader(
@@ -141,8 +172,10 @@ private struct RootNavigationHost: View, Equatable {
                 )
                 newConversationTask?.cancel()
                 let header = conversationHeader(for: session)
+                let operationID = UUID()
+                conversationOperationID = operationID
                 newConversationTask = Task { @MainActor in
-                    defer { newConversationTask = nil }
+                    defer { if conversationOperationID == operationID { newConversationTask = nil } }
                     guard await store.prepareConversation(for: session), !Task.isCancelled else { return }
                     navigationPath = [.conversation(header)]
                 }
@@ -187,12 +220,69 @@ private struct RootNavigationHost: View, Equatable {
         openLiveActivitySession(session)
     }
 
+    /// 会话页左侧栏（折叠屏展开横拿时）用到的导航动作。
+    private var sidebarActions: ConversationSidebarActions {
+        ConversationSidebarActions(
+            openSession: { session in
+                // 已经停在这个会话页就不重复切换；从设置 / 插件等页面点当前会话则回到会话页。
+                // 有切换还没完成时不能忽略（例如在 A 点了 B 又点回 A），交给 switchToSession 取消并重来。
+                if newConversationTask == nil,
+                   case .conversation(let header)? = navigationPath.last,
+                   header.sessionID == session.id {
+                    return
+                }
+                switchToSession(session)
+            },
+            newSession: { workspace in startNewSessionFromSidebar(in: workspace) },
+            openPlugins: { navigate(to: .plugins) },
+            openScheduledTasks: { navigate(to: .scheduledTasks) },
+            openSettings: {
+                newConversationTask?.cancel()
+                navigate(to: .settings)
+            }
+        )
+    }
+
+    /// 侧栏里新建会话：先切到对应工作区，再像首页「新建会话」一样准备，
+    /// 但用替换路由而不是压栈（侧栏是在会话页里点的，不应越压越深）。
+    private func startNewSessionFromSidebar(in workspace: GatewayWorkspace?) {
+        guard newConversationTask == nil else { return }
+        if let workspace {
+            store.selectWorkspace(workspace)
+        } else {
+            store.selectUngroupedWorkspace()
+        }
+        let operationID = UUID()
+        conversationOperationID = operationID
+        newConversationTask = Task { @MainActor in
+            defer { if conversationOperationID == operationID { newConversationTask = nil } }
+            guard await store.prepareNewConversation(),
+                  !Task.isCancelled else { return }
+            let header = ConversationNavigationHeader(
+                sessionID: store.selectedSessionId,
+                title: String(localized: "session.new.fallback", defaultValue: "新建 DeepSeek Harness"),
+                agentPresetTitle: agentPresetDisplayName(for: store.agentPresetDefault)
+            )
+            navigationPath = [.conversation(header)]
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            await store.activatePreparedConversation(sessionID: header.sessionID)
+        }
+    }
+
     private func openLiveActivitySession(_ session: SessionSummary) {
         pendingLiveActivitySessionID = nil
+        switchToSession(session)
+    }
+
+    /// 在当前导航栈上直接换成另一个会话（Live Activity 深链接与侧栏点会话共用）。
+    private func switchToSession(_ session: SessionSummary) {
         newConversationTask?.cancel()
         let header = conversationHeader(for: session)
+        let operationID = UUID()
+        conversationOperationID = operationID
         newConversationTask = Task { @MainActor in
-            defer { newConversationTask = nil }
+            defer { if conversationOperationID == operationID { newConversationTask = nil } }
             guard await store.prepareConversation(for: session), !Task.isCancelled else { return }
             // Replace the route in one published mutation. Clearing the stack first
             // briefly made `onChange` call `resumeWorkspace()`, which sent an
@@ -860,10 +950,30 @@ private struct ConversationNavigationShell<Content: View>: View {
     @State private var liveTitle: String?
     @State private var livePresetTitle: String?
     @State private var showsTeamEntry = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @AppStorage(ConversationSidebar.collapsedKey) private var sidebarCollapsed = false
+
+    /// 宽屏下左侧栏被收起时，在导航栏左侧给一个重新展开的按钮。
+    private var showsSidebarToggle: Bool {
+        horizontalSizeClass == .regular && verticalSizeClass == .regular && sidebarCollapsed
+    }
 
     var body: some View {
         content()
             .navigationTitle(liveTitle ?? header.title)
+            .toolbar {
+                if showsSidebarToggle {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.22)) { sidebarCollapsed = false }
+                        } label: {
+                            Image(systemName: "sidebar.left")
+                        }
+                        .accessibilityLabel("展开侧边栏")
+                    }
+                }
+            }
             .onReceive(store.$sessions) { sessions in
                 let sessionID = header.sessionID ?? store.selectedSessionId
                 liveTitle = sessions.first { $0.id == sessionID }?.title
