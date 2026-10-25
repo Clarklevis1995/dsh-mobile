@@ -225,7 +225,7 @@ struct ConversationSidebar: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
-        .accessibilityValue(isExpanded ? "已展开" : "已收起")
+        .accessibilityValue(isExpanded ? Text("已展开") : Text("已收起"))
 
         if isExpanded {
             let sessions = sortedByActivity(sessions)
@@ -277,8 +277,6 @@ struct ConversationSidebar: View {
         }
         .buttonStyle(.plain)
     }
-
-    /// 网页版侧栏那样的简短时间：19 小时 / 15 天 / 1 个月。
 
     /// 一次遍历把可见会话分到所属工作区（同一会话属于多个工作区时各列一份），
     /// 不属于任何工作区的归入「未分组」，与 AppStore.ungroupedSessions 口径一致。
@@ -339,7 +337,6 @@ struct ConversationSidebar: View {
     }
 }
 
-/// 侧栏按工作区分好的会话（未排序；展开时再按最近活动排序）。
 /// 侧栏的工作区分组结果。抽成独立类型是为了可以单测 —— 原本是 View 内部的私有逻辑。
 struct SessionGroups: Equatable {
     var byWorkspace: [String: [SessionSummary]] = [:]

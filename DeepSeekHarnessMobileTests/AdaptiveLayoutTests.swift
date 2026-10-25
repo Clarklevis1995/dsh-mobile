@@ -8,7 +8,8 @@ final class AdaptiveLayoutTests: XCTestCase {
 
     // MARK: - workspaceUsesColumns
 
-    /// 尺寸表来自真机实测（iPhone Duo 三种形态 + 其它参考机型）。
+    /// Duo 折叠 466×678 与展开横拿 890×626 是真机量到的；
+    /// 932×430（iPhone 横屏）、1024×768（iPad）、1200×400 是参考尺寸。
     func testWorkspaceUsesColumnsMatchesDeviceShapes() {
         let cases: [(name: String, width: CGFloat, height: CGFloat, expected: Bool)] = [
             ("iPhone Duo 折叠 466×678", 466, 678, false),
@@ -29,13 +30,18 @@ final class AdaptiveLayoutTests: XCTestCase {
         }
     }
 
-    /// 900 是作者原本的边界，横屏规则不能顺手把它降低 —— 这个用例钉住它。
-    func testLandscapeRuleDoesNotLowerTheOriginalNineHundredBoundary() {
+    /// 900 是作者原本的边界，横屏规则不能顺手把它降低。
+    /// 关键是下面「竖着拿、宽度 899 / 860 都不分栏」那两条：如果谁把 900 改回 860，
+    /// 这两条会立刻失败 —— 只验「该分栏的分了」是钉不住边界的。
+    func testOriginalNineHundredBoundaryIsNotLowered() {
         XCTAssertTrue(AdaptiveLayout.workspaceUsesColumns(size: CGSize(width: 900, height: 700)))
         XCTAssertTrue(AdaptiveLayout.workspaceUsesColumns(size: CGSize(width: 1100, height: 800)))
         // 890×626 只有走横屏规则才分栏，竖着拿同样的宽度不分栏。
         XCTAssertTrue(AdaptiveLayout.workspaceUsesColumns(size: CGSize(width: 890, height: 626)))
         XCTAssertFalse(AdaptiveLayout.workspaceUsesColumns(size: CGSize(width: 626, height: 890)))
+        // 竖着拿时，899 和 860 都必须单栏（860 是 #58 提过又被撤回的值）。
+        XCTAssertFalse(AdaptiveLayout.workspaceUsesColumns(size: CGSize(width: 899, height: 1000)))
+        XCTAssertFalse(AdaptiveLayout.workspaceUsesColumns(size: CGSize(width: 860, height: 1000)))
     }
 
     /// 无障碍大字号时不分栏，保持作者原来的行为。
