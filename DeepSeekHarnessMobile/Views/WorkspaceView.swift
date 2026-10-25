@@ -185,9 +185,9 @@ struct WorkspaceView: View {
                         recentSessions
                     }
                 }
+                // GeometryReader 给出的宽度已经扣除左右安全区，不能再按 safeArea 补一次，
+                // 否则右侧有安全区时（如折叠屏侧边的状态栏）会空出一大条，左右不对称。
                 .padding(.horizontal, usesColumns ? 40 : 22)
-                .padding(.leading, safeArea.leading)
-                .padding(.trailing, safeArea.trailing)
                 .padding(.top, safeArea.top + 18)
                 .padding(.bottom, safeArea.bottom + 24)
                 .readableContentWidth(AdaptiveLayout.workspaceWidth)
