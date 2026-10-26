@@ -742,7 +742,12 @@ private fun SessionList(
                 if (renaming) AlertDialog(
                     onDismissRequest = { renaming = false },
                     title = { Text(appText("重命名会话")) },
-                    text = { OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true) },
+                    text = {
+                        // 弹窗属于独立窗口，必须自带菜单宿主，否则长按选字会跨窗口取坐标直接崩。
+                        DshMenuHost {
+                            OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true)
+                        }
+                    },
                     confirmButton = {
                         TextButton(enabled = title.isNotBlank(), onClick = {
                             onRename(session.id, title)
@@ -754,7 +759,7 @@ private fun SessionList(
                 if (archiving) AlertDialog(
                     onDismissRequest = { archiving = false },
                     title = { Text(appText("删除会话？")) },
-                    text = { Text(appText("会话将被归档并从列表隐藏，历史记录会保留。")) },
+                    text = { DshMenuHost { Text(appText("会话将被归档并从列表隐藏，历史记录会保留。")) } },
                     confirmButton = {
                         TextButton(onClick = { onArchive(session.id); archiving = false }) { Text(appText("删除")) }
                     },

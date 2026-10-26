@@ -65,18 +65,26 @@ internal fun DshMenuHost(content: @Composable () -> Unit) {
                 val session = provider.session
                 val destination = coordinates
                 if (session != null && destination?.isAttached == true) {
-                    val bounds = session.data.contentBounds(destination).translate(destination.positionInWindow())
-                    val items = session.data.data().components.filterIsInstance<TextContextMenuItem>()
-                    DshTextActions(bounds, session::close, items.map { item ->
-                        val label = when (item.key) {
-                            TextContextMenuKeys.CopyKey -> "复制"
-                            TextContextMenuKeys.CutKey -> "剪切"
-                            TextContextMenuKeys.PasteKey -> "粘贴"
-                            TextContextMenuKeys.SelectAllKey -> "全选"
-                            else -> item.label
-                        }
-                        com.clarklevis.dsh.android.localization.appText(label) to { item.onClick(session) }
-                    })
+                    // 跨窗口求公共祖先会抛 IllegalArgumentException("layouts are not part of the same hierarchy")。
+                    // 真实输入框在 Dialog 窗口、宿主在 Activity 窗口时就会出现，取不到坐标时安静收起菜单，绝不炸进程。
+                    val bounds = runCatching {
+                        session.data.contentBounds(destination).translate(destination.positionInWindow())
+                    }.getOrNull()
+                    if (bounds == null) {
+                        androidx.compose.runtime.LaunchedEffect(session) { session.close() }
+                    } else {
+                        val items = session.data.data().components.filterIsInstance<TextContextMenuItem>()
+                        DshTextActions(bounds, session::close, items.map { item ->
+                            val label = when (item.key) {
+                                TextContextMenuKeys.CopyKey -> "复制"
+                                TextContextMenuKeys.CutKey -> "剪切"
+                                TextContextMenuKeys.PasteKey -> "粘贴"
+                                TextContextMenuKeys.SelectAllKey -> "全选"
+                                else -> item.label
+                            }
+                            com.clarklevis.dsh.android.localization.appText(label) to { item.onClick(session) }
+                        })
+                    }
                 }
                 legacy.request?.let { DshTextActions(it.bounds, legacy::hide, it.actions) }
             }
