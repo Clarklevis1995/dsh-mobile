@@ -36,6 +36,36 @@ final class MultiGatewayTests: XCTestCase {
         XCTAssertThrowsError(try GatewayIdentity.endpoints(payload))
     }
 
+    /// Tailscale 分配的是 100.64.0.0/10（运营商级 NAT 段）。这段里允许明文 ws://，
+    /// 因为流量本来就在 WireGuard 隧道内；两端边界外仍然必须走 wss。
+    func testTailscaleCarrierNatRangeAcceptsPlainWebSocketOnlyInsideSlashTen() throws {
+        XCTAssertNoThrow(try GatewayIdentity.endpoint("ws://100.103.93.57:3081/ws/mobile"))
+        XCTAssertThrowsError(try GatewayIdentity.endpoint("ws://100.63.255.1:3081/ws/mobile"))
+        XCTAssertThrowsError(try GatewayIdentity.endpoint("ws://100.128.0.1:3081/ws/mobile"))
+    }
+
+    /// 候选地址里混进一个坏的，不应该让整次配对失败；全部不合格才报错。
+    func testUnusableCandidatesAreSkippedInsteadOfFailingTheWholePairing() throws {
+        let mixed = GatewayPairingPayload(
+            version: 2,
+            publicUrl: "wss://gateway.example/ws/mobile",
+            pairingCode: "once",
+            expiresAt: 4_102_444_800_000,
+            endpoints: ["ws://plain.example/ws/mobile"]
+        )
+        let values = try GatewayIdentity.endpoints(mixed)
+        XCTAssertEqual(values, ["wss://gateway.example/ws/mobile"])
+
+        let nothingUsable = GatewayPairingPayload(
+            version: 2,
+            publicUrl: "ws://plain.example/ws/mobile",
+            pairingCode: "once",
+            expiresAt: 4_102_444_800_000,
+            endpoints: []
+        )
+        XCTAssertThrowsError(try GatewayIdentity.endpoints(nothingUsable))
+    }
+
     func testPreferencesIsolateSameResourceIDs() throws {
         let defaults = UserDefaults(suiteName: "multi-test-\(UUID())")!
         let first = UserDefaultsAppPreferences(userDefaults: defaults, gatewayID: "A")
