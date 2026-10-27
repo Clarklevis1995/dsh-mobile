@@ -25,6 +25,24 @@ class WorkspaceSelectionTest {
     }
 
     @Test
+    fun allWorkspacesScopeListsEveryVisibleSessionRegardlessOfMembership() {
+        val rows = listOf(
+            SessionSummary("a", "a", 1.0, false, false),
+            SessionSummary("b", "b", 2.0, false, false),
+            SessionSummary("child", "child", 3.0, false, false, parentSessionId = "a", origin = "subagent"),
+            SessionSummary("draft", "draft", 4.0, false, false, hasConversation = false)
+        )
+        val groups = listOf(GatewayWorkspace("w", "/repo", "repo", listOf("a"), "now", "now"))
+
+        // 全部会话：不按工作区成员关系过滤，但仍隐藏子智能体与无正文会话
+        val all = workspaceScopedSessions(rows, groups, AndroidSharedStateHolder.ALL_WORKSPACES_ID)
+        assertEquals(listOf("a", "b"), all.map { it.id })
+
+        // 既有行为不变：选中某个工作区时只看成员
+        assertEquals(listOf("a"), workspaceScopedSessions(rows, groups, "w").map { it.id })
+    }
+
+    @Test
     fun blankSessionsAreHiddenInWorkspaceAndUngroupedHistory() {
         val draftSessions = sessions.map { it.copy(hasConversation = false) }
         assertEquals(emptyList<SessionSummary>(), workspaceScopedSessions(draftSessions, workspaces, "w1"))

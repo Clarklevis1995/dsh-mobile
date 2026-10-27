@@ -319,6 +319,11 @@ internal fun WorkspaceScreen(
 
     val workspaces = stateHolder.availableWorkspaces
     val selectedWorkspace = stateHolder.activeWorkspace
+    // 2026-10-27（fork）：会话 → 所属工作区标题，供"全部会话"视图标注归属。
+    val sessionFolderLabels = remember(workspaces) {
+        buildMap { workspaces.forEach { ws -> ws.sessionIds.forEach { sid -> put(sid, ws.title) } } }
+    }
+    val showingAllWorkspaces = stateHolder.selectedWorkspaceId == AndroidSharedStateHolder.ALL_WORKSPACES_ID
     val ungroupedSelected = stateHolder.isUngroupedWorkspaceSelected
     val sessions = remember(
         stateHolder.snapshot.sessions,
@@ -408,6 +413,8 @@ internal fun WorkspaceScreen(
                                         session.isVisibleInHistory && session.id !in stateHolder.childSessionIds &&
                                             workspaces.none { session.id in it.sessionIds }
                                     },
+                                    allWorkspaces = showingAllWorkspaces,
+                                    sessionCount = sessions.size,
                                     state = stateHolder.gatewayState,
                                     onClick = { showWorkspaceMenu = true }
                                 )
@@ -440,7 +447,9 @@ internal fun WorkspaceScreen(
                                 if (searchQuery.isNotBlank()) stateHolder.localChatMatches.firstOrNull { it.sessionId == id }
                                     ?.let(stateHolder::prepareLocalChatMatch)
                                 onOpenSession(id)
-                            }, stateHolder::renameSession, stateHolder::archiveSession)
+                            }, stateHolder::renameSession, stateHolder::archiveSession,
+                                folderLabels = sessionFolderLabels,
+                                maxRows = if (showingAllWorkspaces) 200 else 12)
                             Spacer(Modifier.height(24.dp))
                         }
                     )
@@ -562,6 +571,8 @@ private fun WorkspaceCard(
     workspace: GatewayWorkspace?,
     ungrouped: Boolean,
     ungroupedCount: Int,
+    allWorkspaces: Boolean = false,
+    sessionCount: Int = 0,
     state: GatewayRuntimeState,
     onClick: () -> Unit
 ) {
@@ -582,14 +593,18 @@ private fun WorkspaceCard(
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(0.dp)) {
             Text(
-                if (ungrouped) appText("未分组") else workspace?.title ?: "DeepseekHarnessProject",
+                if (allWorkspaces) appText("全部会话")
+                else if (ungrouped) appText("未分组")
+                else workspace?.title ?: "DeepseekHarnessProject",
                 color = Color.White,
                 fontSize = 14.sp,
                 lineHeight = 16.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                if (ungrouped) appText("%1\$s 个未归属会话", ungroupedCount) else workspace?.path ?: appText("通过 Mobile Gateway 连接"),
+                if (allWorkspaces) appText("%1\$s 个会话（跨全部工作区）", sessionCount)
+                else if (ungrouped) appText("%1\$s 个未归属会话", ungroupedCount)
+                else workspace?.path ?: appText("通过 Mobile Gateway 连接"),
                 color = Color.White.copy(alpha = 0.55f),
                 fontSize = 12.sp,
                 lineHeight = 14.sp,
@@ -718,22 +733,35 @@ private fun EmptySessions() {
     )
 }
 
+// 会话归属标签：优先工作区标题，其次退回 cwd 末段；与标题相同则不显示，避免重复。
+private fun sessionFolderLabel(session: SessionSummary, folderLabels: Map<String, String>): String? {
+    val label = folderLabels[session.id]
+        ?: session.cwd?.trimEnd('/')?.substringAfterLast('/')?.takeIf { it.isNotEmpty() }
+    return label?.takeIf { it != session.title }
+}
+
 @Composable
 private fun SessionList(
     sessions: List<SessionSummary>,
     onOpen: (String) -> Unit,
     onRename: (String, String) -> Unit,
-    onArchive: (String) -> Unit
+    onArchive: (String) -> Unit,
+    folderLabels: Map<String, String> = emptyMap(),
+    maxRows: Int = 12
 ) {
     Column(Modifier.background(Color.Transparent)) {
-        sessions.take(12).forEach { session ->
+        sessions.take(maxRows).forEach { session ->
             androidx.compose.runtime.key(session.id) {
                 var menuVisible by remember { mutableStateOf(false) }
                 var renaming by remember { mutableStateOf(false) }
                 var archiving by remember { mutableStateOf(false) }
                 var title by remember { mutableStateOf(session.title) }
                 Box {
-                    SessionRow(session, onClick = { onOpen(session.id) }, onLongClick = { menuVisible = true })
+                    SessionRow(
+                        session,
+                        folderLabel = sessionFolderLabel(session, folderLabels),
+                        onClick = { onOpen(session.id) },
+                        onLongClick = { menuVisible = true })
                     SessionContextMenu(
                         expanded = menuVisible,
                         onDismissRequest = { menuVisible = false },
@@ -777,7 +805,12 @@ private fun SessionList(
 }
 
 @Composable
-private fun SessionRow(session: SessionSummary, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun SessionRow(
+    session: SessionSummary,
+    folderLabel: String? = null,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
     Row(
         Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 4.dp, vertical = 10.dp)
             .testTag("workspace-session-${session.id}"),
@@ -801,7 +834,7 @@ private fun SessionRow(session: SessionSummary, onClick: () -> Unit, onLongClick
                 style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
             )
             Text(
-                text = session.id.take(16),
+                text = folderLabel?.let { "$it · ${session.id.take(16)}" } ?: session.id.take(16),
                 color = Color.White.copy(alpha = 0.42f),
                 fontSize = 12.sp,
                 lineHeight = 14.sp,
@@ -877,6 +910,9 @@ internal fun workspaceScopedSessions(
     selectedWorkspaceId: String?,
     childSessionIds: Set<String> = emptySet()
 ): List<SessionSummary> {
+    if (selectedWorkspaceId == AndroidSharedStateHolder.ALL_WORKSPACES_ID) {
+        return sessions.filter { it.isVisibleInHistory && it.id !in childSessionIds }
+    }
     val selected = workspaces.firstOrNull { it.workspaceId == selectedWorkspaceId }
         ?: workspaces.firstOrNull()
     if (

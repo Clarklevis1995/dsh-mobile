@@ -13,7 +13,9 @@ data class SessionSummary(
     // null 兼容旧缓存；网关列表到达后使用 Host 的 blank 标记决定历史可见性。
     val hasConversation: Boolean? = null,
     val parentSessionId: String? = null,
-    val origin: String? = null
+    val origin: String? = null,
+    // 会话所属目录，供跨工作区列表标注归属。
+    val cwd: String? = null
 ) {
     // 普通 fork 也可能有父会话，只隐藏 Host 明确标记的子智能体。
     val isSubagent: Boolean get() = origin == "subagent"
@@ -143,7 +145,8 @@ object SessionListReducer {
                 agentPreset = item.agentPreset ?: existing.agentPreset,
                 hasConversation = !item.blank,
                 parentSessionId = item.parentSessionId ?: existing.parentSessionId,
-                origin = item.origin ?: existing.origin
+                origin = item.origin ?: existing.origin,
+                cwd = item.cwd ?: existing.cwd
             ) ?: SessionSummary(
                 id = item.sessionId,
                 title = if (item.blank) labels.blankTitle(item.sessionId) else title,
@@ -153,7 +156,8 @@ object SessionListReducer {
                 agentPreset = item.agentPreset,
                 hasConversation = !item.blank,
                 parentSessionId = item.parentSessionId,
-                origin = item.origin
+                origin = item.origin,
+                cwd = item.cwd
             )
         }
         return state.copy(sessions = sessions.values
