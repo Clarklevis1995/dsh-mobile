@@ -49,6 +49,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -69,6 +70,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -91,7 +93,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -270,7 +271,7 @@ internal fun ConversationScreen(
             contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                TopAppBar(
+                ConversationTopBar(
                     title = {
                         Text(
                             title,
@@ -338,9 +339,7 @@ internal fun ConversationScreen(
                             }
                         )
                         Spacer(Modifier.width(8.dp))
-                    },
-                    expandedHeight = 64.dp,
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    }
                 )
             }
         ) { padding ->
@@ -394,6 +393,31 @@ internal fun ConversationScreen(
 
     if (showWorkspaceFiles) {
         WorkspaceFilesBottomSheet(stateHolder, initialPath = workspaceInitialPath) { showWorkspaceFiles = false }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ConversationTopBar(
+    title: @Composable () -> Unit,
+    navigationIcon: @Composable () -> Unit,
+    actions: @Composable RowScope.() -> Unit
+) {
+    // Material TopAppBar 内部会 clipToBounds，裁掉圆形按钮超出栏底的阴影。
+    // 保留原来的高度和安全区，用不裁切的容器承载浮动按钮。
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(TopAppBarDefaults.windowInsets)
+            .height(64.dp)
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        navigationIcon()
+        Box(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+            title()
+        }
+        actions()
     }
 }
 

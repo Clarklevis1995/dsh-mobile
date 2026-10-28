@@ -120,6 +120,7 @@ struct TrajectoryView: View {
         }
         .padding(.horizontal, 20).padding(.vertical, 12)
         .readableContentWidth()
+        .sessionPagerHorizontalScrollRegion()
         .background(Color(uiColor: .secondarySystemBackground))
         .overlay(alignment: .bottom) {
             Rectangle()
@@ -207,6 +208,7 @@ private struct TimelineOverviewCanvas: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 plot(layout: layout, width: max(geometry.size.width, CGFloat(nodes.count) * 8))
             }
+            .accessibilityIdentifier("trajectory-overview-scroll")
         }
     }
 

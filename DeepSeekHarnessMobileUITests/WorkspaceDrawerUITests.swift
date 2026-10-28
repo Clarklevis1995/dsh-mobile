@@ -1,6 +1,76 @@
 import XCTest
 import UIKit
 
+final class TrajectoryGestureUITests: XCTestCase {
+    func testOverviewDragDoesNotSwipePageAndBodyStillCanSwipe() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: 2) { alert.buttons.firstMatch.tap() }
+        XCTAssertTrue(app.buttons["设置"].waitForExistence(timeout: 10))
+        let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-"))
+        try XCTSkipUnless(sessions.firstMatch.waitForExistence(timeout: 10), "需要一个已有会话，只读检查手势")
+        let referenceSession = sessions.matching(NSPredicate(format: "label CONTAINS %@", "国内手机")).firstMatch
+        (referenceSession.exists ? referenceSession : sessions.firstMatch).tap()
+        let viewport = app.collectionViews["conversation-history-viewport"]
+        XCTAssertTrue(viewport.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.segmentedControls.count, 0)
+        let title = app.buttons["conversation-page-title"]
+        XCTAssertTrue(title.exists)
+        XCTAssertLessThan(viewport.frame.minY, title.frame.minY, "消息视口应延伸到顶部毛玻璃后方")
+        let glassPreview = XCTAttachment(screenshot: app.screenshot())
+        glassPreview.name = "会话顶部毛玻璃"
+        glassPreview.lifetime = .keepAlways
+        add(glassPreview)
+        XCTAssertEqual(title.value as? String, "对话")
+        title.tap()
+        XCTAssertEqual(title.value as? String, "轨迹")
+        let duration = app.buttons["trajectory-duration-toggle"]
+        XCTAssertTrue(duration.waitForExistence(timeout: 10))
+        XCTAssertGreaterThanOrEqual(duration.frame.minY, title.frame.maxY, "轨迹操作区不能被导航栏遮挡")
+        let original = duration.frame
+        let frame = app.frame
+        // 从摘要和图表两处向右拖，足以触发外层返回“对话”的翻页阈值。
+        for y in [original.midY, original.maxY + 30] {
+            let start = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.width * 0.35, dy: y))
+            let end = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.width * 0.85, dy: y))
+            for _ in 0..<2 {
+                start.press(forDuration: 0.05, thenDragTo: end)
+                XCTAssertEqual(title.value as? String, "轨迹")
+                XCTAssertEqual(duration.frame.minX, original.minX, accuracy: 1)
+            }
+            end.press(forDuration: 0.05, thenDragTo: start)
+            XCTAssertEqual(duration.frame.minX, original.minX, accuracy: 1)
+        }
+        let bodyY = max(original.maxY + 150, frame.height * 0.55)
+        let bodyLeft = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.width * 0.25, dy: bodyY))
+        let bodyRight = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.width * 0.85, dy: bodyY))
+        bodyLeft.press(forDuration: 0.05, thenDragTo: bodyRight)
+        XCTAssertEqual(title.value as? String, "对话")
+        bodyRight.press(forDuration: 0.05, thenDragTo: bodyLeft)
+        XCTAssertEqual(title.value as? String, "轨迹")
+        XCTAssertEqual(duration.frame.minX, original.minX, accuracy: 1)
+
+        // 标题的精确切换入口，以及两页常驻时的轨迹本地状态。
+        let wasSelected = duration.isSelected
+        duration.tap()
+        XCTAssertNotEqual(duration.isSelected, wasSelected)
+        title.press(forDuration: 1)
+        let conversation = app.buttons["对话"].firstMatch
+        XCTAssertTrue(conversation.waitForExistence(timeout: 3))
+        conversation.tap()
+        XCTAssertEqual(title.value as? String, "对话")
+        title.press(forDuration: 1)
+        let trajectory = app.buttons["轨迹"].firstMatch
+        XCTAssertTrue(trajectory.waitForExistence(timeout: 3))
+        trajectory.tap()
+        XCTAssertEqual(title.value as? String, "轨迹")
+        XCTAssertEqual(duration.isSelected, !wasSelected)
+    }
+}
+
 final class WorkspaceDrawerUITests: XCTestCase {
     private var app: XCUIApplication!
 

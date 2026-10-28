@@ -129,8 +129,8 @@ private struct RootNavigationHost: View, Equatable {
                 onActivate: {
                     await store.activatePreparedConversation(sessionID: header.sessionID)
                 }
-            ) {
-                ConversationView()
+            ) { activeView, topInset in
+                ConversationView(activeView: activeView, topContentInset: topInset)
             }
         case .settings:
             SettingsView()
@@ -907,13 +907,15 @@ private struct ConversationNavigationShell<Content: View>: View {
     let store: AppStore
     let sidebarActions: ConversationSidebarActions
     let onActivate: () async -> Void
-    @ViewBuilder let content: () -> Content
+    @ViewBuilder let content: (Binding<Int>, CGFloat) -> Content
+    @State private var activeView = 0
     @State private var workspaceFilesPresentation: WorkspaceFilesPresentation?
     @State private var liveTitle: String?
     @State private var livePresetTitle: String?
     @State private var showsTeamEntry = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsSidebar = false
     @State private var sidebarAvailableHeight: CGFloat = 0
 
@@ -923,13 +925,17 @@ private struct ConversationNavigationShell<Content: View>: View {
     }
 
     var body: some View {
-        content()
+        GeometryReader { geometry in
+            // 视口可滚入导航栏和状态栏后方，首屏的可读边界仍由内容 inset 保留。
+            content($activeView, geometry.safeAreaInsets.top)
+                .ignoresSafeArea(.container, edges: .top)
+        }
             .onGeometryChange(for: CGFloat.self) { geometry in
                 geometry.size.height
             } action: { height in
                 sidebarAvailableHeight = height
             }
-            .navigationTitle(liveTitle ?? header.title)
+            .navigationTitle("")
             .toolbar {
                 if showsSidebarToggle {
                     ToolbarItem(placement: .topBarLeading) {
@@ -949,6 +955,12 @@ private struct ConversationNavigationShell<Content: View>: View {
                             .frame(idealHeight: sidebarAvailableHeight, maxHeight: sidebarAvailableHeight)
                         }
                     }
+                }
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .principal) { pageTitle }
+                        .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .principal) { pageTitle }
                 }
             }
             .onChangeCompat(of: showsSidebarToggle) { _, available in
@@ -1021,6 +1033,36 @@ private struct ConversationNavigationShell<Content: View>: View {
             .sheet(item: $workspaceFilesPresentation, onDismiss: { store.conversationDirectoryPath = nil }) { request in
                 WorkspaceFilesSheet(store: store, sessionID: request.sessionID, initialPath: request.initialPath)
             }
+    }
+
+    private var pageTitle: some View {
+        Button {
+            selectPage(activeView == 0 ? 1 : 0)
+        } label: {
+            Text(liveTitle ?? header.title)
+                .appFont(.headline)
+                .lineLimit(1)
+                .frame(minWidth: 44, maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("conversation-page-title")
+        .accessibilityValue(activeView == 0 ? Text("对话") : Text("轨迹"))
+        .accessibilityHint("轻点切换页面，长按选择对话或轨迹")
+        .contextMenu {
+            Button("对话", systemImage: activeView == 0 ? "checkmark" : "bubble.left") {
+                selectPage(0)
+            }
+            Button("轨迹", systemImage: activeView == 1 ? "checkmark" : "point.topleft.down.curvedto.point.bottomright.up") {
+                selectPage(1)
+            }
+        }
+    }
+
+    private func selectPage(_ page: Int) {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
+            activeView = page
+        }
     }
 
     /// 先关闭悬浮面板，再复用现有会话切换或导航操作；不改变正文宽度。

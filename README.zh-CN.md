@@ -46,13 +46,13 @@ Whaleness 是独立开发的 DeepSeek Harness 第三方原生移动客户端。�
 
 ## 公测用户群
 
-欢迎加入 Whaleness 公测用户群，交流使用体验、反馈问题并获取支持。使用微信扫码，或保存图片后在微信中识别。
+欢迎加入 Whaleness 公测用户 2 群，交流使用体验、反馈问题并获取支持。使用微信扫码，或保存图片后在微信中识别。
 
 <p align="center">
-  <a href="website/assets/support-wechat-2026-10-23.png"><img src="website/assets/support-wechat-2026-10-23.png" alt="Whaleness 公测用户群微信二维码，2026 年 10 月 30 日前有效" width="320"></a>
+  <a href="website/assets/support-wechat-2026-10-28.png"><img src="website/assets/support-wechat-2026-10-28.png" alt="Whaleness 公测用户 2 群微信二维码，2026 年 11 月 4 日前有效" width="320"></a>
 </p>
 
-> 当前二维码于 2026 年 10 月 23 日更新，原图注明 2026 年 10 月 30 日前有效。若已过期，请查看[产品页面](https://clarklevis1995.github.io/dsh-mobile/)中的最新群码。
+> 当前二维码于 2026 年 10 月 28 日更新，原图注明 2026 年 11 月 4 日前有效。若已过期，请查看[产品页面](https://clarklevis1995.github.io/dsh-mobile/)中的最新群码。
 
 ## 当前平台状态
 

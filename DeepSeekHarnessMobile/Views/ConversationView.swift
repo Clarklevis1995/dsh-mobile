@@ -364,9 +364,9 @@ struct ConversationView: View {
     @Environment(\.dismiss) private var dismissConversation
     @EnvironmentObject private var store: AppStore
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var activeView = 0
+    @Binding var activeView: Int
+    var topContentInset: CGFloat = 0
     @State private var draft = ""
     @State private var memberDrafts: [String: String] = [:]
     @State private var memberImages: [String: [GatewayOutgoingImage]] = [:]
@@ -388,7 +388,6 @@ struct ConversationView: View {
     @State private var goalObjectiveDraft = ""
     @State private var confirmsGoalClear = false
     @State private var isPinnedToBottom = true
-    @State private var hasScrolledFromTop = false
     @State private var queueExpanded = false
     @State private var submittedQueueDraft: String?
     @State private var submittedQueueImages: [GatewayOutgoingImage] = []
@@ -417,16 +416,8 @@ struct ConversationView: View {
                 if store.isViewingTeamMember {
                     Text("团队 › \(store.selectedSession?.title ?? "成员")" + (store.selectedMemberCanSend ? "" : " · 只读"))
                         .appFont(.caption).foregroundStyle(.secondary).lineLimit(1).padding(.bottom, 4)
+                        .padding(.top, topContentInset)
                 }
-                Picker("视图", selection: $activeView) {
-                    Text("对话").tag(0)
-                    Text("轨迹").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 40)
-                .readableContentWidth(440)
-                .padding(.vertical, 6)
-
                 PersistentSessionPager(selection: $activeView) {
                     chat
                 } trajectory: {
@@ -435,10 +426,25 @@ struct ConversationView: View {
                         timeline: store.trajectoryTimeline(for: store.selectedSessionId),
                         isActive: activeView == 1
                     )
+                    .padding(.top, pageTopInset)
+                }
+                .overlay(alignment: .top) {
+                    SessionPageIndicator(selection: activeView, sessionID: store.selectedSessionId)
+                        .padding(.top, pageTopInset + 20)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .top) {
+            if topContentInset > 0 {
+                ConversationTopGlass()
+                    .frame(height: topContentInset + 18)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         .ignoresSafeArea(.container, edges: .bottom)
         .background {
             WindowBottomSafeAreaReader(bottomInset: $bottomSafeAreaInset, windowHeight: $voiceWindowHeight)
@@ -452,7 +458,6 @@ struct ConversationView: View {
         .onChangeCompat(of: store.selectedSessionId) { _, _ in
             showsSessionStatsPopover = false
             showsAgentPresetMenu = false
-            hasScrolledFromTop = false
         }
         .onDisappear {
             if store.conversationFileIsOpening { store.cancelWorkspaceFileDownload() }
@@ -498,6 +503,10 @@ struct ConversationView: View {
         .black.opacity(colorScheme == .dark ? 0.34 : 0.10)
     }
 
+    private var pageTopInset: CGFloat {
+        store.isViewingTeamMember ? 0 : topContentInset
+    }
+
     private var chat: some View {
         let sessionID = store.selectedSessionId
         return ZStack(alignment: .bottom) {
@@ -511,6 +520,7 @@ struct ConversationView: View {
                 makeEntries: { items in
                     makeConversationViewportEntries(from: items)
                 },
+                topInset: pageTopInset + 8,
                 bottomInset: composerHeight + conversationBottomClearance,
                 scrollToBottomToken: viewportScrollToBottomToken,
                 onContentAvailabilityChanged: { sessionID, hasContent in
@@ -523,10 +533,7 @@ struct ConversationView: View {
                 onPinnedToBottomChanged: { pinned in
                     isPinnedToBottom = pinned
                 },
-                onScrolledFromTopChanged: { scrolled in
-                    guard sessionID == store.selectedSessionId else { return }
-                    hasScrolledFromTop = scrolled
-                },
+                onScrolledFromTopChanged: { _ in },
                 onBottomAlignmentCompleted: {
                     guard isPreparingHistoryPresentation,
                           historyPresentationSessionID == store.selectedSessionId,
@@ -553,29 +560,20 @@ struct ConversationView: View {
             // controller，不能让上一 Session 的 diffable snapshot 参与新页面首帧。
             .id(sessionID ?? "__empty__")
             .padding(.horizontal, 20)
-            .padding(.top, 8)
             .opacity(shouldShowHistoryPresentationMask ? 0 : 1)
             .readableContentWidth()
-            // 线条不受正文限宽和左右留白约束，高度仍对齐视口的裁切上缘。
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.35))
-                    .frame(height: 1 / max(displayScale, 1))
-                    .padding(.top, 8)
-                    .opacity(hasScrolledFromTop ? 1 : 0)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
 
             if !hasVisibleConversationContent, let error = selectedHistoryError {
                 historyFailureState(error)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, pageTopInset)
                     .padding(.bottom, composerHeight)
                     .readableContentWidth()
                     .zIndex(1)
             } else if shouldShowHistoryPresentationMask {
                 historyPresentationMask
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, pageTopInset)
                     .padding(.bottom, composerHeight)
                     .readableContentWidth()
                     .zIndex(1)
@@ -585,6 +583,7 @@ struct ConversationView: View {
                     else { emptyState }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, pageTopInset)
                 .padding(.bottom, composerHeight)
                 .readableContentWidth()
             }
@@ -2719,13 +2718,73 @@ private struct ConversationModelMenuLabel: View {
     }
 }
 
+/// 在 UIKit 消息视口上方直接采样背景，渐变只作用于玻璃层，不栅格化正文。
+private struct ConversationTopGlass: UIViewRepresentable {
+    final class GlassView: UIVisualEffectView {
+        private let fadeMask = CAGradientLayer()
+
+        init() {
+            super.init(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+            isUserInteractionEnabled = false
+            accessibilityElementsHidden = true
+            fadeMask.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+            layer.mask = fadeMask
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            fadeMask.frame = bounds
+            fadeMask.locations = [0, NSNumber(value: max(0, 1 - 18 / max(bounds.height, 1))), 1]
+            CATransaction.commit()
+        }
+    }
+
+    func makeUIView(context: Context) -> GlassView { GlassView() }
+    func updateUIView(_ view: GlassView, context: Context) {}
+}
+
+private struct SessionPageIndicator: View {
+    let selection: Int
+    let sessionID: String?
+    @State private var isVisible = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<2) { page in
+                Circle()
+                    .fill(Color.primary.opacity(selection == page ? 0.65 : 0.2))
+                    .frame(width: 5, height: 5)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
+        .opacity(isVisible ? 1 : 0)
+        .task(id: "\(sessionID ?? "__new__")-\(selection)") {
+            isVisible = true
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+            withAnimation(.easeOut(duration: 0.3)) { isVisible = false }
+        }
+    }
+}
+
 private struct PersistentSessionPager<ConversationPage: View, TrajectoryPage: View>: View {
     @Binding var selection: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let conversationPage: ConversationPage
     private let trajectoryPage: TrajectoryPage
     @State private var dragTranslation: CGFloat = 0
     @State private var isPageSwipeActive = false
     @State private var dragAxis: SessionPageDragAxis?
+    @State private var horizontalScrollRegions: [CGRect] = []
 
     init(
         selection: Binding<Int>,
@@ -2744,11 +2803,13 @@ private struct PersistentSessionPager<ConversationPage: View, TrajectoryPage: Vi
             HStack(spacing: 0) {
                 conversationPage
                     .frame(width: pageWidth, height: geometry.size.height)
-                    .allowsHitTesting(!isPageSwipeActive)
+                    .allowsHitTesting(selection == 0 && !isPageSwipeActive)
+                    .accessibilityHidden(selection != 0)
 
                 trajectoryPage
                     .frame(width: pageWidth, height: geometry.size.height)
-                    .allowsHitTesting(!isPageSwipeActive)
+                    .allowsHitTesting(selection == 1 && !isPageSwipeActive)
+                    .accessibilityHidden(selection != 1)
             }
             .frame(width: pageWidth * 2, alignment: .leading)
             .offset(x: -CGFloat(selection) * pageWidth + constrainedDrag)
@@ -2761,6 +2822,15 @@ private struct PersistentSessionPager<ConversationPage: View, TrajectoryPage: Vi
             )
         }
         .clipped()
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("会话页面")
+        .accessibilityValue(selection == 0 ? Text("对话") : Text("轨迹"))
+        .accessibilityAction(named: selection == 0 ? Text("切换到轨迹") : Text("切换到对话")) {
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
+                selection = selection == 0 ? 1 : 0
+            }
+        }
+        .onPreferenceChange(SessionPagerHorizontalScrollRegionsKey.self) { horizontalScrollRegions = $0 }
     }
 
     private var constrainedDrag: CGFloat {
@@ -2772,19 +2842,15 @@ private struct PersistentSessionPager<ConversationPage: View, TrajectoryPage: Vi
     }
 
     private func pageGesture(pageWidth: CGFloat, pagerFrame: CGRect) -> some Gesture {
-        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+        DragGesture(minimumDistance: 12, coordinateSpace: .global)
             .onChanged { value in
                 if dragAxis == nil {
-                    let isSystemBackGesture = value.startLocation.x <= 28
+                    let isSystemBackGesture = value.startLocation.x - pagerFrame.minX <= 28
                         && value.translation.width > 0
-                    let globalStart = CGPoint(
-                        x: pagerFrame.minX + value.startLocation.x,
-                        y: pagerFrame.minY + value.startLocation.y
-                    )
-                    if NestedHorizontalScrollResolver.containsScrollableView(at: globalStart) {
-                        // Code blocks own the complete touch sequence. The
-                        // pager must not reinterpret the same pan as a tab
-                        // transition when the finger reaches the cell edge.
+                    // 翻页 HStack 本身有整页偏移，局部触点不能再叠加视口原点。
+                    // 时间轴从触点开始独占整段手势，内容未溢出或滚到边界也不交给翻页。
+                    if horizontalScrollRegions.contains(where: { $0.contains(value.startLocation) })
+                        || NestedHorizontalScrollResolver.containsScrollableView(at: value.startLocation) {
                         dragAxis = .nestedHorizontalScroll
                     } else if isSystemBackGesture {
                         // The NavigationStack's native edge-pop gesture owns
@@ -2830,6 +2896,28 @@ private struct PersistentSessionPager<ConversationPage: View, TrajectoryPage: Vi
                     dragAxis = nil
                 }
             }
+    }
+}
+
+private struct SessionPagerHorizontalScrollRegionsKey: PreferenceKey {
+    static let defaultValue: [CGRect] = []
+
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+extension View {
+    /// 横向交互区从触点开始持有手势，禁止父级把边界拖动解释成翻页。
+    func sessionPagerHorizontalScrollRegion() -> some View {
+        background {
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: SessionPagerHorizontalScrollRegionsKey.self,
+                    value: [geometry.frame(in: .global)]
+                )
+            }
+        }
     }
 }
 

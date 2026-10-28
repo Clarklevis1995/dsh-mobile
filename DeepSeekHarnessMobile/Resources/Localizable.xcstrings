@@ -1,6 +1,74 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "会话页面": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session pages"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会话页面"
+          }
+        }
+      }
+    },
+    "切换到轨迹": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to trajectory"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换到轨迹"
+          }
+        }
+      }
+    },
+    "切换到对话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to conversation"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换到对话"
+          }
+        }
+      }
+    },
+    "轻点切换页面，长按选择对话或轨迹": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap to switch pages. Touch and hold to choose conversation or trajectory."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "轻点切换页面，长按选择对话或轨迹"
+          }
+        }
+      }
+    },
     " " : {
 
     },

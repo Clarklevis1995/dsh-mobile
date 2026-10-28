@@ -46,13 +46,13 @@ Beide Apps verbinden sich über [`dsh-plugin-mobile-gateway`](https://github.com
 
 ## Beta-Community
 
-Tritt der Whaleness-Betagruppe auf WeChat bei, um Erfahrungen zu teilen, Probleme zu melden und Hilfe zu erhalten. Scanne den Code mit WeChat oder speichere das Bild und lasse es in WeChat erkennen.
+Tritt der Whaleness-Betagruppe 2 auf WeChat bei, um Erfahrungen zu teilen, Probleme zu melden und Hilfe zu erhalten. Scanne den Code mit WeChat oder speichere das Bild und lasse es in WeChat erkennen.
 
 <p align="center">
-  <a href="../../website/assets/support-wechat-2026-10-23.png"><img src="../../website/assets/support-wechat-2026-10-23.png" alt="QR-Code der Whaleness-Betagruppe auf WeChat, gültig vor dem 30. Oktober 2026" width="320"></a>
+  <a href="../../website/assets/support-wechat-2026-10-28.png"><img src="../../website/assets/support-wechat-2026-10-28.png" alt="QR-Code der Whaleness-Betagruppe 2 auf WeChat, gültig vor dem 4. November 2026" width="320"></a>
 </p>
 
-> Aktualisiert am 23. Oktober 2026. Laut Originalbild ist der Code vor dem 30. Oktober 2026 gültig. Falls er abgelaufen ist, findest du den aktuellen Gruppen-QR-Code auf der [Produktseite](https://clarklevis1995.github.io/dsh-mobile/).
+> Aktualisiert am 28. Oktober 2026. Laut Originalbild ist der Code vor dem 4. November 2026 gültig. Falls er abgelaufen ist, findest du den aktuellen Gruppen-QR-Code auf der [Produktseite](https://clarklevis1995.github.io/dsh-mobile/).
 
 ## Plattformstatus
 

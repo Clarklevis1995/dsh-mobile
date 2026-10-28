@@ -466,7 +466,7 @@ final class VoiceInputTests: XCTestCase {
         defer { appStore.deactivateGateway() }
         let prepared = await appStore.prepareConversation(for: session)
         XCTAssertTrue(prepared)
-        let controller = UIHostingController(rootView: ConversationView().environmentObject(appStore))
+        let controller = UIHostingController(rootView: ConversationView(activeView: .constant(0)).environmentObject(appStore))
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
         window.rootViewController = controller
@@ -527,7 +527,7 @@ final class VoiceInputTests: XCTestCase {
         defer { appStore.deactivateGateway() }
         let prepared = await appStore.prepareConversation(for: session)
         XCTAssertTrue(prepared)
-        let controller = UIHostingController(rootView: ConversationView().environmentObject(appStore))
+        let controller = UIHostingController(rootView: ConversationView(activeView: .constant(0)).environmentObject(appStore))
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)

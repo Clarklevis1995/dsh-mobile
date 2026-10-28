@@ -187,6 +187,7 @@ struct ConversationViewport: UIViewControllerRepresentable {
     let timeline: ConversationTimeline
     let supplementalEntries: [ConversationViewportEntry]
     let makeEntries: ([ConversationItem]) -> [ConversationViewportEntry]
+    var topInset: CGFloat = 0
     let bottomInset: CGFloat
     let scrollToBottomToken: Int
     let onContentAvailabilityChanged: (String?, Bool) -> Void
@@ -224,6 +225,7 @@ struct ConversationViewport: UIViewControllerRepresentable {
         controller.onHistoryPresented = onHistoryPresented
         controller.cacheScope = cacheScope
         controller.searchTargetID = searchTargetID
+        controller.setTopContentInset(topInset)
         controller.configure(
             sessionID: sessionID,
             timeline: timeline,
@@ -1116,6 +1118,13 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 #if DEBUG
         finishHistoryScrollMetrics()
 #endif
+    }
+
+    /// 顶部留白属于滚动内容，正文离开顶端后才能透过导航栏的毛玻璃。
+    func setTopContentInset(_ inset: CGFloat) {
+        guard collectionView.contentInset.top != inset else { return }
+        collectionView.contentInset.top = inset
+        collectionView.verticalScrollIndicatorInsets.top = inset
     }
 
     override func viewDidLayoutSubviews() {

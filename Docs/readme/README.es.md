@@ -46,13 +46,13 @@ Ambas aplicaciones se conectan a Harness por WebSocket a través de [`dsh-plugin
 
 ## Comunidad de la beta
 
-Únete al grupo de WeChat de la beta de Whaleness para compartir experiencias, enviar comentarios y obtener ayuda. Escanea con WeChat o guarda la imagen para reconocerla en WeChat.
+Únete al grupo 2 de WeChat de la beta de Whaleness para compartir experiencias, enviar comentarios y obtener ayuda. Escanea con WeChat o guarda la imagen para reconocerla en WeChat.
 
 <p align="center">
-  <a href="../../website/assets/support-wechat-2026-10-23.png"><img src="../../website/assets/support-wechat-2026-10-23.png" alt="Código QR del grupo de WeChat de la beta de Whaleness, válido antes del 30 de octubre de 2026" width="320"></a>
+  <a href="../../website/assets/support-wechat-2026-10-28.png"><img src="../../website/assets/support-wechat-2026-10-28.png" alt="Código QR del grupo 2 de WeChat de la beta de Whaleness, válido antes del 4 de noviembre de 2026" width="320"></a>
 </p>
 
-> Actualizado el 23 de octubre de 2026. La imagen original indica que el código es válido antes del 30 de octubre de 2026. Si ha caducado, consulta el código más reciente en la [página del producto](https://clarklevis1995.github.io/dsh-mobile/).
+> Actualizado el 28 de octubre de 2026. La imagen original indica que el código es válido antes del 4 de noviembre de 2026. Si ha caducado, consulta el código más reciente en la [página del producto](https://clarklevis1995.github.io/dsh-mobile/).
 
 ## Estado de las plataformas
 
