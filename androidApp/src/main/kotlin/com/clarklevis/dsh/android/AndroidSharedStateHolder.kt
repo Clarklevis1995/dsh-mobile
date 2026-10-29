@@ -893,7 +893,8 @@ class AndroidSharedStateHolder(
 
     val activeWorkspace: GatewayWorkspace?
         get() {
-            if (selectedWorkspaceId == UNGROUPED_WORKSPACE_ID) return null
+            if (selectedWorkspaceId == UNGROUPED_WORKSPACE_ID ||
+                selectedWorkspaceId == ALL_WORKSPACES_ID) return null
             return availableWorkspaces.firstOrNull { it.workspaceId == selectedWorkspaceId }
                 ?: availableWorkspaces.firstOrNull()
         }
@@ -3347,6 +3348,8 @@ class AndroidSharedStateHolder(
         private const val HISTORY_PAGE_BYTE_BUDGET = 4 * 1_024 * 1_024
         private const val HISTORY_VIEW = "conversation"
         const val UNGROUPED_WORKSPACE_ID = "__ungrouped__"
+        /** 2026-10-27（fork）：跨工作区"全部会话"视图的哨兵 id。 */
+        const val ALL_WORKSPACES_ID = "__all_sessions__"
 
         private val WORKSPACE_REQUEST_TYPES = setOf(
             "directories",
@@ -3425,6 +3428,8 @@ internal fun resolveWorkspaceSelection(
     preferredWorkspaceId: String?,
     workspaces: List<GatewayWorkspace>
 ): String = when {
+    preferredWorkspaceId == AndroidSharedStateHolder.ALL_WORKSPACES_ID ->
+        AndroidSharedStateHolder.ALL_WORKSPACES_ID
     preferredWorkspaceId == AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID ->
         AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID
     workspaces.any { it.workspaceId == preferredWorkspaceId } -> requireNotNull(preferredWorkspaceId)

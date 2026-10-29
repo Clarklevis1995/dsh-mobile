@@ -96,6 +96,18 @@ internal fun WorkspaceSelectionMenu(
             .testTag("workspace-menu"),
         offset = DpOffset(14.dp, (-8).dp)) {
         WorkspaceMenuItem(
+            title = appText("全部会话"),
+            icon = if (effectiveSelection == AndroidSharedStateHolder.ALL_WORKSPACES_ID) {
+                WorkspaceMenuIcon.Selected
+            } else {
+                WorkspaceMenuIcon.Folder
+            },
+            foreground = foreground,
+            modifier = Modifier.testTag("workspace-all"),
+            onClick = { onSelect(AndroidSharedStateHolder.ALL_WORKSPACES_ID) }
+        )
+
+        WorkspaceMenuItem(
             title = appText("未分组"),
             icon = if (effectiveSelection == AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID) {
                 WorkspaceMenuIcon.Selected
