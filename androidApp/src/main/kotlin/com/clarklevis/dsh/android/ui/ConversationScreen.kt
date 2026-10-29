@@ -2386,9 +2386,10 @@ private fun PermissionControl(
 private fun ComposerMenuSectionTitle(title: String) {
     Text(
         title,
-        modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 9.dp, bottom = 4.dp),
+        modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 2.dp),
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f),
         fontSize = 13.sp,
+        lineHeight = 16.sp,
         fontWeight = FontWeight.Medium
     )
 }
@@ -2400,6 +2401,7 @@ private fun ComposerMenuItem(title: String, selected: Boolean, onClick: () -> Un
             Text(
                 title,
                 fontSize = 17.sp,
+                lineHeight = 20.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -2415,7 +2417,8 @@ private fun ComposerMenuItem(title: String, selected: Boolean, onClick: () -> Un
                 tint = MaterialTheme.colorScheme.onSurface
             )
         },
-        contentPadding = PaddingValues(horizontal = 18.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+        minHeight = 44.dp,
         onClick = onClick
     )
 }
@@ -2482,7 +2485,11 @@ private fun ModelControl(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
                 )
             }
-            groups.forEach { group ->
+            groups.forEachIndexed { index, group ->
+                if (index > 0) HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+                )
                 ComposerMenuSectionTitle(group.name)
                 group.models.forEach { model ->
                     ComposerMenuItem(

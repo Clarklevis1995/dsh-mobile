@@ -1089,6 +1089,9 @@ private struct ConversationNavigationShell<Content: View>: View {
             .disabled(header.sessionID == nil)
         } label: {
             Image(systemName: "ellipsis")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 22, height: 22)
         }
         .accessibilityLabel("更多")
     }

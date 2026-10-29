@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -177,10 +178,11 @@ internal fun DshMenuItem(
     leadingIcon: (@Composable () -> Unit)? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
-    contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 10.dp)
+    contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+    minHeight: Dp = 48.dp
 ) {
     androidx.compose.foundation.layout.Row(
-        modifier.fillMaxWidth().heightIn(min = 48.dp).alpha(if (enabled) 1f else .38f)
+        modifier.fillMaxWidth().heightIn(min = minHeight).alpha(if (enabled) 1f else .38f)
             .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
             .padding(contentPadding),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),

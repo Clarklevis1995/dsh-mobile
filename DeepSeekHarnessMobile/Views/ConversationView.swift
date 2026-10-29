@@ -406,6 +406,7 @@ struct ConversationView: View {
     // 普通 State 作为单向的显式聚焦/失焦请求，UITextView 自己持有第一响应者。
     @State private var composerIsFocused = false
     @State private var showsAgentPresetMenu = false
+    @State private var showsModelMenu = false
     @ScaledMetric(relativeTo: .caption) private var composerCapsuleHeight: CGFloat = 34
     private let conversationBottomClearance: CGFloat = 22
 
@@ -456,10 +457,12 @@ struct ConversationView: View {
             if view != 0 { composerIsFocused = false }
             showsSessionStatsPopover = false
             showsAgentPresetMenu = false
+            showsModelMenu = false
         }
         .onChangeCompat(of: store.selectedSessionId) { _, _ in
             showsSessionStatsPopover = false
             showsAgentPresetMenu = false
+            showsModelMenu = false
         }
         .onDisappear {
             if store.conversationFileIsOpening { store.cancelWorkspaceFileDownload() }
@@ -757,6 +760,34 @@ struct ConversationView: View {
                         maximumContentHeight: 380
                     ) {
                         sessionAgentPresetMenuContent
+                    }
+                }
+            }
+        }
+        .overlayPreferenceValue(SessionModelPopoverAnchorKey.self) { anchor in
+            if let anchor {
+                GeometryReader { geometry in
+                    ComposerPopoverOverlay(
+                        sourceFrame: geometry[anchor],
+                        availableSize: geometry.size,
+                        isPresented: showsModelMenu,
+                        onDismiss: { showsModelMenu = false },
+                        preferredWidth: 286,
+                        maximumContentHeight: 560
+                    ) {
+                        ConversationModelMenuContent(
+                            groups: modelGroups,
+                            selection: currentModelSelection,
+                            efforts: currentEfforts,
+                            onSelectModel: { group, model in
+                                showsModelMenu = false
+                                select(group: group, model: model)
+                            },
+                            onSelectEffort: { effort in
+                                showsModelMenu = false
+                                select(effort: effort)
+                            }
+                        )
                     }
                 }
             }
@@ -1695,6 +1726,7 @@ struct ConversationView: View {
                 else {
                     viewportProxy.prepareForOverlayPresentation()
                     showsSessionStatsPopover = false
+                    showsModelMenu = false
                     showsAgentPresetMenu = true
                 }
             } label: {
@@ -1788,6 +1820,7 @@ struct ConversationView: View {
             Button {
                 viewportProxy.prepareForOverlayPresentation()
                 showsAgentPresetMenu = false
+                showsModelMenu = false
                 showsSessionStatsPopover.toggle()
             } label: {
                 HStack(spacing: 7) {
@@ -1855,15 +1888,16 @@ struct ConversationView: View {
             )
         } else {
             ConversationModelMenu(
-                groups: modelGroups,
-                selection: currentModelSelection,
-                efforts: currentEfforts,
                 title: currentModelTitle,
                 effortTitle: currentEffortTitle,
                 isLoading: modelIsLoading,
                 isDisabled: modelGroups.isEmpty || store.selectedModelCatalog?.routable == false,
-                onSelectModel: { group, model in select(group: group, model: model) },
-                onSelectEffort: { effort in select(effort: effort) }
+                onOpen: {
+                    viewportProxy.prepareForOverlayPresentation()
+                    showsAgentPresetMenu = false
+                    showsSessionStatsPopover = false
+                    showsModelMenu.toggle()
+                }
             )
         }
     }
@@ -2612,29 +2646,20 @@ private struct ConversationDefaultModelSummary: View {
 }
 
 private struct ConversationModelMenu: View {
-    let groups: [GatewayModelGroup]
-    let selection: GatewayModelSelection?
-    let efforts: [GatewayReasoningEffort]
     let title: String
     let effortTitle: String?
     let isLoading: Bool
     let isDisabled: Bool
-    let onSelectModel: (GatewayModelGroup, GatewayModelItem) -> Void
-    let onSelectEffort: (GatewayReasoningEffort) -> Void
+    let onOpen: () -> Void
 
     var body: some View {
-        Menu {
-            ConversationModelMenuContent(
-                groups: groups,
-                selection: selection,
-                efforts: efforts,
-                onSelectModel: onSelectModel,
-                onSelectEffort: onSelectEffort
-            )
-        } label: {
+        Button(action: onOpen) {
             ConversationModelMenuLabel(title: title, effortTitle: effortTitle, isLoading: isLoading)
         }
+        .buttonStyle(.plain)
         .disabled(isDisabled)
+        .anchorPreference(key: SessionModelPopoverAnchorKey.self, value: .bounds) { $0 }
+        .accessibilityIdentifier("conversation-model-menu-toggle")
     }
 }
 
@@ -2646,40 +2671,74 @@ private struct ConversationModelMenuContent: View {
     let onSelectEffort: (GatewayReasoningEffort) -> Void
 
     var body: some View {
-        if groups.isEmpty {
-            Text("正在读取模型…")
-        } else {
-            // 保持单层原生菜单，避免子菜单在外层动画结束前解析临时锚点而偏移或裁切。
-            ForEach(groups) { group in
-                Section(group.name) {
-                    ForEach(group.models) { model in
-                        Button {
-                            onSelectModel(group, model)
-                        } label: {
-                            Label(
-                                model.name,
-                                systemImage: selection?.provider == group.id && selection?.model == model.id
-                                    ? "checkmark" : "circle"
-                            )
+        VStack(alignment: .leading, spacing: 0) {
+            if groups.isEmpty {
+                Text("正在读取模型…").appFont(.body).padding(18)
+            } else {
+                if !efforts.isEmpty {
+                    sectionTitle(String(localized: "推理等级"))
+                    ForEach(efforts) { effort in
+                        option(effort.name, selected: effort.id == selection?.reasoningEffort,
+                               identifier: "model-effort-\(effort.id)") {
+                            onSelectEffort(effort)
                         }
                     }
+                    sectionDivider
                 }
-            }
-            if !efforts.isEmpty {
-                Section("推理等级") {
-                    ForEach(efforts) { effort in
-                        Button {
-                            onSelectEffort(effort)
-                        } label: {
-                            Label(
-                                effort.name,
-                                systemImage: effort.id == selection?.reasoningEffort ? "checkmark" : "circle"
-                            )
+                ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                    if index > 0 { sectionDivider }
+                    sectionTitle(group.name)
+                    ForEach(group.models) { model in
+                        option(model.name,
+                               selected: selection?.provider == group.id && selection?.model == model.id,
+                               identifier: "model-option-\(group.id)-\(model.id)") {
+                            onSelectModel(group, model)
                         }
                     }
                 }
             }
         }
+        .padding(.vertical, 8)
+        .foregroundStyle(.primary)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("conversation-model-menu")
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .appFont(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 18)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+    }
+
+    private var sectionDivider: some View {
+        Divider().padding(.horizontal, 18).padding(.vertical, 4)
+    }
+
+    private func option(_ title: String, selected: Bool, identifier: String,
+                        action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: selected ? "checkmark" : "circle")
+                    .resizable().scaledToFit()
+                    .frame(width: 22, height: 22)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .appFont(.system(size: 17, weight: .medium))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -3252,6 +3311,14 @@ private struct SessionStatsSheet: View {
 }
 
 private struct SessionStatsPopoverAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? { nil }
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
+private struct SessionModelPopoverAnchorKey: PreferenceKey {
     static var defaultValue: Anchor<CGRect>? { nil }
 
     static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {

@@ -1,6 +1,48 @@
 import XCTest
 import UIKit
 
+final class ModelMenuLayoutUITests: XCTestCase {
+    func testCompactMenuAtStandardAndMaximumFontSize() throws {
+        continueAfterFailure = false
+        for scale in ["1.0", "1.5"] {
+            let app = XCUIApplication()
+            app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                    "-appearance.fontScale", scale, "-appearance.fontFollowsSystem", "NO"]
+            app.launch()
+            defer { app.terminate() }
+            let alert = app.alerts.firstMatch
+            if alert.waitForExistence(timeout: 2) { alert.buttons.firstMatch.tap() }
+            let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-"))
+            try XCTSkipUnless(sessions.firstMatch.waitForExistence(timeout: 10), "需要一个已有会话")
+            sessions.firstMatch.tap()
+            let toggle = app.buttons["conversation-model-menu-toggle"]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+            try XCTSkipUnless(toggle.isEnabled, "需要会话模型目录")
+            toggle.tap()
+            let menu = app.otherElements["conversation-model-menu"]
+            XCTAssertTrue(menu.waitForExistence(timeout: 5))
+            let effort = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "model-effort-")).firstMatch
+            if effort.exists {
+                XCTAssertEqual(effort.frame.height, 44, accuracy: 1, "短选项不应因字号而增加留白")
+            }
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "紧凑模型菜单-字号\(scale)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            let outside = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 2, dy: menu.frame.midY))
+            outside.tap()
+            XCTAssertFalse(menu.exists)
+            toggle.tap()
+            XCTAssertTrue(menu.waitForExistence(timeout: 5))
+            // 再次点击当前选项，只验证关闭行为，不改变用户的模型或推理等级。
+            let options = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "model-"))
+            let selected = try XCTUnwrap(options.allElementsBoundByIndex.first(where: { $0.isSelected && $0.isHittable }))
+            selected.tap()
+            XCTAssertFalse(menu.exists)
+        }
+    }
+}
+
 final class TrajectoryGestureUITests: XCTestCase {
     func testOverviewDragDoesNotSwipePageAndBodyStillCanSwipe() throws {
         continueAfterFailure = false
