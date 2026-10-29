@@ -864,6 +864,17 @@ private struct DrawerPanGestureAttachment: UIViewRepresentable {
     }
 }
 
+private struct DirectoryBrowserSurface: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 16.4, *) {
+            content.presentationBackground(Color(uiColor: .systemGroupedBackground))
+        } else {
+            content
+        }
+    }
+}
+
 private struct DirectoryBrowserSheet: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -883,6 +894,7 @@ private struct DirectoryBrowserSheet: View {
                             directoryRow(icon: "arrowshape.turn.up.left", title: "..", subtitle: String(localized: "返回上一级"))
                         }
                         .disabled(parentPath == nil)
+                        .listRowBackground(Color(uiColor: .secondarySystemGroupedBackground))
 
                         ForEach(store.directoryEntries) { entry in
                             Button {
@@ -899,7 +911,7 @@ private struct DirectoryBrowserSheet: View {
                                 ZStack {
                                     Color(uiColor: .secondarySystemGroupedBackground)
                                     if highlightedDirectoryPath == entry.path {
-                                        DSHColor.ocean.opacity(0.24)
+                                        DSHColor.ocean.opacity(0.12)
                                     }
                                 }
                             )
@@ -907,13 +919,22 @@ private struct DirectoryBrowserSheet: View {
                     } header: {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("当前目录")
+                                .appFont(.caption.weight(.semibold))
+                                .foregroundStyle(Color(uiColor: .secondaryLabel))
                             Text(store.directoryPath ?? String(localized: "正在读取…"))
                                 .appFont(.caption.monospaced())
                                 .textCase(nil)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color(uiColor: .secondaryLabel))
                         }
+                        .textCase(nil)
                     }
                 }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .background(Color(uiColor: .systemGroupedBackground))
+                .foregroundStyle(Color(uiColor: .label))
+                .toolbarBackground(Color(uiColor: .systemGroupedBackground), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
                 .allowsHitTesting(!store.directoryIsLoading && !store.directoryCreationIsLoading)
                 .overlay {
                     if store.directoryIsLoading && store.directoryEntries.isEmpty {
@@ -956,7 +977,9 @@ private struct DirectoryBrowserSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .background(.ultraThinMaterial)
+        .tint(DSHColor.ocean)
+        .background { Color(uiColor: .systemGroupedBackground).ignoresSafeArea() }
+        .modifier(DirectoryBrowserSurface())
         .onAppear {
             store.directoryEntries = []
             store.browseDirectories()
@@ -1021,9 +1044,16 @@ private struct DirectoryBrowserSheet: View {
             Spacer()
             Image(systemName: "chevron.right")
                 .appFont(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color(uiColor: .tertiaryLabel))
         }
         .contentShape(Rectangle())
+    }
+
+    private var canCreateWorkspace: Bool {
+        store.directoryPath != nil &&
+            !store.directoryIsLoading &&
+            !store.workspaceCreationIsLoading &&
+            !store.directoryCreationIsLoading
     }
 
     private var createWorkspaceBar: some View {
@@ -1031,7 +1061,7 @@ private struct DirectoryBrowserSheet: View {
             if let path = store.directoryPath {
                 Text(path)
                     .appFont(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(uiColor: .secondaryLabel))
                     .lineLimit(1)
             }
             Button {
@@ -1041,7 +1071,7 @@ private struct DirectoryBrowserSheet: View {
             } label: {
                 HStack(spacing: 9) {
                     if store.workspaceCreationIsLoading {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(Color(uiColor: .systemBackground))
                     } else {
                         Image(systemName: "plus")
                     }
@@ -1050,24 +1080,16 @@ private struct DirectoryBrowserSheet: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color(uiColor: .systemBackground))
                 .background {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.black)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.white.opacity(0.18), lineWidth: 0.8)
+                        .fill(Color(uiColor: .label))
                 }
                 .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(.plain)
-            .disabled(
-                store.directoryPath == nil ||
-                store.workspaceCreationIsLoading ||
-                store.directoryCreationIsLoading
-            )
-            .allowsHitTesting(!store.directoryIsLoading)
+            .disabled(!canCreateWorkspace)
+            .opacity(canCreateWorkspace ? 1 : 0.45)
 
             if store.directoryCreationIsLoading {
                 HStack(spacing: 8) {
@@ -1080,7 +1102,8 @@ private struct DirectoryBrowserSheet: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 9)
-        .background(.ultraThinMaterial)
+        .background { Color(uiColor: .systemGroupedBackground).ignoresSafeArea(edges: .bottom) }
+        .overlay(alignment: .top) { Divider() }
     }
 }
 

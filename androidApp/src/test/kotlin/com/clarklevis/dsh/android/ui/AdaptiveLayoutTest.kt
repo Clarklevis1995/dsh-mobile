@@ -9,16 +9,6 @@ import org.junit.Test
 
 class AdaptiveLayoutTest {
     @Test
-    fun conversationSidebarSupportsTabletsAndUnfoldedWindowsInBothOrientations() {
-        for ((width, height) in listOf(1280f to 800f, 800f to 1280f, 890f to 626f, 626f to 890f, 600f to 800f)) {
-            assertTrue(AdaptiveLayout.conversationSidebarAvailable(width, height))
-        }
-        for ((width, height) in listOf(466f to 678f, 678f to 466f, 430f to 932f, 932f to 430f, 599f to 800f)) {
-            assertFalse(AdaptiveLayout.conversationSidebarAvailable(width, height))
-        }
-    }
-
-    @Test
     fun workspaceReflowsForTabletSplitScreenFoldedCoverAndLargeText() {
         assertTrue(AdaptiveLayout.workspaceUsesColumns(1280f, 800f))
         assertTrue(AdaptiveLayout.workspaceUsesColumns(1024f, 1366f))

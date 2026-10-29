@@ -55,24 +55,32 @@ struct MarkdownTableCard: View {
     }
 }
 
+@MainActor
 struct MarkdownTablePage: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var rotationRequest = 0
+    @StateObject private var rotation: DocumentPreviewRotation
     let model: MarkdownTableModel
     let fontSize: CGFloat
 
+    init(model: MarkdownTableModel, fontSize: CGFloat, rotation: DocumentPreviewRotation? = nil) {
+        self.model = model
+        self.fontSize = fontSize
+        _rotation = StateObject(wrappedValue: rotation ?? DocumentPreviewRotation())
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            MarkdownTableActions(model: model, onClose: { dismiss() }, onRotate: { rotationRequest += 1 })
-            ScrollView(.vertical, showsIndicators: true) {
-                MarkdownTableViewport(model: model, fontSize: fontSize)
+        DocumentRotatingLayout(isRotated: rotation.isRotated) {
+            VStack(spacing: 0) {
+                MarkdownTableActions(model: model, onClose: { dismiss() }, onRotate: rotation.toggle)
+                ScrollView(.vertical, showsIndicators: true) {
+                    MarkdownTableViewport(model: model, fontSize: fontSize)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 20)
         }
         .background { Rectangle().fill(DocumentPageAppearance.background).ignoresSafeArea() }
-        .background(DocumentRotationSupport(rotationRequest: rotationRequest))
         .accessibilityIdentifier("markdown-table-fullscreen")
     }
 }
@@ -234,7 +242,10 @@ private struct MarkdownTableActions: View {
     private var buttons: some View {
         HStack(spacing: 0) {
             if copied && onClose == nil { Text("已复制").appFont(.system(size: 12)).foregroundStyle(DocumentPageAppearance.icon) }
-            if let onRotate { action("TableRotate", label: "旋转屏幕", onRotate) }
+            if let onRotate {
+                action("TableRotate", label: "旋转屏幕", onRotate)
+                    .accessibilityIdentifier("markdown-table-rotate")
+            }
             action("TableCopy", label: "复制表格") {
                 UIPasteboard.general.string = MarkdownTableExport.shared.plainText(rows: model.plainRows)
                 copied = true
@@ -243,7 +254,10 @@ private struct MarkdownTableActions: View {
                 exportDocument = MarkdownTableCSVDocument(data: Data(MarkdownTableExport.shared.csv(rows: model.plainRows).utf8))
                 exporting = true
             }
-            if let onExpand { action("TableExpand", label: "全屏浏览表格", onExpand) }
+            if let onExpand {
+                action("TableExpand", label: "全屏浏览表格", onExpand)
+                    .accessibilityIdentifier("markdown-table-expand")
+            }
         }
     }
 

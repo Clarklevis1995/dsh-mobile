@@ -430,7 +430,7 @@ struct ConversationView: View {
                 }
                 .overlay(alignment: .top) {
                     SessionPageIndicator(selection: activeView, sessionID: store.selectedSessionId)
-                        .padding(.top, pageTopInset + 20)
+                        .padding(.top, pageTopInset + 4)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -438,11 +438,13 @@ struct ConversationView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .top) {
-            if topContentInset > 0 {
-                ConversationTopGlass()
-                    .frame(height: topContentInset + 18)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+            if #unavailable(iOS 26.0) {
+                if topContentInset > 0 {
+                    ConversationTopGlass()
+                        .frame(height: topContentInset + 32)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .ignoresSafeArea(.container, edges: .bottom)
@@ -2722,23 +2724,40 @@ private struct ConversationModelMenuLabel: View {
 private struct ConversationTopGlass: UIViewRepresentable {
     final class GlassView: UIVisualEffectView {
         private let fadeMask = CAGradientLayer()
+        private let veil = CAGradientLayer()
 
         init() {
-            super.init(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+            super.init(effect: UIBlurEffect(style: .light))
             isUserInteractionEnabled = false
             accessibilityElementsHidden = true
             fadeMask.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+            fadeMask.locations = [0, 0.45, 1]
             layer.mask = fadeMask
+            veil.locations = [0, 0.4, 0.7, 1]
+            contentView.layer.addSublayer(veil)
+            updateAppearance()
         }
 
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+            super.traitCollectionDidChange(previousTraitCollection)
+            updateAppearance()
+        }
+
+        private func updateAppearance() {
+            let isDark = traitCollection.userInterfaceStyle == .dark
+            effect = UIBlurEffect(style: isDark ? .dark : .light)
+            let color = isDark ? UIColor.black : UIColor.white
+            veil.colors = [0.96, 0.86, 0.70, 0].map { color.withAlphaComponent($0).cgColor }
+        }
 
         override func layoutSubviews() {
             super.layoutSubviews()
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             fadeMask.frame = bounds
-            fadeMask.locations = [0, NSNumber(value: max(0, 1 - 18 / max(bounds.height, 1))), 1]
+            veil.frame = bounds
             CATransaction.commit()
         }
     }
@@ -4447,7 +4466,7 @@ struct ConversationRow: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 if showsCopyButton && !item.text.isEmpty {
-                    CopyMessageButton(text: ParsedMarkdownCache.document(for: item.text).renderPlainText())
+                    CopyMessageButton(text: ParsedMarkdownCache.document(for: MarkdownMath.prepare(item.text, forSelection: true)).renderPlainText())
                         .padding(.bottom, 8)
                 }
             }
@@ -4663,6 +4682,7 @@ private struct ToolOutputView: View {
 }
 
 struct MarkdownContent: View {
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage(AppFontScale.key) private var fontScale = 1.0
     @AppStorage(AppFontScale.followsSystemKey) private var fontFollowsSystem = false
     let text: String
@@ -4682,12 +4702,12 @@ struct MarkdownContent: View {
         renderedMarkdown
             .background {
                 MarkdownLongPressMenu(onCopy: {
-                    UIPasteboard.general.string = ParsedMarkdownCache.document(for: text).renderPlainText()
+                    UIPasteboard.general.string = ParsedMarkdownCache.document(for: MarkdownMath.prepare(text, forSelection: true)).renderPlainText()
                 }, onSelectText: openTextSelection)
                 .accessibilityHidden(true)
             }
             .accessibilityAction(named: Text("复制")) {
-                UIPasteboard.general.string = ParsedMarkdownCache.document(for: text).renderPlainText()
+                UIPasteboard.general.string = ParsedMarkdownCache.document(for: MarkdownMath.prepare(text, forSelection: true)).renderPlainText()
             }
             .accessibilityAction(named: Text("选择文字"), openTextSelection)
             .fullScreenCover(item: $selectionDocument) { document in
@@ -4705,6 +4725,9 @@ struct MarkdownContent: View {
 
     private var renderedMarkdown: some View {
         Markdown(PreparedMarkdownCache.document(for: text, filePaths: knownFiles.map(\.path)))
+            .markdownImageProvider(MathMarkdownImageProvider(fontSize: mathFontSize))
+            .markdownInlineImageProvider(MathMarkdownInlineImageProvider(fontSize: mathFontSize, dark: colorScheme == .dark))
+            .id("\(mathFontSize)-\(colorScheme)")
             .environment(\.openURL, OpenURLAction { url in
                 guard let onOpenFile else { return .systemAction }
                 if url.scheme == "dsh-file-reference", let index = Int(url.lastPathComponent), knownFiles.indices.contains(index) {
@@ -4718,9 +4741,14 @@ struct MarkdownContent: View {
                 return .systemAction
             })
             .markdownTheme(.deepSeek(compact: compact, scale: CGFloat(AppFontScale.effective(fontScale, followsSystem: fontFollowsSystem))))
-            .markdownCodeSyntaxHighlighter(DSHCodeSyntaxHighlighter())
+            .markdownCodeSyntaxHighlighter(DSHCodeSyntaxHighlighter(dark: colorScheme == .dark))
             // MarkdownUI 会自行应用 Dynamic Type。主题已合并系统与应用倍率，避免重复缩放。
             .dynamicTypeSize(.large)
+    }
+
+    private var mathFontSize: CGFloat {
+        UIFontMetrics.default.scaledValue(for: compact ? 13 : 17)
+            * CGFloat(AppFontScale.effective(fontScale, followsSystem: fontFollowsSystem))
     }
 
 }
@@ -4825,7 +4853,7 @@ struct MarkdownSelectionPage: View {
             DocumentPageHeader(title: "选择文字", closeIdentifier: "markdown-selection-close", onClose: { dismiss() }) {
                 EmptyView()
             }
-            let parsed = ParsedMarkdownCache.document(for: document.text)
+            let parsed = ParsedMarkdownCache.document(for: MarkdownMath.prepare(document.text, forSelection: true))
             if parsed.containsTable {
                 MarkdownTableTextSelection(document: parsed, fontSize: document.fontSize)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -4896,6 +4924,7 @@ struct MarkdownTableTextSelection: UIViewRepresentable {
 
 /// 原生 TextView 独立滚动，聊天页的 MarkdownUI 始终保留在原来的布局中。
 struct MarkdownTextSelection: UIViewRepresentable {
+    @Environment(\.colorScheme) private var colorScheme
     let document: MarkdownUI.MarkdownContent
     let font: UIFont
 
@@ -4915,7 +4944,8 @@ struct MarkdownTextSelection: UIViewRepresentable {
     }
 
     func updateUIView(_ view: MarkdownSelectionTextView, context: Context) {
-        let value = document.renderSelectableText(font: font)
+        let highlighter = DSHCodeSyntaxHighlighter(dark: colorScheme == .dark)
+        let value = document.renderSelectableText(font: font, codeHighlighter: highlighter.attributedCode)
         if !view.attributedText.isEqual(to: value) { view.attributedText = value }
     }
 }
@@ -5052,7 +5082,8 @@ enum PreparedMarkdownCache {
         let key = Key(source: source, filePaths: filePaths)
         return cache.value(for: key) {
             // File references keep the original inline-code text for AST linking.
-            let padded = filePaths.isEmpty ? InlineCodePadding.apply(to: source) : source
+            let math = MarkdownMath.prepare(source)
+            let padded = filePaths.isEmpty ? InlineCodePadding.apply(to: math) : math
             var destinations: [String: String] = [:]
             for (index, path) in filePaths.enumerated() {
                 let destination = "dsh-file-reference:///\(index)"
@@ -5300,89 +5331,6 @@ enum InlineCodePadding {
             }
         }
         return rendered
-    }
-}
-
-private struct DSHCodeSyntaxHighlighter: CodeSyntaxHighlighter {
-    func highlightCode(_ code: String, language: String?) -> Text {
-        if isJSON(code, language: language) {
-            return Text(JSONSyntaxHighlighter.highlight(code))
-        }
-        return Text(code)
-    }
-
-    private func isJSON(_ code: String, language: String?) -> Bool {
-        if let language, ["json", "jsonc"].contains(language.lowercased()) { return true }
-        return JSONSyntaxHighlighter.isJSON(code)
-    }
-}
-
-enum JSONSyntaxHighlighter {
-    private static let expression = try! NSRegularExpression(
-        pattern: #"\"(?:\\.|[^\"\\])*\"|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b|\b(?:true|false|null)\b"#
-    )
-    private static let keySuffixExpression = try! NSRegularExpression(pattern: #"\s*:"#)
-    private static let highlighted = MarkdownRenderProductCache<String, AttributedString>(
-        countLimit: 128, costLimit: 4 * 1_024 * 1_024
-    )
-    private static let classifications = MarkdownRenderProductCache<String, Bool>(
-        countLimit: 128, costLimit: 1_024 * 1_024
-    )
-
-    static func isJSON(_ source: String) -> Bool {
-        classifications.value(for: source) {
-            let object = source.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) }
-            return (object.map(JSONSerialization.isValidJSONObject) ?? false, source.utf16.count * 2)
-        }
-    }
-
-    static func highlight(_ source: String) -> AttributedString {
-        highlighted.value(for: source) {
-            // Store semantic colors without theme-resolved UIColor/font metrics.
-            (makeHighlight(source), source.utf16.count * 12)
-        }
-    }
-
-    private static func makeHighlight(_ source: String) -> AttributedString {
-        let string = source as NSString
-        let fullRange = NSRange(location: 0, length: string.length)
-        let matches = expression.matches(in: source, range: fullRange)
-        var result = AttributedString()
-        var cursor = 0
-
-        for match in matches {
-            if match.range.location > cursor {
-                result += styled(string.substring(with: NSRange(location: cursor, length: match.range.location - cursor)), color: .primary)
-            }
-            let token = string.substring(with: match.range)
-            result += styled(token, color: color(for: token, in: source, utf16Length: string.length, after: NSMaxRange(match.range)))
-            cursor = NSMaxRange(match.range)
-        }
-        if cursor < string.length {
-            result += styled(string.substring(from: cursor), color: .primary)
-        }
-        return result
-    }
-
-    private static func color(for token: String, in source: String, utf16Length: Int, after location: Int) -> Color {
-        if token.hasPrefix("\"") {
-            // Match the original text range: copying every remaining suffix
-            // makes key detection quadratic on long JSON blocks.
-            let isKey = keySuffixExpression.firstMatch(
-                in: source, options: .anchored,
-                range: NSRange(location: location, length: utf16Length - location)
-            ) != nil
-            return isKey ? DSHColor.ocean : Color(red: 0.10, green: 0.55, blue: 0.38)
-        }
-        if token == "true" || token == "false" { return DSHColor.purple }
-        if token == "null" { return .red.opacity(0.8) }
-        return DSHColor.orange
-    }
-
-    private static func styled(_ value: String, color: Color) -> AttributedString {
-        var result = AttributedString(value)
-        result.foregroundColor = color
-        return result
     }
 }
 

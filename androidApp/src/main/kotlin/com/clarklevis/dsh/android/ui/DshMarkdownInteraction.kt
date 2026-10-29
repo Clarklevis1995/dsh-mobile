@@ -125,6 +125,7 @@ internal class DshMarkdownCopyPlugin(
 
     private fun renderCode(visitor: MarkwonVisitor, node: Node, info: String?, code: String) {
         visitor.blockStart(node)
+        val cardStart = visitor.length()
         if (includeCopyButtons) {
             val headerStart = visitor.length()
             visitor.builder().append(info?.substringBefore(' ')?.takeIf { it.isNotBlank() } ?: appText("代码"))
@@ -139,13 +140,18 @@ internal class DshMarkdownCopyPlugin(
         val start = visitor.length()
         visitor.builder().append('\u00a0').append('\n')
         visitor.setSpans(start, DshCodePaddingSpan())
-        visitor.builder().append(visitor.configuration().syntaxHighlight().highlight(info, code))
+        val highlighted = visitor.configuration().syntaxHighlight().highlight(info, code)
+        visitor.builder().append(highlighted)
         visitor.ensureNewLine()
         val paddingStart = visitor.length()
         visitor.builder().append('\u00a0')
         visitor.setSpans(paddingStart, DshCodePaddingSpan())
         CoreProps.CODE_BLOCK_INFO.set(visitor.renderProps(), info)
         visitor.setSpansForNodeOptional(node, start)
+        // 阅读层将完整范围替换为卡片；原有富文本仍可供原生选择和兼容渲染使用。
+        visitor.setSpans(cardStart, DshCodeBlockMarker(
+            info.orEmpty().trim().split(Regex("\\s+")).first(), code, highlighted
+        ))
         visitor.blockEnd(node)
     }
 }

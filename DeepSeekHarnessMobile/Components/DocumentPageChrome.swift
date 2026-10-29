@@ -53,63 +53,38 @@ struct DocumentPageHeader<Actions: View>: View {
     }
 }
 
-/// 只有表格预览期间放开手机横屏；离开后恢复聊天的竖屏策略。
+/// 每个预览独立持有方向状态，关闭后不需要恢复任何窗口级设置。
 @MainActor
-enum DocumentRotationPolicy {
-    private static var owners = Set<UUID>()
-    static var tableIsOpen: Bool { !owners.isEmpty }
-    static var orientations: UIInterfaceOrientationMask {
-        if UIDevice.current.userInterfaceIdiom == .pad { return .all }
-        return tableIsOpen ? .allButUpsideDown : .portrait
-    }
-    static func begin(_ owner: UUID, scene: UIWindowScene?) {
-        owners.insert(owner)
-        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        refresh(scene, restore: false)
-    }
-    static func end(_ owner: UUID, scene: UIWindowScene?) {
-        owners.remove(owner)
-        UIDevice.current.endGeneratingDeviceOrientationNotifications()
-        refresh(scene, restore: !tableIsOpen && UIDevice.current.userInterfaceIdiom != .pad)
-    }
-    private static func refresh(_ scene: UIWindowScene?, restore: Bool) {
-        scene?.windows.forEach { window in
-            window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            window.rootViewController?.presentedViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+final class DocumentPreviewRotation: ObservableObject {
+    @Published private(set) var isRotated = false
+
+    func toggle() { isRotated.toggle() }
+}
+
+/// 预览只改变自己的布局坐标系，不请求窗口或控制器改变方向。
+struct DocumentRotatingLayout<Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let isRotated: Bool
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = geometry.size
+            content
+                .frame(width: isRotated ? size.height : size.width,
+                       height: isRotated ? size.width : size.height)
+                .rotationEffect(.degrees(isRotated ? -90 : 0))
+                .position(x: size.width / 2, y: size.height / 2)
         }
-        if restore { scene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) }
+        .clipped()
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: isRotated)
     }
 }
 
-struct DocumentRotationSupport: UIViewControllerRepresentable {
-    var rotationRequest = 0
-
-    final class Controller: UIViewController {
-        let owner = UUID()
-        var active = false
-        var lastRotationRequest = 0
-        weak var scene: UIWindowScene?
-        override func viewDidAppear(_ animated: Bool) {
-            super.viewDidAppear(animated)
-            guard !active else { return }
-            active = true
-            scene = view.window?.windowScene
-            DocumentRotationPolicy.begin(owner, scene: scene)
-        }
-
-        func rotate() {
-            guard let scene else { return }
-            let orientation: UIInterfaceOrientationMask = scene.interfaceOrientation.isLandscape ? .portrait : .landscapeRight
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: orientation))
-        }
-    }
-    func makeUIViewController(context: Context) -> Controller { Controller() }
-    func updateUIViewController(_ controller: Controller, context: Context) {
-        guard controller.lastRotationRequest != rotationRequest else { return }
-        controller.lastRotationRequest = rotationRequest
-        controller.rotate()
-    }
-    static func dismantleUIViewController(_ controller: Controller, coordinator: ()) {
-        if controller.active { DocumentRotationPolicy.end(controller.owner, scene: controller.scene) }
+/// 应用方向不再由表格预览的打开、旋转或关闭状态决定。
+@MainActor
+enum AppInterfaceOrientationPolicy {
+    static var orientations: UIInterfaceOrientationMask {
+        UIDevice.current.userInterfaceIdiom == .pad ? .all : .portrait
     }
 }

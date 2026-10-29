@@ -120,7 +120,7 @@ private struct TextInlineRenderer {
   private let textStyles: InlineTextStyles
   private let images: [String: Image]
   private let softBreakMode: SoftBreak.Mode
-  private let attributes: AttributeContainer
+  private var attributes: AttributeContainer
   private var shouldSkipNextWhitespace = false
 
   init(
@@ -151,12 +151,20 @@ private struct TextInlineRenderer {
       self.renderSoftBreak()
     case .html(let content):
       self.renderHTML(content)
-    case .image(let source, _):
-      self.renderImage(source)
+    case .image(let source, let children):
+      if let image = self.images[source] {
+        self.fragments.append(Text(image))
+      } else if source.hasPrefix("dsh-math:") {
+        self.renderText(children.renderPlainText())
+      }
     case .code:
       self.renderCode(inline)
     default:
-      self.defaultRender(inline)
+      if !inline.inlineImages.contains(where: { $0.source.hasPrefix("dsh-math:") }) {
+        self.defaultRender(inline)
+      } else {
+        self.renderChildrenWithImages(inline)
+      }
     }
   }
 
@@ -195,10 +203,22 @@ private struct TextInlineRenderer {
     }
   }
 
-  private mutating func renderImage(_ source: String) {
-    if let image = self.images[source] {
-      self.fragments.append(Text(image))
+  private mutating func renderChildrenWithImages(_ inline: InlineNode) {
+    let savedAttributes = self.attributes
+    let style: TextStyle
+    switch inline {
+    case .emphasis: style = self.textStyles.emphasis
+    case .strong: style = self.textStyles.strong
+    case .strikethrough: style = self.textStyles.strikethrough
+    case .link: style = self.textStyles.link
+    default: self.render(inline.children); return
     }
+    style._collectAttributes(in: &self.attributes)
+    if case .link(let destination, _) = inline {
+      self.attributes.link = URL(string: destination, relativeTo: self.baseURL)
+    }
+    self.render(inline.children)
+    self.attributes = savedAttributes
   }
 
   private mutating func renderCode(_ inline: InlineNode) {

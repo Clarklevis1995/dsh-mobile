@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// 明确选择软边缘，避免系统版本变化把滚动正文的渐进模糊切回硬质背景。
+struct ConversationScrollEdgeStyle: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            content
+        }
+    }
+}
+
 struct GlassSurface: ViewModifier {
     let radius: CGFloat
     let dark: Bool

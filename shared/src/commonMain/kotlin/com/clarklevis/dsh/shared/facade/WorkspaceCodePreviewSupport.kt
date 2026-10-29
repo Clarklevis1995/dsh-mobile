@@ -68,9 +68,11 @@ object WorkspaceCodePreviewSupport {
         }
     }
 
-    private fun tokenize(text: String, language: String): List<WorkspaceCodeToken> {
+    internal fun tokenize(text: String, language: String): List<WorkspaceCodeToken> {
         if (text.isEmpty() || language == "plaintext") return emptyList()
         if (language in MARKUP_LANGUAGES) return tokenizeMarkup(text)
+        if (language == "latex") return tokenizeLatex(text)
+        if (language == "diff") return tokenizeDiff(text)
         val occupied = BooleanArray(text.length)
         val tokens = mutableListOf<WorkspaceCodeToken>()
 
@@ -110,8 +112,19 @@ object WorkspaceCodePreviewSupport {
             addGroupMatches(CSS_PROPERTY_PATTERN, 1, WorkspaceCodeTokenKind.ATTRIBUTE)
             addGroupMatches(CSS_SELECTOR_PATTERN, 1, WorkspaceCodeTokenKind.TAG)
         }
+        if (language in setOf("yaml", "toml", "properties")) {
+            addGroupMatches(CONFIG_KEY_PATTERN, 1, WorkspaceCodeTokenKind.ATTRIBUTE)
+        }
+        if (language == "shell") {
+            addMatches(SHELL_VARIABLE_PATTERN, WorkspaceCodeTokenKind.ATTRIBUTE)
+        }
 
-        val keywords = LANGUAGE_KEYWORDS[language].orEmpty()
+        val keywords = when (language) {
+            "groovy" -> LANGUAGE_KEYWORDS["java"].orEmpty() + setOf("def", "in", "as", "trait")
+            "objective-c" -> C_KEYWORDS + setOf("interface", "implementation", "end", "property", "synthesize", "protocol", "selector", "self", "super", "nil", "YES", "NO")
+            "json", "yaml", "toml" -> setOf("true", "false", "null")
+            else -> LANGUAGE_KEYWORDS[language].orEmpty()
+        }
         if (keywords.isNotEmpty()) {
             addMatches(
                 Regex(
@@ -153,22 +166,29 @@ object WorkspaceCodePreviewSupport {
             val start = index
             val kind: WorkspaceCodeTokenKind
             when {
-                text.startsWith("<!--", index) || text.startsWith("/*", index) -> {
+                (text.startsWith("<!--", index) && language == "javascript") ||
+                    (text.startsWith("/*", index) && language in BLOCK_COMMENT_LANGUAGES) ||
+                    (text.startsWith("--[[", index) && language == "lua") -> {
                     val isHtmlComment = text.startsWith("<!--", index)
-                    val delimiter = if (isHtmlComment) "-->" else "*/"
-                    val close = text.indexOf(delimiter, index + if (isHtmlComment) 4 else 2)
+                    val isLuaComment = text.startsWith("--[[", index)
+                    val delimiter = if (isHtmlComment) "-->" else if (isLuaComment) "]]" else "*/"
+                    val close = text.indexOf(delimiter, index + if (isHtmlComment || isLuaComment) 4 else 2)
                     index = if (close < 0) text.length else close + delimiter.length
                     kind = WorkspaceCodeTokenKind.COMMENT
                 }
-                text.startsWith("//", index) ||
+                (text.startsWith("//", index) && language in LINE_COMMENT_LANGUAGES) ||
                     (text[index] == '#' && language in HASH_COMMENT_LANGUAGES) ||
-                    (text.startsWith("--", index) && language == "sql") -> {
+                    (text.startsWith("--", index) && language in setOf("sql", "lua")) -> {
                     val close = text.indexOf('\n', index)
                     index = if (close < 0) text.length else close
                     kind = WorkspaceCodeTokenKind.COMMENT
                 }
                 text[index] == '"' || text[index] == '\'' || text[index] == '`' -> {
                     val quote = text[index]
+                    // Rust 的生命周期 'a / 'static 不属于字符字面量。
+                    if (language == "rust" && quote == '\'' && index + 1 < text.length &&
+                        text[index + 1].isLetter() && text.getOrNull(index + 2) != '\''
+                    ) { index++; continue }
                     val delimiter = if (quote != '`' &&
                         index + 2 < text.length && text[index + 1] == quote && text[index + 2] == quote
                     ) {
@@ -193,6 +213,48 @@ object WorkspaceCodePreviewSupport {
             tokens += WorkspaceCodeToken(start, index, kind)
         }
         return tokens
+    }
+
+    private fun tokenizeLatex(text: String): List<WorkspaceCodeToken> = buildList {
+        var index = 0
+        while (index < text.length) {
+            val start = index
+            val kind = when {
+                text[index] == '%' -> {
+                    index = text.indexOf('\n', index).takeIf { it >= 0 } ?: text.length
+                    WorkspaceCodeTokenKind.COMMENT
+                }
+                text[index] == '\\' -> {
+                    index++
+                    if (index < text.length && text[index].isLetter()) {
+                        while (index < text.length && text[index].isLetter()) index++
+                    } else if (index < text.length) { index++ }
+                    WorkspaceCodeTokenKind.KEYWORD
+                }
+                text[index] in "{}[]$&_^" -> { index++; WorkspaceCodeTokenKind.ATTRIBUTE }
+                text[index].isDigit() -> {
+                    index = numberTokenEnd(text, index)
+                    WorkspaceCodeTokenKind.NUMBER
+                }
+                else -> { index++; continue }
+            }
+            add(WorkspaceCodeToken(start, index, kind))
+        }
+    }
+
+    private fun tokenizeDiff(text: String): List<WorkspaceCodeToken> = buildList {
+        var start = 0
+        while (start < text.length) {
+            val end = text.indexOf('\n', start).takeIf { it >= 0 } ?: text.length
+            val kind = when {
+                text.startsWith("@@", start) || text.startsWith("diff ", start) -> WorkspaceCodeTokenKind.ATTRIBUTE
+                text[start] == '+' -> WorkspaceCodeTokenKind.STRING
+                text[start] == '-' -> WorkspaceCodeTokenKind.TAG
+                else -> null
+            }
+            if (kind != null) add(WorkspaceCodeToken(start, end, kind))
+            start = end + 1
+        }
     }
 
     private fun quotedTokenEnd(text: String, start: Int, delimiter: String): Int {
@@ -220,6 +282,13 @@ object WorkspaceCodePreviewSupport {
         if (index + 1 < text.length && text[index] == '.' && text[index + 1].isDigit()) {
             index++
             while (index < text.length && text[index].isDigit()) index++
+        }
+        if (index < text.length && (text[index] == 'e' || text[index] == 'E')) {
+            var exponent = index + 1
+            if (text.getOrNull(exponent) == '+' || text.getOrNull(exponent) == '-') exponent++
+            val digits = exponent
+            while (exponent < text.length && text[exponent].isDigit()) exponent++
+            if (exponent > digits) index = exponent
         }
         return index
     }
@@ -427,9 +496,16 @@ object WorkspaceCodePreviewSupport {
     )
 
     private val HASH_COMMENT_LANGUAGES = setOf(
-        "python", "ruby", "shell", "yaml", "toml", "properties"
+        "python", "ruby", "shell", "yaml", "toml", "properties", "php"
     )
     private val MARKUP_LANGUAGES = setOf("html", "xml")
+    private val BLOCK_COMMENT_LANGUAGES = setOf(
+        "c", "cpp", "csharp", "css", "dart", "go", "groovy", "java", "javascript", "json",
+        "kotlin", "objective-c", "php", "rust", "sql", "swift", "typescript"
+    )
+    private val LINE_COMMENT_LANGUAGES = BLOCK_COMMENT_LANGUAGES - setOf("css", "sql")
+    private val CONFIG_KEY_PATTERN = Regex("(?m)^[ \\t-]*([A-Za-z_][A-Za-z0-9_.-]*)(?=[ \\t]*[:=])")
+    private val SHELL_VARIABLE_PATTERN = Regex("\\$(?:\\{[A-Za-z_][A-Za-z0-9_]*\\}|[A-Za-z_][A-Za-z0-9_]*|[0-9@?#])")
 
     private val CSS_PROPERTY_PATTERN = Regex("(?m)^[ \\t]*([A-Za-z-]+)(?=\\s*:)")
     private val CSS_SELECTOR_PATTERN = Regex("(?m)(?:^|[},])\\s*([.#]?[A-Za-z][A-Za-z0-9_-]*)(?=\\s*[{,])")
@@ -525,7 +601,7 @@ object WorkspaceCodePreviewSupport {
         ),
         "shell" to setOf(
             "case", "do", "done", "elif", "else", "esac", "fi", "for", "function", "if", "in", "select",
-            "then", "time", "until", "while"
+            "then", "time", "until", "while", "export", "local", "echo", "printf", "source", "set", "unset"
         )
     )
 

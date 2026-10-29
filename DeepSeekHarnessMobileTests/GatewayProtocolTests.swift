@@ -9176,26 +9176,18 @@ private final class AgentLongRunningKeepAliveSpy: AgentLongRunningKeepAlive {
 /// a finite measurement after it.
 final class MarkdownRenderProductTests: XCTestCase {
     func testJSONKeyWhitespaceEscapesAndUnicodeKeepOriginalAttributes() throws {
-        // JSONC highlighting accepts general regex whitespace, not just the
-        // four whitespace characters allowed by the JSON parser.
         let source = "\"中文🙂\"\u{2003}\t:\n\"value\\\"with:colon\", \"tail\", true, false, null, -12.5e+2"
-        let highlighted = JSONSyntaxHighlighter.highlight(source)
-        XCTAssertEqual(String(highlighted.characters), source)
-        func color(_ token: String) throws -> Color? {
-            let range = try XCTUnwrap(highlighted.range(of: token))
-            return highlighted[range].foregroundColor
+        let highlighter = DSHCodeSyntaxHighlighter(dark: false)
+        let highlighted = highlighter.attributedCode(source, language: "jsonc")
+        XCTAssertEqual(highlighted.string, source)
+        let text = source as NSString
+        let key = try XCTUnwrap(highlighted.attribute(.foregroundColor, at: text.range(of: "中文").location, effectiveRange: nil) as? UIColor)
+        let string = try XCTUnwrap(highlighted.attribute(.foregroundColor, at: text.range(of: "tail").location, effectiveRange: nil) as? UIColor)
+        XCTAssertNotEqual(key, string)
+        for token in ["true", "false", "null", "12.5e+2"] {
+            XCTAssertNotNil(highlighted.attribute(.foregroundColor, at: text.range(of: token).location, effectiveRange: nil))
         }
-        XCTAssertEqual(try color("\"中文🙂\""), DSHColor.ocean)
-        XCTAssertEqual(try color("\"value\\\"with:colon\""), Color(red: 0.10, green: 0.55, blue: 0.38))
-        XCTAssertEqual(try color("\"tail\""), Color(red: 0.10, green: 0.55, blue: 0.38))
-        XCTAssertEqual(try color("true"), DSHColor.purple)
-        XCTAssertEqual(try color("false"), DSHColor.purple)
-        XCTAssertEqual(try color("null"), .red.opacity(0.8))
-        XCTAssertEqual(try color("-12.5e+2"), DSHColor.orange)
-        XCTAssertEqual(JSONSyntaxHighlighter.highlight(source), highlighted)
-        XCTAssertTrue(JSONSyntaxHighlighter.isJSON(#"{"a": []}"#))
-        XCTAssertFalse(JSONSyntaxHighlighter.isJSON(#""scalar""#))
-        XCTAssertFalse(JSONSyntaxHighlighter.isJSON("not JSON"))
+        XCTAssertEqual(highlighted, highlighter.attributedCode(source, language: "jsonc"))
     }
 
     func testPreparedDocumentUpdatesFileOrderAndRemovesObsoleteReferences() {
@@ -13615,6 +13607,12 @@ final class MarkdownTableRenderingTests: XCTestCase {
             | 小众品牌生存 | 外国品牌靠本土运营商与垂直场景；中国品牌靠出海、抱鸿蒙生态与电竞垂类。 |
             """
         let content = MarkdownUI.MarkdownContent(source)
+        // 固定字号夹具，避免模拟器里保存的用户倍率影响 17pt 列宽断言。
+        let preferencesName = "table-viewport-test-\(UUID().uuidString)"
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: preferencesName))
+        preferences.set(1.0, forKey: AppFontScale.key)
+        preferences.set(false, forKey: AppFontScale.followsSystemKey)
+        defer { preferences.removePersistentDomain(forName: preferencesName) }
         defer { window.isHidden = true; window.rootViewController = nil }
         func scrollViews(_ view: UIView) -> [UIScrollView] {
             ((view as? UIScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews)
@@ -13626,6 +13624,7 @@ final class MarkdownTableRenderingTests: XCTestCase {
                 Spacer(minLength: 0)
             }.padding(20).frame(width: width, height: 1000, alignment: .topLeading)
                 .environment(\.locale, Locale(identifier: "zh_Hans"))
+                .defaultAppStorage(preferences)
         }
         let controller = UIHostingController(rootView: fixture(width: 320))
         window.rootViewController = controller
@@ -13655,19 +13654,24 @@ final class MarkdownTableRenderingTests: XCTestCase {
         }
     }
 
-    func testFullScreenTableSharedHeaderMarginsDarkModeAndRotation() async throws {
+    func testFullScreenTableRotatesItsLayoutWithoutRotatingConversation() async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
         let visualSource = "| 品牌 | 强项 | 弱项 | 参考 |\n| --- | --- | --- | --- |\n" +
             (1...8).map { "| 品牌\($0) | 信号稳定、系统流畅，支持多设备协同 | 需确认价格与续航表现 | 测试资料 |" }.joined(separator: "\n")
-        let model = MarkdownTableModel(content: MarkdownUI.MarkdownContent(visualSource))
-        let controller = UIHostingController(rootView: MarkdownTablePage(model: model, fontSize: 17)
-            .environment(\.locale, Locale(identifier: "zh_Hans")))
-        window.rootViewController = controller
+        let conversationController = UIViewController()
+        let conversation = UIScrollView(frame: window.bounds)
+        conversation.contentInsetAdjustmentBehavior = .never
+        conversation.contentSize = CGSize(width: window.bounds.width, height: 2000)
+        conversationController.view = conversation
+        window.rootViewController = conversationController
         window.makeKeyAndVisible()
+        let rotation = DocumentPreviewRotation()
+        let model = MarkdownTableModel(content: MarkdownUI.MarkdownContent(visualSource))
+        let controller = UIHostingController(rootView: MarkdownTablePage(model: model, fontSize: 17, rotation: rotation)
+            .environment(\.locale, Locale(identifier: "zh_Hans")))
+        controller.modalPresentationStyle = .fullScreen
         defer { window.isHidden = true; window.rootViewController = nil }
-        try await Task.sleep(for: .milliseconds(600))
-        XCTAssertTrue(DocumentRotationPolicy.tableIsOpen)
         func scrollViews(_ view: UIView) -> [UIScrollView] {
             ((view as? UIScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews)
         }
@@ -13680,42 +13684,57 @@ final class MarkdownTableRenderingTests: XCTestCase {
             attachment.lifetime = .keepAlways
             add(attachment)
         }
-        let scroll = try XCTUnwrap(scrollViews(controller.view).last)
-        let bounds = scroll.convert(scroll.bounds, to: controller.view)
+        conversation.setContentOffset(CGPoint(x: 0, y: 100), animated: false)
+        let originalOffset = conversation.contentOffset
+        let originalWindow = window.bounds
+        let originalController = conversationController.view.bounds
+        let originalOrientation = scene.interfaceOrientation
+        conversationController.present(controller, animated: false)
+        try await Task.sleep(for: .milliseconds(600))
+        let preview = controller
+        let scroll = try XCTUnwrap(scrollViews(preview.view).last)
+        let portraitWidth = scroll.bounds.width
+        let bounds = scroll.convert(scroll.bounds, to: preview.view)
         XCTAssertEqual(bounds.minX, 20, accuracy: 1)
-        XCTAssertEqual(controller.view.bounds.width - bounds.maxX, 20, accuracy: 1)
+        XCTAssertEqual(preview.view.bounds.width - bounds.maxX, 20, accuracy: 1)
+        let policy = AppInterfaceOrientationPolicy.orientations
         for style: UIUserInterfaceStyle in [.light, .dark] {
             window.overrideUserInterfaceStyle = style
             try await Task.sleep(for: .milliseconds(200))
-            capture(style == .dark ? "table-page-ios-dark-portrait" : "table-page-ios-light-portrait")
+            capture(style == .dark ? "table-local-ios-dark-portrait" : "table-local-ios-light-portrait")
         }
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            // iPad 多窗口的窗口形状由系统管理；尺寸重排由上面的容器连续缩放测试覆盖。
-            XCTAssertEqual(scroll.contentSize.width,
-                max(scroll.bounds.width, model.widths(fontSize: 17).reduce(0, +)), accuracy: 1)
-            return
-        }
-        func rotationControllers(_ controller: UIViewController) -> [DocumentRotationSupport.Controller] {
-            ((controller as? DocumentRotationSupport.Controller).map { [$0] } ?? [])
-                + controller.children.flatMap(rotationControllers)
-        }
-        let rotation = try XCTUnwrap(rotationControllers(controller).first)
-        rotation.rotate()
-        for _ in 0..<30 {
-            if window.bounds.width > window.bounds.height { break }
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        XCTAssertGreaterThan(window.bounds.width, window.bounds.height, "表格预览应允许横屏")
-        capture("table-page-ios-dark-landscape")
+        rotation.toggle()
+        try await Task.sleep(for: .milliseconds(700))
+        XCTAssertEqual(window.bounds, originalWindow, "旋转不能改变窗口尺寸")
+        XCTAssertEqual(conversationController.view.bounds, originalController, "会话控制器不能旋转")
+        XCTAssertEqual(scene.interfaceOrientation, originalOrientation, "预览不能请求窗口方向变化")
+        XCTAssertEqual(AppInterfaceOrientationPolicy.orientations, policy)
+        XCTAssertEqual(conversation.contentOffset, originalOffset)
+        XCTAssertEqual(scroll.bounds.width, preview.view.safeAreaLayoutGuide.layoutFrame.height - 40, accuracy: 2,
+                       "旋转后表格应使用原视图高度作为横向布局宽度")
+        let origin = scroll.convert(CGPoint.zero, to: preview.view)
+        let unitX = scroll.convert(CGPoint(x: 1, y: 0), to: preview.view)
+        XCTAssertEqual(unitX.x - origin.x, 0, accuracy: 0.01)
+        XCTAssertEqual(abs(unitX.y - origin.y), 1, accuracy: 0.01, "表格视图应局部旋转 90 度")
+        capture("table-local-ios-dark-landscape")
         window.overrideUserInterfaceStyle = .light
         try await Task.sleep(for: .milliseconds(200))
-        capture("table-page-ios-light-landscape")
-        rotation.rotate()
-        for _ in 0..<30 {
-            if window.bounds.height > window.bounds.width { break }
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        XCTAssertGreaterThan(window.bounds.height, window.bounds.width, "旋转按钮应支持再次切回竖屏")
+        capture("table-local-ios-light-landscape")
+        rotation.toggle()
+        try await Task.sleep(for: .milliseconds(700))
+        XCTAssertEqual(scroll.bounds.width, portraitWidth, accuracy: 1)
+        XCTAssertEqual(window.bounds, originalWindow)
+        XCTAssertEqual(scene.interfaceOrientation, originalOrientation)
+        // 在局部横屏状态关闭，也不能改变外层页面方向。
+        rotation.toggle()
+        try await Task.sleep(for: .milliseconds(500))
+        controller.dismiss(animated: false)
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertNil(conversationController.presentedViewController, "关闭后应回到原会话")
+        XCTAssertEqual(conversation.contentOffset, originalOffset)
+        XCTAssertEqual(conversationController.view.bounds, originalController)
+        XCTAssertEqual(window.bounds, originalWindow)
+        XCTAssertEqual(scene.interfaceOrientation, originalOrientation)
     }
 
     func testTableHasHorizontalViewportAndKeepsFiniteReadingHeight() async throws {

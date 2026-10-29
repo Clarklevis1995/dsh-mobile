@@ -920,6 +920,10 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         collectionView.backgroundColor = .clear
         collectionView.delegate = self
         collectionView.contentInsetAdjustmentBehavior = .never
+        if #available(iOS 26.0, *) {
+            // 原生软边缘做渐进模糊；不要再叠整块 material，避免正文被灰色带吞掉。
+            collectionView.topEdgeEffect.style = .soft
+        }
         // ChatLayout's automatic self-sizing mode is explicitly experimental.
         // During a diffable batch it can recursively re-enter
         // `_updateVisibleCellsNow` when SwiftUI/TextKit invalidates intrinsic

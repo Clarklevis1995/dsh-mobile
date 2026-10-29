@@ -913,16 +913,9 @@ private struct ConversationNavigationShell<Content: View>: View {
     @State private var liveTitle: String?
     @State private var livePresetTitle: String?
     @State private var showsTeamEntry = false
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsSidebar = false
     @State private var sidebarAvailableHeight: CGFloat = 0
-
-    /// 沿用宽屏导航栏入口；侧栏仅作为当前会话的悬浮面板展示。
-    private var showsSidebarToggle: Bool {
-        horizontalSizeClass == .regular && verticalSizeClass == .regular
-    }
+    @State private var compactHeader = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -930,31 +923,16 @@ private struct ConversationNavigationShell<Content: View>: View {
             content($activeView, geometry.safeAreaInsets.top)
                 .ignoresSafeArea(.container, edges: .top)
         }
-            .onGeometryChange(for: CGFloat.self) { geometry in
-                geometry.size.height
-            } action: { height in
-                sidebarAvailableHeight = height
+            .onGeometryChange(for: CGSize.self) { geometry in
+                geometry.size
+            } action: { size in
+                sidebarAvailableHeight = size.height
+                compactHeader = size.width < 600
             }
             .navigationTitle("")
             .toolbar {
-                if showsSidebarToggle {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            showsSidebar.toggle()
-                        } label: {
-                            Image(systemName: "sidebar.left")
-                        }
-                        .accessibilityLabel("展开侧边栏")
-                        .accessibilityIdentifier("conversation-sidebar-toggle")
-                        .popover(isPresented: $showsSidebar, arrowEdge: .top) {
-                            ConversationSidebar(
-                                store: store,
-                                actions: dismissingSidebarActions
-                            )
-                            // 使用会话页的可用高度，旋转和分屏时随容器调整；不改变正文布局。
-                            .frame(idealHeight: sidebarAvailableHeight, maxHeight: sidebarAvailableHeight)
-                        }
-                    }
+                if !compactHeader {
+                    ToolbarItem(placement: .topBarLeading) { sidebarButton }
                 }
                 if #available(iOS 26.0, *) {
                     ToolbarItem(placement: .principal) { pageTitle }
@@ -963,15 +941,14 @@ private struct ConversationNavigationShell<Content: View>: View {
                     ToolbarItem(placement: .principal) { pageTitle }
                 }
             }
-            .onChangeCompat(of: showsSidebarToggle) { _, available in
-                if !available { showsSidebar = false }
-            }
             .onChangeCompat(of: header.sessionID) { _, _ in
                 showsSidebar = false
                 liveTitle = nil
                 livePresetTitle = nil
             }
-            .onDisappear { showsSidebar = false }
+            .onDisappear {
+                showsSidebar = false
+            }
             .onReceive(store.$sessions) { sessions in
                 let sessionID = header.sessionID ?? store.selectedSessionId
                 liveTitle = sessions.first { $0.id == sessionID }?.title
@@ -986,13 +963,16 @@ private struct ConversationNavigationShell<Content: View>: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarRole(.editor)
             .toolbarBackground(.hidden, for: .navigationBar)
+            .modifier(ConversationScrollEdgeStyle())
             .toolbar {
                 if #available(iOS 26.0, *) {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        conversationStatus
-                            .padding(.trailing, showsTeamEntry ? -8 : 0)
+                    if !compactHeader {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            conversationStatus
+                                .padding(.trailing, showsTeamEntry ? -8 : 0)
+                        }
+                        .sharedBackgroundVisibility(.hidden)
                     }
-                    .sharedBackgroundVisibility(.hidden)
                     if showsTeamEntry {
                         ToolbarItem(placement: .topBarTrailing) {
                             TeamNavigationEntry(store: store)
@@ -1001,17 +981,24 @@ private struct ConversationNavigationShell<Content: View>: View {
                         .sharedBackgroundVisibility(.hidden)
                         ToolbarSpacer(.fixed, placement: .topBarTrailing)
                     }
+                    if compactHeader {
+                        ToolbarItem(placement: .topBarTrailing) { sidebarButton }
+                        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         moreMenu
                     }
                 } else {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        conversationStatus
+                    if !compactHeader {
+                        ToolbarItem(placement: .topBarTrailing) { conversationStatus }
                     }
                     if showsTeamEntry {
                         ToolbarItem(placement: .topBarTrailing) {
                             TeamNavigationEntry(store: store)
                         }
+                    }
+                    if compactHeader {
+                        ToolbarItem(placement: .topBarTrailing) { sidebarButton }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         moreMenu
@@ -1035,34 +1022,40 @@ private struct ConversationNavigationShell<Content: View>: View {
             }
     }
 
-    private var pageTitle: some View {
+    private var sidebarButton: some View {
         Button {
-            selectPage(activeView == 0 ? 1 : 0)
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            showsSidebar.toggle()
         } label: {
-            Text(liveTitle ?? header.title)
-                .appFont(.headline)
-                .lineLimit(1)
-                .frame(minWidth: 44, maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
+            Image(systemName: "sidebar.left")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 22, height: 22)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("conversation-page-title")
-        .accessibilityValue(activeView == 0 ? Text("对话") : Text("轨迹"))
-        .accessibilityHint("轻点切换页面，长按选择对话或轨迹")
-        .contextMenu {
-            Button("对话", systemImage: activeView == 0 ? "checkmark" : "bubble.left") {
-                selectPage(0)
-            }
-            Button("轨迹", systemImage: activeView == 1 ? "checkmark" : "point.topleft.down.curvedto.point.bottomright.up") {
-                selectPage(1)
+        .accessibilityLabel("展开侧边栏")
+        .accessibilityIdentifier("conversation-sidebar-toggle")
+        .popover(isPresented: $showsSidebar, arrowEdge: .top) {
+            if #available(iOS 16.4, *) {
+                sidebarPanel.presentationCompactAdaptation(.popover)
+            } else {
+                sidebarPanel
             }
         }
     }
 
-    private func selectPage(_ page: Int) {
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) {
-            activeView = page
-        }
+    private var sidebarPanel: some View {
+        ConversationSidebar(store: store, actions: dismissingSidebarActions)
+            .frame(idealHeight: sidebarAvailableHeight, maxHeight: sidebarAvailableHeight)
+    }
+
+    private var pageTitle: some View {
+        ConversationNavigationTitle(
+            title: liveTitle ?? header.title,
+            gateway: gateway,
+            agentPresetTitle: livePresetTitle ?? header.agentPresetTitle,
+            selectedPage: activeView,
+            compact: compactHeader
+        )
     }
 
     /// 先关闭悬浮面板，再复用现有会话切换或导航操作；不改变正文宽度。
@@ -1101,11 +1094,9 @@ private struct ConversationNavigationShell<Content: View>: View {
     }
 
     private var conversationStatus: some View {
-        ConversationNavigationStatus(
-            gateway: gateway,
-            agentPresetTitle: livePresetTitle ?? header.agentPresetTitle
-        )
+        ConversationNavigationStatus(gateway: gateway, agentPresetTitle: livePresetTitle ?? header.agentPresetTitle)
     }
+
 }
 
 private struct WorkspaceFilesSheet: View {
@@ -2052,20 +2043,46 @@ private final class WorkspaceDownloadRegistry {
     }
 }
 
+/// 会话标题和模式共用导航栏的标题区域，不参与侧栏的点击交互。
+private struct ConversationNavigationTitle: View {
+    let title: String
+    let gateway: GatewayClient
+    let agentPresetTitle: String
+    let selectedPage: Int
+    let compact: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .appFont(compact ? .system(size: 16, weight: .semibold) : .headline)
+                .lineLimit(1)
+                .accessibilityIdentifier("conversation-page-title")
+                .accessibilityValue(selectedPage == 0 ? Text("对话") : Text("轨迹"))
+            if compact {
+                ConversationNavigationStatus(gateway: gateway, agentPresetTitle: agentPresetTitle, compact: true)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .accessibilityElement(children: .contain)
+    }
+}
+
 /// Connection changes are scoped to this tiny view instead of rebuilding the
 /// navigation shell (or the toolbar declaration containing it).
 private struct ConversationNavigationStatus: View {
     @ObservedObject var gateway: GatewayClient
     let agentPresetTitle: String
+    var compact = false
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: compact ? 6 : 7) {
             ConnectionDot(state: gateway.state)
             Text(agentPresetTitle)
-                .appFont(.caption.weight(.medium))
+                .appFont(compact ? .system(size: 11, weight: .medium) : .caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+                .fixedSize(horizontal: !compact, vertical: false)
+                .accessibilityIdentifier("conversation-mode-label")
         }
     }
 }

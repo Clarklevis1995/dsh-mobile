@@ -136,9 +136,9 @@ class WorkspaceCodePreviewSupportTest {
             assertEquals(WorkspaceCodeTokenKind.STRING, document.tokens.single().kind)
             assertEquals(source.length, document.tokens.single().endExclusive)
         }
-        listOf("/*", "<!--", "//", "#").forEach { delimiter ->
+        listOf("/*" to "sample.kt", "<!--" to "sample.js", "//" to "sample.kt", "#" to "sample.py").forEach { (delimiter, name) ->
             val source = "$delimiter$body"
-            val document = WorkspaceCodePreviewSupport.prepare(source, "sample.py", null)
+            val document = WorkspaceCodePreviewSupport.prepare(source, name, null)
             assertEquals(1, document.tokens.size)
             assertEquals(WorkspaceCodeTokenKind.COMMENT, document.tokens.single().kind)
             assertEquals(source.length, document.tokens.single().endExclusive)

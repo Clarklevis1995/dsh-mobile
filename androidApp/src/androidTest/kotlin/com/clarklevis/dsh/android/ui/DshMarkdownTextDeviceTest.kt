@@ -161,8 +161,11 @@ class DshMarkdownTextDeviceTest {
     fun selectionPageUsesSharedTypographyCardsAndBlueSelection() {
         val oldLocale = java.util.Locale.getDefault()
         java.util.Locale.setDefault(java.util.Locale.SIMPLIFIED_CHINESE)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences("selection-light-palette-test", android.content.Context.MODE_PRIVATE)
+        val appearance = AppearanceSettings(preferences).apply { selectInterfaceStyle(InterfaceStyle.LIGHT) }
         try {
-            compose.setContent { DshTheme { DshMarkdownSelectionPage(selectionParityMarkdown) {} } }
+            compose.setContent { DshTheme(appearance) { DshMarkdownSelectionPage(selectionParityMarkdown) {} } }
             val view = findSelectionPageTextView()
             compose.waitUntil(5_000) { view.hasSelectionActionMode }
             compose.runOnIdle {
@@ -193,6 +196,7 @@ class DshMarkdownTextDeviceTest {
             saveSelectionScreenshot("selection-parity-android")
         } finally {
             java.util.Locale.setDefault(oldLocale)
+            preferences.edit().clear().commit()
         }
     }
 

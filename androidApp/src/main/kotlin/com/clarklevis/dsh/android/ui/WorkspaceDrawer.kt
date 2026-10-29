@@ -157,7 +157,7 @@ internal fun WorkspaceDrawer(
                         tint = if (dark) Color.White else Color.Black
                     )
                     Image(
-                        painter = painterResource(R.drawable.dsh_whaleness_wordmark),
+                        painter = painterResource(if (dark) R.drawable.dsh_whaleness_wordmark_dark else R.drawable.dsh_whaleness_wordmark),
                         contentDescription = null,
                         modifier = Modifier.size(width = 183.dp, height = 29.dp)
                     )

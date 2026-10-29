@@ -12,8 +12,7 @@ struct InlineText: View {
       return node.children.contains(where: containsCode)
     }
     self.hasInlineCode = inlines.contains(where: containsCode)
-    // 必须与原 loader 的根 compactMap(imageData) 使用同一检测语义。
-    self.hasInlineImages = inlines.contains { $0.imageData != nil }
+    self.hasInlineImages = inlines.contains { !$0.inlineImages.isEmpty }
   }
 
   var body: some View {
@@ -90,23 +89,23 @@ private struct InlineTextWithImages: View {
   }
 
   private func loadInlineImages() async throws -> [String: Image] {
-    let images = Set(self.inlines.compactMap(\.imageData))
+    let images = Set(self.inlines.flatMap(\.inlineImages))
     guard !images.isEmpty else { return [:] }
 
-    return try await withThrowingTaskGroup(of: (String, Image).self) { taskGroup in
+    return await withTaskGroup(of: (String, Image?).self) { taskGroup in
       for image in images {
         guard let url = URL(string: image.source, relativeTo: self.imageBaseURL) else {
           continue
         }
 
         taskGroup.addTask {
-          (image.source, try await self.inlineImageProvider.image(with: url, label: image.alt))
+          (image.source, try? await self.inlineImageProvider.image(with: url, label: image.alt))
         }
       }
 
       var inlineImages: [String: Image] = [:]
 
-      for try await result in taskGroup {
+      for await result in taskGroup {
         inlineImages[result.0] = result.1
       }
 

@@ -3,6 +3,7 @@ package com.clarklevis.dsh.android.ui
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalView
@@ -268,7 +269,8 @@ class ConversationKeyboardDeviceTest {
     fun approvalArrivalWhileViewingTrajectoryReturnsToVisibleActions() {
         val fixture = showConversation()
         try {
-            compose.onNodeWithText("轨迹").performClick()
+            val switchPage = compose.onNodeWithTag("conversation-pager").fetchSemanticsNode().config[SemanticsActions.CustomActions].single()
+            compose.runOnIdle { assertTrue(switchPage.action()) }
             compose.waitForIdle()
             compose.onNodeWithTag("composer-input").assertIsNotDisplayed()
             compose.runOnIdle {
@@ -306,7 +308,8 @@ class ConversationKeyboardDeviceTest {
     fun anotherSessionsApprovalDoesNotInterruptTrajectoryAndAppearsOnSelection() {
         val fixture = showConversation()
         try {
-            compose.onNodeWithText("轨迹").performClick()
+            val switchPage = compose.onNodeWithTag("conversation-pager").fetchSemanticsNode().config[SemanticsActions.CustomActions].single()
+            compose.runOnIdle { assertTrue(switchPage.action()) }
             compose.waitForIdle()
             compose.runOnIdle {
                 fixture.holder.wirePayload =
@@ -399,11 +402,17 @@ class ConversationKeyboardDeviceTest {
                 return image.toPixelMap()[20, image.height - 20].red
             }
             val image = mask.captureToImage()
+            InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
+                .resolve("voice-curved-edge.png").outputStream().use {
+                    image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
             val pixels = image.toPixelMap()
-            val topY = (image.height * 0.12f).toInt()
+            // 正文现在会从顶部玻璃后方穿过；在上部渐变的稳定区域检查曲边，
+            // 避免极浅的边缘颜色被背后的消息位置和像素取整主导。
+            val topY = (image.height * 0.20f).toInt()
             val middle = pixels[image.width / 2, topY]
             val side = pixels[(image.width * 0.04f).toInt(), topY]
-            assertTrue("椭圆渐变顶部两侧应比中间更透明", side.red > middle.red + 0.10f)
+            assertTrue("椭圆渐变顶部两侧应比中间更透明：side=$side, middle=$middle", side.red > middle.red + 0.10f)
             val opaqueRed = bottomRed()
             compose.mainClock.autoAdvance = false
             compose.runOnIdle { fixture.holder.voiceInput.cancel() }

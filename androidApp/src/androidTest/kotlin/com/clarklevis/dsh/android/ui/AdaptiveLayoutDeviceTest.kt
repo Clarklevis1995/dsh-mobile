@@ -129,7 +129,8 @@ class AdaptiveLayoutDeviceTest {
                 assertEquals(list.center.x, composer.center.x, 2f)
                 assertEquals(list.width, composer.width, 2f)
                 assertTrue(list.width <= px(1040f) + 2f)
-                assertTrue(bounds("conversation-tabs").width <= px(440f) + 2f)
+                compose.onNodeWithTag("conversation-tabs").assertDoesNotExist()
+                compose.onNodeWithTag("conversation-page-title").assertIsDisplayed()
                 compose.onNodeWithTag("composer-input").assertIsDisplayed()
             }
             check()

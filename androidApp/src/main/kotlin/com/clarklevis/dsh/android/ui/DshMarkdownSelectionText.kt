@@ -121,7 +121,9 @@ internal fun renderMarkdownSelectionText(source: String, fontSizePx: Float, dens
         span(AbsoluteSizeSpan(1), start)
         span(SelectionLineHeight(fixed = (DshSelectionStyle.CODE_HEADER * density).roundToInt()), start)
         val codeStart = output.length
-        output.append(literal.removeSuffix("\n").ifEmpty { "\n" })
+        val displayedCode = literal.removeSuffix("\n").ifEmpty { "\n" }
+        val dark = androidx.core.graphics.ColorUtils.calculateLuminance(codeBackground) < 0.5
+        output.append(DshCodeSyntaxHighlighter.highlight(displayedCode, language, dark))
         finishBlock(DshSelectionStyle.CODE_PADDING + DshSelectionStyle.PARAGRAPH_SPACING)
         span(TypefaceSpan("monospace"), codeStart)
         // 先按逻辑字号取整，与 iOS 的 14pt 等宽代码一致。

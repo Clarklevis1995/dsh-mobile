@@ -55,7 +55,7 @@ struct ConversationSidebar: View {
                 .padding(.top, 18)
                 .padding(.bottom, 6)
 
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(workspaces) { workspace in
                         workspaceSection(

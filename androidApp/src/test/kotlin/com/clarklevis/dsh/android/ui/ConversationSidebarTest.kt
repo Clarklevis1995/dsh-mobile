@@ -35,13 +35,16 @@ class ConversationSidebarTest {
     }
 
     @Test
-    fun popupStaysInsideWindowInBothDirectionsAndNearBottomEdge() {
-        val provider = ConversationSidebarPositionProvider(24)
+    fun popupFollowsButtonSideInBothDirectionsAndStaysInsideWindow() {
+        var opensFromRight = false
+        val provider = ConversationSidebarPositionProvider(24) { opensFromRight = it.pivotFractionX == 1f }
         val window = IntSize(626, 890)
         val popup = IntSize(348, 842)
         for (direction in LayoutDirection.entries) {
-            for (anchor in listOf(IntRect(60, 40, 106, 86), IntRect(550, 800, 596, 846))) {
+            for ((anchor, expectedX) in listOf(IntRect(60, 40, 106, 86) to 0, IntRect(550, 800, 596, 846) to 278)) {
                 val position = provider.calculatePosition(anchor, window, direction, popup)
+                assertEquals(expectedX, position.x)
+                assertEquals(expectedX > 0, opensFromRight)
                 assertTrue(position.x >= 0 && position.y >= 0)
                 assertTrue(position.x + popup.width <= window.width)
                 assertTrue(position.y + popup.height <= window.height)

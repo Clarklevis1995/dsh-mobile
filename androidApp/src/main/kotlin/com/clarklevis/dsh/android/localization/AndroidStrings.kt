@@ -53,6 +53,10 @@ internal object AndroidStrings {
     )
 
     internal val english: Map<String, String> = mapOf(
+        "会话页面" to "Session pages",
+        "切换到轨迹" to "Switch to trajectory",
+        "切换到对话" to "Switch to conversation",
+        "选择对话或轨迹" to "Choose conversation or trajectory",
         "展开侧边栏" to "Open sidebar",
         "工作区" to "Workspaces",
         "暂无会话" to "No conversations",

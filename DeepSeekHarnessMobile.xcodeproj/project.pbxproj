@@ -85,6 +85,11 @@
 		F1A000000000000000000008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F1A000000000000000000017 /* Assets.xcassets */; };
 		F2B000000000000000000001 /* WorkspaceDrawerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B000000000000000000002 /* WorkspaceDrawerUITests.swift */; };
 		F5CD0CFD51B8D80944F87550 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BE407E6C6512836EB108990D /* Foundation.framework */; };
+		CF228000000000000000001 /* MarkdownMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF228000000000000000002 /* MarkdownMath.swift */; };
+		CF228000000000000000003 /* SwiftMath in Frameworks */ = {isa = PBXBuildFile; productRef = CF228000000000000000004 /* SwiftMath */; };
+		CF228000000000000000007 /* MarkdownMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF228000000000000000008 /* MarkdownMathTests.swift */; };
+		CF229000000000000000001 /* CodeSyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF229000000000000000002 /* CodeSyntaxHighlighter.swift */; };
+		CF229000000000000000003 /* CodeSyntaxHighlighterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF229000000000000000004 /* CodeSyntaxHighlighterTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -199,6 +204,10 @@
 		F2B000000000000000000003 /* DeepSeekHarnessMobileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeepSeekHarnessMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FCF581253EBCFEB43865AB51 /* Glass.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Glass.swift; sourceTree = "<group>"; };
 		FEABDA4B6DAF199B320B1BA1 /* MultiGatewayTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MultiGatewayTests.swift; sourceTree = "<group>"; };
+		CF228000000000000000002 /* MarkdownMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMath.swift; sourceTree = "<group>"; };
+		CF228000000000000000008 /* MarkdownMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMathTests.swift; sourceTree = "<group>"; };
+		CF229000000000000000002 /* CodeSyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeSyntaxHighlighter.swift; sourceTree = "<group>"; };
+		CF229000000000000000004 /* CodeSyntaxHighlighterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeSyntaxHighlighterTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -208,6 +217,7 @@
 			files = (
 				F5CD0CFD51B8D80944F87550 /* Foundation.framework in Frameworks */,
 				E73A2DB9D678DA4B8C01E349 /* MarkdownUI in Frameworks */,
+				CF228000000000000000003 /* SwiftMath in Frameworks */,
 				C7A710000000000000000001 /* ChatLayout in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -283,6 +293,8 @@
 				CF2010000000000000000004 /* ChatHistoryCacheTests.swift */,
 				5D3FFEFFB831B9A6454ECA0E /* AdaptiveLayoutTests.swift */,
 				CF227000000000000000002 /* TrajectoryOverviewLayoutTests.swift */,
+				CF228000000000000000008 /* MarkdownMathTests.swift */,
+				CF229000000000000000004 /* CodeSyntaxHighlighterTests.swift */,
 				CF2030000000000000000002 /* ChatSessionPrefetcherTests.swift */,
 				CA11E0000000000000000011 /* LocalizationCatalogTests.swift */,
 				FEABDA4B6DAF199B320B1BA1 /* MultiGatewayTests.swift */,
@@ -360,6 +372,8 @@
 			children = (
 				CF225000000000000000012 /* DocumentPageChrome.swift */,
 				CF225000000000000000002 /* MarkdownTableCard.swift */,
+				CF228000000000000000002 /* MarkdownMath.swift */,
+				CF229000000000000000002 /* CodeSyntaxHighlighter.swift */,
 				8B77DEC008C0209D814CD7BE /* VoiceRipplePanel.swift */,
 				FCF581253EBCFEB43865AB51 /* Glass.swift */,
 				AF17C0000000000000000002 /* FileTypeIcon.swift */,
@@ -465,6 +479,7 @@
 			name = DeepSeekHarnessMobile;
 			packageProductDependencies = (
 				4CE3D78565179C422C796509 /* MarkdownUI */,
+				CF228000000000000000004 /* SwiftMath */,
 				C7A710000000000000000003 /* ChatLayout */,
 			);
 			productName = DshMobile;
@@ -552,6 +567,7 @@
 			packageReferences = (
 				A5BC89015C15661603FC0C4B /* XCLocalSwiftPackageReference "Vendor/swift-markdown-ui" */,
 				C7A710000000000000000004 /* XCRemoteSwiftPackageReference "ChatLayout" */,
+				CF228000000000000000005 /* XCRemoteSwiftPackageReference "SwiftMath" */,
 			);
 			productRefGroup = D7854C843240E809A949A26E /* Products */;
 			projectDirPath = "";
@@ -650,6 +666,8 @@
 				CF2010000000000000000003 /* ChatHistoryCacheTests.swift in Sources */,
 				EAAE88B94CBECC20963D9646 /* AdaptiveLayoutTests.swift in Sources */,
 				CF227000000000000000001 /* TrajectoryOverviewLayoutTests.swift in Sources */,
+				CF228000000000000000007 /* MarkdownMathTests.swift in Sources */,
+				CF229000000000000000003 /* CodeSyntaxHighlighterTests.swift in Sources */,
 				CF2030000000000000000001 /* ChatSessionPrefetcherTests.swift in Sources */,
 				CA11E000000000000000000F /* LocalizationCatalogTests.swift in Sources */,
 				75392054CB69B9596796C57A /* MultiGatewayTests.swift in Sources */,
@@ -697,6 +715,8 @@
 				A0C0FFEE0000000000000001 /* ConversationViewport.swift in Sources */,
 				B0C0FFEE0000000000000001 /* HarnessAnimatedBackground.swift in Sources */,
 				CF225000000000000000001 /* MarkdownTableCard.swift in Sources */,
+				CF228000000000000000001 /* MarkdownMath.swift in Sources */,
+				CF229000000000000000001 /* CodeSyntaxHighlighter.swift in Sources */,
 				CF225000000000000000011 /* DocumentPageChrome.swift in Sources */,
 				605DCE79952E970820A95606 /* ConversationView.swift in Sources */,
 				605DCE79952E970820A95607 /* HumanQuestionView.swift in Sources */,
@@ -1122,6 +1142,11 @@
 				version = 2.4.3;
 			};
 		};
+		CF228000000000000000005 /* XCRemoteSwiftPackageReference "SwiftMath" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mgriebling/SwiftMath.git";
+			requirement = {kind = exactVersion; version = 1.7.3; };
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1134,6 +1159,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C7A710000000000000000004 /* XCRemoteSwiftPackageReference "ChatLayout" */;
 			productName = ChatLayout;
+		};
+		CF228000000000000000004 /* SwiftMath */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CF228000000000000000005 /* XCRemoteSwiftPackageReference "SwiftMath" */;
+			productName = SwiftMath;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

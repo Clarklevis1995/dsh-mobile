@@ -17,7 +17,10 @@ public enum SelectableCodeBlockStyle {
 extension MarkdownContent {
   /// 为独立全屏文字选择页生成连续富文本，所有偏移均以 UTF-16 计，与 UITextView 一致。
   /// 代码栏的布局换行单独标记，复制时排除；代码本身保持连续文字与原始缩进。
-  public func renderSelectableText(font: UIFont, textColor: UIColor = .label) -> NSAttributedString {
+  public func renderSelectableText(
+    font: UIFont, textColor: UIColor = .label,
+    codeHighlighter: ((String, String?) -> NSAttributedString)? = nil
+  ) -> NSAttributedString {
     let output = NSMutableAttributedString(string: "")
     var codeBlockID = 0
     let paragraph = NSMutableParagraphStyle()
@@ -108,7 +111,15 @@ extension MarkdownContent {
           header[SelectableCodeBlockStyle.decoration] = true
           append("\n", header)
           let displayedCode = content.hasSuffix("\n") ? String(content.dropLast()) : content
+          let codeStart = output.length
           append(displayedCode.isEmpty ? "\n" : displayedCode, style)
+          if let highlighted = codeHighlighter?(displayedCode, language), highlighted.string == displayedCode {
+            highlighted.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: highlighted.length)) { color, range, _ in
+              guard let color else { return }
+              output.addAttribute(.foregroundColor, value: color,
+                range: NSRange(location: codeStart + range.location, length: range.length))
+            }
+          }
           finishBlock(style)
           let blockRange = NSRange(location: start, length: output.length - start)
           if blockRange.length > 0 {

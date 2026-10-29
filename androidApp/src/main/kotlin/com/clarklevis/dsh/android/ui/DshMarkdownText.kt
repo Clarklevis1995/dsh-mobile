@@ -16,6 +16,7 @@ import android.text.style.URLSpan
 import android.util.TypedValue
 import android.view.View
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +42,9 @@ import io.noties.markwon.MarkwonSpansFactory
 import io.noties.markwon.SoftBreakAddsNewLinePlugin
 import io.noties.markwon.core.CorePlugin
 import io.noties.markwon.core.MarkwonTheme
+import io.noties.markwon.core.spans.BulletListItemSpan
+import io.noties.markwon.core.spans.CodeBlockSpan
+import io.noties.markwon.core.spans.OrderedListItemSpan
 import io.noties.markwon.core.spans.CodeSpan
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.LinkResolverDef
@@ -298,10 +302,13 @@ private fun DshRenderedMarkdownText(
     onOpenFile: ((String) -> Unit)? = null,
     copyMarkdown: String = markdown
 ) {
-    val tables = remember(rendered) {
-        rendered.getSpans(0, rendered.length, DshTableMarker::class.java).sortedBy(rendered::getSpanStart)
+    val blocks = remember(rendered) {
+        buildList<Any> {
+            addAll(rendered.getSpans(0, rendered.length, DshTableMarker::class.java))
+            addAll(rendered.getSpans(0, rendered.length, DshCodeBlockMarker::class.java))
+        }.sortedBy(rendered::getSpanStart)
     }
-    if (tables.isNotEmpty()) {
+    if (blocks.isNotEmpty()) {
         androidx.compose.foundation.layout.Column(modifier.fillMaxWidth(),
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
             var offset = 0
@@ -310,14 +317,26 @@ private fun DshRenderedMarkdownText(
                 var last = end
                 while (start < last && rendered[start] == '\n') start++
                 while (last > start && rendered[last - 1] == '\n') last--
-                return if (last > start) SpannedString(rendered.subSequence(start, last)) else null
+                return if (last > start) markdownTextSegment(rendered, start, last) else null
             }
-            tables.forEachIndexed { tableIndex, marker ->
+            var tableIndex = 0
+            blocks.forEach { marker ->
                 textPart(rendered.getSpanStart(marker))?.let { part ->
                     DshRenderedMarkdownText(markdown, part, palette, textSizeSp, lineSpacingExtra,
                         Modifier.fillMaxWidth(), knownFiles, onOpenFile, copyMarkdown)
                 }
-                DshMarkdownTableCard(marker.table, textSizeSp, onOpenFile, copyMarkdown, markdown, tableIndex)
+                when (marker) {
+                    is DshTableMarker -> {
+                        DshMarkdownTableCard(marker.table, textSizeSp, onOpenFile, copyMarkdown, markdown, tableIndex)
+                        tableIndex++
+                    }
+                    is DshCodeBlockMarker -> {
+                        val margins = rendered.getSpans(rendered.getSpanStart(marker), rendered.getSpanEnd(marker), LeadingMarginSpan::class.java)
+                        val leadingInset = margins.filterNot { it is CodeBlockSpan }.sumOf { it.getLeadingMargin(true) }
+                        DshMarkdownCodeCard(marker, textSizeSp, copyMarkdown,
+                            Modifier.padding(start = with(LocalDensity.current) { leadingInset.toDp() }))
+                    }
+                }
                 offset = rendered.getSpanEnd(marker)
             }
             textPart(rendered.length)?.let { part ->
@@ -430,6 +449,22 @@ private fun DshRenderedMarkdownText(
 
 }
 
+/** 卡片前后仍属于同一个列表项；续段保留内缩，但不能重新绘制项目符号。 */
+private fun markdownTextSegment(rendered: Spanned, start: Int, end: Int): Spanned {
+    val part = SpannableStringBuilder(rendered, start, end)
+    rendered.getSpans(start, end, LeadingMarginSpan::class.java).forEach { span ->
+        if ((span is BulletListItemSpan || span is OrderedListItemSpan) && rendered.getSpanStart(span) < start) {
+            val from = part.getSpanStart(span)
+            val to = part.getSpanEnd(span)
+            if (from >= 0 && to > from) {
+                part.removeSpan(span)
+                part.setSpan(LeadingMarginSpan.Standard(span.getLeadingMargin(true)), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+    }
+    return SpannedString(part)
+}
+
 /**
  * 流式阶段不反复解析整篇 Markdown。最终 assistant/message 到达后 ID 会切换为
  * 持久化事件 ID，再一次性使用 Markwon 渲染完整正文。
@@ -463,6 +498,10 @@ internal fun buildDshMarkwon(
         .usePlugin(
             object : AbstractMarkwonPlugin() {
                 override fun configureConfiguration(builder: MarkwonConfiguration.Builder) {
+                    val dark = androidx.core.graphics.ColorUtils.calculateLuminance(palette.textColor) > 0.5
+                    builder.syntaxHighlight { language, code ->
+                        DshCodeSyntaxHighlighter.highlight(code, language, dark)
+                    }
                     val fallback = LinkResolverDef()
                     builder.linkResolver { view, link ->
                         // 表格单元格独立保存 span，无法通过正文的 URLSpan 遍历替换。

@@ -52,8 +52,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -63,9 +61,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -89,7 +85,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -168,6 +163,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -219,8 +215,6 @@ internal fun ConversationScreen(
         ?.name
     val pagerState = rememberPagerState(pageCount = { 2 })
     val scope = rememberCoroutineScope()
-    val window = adaptiveWindowSize()
-    val showsSidebar = AdaptiveLayout.conversationSidebarAvailable(window.width.value, window.height.value)
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val dismissInput: () -> Unit = remember(focusManager, keyboardController) {
@@ -256,7 +250,14 @@ internal fun ConversationScreen(
         if (stateHolder.snapshot.selectedSessionId == null) onBack()
         else stateHolder.refreshSessionControls()
     }
-    LaunchedEffect(pagerState.currentPage) { stateHolder.setTrajectoryActive(pagerState.currentPage == 1) }
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage != 0) dismissInput()
+        stateHolder.setTrajectoryActive(pagerState.currentPage == 1)
+    }
+    val selectPage: (Int) -> Unit = { target ->
+        dismissInput()
+        scope.launch { pagerState.animateScrollToPage(target, animationSpec = tween(280)) }
+    }
     DisposableEffect(stateHolder) {
         onDispose {
             stateHolder.setTrajectoryActive(false)
@@ -264,22 +265,39 @@ internal fun ConversationScreen(
         }
     }
 
+    val compactHeader = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } < 600.dp
+    val headerMode: @Composable () -> Unit = {
+        ConversationHeaderMode(
+            title = agentPresetDisplayName(agentPresetId, agentPresetName),
+            connection = stateHolder.gatewayState.connection,
+            compact = compactHeader
+        )
+    }
+    val sidebarEntry: @Composable () -> Unit = {
+        ConversationSidebarButton(
+            workspaces = stateHolder.snapshot.workspaces,
+            sessions = stateHolder.snapshot.sessions,
+            selectedSessionId = stateHolder.snapshot.selectedSessionId,
+            onOpen = dismissInput,
+            onSelectSession = { id ->
+                if (id != stateHolder.snapshot.selectedSessionId) stateHolder.selectSession(id)
+            },
+            onPlugins = onPlugins,
+            onScheduledTasks = onScheduledTasks,
+            onSettings = onSettings
+        )
+    }
+
     DshMenuBackdropHost { backdropModifier ->
-        Scaffold(
-            modifier = backdropModifier,
-            // 背景与录音蒙层延伸到导航栏下面；底部安全区由 Composer 自己处理。
-            contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
-            containerColor = MaterialTheme.colorScheme.background,
+        ConversationPagerChrome(
+            pagerState = pagerState,
+            sessionId = stateHolder.snapshot.selectedSessionId,
+            onSelectPage = selectPage,
+            modifier = backdropModifier.testTag("conversation-screen"),
             topBar = {
                 ConversationTopBar(
                     title = {
-                        Text(
-                            title,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        ConversationPageTitle(title, pagerState.currentPage, status = if (compactHeader) headerMode else null)
                     },
                     navigationIcon = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -290,44 +308,25 @@ internal fun ConversationScreen(
                                     dismissInput()
                                     onBack()
                                 },
-                                modifier = Modifier.padding(start = 8.dp, end = if (showsSidebar) 8.dp else 14.dp)
+                                modifier = Modifier.padding(start = 8.dp, end = 8.dp)
                             )
-                            if (showsSidebar) {
-                                ConversationSidebarButton(
-                                    workspaces = stateHolder.snapshot.workspaces,
-                                    sessions = stateHolder.snapshot.sessions,
-                                    selectedSessionId = stateHolder.snapshot.selectedSessionId,
-                                    onOpen = dismissInput,
-                                    onSelectSession = { id ->
-                                        if (id != stateHolder.snapshot.selectedSessionId) stateHolder.selectSession(id)
-                                    },
-                                    onPlugins = onPlugins,
-                                    onScheduledTasks = onScheduledTasks,
-                                    onSettings = onSettings
-                                )
+                            if (!compactHeader) {
+                                sidebarEntry()
                                 Spacer(Modifier.width(14.dp))
                             }
                         }
                     },
                     actions = {
-                        Row(
-                            modifier = Modifier.padding(start = 4.dp, end = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            SmallConnectionDot(stateHolder.gatewayState.connection)
-                            Text(
-                                agentPresetDisplayName(agentPresetId, agentPresetName),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 96.dp)
-                            )
+                        if (!compactHeader) {
+                            Box(Modifier.padding(start = 4.dp, end = 8.dp)) { headerMode() }
                         }
                         if (stateHolder.teamSnapshot.visible) {
                             TeamEntryButton(stateHolder)
                             Spacer(Modifier.width(16.dp))
+                        }
+                        if (compactHeader) {
+                            sidebarEntry()
+                            Spacer(Modifier.width(8.dp))
                         }
                         ConversationMoreMenu(
                             canBrowseFiles = stateHolder.snapshot.selectedSessionId != null &&
@@ -342,37 +341,22 @@ internal fun ConversationScreen(
                     }
                 )
             }
-        ) { padding ->
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .consumeWindowInsets(padding)
-            ) {
-                SegmentedControl(pagerState.currentPage) { target ->
-                    dismissInput()
-                    scope.launch { pagerState.animateScrollToPage(target) }
-                }
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
-                    beyondViewportPageCount = 1
-                ) { page ->
-                    if (page == 0) {
-                        ConversationPage(
-                            stateHolder = stateHolder,
-                            onPickImage = onPickImage,
-                            onPickFile = onPickFile,
-                            onShowFullStats = { showStats = true },
-                            onDismissInput = dismissInput
-                        )
-                    }
-                    else Box(Modifier.fillMaxSize().navigationBarsPadding()) {
-                        TrajectoryPage(
-                            nodes = stateHolder.trajectoryNodes,
-                            isActive = pagerState.currentPage == 1
-                        )
-                    }
+        ) { page, topContentInset ->
+            if (page == 0) {
+                ConversationPage(
+                    stateHolder = stateHolder,
+                    onPickImage = onPickImage,
+                    onPickFile = onPickFile,
+                    onShowFullStats = { showStats = true },
+                    onDismissInput = dismissInput,
+                    topContentInset = topContentInset
+                )
+            } else {
+                Box(Modifier.fillMaxSize().padding(top = topContentInset).navigationBarsPadding()) {
+                    TrajectoryPage(
+                        nodes = stateHolder.trajectoryNodes,
+                        isActive = pagerState.currentPage == 1
+                    )
                 }
             }
         }
@@ -532,49 +516,6 @@ private fun ConversationMoreMenuItem(
     )
 }
 
-@Composable
-private fun SegmentedControl(selected: Int, onSelect: (Int) -> Unit) {
-    val trackShape = RoundedCornerShape(16.dp)
-    val segmentShape = RoundedCornerShape(14.dp)
-    val horizontalInset = if (adaptiveWindowSize().width >= 600.dp) 40.dp else 66.dp
-    Row(
-        Modifier.adaptiveContentWidth(440.dp).testTag("conversation-tabs")
-            .padding(start = horizontalInset, end = horizontalInset, top = 2.dp, bottom = 6.dp)
-            .height(32.dp)
-            .clip(trackShape)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.075f))
-            .padding(2.dp)
-    ) {
-        listOf(appText("对话"), appText("轨迹")).forEachIndexed { index, title ->
-            val isSelected = selected == index
-            Box(
-                Modifier.weight(1f).fillMaxHeight().clip(segmentShape)
-                    .background(if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent)
-                    .then(
-                        if (isSelected) {
-                            Modifier.border(
-                                0.5.dp,
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f),
-                                segmentShape
-                            )
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .clickable { onSelect(index) }
-                    .semantics { contentDescription = title },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    title,
-                    fontSize = 13.sp,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                )
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ConversationPage(
@@ -582,7 +523,8 @@ private fun ConversationPage(
     onPickImage: () -> Unit,
     onPickFile: () -> Unit,
     onShowFullStats: () -> Unit,
-    onDismissInput: () -> Unit
+    onDismissInput: () -> Unit,
+    topContentInset: Dp = 0.dp
 ) {
     val density = LocalDensity.current
     val sessionId = stateHolder.snapshot.selectedSessionId
@@ -609,6 +551,7 @@ private fun ConversationPage(
             ConversationTimeline(
                 stateHolder = stateHolder,
                 bottomContentHeight = bottomContentHeight,
+                topContentInset = topContentInset,
                 scrollToBottomToken = scrollToBottomToken,
                 onPinnedToBottomChanged = { isPinnedToBottom = it },
                 onUserInteraction = onDismissInput,
@@ -648,7 +591,7 @@ private fun ConversationPage(
             modifier = Modifier
                 .align(Alignment.Center)
                 .fillMaxSize()
-                .padding(bottom = bottomContentHeight)
+                .padding(top = topContentInset, bottom = bottomContentHeight)
                 .zIndex(1f),
             enter = fadeIn(tween(120)),
             exit = fadeOut(tween(120))
@@ -848,6 +791,7 @@ private fun ConversationBottomFade(
 private fun ConversationTimeline(
     stateHolder: AndroidSharedStateHolder,
     bottomContentHeight: Dp,
+    topContentInset: Dp,
     scrollToBottomToken: Int,
     onPinnedToBottomChanged: (Boolean) -> Unit,
     onUserInteraction: () -> Unit,
@@ -1186,13 +1130,6 @@ private fun ConversationTimeline(
         Modifier
             .fillMaxSize()
             .testTag("conversation-timeline")
-            .drawWithContent {
-                drawContent()
-                // 在全宽视口绘制，不受正文限宽和左右留白约束。
-                if (hasInitialContent && initialPositionApplied && listState.canScrollBackward) {
-                    drawRect(Color.Gray.copy(alpha = 0.35f), size = androidx.compose.ui.geometry.Size(size.width, 1f))
-                }
-            }
             .pointerInput(selectedSessionId) {
                 awaitEachGesture {
                     awaitFirstDown(
@@ -1214,16 +1151,16 @@ private fun ConversationTimeline(
             if (stateHolder.offlineBrowsing) {
                 Text(
                     appText("当前离线，此会话尚未缓存。连接网关后可加载聊天内容。"),
-                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 28.dp).padding(bottom = 150.dp)
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 28.dp).padding(top = topContentInset, bottom = 150.dp)
                         .testTag("offline-history-unavailable"),
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else if (error == null) {
-                EmptyConversation(Modifier.align(Alignment.Center).padding(bottom = 150.dp))
+                EmptyConversation(Modifier.align(Alignment.Center).padding(top = topContentInset, bottom = 150.dp))
             } else {
                 Column(
-                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 28.dp).padding(bottom = 150.dp)
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 28.dp).padding(top = topContentInset, bottom = 150.dp)
                         .testTag("history-load-failure"),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -1243,7 +1180,7 @@ private fun ConversationTimeline(
         }
         if (historyEdgeRevealed && !listState.canScrollBackward &&
             (historyBusy || stateHolder.snapshot.selectedHistoryHasMore)) {
-            Box(Modifier.align(Alignment.TopCenter).heightIn(min = 32.dp).zIndex(2f),
+            Box(Modifier.align(Alignment.TopCenter).padding(top = topContentInset).heightIn(min = 32.dp).zIndex(2f),
                 contentAlignment = Alignment.Center) {
                 if (historyBusy) {
                     Row(Modifier.testTag("history-paging-progress").padding(horizontal = 8.dp, vertical = 4.dp),
@@ -1273,8 +1210,8 @@ private fun ConversationTimeline(
                 .padding(horizontal = 20.dp)
                 .alpha(if (hasInitialContent && !initialPositionApplied) 0f else 1f),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                // 首行给固定提示留出空间；加载状态变化不插入/删除列表行。
-                top = 32.dp,
+                // 首行停在导航栏下方；加载状态变化不插入/删除列表行。
+                top = topContentInset + 8.dp,
                 bottom = bottomContentHeight + 22.dp
             )
         ) {
@@ -3096,16 +3033,17 @@ private fun UserMessage(
             val name = file.name ?: appText("文件")
             val kind = remember(name) { com.clarklevis.dsh.shared.facade.FileIconCatalog.resolve(name, null) }
             Row(
-                Modifier.widthIn(max = 320.dp).background(fileCardColor(kind), RoundedCornerShape(12.dp))
+                Modifier.widthIn(max = 320.dp).fillMaxWidth().background(fileCardColor(kind), RoundedCornerShape(12.dp))
                     .padding(12.dp).testTag("user-file-card"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 FileTypeIcon(kind, Modifier.size(48.dp))
-                Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(name, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
                     file.bytes?.let { Text(android.text.format.Formatter.formatShortFileSize(LocalContext.current, it),
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        fontSize = 12.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
         }
@@ -3556,6 +3494,26 @@ private fun CopyButton(text: String, markdown: Boolean = false) {
 @Composable
 private fun MarkdownLikeText(text: String) {
     DshMarkdownText(text, Modifier.fillMaxWidth())
+}
+
+@Composable
+private fun ConversationHeaderMode(title: String, connection: GatewayConnectionState, compact: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 4.dp)
+    ) {
+        SmallConnectionDot(connection)
+        Text(
+            title,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            fontSize = if (compact) 11.sp else 12.sp,
+            lineHeight = if (compact) 14.sp else TextUnit.Unspecified,
+            fontWeight = if (compact) FontWeight.Medium else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag("conversation-mode-label").then(if (compact) Modifier else Modifier.widthIn(max = 96.dp))
+        )
+    }
 }
 
 @Composable

@@ -54,9 +54,6 @@ internal object AdaptiveLayout {
     val WorkspaceWidth = 1_440.dp
     val SheetWidth = 720.dp
 
-    fun conversationSidebarAvailable(width: Float, height: Float): Boolean =
-        width >= 600f && height >= 500f
-
     fun workspaceUsesColumns(width: Float, height: Float, fontScale: Float = 1f): Boolean =
         width >= 900f && height >= 500f && fontScale < 1.5f
 
