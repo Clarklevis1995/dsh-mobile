@@ -773,7 +773,8 @@ struct ConversationView: View {
                         isPresented: showsModelMenu,
                         onDismiss: { showsModelMenu = false },
                         preferredWidth: 286,
-                        maximumContentHeight: 560
+                        maximumContentHeight: 560,
+                        showsArrow: false
                     ) {
                         ConversationModelMenuContent(
                             groups: modelGroups,
@@ -1215,7 +1216,13 @@ struct ConversationView: View {
                 .disabled(store.selectedContextSnapshot == nil)
                 .accessibilityLabel(String(localized: "a11y.context.percent", defaultValue: "上下文已用 \(Int(contextProgress * 100))%"))
                 .popover(isPresented: $showsContextUsage, arrowEdge: .bottom) {
-                    ContextUsagePopover(snapshot: store.selectedContextSnapshot)
+                    if #available(iOS 16.4, *) {
+                        ContextUsagePopover(snapshot: store.selectedContextSnapshot)
+                            .presentationCompactAdaptation(.popover)
+                            .presentationBackground(.ultraThinMaterial)
+                    } else {
+                        ContextUsagePopover(snapshot: store.selectedContextSnapshot)
+                    }
                 }
 
                 Button {
@@ -2673,7 +2680,7 @@ private struct ConversationModelMenuContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if groups.isEmpty {
-                Text("正在读取模型…").appFont(.body).padding(18)
+                Text("正在读取模型…").padding(18)
             } else {
                 if !efforts.isEmpty {
                     sectionTitle(String(localized: "推理等级"))
@@ -2722,9 +2729,10 @@ private struct ConversationModelMenuContent: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: selected ? "checkmark" : "circle")
-                    .resizable().scaledToFit()
+                    .resizable()
+                    .scaledToFit()
                     .frame(width: 22, height: 22)
-                    .accessibilityHidden(true)
+                    .accessibilityIdentifier("\(identifier)-\(selected ? "checkmark" : "circle")")
                 Text(title)
                     .appFont(.system(size: 17, weight: .medium))
                     .lineLimit(2)
@@ -3318,7 +3326,7 @@ private struct SessionStatsPopoverAnchorKey: PreferenceKey {
     }
 }
 
-private struct SessionModelPopoverAnchorKey: PreferenceKey {
+private struct SessionAgentPresetPopoverAnchorKey: PreferenceKey {
     static var defaultValue: Anchor<CGRect>? { nil }
 
     static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
@@ -3326,7 +3334,7 @@ private struct SessionModelPopoverAnchorKey: PreferenceKey {
     }
 }
 
-private struct SessionAgentPresetPopoverAnchorKey: PreferenceKey {
+private struct SessionModelPopoverAnchorKey: PreferenceKey {
     static var defaultValue: Anchor<CGRect>? { nil }
 
     static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
@@ -3343,6 +3351,7 @@ private struct ComposerPopoverOverlay<Content: View>: View {
     let preferredWidth: CGFloat
     let alignsToTrailing: Bool
     let maximumContentHeight: CGFloat
+    let showsArrow: Bool
     let content: Content
 
     init(
@@ -3353,6 +3362,7 @@ private struct ComposerPopoverOverlay<Content: View>: View {
         preferredWidth: CGFloat = 300,
         alignsToTrailing: Bool = true,
         maximumContentHeight: CGFloat = .infinity,
+        showsArrow: Bool = true,
         @ViewBuilder content: () -> Content
     ) {
         self.sourceFrame = sourceFrame
@@ -3362,6 +3372,7 @@ private struct ComposerPopoverOverlay<Content: View>: View {
         self.preferredWidth = preferredWidth
         self.alignsToTrailing = alignsToTrailing
         self.maximumContentHeight = maximumContentHeight
+        self.showsArrow = showsArrow
         self.content = content()
     }
 
@@ -3379,7 +3390,7 @@ private struct ComposerPopoverOverlay<Content: View>: View {
     var body: some View {
         let margin: CGFloat = 14
         let gap: CGFloat = 6
-        let arrowHeight: CGFloat = 8
+        let arrowHeight: CGFloat = showsArrow ? 8 : 0
         let width = min(preferredWidth, max(1, availableSize.width - margin * 2))
         let above = max(0, sourceFrame.minY - margin - gap)
         let below = max(0, availableSize.height - sourceFrame.maxY - margin - gap)
@@ -3393,7 +3404,8 @@ private struct ComposerPopoverOverlay<Content: View>: View {
             : sourceFrame.maxY + gap + height / 2
         let shape = ComposerPopoverShape(
             arrowX: sourceFrame.midX - (centerX - width / 2),
-            pointsUp: !displaysAbove
+            pointsUp: !displaysAbove,
+            showsArrow: showsArrow
         )
         // 缩放原点使用胶囊中心，即使弹窗显示在胶囊下方，也从触发处展开。
         let scaleAnchor = UnitPoint(
@@ -3451,8 +3463,12 @@ private struct ComposerPopoverOverlay<Content: View>: View {
 private struct ComposerPopoverShape: Shape {
     let arrowX: CGFloat
     let pointsUp: Bool
+    var showsArrow = true
 
     func path(in rect: CGRect) -> Path {
+        if !showsArrow {
+            return RoundedRectangle(cornerRadius: 24, style: .continuous).path(in: rect)
+        }
         let arrowHeight = min(8, rect.height / 3)
         let top = rect.minY + arrowHeight
         let bottom = rect.maxY

@@ -150,6 +150,9 @@ final class LocalizationCatalogTests: XCTestCase {
 
     func testAgentNotificationCopyIsReadableInChinese() throws {
         let table = try localizedTable("Localizable", localization: "zh-Hans")
+        XCTAssertEqual(table["agent.notification.question.title"], "需要回答")
+        XCTAssertEqual(table["agent.notification.question.body"], "%@：%@")
+        XCTAssertEqual(table["agent.notification.question.body.generic"], "%@：Agent 正在等待你的回答或选择")
         XCTAssertEqual(table["agent.notification.approval.title"], "需要审批")
         XCTAssertEqual(table["agent.notification.approval.body"], "%@：%@")
         XCTAssertEqual(table["agent.notification.approval.body.generic"], "%@：Agent 请求批准本次操作")

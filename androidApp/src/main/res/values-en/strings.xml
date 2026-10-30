@@ -8,7 +8,10 @@
     <string name="gateway_active_notification_text">Keep the Gateway connected until the current turn finishes</string>
     <string name="gateway_disconnect_action">Disconnect</string>
     <string name="agent_alert_notification_channel">Agent alerts</string>
-    <string name="agent_alert_notification_channel_description">Approval requests and task results</string>
+    <string name="agent_alert_notification_channel_description">Questions, approval requests and task results</string>
+    <string name="agent_question_notification_title">Answer required</string>
+    <string name="agent_question_notification_detail">%1$s: %2$s</string>
+    <string name="agent_question_notification_generic">%1$s: The agent is waiting for your answer or selection</string>
     <string name="agent_approval_notification_title">Approval required</string>
     <string name="agent_approval_notification_detail">%1$s: %2$s</string>
     <string name="agent_approval_notification_generic">%1$s: The agent is requesting approval for this action</string>

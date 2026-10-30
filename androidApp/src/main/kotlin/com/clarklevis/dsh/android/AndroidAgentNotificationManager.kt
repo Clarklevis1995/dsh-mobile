@@ -12,6 +12,8 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
+import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import org.json.JSONArray
 
 internal const val EXTRA_NOTIFICATION_GATEWAY_ID = "com.clarklevis.dsh.android.notification.GATEWAY_ID"
@@ -19,24 +21,34 @@ internal const val EXTRA_NOTIFICATION_SESSION_ID = "com.clarklevis.dsh.android.n
 
 internal data class AndroidNotificationSessionRoute(val gatewayId: String, val sessionId: String)
 
-/** 审批和执行结果使用独立的提醒渠道；保活服务的常驻通知不承担提醒职责。 */
-internal class AndroidAgentNotificationManager(context: Context) {
+/** 复用实时请求的通知入口，后台切换时只补发仍需用户处理的请求。 */
+internal fun pendingAgentNotificationFrames(snapshot: SharedMobileSnapshot): List<GatewayFrame> =
+    snapshot.pendingApprovals.filter {
+        snapshot.approvalRequestStatuses[it.rpcId]?.kind !in setOf("submitting", "accepted")
+    }.map {
+        GatewayFrame(kind = "approval-requested", rpcId = it.rpcId, sessionId = it.sessionId)
+    } + snapshot.pendingQuestions.map {
+        GatewayFrame(kind = "question-requested", rpcId = it.rpcId, sessionId = it.sessionId)
+    }
+
+/** 用户选择、审批和执行结果使用提醒渠道；保活服务的常驻通知不承担提醒职责。 */
+internal class AndroidAgentNotificationManager(
+    context: Context,
+    private val isInForeground: () -> Boolean = {
+        (context.applicationContext as? DshAndroidApplication)?.isInForeground == true
+    }
+) {
     private val appContext = context.applicationContext
     private val manager = NotificationManagerCompat.from(appContext)
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
-    private val recentIdentifiers = mutableListOf<String>()
-    private val recentIdentifierSet = mutableSetOf<String>()
+    private val history = AgentNotificationHistory(
+        runCatching {
+            val saved = JSONArray(preferences.getString(RECENT_IDENTIFIERS_KEY, "[]"))
+            (0 until saved.length()).map { saved.optString(it) }
+        }.getOrDefault(emptyList())
+    )
 
     init {
-        runCatching { JSONArray(preferences.getString(RECENT_IDENTIFIERS_KEY, "[]")) }
-            .getOrNull()
-            ?.let { saved ->
-                for (index in 0 until saved.length()) {
-                    saved.optString(index).takeIf(String::isNotEmpty)?.let { identifier ->
-                        if (recentIdentifierSet.add(identifier)) recentIdentifiers += identifier
-                    }
-                }
-            }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             appContext.getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(
@@ -66,19 +78,20 @@ internal class AndroidAgentNotificationManager(context: Context) {
             sessionId = sessionId,
             title = appContext.getString(R.string.agent_approval_notification_title),
             body = body,
-            icon = R.drawable.ic_permission_ask
+            icon = R.drawable.ic_permission_ask,
+            requiresResponse = true
         )
     }
 
     fun notifyExecutionEnded(
         gatewayId: String,
         sessionId: String,
-        sequence: Int,
+        eventId: String,
         sessionTitle: String,
         failed: Boolean
     ) {
         notifyOnce(
-            identifier = "execution-ended:$gatewayId:$sessionId:$sequence",
+            identifier = "execution-ended:$gatewayId:$sessionId:$eventId",
             gatewayId = gatewayId,
             sessionId = sessionId,
             title = appContext.getString(
@@ -94,6 +107,27 @@ internal class AndroidAgentNotificationManager(context: Context) {
         )
     }
 
+    fun notifyQuestionRequired(
+        gatewayId: String,
+        requestId: String,
+        sessionId: String,
+        sessionTitle: String,
+        prompt: String?
+    ) {
+        val body = prompt?.trim()?.takeIf(String::isNotEmpty)?.let {
+            appContext.getString(R.string.agent_question_notification_detail, sessionTitle, it)
+        } ?: appContext.getString(R.string.agent_question_notification_generic, sessionTitle)
+        notifyOnce(
+            identifier = "question:$gatewayId:$requestId",
+            gatewayId = gatewayId,
+            sessionId = sessionId,
+            title = appContext.getString(R.string.agent_question_notification_title),
+            body = body,
+            icon = R.drawable.ic_question_bubble,
+            requiresResponse = true
+        )
+    }
+
     @Synchronized
     private fun notifyOnce(
         identifier: String,
@@ -101,11 +135,14 @@ internal class AndroidAgentNotificationManager(context: Context) {
         sessionId: String,
         title: String,
         body: String,
-        icon: Int
+        icon: Int,
+        requiresResponse: Boolean = false
     ) {
-        if (identifier in recentIdentifierSet) return
-        if ((appContext as? DshAndroidApplication)?.isInForeground == true) {
-            rememberIdentifier(identifier)
+        val inForeground = isInForeground()
+        if (history.contains(identifier)) return
+        if (inForeground) {
+            // 待处理请求离开前台后仍需提醒；执行结果保留前台已读语义。
+            if (!requiresResponse) rememberIdentifier(identifier)
             return
         }
         if (!manager.areNotificationsEnabled()) return
@@ -145,14 +182,9 @@ internal class AndroidAgentNotificationManager(context: Context) {
     }
 
     private fun rememberIdentifier(identifier: String) {
-        recentIdentifierSet += identifier
-        recentIdentifiers += identifier
-        if (recentIdentifiers.size > MAXIMUM_RECENT_IDENTIFIERS) {
-            val removed = recentIdentifiers.removeAt(0)
-            recentIdentifierSet -= removed
-        }
+        history.remember(identifier)
         preferences.edit()
-            .putString(RECENT_IDENTIFIERS_KEY, JSONArray(recentIdentifiers).toString())
+            .putString(RECENT_IDENTIFIERS_KEY, JSONArray(history.identifiers).toString())
             .apply()
     }
 
@@ -160,6 +192,20 @@ internal class AndroidAgentNotificationManager(context: Context) {
         const val CHANNEL_ID = "agent-alerts"
         const val PREFERENCES_NAME = "agent_user_notifications"
         const val RECENT_IDENTIFIERS_KEY = "recent_identifiers"
-        const val MAXIMUM_RECENT_IDENTIFIERS = 256
+    }
+}
+
+/** 有界、可持久化的通知去重记录。仅在已提醒或执行结果在前台已读时写入。 */
+internal class AgentNotificationHistory(saved: List<String>, private val maximumCount: Int = 256) {
+    private val recent = saved.filter(String::isNotBlank).distinct().takeLast(maximumCount).toMutableList()
+    private val recentSet = recent.toMutableSet()
+    val identifiers: List<String> get() = recent.toList()
+
+    fun contains(identifier: String): Boolean = identifier in recentSet
+
+    fun remember(identifier: String) {
+        if (!recentSet.add(identifier)) return
+        recent += identifier
+        if (recent.size > maximumCount) recentSet -= recent.removeAt(0)
     }
 }

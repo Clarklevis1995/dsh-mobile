@@ -84,6 +84,7 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
 
     override fun onStop(owner: LifecycleOwner) {
         isInForeground = false
+        graph.stateHolder.notifyPendingAgentRequests()
         maintainCacheStorage()
         hosts.stopPresence()
         hosts.cancelPairing()

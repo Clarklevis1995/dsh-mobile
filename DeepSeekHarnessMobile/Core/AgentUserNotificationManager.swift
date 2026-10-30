@@ -17,16 +17,26 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
     private let center = UNUserNotificationCenter.current()
     private let defaultsKey = "agentUserNotification.recentIdentifiers"
     private let maximumRememberedIdentifierCount = 256
+    private let defaults: UserDefaults
+    private let isInBackground: () -> Bool
+    private let scheduleNotification: (UNNotificationRequest) -> Void
     private var recentIdentifiers: [String]
     private var recentIdentifierSet: Set<String>
     @Published private(set) var pendingSessionRoute: AgentNotificationSessionRoute?
 
-    private override init() {
-        let identifiers = UserDefaults.standard.stringArray(forKey: defaultsKey) ?? []
+    init(
+        defaults: UserDefaults = .standard,
+        isInBackground: @escaping () -> Bool = { UIApplication.shared.applicationState == .background },
+        scheduleNotification: ((UNNotificationRequest) -> Void)? = nil
+    ) {
+        self.defaults = defaults
+        self.isInBackground = isInBackground
+        self.scheduleNotification = scheduleNotification ?? { UNUserNotificationCenter.current().add($0) }
+        let identifiers = defaults.stringArray(forKey: defaultsKey) ?? []
         recentIdentifiers = identifiers
         recentIdentifierSet = Set(identifiers)
         super.init()
-        center.delegate = self
+        if scheduleNotification == nil { center.delegate = self }
     }
 
     func requestAuthorizationIfNeeded() async {
@@ -57,7 +67,8 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
                 : String(
                     localized: "agent.notification.approval.body.generic",
                     defaultValue: "\(sessionTitle)：Agent 请求批准本次操作"
-                )
+                ),
+            requiresResponse: true
         )
     }
 
@@ -88,14 +99,45 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
         )
     }
 
+    func notifyQuestionRequired(
+        gatewayID: String,
+        requestID: String,
+        sessionID: String,
+        sessionTitle: String,
+        prompt: String?
+    ) {
+        let normalizedPrompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        scheduleOnce(
+            identifier: "agent.question.\(gatewayID).\(requestID)",
+            threadIdentifier: "agent.session.\(gatewayID).\(sessionID)",
+            gatewayID: gatewayID,
+            sessionID: sessionID,
+            title: String(localized: "agent.notification.question.title", defaultValue: "需要回答"),
+            body: normalizedPrompt?.isEmpty == false
+                ? String(
+                    localized: "agent.notification.question.body",
+                    defaultValue: "\(sessionTitle)：\(normalizedPrompt!)"
+                )
+                : String(
+                    localized: "agent.notification.question.body.generic",
+                    defaultValue: "\(sessionTitle)：Agent 正在等待你的回答或选择"
+                ),
+            requiresResponse: true
+        )
+    }
+
     private func scheduleOnce(
         identifier: String,
         threadIdentifier: String,
         gatewayID: String,
         sessionID: String,
         title: String,
-        body: String
+        body: String,
+        requiresResponse: Bool = false
     ) {
+        let inBackground = isInBackground()
+        // 前台收到的待处理请求不标记为已提醒，切到后台后由待处理列表补发。
+        guard inBackground || !requiresResponse else { return }
         guard recentIdentifierSet.insert(identifier).inserted else { return }
         recentIdentifiers.append(identifier)
         if recentIdentifiers.count > maximumRememberedIdentifierCount {
@@ -104,10 +146,10 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
             recentIdentifiers.removeFirst(overflow)
             recentIdentifierSet.subtract(removed)
         }
-        UserDefaults.standard.set(recentIdentifiers, forKey: defaultsKey)
+        defaults.set(recentIdentifiers, forKey: defaultsKey)
 
-        // 前台事件已经在会话界面展示；仍记录标识，避免重连后补弹旧通知。
-        guard UIApplication.shared.applicationState == .background else { return }
+        // 前台执行结果已在会话界面展示，记录标识以免重连后补弹旧结果。
+        guard inBackground else { return }
 
         let content = UNMutableNotificationContent()
         content.title = title
@@ -115,7 +157,7 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
         content.sound = .default
         content.threadIdentifier = threadIdentifier
         content.userInfo = ["gatewayID": gatewayID, "sessionID": sessionID]
-        center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+        scheduleNotification(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
     }
 
     func clearPendingSessionRoute(_ route: AgentNotificationSessionRoute) {

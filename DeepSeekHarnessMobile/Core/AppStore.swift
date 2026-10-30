@@ -749,6 +749,7 @@ final class AppStore: ObservableObject {
     private var hasHandledColdLaunchConnection = false
     private var isCheckingColdLaunchCredential = false
     private let backgroundExecutionController: AgentBackgroundExecutionController
+    private let agentNotifications: AgentUserNotificationManager
     private static let defaultConfigurationRequestKinds: Set<String> = [
         "agent-presets", "defaults", "default-model", "set-default", "save-default-model"
     ]
@@ -775,6 +776,7 @@ final class AppStore: ObservableObject {
         approvalEffectExecutor: (any GatewayApprovalEffectExecuting)? = nil,
         sessionControlEffectExecutor: (any GatewaySessionControlEffectExecuting)? = nil,
         backgroundExecutionController: AgentBackgroundExecutionController? = nil,
+        agentNotifications: AgentUserNotificationManager? = nil,
         historyRequestTimeout: Duration = .seconds(20),
         filePreviewTimeout: Duration = .seconds(20),
         sessionControlRequestTimeout: Duration = .seconds(12),
@@ -797,6 +799,7 @@ final class AppStore: ObservableObject {
         self.questionEffectExecutor = questionEffectExecutor ?? gateway
         self.approvalEffectExecutor = approvalEffectExecutor ?? gateway
         self.backgroundExecutionController = backgroundExecutionController ?? AgentBackgroundExecutionController()
+        self.agentNotifications = agentNotifications ?? .shared
         let persistedSessions = preferences.loadSessions()
         let kmpSessionListStore = KMPSessionListStoreAdapter(
             sessions: persistedSessions,
@@ -1327,6 +1330,7 @@ final class AppStore: ObservableObject {
             // 健康连接恢复前台不会重新 hello；补查后台期间漏掉的会话终态。
             if gateway.state.isConnected { gateway.requestSessions() }
         case .background:
+            notifyPendingAgentRequests()
             pauseSessionControlRequests()
             chatPrefetcher.stop(reason: "background")
             backgroundExecutionController.applicationDidEnterBackground()
@@ -3665,10 +3669,42 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func notifyPendingAgentRequests() {
+        // Question 的界面投影异步发布；使用 Store 当前快照，避免切后台时漏掉刚到达的请求。
+        let questions = kmpQuestionStore.snapshot
+        for request in questions.pendingRequests {
+            if questions.platformStatuses[request.rpcId]?.isBusy == true { continue }
+            agentNotifications.notifyQuestionRequired(
+                gatewayID: gatewayLocalID,
+                requestID: request.rpcId,
+                sessionID: request.sessionId,
+                sessionTitle: title(for: request.sessionId),
+                prompt: request.questions.first?.question
+            )
+        }
+        for request in pendingApprovalRequests {
+            if approvalRequestStatuses[request.rpcId]?.isBusy == true { continue }
+            agentNotifications.notifyApprovalRequired(
+                gatewayID: gatewayLocalID,
+                requestID: request.rpcId,
+                sessionID: request.sessionId,
+                sessionTitle: title(for: request.sessionId),
+                detail: request.localizedReason ?? request.toolName
+            )
+        }
+    }
+
     private func handleQuestionRoute(_ route: GatewayQuestionRoute) {
         switch route {
         case .requested(let request, let sessionID, let preview, let replay):
             dispatchQuestionIntent(.requestReceived(request))
+            agentNotifications.notifyQuestionRequired(
+                gatewayID: gatewayLocalID,
+                requestID: request.rpcId,
+                sessionID: request.sessionId,
+                sessionTitle: title(for: request.sessionId),
+                prompt: preview
+            )
             AgentLiveActivityManager.shared.awaitingChoice(
                 gatewayID: gatewayLocalID,
                 request: request,
@@ -3754,14 +3790,14 @@ final class AppStore: ObservableObject {
                 command: commandPreview(for: request),
                 sourceLabel: liveActivitySourceLabel(for: request.sessionId)
             )
+            agentNotifications.notifyApprovalRequired(
+                gatewayID: gatewayLocalID,
+                requestID: request.rpcId,
+                sessionID: request.sessionId,
+                sessionTitle: title(for: request.sessionId),
+                detail: request.localizedReason ?? request.toolName
+            )
             if isNewRequest {
-                AgentUserNotificationManager.shared.notifyApprovalRequired(
-                    gatewayID: gatewayLocalID,
-                    requestID: request.rpcId,
-                    sessionID: request.sessionId,
-                    sessionTitle: title(for: request.sessionId),
-                    detail: request.localizedReason ?? request.toolName
-                )
                 notice(
                     request.replay ? String(localized: "待审批操作已恢复") : String(localized: "Agent 正在等待审批"),
                     request.localizedReason ?? request.toolName,
@@ -4424,7 +4460,7 @@ final class AppStore: ObservableObject {
                 failed: failed,
                 sourceLabel: liveActivitySourceLabel(for: record.sessionId)
             )
-            AgentUserNotificationManager.shared.notifyExecutionEnded(
+            agentNotifications.notifyExecutionEnded(
                 gatewayID: gatewayLocalID,
                 eventID: record.id,
                 sessionID: record.sessionId,

@@ -1,4 +1,5 @@
 import XCTest
+import UserNotifications
 import Network
 import CryptoKit
 import Security
@@ -2409,6 +2410,129 @@ final class GatewayProtocolTests: XCTestCase {
         let failure = try GatewayWireDecoder.decode(Data(#"{"kind":"error","requestType":"session-create","requestId":"old-request","message":"failed"}"#.utf8))
         XCTAssertTrue(gateway.acceptSessionCreationFrame(failure))
         XCTAssertFalse(gateway.acceptSessionCreationFrame(GatewayFrame(kind: "sent", sessionId: "s1")))
+    }
+
+    @MainActor
+    func testAgentAttentionNotificationsWaitForBackgroundAndDeduplicateAcrossRestarts() throws {
+        let suite = "AgentNotifications.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var background = false
+        var notifications: [UNNotificationRequest] = []
+        func makeManager() -> AgentUserNotificationManager {
+            AgentUserNotificationManager(
+                defaults: defaults,
+                isInBackground: { background },
+                scheduleNotification: { notifications.append($0) }
+            )
+        }
+        func sendAttention(_ manager: AgentUserNotificationManager, gateway: String = "gateway-a") {
+            manager.notifyQuestionRequired(
+                gatewayID: gateway, requestID: "rpc-1", sessionID: "question-session",
+                sessionTitle: "Question session", prompt: "Choose a direction"
+            )
+            manager.notifyApprovalRequired(
+                gatewayID: gateway, requestID: "rpc-1", sessionID: "approval-session",
+                sessionTitle: "Approval session", detail: "Run command"
+            )
+        }
+        let manager = makeManager()
+        sendAttention(manager)
+        XCTAssertTrue(notifications.isEmpty)
+        manager.notifyExecutionEnded(
+            gatewayID: "gateway-a", eventID: "end-1", sessionID: "s1",
+            sessionTitle: "Session", failed: false
+        )
+        background = true
+        sendAttention(manager)
+        XCTAssertEqual(notifications.count, 2)
+        XCTAssertEqual(Set(notifications.compactMap { $0.content.userInfo["sessionID"] as? String }),
+                       ["question-session", "approval-session"])
+        XCTAssertTrue(notifications.allSatisfy { $0.content.userInfo["gatewayID"] as? String == "gateway-a" })
+        XCTAssertTrue(notifications.allSatisfy { $0.content.sound != nil && $0.trigger == nil })
+        XCTAssertTrue(notifications[0].content.body.contains("Choose a direction"))
+        sendAttention(manager)
+        sendAttention(makeManager())
+        manager.notifyExecutionEnded(
+            gatewayID: "gateway-a", eventID: "end-1", sessionID: "s1",
+            sessionTitle: "Session", failed: false
+        )
+        XCTAssertEqual(notifications.count, 2)
+        sendAttention(manager, gateway: "gateway-b")
+        XCTAssertEqual(notifications.count, 4)
+    }
+
+    @MainActor
+    func testAppStoreNotifiesPendingQuestionsAndApprovalsWhenEnteringBackground() async throws {
+        let suite = "AgentNotifications.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var background = false
+        var notifications: [UNNotificationRequest] = []
+        let manager = AgentUserNotificationManager(
+            defaults: defaults, isInBackground: { background },
+            scheduleNotification: { notifications.append($0) }
+        )
+        let store = AppStore(
+            preferences: AppPreferencesSpy(endpoint: "wss://injected.example/ws/mobile", selectedWorkspaceID: nil, sessions: []),
+            gatewayLocalID: "test-gateway", agentNotifications: manager
+        )
+        let question = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"question-requested","rpcId":"question-1","sessionId":"s1","questions":[{"id":"q1","question":"继续？","options":[{"label":"是"}]}]}"#.utf8
+        ))
+        let approval = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"approval-requested","rpcId":"approval-1","sessionId":"s2","approvalId":"a1","toolName":"Bash","reason":"读取版本"}"#.utf8
+        ))
+        store.gateway.onFrame?(question)
+        store.gateway.onFrame?(approval)
+        XCTAssertTrue(notifications.isEmpty)
+        background = true
+        store.handleScenePhase(.background)
+        XCTAssertEqual(notifications.count, 2)
+        await flushDeferredKMPEvents(in: store)
+        store.handleScenePhase(.background)
+        store.gateway.onFrame?(question)
+        store.gateway.onFrame?(approval)
+        await flushDeferredKMPEvents(in: store)
+        XCTAssertEqual(notifications.count, 2)
+        XCTAssertEqual(Set(notifications.compactMap { $0.content.userInfo["sessionID"] as? String }), ["s1", "s2"])
+    }
+
+    @MainActor
+    func testAppStoreBackgroundFramesNotifyButResolvedForegroundRequestsDoNot() async throws {
+        let suite = "AgentNotifications.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var background = false
+        var notifications: [UNNotificationRequest] = []
+        let manager = AgentUserNotificationManager(
+            defaults: defaults, isInBackground: { background },
+            scheduleNotification: { notifications.append($0) }
+        )
+        let store = AppStore(
+            preferences: AppPreferencesSpy(endpoint: "wss://injected.example/ws/mobile", selectedWorkspaceID: nil, sessions: []),
+            agentNotifications: manager
+        )
+        for raw in [
+            #"{"kind":"question-requested","rpcId":"q1","sessionId":"s1","questions":[{"id":"q","question":"继续？"}]}"#,
+            #"{"kind":"approval-requested","rpcId":"a1","sessionId":"s1","approvalId":"a","toolName":"Bash"}"#,
+            #"{"kind":"question-resolved","rpcId":"q1","sessionId":"s1","outcome":"answered"}"#,
+            #"{"kind":"approval-resolved","rpcId":"a1","sessionId":"s1","outcome":"allowed-once"}"#
+        ] {
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(raw.utf8)))
+        }
+        await flushDeferredKMPEvents(in: store)
+        background = true
+        store.handleScenePhase(.background)
+        XCTAssertTrue(notifications.isEmpty)
+        for raw in [
+            #"{"kind":"question-requested","rpcId":"q2","sessionId":"s1","replay":true,"questions":[{"id":"q","question":"继续？"}]}"#,
+            #"{"kind":"approval-requested","rpcId":"a2","sessionId":"s1","approvalId":"a","toolName":"Bash","replay":true}"#
+        ] {
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(raw.utf8)))
+        }
+        await flushDeferredKMPEvents(in: store)
+        XCTAssertEqual(notifications.count, 2)
     }
 
     @MainActor

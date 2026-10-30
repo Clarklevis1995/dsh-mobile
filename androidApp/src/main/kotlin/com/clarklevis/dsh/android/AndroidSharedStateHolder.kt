@@ -65,6 +65,7 @@ class AndroidSharedStateHolder(
     voiceContext: android.content.Context? = graph?.application
 ) {
     private val teamStore = com.clarklevis.dsh.shared.facade.SharedTeamStore()
+    private val agentExecutionNotifications = AndroidAgentExecutionNotifications()
     var teamSnapshot by mutableStateOf(com.clarklevis.dsh.shared.facade.TeamSnapshot())
         private set
     private var teamLeadSessionId: String? = null
@@ -2094,9 +2095,21 @@ class AndroidSharedStateHolder(
     }
 
     private fun notifyUserForAgentFrame(appGraph: AndroidAppGraph, frame: GatewayFrame) {
-        if (frame.kind != "approval-requested" &&
-            (frame.kind != "event" || frame.event?.type != "turn/end")
-        ) return
+        val monitoredSessionIds = appGraph.gatewayRuntime.state.value.activeTurnSessionIds +
+            listOfNotNull(snapshot.selectedSessionId)
+        val runningSessionIds = snapshot.sessions.filter { it.isRunning && it.id in monitoredSessionIds }
+            .mapTo(mutableSetOf()) { it.id }
+        agentExecutionNotifications.accept(frame, runningSessionIds)?.let { ended ->
+            appGraph.agentNotifications.notifyExecutionEnded(
+                gatewayId = appGraph.gatewayLocalId,
+                sessionId = ended.sessionId,
+                eventId = ended.eventId,
+                sessionTitle = snapshot.sessions.firstOrNull { it.id == ended.sessionId }
+                    ?.title?.takeIf(String::isNotBlank) ?: "DeepSeek Harness",
+                failed = ended.failed
+            )
+        }
+        if (frame.kind !in setOf("approval-requested", "question-requested")) return
         val sessionId = frame.sessionId?.takeIf(String::isNotBlank) ?: return
         val sessionTitle = snapshot.sessions.firstOrNull { it.id == sessionId }
             ?.title?.takeIf(String::isNotBlank) ?: "DeepSeek Harness"
@@ -2113,23 +2126,26 @@ class AndroidSharedStateHolder(
                     detail = request.localizedReason(Locale.getDefault().toLanguageTag()) ?: request.toolName
                 )
             }
-            frame.kind == "event" && frame.event?.type == "turn/end" -> {
-                val sequence = frame.seq ?: return
-                if (frame.time == null) return
-                val event = frame.event ?: return
-                val failed = event.isError == true || event.interrupted == true ||
-                    !event.error.isNullOrBlank() ||
-                    event.reason?.lowercase(Locale.ROOT) in setOf(
-                        "error", "failed", "cancelled", "canceled", "interrupted", "aborted"
-                    )
-                appGraph.agentNotifications.notifyExecutionEnded(
+            frame.kind == "question-requested" -> {
+                val request = snapshot.pendingQuestions.firstOrNull {
+                    it.sessionId == sessionId && it.rpcId == frame.rpcId &&
+                        it.rpcId.isNotBlank() && it.questions.isNotEmpty()
+                } ?: return
+                appGraph.agentNotifications.notifyQuestionRequired(
                     gatewayId = appGraph.gatewayLocalId,
+                    requestId = request.rpcId,
                     sessionId = sessionId,
-                    sequence = sequence,
                     sessionTitle = sessionTitle,
-                    failed = failed
+                    prompt = request.questions.first().question
                 )
             }
+        }
+    }
+
+    internal fun notifyPendingAgentRequests() {
+        val appGraph = graph ?: return
+        for (frame in pendingAgentNotificationFrames(snapshot)) {
+            notifyUserForAgentFrame(appGraph, frame)
         }
     }
 
