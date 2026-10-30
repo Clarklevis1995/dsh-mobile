@@ -143,7 +143,7 @@ private struct MarkdownTableGrid: View {
                                     })
                                     .dynamicTypeSize(.large)
                                     .multilineTextAlignment(textAlignment(column))
-                            } else { Text(" ") }
+                            } else { Text(verbatim: " ") }
                         }
                         .padding(12)
                         .frame(width: widths[column], alignment: alignment)

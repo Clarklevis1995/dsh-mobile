@@ -143,6 +143,7 @@ enum DSHColor {
 
 struct DeepOceanBackground: View {
     var prefersOpenLightArcs = false
+    var animationPaused = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -151,7 +152,8 @@ struct DeepOceanBackground: View {
                     size: geometry.size,
                     isPad: UIDevice.current.userInterfaceIdiom == .pad
                 ),
-                prefersOpenLightArcs: prefersOpenLightArcs
+                prefersOpenLightArcs: prefersOpenLightArcs,
+                animationPaused: animationPaused
             )
         }
         .ignoresSafeArea()

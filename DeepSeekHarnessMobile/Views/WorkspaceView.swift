@@ -13,6 +13,7 @@ struct WorkspaceView: View {
     let onPlugins: () -> Void
     let onScheduledTasks: () -> Void
     @State private var searchQuery = ""
+    @StateObject private var sessionList = WorkspaceSessionListModel()
     @State private var renamingSession: SessionSummary?
     @State private var renamedTitle = ""
     @State private var archivingSession: SessionSummary?
@@ -20,6 +21,8 @@ struct WorkspaceView: View {
     @State private var showsDirectoryBrowser = false
     @State private var showsQRScanner = false
     @State private var showsManualPairing = false
+    @State private var showsWorkspaceRequiredAlert = false
+    @State private var workspaceIsScrolling = false
     @State private var drawerOffset: CGFloat = 0
     @State private var drawerDragStart: CGFloat?
     @State private var drawerFeedback = WorkspaceDrawerFeedback()
@@ -81,13 +84,16 @@ struct WorkspaceView: View {
                     .padding(.leading, safeArea.leading)
                     .padding(.trailing, safeArea.trailing)
                     // 先扩展到窗口四边，再绘制和裁剪背景；正文仍留在安全区内。
-                    .background { DeepOceanBackground(prefersOpenLightArcs: usesVerticalToolbar) }
+                    .background {
+                        DeepOceanBackground(prefersOpenLightArcs: usesVerticalToolbar,
+                            animationPaused: workspaceIsScrolling || drawerOffset > 0 || drawerDragStart != nil
+                                || showsWorkspaceRequiredAlert)
+                    }
                     .overlay {
                         Color.black.opacity(dimOpacity)
                             .allowsHitTesting(false)
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 48 * progress, style: .continuous))
-                    .compositingGroup()
                     .shadow(
                         color: .black.opacity(0.12 * progress),
                         radius: 9 * progress,
@@ -132,9 +138,12 @@ struct WorkspaceView: View {
         }
         .foregroundStyle(.white)
         .onAppear {
+            sessionList.bind(to: store)
             store.refreshRemoteState()
         }
         .onDisappear {
+            sessionList.unbind()
+            workspaceIsScrolling = false
             drawerFeedback.endDrag(cancelled: true)
             drawerDragStart = nil
         }
@@ -163,7 +172,15 @@ struct WorkspaceView: View {
         } message: {
             Text("会话将被归档并从列表隐藏，历史记录会保留。")
         }
-        .onChangeCompat(of: searchQuery) { _, value in store.search(value) }
+        .alert(String(localized: "请先选择工作区"), isPresented: $showsWorkspaceRequiredAlert) {
+            Button(String(localized: "知道了"), role: .cancel) {}
+        } message: {
+            Text(WorkspaceSessionCopy.creationPrompt)
+        }
+        .onChangeCompat(of: searchQuery) { _, value in
+            sessionList.search(value)
+            store.search(value)
+        }
         .sheet(isPresented: $showsDirectoryBrowser) {
             DirectoryBrowserSheet()
                 .environmentObject(store)
@@ -194,11 +211,8 @@ struct WorkspaceView: View {
         let usesColumns = AdaptiveLayout.workspaceUsesColumns(
             size: size, accessibilityText: dynamicTypeSize.isAccessibilitySize
         )
-        return ZStack {
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture { sessionSearchIsFocused = false }
-            ScrollView {
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: usesColumns ? 40 : 18) {
                     VStack(alignment: .leading, spacing: 6) {
                         header(openDrawer: openDrawer, usesVerticalToolbar: usesVerticalToolbar)
@@ -207,10 +221,8 @@ struct WorkspaceView: View {
                     }
                     if usesColumns {
                         HStack(alignment: .top, spacing: 48) {
-                            workspaceActions
-                                .frame(width: min(440, size.width * 0.38))
-                            recentSessions
-                                .frame(maxWidth: .infinity)
+                            workspaceActions.frame(width: min(440, size.width * 0.38))
+                            recentSessions.frame(maxWidth: .infinity)
                         }
                     } else {
                         Spacer(minLength: 44)
@@ -218,37 +230,39 @@ struct WorkspaceView: View {
                         recentSessions
                     }
                 }
-                // GeometryReader 给出的宽度已经扣除左右安全区，不能再按 safeArea 补一次，
-                // 否则右侧有安全区时（如折叠屏侧边的状态栏）会空出一大条，左右不对称。
-                .padding(.horizontal, usesColumns ? 40 : 22)
-                .padding(.top, safeArea.top + 18)
-                .padding(.bottom, safeArea.bottom + 24)
-                .readableContentWidth(AdaptiveLayout.workspaceWidth)
-                .background {
-                    DrawerPanGestureAttachment(
-                        shouldBegin: { translation in
-                            guard abs(translation.x) > abs(translation.y) * 1.2 else { return false }
-                            return drawerOffset > 0 ? translation.x < 0 : translation.x > 0
-                        },
-                        onChanged: { translation in
-                            updateDrawerDrag(translation: translation, width: drawerWidth)
-                        },
-                        onEnded: { translation, velocity, cancelled in
-                            finishDrawerDrag(
-                                translation: translation, velocity: velocity,
-                                cancelled: cancelled, width: drawerWidth
-                            )
-                        }
-                    )
+                .padding(.bottom, 8)
+                ForEach(sessionList.snapshot.entries) { entry in
+                    sessionListEntry(entry)
+                        .padding(.leading, usesColumns ? min(440, size.width * 0.38) + 48 : 0)
                 }
             }
-            .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.interactively)
-            .scrollDisabled(drawerDragStart == nil && drawerOffset > 0)
+            .padding(.horizontal, usesColumns ? 40 : 22)
+            .padding(.top, safeArea.top + 18)
+            .padding(.bottom, safeArea.bottom + 24)
+            .readableContentWidth(AdaptiveLayout.workspaceWidth)
+            .background {
+                DrawerPanGestureAttachment(
+                    shouldBegin: { translation in
+                        guard abs(translation.x) > abs(translation.y) * 1.2 else { return false }
+                        return drawerOffset > 0 ? translation.x < 0 : translation.x > 0
+                    },
+                    onChanged: { translation in updateDrawerDrag(translation: translation, width: drawerWidth) },
+                    onEnded: { translation, velocity, cancelled in
+                        finishDrawerDrag(translation: translation, velocity: velocity,
+                            cancelled: cancelled, width: drawerWidth)
+                    }
+                )
+            }
         }
-        // A tap handled by empty layout content does not reach the background
-        // layer. Keep a container-level fallback; controls retain their own
-        // actions and the search field consumes its tap while becoming focused.
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .scrollDisabled(drawerDragStart == nil && drawerOffset > 0)
+        .accessibilityIdentifier("workspace-session-list")
+        .modifier(WorkspaceScrollPhaseObserver { active in
+            guard workspaceIsScrolling != active else { return }
+            workspaceIsScrolling = active
+            sessionList.setScrolling(active)
+        })
         .onTapGesture { sessionSearchIsFocused = false }
     }
 
@@ -262,19 +276,23 @@ struct WorkspaceView: View {
             }
             .id("workspace-hero")
             workspaceCard.id("workspace-card")
-            newSessionButton.id("workspace-new-session").disabled(!connectionIsReady)
+            newSessionButton.id("workspace-new-session")
+                .disabled(!connectionIsReady && !store.isAllWorkspacesSelected)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var recentSessions: some View {
-        LazyVStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 18) {
             sessionsHeader.id("workspace-sessions-header")
             sessionSearch.id("workspace-session-search")
-            if displayedSessions.isEmpty {
+            if sessionList.isLoading {
+                ProgressView().tint(.white).frame(maxWidth: .infinity)
+            } else if sessionList.snapshot.entries.isEmpty {
                 emptySessions.id("workspace-sessions-empty")
-            } else {
-                sessionsList
+            }
+            if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(store.searchCoverage).appFont(.caption).foregroundStyle(.white.opacity(0.55))
             }
         }
     }
@@ -484,6 +502,13 @@ struct WorkspaceView: View {
     private var workspaceCard: some View {
         Menu {
             Button {
+                store.selectAllWorkspaces()
+            } label: {
+                Label("全部会话", systemImage: store.isAllWorkspacesSelected ? "checkmark.circle.fill" : "square.stack")
+            }
+            .accessibilityIdentifier("workspace-all-sessions")
+
+            Button {
                 store.selectUngroupedWorkspace()
             } label: {
                 Label {
@@ -540,7 +565,8 @@ struct WorkspaceView: View {
 
     private var sessionsHeader: some View {
         HStack {
-            Text("最近会话").appFont(.headline)
+            Text(store.isAllWorkspacesSelected ? String(localized: "全部会话") : String(localized: "最近会话"))
+                .appFont(.headline)
             Spacer()
             GatewayConnectionStatusText(gateway: store.gateway)
         }
@@ -580,121 +606,112 @@ struct WorkspaceView: View {
 
     private var emptySessions: some View {
         Text(searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-             ? "暂无已知会话。连接服务后创建第一个任务。"
-             : "已缓存聊天中未找到匹配内容。连接网关后可继续搜索其他聊天。")
+             ? String(localized: "暂无已知会话。连接服务后创建第一个任务。")
+             : String(localized: "已缓存聊天中未找到匹配内容。连接网关后可继续搜索其他聊天。"))
             .appFont(.subheadline).foregroundStyle(.white.opacity(0.5))
             .frame(maxWidth: .infinity, alignment: .leading).padding(18)
             .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 15))
     }
 
-    private var displayedSessions: [SessionSummary] {
-        let workspaceSessions: [SessionSummary]
-        if store.isUngroupedWorkspaceSelected {
-            workspaceSessions = store.ungroupedSessions
-        } else if let workspace = store.activeWorkspace {
-            let ids = Set(workspace.sessionIds)
-            workspaceSessions = store.historySessions.filter { ids.contains($0.id) }
-        } else {
-            workspaceSessions = store.historySessions
-        }
-        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else {
-            return workspaceSessions.filter { !store.archivedSessionIds.contains($0.id) }
-        }
-        let ids = Set(store.searchResults.map(\.sessionId))
-        let known = Set(workspaceSessions.map(\.id))
-        let missing = store.searchResults.filter {
-            !known.contains($0.sessionId) && !store.isSubagentSession($0.sessionId)
-        }.map {
-            SessionSummary(id: $0.sessionId, title: "已缓存聊天", lastActivity: .distantPast, isRunning: false, hasUnread: false)
-        }
-        return (workspaceSessions + missing).filter { !store.archivedSessionIds.contains($0.id) && (ids.contains($0.id) || $0.title.localizedCaseInsensitiveContains(query) || $0.id.localizedCaseInsensitiveContains(query)) }
-    }
-
     private var workspaceDisplayTitle: String {
-        store.isUngroupedWorkspaceSelected ? String(localized: "未分组") : (store.activeWorkspace?.title ?? "DeepseekHarnessProject")
+        if store.isAllWorkspacesSelected { return String(localized: "全部会话") }
+        return store.isUngroupedWorkspaceSelected ? String(localized: "未分组") : (store.activeWorkspace?.title ?? "DeepseekHarnessProject")
     }
 
     private var workspaceDisplayPath: String {
+        if store.isAllWorkspacesSelected {
+            return WorkspaceSessionCopy.count(sessionList.snapshot.visibleCount)
+        }
         if store.isUngroupedWorkspaceSelected {
             return String(localized: "workspace.ungrouped.count", defaultValue: "\(store.ungroupedSessions.count) 个未归属会话")
         }
         return store.activeWorkspace?.path ?? String(localized: "通过 Mobile Gateway 连接")
     }
 
-    private var sessionsList: some View {
-        LazyVStack(spacing: 0) {
-            if !searchQuery.isEmpty {
-                Text(store.searchCoverage).appFont(.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+    @ViewBuilder
+    private func sessionListEntry(_ entry: WorkspaceSessionListEntry) -> some View {
+        switch entry {
+        case .section(let id, let title, let number, let count):
+            HStack(spacing: 10) {
+                Text(title)
+                    .appFont(.caption.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .layoutPriority(1)
+                Rectangle().fill(.white.opacity(0.12)).frame(height: 1)
+                Text(WorkspaceSessionCopy.count(count))
+                    .appFont(.caption2)
+                    .fixedSize()
             }
-            ForEach(displayedSessions.prefix(searchQuery.isEmpty ? 12 : 100)) { session in
+            .foregroundStyle(.white.opacity(0.55))
+            .padding(.top, number == 1 ? 8 : 24)
+            .padding(.bottom, 8)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(WorkspaceSessionCopy.sectionAccessibility(title: title, count: count))
+            .accessibilityIdentifier("workspace-section-\(id)")
+        case .sectionToggle(let id, let remainingCount, let isExpanded):
+            Button {
+                sessionList.toggleSection(id)
+            } label: {
+                HStack(spacing: 6) {
+                    Text(isExpanded ? String(localized: "收起") : WorkspaceSessionCopy.expand(remainingCount))
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                }
+                .appFont(.caption)
+                .foregroundStyle(.white.opacity(0.62))
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.leading, 18)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("workspace-section-toggle-\(id)")
+        case .session(let session, let snippet):
+            Button {
+                sessionSearchIsFocused = false
+                onOpenSession(session)
+            } label: {
+                WorkspaceSessionRow(session: session, snippet: snippet)
+                    .equatable()
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("workspace-session-\(session.id)")
+            .contextMenu {
                 Button {
-                    sessionSearchIsFocused = false
-                    onOpenSession(session)
-                } label: {
-                    sessionRow(session)
-                }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("workspace-session-\(session.id)")
-                    .contextMenu {
-                        Button {
-                            renamedTitle = session.title
-                            renamingSession = session
-                        } label: { Label("重命名", systemImage: "pencil") }
-                        .disabled(!connectionIsReady)
-                        Button(role: .destructive) {
-                            archivingSession = session
-                        } label: { Label("删除（归档）", systemImage: "archivebox") }
-                        .disabled(!connectionIsReady)
-                    }
-                    .id("workspace-session-\(session.id)")
-
-                Divider()
-                    .overlay(.white.opacity(0.1))
-                    .padding(.leading, 18)
+                    renamedTitle = session.title
+                    renamingSession = session
+                } label: { Label("重命名", systemImage: "pencil") }
+                .disabled(!connectionIsReady)
+                Button(role: .destructive) {
+                    archivingSession = session
+                } label: { Label("删除（归档）", systemImage: "archivebox") }
+                .disabled(!connectionIsReady)
             }
         }
-    }
-
-    private func sessionRow(_ session: SessionSummary) -> some View {
-        HStack(spacing: 11) {
-            Circle()
-                .fill(session.isRunning ? DSHColor.success : (session.hasUnread ? DSHColor.ocean : .white.opacity(0.35)))
-                .frame(width: 7, height: 7)
-                .shadow(color: session.isRunning ? DSHColor.success : .clear, radius: 5)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(session.title).lineLimit(1).appFont(.subheadline.weight(.medium))
-                if !searchQuery.isEmpty, let hit = store.searchResults.first(where: { $0.sessionId == session.id }) {
-                    Text(hit.snippet).lineLimit(2).appFont(.caption).foregroundStyle(.white.opacity(0.62))
-                } else {
-                    Text(String(session.id.prefix(16))).appFont(.caption2.monospaced()).foregroundStyle(.white.opacity(0.42))
-                }
-            }
-            Spacer()
-            Text(session.isRunning ? String(localized: "运行中") : session.lastActivity.formatted(.relative(presentation: .named)))
-                .appFont(.caption).foregroundStyle(session.isRunning ? .blue : .white.opacity(0.48))
-        }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
     }
 
     @ViewBuilder
     private var newSessionButton: some View {
         if #available(iOS 26.0, *) {
-            Button(action: onNewSession) {
+            Button(action: requestNewSession) {
                 newSessionButtonLabel
             }
             .buttonStyle(.glass(.clear.tint(DSHColor.navy.opacity(0.22))))
             .buttonBorderShape(.roundedRectangle(radius: 18))
             .buttonSizing(.flexible)
         } else {
-            Button(action: onNewSession) {
+            Button(action: requestNewSession) {
                 newSessionButtonLabel
             }
             .buttonStyle(.plain)
             .glassSurface(radius: 18, dark: true, tint: .white.opacity(0.08))
+        }
+    }
+
+    private func requestNewSession() {
+        if store.isAllWorkspacesSelected {
+            showsWorkspaceRequiredAlert = true
+        } else {
+            onNewSession()
         }
     }
 
@@ -707,6 +724,54 @@ struct WorkspaceView: View {
         }
         .frame(maxWidth: .infinity).frame(minHeight: 38)
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+/// 原生滚动阶段覆盖拖动、惯性与程序动画；只在活动/空闲边界通知，不逐帧刷新 SwiftUI 状态。
+struct WorkspaceScrollPhaseObserver: ViewModifier {
+    let onChange: (Bool) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollPhaseChange { _, phase in onChange(phase != .idle) }
+        } else {
+            content
+        }
+    }
+}
+
+/// 行只接收自己的值，不订阅 AppStore，也不在滚动时扫描搜索结果或工作区。
+private struct WorkspaceSessionRow: View, Equatable {
+    let session: SessionSummary
+    let snippet: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 11) {
+                Circle()
+                    .fill(session.isRunning ? DSHColor.success : (session.hasUnread ? DSHColor.ocean : .white.opacity(0.35)))
+                    .frame(width: 7, height: 7)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.title).lineLimit(1).appFont(.subheadline.weight(.medium))
+                    if let snippet {
+                        Text(snippet).lineLimit(2).appFont(.caption).foregroundStyle(.white.opacity(0.62))
+                    } else {
+                        Text(String(session.id.prefix(16)))
+                            .appFont(.caption2.monospaced()).foregroundStyle(.white.opacity(0.42))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(session.isRunning ? String(localized: "运行中") : session.lastActivity.formatted(.relative(presentation: .named)))
+                    .appFont(.caption).foregroundStyle(session.isRunning ? .blue : .white.opacity(0.48))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 10)
+            Divider().overlay(.white.opacity(0.1)).padding(.leading, 18)
+        }
+        .contentShape(Rectangle())
     }
 }
 
@@ -811,6 +876,7 @@ private struct DrawerPanGestureAttachment: UIViewRepresentable {
             super.didMoveToWindow()
             onHierarchyChange?()
         }
+
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {

@@ -19,18 +19,20 @@ enum HarnessBackgroundStyle {
 struct HarnessAnimatedBackground: View {
     let style: HarnessBackgroundStyle
     var prefersOpenLightArcs = false
+    var animationPaused = false
+    @State private var animationClock = HarnessBackgroundAnimationClock()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
     private var pausesAnimation: Bool {
-        reduceMotion || scenePhase != .active
+        animationPaused || reduceMotion || scenePhase != .active
     }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: pausesAnimation)) { timeline in
             let elapsed = reduceMotion
                 ? 0
-                : timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4_096)
+                : animationClock.elapsed(at: timeline.date).truncatingRemainder(dividingBy: 4_096)
 
             ZStack {
                 HarnessFluidLayer(
@@ -47,11 +49,32 @@ struct HarnessAnimatedBackground: View {
                 )
             }
         }
+        .onAppear { animationClock.setPaused(pausesAnimation, at: Date()) }
+        .onChangeCompat(of: pausesAnimation) { _, paused in animationClock.setPaused(paused, at: Date()) }
         .background(DSHColor.navy)
         .ignoresSafeArea()
         .clipped()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// 暂停时保持当前画面，恢复后接着播放，避免手指松开时背景突然跳到另一个相位。
+struct HarnessBackgroundAnimationClock {
+    private var pausedAt: Date?
+    private var pausedDuration: TimeInterval = 0
+
+    mutating func setPaused(_ paused: Bool, at date: Date) {
+        if paused {
+            if pausedAt == nil { pausedAt = date }
+        } else if let start = pausedAt {
+            pausedDuration += max(0, date.timeIntervalSince(start))
+            pausedAt = nil
+        }
+    }
+
+    func elapsed(at date: Date) -> TimeInterval {
+        (pausedAt ?? date).timeIntervalSinceReferenceDate - pausedDuration
     }
 }
 

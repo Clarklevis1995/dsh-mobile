@@ -299,12 +299,13 @@ private struct TrajectoryHistoryVersion: Equatable {
 
 @MainActor
 final class AppStore: ObservableObject {
-    static let ungroupedWorkspaceID = "__ungrouped__"
+    static let ungroupedWorkspaceID = WorkspaceSessionScope.ungrouped
+    static let allWorkspacesID = WorkspaceSessionScope.all
 
     let teamStore = SharedTeamStore()
     @Published private(set) var teamSnapshot = MobileTeamSnapshot()
     @Published private(set) var teamLeadSessionID: String?
-    private var persistedTeamRouting = "[]"
+    @Published private(set) var persistedTeamRouting = "[]"
     private var persistedTeamAvatars = "[]"
     private var teamMemberProfileTimeouts: [String: Task<Void, Never>] = [:]
 
@@ -1204,7 +1205,7 @@ final class AppStore: ObservableObject {
         }
     }
     var activeWorkspace: GatewayWorkspace? {
-        guard !isUngroupedWorkspaceSelected else { return nil }
+        guard !isUngroupedWorkspaceSelected, !isAllWorkspacesSelected else { return nil }
         if let selectedWorkspaceId,
            let workspace = workspaces.first(where: { $0.id == selectedWorkspaceId }) {
             return workspace
@@ -1217,6 +1218,12 @@ final class AppStore: ObservableObject {
     }
     func selectUngroupedWorkspace() {
         selectedWorkspaceId = Self.ungroupedWorkspaceID
+    }
+    func selectAllWorkspaces() {
+        selectedWorkspaceId = Self.allWorkspacesID
+    }
+    var isAllWorkspacesSelected: Bool {
+        selectedWorkspaceId == Self.allWorkspacesID
     }
     var isUngroupedWorkspaceSelected: Bool {
         selectedWorkspaceId == Self.ungroupedWorkspaceID
@@ -1414,6 +1421,10 @@ final class AppStore: ObservableObject {
     }
 
     func prepareNewConversation() async -> Bool {
+        guard !isAllWorkspacesSelected else {
+            lastError = WorkspaceSessionCopy.creationPrompt
+            return false
+        }
         teamLeadSessionID = nil
         teamSnapshot = MobileTeamSnapshot()
         guard !isPreparingNewConversation else { return false }
@@ -2045,7 +2056,7 @@ final class AppStore: ObservableObject {
         localSearchResults = []
         localSearchSequences = [:]
         searchResults = []
-        searchCoverage = normalized.isEmpty ? "" : "本地结果仅涵盖已缓存聊天"
+        searchCoverage = normalized.isEmpty ? "" : String(localized: "本地结果仅涵盖已缓存聊天")
         guard !normalized.isEmpty else { return }
         localSearchTask = Task { [weak self] in
             do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
@@ -3429,6 +3440,7 @@ final class AppStore: ObservableObject {
             workspaces = received
             if selectedWorkspaceId == nil || (
                 selectedWorkspaceId != Self.ungroupedWorkspaceID &&
+                selectedWorkspaceId != Self.allWorkspacesID &&
                 !workspaces.contains(where: { $0.id == selectedWorkspaceId })
             ) {
                 selectedWorkspaceId = workspaces.first?.id ?? Self.ungroupedWorkspaceID

@@ -30,6 +30,8 @@ internal object AndroidStrings {
     }
 
     private val singularEnglish: Map<String, String> = mapOf(
+        "%1\$s 个会话" to "%1\$s session",
+        "展开其余 %1\$s 个会话" to "Show %1\$s more session",
         "%1\$s 个未归属会话" to "%1\$s unassigned session",
         "%1\$s 个附件" to "%1\$s attachment",
         "%1\$s 次工具调用" to "%1\$s tool call",
@@ -53,6 +55,18 @@ internal object AndroidStrings {
     )
 
     internal val english: Map<String, String> = mapOf(
+        "工作区 %1\$s，1 个会话" to "Workspace %1\$s, 1 session",
+        "加载失败" to "Failed to load",
+        "已缓存会话" to "Cached session",
+        "本地聊天内容（仅已缓存部分）；联网时同时补充网关搜索。" to "Cached chat content. Gateway results are also included when connected.",
+        "本地聊天内容（仅已缓存部分，显示前 50 条）。打开结果可定位对应消息。" to "Cached chat content (first 50 results). Open a result to jump to the matching message.",
+        "请先选择一个具体工作区，再创建新会话。" to "Select a specific workspace before creating a new session.",
+        "请先选择工作区" to "Select a workspace first",
+        "全部会话" to "All sessions",
+        "%1\$s 个会话" to "%1\$s sessions",
+        "%1\$s 个会话（跨全部工作区）" to "%1\$s sessions across all workspaces",
+        "工作区 %1\$s，%2\$s 个会话" to "Workspace %1\$s, %2\$s sessions",
+        "展开其余 %1\$s 个会话" to "Show %1\$s more sessions",
         "会话页面" to "Session pages",
         "切换到轨迹" to "Switch to trajectory",
         "切换到对话" to "Switch to conversation",

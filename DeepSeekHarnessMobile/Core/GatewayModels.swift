@@ -1302,7 +1302,7 @@ struct SessionEvent: Codable, Hashable, Sendable, Identifiable {
     var date: Date { Date(timeIntervalSince1970: time > 10_000_000_000 ? time / 1000 : time) }
 }
 
-struct SessionSummary: Codable, Hashable, Identifiable {
+struct SessionSummary: Codable, Hashable, Sendable, Identifiable {
     var id: String
     var title: String
     var lastActivity: Date

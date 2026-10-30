@@ -7,6 +7,24 @@ import SwiftUI
 /// tables must exist, stay populated, and keep placeholder arguments intact,
 /// so the UI never exposes localization identifiers to users.
 final class LocalizationCatalogTests: XCTestCase {
+    func testAllWorkspaceCopyShipsInBothLanguagesAndPreservesCountsAndWorkspaceNames() throws {
+        let english = try englishTable("Localizable")
+        let chinese = try localizedTable("Localizable", localization: "zh-Hans")
+        XCTAssertEqual(english["请先选择工作区"], "Select a workspace first")
+        XCTAssertEqual(english["请先选择一个具体工作区，再创建新会话。"],
+            "Select a specific workspace before creating a new session.")
+        XCTAssertEqual(chinese["请先选择一个具体工作区，再创建新会话。"], "请先选择一个具体工作区，再创建新会话。")
+        XCTAssertEqual(english["全部会话"], "All sessions")
+        XCTAssertEqual(english["收起"], "Collapse")
+        XCTAssertEqual(english["workspace.session.count.one"], "1 session")
+        XCTAssertEqual(english["workspace.section.expand.one"], "Show 1 more session")
+        XCTAssertEqual(String(format: try XCTUnwrap(english["workspace.section.expand"]), 95), "Show 95 more sessions")
+        XCTAssertEqual(String(format: try XCTUnwrap(english["workspace.section.named-accessibility"]), "dsh-mobile", 7),
+            "Workspace dsh-mobile, 7 sessions")
+        XCTAssertEqual(String(format: try XCTUnwrap(chinese["workspace.section.named-accessibility"]), "移动端工程", 7),
+            "工作区 移动端工程，7 个会话")
+    }
+
     func testFontScaleNormalizesInvalidValues() {
         XCTAssertEqual(AppFontScale.normalized(.nan), 1)
         XCTAssertEqual(AppFontScale.normalized(.infinity), 1)

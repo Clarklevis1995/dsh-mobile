@@ -821,6 +821,10 @@ class AndroidSharedStateHolder(
     private var preparingNewSession = false
 
     suspend fun prepareNewSession(): Boolean {
+        if (selectedWorkspaceId == ALL_WORKSPACES_ID) {
+            platformError = appText("请先选择一个具体工作区，再创建新会话。")
+            return false
+        }
         teamLeadSessionId = null
         teamSnapshot = com.clarklevis.dsh.shared.facade.TeamSnapshot()
         if (preparingNewSession) return false

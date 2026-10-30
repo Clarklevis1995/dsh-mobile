@@ -14,12 +14,35 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AndroidSharedStateHolderTest {
+    @Test
+    fun allScopeRejectsCreationWithLocalizedPromptBeforeRequiringGateway() = runTest {
+        val previous = Locale.getDefault()
+        try {
+            for ((locale, message) in listOf(
+                Locale.SIMPLIFIED_CHINESE to "请先选择一个具体工作区，再创建新会话。",
+                Locale.ENGLISH to "Select a specific workspace before creating a new session."
+            )) {
+                Locale.setDefault(locale)
+                val holder = AndroidSharedStateHolder()
+                try {
+                    holder.selectWorkspace(AndroidSharedStateHolder.ALL_WORKSPACES_ID)
+                    val selected = holder.snapshot.selectedSessionId
+                    assertFalse(holder.prepareNewSession())
+                    assertEquals(message, holder.platformError)
+                    assertEquals(selected, holder.snapshot.selectedSessionId)
+                } finally { holder.close() }
+            }
+        } finally { Locale.setDefault(previous) }
+    }
+
     // StateHolder 的平台适配器依赖 Main dispatcher；JVM 测试不使用 Android Looper。
     @Before
     fun setUpMainDispatcher() = Dispatchers.setMain(UnconfinedTestDispatcher())

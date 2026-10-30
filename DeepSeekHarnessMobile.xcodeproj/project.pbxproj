@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CA7400000000000000000001 /* WorkspaceSessionList.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7400000000000000000002 /* WorkspaceSessionList.swift */; };
+		CA7400000000000000000003 /* WorkspaceSessionListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7400000000000000000004 /* WorkspaceSessionListTests.swift */; };
 		0DC425D67C678AF679BFF15A /* VoiceInputAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873D1E0F3E1B1B2CB2366B06 /* VoiceInputAdapter.swift */; };
 		3459A8BD9696202CAC9D85A5 /* GatewaySwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B6B2953247E15BDA40F0BB /* GatewaySwitcherView.swift */; };
 		375D401B1B6F03015EC9073D /* GatewayProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E638ED93D0BBFD018966FB52 /* GatewayProfile.swift */; };
@@ -124,6 +126,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CA7400000000000000000002 /* WorkspaceSessionList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSessionList.swift; sourceTree = "<group>"; };
+		CA7400000000000000000004 /* WorkspaceSessionListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSessionListTests.swift; sourceTree = "<group>"; };
 		0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayProtocolTests.swift; sourceTree = "<group>"; };
 		12863E736F832D8F502B94A0 /* Theme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		152A3874C0D169644C9C7B6D /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -250,6 +254,7 @@
 		08B74F3553B9DFCE13B07DE9 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				CA7400000000000000000002 /* WorkspaceSessionList.swift */,
 				873D1E0F3E1B1B2CB2366B06 /* VoiceInputAdapter.swift */,
 				A9F100000000000000000002 /* AppPreferences.swift */,
 				A9F200000000000000000002 /* PairingPayloadParser.swift */,
@@ -285,6 +290,7 @@
 		0CABA197D44C2A9AA01CF6FF /* DeepSeekHarnessMobileTests */ = {
 			isa = PBXGroup;
 			children = (
+				CA7400000000000000000004 /* WorkspaceSessionListTests.swift */,
 				0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */,
 				A9A3BDFA7B0949F8BA0B01A6 /* WorkspaceDrawerFeedbackTests.swift */,
 				81886703A6C3AB2164852990 /* VoiceInputTests.swift */,
@@ -658,6 +664,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CA7400000000000000000003 /* WorkspaceSessionListTests.swift in Sources */,
 				39FD319C875F4B4A6893D676 /* GatewayProtocolTests.swift in Sources */,
 				3874FCB0CE354690A304E63F /* WorkspaceDrawerFeedbackTests.swift in Sources */,
 				CD86C5C4C6FF6F4BD8D715A6 /* VoiceInputTests.swift in Sources */,
@@ -695,6 +702,7 @@
 				A9FE00000000000000000001 /* AgentUserNotificationManager.swift in Sources */,
 				A9FB00000000000000000001 /* GatewayFrameRouter.swift in Sources */,
 				A9FC00000000000000000001 /* KMPSharedAdapter.swift in Sources */,
+				CA7400000000000000000001 /* WorkspaceSessionList.swift in Sources */,
 				5ED39F22065A71FC54D755AC /* AppStore.swift in Sources */,
 				AF18C0000000000000000001 /* WorkspacePreviewCache.swift in Sources */,
 				CF2010000000000000000001 /* ChatHistoryCache.swift in Sources */,

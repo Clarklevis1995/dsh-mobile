@@ -22,6 +22,21 @@ class AndroidStringsTest {
     @get:Rule val locale = LocaleTestRule(Locale.ENGLISH)
 
     @Test
+    fun allWorkspaceAndCreationReminderCopySupportsBothLanguagesAndSingularCounts() {
+        assertEquals("All sessions", appText("全部会话"))
+        assertEquals("Select a workspace first", appText("请先选择工作区"))
+        assertEquals("Select a specific workspace before creating a new session.", appText("请先选择一个具体工作区，再创建新会话。"))
+        assertEquals("1 session", appText("%1\$s 个会话", 1))
+        assertEquals("95 sessions", appText("%1\$s 个会话", 95))
+        assertEquals("Show 1 more session", appText("展开其余 %1\$s 个会话", 1))
+        assertEquals("Show 95 more sessions", appText("展开其余 %1\$s 个会话", 95))
+        assertEquals("Workspace 移动端工程, 7 sessions", appText("工作区 %1\$s，%2\$s 个会话", "移动端工程", 7))
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+        assertEquals("请先选择一个具体工作区，再创建新会话。", appText("请先选择一个具体工作区，再创建新会话。"))
+        assertEquals("展开其余 95 个会话", appText("展开其余 %1\$s 个会话", 95))
+    }
+
+    @Test
     fun screenshotChromeAndComposerAreFullyEnglish() {
         val labels = listOf(
             "已连接Deepseek Harness预览版", "新建会话", "最近会话", "搜索会话内容", "已连接",

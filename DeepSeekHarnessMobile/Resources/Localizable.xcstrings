@@ -1,6 +1,261 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "workspace.section.named-accessibility.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace %@, 1 session"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 %@，1 个会话"
+          }
+        }
+      }
+    },
+    "筛选定时任务": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter scheduled tasks"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "筛选定时任务"
+          }
+        }
+      }
+    },
+    "已缓存聊天中未找到匹配内容。连接网关后可继续搜索其他聊天。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matches in cached chats. Connect to the gateway to search other chats."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已缓存聊天中未找到匹配内容。连接网关后可继续搜索其他聊天。"
+          }
+        }
+      }
+    },
+    "本地结果仅涵盖已缓存聊天": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local results include cached chats only"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地结果仅涵盖已缓存聊天"
+          }
+        }
+      }
+    },
+    "workspace.section.expand.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show 1 more session"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "展开其余 1 个会话"
+          }
+        }
+      }
+    },
+    "workspace.session.count.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 session"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 个会话"
+          }
+        }
+      }
+    },
+    "请先选择一个具体工作区，再创建新会话。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a specific workspace before creating a new session."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先选择一个具体工作区，再创建新会话。"
+          }
+        }
+      }
+    },
+    "请先选择工作区": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a workspace first"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先选择工作区"
+          }
+        }
+      }
+    },
+    "workspace.section.named-accessibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace %1$@, %2$lld sessions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 %1$@，%2$lld 个会话"
+          }
+        }
+      }
+    },
+    "workspace.section.expand": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show %lld more sessions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "展开其余 %lld 个会话"
+          }
+        }
+      }
+    },
+    "已缓存聊天": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cached chat"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已缓存聊天"
+          }
+        }
+      }
+    },
+    "workspace.section.accessibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Section %1$lld, %2$lld sessions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分区 %1$lld，%2$lld 个会话"
+          }
+        }
+      }
+    },
+    "workspace.section.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld sessions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个会话"
+          }
+        }
+      }
+    },
+    "workspace.all.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld sessions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个会话"
+          }
+        }
+      }
+    },
+    "全部会话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All sessions"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部会话"
+          }
+        }
+      }
+    },
     "会话页面": {
       "extractionState": "manual",
       "localizations": {
@@ -68,9 +323,6 @@
           }
         }
       }
-    },
-    " " : {
-
     },
     " 等工具" : {
       "extractionState" : "stale",
