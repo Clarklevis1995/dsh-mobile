@@ -1131,6 +1131,23 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         collectionView.verticalScrollIndicatorInsets.top = inset
     }
 
+    /// 更新底部覆盖层对应的滚动留白。底部 composer 是 viewport 的 SwiftUI
+    /// overlay，因此它可以在 timeline 不变时变高（例如持久目标出现）。
+    /// 如果用户原本贴在尾部，必须把 contentOffset 一起移到新的尾部；
+    /// 否则新面板会覆盖最后几条消息。已经离开尾部时保留用户的阅读位置。
+    private func setBottomContentInset(_ inset: CGFloat) {
+        guard collectionView.contentInset.bottom != inset else { return }
+        let wasPinnedToBottom = isPinnedToBottom
+            && isAtBottom(collectionView)
+            && !isViewportMoving
+            && !isUserGestureAwaitingEnd
+        collectionView.contentInset.bottom = inset
+        collectionView.verticalScrollIndicatorInsets.bottom = inset
+        guard wasPinnedToBottom else { return }
+        collectionView.layoutIfNeeded()
+        followStreamingTail()
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 #if DEBUG
@@ -1206,8 +1223,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         hasConversationContent: Bool, historyPresentationStamp: HistoryPresentationStamp?, batch: PresentationBatch? = nil
     ) {
         let unchangedBottomInset = collectionView.contentInset.bottom == bottomInset
-        collectionView.contentInset.bottom = bottomInset
-        collectionView.verticalScrollIndicatorInsets.bottom = bottomInset
+        setBottomContentInset(bottomInset)
         guard collectionView.bounds.width > 0 else {
             // History can arrive during UIViewControllerRepresentable's first
             // update, before Auto Layout assigns the viewport its real width.

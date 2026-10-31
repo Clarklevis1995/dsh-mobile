@@ -63,7 +63,8 @@ struct SettingsView: View {
 
     private var selectedPermissionName: String {
         guard let id = store.permissionDefault else { return String(localized: "未读取") }
-        return store.permissionDefaultOptions.first(where: { $0.value == id })?.name ?? id
+        let option = store.permissionDefaultOptions.first(where: { $0.value == id })
+        return L10n.permissionName(for: id, fallback: option?.name)
     }
 
     private var defaultsAreLoading: Bool {
@@ -594,7 +595,7 @@ private struct DefaultPermissionChoice: Identifiable, Hashable {
 
     init(_ option: GatewayPermissionOption) {
         id = option.value
-        title = option.name
+        title = L10n.permissionName(for: option.value, fallback: option.name)
         description = option.description ?? option.name
     }
 }

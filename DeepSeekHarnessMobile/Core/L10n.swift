@@ -76,12 +76,31 @@ enum L10n {
 
     // MARK: Permission labels
 
-    static func permissionName(for id: String) -> String {
+    /// Prefer the stable protocol identifier for built-in permissions. Gateway
+    /// display names may be raw IDs or English descriptions, while the app's
+    /// source language and catalog already define the corresponding labels.
+    /// Deployment-specific names remain visible so an operator's custom label
+    /// is not silently replaced by the built-in translation.
+    static func permissionName(for id: String, fallback: String? = nil, bundle: Bundle = .main) -> String {
+        let serverName = fallback?.trimmingCharacters(in: .whitespacesAndNewlines)
+        func isBuiltInName(_ names: Set<String>) -> Bool {
+            guard let serverName, !serverName.isEmpty else { return true }
+            return serverName == id || names.contains(serverName)
+        }
         switch id {
-        case "read-only": String(localized: "只读")
-        case "workspace-write": String(localized: "工作区写入")
-        case "danger-full-access": String(localized: "完全访问")
-        default: id
+        case "ask":
+            return isBuiltInName(["Ask", "Ask every time"]) ? String(localized: "每次询问", bundle: bundle) : (serverName ?? id)
+        case "read-only":
+            return isBuiltInName(["Read", "Read-only", "Read Only", "Can read the workspace but not modify files"])
+                ? String(localized: "只读", bundle: bundle) : (serverName ?? id)
+        case "workspace-write":
+            return isBuiltInName(["Workspace write", "Workspace Write", "Can read and write within the current workspace"])
+                ? String(localized: "工作区写入", bundle: bundle) : (serverName ?? id)
+        case "danger-full-access":
+            return isBuiltInName(["Full access", "Full Access", "Can access the host environment without sandbox limits"])
+                ? String(localized: "完全访问", bundle: bundle) : (serverName ?? id)
+        default:
+            return serverName ?? id
         }
     }
 
