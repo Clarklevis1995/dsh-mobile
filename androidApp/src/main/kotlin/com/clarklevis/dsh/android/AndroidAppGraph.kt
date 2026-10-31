@@ -9,7 +9,6 @@ import com.clarklevis.dsh.android.platform.AndroidGatewayDiagnostics
 import com.clarklevis.dsh.android.platform.AndroidGatewayPreferences
 import com.clarklevis.dsh.android.platform.AndroidImagePreprocessor
 import com.clarklevis.dsh.android.platform.AndroidNetworkMonitor
-import com.clarklevis.dsh.android.platform.OkHttpGatewayTransport
 import com.clarklevis.dsh.shared.gateway.GatewayRuntime
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
@@ -54,10 +53,13 @@ class AndroidAppGraph(
         AndroidAgentNotificationManager(application)
     }
     val networkMonitor: GatewayNetworkMonitor = networkMonitorOverride ?: AndroidNetworkMonitor(application)
-    val transport: GatewayTransport = transportOverride ?: com.clarklevis.dsh.shared.gateway.SplitGatewayTransport(
-        OkHttpGatewayTransport(diagnostics = diagnostics),
-        OkHttpGatewayTransport(diagnostics = diagnostics)
-    )
+    val transport: GatewayTransport = transportOverride ?: com.clarklevis.dsh.android.platform.RtcGatewayTransport(application, gatewayScope, diagnostics)
+    internal val connectionMethod: kotlinx.coroutines.flow.StateFlow<String>
+        get() = (transport as? com.clarklevis.dsh.android.platform.RtcGatewayTransport)?.connectionMethod
+            ?: kotlinx.coroutines.flow.MutableStateFlow("WebSocket")
+    internal val connectionPaths
+        get() = (transport as? com.clarklevis.dsh.android.platform.RtcGatewayTransport)?.connectionPaths
+            ?: kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, com.clarklevis.dsh.shared.transport.RtcSelectedPath>())
     val gatewayRuntime = GatewayRuntime(
         transport = transport,
         preferences = preferences,

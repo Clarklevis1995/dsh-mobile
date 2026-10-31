@@ -2,12 +2,15 @@ import SwiftUI
 import WebKit
 import MarkdownUI
 import Charts
+import DeepSeekHarnessShared
 
 struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var store: AppStore
     @State private var pendingPermission: DefaultPermissionChoice?
     @State private var observedGatewayState: ConnectionState?
+    @State private var observedConnectionMethod = ""
+    @State private var observedConnectionPaths: [String: RtcSelectedPath] = [:]
     @State private var showsPrivacyPolicy = false
     @State private var showsReleaseNotes = false
     @AppStorage(AppFontScale.key) private var fontScale = 1.0
@@ -169,6 +172,19 @@ struct SettingsView: View {
                         Text("Port \(port)").foregroundStyle(.secondary)
                     }
                 }
+                LabeledContent("连接方式", value: gatewayState.isConnected
+                    ? (observedConnectionMethod.isEmpty ? "WebSocket" : String(localized: String.LocalizationValue(observedConnectionMethod))) : String(localized: "未连接"))
+                    .accessibilityIdentifier("gateway-connection-method")
+                if gatewayState.isConnected && observedConnectionMethod == "WebRTC" {
+                    GatewayConnectionPathView(paths: observedConnectionPaths)
+                }
+                NavigationLink {
+                    GatewayNetworkDiagnosticsView(gateway: store.gateway)
+                        .id(ObjectIdentifier(store.gateway))
+                } label: {
+                    LabeledContent("网络检测", value: String(localized: "实时延迟与丢包"))
+                }
+                .accessibilityIdentifier("network-diagnostics-entry")
                 Button(gatewayState.isConnected ? String(localized: "断开连接") : String(localized: "连接")) {
                     if gatewayState.isConnected {
                         store.disconnect()
@@ -246,8 +262,10 @@ struct SettingsView: View {
                 .accessibilityIdentifier("storage-space-settings-row")
             }
 
+            LogExportSection()
+
             Section("关于") {
-                releaseRow("当前版本", value: appVersion, repository: "dsh-mobile", version: appVersion)
+                releaseRow("当前版本（去给作者Star🌟）", value: appVersion, repository: "dsh-mobile", version: appVersion)
                 releaseRow("要求网关版本", value: releaseInfo.map { "≥ \($0.minimumGatewayVersion)" } ?? "未提供",
                            repository: "dsh-plugin-mobile-gateway", version: releaseInfo?.minimumGatewayVersion)
                 releaseRow("已连接网关版本", value: !gatewayState.isConnected ? "未连接" :
@@ -263,6 +281,8 @@ struct SettingsView: View {
             await store.refreshCacheStorage()
             if gatewayState.isConnected { store.refreshPlugins() }
         }
+        .onReceive(store.gateway.$connectionMethod) { observedConnectionMethod = $0 }
+        .onReceive(store.gateway.$connectionPaths) { observedConnectionPaths = $0 }
         .onReceive(store.gateway.$state) { state in
             let wasConnected = observedGatewayState?.isConnected ?? state.isConnected
             observedGatewayState = state
@@ -579,7 +599,6 @@ private struct DefaultConfigurationRow: View {
                     .controlSize(.small)
             } else {
                 Text(value)
-                    .appFont(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -913,6 +932,7 @@ private struct DefaultModelCard: View {
                     Text("当前使用")
                         .appFont(.caption.weight(.semibold))
                         .foregroundStyle(.white)
+                        .fixedSize()
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                         .background(.black, in: Capsule())
@@ -922,10 +942,11 @@ private struct DefaultModelCard: View {
             .onTapGesture { if !isBusy { onSelectModel() } }
 
             if !efforts.isEmpty {
-                HStack(spacing: 8) {
+                ReasoningEffortFlowLayout(spacing: 8) {
                     Text("思考等级")
                         .appFont(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize()
                     ForEach(efforts) { effort in
                         let isCurrentEffort = isSelected && effort.id == currentEffort
                         Button {
@@ -933,6 +954,7 @@ private struct DefaultModelCard: View {
                         } label: {
                             Text(effort.name)
                                 .appFont(.caption.weight(.medium))
+                                .fixedSize()
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
                                 .background(isCurrentEffort ? Color.primary : Color.secondary.opacity(0.12), in: Capsule())
@@ -941,8 +963,8 @@ private struct DefaultModelCard: View {
                         .buttonStyle(.plain)
                         .disabled(isBusy)
                     }
-                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -954,6 +976,60 @@ private struct DefaultModelCard: View {
                 .stroke(isSelected ? Color.primary : Color.secondary.opacity(0.18), lineWidth: isSelected ? 1.5 : 1)
         }
         .opacity(isBusy ? 0.7 : 1)
+    }
+}
+
+/// 按实际可用宽度排列完整胶囊，空间不足时整颗换行。
+private struct ReasoningEffortFlowLayout: Layout {
+    let spacing: CGFloat
+
+    private struct Row {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = rows(for: proposal.width, subviews: subviews)
+        return CGSize(
+            width: rows.map(\.width).max() ?? 0,
+            height: rows.reduce(0) { $0 + $1.height } + CGFloat(max(0, rows.count - 1)) * spacing
+        )
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in rows(for: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(size)
+                )
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private func rows(for width: CGFloat?, subviews: Subviews) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let gap = row.indices.isEmpty ? 0 : spacing
+            if !row.indices.isEmpty && row.width + gap + size.width > (width ?? .infinity) {
+                rows.append(row)
+                row = Row()
+            }
+            row.width += (row.indices.isEmpty ? 0 : spacing) + size.width
+            row.height = max(row.height, size.height)
+            row.indices.append(index)
+        }
+        if !row.indices.isEmpty { rows.append(row) }
+        return rows
     }
 }
 
@@ -1214,4 +1290,58 @@ private struct StorageCategoryDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("storage-category-detail")
     }
+}
+
+
+private struct LogExportSection: View {
+    @State private var busy = false
+    @State private var presentation: LogExportPresentation?
+    @State private var failed = false
+
+    var body: some View {
+        Section {
+            Button("导出日志") { prepare(share: false) }
+                .accessibilityIdentifier("export-logs")
+            Button("分享日志") { prepare(share: true) }
+                .accessibilityIdentifier("share-logs")
+        } header: { Text("日志")
+        } footer: {
+            Text("按小时保存，日志和导出副本合计不超过 200 MB，自动清理最旧日志。")
+            if busy { ProgressView() }
+        }
+        .disabled(busy)
+        .sheet(item: $presentation) { item in
+            LogExportSheet(urls: item.urls, share: item.share)
+        }
+        .alert("日志导出失败，请重试", isPresented: $failed) {
+            Button("好", role: .cancel) {}
+        }
+    }
+
+    private func prepare(share: Bool) {
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                let urls = try await LocalAppLog.shared.export()
+                presentation = LogExportPresentation(urls: urls, share: share)
+            } catch { failed = true }
+        }
+    }
+}
+
+private struct LogExportPresentation: Identifiable {
+    let id = UUID()
+    let urls: [URL]
+    let share: Bool
+}
+
+private struct LogExportSheet: UIViewControllerRepresentable {
+    let urls: [URL]
+    let share: Bool
+    func makeUIViewController(context: Context) -> UIViewController {
+        if share { return UIActivityViewController(activityItems: urls, applicationActivities: nil) }
+        return UIDocumentPickerViewController(forExporting: urls, asCopy: true)
+    }
+    func updateUIViewController(_ controller: UIViewController, context: Context) {}
 }

@@ -212,28 +212,21 @@ struct WorkspaceView: View {
             size: size, accessibilityText: dynamicTypeSize.isAccessibilitySize
         )
         return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: usesColumns ? 40 : 18) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        header(openDrawer: openDrawer, usesVerticalToolbar: usesVerticalToolbar)
-                            .id("workspace-header")
-                        GatewaySwitcherBar()
-                    }
-                    if usesColumns {
-                        HStack(alignment: .top, spacing: 48) {
-                            workspaceActions.frame(width: min(440, size.width * 0.38))
-                            recentSessions.frame(maxWidth: .infinity)
-                        }
-                    } else {
-                        Spacer(minLength: 44)
-                        workspaceActions
-                        recentSessions
-                    }
+            VStack(alignment: .leading, spacing: usesColumns ? 40 : 18) {
+                VStack(alignment: .leading, spacing: 6) {
+                    header(openDrawer: openDrawer, usesVerticalToolbar: usesVerticalToolbar)
+                        .id("workspace-header")
+                    GatewaySwitcherBar()
                 }
-                .padding(.bottom, 8)
-                ForEach(sessionList.snapshot.entries) { entry in
-                    sessionListEntry(entry)
-                        .padding(.leading, usesColumns ? min(440, size.width * 0.38) + 48 : 0)
+                if usesColumns {
+                    HStack(alignment: .top, spacing: 48) {
+                        workspaceActions.frame(width: min(440, size.width * 0.38))
+                        sessionListContent.frame(maxWidth: .infinity)
+                    }
+                } else {
+                    Spacer(minLength: 44)
+                    workspaceActions
+                    sessionListContent
                 }
             }
             .padding(.horizontal, usesColumns ? 40 : 22)
@@ -293,6 +286,16 @@ struct WorkspaceView: View {
             }
             if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(store.searchCoverage).appFont(.caption).foregroundStyle(.white.opacity(0.55))
+            }
+        }
+    }
+
+    /// 标题、搜索与列表同属一栏，列表起点不受左侧操作区高度影响。
+    private var sessionListContent: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            recentSessions.padding(.bottom, 8)
+            ForEach(sessionList.snapshot.entries) { entry in
+                sessionListEntry(entry)
             }
         }
     }

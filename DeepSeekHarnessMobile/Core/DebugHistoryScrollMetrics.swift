@@ -518,7 +518,7 @@ final class DebugHistoryScrollMetrics {
             for file in files.dropFirst(8) { try? manager.removeItem(at: file) }
         } catch {
             // 仅诊断导出失败，不更改产品状态，不写会话数据到日志。
-            NSLog("DebugHistoryScrollMetrics export failed")
+            appLog("DebugHistoryScrollMetrics export failed")
         }
     }
 }

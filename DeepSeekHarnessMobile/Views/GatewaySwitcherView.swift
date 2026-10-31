@@ -22,12 +22,12 @@ struct GatewaySwitcherBar: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("当前主机：\(hosts.activeProfile?.displayName ?? String(localized: "未选择"))，切换主机")
-        .sheet(isPresented: $showsHosts) { GatewaySwitcherSheet() }
+        .sheet(isPresented: $showsHosts) { GatewaySwitcherSheet(hosts: hosts) }
     }
 }
 
-private struct GatewaySwitcherSheet: View {
-    @EnvironmentObject private var hosts: MultiGatewayStore
+struct GatewaySwitcherSheet: View {
+    @ObservedObject var hosts: MultiGatewayStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var editMode: EditMode = .inactive

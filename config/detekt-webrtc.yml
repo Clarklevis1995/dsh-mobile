@@ -1,0 +1,4 @@
+# 与 ktlint 的 Kotlin 官方风格行宽一致；其余规则使用 detekt 默认配置。
+style:
+  MaxLineLength:
+    maxLineLength: 140

@@ -41,6 +41,7 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
 
     override fun onCreate() {
         super<Application>.onCreate()
+        com.clarklevis.dsh.android.platform.LocalAppLog.start(this)
         hosts = AndroidMultiGatewayStore(this)
         maintainCacheStorage()
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
@@ -55,7 +56,7 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                android.util.Log.w("CacheStorage", "maintenance-failed reason=storage-error")
+                com.clarklevis.dsh.android.platform.LocalAppLog.w("CacheStorage", "maintenance-failed reason=storage-error")
             }
         }
     }

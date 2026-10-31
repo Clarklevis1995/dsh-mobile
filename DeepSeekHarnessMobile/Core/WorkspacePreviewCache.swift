@@ -159,10 +159,10 @@ struct WorkspacePreviewCache: Sendable {
                   (attributes[.size] as? NSNumber)?.int64Value == version.size,
                   try digest(file) == expected else { throw CocoaError(.fileReadCorruptFile) }
             try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: directory.path)
-            NSLog("[ResourceCache] hit bytes=%lld", version.size)
+            appLog("[ResourceCache] hit bytes=%lld", version.size)
             return file
         } catch {
-            NSLog("[ResourceCache] miss reason=missing-or-invalid")
+            appLog("[ResourceCache] miss reason=missing-or-invalid")
             lifetime.synchronized {
                 lifetime.release(file)
                 if isSafeManagedCacheDirectory(root), !lifetime.isLeased(directory) {
@@ -218,7 +218,7 @@ struct WorkspacePreviewCache: Sendable {
                 try FileManager.default.moveItem(at: staging, to: directory)
                 lifetime.markMutation(root)
                 lifetime.retain(finalFile)
-                NSLog("[ResourceCache] stored bytes=%lld", entry.size)
+                appLog("[ResourceCache] stored bytes=%lld", entry.size)
                 return finalFile
             }
         } catch {
@@ -271,7 +271,7 @@ struct WorkspacePreviewCache: Sendable {
         let stats = WorkspaceCacheStatistics(previewBytes: treeBytes(root),
             temporaryBytes: temporaryRoot.map(treeBytes) ?? 0,
             protectedBytes: all.filter { lifetime.isLeased($0) }.reduce(0) { $0 + treeBytes($1) })
-        NSLog("[ResourceCache] maintenance previewBytes=%lld temporaryBytes=%lld protectedBytes=%lld", stats.previewBytes, stats.temporaryBytes, stats.protectedBytes)
+        appLog("[ResourceCache] maintenance previewBytes=%lld temporaryBytes=%lld protectedBytes=%lld", stats.previewBytes, stats.temporaryBytes, stats.protectedBytes)
         return stats
     }
 
@@ -425,7 +425,7 @@ actor AppCacheMaintenance {
         let stats = AppCacheStorageStatistics(resources: files.0, databaseBytes: files.1, imageBytes: files.2,
             memoryBytes: number("memoryBytes"), memoryHits: number("memoryHits"), diskHits: number("diskHits"),
             misses: number("misses"), freeBytes: Self.freeBytes())
-        NSLog("[CacheManagement] physicalBytes=%lld protectedBytes=%lld memoryBytes=%lld pressure=%d", stats.totalBytes,
+        appLog("[CacheManagement] physicalBytes=%lld protectedBytes=%lld memoryBytes=%lld pressure=%d", stats.totalBytes,
               stats.resources.protectedBytes, stats.memoryBytes, stats.underPressure ? 1 : 0)
         return stats
     }

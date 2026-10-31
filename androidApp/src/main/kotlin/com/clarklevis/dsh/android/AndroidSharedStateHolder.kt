@@ -176,7 +176,9 @@ class AndroidSharedStateHolder(
         })
     }
     private val projectionActor = AndroidProjectionActor(
-        projection = AndroidGatewayProjection(store, onResubscribe = { sessionId ->
+        projection = AndroidGatewayProjection(store, nowMonotonicSeconds = {
+            if (graph == null) System.nanoTime() / 1e9 else android.os.SystemClock.elapsedRealtimeNanos() / 1e9
+        }, onResubscribe = { sessionId ->
             graph?.let { appGraph ->
                 appGraph.gatewayScope.launch {
                     if (appGraph.gatewayRuntime.state.value.connection == GatewayConnectionState.CONNECTED) {
@@ -288,6 +290,18 @@ class AndroidSharedStateHolder(
     var snapshot: SharedMobileSnapshot by mutableStateOf(projectionActor.initialSnapshot)
         private set
     var wirePayload: String by mutableStateOf(DEFAULT_WIRE_PAYLOAD)
+    internal fun observeNetworkDiagnostics(): kotlinx.coroutines.flow.Flow<com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSnapshot> {
+        val appGraph = graph ?: return kotlinx.coroutines.flow.flowOf(
+            com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSnapshot()
+        )
+        return appGraph.gatewayRuntime.monitorNetworkDiagnostics { appGraph.connectionMethod.value }
+    }
+
+    internal val connectionMethod get() = graph?.connectionMethod
+        ?: kotlinx.coroutines.flow.MutableStateFlow("WebSocket")
+    internal val connectionPaths get() = graph?.connectionPaths
+        ?: kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, com.clarklevis.dsh.shared.transport.RtcSelectedPath>())
+
     var gatewayState: GatewayRuntimeState by mutableStateOf(GatewayRuntimeState())
         private set
     var scheduledTasks: List<MobileScheduledTask> by mutableStateOf(emptyList())
@@ -1339,7 +1353,7 @@ class AndroidSharedStateHolder(
             projectionActor.loadHistoryImmediate(sessionId, older = true)
             return true
         }
-        android.util.Log.d("HistoryPresentation", "stage=request-start rows=${snapshot.conversation.size}")
+        com.clarklevis.dsh.android.platform.LocalAppLog.d("HistoryPresentation", "stage=request-start rows=${snapshot.conversation.size}")
         appGraph.gatewayScope.launch {
             try {
                 projectionActor.loadHistory(sessionId, older = true, offline = offlineBrowsing) {
@@ -1356,7 +1370,7 @@ class AndroidSharedStateHolder(
                     historyPagingSessionIds = historyPagingSessionIds - sessionId
                     platformError = appText("历史记录加载失败")
                 }
-                android.util.Log.w("HistoryPresentation", "stage=request-failed type=${error.javaClass.simpleName}")
+                com.clarklevis.dsh.android.platform.LocalAppLog.w("HistoryPresentation", "stage=request-failed type=${error.javaClass.simpleName}")
             }
         }
         return true
@@ -3304,7 +3318,9 @@ class AndroidSharedStateHolder(
                                         defaultConfigurationLoadingKinds =
                                             defaultConfigurationLoadingKinds - event.requestType
                                         clearWorkspaceRequestLoading(event.requestType)
-                                        platformError = "${event.requestType}: ${event.reason}"
+                                        platformError = if (event.reason == "transport/ws-required") {
+                                            appText("正在切换到 WebSocket 以发送大消息，草稿已保留，请连接后重新发送。")
+                                        } else "${event.requestType}: ${event.reason}"
                                         if (event.requestType == "history") {
                                             event.targetSessionId?.let {
                                                 historyPagingSessionIds = historyPagingSessionIds - it

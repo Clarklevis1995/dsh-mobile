@@ -2,7 +2,7 @@ import XCTest
 import UIKit
 
 final class ModelMenuLayoutUITests: XCTestCase {
-    func testAndroidStyleMenuAtStandardAndMaximumFontSize() throws {
+    func testNativeModelSubmenusAtStandardAndMaximumFontSize() throws {
         continueAfterFailure = false
         for scale in ["1.0", "1.5"] {
             let app = XCUIApplication()
@@ -20,40 +20,74 @@ final class ModelMenuLayoutUITests: XCTestCase {
             session.tap()
             let toggle = app.buttons["conversation-model-menu-toggle"]
             XCTAssertTrue(toggle.waitForExistence(timeout: 10))
-            try XCTSkipUnless(toggle.isEnabled, "需要会话模型目录")
+            try XCTSkipUnless(NSPredicate { _, _ in toggle.isEnabled }.evaluateAfterWaiting(timeout: 10),
+                              "需要可切换模型的会话目录")
+            let currentModelTitle = try XCTUnwrap(toggle.staticTexts.allElementsBoundByIndex.first?.label)
+            let hasSelectedEffort = toggle.staticTexts.count > 1
+            let outside = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.4))
+            let modelSubmenu = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "模型")).firstMatch
+            let effortSubmenu = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "推理等级")).firstMatch
+
             toggle.tap()
-            let menu = app.otherElements["conversation-model-menu"]
-            XCTAssertTrue(menu.waitForExistence(timeout: 5))
-            XCTAssertTrue(menu.buttons.firstMatch.isHittable)
-            XCTAssertEqual(app.sheets.count, 0, "模型选择应贴着输入区浮层展示")
-            let options = menu.buttons.allElementsBoundByIndex
-            let selectedOptions = options.filter(\.isSelected)
-            XCTAssertFalse(selectedOptions.isEmpty)
-            if options.contains(where: { $0.identifier.hasPrefix("model-effort-") }) {
-                XCTAssertTrue(options.first?.identifier.hasPrefix("model-effort-") == true, "推理等级应置于模型分组上方")
-            }
-            for option in options where option.isHittable {
-                let symbol = option.isSelected ? "checkmark" : "circle"
-                let indicator = option.images["\(option.identifier)-\(symbol)"]
-                XCTAssertTrue(indicator.exists)
-                XCTAssertLessThan(indicator.frame.midX, option.frame.midX, "对号和未选中圆圈应统一放在左侧")
-            }
-            let screenshot = XCTAttachment(screenshot: app.screenshot())
-            screenshot.name = "安卓同款模型菜单-字号\(scale)"
-            screenshot.lifetime = .keepAlways
-            add(screenshot)
-            let outside = app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.4))
+            XCTAssertTrue(modelSubmenu.waitForExistence(timeout: 5))
+            XCTAssertTrue(effortSubmenu.exists)
+            let root = app.collectionViews.containing(.button, identifier: modelSubmenu.label).firstMatch
+            XCTAssertEqual(root.buttons.count, 2, "一级菜单只包含模型和推理等级两个入口")
+            XCTAssertLessThan(modelSubmenu.frame.midY, effortSubmenu.frame.midY)
+            XCTAssertTrue(modelSubmenu.label.contains(currentModelTitle) || root.staticTexts[currentModelTitle].exists)
+            XCTAssertEqual(app.sheets.count, 0, "模型选择继续使用原生菜单")
+            attachScreenshot(app, name: "模型二级菜单-一级-字号\(scale)")
+
+            modelSubmenu.tap()
+            let models = app.collectionViews.containing(.button, identifier: currentModelTitle).firstMatch
+            XCTAssertTrue(models.waitForExistence(timeout: 5))
+            XCTAssertFalse(models.buttons.allElementsBoundByIndex.filter { $0.images["checkmark"].exists }.isEmpty)
+            assertIndicators(in: models)
+            attachScreenshot(app, name: "模型二级菜单-模型选择-字号\(scale)")
             outside.tap()
-            XCTAssertFalse(menu.exists)
+            XCTAssertFalse(models.exists)
+
             toggle.tap()
-            XCTAssertTrue(menu.waitForExistence(timeout: 5))
-            // 再次点击当前选项，只验证关闭行为，不改变用户的模型或推理等级。
-            let selected = try XCTUnwrap(menu.buttons.allElementsBoundByIndex.first(where: {
-                $0.isSelected && $0.isHittable
-            }))
-            selected.tap()
-            XCTAssertFalse(menu.exists)
+            XCTAssertTrue(effortSubmenu.waitForExistence(timeout: 5))
+            if effortSubmenu.isEnabled {
+                effortSubmenu.tap()
+                let efforts = app.collectionViews.containing(.image, identifier: "checkmark").firstMatch
+                if hasSelectedEffort {
+                    XCTAssertTrue(efforts.waitForExistence(timeout: 5))
+                    assertIndicators(in: efforts)
+                    XCTAssertFalse(efforts.buttons[currentModelTitle].exists, "等级子菜单不混入模型选项")
+                    attachScreenshot(app, name: "模型二级菜单-推理等级-字号\(scale)")
+                    // 重选当前等级，验证选择后关闭菜单，不改变会话配置。
+                    let selected = try XCTUnwrap(efforts.buttons.allElementsBoundByIndex.first {
+                        $0.images["checkmark"].exists && $0.isHittable
+                    })
+                    selected.tap()
+                    XCTAssertFalse(efforts.exists)
+                } else {
+                    outside.tap()
+                }
+            } else {
+                XCTAssertFalse(hasSelectedEffort, "不支持推理等级的模型不应显示旧模型的等级")
+                outside.tap()
+            }
         }
+    }
+
+    private func assertIndicators(in menu: XCUIElement) {
+        for option in menu.buttons.allElementsBoundByIndex where option.isHittable {
+            let indicator = option.images.matching(NSPredicate(
+                format: "identifier IN %@", ["checkmark", "circle"]
+            )).firstMatch
+            XCTAssertTrue(indicator.exists)
+            XCTAssertLessThan(indicator.frame.midX, option.frame.midX)
+        }
+    }
+
+    private func attachScreenshot(_ app: XCUIApplication, name: String) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 }
 

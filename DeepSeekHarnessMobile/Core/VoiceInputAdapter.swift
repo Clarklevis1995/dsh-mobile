@@ -427,7 +427,7 @@ func finishVoicePCMConversion(_ converter: AVAudioConverter, format: AVAudioForm
 }
 
 #if DEBUG
-private let voiceInputLatencyLogger = Logger(subsystem: "ai.dsh.mobile.ios", category: "voice-input-latency")
+private let voiceInputLatencyLogger = LocalLogger(subsystem: "ai.dsh.mobile.ios", category: "voice-input-latency")
 #endif
 
 /// 系统单调时钟便于对齐 UI 与硬件线程日志；不输出用户音频或文字。
@@ -435,7 +435,7 @@ func traceVoiceInputLatency(_ stage: String, since: TimeInterval? = nil) {
 #if DEBUG
     let uptime = ProcessInfo.processInfo.systemUptime
     let elapsed = since.map { (uptime - $0) * 1000 } ?? 0
-    voiceInputLatencyLogger.notice("VoiceInputLatency stage=\(stage, privacy: .public) uptime=\(uptime) durationMs=\(elapsed)")
+    voiceInputLatencyLogger.notice("VoiceInputLatency stage=\(stage) uptime=\(uptime) durationMs=\(elapsed)")
 #endif
 }
 
@@ -444,6 +444,6 @@ func traceVoiceInputLatency(_ stage: String, since: TimeInterval? = nil) {
 private func traceVoiceHaptic(_ cue: String) {
 #if DEBUG
     let allowed = AVAudioSession.sharedInstance().allowHapticsAndSystemSoundsDuringRecording
-    voiceInputLatencyLogger.notice("VoiceInputHaptic cue=\(cue, privacy: .public) recordingAllowed=\(allowed)")
+    voiceInputLatencyLogger.notice("VoiceInputHaptic cue=\(cue) recordingAllowed=\(allowed)")
 #endif
 }

@@ -52,6 +52,75 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class GatewayRuntimeIntegrationTest {
     @Test
+    fun networkDiagnosticsAreColdCorrelatedAndCancelledWithThePage() = runTest {
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(transport, FakePreferences(), FakeCredentials(), FakeAttachmentCache(),
+            FakeNetworkMonitor(), FakeClock(0), backgroundScope, diagnosticsNow = { testScheduler.currentTime.toDouble() })
+        val states = mutableListOf<com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSnapshot>()
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
+        runCurrent()
+        runtime.connect("ws://localhost/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","capabilities":["network-diagnostics-v1"]}""")
+        runCurrent()
+        fun probes() = transport.sentPayloads.filter { it.contains("network-check:") }
+        val flow = runtime.monitorNetworkDiagnostics { "WebSocket" }
+        advanceTimeBy(2000)
+        runCurrent()
+        assertTrue(probes().isEmpty(), "未订阅检测页时不发探测包")
+        val collector = backgroundScope.launch { flow.collect(states::add) }
+        runCurrent()
+        assertEquals(1, probes().size)
+        val id = wireJson.parseToJsonElement(probes().single()).jsonObject.getValue("requestId").jsonPrimitive.content
+        advanceTimeBy(10)
+        transport.receive("""{"kind":"pong"}""")
+        runCurrent()
+        advanceTimeBy(15)
+        transport.receive("""{"kind":"pong","requestId":"$id"}""")
+        runCurrent()
+        advanceTimeBy(1000)
+        runCurrent()
+        assertEquals(25.0, states.last().roundTripMs)
+        assertEquals(0.0, states.last().lossPercent)
+        assertTrue(states.last().receivedBytesPerSecond > 0)
+        assertTrue(events.filterIsInstance<GatewayRuntimeEvent.Frame>().none { it.frame.requestId == id })
+        collector.cancel()
+        runCurrent()
+        val count = probes().size
+        advanceTimeBy(6000)
+        runCurrent()
+        assertEquals(count, probes().size, "关闭页面后不再发送探测")
+        val resumed = backgroundScope.launch { flow.collect(states::add) }
+        runCurrent()
+        assertEquals(0, states.last().timedOutProbes, "取消的在途探测不计入丢包")
+        assertEquals(-1.0, states.last().roundTripMs)
+        resumed.cancel()
+        runCurrent()
+    }
+
+    @Test
+    fun networkDiagnosticsDoNotProbeUnadvertisedOldGateway() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport)
+        val states = mutableListOf<com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSnapshot>()
+        runCurrent()
+        runtime.connect("ws://localhost/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","capabilities":[]}""")
+        runCurrent()
+        val collector = backgroundScope.launch { runtime.monitorNetworkDiagnostics { "WebSocket" }.collect(states::add) }
+        runCurrent()
+        advanceTimeBy(4000)
+        runCurrent()
+        assertFalse(states.last().supported)
+        assertEquals(-1.0, states.last().lossPercent)
+        assertTrue(transport.sentPayloads.none { it.contains("network-check:") })
+        collector.cancel()
+        runCurrent()
+    }
+
+    @Test
     fun fileUploadUsesControlAndReceiptMessageUsesConversation() = runTest {
         val control = FakeTransport()
         val conversation = FakeTransport()
@@ -354,6 +423,61 @@ class GatewayRuntimeIntegrationTest {
         transport.receive("""{"kind":"queue-item-updated","sessionId":"a","itemId":"q2","action":"remove","accepted":true}""")
         runCurrent()
         assertEquals("q2", events.filterIsInstance<GatewayRuntimeEvent.Frame>().last { it.frame.kind == "queue-item-updated" }.frame.itemId)
+    }
+
+    @Test
+    fun rtcPairingReopensWithPersistedCredentialsBeforeAnyBusinessHello() = runTest {
+        val raw = FakeTransport()
+        val upgraded = object : com.clarklevis.dsh.shared.platform.GatewayRtcTransport, GatewayTransport by raw {
+            override val conversationEvents: Flow<GatewayTransportEvent> = kotlinx.coroutines.flow.emptyFlow()
+            override fun resetRtcRecovery() = Unit
+        }
+        val credentials = FakeCredentials()
+        val runtime = GatewayRuntime(upgraded, FakePreferences(), credentials, FakeAttachmentCache(),
+            FakeNetworkMonitor(), FakeClock(0), backgroundScope)
+        runCurrent()
+        runtime.pair(encodeBase64Url(
+            """{"version":2,"publicUrl":"wss://gateway.example/ws/mobile","pairingCode":"pair-code","expiresAt":60000}"""
+        ))
+        raw.opened()
+        raw.receive("""{"kind":"paired","token":"saved-token"}""")
+        runCurrent()
+        assertEquals("saved-token", credentials.tokens["wss://gateway.example/ws/mobile"])
+        raw.receive("""{"kind":"hello","protocol":3}""")
+        runCurrent()
+        assertEquals(2, raw.connectionSpecs.size)
+        assertEquals("saved-token", raw.connectionSpecs.last().bearerToken)
+        assertNull(raw.connectionSpecs.last().pairingCode)
+        assertTrue(raw.sentPayloads.isEmpty())
+        assertFalse(runtime.state.value.connection == GatewayConnectionState.CONNECTED)
+        raw.opened()
+        raw.receive("""{"kind":"hello","protocol":3}""")
+        runCurrent()
+        assertEquals(GatewayConnectionState.CONNECTED, runtime.state.value.connection)
+    }
+
+    @Test
+    fun lanPairingKeepsOriginalWebSocketWithoutRtcReopen() = runTest {
+        val raw = FakeTransport()
+        val transport = object : com.clarklevis.dsh.shared.platform.GatewayRtcTransport, GatewayTransport by raw {
+            override val conversationEvents: Flow<GatewayTransportEvent> = kotlinx.coroutines.flow.emptyFlow()
+            override fun resetRtcRecovery() = Unit
+        }
+        val credentials = FakeCredentials()
+        val runtime = GatewayRuntime(transport, FakePreferences(), credentials, FakeAttachmentCache(),
+            FakeNetworkMonitor(), FakeClock(0), backgroundScope)
+        runCurrent()
+        runtime.pair(encodeBase64Url(
+            """{"version":2,"publicUrl":"ws://192.168.1.94:3081/ws/mobile","pairingCode":"pair-code","expiresAt":60000}"""
+        ))
+        raw.opened()
+        raw.receive("""{"kind":"paired","token":"saved-token"}""")
+        runCurrent()
+        raw.receive("""{"kind":"hello","protocol":3}""")
+        runCurrent()
+        assertEquals("saved-token", credentials.tokens["ws://192.168.1.94:3081/ws/mobile"])
+        assertEquals(1, raw.connectionSpecs.size)
+        assertEquals(GatewayConnectionState.CONNECTED, runtime.state.value.connection)
     }
 
     @Test

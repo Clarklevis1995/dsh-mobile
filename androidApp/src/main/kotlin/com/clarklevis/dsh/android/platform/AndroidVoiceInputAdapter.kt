@@ -381,7 +381,7 @@ private class AndroidVoiceRecorder : AndroidVoiceAudioCapturing {
                         }
                         val now = SystemClock.elapsedRealtime()
                         if (first || now - lastLevelAt >= LEVEL_INTERVAL_MILLISECONDS) {
-                            if (first) Log.d("VoiceInputLatency", "stage=first-pcm uptimeMs=$now")
+                            if (first) com.clarklevis.dsh.android.platform.LocalAppLog.d("VoiceInputLatency", "stage=first-pcm uptimeMs=$now")
                             first = false
                             lastLevelAt = now
                             val rms = sqrt(energy / count).toFloat()
@@ -451,6 +451,6 @@ private class VoiceInputLatency(
 
     fun mark(stage: String) {
         if (!enabled || touchedAt == 0L) return
-        Log.d("VoiceInputLatency", "$stage elapsed=${SystemClock.uptimeMillis() - touchedAt}ms")
+        com.clarklevis.dsh.android.platform.LocalAppLog.d("VoiceInputLatency", "$stage elapsed=${SystemClock.uptimeMillis() - touchedAt}ms")
     }
 }

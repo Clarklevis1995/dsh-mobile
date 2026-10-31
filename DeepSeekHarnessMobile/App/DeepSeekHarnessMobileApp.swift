@@ -1,4 +1,5 @@
 import SwiftUI
+import DeepSeekHarnessShared
 
 private final class AgentNotificationAppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
@@ -13,6 +14,8 @@ private final class AgentNotificationAppDelegate: NSObject, UIApplicationDelegat
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        ChatCacheDiagnostics.shared.localLogWriter = { LocalAppLog.shared.write($0) }
+        LocalAppLog.shared.write("INFO App started")
         _ = AgentUserNotificationManager.shared
         return true
     }

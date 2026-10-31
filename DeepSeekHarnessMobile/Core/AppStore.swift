@@ -2,6 +2,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 import DeepSeekHarnessShared
 
+/// 连续时钟包含设备休眠时间，同时不受手机日期、时区或校时影响。
+enum AgentTurnMonotonicClock {
+    private static let clock = ContinuousClock()
+    private static let origin = clock.now
+    static var now: Double {
+        let elapsed = origin.duration(to: clock.now).components
+        return Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
+    }
+}
+
 struct AgentLiveActivityProgress: Equatable {
     let headline: String
     let detail: String?
@@ -749,6 +759,7 @@ final class AppStore: ObservableObject {
     private var hasHandledColdLaunchConnection = false
     private var isCheckingColdLaunchCredential = false
     private let backgroundExecutionController: AgentBackgroundExecutionController
+    private let turnTiming = SharedTurnTimingStore()
     private let agentNotifications: AgentUserNotificationManager
     private static let defaultConfigurationRequestKinds: Set<String> = [
         "agent-presets", "defaults", "default-model", "set-default", "save-default-model"
@@ -946,6 +957,10 @@ final class AppStore: ObservableObject {
         }
     }
 
+    var selectedTurnTiming: SharedTurnTimingSnapshot? {
+        selectedSessionId.flatMap { turnTiming.snapshot(sessionId: $0) }
+    }
+
     var selectedEvents: [SessionEvent] {
         guard let selectedSessionId else { return [] }
         return isShowingSearchContext ? searchContextRecords : events[selectedSessionId, default: []]
@@ -1070,7 +1085,7 @@ final class AppStore: ObservableObject {
                 fontScale: Double(UIFont.appPreferredFont(forTextStyle: .body).pointSize / 17),
                 startedAt: ProcessInfo.processInfo.systemUptime, beforeSequence: before,
                 minimumEventSequence: (kmpHistoryStore.lastEventSequence ?? 0) + 1)
-            NSLog("history-read-batch stage=start")
+            appLog("history-read-batch stage=start")
         }
         loadHistory(for: sessionID, older: true, presentationOperationID: operationID)
         return historyPresentationAdmission.matches(sessionID: sessionID, operationID: operationID)
@@ -1952,6 +1967,11 @@ final class AppStore: ObservableObject {
                 ? "此会话尚未缓存，连接后可加载聊天内容" : "已到达本地缓存边界，连接后可加载更早内容"
             return
         }
+        if !older, sessionId == selectedSessionId, gateway.subscriptionRecoveryExhausted {
+            // 用户点击重试后开启新的恢复周期，并隔离上一连接的迟到确认。
+            connect()
+            return
+        }
         if usesAssistantStream && !older && sessionId == selectedSessionId {
             subscribeToSession(sessionId)
         } else {
@@ -2031,6 +2051,7 @@ final class AppStore: ObservableObject {
         }
     }
     func resumeWorkspace() {
+        gateway.cancelSubscriptionRecovery()
         if let id = selectedSessionId { historyPresentationAdmission.cancel(sessionID: id, outcome: .detached) }
         preparedConversationActivationKey = nil
         activeConversationActivationKey = nil
@@ -2628,6 +2649,10 @@ final class AppStore: ObservableObject {
             lastError = String(localized: "当前 Mobile Gateway 不支持图片，请升级并重启 dsh web。")
             return false
         }
+        guard gateway.prepareMessageTransport(text: trimmed, images: images) else {
+            lastError = String(localized: "正在切换到 WebSocket 以发送大消息，草稿已保留，请连接后重新发送。")
+            return false
+        }
         guard !sessionAgentPreset.blocksSending else { return false }
         if isShowingSearchContext { clearSearchContext(); conversationSearchTarget = nil }
         if !isViewingTeamMember, let command = kmpSlashCommandStore.commandExecutionForInput(text: trimmed) {
@@ -2808,8 +2833,17 @@ final class AppStore: ObservableObject {
 
     private func handle(_ frame: GatewayFrame) {
         if frame.kind == "error", frame.code == "subscription-timeout",
-           frame.sessionId == nil || frame.sessionId != selectedSessionId || preparedConversationActivationKey == nil {
+           frame.sessionId == nil || frame.sessionId != selectedSessionId || preparedConversationActivationKey != frame.sessionId {
             // 后台监控或已离开的会话不能通过旧订阅超时打断当前页面。
+            return
+        }
+        if frame.kind == "error", frame.code == "subscription-timeout", let sessionID = frame.sessionId {
+            if gateway.recoverSubscription(sessionID: sessionID) {
+                historyLoadErrors[sessionID] = nil
+                return
+            }
+            // 自动恢复耗尽后保留聊天内容，通过现有历史错误条提供手动重试。
+            recordHistoryFailure(frame.message ?? String(localized: "历史记录加载超时，请重试"), sessionID: sessionID)
             return
         }
         if frame.kind.hasPrefix("file-upload-") || frame.requestType?.hasPrefix("file-upload-") == true {
@@ -2831,6 +2865,9 @@ final class AppStore: ObservableObject {
             return
         }
         if frame.kind == "hello" { gateway.resetSubscriptionRequests() }
+        if frame.kind == "hello", let serverTime = frame.at ?? frame.time {
+            turnTiming.observeServerTime(epochSeconds: serverTime, nowMonotonicSeconds: AgentTurnMonotonicClock.now)
+        }
         if frame.kind == "subscribed", !gateway.acceptSubscriptionAck(sessionID: frame.sessionId) { return }
         if frame.kind == "error", frame.requestType == "subscribe" { gateway.resetSubscriptionRequests() }
         if ["hello", "sessions", "session-status", "projection-baseline", "agent-team", "agent-team-updated", "subagents", "subagents-updated", "subagent-identity-updated", "subagent-timing-updated", "session-snapshot", "history", "error"].contains(frame.kind),
@@ -2932,6 +2969,7 @@ final class AppStore: ObservableObject {
             let update = assistantStreamState.acceptJson(json: String(decoding: encoded, as: UTF8.self))
             do {
                 for id in update.invalidatedSessionIds {
+                    turnTiming.clear(sessionId: id)
                     invalidateChatCache(sessionID: id)
                     historySyncEngine.finish(sessionID: id)
                     try kmpHistoryStore.clear(sessionID: id)
@@ -2957,6 +2995,9 @@ final class AppStore: ObservableObject {
                 if update.resubscribe, let id = update.sessionId { subscribeToSession(id) }
                 guard update.accepted else { return }
                 if frame.kind == "assistant-stream", let id = frame.sessionId {
+                    if let serverTime = frame.frame?["time"]?.doubleValue {
+                        turnTiming.observeServerTime(epochSeconds: serverTime, nowMonotonicSeconds: AgentTurnMonotonicClock.now)
+                    }
                     let streamType = frame.frame?["type"]?.stringValue
                     if streamType == "start" {
                         cancelLiveActivityStreamUpdate(sessionID: id)
@@ -2972,6 +3013,8 @@ final class AppStore: ObservableObject {
                     }
                 }
                 if frame.kind == "session-snapshot", let id = frame.sessionId {
+                    // 到达这里的快照已通过订阅、流标识和格式校验，可以证明订阅生效。
+                    _ = gateway.acceptSubscriptionSnapshot(sessionID: id)
                     if isShowingSearchContext, conversationSearchTarget == nil { clearSearchContext() }
                     historyLoadErrors[id] = nil
                     lastError = nil
@@ -3970,6 +4013,10 @@ final class AppStore: ObservableObject {
     }
 
     private func handleSent(sessionID: String, command: JSONValue?) {
+        if sessions.first(where: { $0.id == sessionID })?.isRunning != true,
+           turnTiming.snapshot(sessionId: sessionID) == nil {
+            turnTiming.awaitStart(sessionId: sessionID, afterSequence: Int32(events[sessionID]?.last?.seq ?? -1))
+        }
         backgroundExecutionController.messageAccepted(sessionID: sessionID)
         waitingForNewSession = false
         dispatchSessionListIntent(.messageSent(sessionID: sessionID, agentPreset: agentPresetDefault))
@@ -4172,7 +4219,7 @@ final class AppStore: ObservableObject {
             while let request = self.pendingConversationHistory.removeValue(forKey: id) {
                 self.activeConversationHistory[id] = request
                 let started = DispatchTime.now().uptimeNanoseconds
-                NSLog("conversation-history-prepare-start events=%ld", request.records.count)
+                appLog("conversation-history-prepare-start events=%ld", request.records.count)
                 let input = request.input
 #if DEBUG
                 let testPreparation = self.conversationHistoryPreparationForTesting
@@ -4190,14 +4237,14 @@ final class AppStore: ObservableObject {
                       self.conversationProjectionEpochs[id, default: 0] == request.epoch,
                       self.kmpHistoryStore.projectionSnapshot(for: id)?.eventSequence == request.snapshot.eventSequence else {
                     if !self.reuseCoveredConversationHistory(prepared, request: request, sessionID: id) {
-                        NSLog("conversation-history-prepare-discard")
+                        appLog("conversation-history-prepare-discard")
                     }
                     continue
                 }
                 do {
                     if self.sessions.first(where: { $0.id == id })?.isRunning != false ||
                         self.assistantStreamState.activeAttemptId() != nil {
-                        NSLog("conversation-history-prepare-fallback reason=became-active")
+                        appLog("conversation-history-prepare-fallback reason=became-active")
                         try self.installConversationHistorySynchronously(request, sessionID: id)
                         self.scheduleConversationProjection(for: id)
                         continue
@@ -4206,11 +4253,11 @@ final class AppStore: ObservableObject {
                     let committed = try self.kmpConversationStore.commitPreparedHistory(result, sessionID: id,
                         lastSequence: request.records.last?.seq ?? -1)
                     if !committed {
-                        NSLog("conversation-history-prepare-fallback reason=revision")
+                        appLog("conversation-history-prepare-fallback reason=revision")
                         try self.installConversationHistorySynchronously(request, sessionID: id)
                     } else {
                         self.historyPresentationCommittedEpochs[id] = self.historyPresentationRequiredEpochs[id, default: 0]
-                        NSLog("conversation-history-prepare-commit elapsed_ms=%.2f",
+                        appLog("conversation-history-prepare-commit elapsed_ms=%.2f",
                             Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000)
                         try self.replayConversationTransientChunks(sessionID: id)
                     }
@@ -4218,7 +4265,7 @@ final class AppStore: ObservableObject {
                 } catch {
                     // 纯准备失败也不能遗失 pending 历史或一直显示 loading。
                     do {
-                        NSLog("conversation-history-prepare-fallback reason=prepare-error")
+                        appLog("conversation-history-prepare-fallback reason=prepare-error")
                         try self.installConversationHistorySynchronously(request, sessionID: id)
                         self.scheduleConversationProjection(for: id)
                     } catch {
@@ -4264,7 +4311,7 @@ final class AppStore: ObservableObject {
 #if DEBUG
             conversationHistoryReusedPreparationCountForTesting += 1
 #endif
-            NSLog("conversation-history-prepare-reuse cached_events=%ld latest_events=%ld", request.records.count, next.records.count)
+            appLog("conversation-history-prepare-reuse cached_events=%ld latest_events=%ld", request.records.count, next.records.count)
             return true
         } catch { return false }
     }
@@ -4289,7 +4336,7 @@ final class AppStore: ObservableObject {
         activeConversationHistory[sessionID] = nil
         conversationProjectionEpochs[sessionID, default: 0] &+= 1
         guard !evictedConversationSessionIDs.contains(sessionID) else { return }
-        NSLog("conversation-history-prepare-fallback reason=live events=%ld", request.records.count)
+        appLog("conversation-history-prepare-fallback reason=live events=%ld", request.records.count)
         try installConversationHistorySynchronously(request, sessionID: sessionID, replayTransient: replayTransient)
         scheduleConversationProjection(for: sessionID)
     }
@@ -4352,12 +4399,12 @@ final class AppStore: ObservableObject {
                 next.minimumEventSequence = (kmpHistoryStore.lastEventSequence ?? 0) + 1
                 next.responseReady = false
                 historyReadingBatches[sessionId] = next
-                NSLog("history-read-batch stage=continue rounds=%ld messages=%ld height=%.1f", batch.rounds, window.messages, window.height)
+                appLog("history-read-batch stage=continue rounds=%ld messages=%ld height=%.1f", batch.rounds, window.messages, window.height)
                 loadHistory(for: sessionId, older: true, presentationOperationID: batch.operationID)
                 return
             }
             historyReadingBatches[sessionId] = nil
-            NSLog("history-read-batch stage=ready rounds=%ld messages=%ld height=%.1f reason=%@", batch.rounds,
+            appLog("history-read-batch stage=ready rounds=%ld messages=%ld height=%.1f reason=%@", batch.rounds,
                 window.messages, window.height, reason ?? "active")
             publishConversationItems(items, for: sessionId)
             historyPresentationAdmission.terminal(sessionID: sessionId,
@@ -4406,6 +4453,10 @@ final class AppStore: ObservableObject {
 
     private func applyEvent(_ record: SessionEvent) {
         let event = record.event
+        turnTiming.receiveLiveEvent(
+            sessionId: record.sessionId, sequence: Int32(record.seq), epochSeconds: record.time,
+            eventType: event.type, nowMonotonicSeconds: AgentTurnMonotonicClock.now
+        )
         if event.type == "turn/start" {
             cancelLiveActivityStreamUpdate(sessionID: record.sessionId)
             liveActivityToolLabels[record.sessionId] = [:]
@@ -4641,6 +4692,12 @@ final class AppStore: ObservableObject {
     }
 
     private func resetOutstandingRequests() {
+        if messageSubmissionPending || commandSubmissionPending {
+            // 服务端可能已经执行，只是确认留在旧连接；切换承载不能自动重放写操作。
+            messageSubmissionTimeout?.cancel()
+            messageSubmissionPending = false
+            commandSubmissionPending = false
+        }
         deferredSessionControlEffects.removeAll()
         fileUploads.disconnected()
         for (id, task) in teamMemberProfileTimeouts {
@@ -4946,6 +5003,13 @@ final class AppStore: ObservableObject {
         if let patchKind = change.eventPatchKind {
             historyLoadErrors[change.sessionID] = nil
             events[change.sessionID] = change.events
+            if change.eventRecord == nil {
+                turnTiming.receiveHistory(sessionId: change.sessionID, boundaries: change.events.compactMap { record in
+                    guard record.event.type == "turn/start" || record.event.type == "turn/end" else { return nil }
+                    return SharedTurnBoundary(sequence: Int32(record.seq), epochSeconds: record.time,
+                                              isStart: record.event.type == "turn/start")
+                })
+            }
             if isShowingSearchContext, change.sessionID == selectedSessionId,
                let sequence = localSearchSequences[change.sessionID],
                searchTargetWasInvalidated(sessionID: change.sessionID, sequence: sequence) {

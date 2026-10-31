@@ -11,8 +11,8 @@ android {
         applicationId = "com.clarklevis.dsh.android"
         minSdk = 24
         targetSdk = 36
-        versionCode = 33
-        versionName = "1.7.12"
+        versionCode = 34
+        versionName = "1.7.13"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+    implementation("io.github.webrtc-sdk:android:144.7559.15")
     implementation(libs.backdrop)
     implementation(libs.markwon.core)
     implementation(libs.markwon.ext.strikethrough)

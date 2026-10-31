@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import DeepSeekHarnessMobile
 
@@ -9,8 +10,68 @@ private final class MigrationTestCredentials: GatewayCredentialStoring {
     func loadOrCreateDeviceID() -> String { "migration-test-device" }
 }
 
+private actor ColdLaunchProfileCredentials: GatewayCredentialStoring {
+    let profileID: String
+    private(set) var tokenReads = 0
+    init(profileID: String) { self.profileID = profileID }
+    func loadToken(for endpoint: URL) -> String? {
+        tokenReads += 1
+        return endpoint.absoluteString == "https://gateway-credential.invalid/\(profileID)" ? "saved-device-token" : nil
+    }
+    func saveToken(_ token: String, for endpoint: URL) {}
+    func deleteToken(for endpoint: URL) {}
+    func loadOrCreateDeviceID() async throws -> String {
+        // 停在凭据准备阶段，验证启动连接意图而不打开真实网络连接。
+        try await Task.sleep(for: .seconds(30))
+        return "cold-launch-device"
+    }
+}
+
 final class MultiGatewayTests: XCTestCase {
     private let gatewayID = "d56a1098-8519-43a1-9dce-fb99863bf5bb"
+
+    @MainActor
+    func testRestoredExternalGatewayAutoConnectsWithoutDependingOnRootViewTask() async throws {
+        let suite = "external-cold-launch-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let external = "wss://external.example/ws/mobile"
+        let profile = GatewayProfile(gatewayId: gatewayID, gatewayName: "外网主机",
+                                     endpoints: ["ws://192.168.1.94:3081/ws/mobile", external], preferredEndpoint: external)
+        defaults.set(try JSONEncoder().encode([profile]), forKey: "gateway.profiles.v1")
+        defaults.set(profile.id, forKey: "gateway.activeID")
+        let credentials = ColdLaunchProfileCredentials(profileID: profile.id)
+        let hosts = MultiGatewayStore(defaults: defaults, credentials: credentials)
+        await hosts.waitUntilReady()
+        defer { hosts.activeStore.deactivateGateway() }
+        let deadline = ProcessInfo.processInfo.systemUptime + 1
+        while !hosts.activeStore.gateway.recoveryStateForTesting.wantsConnection,
+              ProcessInfo.processInfo.systemUptime < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(hosts.activeStore.endpoint, external)
+        XCTAssertEqual(hosts.activeStore.gateway.state, .connecting)
+        XCTAssertTrue(hosts.activeStore.gateway.recoveryStateForTesting.wantsConnection)
+        let reads = await credentials.tokenReads
+        XCTAssertGreaterThan(reads, 0)
+    }
+
+    @MainActor
+    func testRestoredManuallyDisconnectedGatewayDoesNotAutoConnect() async throws {
+        let suite = "manual-cold-launch-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let profile = GatewayProfile(gatewayName: "手动断开的主机", endpoints: ["wss://external.example/ws/mobile"])
+        defaults.set(try JSONEncoder().encode([profile]), forKey: "gateway.profiles.v1")
+        UserDefaultsAppPreferences(userDefaults: defaults, gatewayID: profile.id).automaticallyConnect = false
+        let credentials = ColdLaunchProfileCredentials(profileID: profile.id)
+        let hosts = MultiGatewayStore(defaults: defaults, credentials: credentials)
+        await hosts.waitUntilReady()
+        defer { hosts.activeStore.deactivateGateway() }
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(hosts.activeStore.gateway.state, .disconnected)
+        XCTAssertFalse(hosts.activeStore.gateway.recoveryStateForTesting.wantsConnection)
+        let reads = await credentials.tokenReads
+        XCTAssertEqual(reads, 0)
+    }
 
     func testIdentityCannotDowngradeOrChange() throws {
         try GatewayIdentity.validate(expected: nil, received: nil)
@@ -152,5 +213,31 @@ final class MultiGatewayTests: XCTestCase {
     func testPreferredEndpointCannotAddTrust() {
         let profile = GatewayProfile(gatewayName: "电脑", endpoints: ["wss://trusted.example/ws/mobile"], preferredEndpoint: "wss://evil.example/ws/mobile")
         XCTAssertEqual(profile.connectionEndpoints, profile.endpoints)
+    }
+
+    @MainActor
+    func testSwitcherSheetRendersWithoutEnvironmentObject() async throws {
+        let first = GatewayProfile(gatewayName: "电脑 A", endpoints: ["wss://a.example/ws/mobile"])
+        let second = GatewayProfile(gatewayName: "电脑 B", endpoints: ["wss://b.example/ws/mobile"])
+        for profiles in [[GatewayProfile](), [first, second]] {
+            let suite = "switcher-sheet-\(UUID())"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            defaults.set(try JSONEncoder().encode(profiles), forKey: "gateway.profiles.v1")
+            defaults.set(second.id, forKey: "gateway.activeID")
+            let hosts = MultiGatewayStore(defaults: defaults, credentials: MigrationTestCredentials())
+            await hosts.waitUntilReady()
+            defer { hosts.stopProbes(); hosts.activeStore.deactivateGateway() }
+
+            // 独立承载弹窗，不注入环境对象，覆盖呈现边界丢失依赖的崩溃。
+            let controller = UIHostingController(rootView:
+                GatewaySwitcherSheet(hosts: hosts).environment(\.scenePhase, .background)
+            )
+            let size = controller.sizeThatFits(in: CGSize(width: 390, height: 640))
+
+            XCTAssertTrue(size.width.isFinite && size.height.isFinite)
+            XCTAssertGreaterThan(size.width, 0)
+            XCTAssertGreaterThan(size.height, 0)
+        }
     }
 }

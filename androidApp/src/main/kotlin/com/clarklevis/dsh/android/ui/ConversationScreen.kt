@@ -865,7 +865,7 @@ private fun ConversationTimeline(
                 onPinnedToBottomChanged(false)
                 if (stateHolder.loadOlderHistory()) {
                     historyReadBatch = batch
-                    android.util.Log.d("HistoryPresentation", "stage=read-batch-start")
+                    com.clarklevis.dsh.android.platform.LocalAppLog.d("HistoryPresentation", "stage=read-batch-start")
                 }
             }
         }
@@ -918,13 +918,13 @@ private fun ConversationTimeline(
                     if (stopReason == null) {
                         historyReadBatch = batch.copy(beforeSequence = requireNotNull(targetState.earliestSequence), pages = batch.pages + 1)
                         if (stateHolder.loadOlderHistory()) {
-                            android.util.Log.d("HistoryPresentation", "stage=read-batch-continue pages=${batch.pages + 1} " +
+                            com.clarklevis.dsh.android.platform.LocalAppLog.d("HistoryPresentation", "stage=read-batch-continue pages=${batch.pages + 1} " +
                                 "messages=${window.messages} heightDp=${window.estimatedHeightDp.toInt()}")
                             return@collect
                         }
                     }
                     historyReadBatch = null
-                    android.util.Log.d("HistoryPresentation", "stage=read-batch-ready pages=${batch.pages + 1} " +
+                    com.clarklevis.dsh.android.platform.LocalAppLog.d("HistoryPresentation", "stage=read-batch-ready pages=${batch.pages + 1} " +
                         "messages=${window.messages} heightDp=${window.estimatedHeightDp.toInt()} reason=${stopReason ?: "unavailable"}")
                 }
                 if (targetState.moving) {
@@ -936,7 +936,7 @@ private fun ConversationTimeline(
                         }
                         warmReadingWindow(target)
                         preparedWhileMoving = target
-                        android.util.Log.d("HistoryPresentation", "stage=background-ready entries=${target.entries.size} moving=true")
+                        com.clarklevis.dsh.android.platform.LocalAppLog.d("HistoryPresentation", "stage=background-ready entries=${target.entries.size} moving=true")
                     }
                     return@collect
                 }
@@ -955,7 +955,7 @@ private fun ConversationTimeline(
                 } == true
                 val began = android.os.SystemClock.elapsedRealtime()
                 presentingHistory = older
-                if (older) android.util.Log.d("HistoryPresentation", "stage=prepare-start rows=${source.conversation.size}")
+                if (older) com.clarklevis.dsh.android.platform.LocalAppLog.d("HistoryPresentation", "stage=prepare-start rows=${source.conversation.size}")
                 try {
                     val target = preparedWhileMoving?.takeIf { it.items === source.conversation &&
                         it.running == running && it.earliestSequence == source.selectedHistoryEarliestSequence }
@@ -966,7 +966,7 @@ private fun ConversationTimeline(
                     if (older) {
                         // 只预热即将进入阅读窗口的几行，不等待整页Markdown都渲染完。
                         warmReadingWindow(target)
-                        android.util.Log.d("HistoryPresentation", "stage=prepare-ready entries=${target.entries.size} " +
+                        com.clarklevis.dsh.android.platform.LocalAppLog.d("HistoryPresentation", "stage=prepare-ready entries=${target.entries.size} " +
                             "elapsedMs=${android.os.SystemClock.elapsedRealtime() - began}")
                         withFrameNanos { }
                     }
@@ -995,7 +995,7 @@ private fun ConversationTimeline(
                             previous = geometry
                         }
                         val actual = anchor?.let { saved -> listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == saved.id } }
-                        android.util.Log.d("HistoryPresentation", "stage=presented inserted=${revealIds.size} " +
+                        com.clarklevis.dsh.android.platform.LocalAppLog.d("HistoryPresentation", "stage=presented inserted=${revealIds.size} " +
                             "elapsedMs=${android.os.SystemClock.elapsedRealtime() - began} " +
                             "anchorValid=${actual != null} anchorErrorPx=${actual?.let { it.offset - requireNotNull(anchor).offset }} " +
                             "interrupted=${generation != interactionGeneration}")
@@ -1274,14 +1274,8 @@ private fun ConversationTimeline(
             }
             if (selectedSessionIsRunning) {
                 item(key = "deep-search-progress", contentType = "deep-search-progress") {
-                    val previousReplyIndex = items.indexOfLast {
-                        it.kind == ConversationItemKind.ASSISTANT && it.id != activeStreamingMessageId
-                    }
-                    val turnItems = items.drop(previousReplyIndex + 1)
                     DeepSearchProgressRow(
-                        startEpochSeconds = turnItems.firstOrNull { it.kind == ConversationItemKind.USER }
-                            ?.epochSeconds
-                            ?: items.lastOrNull { it.kind == ConversationItemKind.USER }?.epochSeconds,
+                        timing = stateHolder.snapshot.activeTurnTiming,
                         cues = items.drop(items.indexOfLast { it.kind == ConversationItemKind.USER } + 1)
                             .filter { it.kind != ConversationItemKind.SYSTEM }
                             .map { DeepSearchProgressCue(it.kind, it.epochSeconds, it.isError) }
@@ -1294,20 +1288,16 @@ private fun ConversationTimeline(
 
 @Composable
 private fun DeepSearchProgressRow(
-    startEpochSeconds: Double?,
+    timing: com.clarklevis.dsh.shared.facade.SharedTurnTimingSnapshot?,
     cues: List<DeepSearchProgressCue>
 ) {
-    val startMilliseconds = remember(startEpochSeconds) {
-        startEpochSeconds?.takeIf { it > 0.0 }?.times(1_000)?.toLong()
-            ?: System.currentTimeMillis()
-    }
-    var elapsedSeconds by remember(startMilliseconds) { mutableIntStateOf(0) }
-    LaunchedEffect(startMilliseconds) {
+    val startMilliseconds = ((timing?.startEpochSeconds ?: 0.0) * 1_000).toLong()
+    var elapsedSeconds by remember(timing) { mutableIntStateOf(0) }
+    LaunchedEffect(timing) {
+        if (timing == null) return@LaunchedEffect
         while (true) {
-            elapsedSeconds = ((System.currentTimeMillis() - startMilliseconds) / 1_000)
-                .coerceAtLeast(0)
-                .coerceAtMost(Int.MAX_VALUE.toLong())
-                .toInt()
+            elapsedSeconds = timing.elapsedSeconds(android.os.SystemClock.elapsedRealtimeNanos() / 1e9)
+                .coerceAtMost(Int.MAX_VALUE.toDouble()).toInt()
             delay(1_000)
         }
     }
@@ -1379,7 +1369,8 @@ private fun DeepSearchProgressRow(
                 )
             }
             Text(
-                text = appText("%1\$s，用时 %2\$s 秒…", appText(phrase), elapsedSeconds),
+                text = if (timing == null) appText("正在同步执行状态…")
+                    else appText("%1\$s，用时 %2\$s 秒…", appText(phrase), elapsedSeconds),
                 modifier = Modifier.onSizeChanged { textWidth = it.width.coerceAtLeast(1) },
                 style = TextStyle(brush = shimmerBrush, fontSize = 14.sp, fontWeight = FontWeight.Medium),
                 maxLines = 1

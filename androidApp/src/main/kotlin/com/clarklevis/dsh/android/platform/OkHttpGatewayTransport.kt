@@ -59,6 +59,7 @@ internal class OkHttpGatewayTransport(
             )
             .apply {
                 spec.channel?.let { header("X-DSH-Channel", it) }
+                if (spec.negotiateRtc) header("X-DSH-Transport-Intent", "negotiate-v1")
                 spec.bearerToken?.takeIf(String::isNotBlank)?.let {
                     header("Authorization", "Bearer $it")
                 }

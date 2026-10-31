@@ -1,16 +1,16 @@
 package com.clarklevis.dsh.android.platform
 
 import android.app.Application
-import android.content.pm.ApplicationInfo
 import android.os.SystemClock
 import android.util.Log
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.platform.GatewayTransportState
+import com.clarklevis.dsh.shared.transport.RtcDiagnostics
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * 仅在 debuggable 构建中输出 Gateway 关键路径元数据。
+ * Gateway 和 RTC 固定字段诊断同时写入控制台与本地文件，支持发布包导出。
  *
  * API 刻意不接收 endpoint、凭据、消息正文、Session ID、附件 ID 或 Base64，避免调用方误打敏感值。
  */
@@ -44,6 +44,11 @@ internal class AndroidGatewayDiagnostics private constructor(
     fun offlineCatalog(stage: String, sessionCount: Int) {
         val safeStage = stage.takeIf { it in setOf("restore", "miss", "skip-late", "saved", "skip-write") } ?: "unknown"
         emit(Log.DEBUG, "offline-catalog stage=$safeStage sessions=${sessionCount.coerceIn(0, 4096)}")
+    }
+
+    @Suppress("LongParameterList")
+    fun rtc(event: String, reason: String, phase: String, channel: String, mode: String, elapsedMs: Long) {
+        writer(Log.INFO, TAG, RtcDiagnostics.message(event, reason, phase, channel, mode, elapsedMs))
     }
 
     fun chatPrefetch(stage: String, count: Int) {
@@ -207,8 +212,8 @@ internal class AndroidGatewayDiagnostics private constructor(
         private const val FRAME_LOG_SAMPLE_INTERVAL = 128L
 
         fun forApplication(application: Application): AndroidGatewayDiagnostics = AndroidGatewayDiagnostics(
-            enabled = application.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0,
-            writer = Log::println,
+            enabled = true,
+            writer = LocalAppLog::println,
             monotonicMillis = SystemClock::elapsedRealtime
         )
 
@@ -216,8 +221,9 @@ internal class AndroidGatewayDiagnostics private constructor(
 
         internal fun forTest(
             monotonicMillis: () -> Long = { System.nanoTime() / 1_000_000 },
+            enabled: Boolean = true,
             writer: (priority: Int, tag: String, message: String) -> Unit
-        ): AndroidGatewayDiagnostics = AndroidGatewayDiagnostics(true, writer, monotonicMillis)
+        ): AndroidGatewayDiagnostics = AndroidGatewayDiagnostics(enabled, writer, monotonicMillis)
     }
 }
 

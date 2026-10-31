@@ -81,9 +81,12 @@ internal fun SettingsScreen(
     onOpenDefaultModel: () -> Unit,
     onOpenFontSize: () -> Unit,
     onOpenStorage: () -> Unit = {},
+    onOpenNetworkDiagnostics: () -> Unit = {},
     updateModel: com.clarklevis.dsh.android.update.AppUpdateViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val updateState by updateModel.state.collectAsStateWithLifecycle()
+    val connectionMethod by stateHolder.connectionMethod.collectAsStateWithLifecycle()
+    val connectionPaths by stateHolder.connectionPaths.collectAsStateWithLifecycle()
     var showPermissionPicker by remember { mutableStateOf(false) }
     var pendingPermission by remember { mutableStateOf<String?>(null) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
@@ -179,6 +182,20 @@ internal fun SettingsScreen(
                         SettingsDivider()
                         GatewayStatusRow(stateHolder)
                         SettingsDivider()
+                        SettingsValueRow(
+                            appText("连接方式"),
+                            if (isConnected(stateHolder)) appText(connectionMethod.ifEmpty { "WebSocket" }) else appText("未连接"),
+                            modifier = Modifier.testTag("gateway-connection-method")
+                        )
+                        if (isConnected(stateHolder) && connectionMethod == "WebRTC") {
+                            RtcConnectionPathDetails(connectionPaths, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                        }
+                        SettingsDivider()
+                        SettingsValueRow(
+                            appText("网络检测"), appText("实时延迟与丢包"),
+                            modifier = Modifier.testTag("network-diagnostics-entry"), onClick = onOpenNetworkDiagnostics
+                        )
+                        SettingsDivider()
                         SettingsActionRow(if (isConnected(stateHolder)) appText("断开连接") else appText("连接")) {
                             if (isConnected(stateHolder)) stateHolder.disconnect() else stateHolder.connect()
                         }
@@ -216,9 +233,13 @@ internal fun SettingsScreen(
                             onClick = onOpenStorage
                         )
                     }
+                    SettingsSection(
+                        title = appText("日志"),
+                        footer = appText("按小时保存，日志和导出副本合计不超过 200 MB，自动清理最旧日志。")
+                    ) { LogExportActions() }
                     SettingsSection(appText("关于")) {
                         SettingsValueRow(
-                            title = appText("当前版本"),
+                            title = appText("当前版本（去给作者Star🌟）"),
                             value = updateModel.currentVersion,
                             enabled = !updateState.busy,
                             isLoading = updateState.busy,
@@ -739,7 +760,12 @@ private fun SettingsValueRow(
             .clickable(enabled = enabled && onClick != null) { onClick?.invoke() },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, color = MaterialTheme.colorScheme.onSurface.copy(alpha = rowAlpha), fontSize = 16.sp)
+        Text(
+            title,
+            modifier = Modifier.weight(1f, fill = false),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = rowAlpha),
+            fontSize = 16.sp
+        )
         Spacer(Modifier.weight(1f).padding(horizontal = 6.dp))
         if (isLoading) {
             CircularProgressIndicator(
@@ -856,7 +882,7 @@ private fun PermissionSettingsRow(
 }
 
 @Composable
-private fun SettingsDivider() {
+internal fun SettingsDivider() {
     HorizontalDivider(
         thickness = 0.5.dp,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
@@ -909,7 +935,7 @@ private fun GatewayStatusRow(stateHolder: AndroidSharedStateHolder) {
 }
 
 @Composable
-private fun SettingsActionRow(title: String, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun SettingsActionRow(title: String, enabled: Boolean = true, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 54.dp).clickable(enabled = enabled, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically

@@ -4,7 +4,7 @@ import ImageIO
 @inline(__always)
 func gatewayApprovalTrace(_ message: @autoclosure () -> String) {
 #if DEBUG
-    print("[DshApproval] \(message())")
+    appPrint("[DshApproval] \(message())")
 #endif
 }
 

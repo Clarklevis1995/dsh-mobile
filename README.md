@@ -35,7 +35,7 @@ Whaleness is an independently developed third-party native mobile client for Dee
 - `androidApp` implements the Android app with Kotlin, Jetpack Compose, and OkHttp.
 - `DeepSeekHarnessMobile` builds the iOS interface with SwiftUI/UIKit and accesses shared logic through a Kotlin/Native framework.
 
-Both apps connect to Harness over WebSocket through [`dsh-plugin-mobile-gateway`](https://github.com/Clarklevis1995/dsh-plugin-mobile-gateway). Networking, secure storage, files, images, lifecycle handling, and background execution use native platform APIs. Business rules are consolidated in `shared/commonMain` wherever practical.
+Both apps connect to Harness over WebSocket through [`dsh-plugin-mobile-gateway`](https://github.com/Clarklevis1995/dsh-plugin-mobile-gateway). With the gateway’s experimental WebRTC option enabled, paired clients prefer two native RTC data channels and explicitly fall back to WebSocket when negotiation fails. Settings shows the selected connection method. See [App integration and validation](Docs/webrtc-app-integration.md). Networking, secure storage, files, images, lifecycle handling, and background execution use native platform APIs. Business rules are consolidated in `shared/commonMain` wherever practical.
 
 ## Downloads and Prerequisites
 

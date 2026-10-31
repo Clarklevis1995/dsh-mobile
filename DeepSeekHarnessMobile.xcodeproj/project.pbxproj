@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DA3100000000000000000003 /* LocalAppLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3100000000000000000004 /* LocalAppLogTests.swift */; };
+		DA3100000000000000000001 /* LocalAppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3100000000000000000002 /* LocalAppLog.swift */; };
 		CA7400000000000000000001 /* WorkspaceSessionList.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7400000000000000000002 /* WorkspaceSessionList.swift */; };
 		CA7400000000000000000003 /* WorkspaceSessionListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7400000000000000000004 /* WorkspaceSessionListTests.swift */; };
 		0DC425D67C678AF679BFF15A /* VoiceInputAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873D1E0F3E1B1B2CB2366B06 /* VoiceInputAdapter.swift */; };
@@ -92,6 +94,9 @@
 		CF228000000000000000007 /* MarkdownMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF228000000000000000008 /* MarkdownMathTests.swift */; };
 		CF229000000000000000001 /* CodeSyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF229000000000000000002 /* CodeSyntaxHighlighter.swift */; };
 		CF229000000000000000003 /* CodeSyntaxHighlighterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF229000000000000000004 /* CodeSyntaxHighlighterTests.swift */; };
+		CF230000000000000000001 /* GatewayRtcLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF230000000000000000002 /* GatewayRtcLink.swift */; };
+		CF230000000000000000003 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = CF230000000000000000004 /* WebRTC */; };
+		CF231000000000000000001 /* GatewayNetworkDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF231000000000000000002 /* GatewayNetworkDiagnostics.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -126,6 +131,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		DA3100000000000000000004 /* LocalAppLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAppLogTests.swift; sourceTree = "<group>"; };
+		DA3100000000000000000002 /* LocalAppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAppLog.swift; sourceTree = "<group>"; };
 		CA7400000000000000000002 /* WorkspaceSessionList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSessionList.swift; sourceTree = "<group>"; };
 		CA7400000000000000000004 /* WorkspaceSessionListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSessionListTests.swift; sourceTree = "<group>"; };
 		0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayProtocolTests.swift; sourceTree = "<group>"; };
@@ -212,6 +219,8 @@
 		CF228000000000000000008 /* MarkdownMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMathTests.swift; sourceTree = "<group>"; };
 		CF229000000000000000002 /* CodeSyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeSyntaxHighlighter.swift; sourceTree = "<group>"; };
 		CF229000000000000000004 /* CodeSyntaxHighlighterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeSyntaxHighlighterTests.swift; sourceTree = "<group>"; };
+		CF230000000000000000002 /* GatewayRtcLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayRtcLink.swift; sourceTree = "<group>"; };
+		CF231000000000000000002 /* GatewayNetworkDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatewayNetworkDiagnostics.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -221,6 +230,7 @@
 			files = (
 				F5CD0CFD51B8D80944F87550 /* Foundation.framework in Frameworks */,
 				E73A2DB9D678DA4B8C01E349 /* MarkdownUI in Frameworks */,
+				CF230000000000000000003 /* WebRTC in Frameworks */,
 				CF228000000000000000003 /* SwiftMath in Frameworks */,
 				C7A710000000000000000001 /* ChatLayout in Frameworks */,
 			);
@@ -277,6 +287,9 @@
 				CA11E0000000000000000004 /* ImagePreprocessor.swift */,
 				A0C0FFEE0000000000000004 /* ConversationTimeline.swift */,
 				E61E231D0CD3E07857F861B0 /* GatewayClient.swift */,
+				DA3100000000000000000002 /* LocalAppLog.swift */,
+				CF230000000000000000002 /* GatewayRtcLink.swift */,
+				CF231000000000000000002 /* GatewayNetworkDiagnostics.swift */,
 				CF206000000000000000002 /* FileUploadController.swift */,
 				954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */,
 				CA11E000000000000000000A /* L10n.swift */,
@@ -292,6 +305,7 @@
 			children = (
 				CA7400000000000000000004 /* WorkspaceSessionListTests.swift */,
 				0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */,
+				DA3100000000000000000004 /* LocalAppLogTests.swift */,
 				A9A3BDFA7B0949F8BA0B01A6 /* WorkspaceDrawerFeedbackTests.swift */,
 				81886703A6C3AB2164852990 /* VoiceInputTests.swift */,
 				AF17C0000000000000000004 /* FileIconAssetTests.swift */,
@@ -485,6 +499,7 @@
 			name = DeepSeekHarnessMobile;
 			packageProductDependencies = (
 				4CE3D78565179C422C796509 /* MarkdownUI */,
+				CF230000000000000000004 /* WebRTC */,
 				CF228000000000000000004 /* SwiftMath */,
 				C7A710000000000000000003 /* ChatLayout */,
 			);
@@ -574,6 +589,7 @@
 				A5BC89015C15661603FC0C4B /* XCLocalSwiftPackageReference "Vendor/swift-markdown-ui" */,
 				C7A710000000000000000004 /* XCRemoteSwiftPackageReference "ChatLayout" */,
 				CF228000000000000000005 /* XCRemoteSwiftPackageReference "SwiftMath" */,
+				CF230000000000000000005 /* XCRemoteSwiftPackageReference "WebRTC" */,
 			);
 			productRefGroup = D7854C843240E809A949A26E /* Products */;
 			projectDirPath = "";
@@ -666,6 +682,7 @@
 			files = (
 				CA7400000000000000000003 /* WorkspaceSessionListTests.swift in Sources */,
 				39FD319C875F4B4A6893D676 /* GatewayProtocolTests.swift in Sources */,
+				DA3100000000000000000003 /* LocalAppLogTests.swift in Sources */,
 				3874FCB0CE354690A304E63F /* WorkspaceDrawerFeedbackTests.swift in Sources */,
 				CD86C5C4C6FF6F4BD8D715A6 /* VoiceInputTests.swift in Sources */,
 				AF17C0000000000000000003 /* FileIconAssetTests.swift in Sources */,
@@ -713,6 +730,9 @@
 				CA11E0000000000000000003 /* ImagePreprocessor.swift in Sources */,
 				A0C0FFEE0000000000000003 /* ConversationTimeline.swift in Sources */,
 				80E777AC0855635BC3D12EA7 /* GatewayClient.swift in Sources */,
+				DA3100000000000000000001 /* LocalAppLog.swift in Sources */,
+				CF230000000000000000001 /* GatewayRtcLink.swift in Sources */,
+				CF231000000000000000001 /* GatewayNetworkDiagnostics.swift in Sources */,
 				CF206000000000000000001 /* FileUploadController.swift in Sources */,
 				AFAE90EEB4462AD84169D356 /* GatewayModels.swift in Sources */,
 				CA11E0000000000000000009 /* L10n.swift in Sources */,
@@ -969,7 +989,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 34;
 				DEVELOPMENT_TEAM = SHVN6YQNQF;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AgentLiveActivityWidget/Info.plist;
@@ -979,7 +999,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.12;
+				MARKETING_VERSION = 1.7.13;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(LOCAL_BUNDLE_IDENTIFIER).AgentLiveActivityWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -997,7 +1017,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 34;
 				DEVELOPMENT_TEAM = T58RY5HUA7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AgentLiveActivityWidget/Info.plist;
@@ -1007,7 +1027,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.12;
+				MARKETING_VERSION = 1.7.13;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(LOCAL_BUNDLE_IDENTIFIER).AgentLiveActivityWidget";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.lichaofan.dshmobile.AgentLiveActivityWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1155,6 +1175,11 @@
 			repositoryURL = "https://github.com/mgriebling/SwiftMath.git";
 			requirement = {kind = exactVersion; version = 1.7.3; };
 		};
+		CF230000000000000000005 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stasel/WebRTC.git";
+			requirement = {kind = exactVersion; version = 154.0.0; };
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1172,6 +1197,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = CF228000000000000000005 /* XCRemoteSwiftPackageReference "SwiftMath" */;
 			productName = SwiftMath;
+		};
+		CF230000000000000000004 /* WebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CF230000000000000000005 /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

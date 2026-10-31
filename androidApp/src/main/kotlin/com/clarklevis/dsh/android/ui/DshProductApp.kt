@@ -101,6 +101,7 @@ import kotlinx.coroutines.withContext
 private const val ROUTE_WORKSPACE = "workspace"
 private const val ROUTE_CONVERSATION = "conversation"
 private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_SETTINGS_NETWORK = "settings/network-diagnostics"
 private const val ROUTE_SETTINGS_STORAGE = "settings/storage"
 private const val ROUTE_SETTINGS_FONT_SIZE = "settings/font-size"
 private const val ROUTE_SETTINGS_AGENT_PRESETS = "settings/agent-presets"
@@ -204,8 +205,12 @@ internal fun DshProductApp(
                 onOpenAgentPresets = { navController.navigate(ROUTE_SETTINGS_AGENT_PRESETS) },
                 onOpenDefaultModel = { navController.navigate(ROUTE_SETTINGS_DEFAULT_MODEL) },
                 onOpenFontSize = { navController.navigate(ROUTE_SETTINGS_FONT_SIZE) },
-                onOpenStorage = { navController.navigate(ROUTE_SETTINGS_STORAGE) }
+                onOpenStorage = { navController.navigate(ROUTE_SETTINGS_STORAGE) },
+                onOpenNetworkDiagnostics = { navController.navigate(ROUTE_SETTINGS_NETWORK) }
             )
+        }
+        composable(ROUTE_SETTINGS_NETWORK) {
+            NetworkDiagnosticsScreen(stateHolder, navController::popBackStack)
         }
         composable(ROUTE_SETTINGS_STORAGE) {
             StorageSpaceScreen(stateHolder, navController::popBackStack)

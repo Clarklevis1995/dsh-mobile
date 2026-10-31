@@ -601,7 +601,7 @@ final class AgentLiveActivityManager {
         } catch {
             failedCreationKeys.insert(activityKey)
 #if DEBUG
-            print("[AgentLiveActivity] 无法创建实时活动：\(error.localizedDescription)")
+            appPrint("[AgentLiveActivity] 无法创建实时活动：\(error.localizedDescription)")
 #endif
         }
     }
@@ -812,7 +812,7 @@ final class AgentLiveActivityManager {
               applicationState() == .active else { return false }
 
 #if DEBUG
-        print("[AgentLiveActivity] 检测到 \(systemActivities.count) 个实时活动，开始重建唯一实例")
+        appPrint("[AgentLiveActivity] 检测到 \(systemActivities.count) 个实时活动，开始重建唯一实例")
 #endif
         latestStates[activityKey] = state
         pendingCreations[activityKey] = attributes
@@ -860,12 +860,12 @@ final class AgentLiveActivityManager {
                 self.pendingCreations[activityKey] = nil
                 self.failedCreationKeys.remove(activityKey)
 #if DEBUG
-                print("[AgentLiveActivity] 实时活动重建完成 id=\(replacement.id)")
+                appPrint("[AgentLiveActivity] 实时活动重建完成 id=\(replacement.id)")
 #endif
             } catch {
                 self.failedCreationKeys.insert(activityKey)
 #if DEBUG
-                print("[AgentLiveActivity] 无法重建重复实时活动：\(error.localizedDescription)")
+                appPrint("[AgentLiveActivity] 无法重建重复实时活动：\(error.localizedDescription)")
 #endif
             }
             self.rebuildingActivityKeys.remove(activityKey)

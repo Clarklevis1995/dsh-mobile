@@ -1,329 +1,86 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
-    "workspace.section.named-accessibility.one": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Workspace %@, 1 session"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "工作区 %@，1 个会话"
-          }
+  "按小时保存，日志和导出副本合计不超过 200 MB，自动清理最旧日志。": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Logs are saved hourly. Logs and export copies use up to 200 MB in total; the oldest logs are removed automatically."
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "按小时保存，日志和导出副本合计不超过 200 MB，自动清理最旧日志。"
         }
       }
-    },
-    "筛选定时任务": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Filter scheduled tasks"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "筛选定时任务"
-          }
+    }
+  },
+  "日志导出失败，请重试": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Could not export logs. Please try again."
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "日志导出失败，请重试"
         }
       }
-    },
-    "已缓存聊天中未找到匹配内容。连接网关后可继续搜索其他聊天。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No matches in cached chats. Connect to the gateway to search other chats."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已缓存聊天中未找到匹配内容。连接网关后可继续搜索其他聊天。"
-          }
+    }
+  },
+  "分享日志": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Share logs"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "分享日志"
         }
       }
-    },
-    "本地结果仅涵盖已缓存聊天": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Local results include cached chats only"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "本地结果仅涵盖已缓存聊天"
-          }
+    }
+  },
+  "导出日志": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Export logs"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "导出日志"
         }
       }
-    },
-    "workspace.section.expand.one": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show 1 more session"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "展开其余 1 个会话"
-          }
+    }
+  },
+  "日志": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Logs"
+        }
+      },
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "日志"
         }
       }
-    },
-    "workspace.session.count.one": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 session"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 个会话"
-          }
-        }
-      }
-    },
-    "请先选择一个具体工作区，再创建新会话。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Select a specific workspace before creating a new session."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请先选择一个具体工作区，再创建新会话。"
-          }
-        }
-      }
-    },
-    "请先选择工作区": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Select a workspace first"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请先选择工作区"
-          }
-        }
-      }
-    },
-    "workspace.section.named-accessibility": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Workspace %1$@, %2$lld sessions"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "工作区 %1$@，%2$lld 个会话"
-          }
-        }
-      }
-    },
-    "workspace.section.expand": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show %lld more sessions"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "展开其余 %lld 个会话"
-          }
-        }
-      }
-    },
-    "已缓存聊天": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cached chat"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已缓存聊天"
-          }
-        }
-      }
-    },
-    "workspace.section.accessibility": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Section %1$lld, %2$lld sessions"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "分区 %1$lld，%2$lld 个会话"
-          }
-        }
-      }
-    },
-    "workspace.section.count": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld sessions"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld 个会话"
-          }
-        }
-      }
-    },
-    "workspace.all.count": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld sessions"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld 个会话"
-          }
-        }
-      }
-    },
-    "全部会话": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "All sessions"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "全部会话"
-          }
-        }
-      }
-    },
-    "会话页面": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Session pages"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "会话页面"
-          }
-        }
-      }
-    },
-    "切换到轨迹": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switch to trajectory"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "切换到轨迹"
-          }
-        }
-      }
-    },
-    "切换到对话": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switch to conversation"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "切换到对话"
-          }
-        }
-      }
-    },
-    "轻点切换页面，长按选择对话或轨迹": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tap to switch pages. Touch and hold to choose conversation or trajectory."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "轻点切换页面，长按选择对话或轨迹"
-          }
-        }
-      }
-    },
+    }
+  },
     " 等工具" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -527,6 +284,26 @@
         }
       }
     },
+    "%@：%@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@：%2$@"
+          }
+        }
+      }
+    },
+    "%@：%@ · %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@：%2$@ · %3$@"
+          }
+        }
+      }
+    },
     "%@%%" : {
       "localizations" : {
         "en" : {
@@ -582,6 +359,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "0 秒"
+          }
+        }
+      }
+    },
+    "60 秒前" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60 s ago"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60 秒前"
           }
         }
       }
@@ -2155,6 +1948,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "模型"
+          }
+        }
+      }
+    },
+    "NAT 穿透直连" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NAT traversal direct"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NAT 穿透直连"
           }
         }
       }
@@ -3737,6 +3547,23 @@
         }
       }
     },
+    "TURN 中继" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TURN relay"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TURN 中继"
+          }
+        }
+      }
+    },
     "usage.row.tools" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3800,6 +3627,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ tok/s"
+          }
+        }
+      }
+    },
+    "WebRTC，路径待确认" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WebRTC, path unconfirmed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WebRTC，路径待确认"
           }
         }
       }
@@ -3873,6 +3717,142 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Whaleness Harness"
+          }
+        }
+      }
+    },
+    "workspace.all.count" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld sessions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个会话"
+          }
+        }
+      }
+    },
+    "workspace.section.accessibility" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Section %1$lld, %2$lld sessions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分区 %1$lld，%2$lld 个会话"
+          }
+        }
+      }
+    },
+    "workspace.section.count" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld sessions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个会话"
+          }
+        }
+      }
+    },
+    "workspace.section.expand" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show %lld more sessions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展开其余 %lld 个会话"
+          }
+        }
+      }
+    },
+    "workspace.section.expand.one" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show 1 more session"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展开其余 1 个会话"
+          }
+        }
+      }
+    },
+    "workspace.section.named-accessibility" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace %1$@, %2$lld sessions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区 %1$@，%2$lld 个会话"
+          }
+        }
+      }
+    },
+    "workspace.section.named-accessibility.one" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace %@, 1 session"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区 %@，1 个会话"
+          }
+        }
+      }
+    },
+    "workspace.session.count.one" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 session"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 个会话"
           }
         }
       }
@@ -4172,6 +4152,23 @@
         }
       }
     },
+    "丢包" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loss"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "丢包"
+          }
+        }
+      }
+    },
     "丢弃" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4298,6 +4295,23 @@
         }
       }
     },
+    "仅此页可见时检测，离开页面或进入后台即停止。丢包率为 3 秒内未响应的探测占比；速率为应用层实际收发流量。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runs only while this page is visible. Leaving the page or entering the background stops probes. Loss means probes unanswered within 3 seconds; rates measure actual application traffic."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅此页可见时检测，离开页面或进入后台即停止。丢包率为 3 秒内未响应的探测占比；速率为应用层实际收发流量。"
+          }
+        }
+      }
+    },
     "从 App 移除选中的 %@ 台主机及连接凭证；网关上的会话和工作区不会被删除。再次连接需重新配对。" : {
       "localizations" : {
         "en" : {
@@ -4418,6 +4432,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Session status"
+          }
+        }
+      }
+    },
+    "会话通道" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conversation channel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话通道"
+          }
+        }
+      }
+    },
+    "会话页面" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session pages"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话页面"
+          }
+        }
+      }
+    },
+    "传输路径" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transport path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "传输路径"
           }
         }
       }
@@ -4554,6 +4619,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Change default model?"
+          }
+        }
+      }
+    },
+    "值" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Value"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "值"
           }
         }
       }
@@ -4707,6 +4789,23 @@
         }
       }
     },
+    "全部会话" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All sessions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部会话"
+          }
+        }
+      }
+    },
     "共 %@ 个 · %@ 运行中" : {
       "localizations" : {
         "en" : {
@@ -4846,6 +4945,23 @@
         }
       }
     },
+    "内网直连" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Private-network direct"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内网直连"
+          }
+        }
+      }
+    },
     "最多 120 个字" : {
       "localizations" : {
         "en" : {
@@ -4856,7 +4972,25 @@
         }
       }
     },
+    "最近一分钟网络状态折线图" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network status over the last minute"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近一分钟网络状态折线图"
+          }
+        }
+      }
+    },
     "最近会话" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4928,6 +5062,23 @@
         }
       }
     },
+    "分段" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Segment"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分段"
+          }
+        }
+      }
+    },
     "切换主机" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4935,6 +5086,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Switch host"
+          }
+        }
+      }
+    },
+    "切换到对话" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch to conversation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到对话"
           }
         }
       }
@@ -4969,6 +5137,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换到语音输入"
+          }
+        }
+      }
+    },
+    "切换到轨迹" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch to trajectory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到轨迹"
           }
         }
       }
@@ -5268,6 +5453,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Parameters"
+          }
+        }
+      }
+    },
+    "发送" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送"
+          }
+        }
+      }
+    },
+    "发送 %@ · 成功 %d / 超时 %d" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send %@ · Success %d / Timeout %d"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送 %@ · 成功 %d / 超时 %d"
           }
         }
       }
@@ -5944,6 +6162,23 @@
         }
       }
     },
+    "实时延迟与丢包" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live latency and packet loss"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时延迟与丢包"
+          }
+        }
+      }
+    },
     "实验性" : {
       "localizations" : {
         "en" : {
@@ -6423,6 +6658,40 @@
         }
       }
     },
+    "已缓存聊天" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cached chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已缓存聊天"
+          }
+        }
+      }
+    },
+    "已缓存聊天中未找到匹配内容。连接网关后可继续搜索其他聊天。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matches in cached chats. Connect to the gateway to search other chats."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已缓存聊天中未找到匹配内容。连接网关后可继续搜索其他聊天。"
+          }
+        }
+      }
+    },
     "已跳过" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -6474,6 +6743,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Attached sessions"
+          }
+        }
+      }
+    },
+    "平均 %@ · P95 %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Average %@ · P95 %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平均 %@ · P95 %@"
+          }
+        }
+      }
+    },
+    "延迟" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Latency"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "延迟"
+          }
+        }
+      }
+    },
+    "延迟抖动" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Latency jitter"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "延迟抖动"
           }
         }
       }
@@ -6672,6 +6992,23 @@
         }
       }
     },
+    "当前版本（去给作者Star🌟）" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current version (Star the author🌟)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前版本（去给作者Star🌟）"
+          }
+        }
+      }
+    },
     "当前目录" : {
       "localizations" : {
         "en" : {
@@ -6805,6 +7142,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当前设备没有此文件的本地副本，当前网关尚不支持下载已发送附件。"
+          }
+        }
+      }
+    },
+    "往返延迟" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Round-trip latency"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "往返延迟"
           }
         }
       }
@@ -7114,6 +7468,23 @@
         }
       }
     },
+    "抖动" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jitter"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "抖动"
+          }
+        }
+      }
+    },
     "拒绝" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -7229,12 +7600,79 @@
         }
       }
     },
+    "探测丢包率" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Probe loss"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "探测丢包率"
+          }
+        }
+      }
+    },
+    "探测超时 · %" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Probe timeout · %"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "探测超时 · %"
+          }
+        }
+      }
+    },
     "探索未至之境" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Into the Unknown"
+          }
+        }
+      }
+    },
+    "接收" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Receive"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接收"
+          }
+        }
+      }
+    },
+    "接收 / 发送 · KiB/s" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Receive / Send · KiB/s"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接收 / 发送 · KiB/s"
           }
         }
       }
@@ -7250,6 +7688,23 @@
         }
       }
     },
+    "接收速率" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Receive rate"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接收速率"
+          }
+        }
+      }
+    },
     "控制请求失败" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7257,6 +7712,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Control request failed"
+          }
+        }
+      }
+    },
+    "控制通道" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control channel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制通道"
           }
         }
       }
@@ -8368,6 +8840,23 @@
         }
       }
     },
+    "本地结果仅涵盖已缓存聊天" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local results include cached chats only"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地结果仅涵盖已缓存聊天"
+          }
+        }
+      }
+    },
     "本地缓存片段" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8711,6 +9200,23 @@
         }
       }
     },
+    "正在切换到 WebSocket 以发送大消息，草稿已保留，请连接后重新发送。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switching to WebSocket for this large message. Your draft is saved; send it again once connected."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在切换到 WebSocket 以发送大消息，草稿已保留，请连接后重新发送。"
+          }
+        }
+      }
+    },
     "正在创建" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8782,6 +9288,17 @@
         }
       }
     },
+    "正在同步执行状态…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Syncing execution status…"
+          }
+        }
+      }
+    },
     "正在定位到最新消息…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8834,6 +9351,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Generating trajectory…"
+          }
+        }
+      }
+    },
+    "正在确认路径" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在确认路径"
           }
         }
       }
@@ -9132,6 +9666,40 @@
         }
       }
     },
+    "每秒检测 · 最近 60 秒" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every second · Last 60 s"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每秒检测 · 最近 60 秒"
+          }
+        }
+      }
+    },
+    "毫秒 · ms" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Milliseconds · ms"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毫秒 · ms"
+          }
+        }
+      }
+    },
     "没有参数" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -9200,6 +9768,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No model options were recorded"
+          }
+        }
+      }
+    },
+    "流量" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Traffic"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "流量"
           }
         }
       }
@@ -9409,6 +9994,22 @@
         }
       }
     },
+    "现在" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Now"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "现在"
+          }
+        }
+      }
+    },
     "用量" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -9474,6 +10075,23 @@
         }
       }
     },
+    "直连" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Direct"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直连"
+          }
+        }
+      }
+    },
     "知道了" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9535,6 +10153,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "View"
+          }
+        }
+      }
+    },
+    "秒" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seconds"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒"
           }
         }
       }
@@ -9651,12 +10286,45 @@
         }
       }
     },
+    "等待探测结果…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for probe results…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待探测结果…"
+          }
+        }
+      }
+    },
     "等待结果" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Waiting for result"
+          }
+        }
+      }
+    },
+    "等待连接" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for connection"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待连接"
           }
         }
       }
@@ -9668,6 +10336,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Answers must cover every question, in the original order."
+          }
+        }
+      }
+    },
+    "筛选定时任务" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filter scheduled tasks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "筛选定时任务"
           }
         }
       }
@@ -9900,6 +10585,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No presets available from the gateway. Pull down to refresh."
+          }
+        }
+      }
+    },
+    "网关需更新" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gateway update required"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网关需更新"
+          }
+        }
+      }
+    },
+    "网络指标" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network Metrics"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络指标"
+          }
+        }
+      }
+    },
+    "网络检测" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network Diagnostics"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络检测"
           }
         }
       }
@@ -10251,6 +10986,40 @@
         }
       }
     },
+    "请先选择一个具体工作区，再创建新会话。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a specific workspace before creating a new session."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先选择一个具体工作区，再创建新会话。"
+          }
+        }
+      }
+    },
+    "请先选择工作区" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a workspace first"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先选择工作区"
+          }
+        }
+      }
+    },
     "请升级网关" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10302,6 +11071,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Scan the QR code generated by the Harness WebUI"
+          }
+        }
+      }
+    },
+    "请更新网关以启用可关联的网络探测；旧网关不会被误判为丢包。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update the gateway to enable correlated probes. Older gateways are never reported as packet loss."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请更新网关以启用可关联的网络探测；旧网关不会被误判为丢包。"
           }
         }
       }
@@ -10501,6 +11286,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Turns · Steps"
+          }
+        }
+      }
+    },
+    "轻点切换页面，长按选择对话或轨迹" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap to switch pages. Touch and hold to choose conversation or trajectory."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "轻点切换页面，长按选择对话或轨迹"
           }
         }
       }
@@ -10758,6 +11560,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接或会话已变化，请重新上传"
+          }
+        }
+      }
+    },
+    "连接方式" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection method"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接方式"
           }
         }
       }

@@ -1,5 +1,8 @@
 package com.clarklevis.dsh.shared.gateway
 
+
+import com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSnapshot
+import com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsStore
 import com.clarklevis.dsh.shared.platform.GatewayAttachmentCache
 import com.clarklevis.dsh.shared.platform.GatewayClock
 import com.clarklevis.dsh.shared.platform.GatewayConnectionSpec
@@ -7,29 +10,34 @@ import com.clarklevis.dsh.shared.platform.GatewayCredentialStore
 import com.clarklevis.dsh.shared.platform.GatewayNetworkMonitor
 import com.clarklevis.dsh.shared.platform.GatewayNetworkState
 import com.clarklevis.dsh.shared.platform.GatewayPreferences
+import com.clarklevis.dsh.shared.platform.GatewaySplitTransport
 import com.clarklevis.dsh.shared.platform.GatewayTransport
-import com.clarklevis.dsh.shared.platform.GatewayTransportFrame
 import com.clarklevis.dsh.shared.platform.GatewayTransportEvent
+import com.clarklevis.dsh.shared.platform.GatewayTransportFrame
 import com.clarklevis.dsh.shared.platform.GatewayTransportState
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import com.clarklevis.dsh.shared.protocol.wireJson
-import kotlinx.coroutines.CoroutineScope
+import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
-import com.clarklevis.dsh.shared.platform.GatewaySplitTransport
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 
 enum class GatewayConnectionState {
     DISCONNECTED,
@@ -110,8 +118,55 @@ class GatewayRuntime(
     private var expectedGatewayId: String? = null,
     private val trustedEndpoints: List<String> = emptyList(),
     private val onIdentity: suspend (GatewayFrame, String) -> Unit = { _, _ -> },
-    private val foregroundProbeTimeoutMilliseconds: Long = DEFAULT_FOREGROUND_PROBE_TIMEOUT_MILLISECONDS
+    private val foregroundProbeTimeoutMilliseconds: Long = DEFAULT_FOREGROUND_PROBE_TIMEOUT_MILLISECONDS,
+    private val diagnosticsNow: () -> Double = createNetworkDiagnosticsClock()
 ) {
+    private val diagnosticsStore = NetworkDiagnosticsStore()
+    private var diagnosticsLease = 0L
+
+    /** 冷流的订阅即检测生命周期；页面消失或进入后台取消收集后，不再发探测包。 */
+    fun monitorNetworkDiagnostics(connectionMethod: () -> String): Flow<NetworkDiagnosticsSnapshot> =
+        flow {
+            val lease = serialized {
+                diagnosticsLease++
+                diagnosticsStore.start(Random.nextLong().toString(16), diagnosticsNow())
+                diagnosticsLease
+            }
+            try {
+                while (true) {
+                    val snapshot = serialized {
+                        if (lease != diagnosticsLease) return@serialized null
+                        val now = diagnosticsNow()
+                        diagnosticsStore.connection(
+                            connectionGeneration.toString(), connectionMethod(),
+                            mutableState.value.connection == GatewayConnectionState.CONNECTED,
+                            NetworkDiagnosticsStore.CAPABILITY in mutableState.value.capabilities,
+                            now
+                        )
+                        diagnosticsStore.tick(now)
+                        diagnosticsStore.nextProbe(now)?.let { id ->
+                            val payload = buildJsonObject {
+                                put("type", JsonPrimitive("ping"))
+                                put("requestId", JsonPrimitive(id))
+                            }.toString()
+                            try {
+                                transport.send(payload)
+                                diagnosticsStore.recordTraffic(payload.encodeToByteArray().size.toLong(), 0)
+                            } catch (cancelled: CancellationException) { throw cancelled }
+                            catch (_: Exception) { diagnosticsStore.sendFailed(id, diagnosticsNow()) }
+                        }
+                        diagnosticsStore.snapshot()
+                    } ?: break
+                    emit(snapshot)
+                    delay(1000)
+                }
+            } finally {
+                withContext(NonCancellable) {
+                    serialized { if (diagnosticsLease == lease) diagnosticsStore.stop() }
+                }
+            }
+        }
+
     private val serialization = Mutex()
     private val mutableState = MutableStateFlow(
         GatewayRuntimeState(networkAvailable = networkMonitor.state.value == GatewayNetworkState.AVAILABLE)
@@ -135,6 +190,7 @@ class GatewayRuntime(
     private var reconnectBlocked = false
     /** 手动配对码是一次性的；失败后绝不能在后台反复重连。 */
     private var isManualPairingAttempt = false
+    private var upgradeAfterPairing = false
     private var pairingCode: String? = null
     private var endpoint: String? = null
     private var subscribedSessionId: String? = null
@@ -177,6 +233,8 @@ class GatewayRuntime(
     }
 
     suspend fun connect(endpoint: String) = serialized {
+        upgradeAfterPairing = false
+        (transport as? com.clarklevis.dsh.shared.platform.GatewayRtcTransport)?.resetRtcRecovery()
         requireWebSocketEndpoint(endpoint)
         require(trustedEndpoints.isEmpty() || endpoint in trustedEndpoints) { "地址未经此主机确认" }
         cancelForegroundResumeLocked()
@@ -195,6 +253,7 @@ class GatewayRuntime(
     }
 
     suspend fun pair(encodedPayload: String) = serialized {
+        upgradeAfterPairing = false
         val payload = GatewayPairingPayloadParser.parse(encodedPayload, clock.nowEpochMilliseconds())
         GatewayIdentity.validate(expectedGatewayId, payload.gatewayId)
         cancelForegroundResumeLocked()
@@ -243,6 +302,7 @@ class GatewayRuntime(
     }
 
     suspend fun disconnect() = serialized {
+        upgradeAfterPairing = false
         desiredConnection = false
         reconnectBlocked = false
         pairingCode = null
@@ -454,12 +514,15 @@ class GatewayRuntime(
         )
         updateRequestTimeoutsLocked()
         return runCatching { transport.send(request.payload) }.fold(
-            onSuccess = { true },
-            onFailure = {
+            onSuccess = {
+                if (diagnosticsStore.isActive) diagnosticsStore.recordTraffic(request.payload.encodeToByteArray().size.toLong(), 0)
+                true
+            },
+            onFailure = { error ->
                 pendingLanes.remove(request.responseKind)?.active?.timeoutJob?.cancel()
                 rejectLocked(
                     request.requestType,
-                    ERROR_SEND_FAILED,
+                    if (error.message == "transport/ws-required") "transport/ws-required" else ERROR_SEND_FAILED,
                     request.targetSessionId,
                     request.correlationId,
                     request.isBackgroundHistory
@@ -632,6 +695,13 @@ class GatewayRuntime(
             rejectLocked("transport", ERROR_STALE_FRAME)
             return null
         }
+        diagnosticsStore.recordTraffic(0, transportFrame.byteCount.toLong())
+        if (frame.kind == "pong" && frame.requestId?.startsWith(
+                NetworkDiagnosticsStore.PROBE_PREFIX
+            ) == true) {
+            diagnosticsStore.acceptPong(frame.requestId, diagnosticsNow())
+            return null
+        }
         if (frame.kind == "hello" && isManualPairingAttempt && pairingCode != null) {
             reconnectBlocked = true
             desiredConnection = false
@@ -668,6 +738,15 @@ class GatewayRuntime(
                 return null
             }
             pairingCode = null
+            upgradeAfterPairing = transport is com.clarklevis.dsh.shared.platform.GatewayRtcTransport &&
+                com.clarklevis.dsh.shared.transport.GatewayTransportPolicy.allowsRtc(target)
+        }
+        if (frame.kind == "hello" && upgradeAfterPairing) {
+            // 长期凭据已提交成功；换新鉴权连接协商，旧配对连接不执行业务。
+            upgradeAfterPairing = false
+            isManualPairingAttempt = false
+            openTransportLocked(preserveTurns = false)
+            return null
         }
         if (frame.kind == "hello") {
             try {
@@ -857,7 +936,7 @@ class GatewayRuntime(
             "speech-preparation-cancelled", "speech-transcript", "speech-cancelled",
             "file-upload-completed" -> request.correlationId == frame.requestId || (frame.uploadId != null && runCatching {
                 val payload = wireJson.parseToJsonElement(request.payload) as kotlinx.serialization.json.JsonObject
-                (payload["uploadId"] as? kotlinx.serialization.json.JsonPrimitive)?.content == frame.uploadId
+                (payload["uploadId"] as? JsonPrimitive)?.content == frame.uploadId
             }.getOrDefault(false))
             "file-upload-opened", "file-upload-chunk-accepted", "file-upload-cancelled",
             "session-created", "session-agent-preset", "select-agent-preset", "file-resolved", "file-list", "file-download-opened" -> request.correlationId == frame.requestId
@@ -1452,3 +1531,8 @@ class GatewayRuntime(
 /** attachmentId 尚未由协议保证跨 session 全局唯一，因此缓存键必须包含 session。 */
 fun gatewayAttachmentCacheKey(sessionId: String, attachmentId: String): String =
     "${sessionId.length}:$sessionId:$attachmentId"
+
+private fun createNetworkDiagnosticsClock(): () -> Double {
+    val origin = kotlin.time.TimeSource.Monotonic.markNow()
+    return { origin.elapsedNow().inWholeNanoseconds / 1_000_000.0 }
+}

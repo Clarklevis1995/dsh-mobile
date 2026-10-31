@@ -90,11 +90,6 @@ private struct RootNavigationHost: View, Equatable {
                 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task {
-            if case .disconnected = store.gateway.state {
-                await store.connectOnColdLaunchIfPaired()
-            }
-        }
         .onChangeCompat(of: navigationPath) { _, path in
             if path.isEmpty { store.resumeWorkspace() }
         }
