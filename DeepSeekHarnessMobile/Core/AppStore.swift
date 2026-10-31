@@ -3616,7 +3616,13 @@ final class AppStore: ObservableObject {
                 let transition = dispatchSessionControlAction(.permissionSelected(sessionID: sessionID, value: value))
                 cancelCompletedSessionControlTracker("permission", transition: transition)
                 if transition.completed("permission"), let targetSessionID {
-                    notice(String(localized: "权限已切换"), value, sessionId: targetSessionID)
+                    notice(
+                        String(localized: "权限已切换"),
+                        L10n.permissionName(for: value, fallback: sessionPermissions[targetSessionID]?.options?
+                            .first(where: { $0.value == value })?.name
+                            ?? permissionDefaultOptions.first(where: { $0.value == value })?.name),
+                        sessionId: targetSessionID
+                    )
                 }
             } else {
                 if failSessionControlRequest("permission", responseSessionID: sessionID) {

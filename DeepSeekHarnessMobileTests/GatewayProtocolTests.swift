@@ -997,6 +997,14 @@ private struct HistoryHeightProbe: UIViewRepresentable {
 
 final class ConversationViewportLayoutTests: XCTestCase {
     @MainActor
+    private func waitForLayout(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while !condition(), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(condition(), "会话布局未在超时前稳定", file: file, line: line)
+    }
+    @MainActor
     func testWarmSessionRestoresReadingAnchorAndSearchDoesNotSnapBackToTail() async throws {
         ConversationViewportController.clearReusableHeights()
         defer { ConversationViewportController.clearReusableHeights() }
@@ -2134,6 +2142,154 @@ final class ConversationViewportLayoutTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(assistant.height, 619)
         XCTAssertGreaterThanOrEqual(following.minY + 0.5, assistant.maxY)
+    }
+
+    @MainActor
+    func testGoalProjectionKeepsLatestMessageAboveComposerInConversationView() async throws {
+        let suite = "GoalComposerLayout.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = UserDefaultsAppPreferences(userDefaults: defaults)
+        preferences.automaticallyConnect = false
+        let session = SessionSummary(id: suite, title: "持久目标滚动回归", lastActivity: Date(),
+            isRunning: false, hasUnread: false)
+        preferences.saveSessions([session])
+        let store = AppStore(preferences: preferences, gatewayLocalID: suite, chatHistoryCache: nil)
+        defer { store.deactivateGateway() }
+        let prepared = await store.prepareConversation(for: session)
+        XCTAssertTrue(prepared)
+        let timeline = store.conversationTimeline(for: session.id)
+        timeline.publish((0..<16).map { index in
+            ConversationItem(id: "goal-message-\(index)", kind: .assistant, title: "",
+                text: "消息 \(index)：\n" + String(repeating: "持久目标出现后仍应能读到最新内容。", count: 4),
+                isError: false, date: Date(timeIntervalSince1970: Double(index)))
+        })
+        let controller = UIHostingController(rootView: ConversationView(activeView: .constant(0)).environmentObject(store))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        try await waitForLayout {
+            guard let list = firstDescendant(of: UICollectionView.self, in: controller.view) else { return false }
+            return list.numberOfSections > 0 && list.numberOfItems(inSection: 0) >= 16
+                && !list.isHidden && list.layer.opacity == 1 && list.contentInset.bottom > 0
+        }
+        controller.view.layoutIfNeeded()
+        let list = try XCTUnwrap(firstDescendant(of: UICollectionView.self, in: controller.view))
+        let previousInset = list.contentInset.bottom
+        let revision = timeline.currentSnapshot.revision
+        var frame = GatewayFrame(kind: "goal-updated")
+        frame.sessionId = session.id
+        frame.asOfSeq = 1
+        frame.goal = GatewayGoalPayload(goal: GatewayGoalDefinition(id: "goal", revision: 1,
+            objective: "完成持久目标与权限显示回归验证", phase: "active"), roundsStarted: 1)
+        store.gateway.onFrame?(frame)
+        try await waitForLayout {
+            store.selectedGoalProjection?.goal != nil && list.contentInset.bottom > previousInset + 40
+        }
+        controller.view.layoutIfNeeded()
+        XCTAssertNotNil(store.selectedGoalProjection?.goal)
+        XCTAssertEqual(timeline.currentSnapshot.revision, revision, "该场景只能改变目标面板，不能依赖新消息修正滚动")
+        XCTAssertGreaterThan(list.contentInset.bottom, previousInset + 40)
+        let bottom = max(-list.adjustedContentInset.top,
+            list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)
+        XCTAssertEqual(list.contentOffset.y, bottom, accuracy: 1)
+        let lastPath = IndexPath(item: list.numberOfItems(inSection: 0) - 1, section: 0)
+        let lastFrame = try XCTUnwrap(list.layoutAttributesForItem(at: lastPath)).frame
+        XCTAssertLessThanOrEqual(lastFrame.maxY - list.contentOffset.y,
+                                 list.bounds.height - list.contentInset.bottom + 1,
+                                 "最新消息必须完整位于底部目标与输入框上方")
+        let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "持久目标出现后最新消息完整可见"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
+    func testPinnedViewportFollowsBottomInsetChangesWithoutTimelineUpdate() async throws {
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 320)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.frame = controller.view.frame
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+
+        let rows = (0..<12).map { index in
+            ConversationViewportEntry(
+                id: "bottom-inset-\(index)",
+                revision: 0,
+                content: AnyView(Text("消息 \(index)").frame(height: 90))
+            )
+        }
+        controller.apply(entries: rows, revision: 1, bottomInset: 0, hasConversationContent: true)
+        try await Task.sleep(for: .milliseconds(180))
+        let list = try XCTUnwrap(firstDescendant(of: UICollectionView.self, in: controller.view))
+        list.layoutIfNeeded()
+        let oldBottom = list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom
+        XCTAssertEqual(list.contentOffset.y, oldBottom, accuracy: 1)
+
+        controller.apply(entries: rows, revision: 1, bottomInset: 120, hasConversationContent: true)
+        try await Task.sleep(for: .milliseconds(80))
+        list.layoutIfNeeded()
+        let newBottom = list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom
+        XCTAssertGreaterThan(newBottom, oldBottom + 100)
+        XCTAssertEqual(list.contentOffset.y, newBottom, accuracy: 1,
+                       "底部目标面板出现时，贴底消息必须跟随新的覆盖层留白")
+    }
+
+    @MainActor
+    func testBottomInsetChangePreservesReadingPositionAfterUserLeavesTail() async throws {
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 320)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.frame = controller.view.frame
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+
+        let rows = (0..<18).map { index in
+            ConversationViewportEntry(
+                id: "reading-inset-\(index)",
+                revision: 0,
+                content: AnyView(Text("消息 \(index)").frame(height: 80))
+            )
+        }
+        controller.apply(entries: rows, revision: 1, bottomInset: 0, hasConversationContent: true)
+        try await Task.sleep(for: .milliseconds(180))
+        let list = try XCTUnwrap(firstDescendant(of: UICollectionView.self, in: controller.view))
+        controller.scrollViewWillBeginDragging(list)
+        list.setContentOffset(CGPoint(x: 0, y: 260), animated: false)
+        controller.scrollViewDidScroll(list)
+        controller.scrollViewDidEndDragging(list, willDecelerate: false)
+        let readingOffset = list.contentOffset.y
+        XCTAssertLessThan(readingOffset, list.contentSize.height - list.bounds.height - 28)
+
+        controller.apply(entries: rows, revision: 1, bottomInset: 120, hasConversationContent: true)
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(list.contentOffset.y, readingOffset, accuracy: 1,
+                       "用户离开底部后，目标面板变化不能抢夺阅读位置")
     }
 
     @MainActor
