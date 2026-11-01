@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicLong
  * API 刻意不接收 endpoint、凭据、消息正文、Session ID、附件 ID 或 Base64，避免调用方误打敏感值。
  */
 internal class AndroidGatewayDiagnostics private constructor(
-    private val enabled: Boolean,
+    internal val enabled: Boolean,
     private val writer: (priority: Int, tag: String, message: String) -> Unit,
     private val monotonicMillis: () -> Long = { System.nanoTime() / 1_000_000 }
 ) {
@@ -27,7 +27,8 @@ internal class AndroidGatewayDiagnostics private constructor(
         generation: Long,
         channel: String?,
         cause: GatewayTransportFailureCause,
-        closeCode: Int? = null
+        closeCode: Int? = null,
+        httpStatus: Int? = null
     ) {
         val since = backgroundSince.get()
         val backgroundMillis = if (since >= 0) (monotonicMillis() - since).coerceAtLeast(0) else -1
@@ -38,7 +39,7 @@ internal class AndroidGatewayDiagnostics private constructor(
         }
         emit(Log.WARN, "transport failure-detail generation=$generation channel=$safeChannel " +
             "cause=${cause.wireName} background=${since >= 0} backgroundMillis=$backgroundMillis " +
-            "closeCode=${closeCode ?: "none"}")
+            "closeCode=${closeCode ?: "none"} httpStatus=${httpStatus ?: "none"}")
     }
 
     fun offlineCatalog(stage: String, sessionCount: Int) {
@@ -59,6 +60,26 @@ internal class AndroidGatewayDiagnostics private constructor(
             )
         } ?: "unknown"
         emit(Log.DEBUG, "chat-prefetch stage=$safeStage count=${count.coerceIn(0, 6)}")
+    }
+
+    /**
+     * 内嵌 tailscale 节点的阶段与结果。刻意不打印状态 JSON：里面含 tailnet 地址与节点密钥。
+     */
+    fun tunnel(stage: String, ok: Boolean, backendState: String?, peerCount: Int = 0, hasAuthUrl: Boolean = false) {
+        val safeStage = stage.takeIf {
+            it in setOf(
+                "bring-up", "start", "native-load", "forward", "status", "close", "disabled",
+                "routes", "auto-start"
+            )
+        } ?: "unknown"
+        val safeBackend = backendState.takeIf {
+            it in setOf("Running", "NeedsLogin", "NeedsMachineAuth", "Stopped", "NoLoginNeeded", "InUseOtherUser")
+        } ?: "none"
+        emit(
+            if (ok) Log.INFO else Log.WARN,
+            "tsnet tunnel stage=$safeStage ok=$ok backend=$safeBackend " +
+                "peers=${peerCount.coerceIn(0, 4096)} authUrl=$hasAuthUrl"
+        )
     }
 
     fun intent(action: GatewayDiagnosticAction, hasSession: Boolean = false, imageCount: Int = 0) {
@@ -200,6 +221,26 @@ internal class AndroidGatewayDiagnostics private constructor(
         emit(
             Log.INFO,
             "lifecycle event=${event.wireName}" + (keepAlive?.let { " keepAlive=$it" } ?: "")
+        )
+    }
+
+    /**
+     * 这次连接走的是哪条路径：直连，还是经应用内的 Tailscale 节点出口。
+     * 没有它，"到底走没走隧道"只能靠对端流量猜——真机排障时就卡在这儿的。
+     */
+    fun transportRoute(routedThroughNode: Boolean) {
+        emit(Log.INFO, "transport route=${if (routedThroughNode) "node" else "direct"}")
+    }
+
+    /**
+     * 握手被拒绝时，服务端回给客户端的原因。刻意不包含 URL、凭据、设备标识。
+     * 有了它，"403/401 为什么" 就不必靠猜（真机上就是这么缺的）。
+     */
+    fun emitTransportRejection(generation: Long, status: Int, reason: String, body: String) {
+        emit(
+            Log.WARN,
+            "transport rejected generation=$generation status=$status reason=${reason.take(60)} " +
+                "detail=${body.replace(Regex("[\\r\\n\\t]+"), " ").take(120)}"
         )
     }
 
