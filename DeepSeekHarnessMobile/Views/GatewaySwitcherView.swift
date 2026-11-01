@@ -7,6 +7,8 @@ struct GatewaySwitcherBar: View {
     var body: some View {
         Button { showsHosts = true } label: {
             HStack(spacing: 8) {
+                // 内嵌隧道的标记：只在开关打开时出现；未连上时叠一个转圈，连上后静止点亮。
+                TailscaleTunnelIndicator()
                 Image(systemName: hosts.activeProfile?.deviceKind ?? "desktopcomputer")
                 Text(hosts.activeProfile?.displayName ?? String(localized: "选择主机"))
                     .lineLimit(1)

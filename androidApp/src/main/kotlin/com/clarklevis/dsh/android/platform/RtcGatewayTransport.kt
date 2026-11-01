@@ -39,9 +39,13 @@ internal class RtcGatewayTransport(
     private val scope: CoroutineScope,
     private val diagnostics: AndroidGatewayDiagnostics,
     private val rtcPolicy: (String) -> Boolean = GatewayTransportPolicy::allowsRtc,
+    // 连接出口由应用层的路径策略决定（内嵌 Tailscale 节点在跑就走它）。传输层自己不知道网络路径。
+    // 注意：WebRTC 用自己的 socket，不经这个出口——所以经节点时 rtcPolicy 应当拒绝 RTC，
+    // 否则会先徒劳地尝试 ICE 再回落到 WebSocket（实测过 RTC 不会走内嵌节点）。
+    private val clientProvider: () -> okhttp3.OkHttpClient = { OkHttpGatewayTransport.defaultClient() },
 ) : GatewayRtcTransport {
-    private val signal = OkHttpGatewayTransport(diagnostics = diagnostics)
-    private val conversation = OkHttpGatewayTransport(diagnostics = diagnostics)
+    private val signal = OkHttpGatewayTransport(clientProvider = clientProvider, diagnostics = diagnostics)
+    private val conversation = OkHttpGatewayTransport(clientProvider = clientProvider, diagnostics = diagnostics)
     private val controlLane = Lane("control")
     private val conversationLane = Lane("conversation")
     private val split = SplitGatewayTransport(controlLane, conversationLane)

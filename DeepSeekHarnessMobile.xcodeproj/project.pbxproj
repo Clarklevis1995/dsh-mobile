@@ -7,6 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DA4300000000000000000001 /* TunnelDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4300000000000000000002 /* TunnelDiagnostics.swift */; };
+		DA4100000000000000000001 /* NodeForwarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4100000000000000000002 /* NodeForwarding.swift */; };
+		DA4200000000000000000001 /* NodeForwardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4200000000000000000002 /* NodeForwardingTests.swift */; };
+		AB0200000000000000000001 /* TailscaleTunnelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0200000000000000000002 /* TailscaleTunnelView.swift */; };
+		A9FF00000000000000000001 /* TsnetTunnel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9FF00000000000000000002 /* TsnetTunnel.swift */; };
+		AC0300000000000000000001 /* TailscaleTunnelSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0300000000000000000002 /* TailscaleTunnelSettings.swift */; };
+		AC0400000000000000000001 /* TailscaleTunnelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0400000000000000000002 /* TailscaleTunnelController.swift */; };
+		A9FC00000000000000000010 /* Tsnetgo.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9FC00000000000000000011 /* Tsnetgo.xcframework */; };
 		DA3100000000000000000003 /* LocalAppLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3100000000000000000004 /* LocalAppLogTests.swift */; };
 		DA3100000000000000000001 /* LocalAppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3100000000000000000002 /* LocalAppLog.swift */; };
 		CA7400000000000000000001 /* WorkspaceSessionList.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7400000000000000000002 /* WorkspaceSessionList.swift */; };
@@ -131,6 +139,14 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		DA4300000000000000000002 /* TunnelDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelDiagnostics.swift; sourceTree = "<group>"; };
+		DA4100000000000000000002 /* NodeForwarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeForwarding.swift; sourceTree = "<group>"; };
+		DA4200000000000000000002 /* NodeForwardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeForwardingTests.swift; sourceTree = "<group>"; };
+		AB0200000000000000000002 /* TailscaleTunnelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailscaleTunnelView.swift; sourceTree = "<group>"; };
+		A9FF00000000000000000002 /* TsnetTunnel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TsnetTunnel.swift; sourceTree = "<group>"; };
+		AC0300000000000000000002 /* TailscaleTunnelSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailscaleTunnelSettings.swift; sourceTree = "<group>"; };
+		AC0400000000000000000002 /* TailscaleTunnelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailscaleTunnelController.swift; sourceTree = "<group>"; };
+		A9FC00000000000000000011 /* Tsnetgo.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = tsnetgo/build/tsnetgo/Tsnetgo.xcframework; sourceTree = "<group>"; };
 		DA3100000000000000000004 /* LocalAppLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAppLogTests.swift; sourceTree = "<group>"; };
 		DA3100000000000000000002 /* LocalAppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAppLog.swift; sourceTree = "<group>"; };
 		CA7400000000000000000002 /* WorkspaceSessionList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSessionList.swift; sourceTree = "<group>"; };
@@ -231,6 +247,7 @@
 				F5CD0CFD51B8D80944F87550 /* Foundation.framework in Frameworks */,
 				E73A2DB9D678DA4B8C01E349 /* MarkdownUI in Frameworks */,
 				CF230000000000000000003 /* WebRTC in Frameworks */,
+				A9FC00000000000000000010 /* Tsnetgo.xcframework in Frameworks */,
 				CF228000000000000000003 /* SwiftMath in Frameworks */,
 				C7A710000000000000000001 /* ChatLayout in Frameworks */,
 			);
@@ -287,6 +304,11 @@
 				CA11E0000000000000000004 /* ImagePreprocessor.swift */,
 				A0C0FFEE0000000000000004 /* ConversationTimeline.swift */,
 				E61E231D0CD3E07857F861B0 /* GatewayClient.swift */,
+				A9FF00000000000000000002 /* TsnetTunnel.swift */,
+				DA4100000000000000000002 /* NodeForwarding.swift */,
+				DA4300000000000000000002 /* TunnelDiagnostics.swift */,
+				AC0300000000000000000002 /* TailscaleTunnelSettings.swift */,
+				AC0400000000000000000002 /* TailscaleTunnelController.swift */,
 				DA3100000000000000000002 /* LocalAppLog.swift */,
 				CF230000000000000000002 /* GatewayRtcLink.swift */,
 				CF231000000000000000002 /* GatewayNetworkDiagnostics.swift */,
@@ -306,6 +328,7 @@
 				CA7400000000000000000004 /* WorkspaceSessionListTests.swift */,
 				0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */,
 				DA3100000000000000000004 /* LocalAppLogTests.swift */,
+				DA4200000000000000000002 /* NodeForwardingTests.swift */,
 				A9A3BDFA7B0949F8BA0B01A6 /* WorkspaceDrawerFeedbackTests.swift */,
 				81886703A6C3AB2164852990 /* VoiceInputTests.swift */,
 				AF17C0000000000000000004 /* FileIconAssetTests.swift */,
@@ -350,6 +373,7 @@
 				D7854C843240E809A949A26E /* Products */,
 				20DF8D6DFD28A5D750C6FC28 /* Frameworks */,
 				3BAEAAE97D242C997E1AB80A /* DeepSeekHarnessMobile */,
+				A9FC00000000000000000011 /* Tsnetgo.xcframework */,
 				F1A000000000000000000021 /* AgentLiveActivityWidget */,
 				0CABA197D44C2A9AA01CF6FF /* DeepSeekHarnessMobileTests */,
 				F2B000000000000000000004 /* DeepSeekHarnessMobileUITests */,
@@ -417,6 +441,7 @@
 				D610757C1FF81FD953A9D000 /* WorkspaceView.swift */,
 				DCB5E4921392A6503AD87B74 /* ConversationSidebar.swift */,
 				65B6B2953247E15BDA40F0BB /* GatewaySwitcherView.swift */,
+				AB0200000000000000000002 /* TailscaleTunnelView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -485,6 +510,7 @@
 			buildConfigurationList = 62C8D12628E44A75D40278DD /* Build configuration list for PBXNativeTarget "DeepSeekHarnessMobile" */;
 			buildPhases = (
 				A9FC00000000000000000003 /* Build KMP Framework */,
+				A9FC00000000000000000004 /* Build Tsnetgo XCFramework */,
 				AB0170000000000000000005 /* Build Metal Library */,
 				83446887BD782B48B6E0170F /* Sources */,
 				2730CFAAB3AB8815D8F74EB4 /* Frameworks */,
@@ -673,6 +699,26 @@
 			shellScript = "/bin/sh \"$SRCROOT/scripts/build_metal_library.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		A9FC00000000000000000004 /* Build Tsnetgo XCFramework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Tsnetgo XCFramework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\ncd \"$SRCROOT\"\n# 内嵌 tailscale 节点（见 tsnetgo/）：16.x 没有给 URLSession 配代理的 API，\n# 经节点的 WebSocket 由 Swift 对着 StartProxy 的本地 CONNECT 代理说，所以需要这个包。\n\"$SRCROOT/gradlew\" buildTsnetXcframework --quiet\n";
+		};
+
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -683,6 +729,7 @@
 				CA7400000000000000000003 /* WorkspaceSessionListTests.swift in Sources */,
 				39FD319C875F4B4A6893D676 /* GatewayProtocolTests.swift in Sources */,
 				DA3100000000000000000003 /* LocalAppLogTests.swift in Sources */,
+				DA4200000000000000000001 /* NodeForwardingTests.swift in Sources */,
 				3874FCB0CE354690A304E63F /* WorkspaceDrawerFeedbackTests.swift in Sources */,
 				CD86C5C4C6FF6F4BD8D715A6 /* VoiceInputTests.swift in Sources */,
 				AF17C0000000000000000003 /* FileIconAssetTests.swift in Sources */,
@@ -730,6 +777,12 @@
 				CA11E0000000000000000003 /* ImagePreprocessor.swift in Sources */,
 				A0C0FFEE0000000000000003 /* ConversationTimeline.swift in Sources */,
 				80E777AC0855635BC3D12EA7 /* GatewayClient.swift in Sources */,
+				A9FF00000000000000000001 /* TsnetTunnel.swift in Sources */,
+				DA4100000000000000000001 /* NodeForwarding.swift in Sources */,
+				DA4300000000000000000001 /* TunnelDiagnostics.swift in Sources */,
+				AB0200000000000000000001 /* TailscaleTunnelView.swift in Sources */,
+				AC0300000000000000000001 /* TailscaleTunnelSettings.swift in Sources */,
+				AC0400000000000000000001 /* TailscaleTunnelController.swift in Sources */,
 				DA3100000000000000000001 /* LocalAppLog.swift in Sources */,
 				CF230000000000000000001 /* GatewayRtcLink.swift in Sources */,
 				CF231000000000000000001 /* GatewayNetworkDiagnostics.swift in Sources */,

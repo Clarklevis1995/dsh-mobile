@@ -106,6 +106,7 @@ private const val ROUTE_SETTINGS_STORAGE = "settings/storage"
 private const val ROUTE_SETTINGS_FONT_SIZE = "settings/font-size"
 private const val ROUTE_SETTINGS_AGENT_PRESETS = "settings/agent-presets"
 private const val ROUTE_SETTINGS_DEFAULT_MODEL = "settings/default-model"
+private const val ROUTE_SETTINGS_TUNNEL = "settings/tailscale-tunnel"
 private const val ROUTE_PLUGINS = "plugins"
 private const val ROUTE_PLUGIN_BUNDLE = "plugins/bundle/{bundleName}"
 private const val ROUTE_PLUGIN_OFFICIAL = "plugins/official/{pluginId}"
@@ -206,11 +207,15 @@ internal fun DshProductApp(
                 onOpenDefaultModel = { navController.navigate(ROUTE_SETTINGS_DEFAULT_MODEL) },
                 onOpenFontSize = { navController.navigate(ROUTE_SETTINGS_FONT_SIZE) },
                 onOpenStorage = { navController.navigate(ROUTE_SETTINGS_STORAGE) },
-                onOpenNetworkDiagnostics = { navController.navigate(ROUTE_SETTINGS_NETWORK) }
+                onOpenNetworkDiagnostics = { navController.navigate(ROUTE_SETTINGS_NETWORK) },
+                onOpenTunnel = { navController.navigate(ROUTE_SETTINGS_TUNNEL) }
             )
         }
         composable(ROUTE_SETTINGS_NETWORK) {
             NetworkDiagnosticsScreen(stateHolder, navController::popBackStack)
+        }
+        composable(ROUTE_SETTINGS_TUNNEL) {
+            TailscaleTunnelScreen(navController::popBackStack)
         }
         composable(ROUTE_SETTINGS_STORAGE) {
             StorageSpaceScreen(stateHolder, navController::popBackStack)

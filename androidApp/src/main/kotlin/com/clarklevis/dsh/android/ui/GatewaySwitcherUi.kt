@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.res.painterResource
 import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.android.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.clarklevis.dsh.android.platform.TunnelUiStage
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -49,8 +51,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.material3.Text
@@ -68,6 +68,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -80,6 +83,27 @@ import com.clarklevis.dsh.android.DshAndroidApplication
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import com.clarklevis.dsh.shared.gateway.GatewayProfile
 import kotlinx.coroutines.awaitCancellation
+
+/**
+ * 内嵌 Tailscale 的状态标记，放在主机切换控件的左侧（按用户要求）。
+ * 规则：开关没开 → 什么都不显示，界面照旧；开了但未登录/未连上 → 九点按官方 16 帧闪；
+ * 已连上 → 静态点亮。颜色恒为白色，不靠配色区分状态；状态文字走 contentDescription。
+ */
+@Composable
+private fun TailscaleTunnelIndicator(application: DshAndroidApplication) {
+    val settings = LocalTailscaleTunnelSettings.current
+    if (!settings.enabled) return
+    val state by application.tunnel.state.collectAsStateWithLifecycle()
+    val ready = state.stage == TunnelUiStage.READY
+    TailscaleMarkIcon(
+        connected = ready,
+        color = Color.White.copy(alpha = 0.85f),
+        modifier = Modifier
+            .padding(end = 2.dp)
+            .size(18.dp)
+            .clearAndSetSemantics { contentDescription = appText("内嵌隧道") }
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,6 +124,7 @@ internal fun GatewaySwitcherBar() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        TailscaleTunnelIndicator(application)
         HostIcon(hosts.activeProfile?.server == true, Color.White, Modifier.size(15.dp))
         Text(hosts.activeProfile?.displayName ?: appText("选择主机"), color = Color.White, fontSize = 12.sp, maxLines = 1)
         val activeOnline = hosts.activeGraph.stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED
