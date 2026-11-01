@@ -82,6 +82,7 @@ internal fun SettingsScreen(
     onOpenFontSize: () -> Unit,
     onOpenStorage: () -> Unit = {},
     onOpenNetworkDiagnostics: () -> Unit = {},
+    onOpenTunnel: () -> Unit = {},
     updateModel: com.clarklevis.dsh.android.update.AppUpdateViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val updateState by updateModel.state.collectAsStateWithLifecycle()
@@ -201,6 +202,9 @@ internal fun SettingsScreen(
                         }
                         SettingsDivider()
                         SettingsActionRow(appText("Ping 网关"), enabled = isConnected(stateHolder), onClick = stateHolder::pingGateway)
+                    }
+                    SettingsSection(appText("Tailscale 内嵌隧道")) {
+                        TailscaleTunnelRow(onOpenTunnel)
                     }
                     stateHolder.snapshot.hostSnapshot?.let { host ->
                         SettingsSection("DSH Host") {
@@ -791,6 +795,17 @@ private fun SettingsValueRow(
             )
         }
     }
+}
+
+@Composable
+internal fun TailscaleTunnelRow(onClick: () -> Unit) {
+    val settings = LocalTailscaleTunnelSettings.current
+    SettingsValueRow(
+        title = appText("内嵌隧道"),
+        value = if (settings.enabled) appText("已启用") else appText("未启用"),
+        onClick = onClick,
+        modifier = Modifier.testTag("tailscale-tunnel-settings-row")
+    )
 }
 
 @Composable
