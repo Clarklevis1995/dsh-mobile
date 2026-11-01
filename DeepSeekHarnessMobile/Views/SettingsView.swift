@@ -195,6 +195,12 @@ struct SettingsView: View {
                 Button("Ping 网关") { store.gateway.ping() }
             }
 
+            Section {
+                TailscaleTunnelSettingsRow()
+            } header: {
+                Text("Tailscale 内嵌隧道")
+            }
+
             if let host = store.hostSnapshot {
                 Section("DSH Host") {
                     LabeledContent("版本", value: [host.dshVersion, host.version].compactMap { $0 }

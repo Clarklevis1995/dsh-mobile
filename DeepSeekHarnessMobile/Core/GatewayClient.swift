@@ -178,6 +178,7 @@ final class GatewayClient: ObservableObject {
     /// event is itself larger than the page budget.
     private static let maximumIncomingMessageSize = 64 * 1024 * 1024
 
+
     @Published private(set) var state: ConnectionState = .disconnected
     private struct NetworkDiagnosticsObserver {
         let pong: (String) -> Void
@@ -503,12 +504,22 @@ final class GatewayClient: ObservableObject {
                 if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
                 request.setValue("dsh-mobile-v1", forHTTPHeaderField: "Sec-WebSocket-Protocol")
             }
-            let rtcAllowed = self.rtcPolicy(url.absoluteString)
+            // 经内嵌节点的那条路：只把「连接端点」换成本地转发器（127.0.0.1:随机端口原样转发到目标）。
+            // 逻辑端点不动——凭据、档案标识、日志里的 endpoint 全部还是用户填的那个；
+            // 换掉的只是 socket 连去哪儿。WS 的握手与帧仍由 URLSession 做，我们不碰协议。
+            let forward = await TailscaleTunnelController.shared.forwarder(for: url.absoluteString)
+            if let forward, let local = NodeForwarding.connectURL(for: url, localPort: forward.localPort) {
+                request.url = local
+                TunnelDiagnostics.transport("route=node target=\(forward.target) local=\(forward.localPort)")
+            }
+            // 经节点时不试 RTC：WebRTC 用的是自己的 socket，绕过这个入口（安卓实测过它不会走节点）。
+            let rtcAllowed = self.rtcPolicy(url.absoluteString) && forward == nil
             let negotiate = self.channel == "control" && !self.probeOnly && token?.isEmpty == false &&
                 pairingCode == nil && self.expectedGatewayID != nil && !self.forceNextWebsocket && rtcAllowed
             if self.channel == "control", !self.probeOnly, !negotiate {
                 let reason: String
-                if !rtcAllowed { reason = "lan-websocket" }
+                if forward != nil { reason = "node-websocket" }
+                else if !rtcAllowed { reason = "lan-websocket" }
                 else if pairingCode != nil { reason = "pairing" }
                 else if token?.isEmpty != false { reason = "no-credential" }
                 else if self.expectedGatewayID == nil { reason = "no-gateway-identity" }
