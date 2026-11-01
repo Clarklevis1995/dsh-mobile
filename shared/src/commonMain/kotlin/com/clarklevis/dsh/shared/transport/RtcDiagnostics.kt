@@ -35,6 +35,9 @@ object RtcDiagnostics {
             "no-gateway-identity",
             "websocket-recovery",
             "lan-websocket",
+            // 经内嵌节点时不做 RTC：节点的入口只带 TCP，WebRTC 的 socket 会绕过它。
+            // 这是 iOS 侧发的标签；安卓的判定在 androidApp 里，这里只是允许它存在。
+            "node-websocket",
         )
 
     // 字段对应固定日志格式，避免接收会携带敏感值的任意上下文对象。

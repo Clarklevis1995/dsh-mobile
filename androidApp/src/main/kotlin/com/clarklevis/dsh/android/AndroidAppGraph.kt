@@ -53,7 +53,18 @@ class AndroidAppGraph(
         AndroidAgentNotificationManager(application)
     }
     val networkMonitor: GatewayNetworkMonitor = networkMonitorOverride ?: AndroidNetworkMonitor(application)
-    val transport: GatewayTransport = transportOverride ?: com.clarklevis.dsh.android.platform.RtcGatewayTransport(application, gatewayScope, diagnostics)
+    // 连接是否经内嵌节点，由应用层策略决定（节点在跑且已进 tailnet 才走它）；传输层不判断地址属于哪个网段。
+    private val routeClientProvider: () -> okhttp3.OkHttpClient = {
+        (application as? DshAndroidApplication)?.routeClient() ?: com.clarklevis.dsh.android.platform.OkHttpGatewayTransport.defaultClient()
+    }
+    private val routeAllowsRtc: (String) -> Boolean = { endpoint ->
+        // 经节点时不尝试 RTC：节点的 CONNECT 出口只带 TCP，WebRTC 的 socket 会绕过它。
+        (application as? DshAndroidApplication)?.tunnel?.proxyForRoute() == null &&
+            com.clarklevis.dsh.shared.transport.GatewayTransportPolicy.allowsRtc(endpoint)
+    }
+    val transport: GatewayTransport = transportOverride ?: com.clarklevis.dsh.android.platform.RtcGatewayTransport(
+        application, gatewayScope, diagnostics, rtcPolicy = routeAllowsRtc, clientProvider = routeClientProvider
+    )
     internal val connectionMethod: kotlinx.coroutines.flow.StateFlow<String>
         get() = (transport as? com.clarklevis.dsh.android.platform.RtcGatewayTransport)?.connectionMethod
             ?: kotlinx.coroutines.flow.MutableStateFlow("WebSocket")
