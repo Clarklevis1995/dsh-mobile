@@ -169,6 +169,11 @@ internal open class DshSelectableMarkdownView(context: Context) : AppCompatTextV
     private var selectionMode: ActionMode? = null
     internal val hasSelectionActionMode: Boolean get() = selectionMode != null
     private val showSelectionToolbar = Runnable { publishSelectionToolbar() }
+    /** 复用同一实例，避免 setMovementMethod 因“新对象”绕过 TextView 内部的值未变化短路。 */
+    private val tableMovementMethod: android.text.method.MovementMethod by lazy {
+        io.noties.markwon.ext.tables.TableAwareMovementMethod.create()
+    }
+    private var restoringMovementMethod = false
 
     init {
         setTextIsSelectable(true)
@@ -208,9 +213,26 @@ internal open class DshSelectableMarkdownView(context: Context) : AppCompatTextV
                 removeCallbacks(showSelectionToolbar)
                 onSelectionToolbarChanged?.invoke(null)
                 selecting = false
-                movementMethod = if (isSelectionPage) ArrowKeyMovementMethod.getInstance()
-                    else io.noties.markwon.ext.tables.TableAwareMovementMethod.create()
+                restoreMovementMethod()
             }
+        }
+    }
+
+    /**
+     * 只在 ActionMode 销毁回调里恢复 movementMethod 会重入：`TextView.setMovementMethod`
+     * 同步调用 `Editor.prepareCursorControllers` → `stopSelectionActionMode` →
+     * `onDestroyActionMode`。若每次都新建 `TableAwareMovementMethod`，`mMovement != movement`
+     * 永远成立，递归不会终止（StackOverflowError）。这里复用实例并加同栈重入保护。
+     */
+    private fun restoreMovementMethod() {
+        if (restoringMovementMethod) return
+        val target = if (isSelectionPage) ArrowKeyMovementMethod.getInstance() else tableMovementMethod
+        if (movementMethod === target) return
+        restoringMovementMethod = true
+        try {
+            movementMethod = target
+        } finally {
+            restoringMovementMethod = false
         }
     }
 
