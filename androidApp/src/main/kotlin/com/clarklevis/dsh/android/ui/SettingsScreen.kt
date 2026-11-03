@@ -766,11 +766,11 @@ private fun SettingsValueRow(
     ) {
         Text(
             title,
-            modifier = Modifier.weight(1f, fill = false),
+            modifier = Modifier.weight(1f),
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = rowAlpha),
             fontSize = 16.sp
         )
-        Spacer(Modifier.weight(1f).padding(horizontal = 6.dp))
+        Spacer(Modifier.width(12.dp))
         if (isLoading) {
             CircularProgressIndicator(
                 modifier = Modifier.size(16.dp),
