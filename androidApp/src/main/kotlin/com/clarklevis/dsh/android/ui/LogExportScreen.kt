@@ -276,7 +276,7 @@ private fun LogIconButton(
             Icon(
                 painterResource(icon),
                 null,
-                Modifier.size(if (icon == R.drawable.ic_back_chevron) 22.dp else 24.dp),
+                Modifier.size(if (icon == R.drawable.ic_back_chevron) 22.dp else 20.dp),
                 tint = logTextColor().copy(alpha = if (enabled) 1f else 0.3f)
             )
         }

@@ -258,7 +258,7 @@ struct LogExportView: View {
                     Image(share ? "LogShare" : "LogDownload")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 24, height: 24)
+                        .frame(width: 20, height: 20)
                 }
             }
             .frame(width: 44, height: 44)

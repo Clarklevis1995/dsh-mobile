@@ -11,9 +11,13 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.clarklevis.dsh.android.platform.GatewayLifecycleEvent
 import com.clarklevis.dsh.android.ui.AppearanceSettings
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-class DshAndroidApplication : Application(), DefaultLifecycleObserver {
+class DshAndroidApplication :
+    Application(),
+    DefaultLifecycleObserver {
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(AppearanceSettings.localizedContext(base))
     }
@@ -26,6 +30,7 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
     private val tunnelScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate
     )
+
     /** 隧道开启时请求保持前台服务；最终由 AndroidMultiGatewayStore 统一裁决（回合与隧道是或关系）。 */
     internal var tunnelKeepAliveRequested = false
         private set
@@ -39,7 +44,10 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
         graph.diagnostics.transportRoute(routedThroughNode = proxy != null)
         if (proxy == null) return com.clarklevis.dsh.android.platform.OkHttpGatewayTransport.defaultClient()
         return com.clarklevis.dsh.android.platform.OkHttpGatewayTransport.proxiedClient(
-            proxy.host, proxy.port, proxy.user, proxy.pass
+            proxy.host,
+            proxy.port,
+            proxy.user,
+            proxy.pass
         )
     }
 
@@ -65,6 +73,7 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
         )
     }
     val graph: AndroidAppGraph get() = hosts.activeGraph
+
     @Volatile
     internal var isInForeground = false
         private set
@@ -124,10 +133,16 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
     override fun onStart(owner: LifecycleOwner) {
         isInForeground = true
         graph.diagnostics.lifecycle(GatewayLifecycleEvent.FOREGROUND)
-        graph.gatewayRuntime.applicationDidBecomeActive()
+        if (!tunnel.hasSession) autoStartTunnelIfEnabled()
         // 浏览器授权返回时保留原节点和候选节点，立即刷新授权结果。
         tunnel.refreshAfterReturningToApp()
+        graph.gatewayRuntime.applicationDidBecomeActive()
+    }
+
+    /** 冷启动可能早于 onStart；先恢复已保存的隧道，再让网关选择连接出口。 */
+    internal suspend fun awaitTunnelForStoredConnection() = withContext(Dispatchers.Main.immediate) {
         if (!tunnel.hasSession) autoStartTunnelIfEnabled()
+        tunnel.awaitReadyForStoredConnection()
     }
 
     private fun autoStartTunnelIfEnabled() {

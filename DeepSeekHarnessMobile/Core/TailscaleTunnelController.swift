@@ -52,6 +52,9 @@ final class TailscaleTunnelController: ObservableObject {
     private let host: TailscaleIOSSessionHost
     private let sessions: TailscaleSessionFacade
     private var listener: TailscaleIOSSessionListener?
+    private var needsResumeRecovery = false
+    private var resumeGeneration = 0
+    private var preparation: (generation: Int, task: Task<Bool, Never>)?
 
     init(settings: TailscaleTunnelSettings? = nil,
          makeClient: @escaping () -> any TsnetNodeServing = { TsnetNodeClient() },
@@ -79,12 +82,21 @@ final class TailscaleTunnelController: ObservableObject {
     }
 
     func start() {
+        resumeGeneration += 1
+        preparation = nil
+        needsResumeRecovery = false
         sessions.start(account: settings.selectedAccount.shared, authKey: settings.effectiveAuthKey(),
             defaultHostname: TailscaleTunnelSettings.defaultNodeName())
         publish()
     }
 
-    func stop() { sessions.stop(); publish() }
+    func stop() {
+        resumeGeneration += 1
+        preparation = nil
+        needsResumeRecovery = false
+        sessions.stop()
+        publish()
+    }
 
     func beginAccountAddition() {
         var account = TailscaleAccount()
@@ -124,10 +136,42 @@ final class TailscaleTunnelController: ObservableObject {
     }
 
     func refreshAfterReturningToApp() async {
+        if needsResumeRecovery || preparation != nil {
+            _ = await prepareForConnection()
+            return
+        }
         await withCheckedContinuation { continuation in
-            sessions.refresh(result: TailscaleIOSRefreshResult { continuation.resume() })
+            sessions.refresh(result: TailscaleIOSRefreshResult { _ in continuation.resume() })
         }
         publish()
+    }
+
+    func applicationDidEnterBackground() {
+        needsResumeRecovery = settings.enabled
+        resumeGeneration += 1
+    }
+
+    /// 网关的建连准备阶段共用此屏障；重复前台通知或双通道连接不会重复重建节点。
+    func prepareForConnection(to endpoint: String? = nil) async -> Bool {
+        guard settings.enabled else { return true }
+        if let endpoint, let url = URL(string: endpoint), !NodeForwarding.canCarry(url) { return true }
+        let generation = resumeGeneration
+        if let preparation, preparation.generation == generation {
+            let ready = await preparation.task.value
+            return ready && settings.enabled && resumeGeneration == generation
+        }
+        let recover = needsResumeRecovery
+        needsResumeRecovery = false
+        let task = Task { [sessions] in
+            await withCheckedContinuation { continuation in
+                sessions.prepareForConnection(recover: recover, result: TailscaleIOSRefreshResult { continuation.resume(returning: $0) })
+            }
+        }
+        preparation = (generation, task)
+        let ready = await task.value
+        if preparation?.generation == generation { preparation = nil }
+        publish()
+        return ready && settings.enabled && resumeGeneration == generation
     }
 
     func forwarder(for endpoint: String) async -> TsnetNodeClient.Forward? {
@@ -212,7 +256,7 @@ private final class TailscaleIOSSessionListener: NSObject, TailscaleSessionListe
     }
 }
 
-private final class TailscaleIOSNode: NSObject, TailscaleNativeNode {
+private final class TailscaleIOSNode: NSObject, TailscaleNativeNode, TailscaleNativeRecoveryNode {
     let client: any TsnetNodeServing
     private let directory: URL
     init(client: any TsnetNodeServing, directory: URL) { self.client = client; self.directory = directory }
@@ -228,10 +272,16 @@ private final class TailscaleIOSNode: NSObject, TailscaleNativeNode {
     func close(result: any TailscaleCloseResult) {
         Task { @MainActor in result.complete(closed: await client.shutdown()) }
     }
+    func isHealthy(result: any TailscaleCloseResult) {
+        Task { @MainActor in result.complete(closed: await client.isHealthy()) }
+    }
+    func prepareAfterResume(result: any TailscaleCloseResult) {
+        Task { @MainActor in result.complete(closed: await client.prepareAfterResume()) }
+    }
 }
 
 private final class TailscaleIOSRefreshResult: NSObject, TailscaleCloseResult {
-    private let completion: () -> Void
-    init(completion: @escaping () -> Void) { self.completion = completion }
-    func complete(closed: Bool) { completion() }
+    private let completion: (Bool) -> Void
+    init(completion: @escaping (Bool) -> Void) { self.completion = completion }
+    func complete(closed: Bool) { completion(closed) }
 }

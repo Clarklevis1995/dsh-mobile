@@ -23,6 +23,11 @@ interface TailscaleNativeNode {
     fun close(result: TailscaleCloseResult)
 }
 
+interface TailscaleNativeRecoveryNode {
+    fun isHealthy(result: TailscaleCloseResult)
+    fun prepareAfterResume(result: TailscaleCloseResult)
+}
+
 interface TailscaleSessionHost {
     fun makeNode(account: TailscaleAccount): TailscaleNativeNode
     fun saveAccount(account: TailscaleAccount, status: TailscaleStatus)
@@ -34,6 +39,22 @@ interface TailscaleSessionListener {
 }
 
 private class NativeNodeAdapter(val native: TailscaleNativeNode) : TailscaleNode {
+    override suspend fun isHealthy(): Boolean {
+        val recovery = native as? TailscaleNativeRecoveryNode ?: return true
+        return suspendCoroutine { continuation ->
+            recovery.isHealthy(object : TailscaleCloseResult {
+                override fun complete(closed: Boolean) = continuation.resume(closed)
+            })
+        }
+    }
+    override suspend fun prepareAfterResume(): Boolean {
+        val recovery = native as? TailscaleNativeRecoveryNode ?: return true
+        return suspendCoroutine { continuation ->
+            recovery.prepareAfterResume(object : TailscaleCloseResult {
+                override fun complete(closed: Boolean) = continuation.resume(closed)
+            })
+        }
+    }
     override suspend fun begin(authKey: String, hostname: String): String = suspendCoroutine { continuation ->
         native.begin(
             authKey,
@@ -106,6 +127,16 @@ class TailscaleSessionFacade(host: TailscaleSessionHost) {
         scope.launch {
             manager.refresh().joinAll()
             result.complete(true)
+        }
+    }
+    fun prepareForConnection(recover: Boolean, result: TailscaleCloseResult) {
+        scope.launch {
+            var ready = false
+            try {
+                ready = manager.prepareForConnection(recover)
+            } finally {
+                result.complete(ready)
+            }
         }
     }
     fun acceptCurrentStatus(token: String, json: String): Boolean {

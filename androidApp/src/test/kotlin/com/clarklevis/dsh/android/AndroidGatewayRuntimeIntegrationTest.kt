@@ -1,10 +1,9 @@
 package com.clarklevis.dsh.android
 
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
+import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.gateway.GatewayRuntime
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
-import com.clarklevis.dsh.shared.gateway.GatewayRequests
-import kotlinx.coroutines.CompletableDeferred
 import com.clarklevis.dsh.shared.platform.GatewayAttachmentCache
 import com.clarklevis.dsh.shared.platform.GatewayClock
 import com.clarklevis.dsh.shared.platform.GatewayConnectionSpec
@@ -14,24 +13,247 @@ import com.clarklevis.dsh.shared.platform.GatewayNetworkState
 import com.clarklevis.dsh.shared.platform.GatewayPreferences
 import com.clarklevis.dsh.shared.platform.GatewayPreferencesSnapshot
 import com.clarklevis.dsh.shared.platform.GatewayTransport
-import com.clarklevis.dsh.shared.platform.GatewayTransportFrame
 import com.clarklevis.dsh.shared.platform.GatewayTransportEvent
+import com.clarklevis.dsh.shared.platform.GatewayTransportFrame
 import com.clarklevis.dsh.shared.platform.GatewayTransportState
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AndroidGatewayRuntimeIntegrationTest {
+    @Test
+    fun coldStoredConnectionWaitsForTunnelRoutesBeforeStartingHandshake() = runTest {
+        val tunnel = MutableStateFlow(com.clarklevis.dsh.shared.tailscale.TailscaleStatus())
+        var route: String? = null
+        val transport = FakeTransport().apply {
+            onOpening = { route = if (tunnel.value.canConnect) "tailscale" else "direct" }
+        }
+        val runtime = GatewayRuntime(
+            transport,
+            FakePreferences(),
+            FakeCredentials(),
+            FakeAttachmentCache(),
+            FakeNetworkMonitor(),
+            ImmediateClock,
+            backgroundScope
+        )
+        val startup = async { runtime.connectStoredWhenReady { tunnel.first { it.canConnect } } }
+        runCurrent()
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertTrue(transport.specs.isEmpty())
+        assertFalse(startup.isCompleted)
+        tunnel.value = com.clarklevis.dsh.shared.tailscale.TailscaleStatus(
+            stage = com.clarklevis.dsh.shared.tailscale.TailscaleStage.WAITING_ROUTES,
+            backendRunning = true,
+            peerCount = 0
+        )
+        runCurrent()
+        assertTrue(transport.specs.isEmpty())
+        tunnel.value = tunnel.value.copy(routesReady = true)
+        runCurrent()
+        assertTrue(transport.specs.isEmpty())
+        assertFalse(startup.isCompleted)
+        tunnel.value = tunnel.value.copy(stage = com.clarklevis.dsh.shared.tailscale.TailscaleStage.READY, peerCount = 5)
+        runCurrent()
+        assertTrue(startup.await())
+        assertEquals("tailscale", route)
+        assertEquals("stored-token", transport.specs.single().bearerToken)
+        transport.open()
+        transport.receive("""{"kind":"hello","protocol":3,"authenticated":true}""")
+        runCurrent()
+        assertEquals(GatewayConnectionState.CONNECTED, runtime.state.value.connection)
+        assertTrue(runtime.connectStoredWhenReady {})
+        assertEquals(1, transport.specs.size)
+    }
+
+    @Test
+    fun manualDisconnectWhileTunnelStartsPreventsLateAutomaticConnection() = runTest {
+        val ready = CompletableDeferred<Unit>()
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport,
+            FakePreferences(),
+            FakeCredentials(),
+            FakeAttachmentCache(),
+            FakeNetworkMonitor(),
+            ImmediateClock,
+            backgroundScope
+        )
+        val startup = async { runtime.connectStoredWhenReady { ready.await() } }
+        runCurrent()
+        runtime.disconnect()
+        ready.complete(Unit)
+        runCurrent()
+        assertFalse(startup.await())
+        assertTrue(transport.specs.isEmpty())
+    }
+
+    @Test
+    fun sameHostReplacementCleanupPreservesAutomaticConnectionForNextColdLaunch() = runTest {
+        val preferences = FakePreferences()
+        fun runtime(transport: FakeTransport) = GatewayRuntime(
+            transport,
+            preferences,
+            FakeCredentials(),
+            FakeAttachmentCache(),
+            FakeNetworkMonitor(),
+            ImmediateClock,
+            backgroundScope
+        )
+        val old = runtime(FakeTransport())
+        val replacement = runtime(FakeTransport())
+        old.connect(preferences.load().endpoint)
+        replacement.connect(preferences.load().endpoint)
+        // 重新配对同一主机会先在 paired 回调清理，再在 activate 时清理旧图。
+        repeat(2) { old.retireConnection() }
+        assertTrue(preferences.load().automaticallyConnect)
+        replacement.retireConnection()
+        val coldTransport = FakeTransport()
+        val coldRuntime = runtime(coldTransport)
+        val tunnelReady = CompletableDeferred<Unit>()
+        val startup = async { coldRuntime.connectStoredWhenReady { tunnelReady.await() } }
+        runCurrent()
+        assertTrue(coldTransport.specs.isEmpty())
+        tunnelReady.complete(Unit)
+        runCurrent()
+        assertTrue(startup.await())
+        assertEquals("stored-token", coldTransport.specs.single().bearerToken)
+        coldTransport.open()
+        coldTransport.receive("""{"kind":"hello","protocol":3,"authenticated":true}""")
+        runCurrent()
+        assertEquals(GatewayConnectionState.CONNECTED, coldRuntime.state.value.connection)
+    }
+
+    @Test
+    fun retiringGraphInvalidatesItsPendingStartupWithoutDisablingReplacement() = runTest {
+        val preferences = FakePreferences()
+        val ready = CompletableDeferred<Unit>()
+        val oldTransport = FakeTransport()
+        val replacementTransport = FakeTransport()
+        fun runtime(transport: FakeTransport) = GatewayRuntime(
+            transport,
+            preferences,
+            FakeCredentials(),
+            FakeAttachmentCache(),
+            FakeNetworkMonitor(),
+            ImmediateClock,
+            backgroundScope
+        )
+        val old = runtime(oldTransport)
+        val replacement = runtime(replacementTransport)
+        val oldStartup = async { old.connectStoredWhenReady { ready.await() } }
+        runCurrent()
+        old.retireConnection()
+        val replacementStartup = async { replacement.connectStoredWhenReady { ready.await() } }
+        runCurrent()
+        ready.complete(Unit)
+        runCurrent()
+        assertFalse(oldStartup.await())
+        assertTrue(oldTransport.specs.isEmpty())
+        assertTrue(replacementStartup.await())
+        assertEquals(1, replacementTransport.specs.size)
+        assertTrue(preferences.load().automaticallyConnect)
+    }
+
+    @Test
+    fun retiringGraphDoesNotUndoUsersManualDisconnectPreference() = runTest {
+        val preferences = FakePreferences()
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport,
+            preferences,
+            FakeCredentials(),
+            FakeAttachmentCache(),
+            FakeNetworkMonitor(),
+            ImmediateClock,
+            backgroundScope
+        )
+        runtime.disconnect()
+        runtime.retireConnection()
+        assertFalse(preferences.load().automaticallyConnect)
+        assertFalse(runtime.connectStoredWhenReady { error("用户手动断开后不应等待或自动连接") })
+        assertTrue(transport.specs.isEmpty())
+    }
+
+    @Test
+    fun manualConnectionWhileTunnelStartsSupersedesPendingAutomaticConnection() = runTest {
+        val preferences = FakePreferences()
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport,
+            preferences,
+            FakeCredentials(),
+            FakeAttachmentCache(),
+            FakeNetworkMonitor(),
+            ImmediateClock,
+            backgroundScope
+        )
+        val ready = CompletableDeferred<Unit>()
+        val startup = async { runtime.connectStoredWhenReady { ready.await() } }
+        runCurrent()
+        runtime.connect("wss://other-gateway.example/ws/mobile")
+        ready.complete(Unit)
+        runCurrent()
+        assertFalse(startup.await())
+        assertEquals("wss://other-gateway.example/ws/mobile", transport.specs.single().endpoint)
+    }
+
+    @Test
+    fun cancelledColdStartCannotConnectOldGraphAfterTunnelBecomesReady() = runTest {
+        val ready = CompletableDeferred<Unit>()
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport,
+            FakePreferences(),
+            FakeCredentials(),
+            FakeAttachmentCache(),
+            FakeNetworkMonitor(),
+            ImmediateClock,
+            backgroundScope
+        )
+        val startup = async { runtime.connectStoredWhenReady { ready.await() } }
+        runCurrent()
+        startup.cancel()
+        ready.complete(Unit)
+        runCurrent()
+        assertTrue(startup.isCancelled)
+        assertTrue(transport.specs.isEmpty())
+    }
+
+    @Test
+    fun disabledAutoConnectDoesNotStartOrWaitForTunnel() = runTest {
+        val preferences = FakePreferences()
+        preferences.update(preferences.load().copy(automaticallyConnect = false))
+        val transport = FakeTransport()
+        val runtime = GatewayRuntime(
+            transport,
+            preferences,
+            FakeCredentials(),
+            FakeAttachmentCache(),
+            FakeNetworkMonitor(),
+            ImmediateClock,
+            backgroundScope
+        )
+        assertFalse(runtime.connectStoredWhenReady { error("自动连接已关闭，不应触发隧道等待") })
+        assertTrue(transport.specs.isEmpty())
+    }
+
     @Test
     fun tailscaleQrPairingAuthenticatesAndConnectsWithoutReopeningTransport() = runTest {
         val endpoint = "ws://100.100.1.19:3081/ws/mobile"
@@ -42,14 +264,22 @@ class AndroidGatewayRuntimeIntegrationTest {
         }
         var savedToken: String? = null
         val credentials = object : GatewayCredentialStore by FakeCredentials() {
-            override suspend fun saveToken(endpoint: String, token: String) { savedToken = token }
+            override suspend fun saveToken(endpoint: String, token: String) {
+                savedToken = token
+            }
         }
         val runtime = GatewayRuntime(
-            transport, FakePreferences(), credentials, FakeAttachmentCache(),
-            FakeNetworkMonitor(), ImmediateClock, backgroundScope
+            transport,
+            FakePreferences(),
+            credentials,
+            FakeAttachmentCache(),
+            FakeNetworkMonitor(),
+            ImmediateClock,
+            backgroundScope
         )
         runCurrent()
-        val json = """{"version":2,"publicUrl":"$endpoint","pairingCode":"once","expiresAt":60000,"endpoints":["ws://192.168.1.19:3081/ws/mobile"]}"""
+        val json =
+            """{"version":2,"publicUrl":"$endpoint","pairingCode":"once","expiresAt":60000,"endpoints":["ws://192.168.1.19:3081/ws/mobile"]}"""
         runtime.pair(kotlin.io.encoding.Base64.UrlSafe.encode(json.encodeToByteArray()).trimEnd('='))
         assertEquals(endpoint, raw.specs.single().endpoint)
         assertEquals("once", raw.specs.single().pairingCode)
@@ -67,8 +297,13 @@ class AndroidGatewayRuntimeIntegrationTest {
     fun fileFollowUpDoesNotDeadlockWhenConversationFillsRuntimeQueue() = runTest {
         val transport = FakeTransport()
         val runtime = GatewayRuntime(
-            transport, FakePreferences(), FakeCredentials(), FakeAttachmentCache(),
-            FakeNetworkMonitor(), ImmediateClock, backgroundScope
+            transport,
+            FakePreferences(),
+            FakeCredentials(),
+            FakeAttachmentCache(),
+            FakeNetworkMonitor(),
+            ImmediateClock,
+            backgroundScope
         )
         val releaseFileConsumer = CompletableDeferred<Unit>()
         val followUps = AndroidGatewayFollowUpQueue(backgroundScope, onFailure = { throw it })
@@ -102,7 +337,9 @@ class AndroidGatewayRuntimeIntegrationTest {
         assertEquals(1, receivedChunks)
         // Runtime 的事件队列容量为 8；消费者停在写文件后的下一块请求前。
         repeat(24) { index ->
-            transport.receive("""{"sessionId":"s1","seq":${index + 1},"time":1,"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"text-delta","text":"x"}}""")
+            transport.receive(
+                """{"sessionId":"s1","seq":${index + 1},"time":1,"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"text-delta","text":"x"}}"""
+            )
         }
         runCurrent()
         assertTrue(receivedSequences.isEmpty())
@@ -188,9 +425,11 @@ class AndroidGatewayRuntimeIntegrationTest {
         private val eventsFlow = MutableSharedFlow<GatewayTransportEvent>(extraBufferCapacity = 32)
         val specs = mutableListOf<GatewayConnectionSpec>()
         val sentPayloads = mutableListOf<String>()
+        var onOpening: (() -> Unit)? = null
         override val state: StateFlow<GatewayTransportState> = mutableState
         override val events: Flow<GatewayTransportEvent> = eventsFlow
         override suspend fun open(spec: GatewayConnectionSpec) {
+            onOpening?.invoke()
             specs += spec
             emitState(GatewayTransportState.Opening(spec.generation))
         }

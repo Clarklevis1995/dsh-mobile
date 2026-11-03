@@ -25,6 +25,9 @@ data class TailscaleStatus(
         stage == TailscaleStage.NEEDS_LOGIN ||
         stage == TailscaleStage.WAITING_ROUTES
 
+    /** 缓存 netmap 可以先报告 Running，但缺少对端时不能开始网关拨号。 */
+    val canConnect: Boolean get() = stage == TailscaleStage.READY && backendRunning && routesReady
+
     /** 网页确认、认证和路由三个条件均满足后才允许替换当前节点。 */
     fun canPromote(confirmed: Boolean): Boolean = confirmed && backendRunning && routesReady
 }
@@ -43,7 +46,13 @@ object TailscalePolicy {
         val routes = runCatching { obj?.get("routesReady")?.jsonPrimitive?.booleanOrNull }.getOrNull() == true
         val error = text("error").orEmpty()
         val running = backend == "Running"
-        val stage = stage(backend, peers, url, routes, candidate)
+        // 原生适配器明确返回路由结果时，当前节点也必须继续轮询到路由配置完成。
+        val backendStage = stage(backend, peers, url, routes, candidate || obj?.containsKey("routesReady") == true)
+        // Up 的等待超时不会停止 SDK 的控制面登录，必须继续查询，不能把它变成永久失败。
+        val waitingForLogin = bringUp &&
+            text("stage") == "up" &&
+            (error.contains("deadline") || error.contains("timeout"))
+        val stage = if (backendStage == TailscaleStage.FAILED && waitingForLogin) TailscaleStage.STARTING else backendStage
         val failure = if (stage == TailscaleStage.FAILED) failure(text("stage"), error, bringUp) else null
         return TailscaleStatus(
             stage, url, peers, address, failure, running, routes,
@@ -51,8 +60,8 @@ object TailscalePolicy {
         )
     }
 
-    private fun stage(backend: String, peers: Int, url: String?, routes: Boolean, candidate: Boolean): TailscaleStage = when {
-        backend == "Running" && candidate && !routes -> TailscaleStage.WAITING_ROUTES
+    private fun stage(backend: String, peers: Int, url: String?, routes: Boolean, requireRoutes: Boolean): TailscaleStage = when {
+        backend == "Running" && requireRoutes && !routes -> TailscaleStage.WAITING_ROUTES
         backend == "Running" && peers > 0 -> TailscaleStage.READY
         backend == "Running" -> TailscaleStage.WAITING_ROUTES
         backend == "NeedsLogin" || url != null -> TailscaleStage.NEEDS_LOGIN

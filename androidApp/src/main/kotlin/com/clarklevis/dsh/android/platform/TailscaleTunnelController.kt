@@ -14,6 +14,7 @@ import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import tsnetgo.Tsnetgo
 
@@ -59,6 +60,12 @@ internal class TailscaleTunnelController(
     val state = manager.state
     val accountAddition = manager.addition
     val hasSession: Boolean get() = manager.hasSession
+
+    /** 等待期间不占用网关的握手期限；关闭隧道后允许按原来的直连策略继续。 */
+    suspend fun awaitReadyForStoredConnection() {
+        if (!settings.enabled) return
+        state.first { !settings.enabled || it.canConnect }
+    }
 
     /** 连接线程只能读取当前节点。候选登录不改变出口，避免影响现有 TCP/WebSocket。 */
     fun proxyForRoute(): TsnetProxy? {

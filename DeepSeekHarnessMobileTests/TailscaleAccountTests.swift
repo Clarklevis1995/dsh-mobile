@@ -2,6 +2,13 @@ import SwiftUI
 import XCTest
 @testable import DeepSeekHarnessMobile
 
+private struct ResumeTestCredentials: GatewayCredentialStoring {
+    func loadToken(for endpoint: URL) async throws -> String? { "retained-gateway-token" }
+    func saveToken(_ token: String, for endpoint: URL) async throws {}
+    func deleteToken(for endpoint: URL) async {}
+    func loadOrCreateDeviceID() async throws -> String { "resume-test-device" }
+}
+
 private actor AccountTestNode: TsnetNodeServing {
     static let running = #"{"state":"Running","routesReady":true,"peers":1,"loginName":"user@example.com","tailnetName":"work.example","tailscaleIPs":["100.100.1.19"]}"#
     static let login = #"{"state":"NeedsLogin","authURL":"https://login.tailscale.com/a/new"}"#
@@ -11,12 +18,14 @@ private actor AccountTestNode: TsnetNodeServing {
     private(set) var authKeys: [String] = []
     private(set) var events: [String] = []
     private(set) var statusWaiting = false
+    private(set) var statusQueries = 0
     private var response = AccountTestNode.login
     private var closeSucceeds = true
     private var holdFirstStart = false
     private var firstStart: CheckedContinuation<String, Never>?
     private var holdStatus = false
     private var pendingStatus: CheckedContinuation<String, Never>?
+    private var healthy = true
 
     func configure(response: String = AccountTestNode.login, holdFirstStart: Bool = false, closeSucceeds: Bool = true) {
         self.response = response
@@ -24,6 +33,9 @@ private actor AccountTestNode: TsnetNodeServing {
         self.closeSucceeds = closeSucceeds
     }
     func setResponse(_ value: String) { response = value }
+    func setHealthy(_ value: Bool) { healthy = value }
+    func isHealthy() async -> Bool { events.append("health-check"); return healthy }
+    func prepareAfterResume() async -> Bool { events.append("resume-check"); return healthy }
     func bringUp(hostname: String, authKey: String, stateDirectory: URL, timeoutSeconds: Int) async -> String {
         directories.append(stateDirectory)
         authKeys.append(authKey)
@@ -38,6 +50,7 @@ private actor AccountTestNode: TsnetNodeServing {
     func pauseStatus() { holdStatus = true }
     func releaseStatus() { pendingStatus?.resume(returning: Self.running); pendingStatus = nil; holdStatus = false }
     func statusJson() async -> String {
+        statusQueries += 1
         if holdStatus {
             return await withCheckedContinuation { pendingStatus = $0; statusWaiting = true }
         }
@@ -51,7 +64,208 @@ private actor AccountTestNode: TsnetNodeServing {
 }
 
 @MainActor
+private final class ConnectionSceneTestState: ObservableObject {
+    @Published var phase: ScenePhase = .active
+}
+
+private struct ConnectionSceneTestView: View {
+    @ObservedObject var state: ConnectionSceneTestState
+    let tunnel: TailscaleTunnelController
+    let phaseChanged: (ScenePhase) -> Void
+    var body: some View {
+        Color.clear
+            .modifier(AppConnectionLifecycleModifier(tunnel: tunnel, phaseChanged: phaseChanged))
+            .environment(\.scenePhase, state.phase)
+    }
+}
+
+@MainActor
 final class TailscaleAccountTests: XCTestCase {
+    func testGatewayWaitsForRebuiltPeerMapInsteadOfTimingOutItsFirstConnection() async throws {
+        try await withFixture { settings, _, root in
+            _ = saveAccount(settings)
+            let old = AccountTestNode()
+            let replacement = AccountTestNode(localPort: 9)
+            await old.configure(response: AccountTestNode.running)
+            await replacement.configure(response: AccountTestNode.running.replacingOccurrences(of: "\"peers\":1", with: "\"peers\":0"))
+            let controller = makeController(settings, nodes: [old, replacement], root: root)
+            controller.setEnabled(true)
+            defer { controller.stop() }
+            try await waitUntil { controller.state.stage == .ready }
+            await old.setHealthy(false)
+            controller.applicationDidEnterBackground()
+
+            var forwardCalls = 0
+            let gateway = GatewayClient(credentials: ResumeTestCredentials(), prepareTunnel: {
+                await controller.prepareForConnection(to: $0)
+            }, tunnelForwarder: {
+                forwardCalls += 1
+                return await controller.forwarder(for: $0)
+            })
+            defer { gateway.disconnect() }
+            gateway.connect(to: "ws://100.100.1.19:3081/ws/mobile")
+            try await waitUntil { await replacement.statusQueries >= 2 }
+            XCTAssertEqual(controller.state.stage, .waitingRoutes)
+            XCTAssertEqual(forwardCalls, 0, "没有对端时不得创建首个网关 socket 并开始 15 秒握手计时")
+            let pendingEvents = await replacement.events
+            XCTAssertFalse(pendingEvents.contains("forward"))
+
+            await replacement.setResponse(AccountTestNode.running)
+            try await waitUntil(timeout: 2) { forwardCalls == 1 }
+            let readyEvents = await replacement.events
+            XCTAssertEqual(readyEvents.filter { $0 == "forward" }.count, 1)
+            XCTAssertEqual(readyEvents.filter { $0 == "start" }.count, 1)
+        }
+    }
+
+    func testSwiftUISceneReturnRecoversTunnelBeforeGatewayPreparationUsesForwarder() async throws {
+        try await withFixture { settings, _, root in
+            let account = saveAccount(settings)
+            let old = AccountTestNode(localPort: 11111)
+            let replacement = AccountTestNode(localPort: 22222)
+            await old.configure(response: AccountTestNode.running)
+            await replacement.configure(response: AccountTestNode.running)
+            let controller = makeController(settings, nodes: [old, replacement], root: root)
+            controller.setEnabled(true)
+            defer { controller.stop() }
+            try await waitUntil { controller.state.stage == .ready }
+
+            let sceneState = ConnectionSceneTestState()
+            var phases: [ScenePhase] = []
+            var connectedPort: Int?
+            let view = ConnectionSceneTestView(state: sceneState, tunnel: controller) { phase in
+                phases.append(phase)
+                if phase == .active {
+                    Task { @MainActor in
+                        if await controller.prepareForConnection(to: "ws://100.100.1.19:3081/ws/mobile") {
+                            connectedPort = await controller.forwarder(for: "ws://100.100.1.19:3081/ws/mobile")?.localPort
+                        }
+                    }
+                }
+            }
+            let host = UIHostingController(rootView: view)
+            let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+            let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true }
+            try await Task.sleep(for: .milliseconds(100))
+            sceneState.phase = .background
+            try await waitUntil { phases.contains(.background) }
+            await old.setHealthy(false)
+            sceneState.phase = .active
+            try await waitUntil { connectedPort != nil }
+            XCTAssertEqual(connectedPort, 22222)
+            let events = await old.events
+            XCTAssertEqual(events.filter { $0 == "resume-check" }.count, 1, "必须通过实际 Scene 通知执行恢复")
+            XCTAssertEqual(events.filter { $0 == "close" }.count, 1)
+            XCTAssertFalse(events.contains("forward"))
+            XCTAssertEqual(settings.selectedAccountID, account.id)
+        }
+    }
+
+    func testRetryRebuildsNodeWhenSocketDamageIsReportedAfterInitialResumeCheck() async throws {
+        try await withFixture { settings, _, root in
+            _ = saveAccount(settings)
+            let old = AccountTestNode(localPort: 11111)
+            let replacement = AccountTestNode(localPort: 22222)
+            await old.configure(response: AccountTestNode.running)
+            await replacement.configure(response: AccountTestNode.running)
+            let controller = makeController(settings, nodes: [old, replacement], root: root)
+            controller.setEnabled(true)
+            defer { controller.stop() }
+            try await waitUntil { controller.state.stage == .ready }
+            controller.applicationDidEnterBackground()
+            let initial = await controller.prepareForConnection()
+            XCTAssertTrue(initial)
+            await old.setHealthy(false)
+            let retry = await controller.prepareForConnection()
+            XCTAssertTrue(retry)
+            let forward = await controller.forwarder(for: "ws://100.100.1.19:3081/ws/mobile")
+            XCTAssertEqual(forward?.localPort, 22222)
+            let events = await old.events
+            XCTAssertEqual(events.filter { $0 == "resume-check" }.count, 1)
+            XCTAssertEqual(events.filter { $0 == "health-check" }.count, 1)
+            XCTAssertEqual(events.filter { $0 == "close" }.count, 1)
+        }
+    }
+
+    func testColdStartUpTimeoutAllowsAutomaticGatewayRetryWithoutRefreshOrNodeRestart() async throws {
+        try await withFixture { settings, _, root in
+            let account = saveAccount(settings)
+            let node = AccountTestNode(localPort: 23456)
+            await node.configure(response: #"{"ok":false,"stage":"up","error":"context deadline exceeded","authURL":""}"#)
+            let controller = makeController(settings, nodes: [node], root: root)
+            defer { controller.stop() }
+            controller.setEnabled(true)
+            try await waitUntil { !(await node.directories).isEmpty }
+            // 等待 bringUp 结果被共享状态机消费，下一次重连只允许查询原节点。
+            await Task.yield()
+            await node.setResponse(AccountTestNode.running)
+            let ready = await controller.prepareForConnection(to: "ws://100.100.1.19:3081/ws/mobile")
+            XCTAssertTrue(ready)
+            let forward = await controller.forwarder(for: "ws://100.100.1.19:3081/ws/mobile")
+            XCTAssertEqual(forward?.localPort, 23456)
+            XCTAssertEqual(settings.selectedAccountID, account.id)
+            let events = await node.events
+            XCTAssertEqual(events.filter { $0 == "start" }.count, 1)
+            XCTAssertFalse(events.contains("close"))
+        }
+    }
+
+    func testForegroundRebuildsDamagedRunningNodeWithSameIdentityBeforeUsingNewPort() async throws {
+        try await withFixture { settings, _, root in
+            let account = saveAccount(settings)
+            let old = AccountTestNode(localPort: 11111)
+            let replacement = AccountTestNode(localPort: 22222)
+            await old.configure(response: AccountTestNode.running)
+            await old.setHealthy(false)
+            await replacement.configure(response: AccountTestNode.running)
+            let controller = makeController(settings, nodes: [old, replacement], root: root)
+            defer { controller.stop() }
+            controller.setEnabled(true)
+            try await waitUntil { controller.state.stage == .ready }
+            controller.applicationDidEnterBackground()
+            async let first = controller.prepareForConnection(to: "ws://100.100.1.19:3081/ws/mobile")
+            async let second = controller.prepareForConnection(to: "ws://100.100.1.19:3081/ws/mobile")
+            let results = await (first, second)
+            XCTAssertTrue(results.0)
+            XCTAssertTrue(results.1)
+            let forward = await controller.forwarder(for: "ws://100.100.1.19:3081/ws/mobile")
+            XCTAssertEqual(forward?.localPort, 22222)
+            XCTAssertEqual(settings.selectedAccountID, account.id)
+            XCTAssertEqual(settings.accounts.count, 1)
+            let paths = await replacement.directories
+            let keys = await replacement.authKeys
+            let events = await old.events
+            XCTAssertEqual(paths, [account.stateDirectory(in: root)])
+            XCTAssertEqual(keys, [""])
+            XCTAssertEqual(events.filter { $0 == "resume-check" }.count, 1)
+            XCTAssertEqual(events.filter { $0 == "close" }.count, 1)
+        }
+    }
+
+    func testGatewayWaitsForTunnelAndDisconnectInvalidatesLatePreparation() async throws {
+        var release: CheckedContinuation<Bool, Never>?
+        var forwardCalls = 0
+        let gateway = GatewayClient(credentials: ResumeTestCredentials(), prepareTunnel: { _ in
+            await withCheckedContinuation { release = $0 }
+        }, tunnelForwarder: { _ in
+            forwardCalls += 1
+            return nil
+        })
+        defer { gateway.disconnect() }
+        gateway.connect(to: "ws://127.0.0.1:9/ws/mobile")
+        try await waitUntil { release != nil }
+        XCTAssertEqual(forwardCalls, 0)
+        gateway.disconnect()
+        release?.resume(returning: true)
+        release = nil
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(forwardCalls, 0)
+        XCTAssertEqual(gateway.state, .disconnected)
+    }
+
     private func withFixture(_ body: (TailscaleTunnelSettings, UserDefaults, URL) async throws -> Void) async throws {
         let name = "tailscale-accounts-test-\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))

@@ -6,7 +6,6 @@ import DeepSeekHarnessShared
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var hosts: MultiGatewayStore
-    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         RootNavigationHost(store: store)
@@ -16,9 +15,7 @@ struct RootView: View {
             .alert("Whaleness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
                 Button(String(localized: "好"), role: .cancel) { store.lastError = nil }
             } message: { Text(store.lastError ?? "") }
-            .onChangeCompat(of: scenePhase) { _, phase in
-                store.handleScenePhase(phase)
-            }
+            .modifier(AppConnectionLifecycleModifier(tunnel: .shared, phaseChanged: store.handleScenePhase))
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
                 store.handleMemoryWarning()
             }
@@ -27,6 +24,27 @@ struct RootView: View {
                       let profile = hosts.profiles.first(where: { $0.id == route.gatewayID }) else { return }
                 hosts.select(profile)
             }
+    }
+}
+
+/// Scene 生命周期是前后台恢复的唯一入口；先标记隧道，再通知网关，建连时共用恢复屏障。
+struct AppConnectionLifecycleModifier: ViewModifier {
+    @Environment(\.scenePhase) private var scenePhase
+    let tunnel: TailscaleTunnelController
+    let phaseChanged: (ScenePhase) -> Void
+
+    func body(content: Content) -> some View {
+        content.onChangeCompat(of: scenePhase) { _, phase in
+            switch phase {
+            case .background:
+                tunnel.applicationDidEnterBackground()
+            case .active:
+                Task { await tunnel.refreshAfterReturningToApp() }
+            default:
+                break
+            }
+            phaseChanged(phase)
+        }
     }
 }
 

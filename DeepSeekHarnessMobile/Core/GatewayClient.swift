@@ -130,6 +130,8 @@ final class GatewayClient: ObservableObject {
     private let foregroundRtcTimeout: Duration
     private let subscriptionTimeoutInterval: Duration
     private let rtcPolicy: (String) -> Bool
+    private let prepareTunnel: (String) async -> Bool
+    private let tunnelForwarder: (String) async -> TsnetNodeClient.Forward?
 
     init(
         channel: String = "control",
@@ -138,7 +140,9 @@ final class GatewayClient: ObservableObject {
         probeTimeout: Duration = .seconds(5),
         foregroundRtcTimeout: Duration = .seconds(3),
         subscriptionTimeoutInterval: Duration = .seconds(15),
-        rtcPolicy: @escaping (String) -> Bool = { GatewayTransportPolicy.shared.allowsRtc(endpoint: $0) }
+        rtcPolicy: @escaping (String) -> Bool = { GatewayTransportPolicy.shared.allowsRtc(endpoint: $0) },
+        prepareTunnel: @escaping (String) async -> Bool = { await TailscaleTunnelController.shared.prepareForConnection(to: $0) },
+        tunnelForwarder: @escaping (String) async -> TsnetNodeClient.Forward? = { await TailscaleTunnelController.shared.forwarder(for: $0) }
     ) {
         self.channel = channel
         self.credentials = credentials ?? SystemGatewayCredentialStore.shared
@@ -147,6 +151,8 @@ final class GatewayClient: ObservableObject {
         self.foregroundRtcTimeout = foregroundRtcTimeout
         self.subscriptionTimeoutInterval = subscriptionTimeoutInterval
         self.rtcPolicy = rtcPolicy
+        self.prepareTunnel = prepareTunnel
+        self.tunnelForwarder = tunnelForwarder
     }
 #if DEBUG
     private var testRequestTransport: ((String) -> Void)?
@@ -496,7 +502,6 @@ final class GatewayClient: ObservableObject {
             }
             guard let self, !Task.isCancelled, self.connectionGeneration == generation,
                   self.wantsConnection else { return }
-            self.connectionPreparationTask = nil
             request.setValue(deviceID, forHTTPHeaderField: "X-DSH-Device-ID")
             if let pairingCode {
                 request.setValue("dsh-mobile-v1, dsh-pair.\(pairingCode)", forHTTPHeaderField: "Sec-WebSocket-Protocol")
@@ -507,7 +512,14 @@ final class GatewayClient: ObservableObject {
             // 经内嵌节点的那条路：只把「连接端点」换成本地转发器（127.0.0.1:随机端口原样转发到目标）。
             // 逻辑端点不动——凭据、档案标识、日志里的 endpoint 全部还是用户填的那个；
             // 换掉的只是 socket 连去哪儿。WS 的握手与帧仍由 URLSession 做，我们不碰协议。
-            let forward = await TailscaleTunnelController.shared.forwarder(for: url.absoluteString)
+            let tunnelReady = await self.prepareTunnel(url.absoluteString)
+            guard !Task.isCancelled, self.connectionGeneration == generation, self.wantsConnection else { return }
+            guard tunnelReady else {
+                self.fail(String(localized: "正在建立连接"), shouldReconnect: true, reportFailure: false)
+                return
+            }
+            let forward = await self.tunnelForwarder(url.absoluteString)
+            guard !Task.isCancelled, self.connectionGeneration == generation, self.wantsConnection else { return }
             if let forward, let local = NodeForwarding.connectURL(for: url, localPort: forward.localPort) {
                 request.url = local
                 TunnelDiagnostics.transport("route=node target=\(forward.target) local=\(forward.localPort)")
@@ -529,6 +541,7 @@ final class GatewayClient: ObservableObject {
             }
             self.forceNextWebsocket = false
             if negotiate { request.setValue("negotiate-v1", forHTTPHeaderField: "X-DSH-Transport-Intent") }
+            self.connectionPreparationTask = nil
             let socket = self.transportSession.webSocketTask(with: request)
             socket.maximumMessageSize = Self.maximumIncomingMessageSize
             self.socket = socket
@@ -1248,7 +1261,8 @@ final class GatewayClient: ObservableObject {
     private func openConversationChannel() {
         guard conversationClient == nil, let endpoint else { return }
         let client = GatewayClient(channel: "conversation", credentials: credentials,
-                                   heartbeatInterval: heartbeatInterval, probeTimeout: probeTimeout)
+                                   heartbeatInterval: heartbeatInterval, probeTimeout: probeTimeout,
+                                   prepareTunnel: prepareTunnel, tunnelForwarder: tunnelForwarder)
         client.credentialID = credentialID
         client.expectedGatewayID = expectedGatewayID
         client.trustedEndpoints = trustedEndpoints

@@ -6,16 +6,25 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+
+private const val RESUME_READY_TIMEOUT_MILLISECONDS = 30_000L
+private const val CONNECTION_POLL_MILLISECONDS = 250L
 
 /** 原生 SDK 适配器。各实例必须拥有独立节点、串行执行队列和状态目录。 */
 interface TailscaleNode {
     suspend fun begin(authKey: String, hostname: String): String
     suspend fun status(): String
     suspend fun close(): Boolean
+    suspend fun isHealthy(): Boolean = true
+    suspend fun prepareAfterResume(): Boolean = true
 }
 
 data class TailscaleAddition(
@@ -28,8 +37,9 @@ data class TailscaleAddition(
 
 /**
  * 当前节点与候选节点的共同调度。命令在调用方的主线程执行，原生阻塞调用由适配器切换线程。
- * 不依赖 Android 生命周期，返回前台只刷新；清理屏障避免重用尚未关闭的状态目录。
+ * 平台提供恢复检查；共享层负责原身份重建与就绪等待，清理屏障避免复用尚未关闭的目录。
  */
+@Suppress("TooManyFunctions") // 账号命令与恢复统一经过同一状态机，避免平台自行调度节点。
 class TailscaleSessionManager(
     private val scope: CoroutineScope,
     private val makeNode: (TailscaleAccount) -> TailscaleNode,
@@ -42,6 +52,8 @@ class TailscaleSessionManager(
         var status = TailscaleStatus(stage = TailscaleStage.STARTING)
         var lastJSON = ""
         var promptForLogin = false
+        var hostname = ""
+        var recovery: Deferred<Boolean>? = null
 
         @Volatile var cancelled = false
 
@@ -65,7 +77,7 @@ class TailscaleSessionManager(
         val session = active.value ?: return false
         if (session.node !== node || !live(session)) return false
         apply(session, json, false)
-        return session.status.backendRunning
+        return session.status.canConnect
     }
 
     fun start(account: TailscaleAccount, authKey: String, defaultHostname: String) {
@@ -147,6 +159,77 @@ class TailscaleSessionManager(
         }
     }
 
+    /** 恢复只替换当前节点，保留账号目录、登录身份和独立的候选登录流程。 */
+    suspend fun prepareForConnection(recover: Boolean): Boolean {
+        val session = active.value ?: return false
+        val recovery = session.recovery ?: beginRecovery(session, recover)
+        return recovery.await()
+    }
+
+    private fun beginRecovery(session: Session, recover: Boolean): Deferred<Boolean> {
+        val recovery = scope.async(start = CoroutineStart.LAZY) { recoverSession(session, recover) }
+        session.recovery = recovery
+        recovery.invokeOnCompletion { if (session.recovery === recovery) session.recovery = null }
+        recovery.start()
+        return recovery
+    }
+
+    private suspend fun recoverSession(session: Session, recover: Boolean): Boolean {
+        val healthy = when {
+            !session.began -> true
+            recover -> session.node.prepareAfterResume()
+            else -> session.node.isHealthy()
+        }
+        return when {
+            !live(session) || active.value !== session -> false
+            !session.began -> awaitReady(session)
+            healthy -> {
+                apply(session, session.node.status(), false)
+                // 状态查询曾经失败时原轮询可能已结束；重试必须重新观察 SDK，而非复用失败缓存。
+                if (live(session) && session.status.isTransient && session.job?.isActive != true) {
+                    session.job = scope.launch { poll(session) }
+                }
+                awaitReady(session)
+            }
+            else -> {
+                val previous = retire(session, discard = false)
+                val replacement = Session(session.account, makeNode(session.account), ++generation)
+                active.value = replacement
+                mutableState.value = replacement.status
+                launch(replacement, "", session.hostname, previous)
+                awaitReady(replacement)
+            }
+        }
+    }
+
+    private suspend fun awaitReady(session: Session): Boolean = withTimeoutOrNull(RESUME_READY_TIMEOUT_MILLISECONDS) {
+        coroutineScope {
+            // 只有连接屏障等待期间快速查询；就绪、停止或超时后取消，避免后台常驻高频轮询。
+            val observer = launch { pollConnectionReadiness(session) }
+            try {
+                val (current, status) = combine(active, state) { current, status -> current to status }.first { (current, status) ->
+                    current !== session ||
+                        status.canConnect ||
+                        status.stage in setOf(TailscaleStage.DISABLED, TailscaleStage.FAILED, TailscaleStage.NEEDS_LOGIN)
+                }
+                current === session && status.canConnect
+            } finally {
+                observer.cancel()
+            }
+        }
+    } ?: false
+
+    private suspend fun pollConnectionReadiness(session: Session) {
+        while (live(session) && active.value === session && session.status.isTransient) {
+            delay(CONNECTION_POLL_MILLISECONDS)
+            if (!live(session) || active.value !== session) return
+            if (!session.began || session.status.canConnect) continue
+            val json = session.node.status()
+            // 相同结果不重复保存账号或通知界面；迟到结果仍受会话身份检查约束。
+            if (live(session) && json != session.lastJSON) apply(session, json, false)
+        }
+    }
+
     suspend fun awaitCleanup() {
         cleanups.values.toList().forEach { it.task.await() }
     }
@@ -155,6 +238,7 @@ class TailscaleSessionManager(
         (active.value === session || candidate === session)
 
     private fun launch(session: Session, authKey: String, defaultHostname: String, previous: Deferred<Boolean>? = null) {
+        session.hostname = session.account.nodeName.ifBlank { defaultHostname }
         val directoryCleanup = cleanups[session.account.id]?.task
         session.job = scope.launch {
             val priorClosed = previous?.await() ?: true
@@ -165,7 +249,7 @@ class TailscaleSessionManager(
                 publish(session)
                 return@launch
             }
-            val json = session.node.begin(authKey, session.account.nodeName.ifBlank { defaultHostname })
+            val json = session.node.begin(authKey, session.hostname)
             if (!live(session)) return@launch
             session.began = true
             apply(session, json, true)

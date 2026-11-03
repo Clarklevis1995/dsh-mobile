@@ -1,4 +1,4 @@
-Simple Design System icons: Inbox, Folder, Plus
+Simple Design System icons: Inbox, Plus
 
 MIT License
 

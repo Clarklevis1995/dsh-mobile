@@ -200,7 +200,7 @@ class AndroidMultiGatewayStore(private val application: Application) {
         }
         stopPresence()
         val old = activeGraph
-        withContext(old.gatewayDispatcher) { old.gatewayRuntime.disconnect() }
+        withContext(old.gatewayDispatcher) { old.gatewayRuntime.retireConnection() }
         old.stateHolder.close()
         old.applicationScope.cancel()
         old.gatewayScope.cancel()
@@ -265,7 +265,7 @@ class AndroidMultiGatewayStore(private val application: Application) {
                             profile = profile.copy(remoteDeviceId = frame.device?.id)
                             if (activeId == profile.localId) {
                                 val old = activeGraph
-                                withContext(old.gatewayDispatcher) { old.gatewayRuntime.disconnect() }
+                                withContext(old.gatewayDispatcher) { old.gatewayRuntime.retireConnection() }
                             }
                         }
                         if (frame.kind == "hello") identity.complete(frame)

@@ -6,6 +6,13 @@ protocol TsnetNodeServing: Sendable {
     func statusJson() async -> String
     func forward(toHost host: String, port: Int, targetLabel: String) async -> TsnetNodeClient.Forward?
     func shutdown() async -> Bool
+    func isHealthy() async -> Bool
+    func prepareAfterResume() async -> Bool
+}
+
+extension TsnetNodeServing {
+    func isHealthy() async -> Bool { true }
+    func prepareAfterResume() async -> Bool { true }
 }
 
 /// 进程内的 Tailscale 节点：Go/tsnet 经 gomobile 绑定，跑在 app 进程里。
@@ -99,6 +106,29 @@ final class TsnetNodeClient: TsnetNodeServing, @unchecked Sendable {
                 self.lastStatusJson = json
                 Self.log("status", ok: json.contains("\"ok\":true"), json: json)
                 cont.resume(returning: json)
+            }
+        }
+    }
+
+    /// 重试时只检查底层损坏标记，不能清理其他网关仍在使用的转发器。
+    func isHealthy() async -> Bool {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                let healthy = self.node.map { !$0.needsRecovery() } ?? false
+                Self.log("health-check", ok: healthy, json: "{}")
+                continuation.resume(returning: healthy)
+            }
+        }
+    }
+
+    func prepareAfterResume() async -> Bool {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                guard let current = self.node else { continuation.resume(returning: false); return }
+                let healthy = !current.needsRecovery()
+                current.resetLocalListeners()
+                Self.log("resume-check", ok: healthy, json: "{}")
+                continuation.resume(returning: healthy)
             }
         }
     }
@@ -197,8 +227,10 @@ final class TsnetNodeClient: TsnetNodeServing, @unchecked Sendable {
         let peers = Int(firstMatch(#""peers":(\d+)"#, in: json) ?? "") ?? 0
         let backend = firstMatch(#""state":"([A-Za-z]*)""#, in: json)
         let authUrl = json.contains("\"authURL\":\"http")
+        let sdkStage = firstMatch(#""stage":"([A-Za-z-]*)""#, in: json) ?? ""
+        let timedOut = json.contains("context deadline exceeded") || json.contains("timeout")
         TunnelDiagnostics.tunnel(stage: stage, ok: ok, backend: backend, peers: peers,
-                                authUrl: authUrl, extra: extra)
+                                authUrl: authUrl, extra: " sdkStage=\(sdkStage) timeout=\(timedOut ? 1 : 0)" + extra)
     }
 
     private static func firstMatch(_ pattern: String, in text: String) -> String? {

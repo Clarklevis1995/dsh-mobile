@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -125,6 +126,7 @@ internal fun SettingsScreen(
     val pageBackground = if (dark) Color(0xFF0D1118) else Color(0xFFF1F1F6)
     val topBarSeparator = if (dark) Color.White.copy(alpha = 0.16f) else Color.Black.copy(alpha = 0.12f)
     val backdrop = rememberLayerBackdrop()
+    val listState = rememberLazyListState()
     val layoutDirection = LocalLayoutDirection.current
     LaunchedEffect(stateHolder.gatewayState.connection) {
         stateHolder.refreshProductState()
@@ -152,6 +154,7 @@ internal fun SettingsScreen(
         Box(Modifier.fillMaxSize().testTag("settings-screen")) {
             LazyColumn(
                 Modifier.fillMaxSize().layerBackdrop(backdrop).background(pageBackground).testTag("settings-list"),
+                state = listState,
                 contentPadding = PaddingValues(
                     start = padding.calculateStartPadding(layoutDirection),
                     top = padding.calculateTopPadding(),
@@ -308,10 +311,12 @@ internal fun SettingsScreen(
                     .clipToBounds()
                     .drawWithContent {
                         drawContent()
-                        // 使用物理像素绘制整屏细线，避免高密度屏幕上 1dp 变成多像素。
-                        drawRect(topBarSeparator, Offset(0f, size.height - 1f), Size(size.width, 1f))
+                        if (listState.canScrollBackward) {
+                            // 离开列表顶部后才显示整屏细线，使用物理像素避免高密度屏幕上变粗。
+                            drawRect(topBarSeparator, Offset(0f, size.height - 1f), Size(size.width, 1f))
+                        }
                     }
-                    .topBarGlassSurface(backdrop, pageBackground, surfaceAlpha = 0.65f)
+                    .topBarGlassSurface(backdrop, pageBackground, surfaceAlpha = 0.5f)
                     .semantics { hideFromAccessibility() }
                     .testTag("settings-top-glass")
             )

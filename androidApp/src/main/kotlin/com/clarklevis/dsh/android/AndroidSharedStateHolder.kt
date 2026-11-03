@@ -3361,8 +3361,9 @@ class AndroidSharedStateHolder(
                     }
                 }
                 launch {
-                    runCatching { appGraph.gatewayRuntime.connectStoredIfPaired() }
+                    runCatching { appGraph.gatewayRuntime.connectStoredWhenReady(appGraph.storedConnectionPrerequisite) }
                         .onFailure {
+                            if (it is CancellationException) throw it
                             withContext(Dispatchers.Main.immediate) {
                                 platformError = "stored-connect-failed"
                             }

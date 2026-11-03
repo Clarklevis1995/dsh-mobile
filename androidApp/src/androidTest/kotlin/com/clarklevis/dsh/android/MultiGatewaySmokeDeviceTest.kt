@@ -6,15 +6,46 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import org.json.JSONObject
-import org.junit.Assume.assumeTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /** 需显式启用，并先启动 scripts/multi_gateway_smoke_server.py；普通设备回归跳过。 */
 class MultiGatewaySmokeDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val hosts get() = (instrumentation.targetContext.applicationContext as DshAndroidApplication).hosts
+
+    @Test
+    fun rePairingSavedHostRetainsAutoConnectForNextColdLaunch() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("multiGatewaySmoke") == "true")
+        ActivityScenario.launch(MainActivity::class.java).use {
+            eventually { hosts.ready }
+            pair("A", 18781, "d56a1098-8519-43a1-9dce-fb99863bf5bb")
+            eventually { showsOnly("A") && !hosts.pairing }
+            val original = hosts.activeGraph
+            val id = hosts.activeId
+            pair("A", 18781, "d56a1098-8519-43a1-9dce-fb99863bf5bb")
+            eventually { hosts.activeGraph !== original && showsOnly("A") && !hosts.pairing }
+            assertEquals(id, hosts.activeId)
+            assertTrue(kotlinx.coroutines.runBlocking { hosts.activeGraph.preferences.load().automaticallyConnect })
+        }
+    }
+
+    /** 单独启动 instrumentation，确保 Application/主机目录均从持久化资料恢复。 */
+    @Test
+    fun savedHostConnectsOnColdLaunchWithoutConnectTap() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("multiGatewaySmoke") == "true")
+        ActivityScenario.launch(MainActivity::class.java).use {
+            eventually { hosts.ready && showsOnly("A") }
+            assertTrue(kotlinx.coroutines.runBlocking { hosts.activeGraph.preferences.load().automaticallyConnect })
+            instrumentation.runOnMainSync {
+                hosts.remove(hosts.profiles.filter { it.gatewayName == "Smoke A" })
+            }
+            eventually { hosts.profiles.none { it.gatewayName == "Smoke A" } }
+        }
+    }
 
     @Test
     fun sameResourceIdsRemainIsolatedAcrossHostsAndPresenceChecks() {

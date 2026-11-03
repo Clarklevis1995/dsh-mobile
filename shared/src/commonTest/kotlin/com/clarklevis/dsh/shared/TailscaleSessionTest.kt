@@ -81,18 +81,38 @@ class TailscaleSessionTest {
     }
 
     @Test fun statusUsesJSONAndRequiresRoutesAndConfirmationBeforePromotion() {
+        assertEquals(TailscaleStage.WAITING_ROUTES, TailscalePolicy.parseStatus(running(false), false, false).stage)
         val status = TailscalePolicy.parseStatus(running(false).replace("\":", "\" : "), true, true)
         assertEquals(TailscaleStage.WAITING_ROUTES, status.stage)
         assertFalse(status.canPromote(true))
         val ready = TailscalePolicy.parseStatus(running(), false, true)
         assertFalse(ready.canPromote(false))
         assertTrue(ready.canPromote(true))
+        assertTrue(ready.canConnect)
+        assertFalse(status.canConnect)
+        val emptyTailnet = TailscalePolicy.parseStatus(running(peers = 0), false, true)
+        assertTrue(emptyTailnet.canPromote(true), "空 tailnet 仍允许保存已认证账号")
+        assertFalse(emptyTailnet.canConnect, "缺少对端时不能开始网关拨号")
         assertEquals("100.96.53.9", ready.nodeAddress)
         assertNull(TailscalePolicy.parseStatus("""{"authURL":"https://controlplane.tailscale.com"}""", true, true).authUrl)
         assertEquals(TailscaleStage.FAILED, TailscalePolicy.parseStatus("broken", false, false).stage)
         assertEquals(
             "native-load",
             TailscalePolicy.parseStatus("""{"stage":"native-load","error":"ABI mismatch"}""", true, false).failureKind
+        )
+    }
+
+    @Test fun onlyAnSdkUpWaitTimeoutRemainsStarting() {
+        val upTimeout = """{"stage":"up","error":"context deadline exceeded"}"""
+        assertEquals(TailscaleStage.STARTING, TailscalePolicy.parseStatus(upTimeout, true, false).stage)
+        assertEquals(TailscaleStage.FAILED, TailscalePolicy.parseStatus(upTimeout, false, false).stage)
+        assertEquals(
+            TailscaleStage.FAILED,
+            TailscalePolicy.parseStatus(upTimeout.replace("\"up\"", "\"start\""), true, false).stage
+        )
+        assertEquals(
+            TailscaleStage.FAILED,
+            TailscalePolicy.parseStatus("""{"stage":"up","error":"invalid auth key"}""", true, true).stage
         )
     }
 

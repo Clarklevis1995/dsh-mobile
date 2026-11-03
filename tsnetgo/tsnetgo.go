@@ -26,12 +26,14 @@ import (
 type Node struct {
 	srv *tsnet.Server
 
-	mu        sync.Mutex
-	fw        map[string]*forwarder
-	logTail   []string
-	authURL   string
-	authReady chan struct{}
-	verbose   bool
+	mu               sync.Mutex
+	fw               map[string]*forwarder
+	logTail          []string
+	authURL          string
+	authReady        chan struct{}
+	verbose          bool
+	closed           bool
+	recoveryRequired bool
 
 	proxyLn   net.Listener
 	proxyPort int
@@ -221,6 +223,10 @@ func (n *Node) AcceptRoutes() string {
 // CONNECT 代理保持原 URL、Host、SNI 与证书校验不变，凭据不跨 JNI。
 func (n *Node) StartProxy() string {
 	n.mu.Lock()
+	if n.closed {
+		n.mu.Unlock()
+		return jsonOut(map[string]any{"ok": false, "error": "node closed"})
+	}
 	if n.proxyLn != nil {
 		port := n.proxyPort
 		n.mu.Unlock()
@@ -241,6 +247,15 @@ func (n *Node) StartProxy() string {
 }
 
 func (n *Node) serveProxy(ln net.Listener) {
+	defer func() {
+		_ = ln.Close()
+		n.mu.Lock()
+		if n.proxyLn == ln {
+			n.proxyLn = nil
+			n.proxyPort = 0
+		}
+		n.mu.Unlock()
+	}()
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -366,11 +381,23 @@ func (n *Node) probeHTTPNow(rawURL string, maxBytes int) string {
 		"bytes": len(body), "head": strings.TrimSpace(head)})
 }
 
-func (n *Node) Close() error {
+// NeedsRecovery 不使用 Running/peers 判断底层 socket 是否仍然有效。
+func (n *Node) NeedsRecovery() bool {
 	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.closed || n.recoveryRequired
+}
+
+// ResetLocalListeners 在恢复前台时废弃旧 loopback 入口，新建连接必须重新获取端口。
+func (n *Node) ResetLocalListeners() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.resetLocalListenersLocked()
+}
+
+func (n *Node) resetLocalListenersLocked() {
 	for _, f := range n.fw {
-		f.cancel()
-		_ = f.ln.Close()
+		f.stop()
 	}
 	n.fw = nil
 	if n.proxyLn != nil {
@@ -378,6 +405,12 @@ func (n *Node) Close() error {
 		n.proxyLn = nil
 		n.proxyPort = 0
 	}
+}
+
+func (n *Node) Close() error {
+	n.mu.Lock()
+	n.closed = true
+	n.resetLocalListenersLocked()
 	n.mu.Unlock()
 	// 引擎关闭会断 DERP、刷状态，可能长时间不返回（真机上测试的收尾就卡在这里）。
 	// 转发器已经先放掉了，这里给 srv.Close() 一个死线，超时就报错而不是吊住调用方。
@@ -410,6 +443,11 @@ func (n *Node) onLog(format string, args ...any) {
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	// iOS 挂起后这些错误可能与 Running 状态并存；只在新节点上清除此标记。
+	lower := strings.ToLower(line)
+	if !n.closed && (strings.Contains(lower, "bad file descriptor") || strings.Contains(lower, "socket is not connected")) {
+		n.recoveryRequired = true
+	}
 	if n.authURL == "" {
 		if m := loginURLRe.FindString(line); m != "" {
 			n.authURL = m
