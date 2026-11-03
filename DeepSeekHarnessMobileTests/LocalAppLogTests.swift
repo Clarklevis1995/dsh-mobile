@@ -2,6 +2,32 @@ import XCTest
 @testable import DeepSeekHarnessMobile
 
 final class LocalAppLogTests: XCTestCase {
+    func testRangeSummaryAndArchiveExcludeOtherRecordsInSameHour() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = LocalAppLog(directory: directory)
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        store.write("before", at: base)
+        store.write("inside\ncontinuation", at: base.addingTimeInterval(60))
+        store.write("end-exclusive", at: base.addingTimeInterval(120))
+        let interval = DateInterval(start: base.addingTimeInterval(60), duration: 60)
+        let summary = try await store.summary(in: interval)
+        XCTAssertEqual(summary.fileCount, 1)
+        XCTAssertEqual(summary.earliest, base)
+        let url = try await store.exportArchive(in: interval)
+        let data = try Data(contentsOf: url)
+        XCTAssertEqual(Array(data.prefix(4)), [0x50, 0x4b, 0x03, 0x04])
+        XCTAssertNotNil(data.range(of: Data("inside\ncontinuation".utf8)))
+        XCTAssertNil(data.range(of: Data("before".utf8)))
+        XCTAssertNil(data.range(of: Data("end-exclusive".utf8)))
+        let empty = try await store.summary(in: DateInterval(start: base.addingTimeInterval(180), duration: 60))
+        XCTAssertEqual(empty.fileCount, 0)
+        do {
+            _ = try await store.exportArchive(in: DateInterval(start: base.addingTimeInterval(180), duration: 60))
+            XCTFail("空时间段应拒绝导出")
+        } catch {}
+    }
+
     func testNestedResidualFilesCountAgainstProductionLimit() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

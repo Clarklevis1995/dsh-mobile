@@ -1,6 +1,13 @@
 import Foundation
 import Tsnetgo
 
+protocol TsnetNodeServing: Sendable {
+    func bringUp(hostname: String, authKey: String, stateDirectory: URL, timeoutSeconds: Int) async -> String
+    func statusJson() async -> String
+    func forward(toHost host: String, port: Int, targetLabel: String) async -> TsnetNodeClient.Forward?
+    func shutdown() async -> Bool
+}
+
 /// 进程内的 Tailscale 节点：Go/tsnet 经 gomobile 绑定，跑在 app 进程里。
 /// 不建 TUN、不申请系统 VPN 槽位；app 只连 127.0.0.1 上的本地入口。
 ///
@@ -13,7 +20,7 @@ import Tsnetgo
 /// 握手、帧、关闭码都由系统栈完成（实测第一帧就是插件的 paired）。代价记两条：
 /// wss 走不了这条（TLS 的主机名对不上），以及 app 必须把「逻辑端点」和「连接端点」分开——
 /// 凭据、档案、日志一律用逻辑端点，只有 socket 连的是本地端口。
-final class TsnetNodeClient: @unchecked Sendable {
+final class TsnetNodeClient: TsnetNodeServing, @unchecked Sendable {
     /// 一次经节点的拨号入口：本地端口 + 它代表的目标。
     struct Forward {
         let localPort: Int
@@ -24,36 +31,36 @@ final class TsnetNodeClient: @unchecked Sendable {
     private var node: TsnetgoNode?
     private var lastStatusJson = ""
     private var lastErrorValue = ""
+    private var routesAccepted = false
 
     var lastError: String {
         queue.sync { lastErrorValue }
     }
 
-    private static func stateDirectory() -> URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let dir = support.appendingPathComponent("tsnet-state", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        // 节点状态含 tailnet 私钥：不该被备份带走，也不该在换设备时复用。
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        var mutable = dir
-        try? mutable.setResourceValues(values)
-        return dir
+    private static func prepareStateDirectory(_ dir: URL) throws {
+        // 公共日志回退目录不随候选账号删除，也不应进入设备备份。
+        let logs = dir.deletingLastPathComponent().appendingPathComponent("tsnet-logs", isDirectory: true)
+        for directory in [dir, logs] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            var mutable = directory
+            try mutable.setResourceValues(values)
+        }
     }
 
     /// 启动节点并等一次状态；返回状态 JSON，失败信息同时在返回串与 lastError 里。
-    /// stage 只用于把「卡在哪一步」带出去：真机上没有可附加的调试器，卡在 native 里就是黑盒。
-    func bringUp(hostname: String, authKey: String, timeoutSeconds: Int,
-                 stage: @escaping (String) -> Void = { _ in }) async -> String {
+    func bringUp(hostname: String, authKey: String, stateDirectory: URL, timeoutSeconds: Int) async -> String {
         await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
             queue.async {
-                stage("swift-entered")
                 if self.node == nil {
-                    stage("swift-before-native-start")
+                    do { try Self.prepareStateDirectory(stateDirectory) } catch {
+                        self.lastErrorValue = "state-directory-failed"
+                        cont.resume(returning: "{\"ok\":false,\"error\":\"state-directory-failed\"}")
+                        return
+                    }
                     var startError: NSError?
-                    self.node = TsnetgoStart(hostname, Self.stateDirectory().path, &startError)
-                    stage("swift-after-native-start")
+                    self.node = TsnetgoStart(hostname, stateDirectory.path, &startError)
                     if self.node == nil {
                         let message = startError?.localizedDescription ?? "unknown"
                         self.lastErrorValue = "start-failed: \(message)"
@@ -70,22 +77,15 @@ final class TsnetNodeClient: @unchecked Sendable {
                 // （路由有没有装、EditPrefs 有没有被拒），发布包不该刷日志。
                 current.setVerbose(Self.verboseLoggingAllowed)
                 current.setAuthKey(authKey.trimmingCharacters(in: .whitespacesAndNewlines))
-                stage("swift-before-native-bringup")
-                let json = current.bringUp(Int(timeoutSeconds))
-                stage("swift-after-native-bringup")
+                // 交互式登录只等链接；浏览器授权完成由控制器随后持续检测。
+                let raw = authKey.isEmpty
+                    ? current.beginLogin(Int(timeoutSeconds))
+                    : current.bringUp(Int(timeoutSeconds))
+                let json = self.prepareRoutes(in: raw, current: current)
                 self.lastStatusJson = json
                 let ok = json.contains("\"ok\":true")
                 self.lastErrorValue = ok ? "" : "bring-up-failed"
                 Self.log("bring-up", ok: ok, json: json)
-                if ok {
-                    // 连上之后接受别人广播的子网路由（等价 tailscale set --accept-routes）。
-                    // 不做这一步就到不了网关广播的局域网段：安卓上先实测过，iOS 真机同一条必需
-                    // （蜂窝下没有它就完全到不了）。
-                    let routes = current.acceptRoutes()
-                    let routesOk = routes.contains("\"ok\":true")
-                    if !routesOk { self.lastErrorValue = "routes-not-accepted" }
-                    Self.log("routes", ok: routesOk, json: routes)
-                }
                 cont.resume(returning: json)
             }
         }
@@ -95,7 +95,7 @@ final class TsnetNodeClient: @unchecked Sendable {
         await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
             queue.async {
                 guard let current = self.node else { cont.resume(returning: self.lastStatusJson); return }
-                let json = current.statusNow()
+                let json = self.prepareRoutes(in: current.statusNow(), current: current)
                 self.lastStatusJson = json
                 Self.log("status", ok: json.contains("\"ok\":true"), json: json)
                 cont.resume(returning: json)
@@ -144,19 +144,43 @@ final class TsnetNodeClient: @unchecked Sendable {
         }
     }
 
-    func shutdown() async {
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+    func shutdown() async -> Bool {
+        await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
             queue.async {
-                // Go 侧的 Close() 会在 10 秒内返回错误而不是无限吊住；绑定把 error 变成抛出，
-                // 所以接住并留诊断——关闭失败不能让调用方崩。
                 do { _ = try self.node?.close() } catch {
                     self.lastErrorValue = "close-failed: \(error.localizedDescription)"
                     Self.log("close", ok: false, json: "{}")
+                    // 关闭超时可能仍在刷写旧目录，不允许启动另一个身份。
+                    cont.resume(returning: false)
+                    return
                 }
                 self.node = nil
-                cont.resume()
+                self.lastStatusJson = ""
+                self.lastErrorValue = ""
+                self.routesAccepted = false
+                cont.resume(returning: true)
             }
         }
+    }
+
+    /// 把路由配置结果带给控制器，候选节点不能只凭 Running 就抢占当前连接。
+    private func prepareRoutes(in json: String, current: TsnetgoNode) -> String {
+        guard let data = json.data(using: .utf8),
+              var payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              payload["state"] as? String == "Running" else { return json }
+        acceptRoutesIfNeeded(current)
+        payload["routesReady"] = routesAccepted
+        guard let result = try? JSONSerialization.data(withJSONObject: payload),
+              let text = String(data: result, encoding: .utf8) else { return json }
+        return text
+    }
+
+    private func acceptRoutesIfNeeded(_ current: TsnetgoNode) {
+        guard !routesAccepted else { return }
+        let routes = current.acceptRoutes()
+        routesAccepted = routes.contains("\"ok\":true")
+        if !routesAccepted { lastErrorValue = "routes-not-accepted" }
+        Self.log("routes", ok: routesAccepted, json: routes)
     }
 
     private static var verboseLoggingAllowed: Bool {

@@ -159,7 +159,7 @@ class ConversationPagerChromeDeviceTest {
     }
 
     @Test
-    fun softEdgeRetainsSilhouettesInsteadOfDrawingAnOpaqueBand() {
+    fun softEdgeProtectsTheWholeToolbarAndFadesBelowIt() {
         compose.setContent {
             MaterialTheme {
                 val pager = rememberPagerState(pageCount = { 2 })
@@ -190,11 +190,12 @@ class ConversationPagerChromeDeviceTest {
             val row = (pixels.width / 4 until pixels.width * 3 / 4).map { pixels[it, y].red }
             return row.max() - row.min()
         }
-        val body = contrast(120)
+        val body = contrast(160)
         val toolbarEdge = contrast(64)
-        assertTrue("标题下缘应保留正文轮廓，不能被整块灰带吞掉", toolbarEdge > body * 0.10f)
-        assertTrue("过渡区应有模糊，而非透明叠出原始清晰文字", toolbarEdge < body * 0.90f)
-        assertTrue("越靠状态栏模糊应越强，不能只有固定半径的整块蒙层", contrast(16) < toolbarEdge * 0.5f)
+        val transition = contrast(104)
+        assertTrue("标题下缘不能透出清晰正文产生重影", toolbarEdge < body * 0.05f)
+        assertTrue("状态栏后方也应充分遮挡正文", contrast(16) < body * 0.05f)
+        assertTrue("导航栏下方应保留较宽的渐隐区", transition > body * 0.10f && transition < body * 0.90f)
         InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
             .resolve("conversation-soft-edge-contrast.png").outputStream().use {
                 image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
@@ -224,12 +225,12 @@ class ConversationPagerChromeDeviceTest {
             return pixels[pixels.width / 4, with(compose.density) { 56.dp.roundToPx() }]
         }
         val red = topSample()
-        assertTrue("玻璃应采样红色正文，而非画成固定白色", red.red > red.blue + 0.1f)
+        assertTrue("玻璃应保留轻微正文色彩采样", red.red > red.blue + 0.005f)
         compose.runOnIdle { color = Color.Blue }
         val blue = topSample()
-        assertTrue("正文变化后玻璃应同步更新采样", blue.blue > blue.red + 0.1f)
+        assertTrue("正文变化后玻璃应同步更新采样", blue.blue > blue.red + 0.005f)
         val root = compose.onNodeWithTag("glass-root").captureToImage().toPixelMap()
-        val body = root[root.width / 4, with(compose.density) { 120.dp.roundToPx() }]
+        val body = root[root.width / 4, with(compose.density) { 160.dp.roundToPx() }]
         assertTrue("玻璃不能改变下方正文的颜色", body.blue > 0.95f && body.red < 0.05f)
     }
 }

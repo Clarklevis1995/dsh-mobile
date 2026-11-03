@@ -50,13 +50,25 @@ func (f *forwarder) pipe(ctx context.Context, n *Node, local net.Conn) {
 		_ = local.Close()
 		return
 	}
+	pipeForward(ctx, local, remote)
+}
+
+// 只关闭本转发器的连接。取消或任意一端退出时唤醒另一条复制协程，避免切换后旧 socket 挂住。
+func pipeForward(ctx context.Context, local, remote net.Conn) {
+	closeBoth := func() { _ = local.Close(); _ = remote.Close() }
+	stop := context.AfterFunc(ctx, closeBoth)
+	defer stop()
+	defer closeBoth()
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() { defer wg.Done(); _, _ = io.Copy(remote, local) }()
-	go func() { defer wg.Done(); _, _ = io.Copy(local, remote) }()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(remote, local)
+		closeBoth()
+	}()
+	_, _ = io.Copy(local, remote)
+	closeBoth()
 	wg.Wait()
-	_ = remote.Close()
-	_ = local.Close()
 }
 
 // ForwardTo 返回本地端口；同一 target 复用同一个监听器。

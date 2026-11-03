@@ -1,11 +1,16 @@
 package com.clarklevis.dsh.android.platform
 
 import android.content.Context
-import android.os.Build
+import com.clarklevis.dsh.shared.tailscale.TailscaleNode
 import java.io.File
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import tsnetgo.Node
 import tsnetgo.Tsnetgo
 
@@ -20,10 +25,12 @@ internal data class TsnetProxy(val host: String, val port: Int, val user: String
 
 internal class TsnetTunnel(
     private val appContext: Context,
-    private val diagnostics: AndroidGatewayDiagnostics = AndroidGatewayDiagnostics.disabled()
-) {
+    private val diagnostics: AndroidGatewayDiagnostics = AndroidGatewayDiagnostics.disabled(),
+    private val directory: File = File(appContext.filesDir, "tsnet-state")
+) : TailscaleNode {
     private val lock = Any()
     private var node: Node? = null
+    private var routesAccepted = false
 
     /** 最近一次状态 JSON，供诊断界面与测试读取；不含凭据。 */
     @Volatile
@@ -34,34 +41,23 @@ internal class TsnetTunnel(
     var lastError: String = ""
         private set
 
-    private fun stateDir(): File =
-        File(appContext.filesDir, "tsnet-state").apply { mkdirs() }
+    private fun stateDir(): File = directory.apply { mkdirs() }
 
-    private fun nodeHostname(): String {
-        val slug = Build.MODEL.orEmpty()
-            .lowercase(Locale.ROOT)
-            .replace(Regex("[^a-z0-9]+"), "-")
-            .trim('-')
-            .take(40)
-            .trimEnd('-')
-        return if (slug.isEmpty()) "dsh-mobile" else "dsh-$slug"
+    override suspend fun status(): String = withContext(Dispatchers.IO) {
+        runCatching { statusJson() }.getOrElse {
+            """{"ok":false,"error":${quote(it.message)}}"""
+        }
     }
 
-    /** 启动节点并等待一次状态。返回状态 JSON；失败信息在返回串与 [lastError] 里。 */
-    suspend fun bringUp(
-        authKey: String,
-        hostname: String? = null,
-        timeoutSeconds: Long = 90L,
-        stage: (String) -> Unit = {}
-    ): String = withContext(Dispatchers.IO) {
+    override suspend fun close(): Boolean = withContext(Dispatchers.IO) { shutdown() }
+
+    // gomobile 用 Exception 统一承载底层 Go error，边界处转为结构化状态。
+    @Suppress("TooGenericExceptionCaught")
+    override suspend fun begin(authKey: String, hostname: String): String = withContext(Dispatchers.IO) {
         synchronized(lock) {
             try {
-                stage("kotlin-entered")
                 if (node == null) {
-                    val name = hostname?.takeIf { it.isNotBlank() } ?: nodeHostname()
-                    stage("kotlin-before-native-start")
-                    node = Tsnetgo.start(name, stateDir().absolutePath)
-                    stage("kotlin-after-native-start")
+                    node = Tsnetgo.start(hostname, stateDir().absolutePath)
                 }
                 val current = node ?: return@withContext statusJson()
                 // 只有可调试包才把节点内部日志转出去：真机排障需要知道它自己怎么说
@@ -69,21 +65,11 @@ internal class TsnetTunnel(
                 // 用 diagnostics.enabled 判断，它本身就等于 FLAG_DEBUGGABLE。
                 current.setVerbose(diagnostics.enabled)
                 current.setAuthKey(authKey.trim())
-                stage("kotlin-before-native-bringup")
-                val json = current.bringUp(timeoutSeconds)
-                stage("kotlin-after-native-bringup")
-                lastStatusJson = json
+                val json = if (authKey.isBlank()) current.beginLogin(LOGIN_TIMEOUT_SECONDS) else current.bringUp(LOGIN_TIMEOUT_SECONDS)
+                lastStatusJson = enrichRoutes(current, json)
                 lastError = if (json.contains("\"ok\":true")) "" else "bring-up-failed"
                 report("bring-up", json)
-                if (json.contains("\"ok\":true")) {
-                    // 连上之后立刻接受别人广播的子网路由（等价 tailscale set --accept-routes）。
-                    // 不做这一步，经内嵌节点就到不了网关广播的局域网段（真机实测）。
-                    val routes = current.acceptRoutes()
-                    val ok = routes.contains("\"ok\":true")
-                    if (!ok) lastError = "routes-not-accepted"
-                    diagnostics.tunnel("routes", ok = ok, backendState = null)
-                }
-                json
+                lastStatusJson
             } catch (linkFailure: UnsatisfiedLinkError) {
                 // ABI 不匹配 / gomobile .so 未被打进包 / 低于 -androidapi 的设备，都会落到这里。
                 lastError = "native-load-failed: ${linkFailure.message}"
@@ -97,28 +83,28 @@ internal class TsnetTunnel(
         }
     }
 
-    fun statusJson(): String {
-        val current = synchronized(lock) { node } ?: return lastStatusJson
-        val json = current.statusNow()
+    fun statusJson(): String = synchronized(lock) {
+        val current = node ?: return lastStatusJson
+        val json = enrichRoutes(current, current.statusNow())
         lastStatusJson = json
         report("status", json)
-        return json
+        json
     }
 
-    /** 让 Go 侧在 127.0.0.1 上开一个到 host:port 的转发器，返回本地端口。 */
-    suspend fun forwardTo(host: String, port: Int): Int = withContext(Dispatchers.IO) {
-        val current = synchronized(lock) { node } ?: error("tsnet-not-started")
-        current.forwardTo(host, port.toLong()).toInt()
-    }
-
-    /** 用节点自己的 netstack 发一次 HTTP（不经过 SOCKS、不经过 OkHttp）。返回结果 JSON。 */
-    fun probeHttp(url: String, maxBytes: Int = 4096): String =
-        synchronized(lock) { node?.probeHTTP(url, maxBytes.toLong()) ?: "{\"ok\":false,\"error\":\"tsnet-not-started\"}" }
-
-    /** 节点内部日志尾部（真机上 logcat 会被厂商丢掉，所以走 API）。 */
+    /** 仅按需读取本机节点日志，诊断输出由调用方脱敏。 */
     fun logsJson(): String = synchronized(lock) { node?.logs() ?: "{}" }
 
-    fun forwardsJson(): String = synchronized(lock) { node?.forwardsJSON() ?: "[]" }
+    private fun enrichRoutes(current: Node, raw: String): String {
+        val obj = runCatching { Json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return raw
+        if (obj["state"] == JsonPrimitive("Running") && !routesAccepted) {
+            routesAccepted = runCatching {
+                val routes = Json.parseToJsonElement(current.acceptRoutes()) as JsonObject
+                routes["ok"] == JsonPrimitive(true)
+            }.getOrDefault(false)
+            diagnostics.tunnel("routes", ok = routesAccepted, backendState = null)
+        }
+        return JsonObject(obj + ("routesReady" to JsonPrimitive(routesAccepted))).toString()
+    }
 
     /**
      * 连接出口：127.0.0.1 上由 Go 侧起的 CONNECT 代理（内部经 tailnet 转发）。
@@ -127,25 +113,27 @@ internal class TsnetTunnel(
      */
     fun proxyInfo(): TsnetProxy? {
         val current = synchronized(lock) { node } ?: return null
-        val json = current.startProxy()
-        if (!json.contains("\"ok\":true")) return null
-        val host = Regex("\"host\":\"([^\"]+)\"").find(json)?.groupValues?.getOrNull(1) ?: return null
-        val port = Regex("\"port\":(\\d+)").find(json)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: return null
-        return TsnetProxy(host, port, "", "")
+        val obj = Json.parseToJsonElement(current.startProxy()) as? JsonObject ?: return null
+        val host = obj["host"]?.jsonPrimitive?.contentOrNull
+        val port = obj["port"]?.jsonPrimitive?.intOrNull
+        return if (obj["ok"] == JsonPrimitive(true) && host != null && port != null) TsnetProxy(host, port, "", "") else null
     }
 
-    fun shutdown() {
-        synchronized(lock) {
-            try {
-                // Go 侧的 Close() 现在会在 10 秒内返回错误（而不是无限吊住），
-                // gomobile 把 error 变成异常，所以这里接住并留诊断——关闭失败不能让调用方崩。
-                node?.close()
-            } catch (failure: Exception) {
-                lastError = "close-failed: ${failure.message}"
-                diagnostics.tunnel("close", ok = false, backendState = null)
-            }
-            node = null
+    // 原生关闭异常必须保留节点引用及目录屏障，防止第二个实例重用仍在使用的身份。
+    @Suppress("TooGenericExceptionCaught")
+    fun shutdown(): Boolean = synchronized(lock) {
+        try {
+            // Go 侧的 Close() 现在会在 10 秒内返回错误（而不是无限吊住），
+            // gomobile 把 error 变成异常，所以这里接住并留诊断——关闭失败不能让调用方崩。
+            node?.close()
+        } catch (failure: Exception) {
+            lastError = "close-failed: ${failure.message}"
+            diagnostics.tunnel("close", ok = false, backendState = null)
+            return false
         }
+        node = null
+        routesAccepted = false
+        true
     }
 
     /** 只上报非敏感字段；状态 JSON 里的 tailnet 地址与节点密钥不进 logcat。 */
@@ -161,8 +149,9 @@ internal class TsnetTunnel(
         )
     }
 
-    private fun quote(value: String?): String {
-        val escaped = (value ?: "").replace("\\", "\\\\").replace("\"", "\\\"")
-        return "\"" + escaped + "\""
+    private fun quote(value: String?): String = JsonPrimitive(value.orEmpty()).toString()
+
+    private companion object {
+        const val LOGIN_TIMEOUT_SECONDS = 12L
     }
 }

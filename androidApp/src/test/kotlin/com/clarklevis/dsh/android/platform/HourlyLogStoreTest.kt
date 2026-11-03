@@ -11,6 +11,31 @@ import java.util.Date
 import java.util.zip.ZipFile
 
 class HourlyLogStoreTest {
+    @Test fun filtersRecordsWithinTheSameHourAndPreservesContinuationLines() {
+        val directory = Files.createTempDirectory("log-range").toFile()
+        try {
+            val store = HourlyLogStore(directory)
+            val base = 1_800_000_000_000L
+            store.append("before", Date(base))
+            store.append("inside\ncontinuation", Date(base + 60_000))
+            store.append("end-exclusive", Date(base + 120_000))
+            val summary = store.summary(base + 60_000, base + 120_000)
+            assertEquals(1, summary.fileCount)
+            assertEquals(base, summary.earliest)
+            ZipFile(store.export(base + 60_000, base + 120_000)).use { zip ->
+                val text = zip.entries().asSequence().joinToString { zip.getInputStream(it).reader().readText() }
+                assertTrue(text.contains("inside\ncontinuation"))
+                assertFalse(text.contains("before"))
+                assertFalse(text.contains("end-exclusive"))
+                assertEquals(text.toByteArray().size.toLong(), summary.bytes)
+            }
+            assertEquals(0, store.summary(base + 180_000, base + 240_000).fileCount)
+            assertTrue(runCatching { store.export(base + 180_000, base + 240_000) }.isFailure)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
     @Test fun countsNestedResidualFilesAgainstProductionLimit() {
         val directory = Files.createTempDirectory("nested-log-residuals").toFile()
         try {

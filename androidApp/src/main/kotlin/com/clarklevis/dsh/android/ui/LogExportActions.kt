@@ -8,8 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
@@ -23,11 +23,15 @@ import java.io.File
 
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
 @Composable
-internal fun LogExportActions() {
+internal fun LogExportActions(
+    start: Long,
+    end: Long,
+    content: @Composable (Boolean, (Boolean) -> Unit) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var pendingFile by remember { mutableStateOf<File?>(null) }
+    var busy by rememberSaveable { mutableStateOf(false) }
+    var pendingPath by rememberSaveable { mutableStateOf<String?>(null) }
     val failure = appText("日志导出失败，请重试")
 
     fun report() {
@@ -35,8 +39,8 @@ internal fun LogExportActions() {
     }
     val save =
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
-            val source = pendingFile
-            pendingFile = null
+            val source = pendingPath?.let(::File)
+            pendingPath = null
             if (uri != null && source != null) {
                 scope.launch {
                     busy = true
@@ -59,10 +63,11 @@ internal fun LogExportActions() {
     val chooserTitle = appText("分享日志")
 
     fun export(share: Boolean) {
+        if (busy) return
         scope.launch {
             busy = true
             try {
-                val file = withContext(Dispatchers.IO) { LocalAppLog.export() }
+                val file = withContext(Dispatchers.IO) { LocalAppLog.export(start, end) }
                 if (share) {
                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.workspace-files", file)
                     val intent =
@@ -74,7 +79,7 @@ internal fun LogExportActions() {
                         }
                     context.startActivity(Intent.createChooser(intent, chooserTitle))
                 } else {
-                    pendingFile = file
+                    pendingPath = file.absolutePath
                     save.launch(file.name)
                 }
             } catch (cancelled: CancellationException) {
@@ -86,7 +91,5 @@ internal fun LogExportActions() {
             }
         }
     }
-    SettingsActionRow(appText("导出日志"), enabled = !busy) { export(false) }
-    SettingsDivider()
-    SettingsActionRow(chooserTitle, enabled = !busy) { export(true) }
+    content(busy, ::export)
 }

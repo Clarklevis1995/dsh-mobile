@@ -139,8 +139,11 @@ internal class AppFontDensity(
 }
 
 @Composable
+internal fun dshSwitchTrackColor(): Color = if (isSystemInDarkTheme()) Color(0xFF1D447F) else Color(0xFF245AC4)
+
+@Composable
 internal fun dshSwitchColors(preserveDisabledColors: Boolean = false): SwitchColors {
-    val blue = if (isSystemInDarkTheme()) Color(0xFF1D447F) else Color(0xFF245AC4)
+    val blue = dshSwitchTrackColor()
     if (!preserveDisabledColors) return SwitchDefaults.colors(
         checkedTrackColor = blue,
         checkedBorderColor = blue,

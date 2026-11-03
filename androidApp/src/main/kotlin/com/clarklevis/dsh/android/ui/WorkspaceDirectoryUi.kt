@@ -100,7 +100,7 @@ internal fun WorkspaceSelectionMenu(
             icon = if (effectiveSelection == AndroidSharedStateHolder.ALL_WORKSPACES_ID) {
                 WorkspaceMenuIcon.Selected
             } else {
-                WorkspaceMenuIcon.Folder
+                WorkspaceMenuIcon.All
             },
             foreground = foreground,
             modifier = Modifier.testTag("workspace-all"),
@@ -153,7 +153,7 @@ internal fun WorkspaceSelectionMenu(
     }
 }
 
-private enum class WorkspaceMenuIcon { Selected, Ungrouped, Folder, Add }
+private enum class WorkspaceMenuIcon { All, Selected, Ungrouped, Folder, Add }
 
 @Composable
 private fun WorkspaceMenuItem(
@@ -179,20 +179,11 @@ private fun WorkspaceMenuItem(
         modifier = modifier.height(50.dp),
         leadingIcon = {
             when (icon) {
-                WorkspaceMenuIcon.Selected -> Box(
-                    Modifier.size(22.dp).background(foreground, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_menu_check),
-                        contentDescription = null,
-                        modifier = Modifier.size(15.dp),
-                        colorFilter = ColorFilter.tint(if (foreground.luminance() > 0.5f) Color.Black else Color.White)
-                    )
-                }
-                WorkspaceMenuIcon.Ungrouped -> MenuVectorIcon(R.drawable.ic_workspace_tray, foreground)
-                WorkspaceMenuIcon.Folder -> MenuVectorIcon(R.drawable.ic_folder_outline, foreground)
-                WorkspaceMenuIcon.Add -> MenuVectorIcon(R.drawable.ic_add, foreground)
+                WorkspaceMenuIcon.All -> MenuVectorIcon(R.drawable.ic_workspace_all, foreground)
+                WorkspaceMenuIcon.Selected -> MenuVectorIcon(R.drawable.ic_workspace_selected, foreground)
+                WorkspaceMenuIcon.Ungrouped -> MenuVectorIcon(R.drawable.ic_workspace_inbox, foreground)
+                WorkspaceMenuIcon.Folder -> MenuVectorIcon(R.drawable.ic_workspace_folder, foreground)
+                WorkspaceMenuIcon.Add -> MenuVectorIcon(R.drawable.ic_workspace_add, foreground)
             }
         },
         contentPadding = PaddingValues(horizontal = 16.dp)
@@ -608,6 +599,3 @@ private fun DirectoryCreateWorkspaceBar(
         }
     }
 }
-
-private fun Color.luminance(): Float =
-    (red * 0.299f) + (green * 0.587f) + (blue * 0.114f)

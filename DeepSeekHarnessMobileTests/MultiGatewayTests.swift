@@ -97,6 +97,37 @@ final class MultiGatewayTests: XCTestCase {
         XCTAssertThrowsError(try GatewayIdentity.endpoints(payload))
     }
 
+    func testTailscaleIPv4RangeAllowsPlainWebSocketWithoutAllowingPublicNeighbors() throws {
+        for host in ["100.64.0.0", "100.100.1.19", "100.127.255.255"] {
+            let endpoint = "ws://\(host):3081/ws/mobile"
+            XCTAssertEqual(try GatewayIdentity.endpoint(endpoint), endpoint)
+        }
+        for host in ["100.63.255.255", "100.128.0.0", "100.255.255.255", "100.64.256.1"] {
+            XCTAssertThrowsError(try GatewayIdentity.endpoint("ws://\(host):3081/ws/mobile"))
+        }
+        for suffix in ["?token=secret", "#fragment"] {
+            XCTAssertThrowsError(try GatewayIdentity.endpoint("ws://100.100.1.19:3081/ws/mobile\(suffix)"))
+        }
+        XCTAssertThrowsError(try GatewayIdentity.endpoint("ws://user:pass@100.100.1.19:3081/ws/mobile"))
+    }
+
+    func testPairingAcceptsTailscaleAsPrimaryOrCandidateEndpoint() throws {
+        let lan = "ws://192.168.1.19:3081/ws/mobile"
+        let tailscale = "ws://100.100.1.19:3081/ws/mobile"
+        for (primary, candidate) in [(lan, tailscale), (tailscale, lan)] {
+            let payload = GatewayPairingPayload(
+                version: 2, publicUrl: primary, pairingCode: "once", expiresAt: 4_102_444_800_000,
+                gatewayId: gatewayID, endpoints: [candidate]
+            )
+            let encoded = try JSONEncoder().encode(payload).base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+            let parsed = try PairingPayloadParser.parse(encoded)
+            XCTAssertEqual(try GatewayIdentity.endpoints(parsed), [primary, candidate])
+        }
+    }
+
     func testPreferencesIsolateSameResourceIDs() throws {
         let defaults = UserDefaults(suiteName: "multi-test-\(UUID())")!
         let first = UserDefaultsAppPreferences(userDefaults: defaults, gatewayID: "A")

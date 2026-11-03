@@ -6,7 +6,22 @@
 	objectVersion = 60;
 	objects = {
 
+/* Begin PBXAggregateTarget section */
+		A93F1F09B184421AA98EE48A /* TsnetgoFramework */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = 9AD0FEBE9FE44AD7AAF6875C /* Build configuration list for TsnetgoFramework */;
+			buildPhases = (
+				A9FC00000000000000000004 /* Build Tsnetgo XCFramework */,
+			);
+			dependencies = ();
+			name = TsnetgoFramework;
+			productName = TsnetgoFramework;
+		};
+/* End PBXAggregateTarget section */
+
 /* Begin PBXBuildFile section */
+		10EBA8F511A44135A7B876AC /* TailscaleAccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D800EB089E66481480D3C8A0 /* TailscaleAccountTests.swift */; };
+		DA3200000000000000000001 /* LogExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3200000000000000000002 /* LogExportView.swift */; };
 		DA4300000000000000000001 /* TunnelDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4300000000000000000002 /* TunnelDiagnostics.swift */; };
 		DA4100000000000000000001 /* NodeForwarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4100000000000000000002 /* NodeForwarding.swift */; };
 		DA4200000000000000000001 /* NodeForwardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4200000000000000000002 /* NodeForwardingTests.swift */; };
@@ -108,6 +123,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		66716EA62B914E48BB1F7AE7 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = DBC59CB58F3644757A020517; proxyType = 1; remoteGlobalIDString = A93F1F09B184421AA98EE48A; remoteInfo = TsnetgoFramework; };
 		A1CBB12844986E16990B5C5A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = DBC59CB58F3644757A020517 /* Project object */;
@@ -139,6 +155,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		D800EB089E66481480D3C8A0 /* TailscaleAccountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailscaleAccountTests.swift; sourceTree = "<group>"; };
+		DA3200000000000000000002 /* LogExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogExportView.swift; sourceTree = "<group>"; };
 		DA4300000000000000000002 /* TunnelDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelDiagnostics.swift; sourceTree = "<group>"; };
 		DA4100000000000000000002 /* NodeForwarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeForwarding.swift; sourceTree = "<group>"; };
 		DA4200000000000000000002 /* NodeForwardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeForwardingTests.swift; sourceTree = "<group>"; };
@@ -329,6 +347,7 @@
 				0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */,
 				DA3100000000000000000004 /* LocalAppLogTests.swift */,
 				DA4200000000000000000002 /* NodeForwardingTests.swift */,
+				D800EB089E66481480D3C8A0 /* TailscaleAccountTests.swift */,
 				A9A3BDFA7B0949F8BA0B01A6 /* WorkspaceDrawerFeedbackTests.swift */,
 				81886703A6C3AB2164852990 /* VoiceInputTests.swift */,
 				AF17C0000000000000000004 /* FileIconAssetTests.swift */,
@@ -437,6 +456,7 @@
 				5A37B43613D712F252BA91D7 /* RootView.swift */,
 				B10000000000000000000002 /* PluginsView.swift */,
 				D98111628697EC1C4FF9878B /* SettingsView.swift */,
+				DA3200000000000000000002 /* LogExportView.swift */,
 				65009160A0642089906B54DF /* TrajectoryView.swift */,
 				D610757C1FF81FD953A9D000 /* WorkspaceView.swift */,
 				DCB5E4921392A6503AD87B74 /* ConversationSidebar.swift */,
@@ -510,7 +530,6 @@
 			buildConfigurationList = 62C8D12628E44A75D40278DD /* Build configuration list for PBXNativeTarget "DeepSeekHarnessMobile" */;
 			buildPhases = (
 				A9FC00000000000000000003 /* Build KMP Framework */,
-				A9FC00000000000000000004 /* Build Tsnetgo XCFramework */,
 				AB0170000000000000000005 /* Build Metal Library */,
 				83446887BD782B48B6E0170F /* Sources */,
 				2730CFAAB3AB8815D8F74EB4 /* Frameworks */,
@@ -520,6 +539,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				B69A09F1043147D1B6849033 /* PBXTargetDependency */,
 				F1A000000000000000000042 /* PBXTargetDependency */,
 			);
 			name = DeepSeekHarnessMobile;
@@ -621,6 +641,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				A93F1F09B184421AA98EE48A /* TsnetgoFramework */,
 				660802D096F9D6E6D171BFE5 /* DeepSeekHarnessMobile */,
 				F1A000000000000000000040 /* AgentLiveActivityWidget */,
 				7515E0402B76392350DE0E00 /* DeepSeekHarnessMobileTests */,
@@ -713,6 +734,7 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(SRCROOT)/tsnetgo/build/tsnetgo/Tsnetgo.xcframework",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -730,6 +752,7 @@
 				39FD319C875F4B4A6893D676 /* GatewayProtocolTests.swift in Sources */,
 				DA3100000000000000000003 /* LocalAppLogTests.swift in Sources */,
 				DA4200000000000000000001 /* NodeForwardingTests.swift in Sources */,
+				10EBA8F511A44135A7B876AC /* TailscaleAccountTests.swift in Sources */,
 				3874FCB0CE354690A304E63F /* WorkspaceDrawerFeedbackTests.swift in Sources */,
 				CD86C5C4C6FF6F4BD8D715A6 /* VoiceInputTests.swift in Sources */,
 				AF17C0000000000000000003 /* FileIconAssetTests.swift in Sources */,
@@ -805,6 +828,7 @@
 				8891D9FBE23CCC096061416E /* RootView.swift in Sources */,
 				B10000000000000000000001 /* PluginsView.swift in Sources */,
 				7B8DAA4E77DE3665B7E1C087 /* SettingsView.swift in Sources */,
+				DA3200000000000000000001 /* LogExportView.swift in Sources */,
 				C5F737EBF5077A9BF35E9F64 /* TrajectoryView.swift in Sources */,
 				E7585B9F7F89A3084B6E0182 /* WorkspaceView.swift in Sources */,
 				65B1D361C78618DBA4550C4F /* ConversationSidebar.swift in Sources */,
@@ -836,6 +860,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		B69A09F1043147D1B6849033 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A93F1F09B184421AA98EE48A /* TsnetgoFramework */; targetProxy = 66716EA62B914E48BB1F7AE7 /* PBXContainerItemProxy */; };
 		DD2CB1177812E5F54629AA43 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = DeepSeekHarnessMobile;
@@ -850,6 +875,8 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		D85B24CDE8A246E1A1B9294B /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {}; name = Debug; };
+		A119E70B0B344D1AADA5015F /* Release */ = {isa = XCBuildConfiguration; buildSettings = {}; name = Release; };
 		0DD215C4F718C79148B6B0EE /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = F2A000000000000000000001 /* config/Debug.xcconfig */;
@@ -1160,6 +1187,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		9AD0FEBE9FE44AD7AAF6875C /* Build configuration list for TsnetgoFramework */ = {isa = XCConfigurationList; buildConfigurations = (D85B24CDE8A246E1A1B9294B /* Debug */, A119E70B0B344D1AADA5015F /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 		62C8D12628E44A75D40278DD /* Build configuration list for PBXNativeTarget "DeepSeekHarnessMobile" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

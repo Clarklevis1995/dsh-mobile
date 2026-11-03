@@ -178,6 +178,102 @@ class ConversationHistoryPagingDeviceTest {
         } finally { compose.runOnIdle { holder.close() } }
     }
 
+    @Test fun continuousDragReachingTheTopCanLoadWithoutLiftingTheFinger() {
+        val holder = showConversation()
+        try {
+            compose.onNodeWithTag("conversation-message-list").performScrollToIndex(1)
+            compose.onNodeWithTag("conversation-message-list").performTouchInput {
+                val start = Offset(center.x, height * 0.20f)
+                down(start)
+                // 分多帧先滚动正文再触边，覆盖真实拖动中列表消费位置变化的情况。
+                repeat(30) { step ->
+                    moveTo(Offset(start.x, start.y + height * 0.55f * (step + 1) / 30), delayMillis = 16)
+                }
+                up()
+            }
+            compose.onNodeWithTag("history-paging-progress").assertIsDisplayed()
+            assertTrue("s" in holder.historyPagingSessionIds)
+        } finally { compose.runOnIdle { holder.close() } }
+    }
+
+    @Test fun generatingReplyAllowsDraggingAwayFromBottomWithoutBeingPulledBack() {
+        val holder = showConversation(running = true)
+        try {
+            val bottom = timelineScrollPosition()
+            val list = compose.onNodeWithTag("conversation-message-list")
+            list.performTouchInput {
+                val start = Offset(center.x, height * 0.20f)
+                down(start)
+                repeat(30) { step ->
+                    moveTo(Offset(start.x, start.y + height * 0.45f * (step + 1) / 30), delayMillis = 16)
+                }
+            }
+            val reading = timelineScrollPosition()
+            assertTrue("生成过程中应能向更早的正文滚动", reading < bottom)
+            compose.runOnIdle { holder.frame(streamDelta(1, "，拖动中继续生成")) }
+            assertEquals(reading, timelineScrollPosition(), 1f)
+            list.performTouchInput { up() }
+            compose.waitForIdle()
+            val released = timelineScrollPosition()
+            compose.runOnIdle { holder.frame(streamDelta(2, "，松手后继续生成")) }
+            compose.waitForIdle()
+            assertEquals(released, timelineScrollPosition(), 1f)
+            assertTrue(holder.selectedSessionIsRunning)
+            assertTrue(holder.snapshot.conversation.last().text.endsWith("松手后继续生成"))
+        } finally { compose.runOnIdle { holder.close() } }
+    }
+
+    @Test fun generatingReplyAllowsDraggingAndRepeatedHistoryPagingWithoutLosingStream() {
+        val holder = showConversation(running = true)
+        try {
+            assertTrue(holder.selectedSessionIsRunning)
+            compose.onNodeWithTag("conversation-message-list").performScrollToIndex(1)
+            val list = compose.onNodeWithTag("conversation-message-list")
+            list.performTouchInput {
+                val start = Offset(center.x, height * 0.20f)
+                down(start)
+                repeat(30) { step ->
+                    moveTo(Offset(start.x, start.y + height * 0.55f * (step + 1) / 30), delayMillis = 16)
+                }
+            }
+            compose.onNodeWithTag("history-paging-progress").assertIsDisplayed()
+            val before = top("s-101")
+            compose.runOnIdle {
+                holder.frame(streamDelta(1, "，分页期间继续生成"))
+                holder.frame(history(99..99, hasMore = true))
+            }
+            waitForNextPage(holder, 99)
+            compose.runOnIdle {
+                holder.frame(streamDelta(2, "，补页期间继续生成"))
+                holder.frame(history(60..98, hasMore = true))
+            }
+            compose.mainClock.advanceTimeBy(250)
+            assertEquals(before, top("s-101"), 1f)
+            list.performTouchInput { up() }
+            waitForPresentation()
+            assertEquals(before, top("s-101"), 1f)
+            assertTrue(holder.selectedSessionIsRunning)
+
+            beginPage()
+            val second = top("s-61")
+            compose.runOnIdle {
+                holder.frame(streamDelta(3, "，第二次分页继续生成"))
+                holder.frame(history(20..59, hasMore = false))
+            }
+            waitForPresentation()
+            assertEquals(second, top("s-61"), 1f)
+            assertEquals(20, holder.snapshot.selectedHistoryEarliestSequence)
+            assertTrue(holder.selectedSessionIsRunning)
+            assertTrue(holder.historyPagingSessionIds.isEmpty())
+            assertEquals("正在生成，分页期间继续生成，补页期间继续生成，第二次分页继续生成",
+                holder.snapshot.conversation.last().text)
+            compose.runOnIdle { holder.frame(streamDelta(4, "，分页后仍在生成")) }
+            compose.waitForIdle()
+            assertEquals(second, top("s-61"), 1f)
+            assertTrue(holder.snapshot.conversation.last().text.endsWith("分页后仍在生成"))
+        } finally { compose.runOnIdle { holder.close() } }
+    }
+
     @Test fun shortConversationWithoutEarlierHistoryNeverShowsAnEndBanner() {
         val holder = showConversation(events(100..100), hasMore = false)
         try {
@@ -316,6 +412,9 @@ class ConversationHistoryPagingDeviceTest {
     private fun timelineScrollRange() = compose.onNodeWithTag("conversation-message-list")
         .fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].maxValue()
 
+    private fun timelineScrollPosition() = compose.onNodeWithTag("conversation-message-list")
+        .fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
+
     private fun waitForNextPage(holder: AndroidSharedStateHolder, earliest: Int) {
         compose.waitUntil(10_000) {
             holder.snapshot.selectedHistoryEarliestSequence == earliest && holder.snapshot.selectedHistoryIsLoadingOlder
@@ -353,12 +452,14 @@ class ConversationHistoryPagingDeviceTest {
         compose.waitForIdle()
     }
 
-    private fun showConversation(initialEvents: String = events(100..119), hasMore: Boolean = true): AndroidSharedStateHolder {
+    private fun showConversation(initialEvents: String = events(100..119), hasMore: Boolean = true, running: Boolean = false): AndroidSharedStateHolder {
         val holder = AndroidSharedStateHolder().apply {
             frame("""{"kind":"hello","historyFormatVersion":3,"capabilities":["assistant-stream-v1"]}""")
             selectSession("s")
             frame("""{"kind":"subscribed","sessionId":"s","subscriptionId":"sub","assistantStream":true}""")
-            frame("""{"kind":"session-snapshot","sessionId":"s","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":119,"events":[$initialEvents],"hasMore":$hasMore,"nextBeforeSeq":100}""")
+            val stream = if (running) """, "assistantStream":{"revision":2,"activeAttempt":{"attemptId":"s:1","turn":2,"step":3,"nextIndex":1,"startedAfterSeq":119,"stream":[{"type":"text-chunks","index":0,"time0":120,"texts":["正在生成"],"dt":[]}]}}""" else ""
+            frame("""{"kind":"session-snapshot","sessionId":"s","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":119,"events":[$initialEvents],"hasMore":$hasMore,"nextBeforeSeq":100$stream}""")
+            if (running) frame("""{"kind":"sessions","items":[{"sessionId":"s","updatedAt":120,"running":true,"blank":false}]}""")
         }
         compose.setContent { DshTheme { ConversationScreen(holder, onPickImage = {}, onBack = {}) } }
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("conversation-message-list").fetchSemanticsNodes().isNotEmpty() }
@@ -371,5 +472,7 @@ class ConversationHistoryPagingDeviceTest {
     }
     private fun history(range: IntRange, hasMore: Boolean) =
         """{"kind":"history","sessionId":"s","historyFormatVersion":3,"events":[${events(range)}],"hasMore":$hasMore}"""
+    private fun streamDelta(index: Int, text: String) =
+        """{"kind":"assistant-stream","sessionId":"s","subscriptionId":"sub","streamId":"stream","frame":{"type":"chunk","attemptId":"s:1","revision":${index + 2},"index":$index,"time":${120 + index},"turn":2,"step":3,"chunk":{"type":"text-delta","index":0,"text":"$text"}}}"""
     private fun AndroidSharedStateHolder.frame(raw: String) { wirePayload = raw; submitWirePayload() }
 }

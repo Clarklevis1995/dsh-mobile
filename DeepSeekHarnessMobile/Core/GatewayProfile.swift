@@ -57,6 +57,8 @@ enum GatewayIdentity {
         let octets = parts.compactMap { Int($0) }
         guard octets.count == 4, octets.allSatisfy({ (0...255).contains($0) }) else { return false }
         return octets[0] == 10 || octets[0] == 127 ||
+            // Tailscale 使用的共享地址段 100.64.0.0/10，不属于公网地址。
+            (octets[0] == 100 && (64...127).contains(octets[1])) ||
             (octets[0] == 192 && octets[1] == 168) ||
             (octets[0] == 172 && (16...31).contains(octets[1])) ||
             (octets[0] == 169 && octets[1] == 254)

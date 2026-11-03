@@ -26,14 +26,35 @@ import (
 type Node struct {
 	srv *tsnet.Server
 
-	mu      sync.Mutex
-	fw      map[string]*forwarder
-	logTail []string
-	authURL string
-	verbose bool
+	mu        sync.Mutex
+	fw        map[string]*forwarder
+	logTail   []string
+	authURL   string
+	authReady chan struct{}
+	verbose   bool
 
 	proxyLn   net.Listener
 	proxyPort int
+}
+
+// 日志回退目录属于进程，不跟随账号切换；节点自己的状态与日志缓冲仍由 Server.Dir 隔离。
+var processLogsOnce sync.Once
+var processLogsError error
+
+func prepareProcessLogs(nodeDir string) error {
+	processLogsOnce.Do(func() {
+		dir := os.Getenv("TS_LOGS_DIR")
+		if dir == "" {
+			// 放在账号目录外，取消添加时清理候选目录不会影响其他节点。
+			dir = filepath.Join(filepath.Dir(nodeDir), "tsnet-logs")
+		}
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			processLogsError = err
+			return
+		}
+		processLogsError = os.Setenv("TS_LOGS_DIR", dir)
+	})
+	return processLogsError
 }
 
 // Start 只建对象、不联网；鉴权回调在创建时就接好，避免漏掉登录 URL。
@@ -44,14 +65,10 @@ func Start(hostname, dir string) (*Node, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	// Android 的应用进程里没有 HOME、也没有 TMPDIR，logpolicy 会退到
-	// os.MkdirTemp 再 panic("no safe place found to store log state")。
-	// TS_LOGS_DIR 是它自己的显式覆盖入口（logpolicy.go:211）。
-	logsDir := filepath.Join(dir, "logs")
-	if err := os.MkdirAll(logsDir, 0o700); err == nil {
-		_ = os.Setenv("TS_LOGS_DIR", logsDir)
+	if err := prepareProcessLogs(dir); err != nil {
+		return nil, err
 	}
-	n := &Node{}
+	n := &Node{authReady: make(chan struct{})}
 	n.srv = &tsnet.Server{
 		Hostname: hostname,
 		Dir:      dir,
@@ -71,6 +88,21 @@ func (n *Node) SetEphemeral(on bool)          { n.srv.Ephemeral = on }
 
 // BringUp 启动节点并等一次状态；timeoutSeconds 内拿不到就返回失败 + 登录 URL。
 func (n *Node) BringUp(timeoutSeconds int) string {
+	return n.bringUp(timeoutSeconds, false)
+}
+
+// BeginLogin 在真实登录链接就绪时立即返回，不等待浏览器授权后的 Running。
+// 原 BringUp 的等待语义保持不变，Android 侧不需要跟随调整。
+func (n *Node) BeginLogin(timeoutSeconds int) string {
+	return n.bringUp(timeoutSeconds, true)
+}
+
+type bringUpResult struct {
+	status *ipnstate.Status
+	err    error
+}
+
+func (n *Node) bringUp(timeoutSeconds int, returnOnAuthURL bool) string {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 	// srv.Start() 不吃 context：真机上它曾长时间不返回，把整条链路吊住。
@@ -86,14 +118,34 @@ func (n *Node) BringUp(timeoutSeconds int) string {
 		return jsonOut(map[string]any{"ok": false, "stage": "start-timeout",
 			"error": fmt.Sprintf("srv.Start did not return within %d seconds", timeoutSeconds), "log": n.tail(40)})
 	}
-	st, err := n.srv.Up(ctx)
-	if st != nil { // 部分状态也带 BackendState 与 AuthURL，比只回错误有用
-		out := statusObj(st)
-		out["error"] = errString(err)
-		return jsonOut(out)
+	result := make(chan bringUpResult, 1)
+	go func() {
+		st, err := n.srv.Up(ctx)
+		result <- bringUpResult{status: st, err: err}
+	}()
+	return n.waitForBringUp(ctx, result, returnOnAuthURL)
+}
+
+func (n *Node) waitForBringUp(ctx context.Context, result <-chan bringUpResult, returnOnAuthURL bool) string {
+	var authReady <-chan struct{}
+	if returnOnAuthURL {
+		authReady = n.authReady
 	}
-	return jsonOut(map[string]any{"ok": false, "stage": "up", "error": errString(err),
-		"authURL": n.AuthURL(), "log": n.tail(12)})
+	select {
+	case <-authReady:
+		return jsonOut(map[string]any{"ok": false, "state": "NeedsLogin", "authURL": n.AuthURL()})
+	case got := <-result:
+		if got.status != nil {
+			out := statusObj(got.status)
+			out["error"] = errString(got.err)
+			return jsonOut(out)
+		}
+		return jsonOut(map[string]any{"ok": false, "stage": "up", "error": errString(got.err),
+			"authURL": n.AuthURL()})
+	case <-ctx.Done():
+		return jsonOut(map[string]any{"ok": false, "stage": "up", "error": ctx.Err().Error(),
+			"authURL": n.AuthURL()})
+	}
 }
 
 func (n *Node) StatusNow() string {
@@ -361,6 +413,9 @@ func (n *Node) onLog(format string, args ...any) {
 	if n.authURL == "" {
 		if m := loginURLRe.FindString(line); m != "" {
 			n.authURL = m
+			if n.authReady != nil {
+				close(n.authReady)
+			}
 		}
 	}
 	if len(n.logTail) > 200 {
@@ -378,16 +433,27 @@ func (n *Node) tail(k int) []string {
 	return append([]string(nil), n.logTail[len(n.logTail)-k:]...)
 }
 
-var loginURLRe = regexp.MustCompile(`https://[a-z0-9.-]*tailscale[a-z0-9./?=&_-]*`)
+// 不得把 controlplane.tailscale.com 的控制端地址误认成登录链接；保留授权码大小写。
+var loginURLRe = regexp.MustCompile(`https://login\.tailscale\.com/a/[A-Za-z0-9_-]+(?:\?[^\s"'<>)]*)?`)
 
 func statusObj(st *ipnstate.Status) map[string]any {
 	var ips []string
 	for _, a := range st.TailscaleIPs {
 		ips = append(ips, a.String())
 	}
-	return map[string]any{"ok": st.BackendState == "Running", "state": st.BackendState,
+	out := map[string]any{"ok": st.BackendState == "Running", "state": st.BackendState,
 		"tailscaleIPs": ips, "peers": len(st.Peer),
 		"authURL": st.AuthURL, "magicDNS": st.MagicDNSSuffix}
+	// 只返回本节点所属用户和网络；不把其他对端的用户列表传给应用。
+	if st.Self != nil {
+		if user, ok := st.User[st.Self.UserID]; ok {
+			out["loginName"] = user.LoginName
+		}
+	}
+	if st.CurrentTailnet != nil {
+		out["tailnetName"] = st.CurrentTailnet.Name
+	}
+	return out
 }
 
 func errString(err error) string {

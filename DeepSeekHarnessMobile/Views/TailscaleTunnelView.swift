@@ -12,6 +12,7 @@
 //   未点亮的点 alpha=77/255。帧间隔官方没有公开依据（各平台 GUI 不开源），100ms 是我们自己的取值。
 // 刻意不变色：连接中与已连接都用同一个颜色，只靠"闪/不闪"区分。
 import SwiftUI
+import Combine
 
 enum TailscaleMark {
     /// 48 单位视口里的九点中心，索引 = 行*3 + 列，左上为 0。
@@ -79,9 +80,10 @@ struct TailscaleMarkIcon: View {
 /// connected 只有在节点真的 Running 时才成立，连接中就按官方素材闪。
 struct TailscaleTunnelIndicator: View {
     @ObservedObject private var tunnel = TailscaleTunnelController.shared
+    @ObservedObject private var settings = TailscaleTunnelSettings.shared
 
     var body: some View {
-        if TailscaleTunnelSettings.shared.enabled {
+        if settings.enabled {
             TailscaleMarkIcon(connected: tunnel.state.stage == .ready,
                               tint: Color.white.opacity(0.85))
                 .frame(width: 18, height: 18)
@@ -111,6 +113,7 @@ private func tunnelFailureText(_ kind: TunnelFailureKind?) -> String? {
     case .backendStart: return String(localized: "节点启动失败")
     case .loginWait: return String(localized: "登录等待超时")
     case .status: return String(localized: "状态查询失败")
+    case .shutdown: return String(localized: "旧隧道未能关闭，请重试或重启应用。")
     case .unknown: return String(localized: "未知错误")
     }
 }
@@ -127,27 +130,114 @@ private func tunnelStageColor(_ stage: TunnelUiStage) -> Color {
 // MARK: - 设置页
 
 struct TailscaleTunnelSettingsView: View {
-    @ObservedObject private var tunnel = TailscaleTunnelController.shared
+    @ObservedObject private var tunnel: TailscaleTunnelController
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
 
-    @State private var enabled = TailscaleTunnelSettings.shared.enabled
-    @State private var nodeName = TailscaleTunnelSettings.shared.nodeName
-    @State private var authKey = TailscaleTunnelSettings.shared.authKey
+    @ObservedObject private var settings: TailscaleTunnelSettings
+    @State private var editingAccount: TailscaleAccount?
+    @State private var deletingAccount: TailscaleAccount?
+    @State private var nodeName: String
+    @State private var authKey: String
     @State private var invalidName = false
     @State private var copied = false
+
+    init(settings: TailscaleTunnelSettings? = nil, tunnel: TailscaleTunnelController? = nil) {
+        let settings = settings ?? .shared
+        self.settings = settings
+        self.tunnel = tunnel ?? .shared
+        _nodeName = State(initialValue: settings.nodeName)
+        _authKey = State(initialValue: settings.authKey)
+    }
 
     var body: some View {
         Form {
             Section {
-                Toggle("启用内嵌隧道", isOn: $enabled)
+                Toggle("启用内嵌隧道", isOn: Binding(
+                    get: { settings.enabled }, set: { tunnel.setEnabled($0) }))
+                    .tint(DSHColor.switchTint(for: colorScheme))
                     .accessibilityIdentifier("tunnel-enabled-switch")
+                    .disabled(tunnel.accountAddition != nil)
             } header: {
                 Text("Tailscale 内嵌隧道")
+                    .appFont(.caption)
             } footer: {
                 Text("在应用内建立一个 Tailscale 节点：不需要安装 Tailscale，也不会占用系统 VPN。节点只在你自己的 tailnet 内可达。")
+                    .appFont(.caption)
             }
 
-            if enabled {
+            Section {
+                ForEach(settings.accounts) { account in
+                    Button {
+                        tunnel.selectAccount(account.id)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(verbatim: account.displayName)
+                                    .foregroundStyle(.primary)
+                                if !account.name.isEmpty, let login = account.loginName,
+                                   !login.isEmpty, login != account.displayName {
+                                    Text(verbatim: login).appFont(.caption2).foregroundStyle(.secondary)
+                                }
+                                if let tailnet = account.tailnetName, !tailnet.isEmpty,
+                                   tailnet != account.displayName, tailnet != account.loginName {
+                                    Text(verbatim: tailnet).appFont(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            if account.id == settings.selectedAccountID {
+                                Image(systemName: "checkmark").foregroundStyle(DSHColor.ocean)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .accessibilityIdentifier("tunnel-account-\(account.id.uuidString)")
+                    .accessibilityValue(account.id == settings.selectedAccountID
+                        ? String(localized: "当前账号") : "")
+                    .contextMenu {
+                        Button {
+                            editingAccount = account
+                        } label: {
+                            Label("重命名", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) {
+                            deletingAccount = account
+                        } label: {
+                            Label("删除账号", systemImage: "trash")
+                        }
+                    }
+                }
+                Button {
+                    tunnel.beginAccountAddition()
+                } label: {
+                    Label("添加 Tailscale 账号", systemImage: "plus")
+                }
+                .accessibilityIdentifier("tunnel-add-account")
+                .disabled(tunnel.accountAddition != nil)
+            } header: {
+                Text("账号与网络")
+                    .appFont(.caption)
+            } footer: {
+                Text("仅显示已登录账号。点击账号可切换网络，登录状态会分别保留。")
+                    .appFont(.caption)
+            }
+
+            if let addition = tunnel.accountAddition, addition.confirmed {
+                Section {
+                    HStack {
+                        if !addition.failed { ProgressView().controlSize(.mini) }
+                        Text(addition.failed ? String(localized: "新账号连接失败")
+                            : addition.stage == .waitingRoutes ? String(localized: "正在准备新账号的路由…")
+                            : String(localized: "等待新账号登录…"))
+                            .appFont(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("取消添加", role: .cancel) { tunnel.cancelAccountAddition() }
+                }
+            }
+
+            if settings.enabled {
                 Section {
                     HStack {
                         Circle()
@@ -161,7 +251,7 @@ struct TailscaleTunnelSettingsView: View {
                         } else if tunnel.state.peerCount > 0 {
                             // 与 Android 同形：先用词条，再拼数字，不把插值当成一条本地化键。
                             Text(verbatim: "\(String(localized: "对端数量")) \(tunnel.state.peerCount)")
-                                .font(.footnote)
+                                .appFont(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -173,7 +263,7 @@ struct TailscaleTunnelSettingsView: View {
                     if let reason = tunnelFailureText(tunnel.state.failureKind) {
                         LabeledContent("失败原因", value: reason)
                     }
-                    if let authUrl = tunnel.state.authUrl {
+                    if let authUrl = tunnel.state.authUrl, tunnel.accountAddition?.confirmed != false {
                         Button("打开登录链接") {
                             if let link = URL(string: authUrl) { openURL(link) }
                         }
@@ -188,11 +278,13 @@ struct TailscaleTunnelSettingsView: View {
                             Text(copied ? String(localized: "已复制") : String(localized: "复制链接"))
                         }
                     }
+                    if tunnel.state.stage == .disabled || tunnel.state.stage == .failed {
+                        Button("继续连接") { tunnel.start() }
+                            .accessibilityIdentifier("tunnel-retry")
+                    }
                     if tunnel.state.stage != .disabled {
                         Button(role: .destructive) {
-                            enabled = false
-                            TailscaleTunnelSettings.shared.selectEnabled(false)
-                            tunnel.stop()
+                            tunnel.setEnabled(false)
                         } label: {
                             Text(tunnel.state.stage == .starting || tunnel.state.stage == .needsLogin
                                 ? String(localized: "停止启动") : String(localized: "停止隧道"))
@@ -200,9 +292,11 @@ struct TailscaleTunnelSettingsView: View {
                     }
                 } header: {
                     Text("隧道状态")
+                    .appFont(.caption)
                 } footer: {
                     if tunnel.state.stage == .needsLogin {
                         Text("等待你在浏览器里完成登录。")
+                    .appFont(.caption)
                     }
                 }
 
@@ -215,32 +309,337 @@ struct TailscaleTunnelSettingsView: View {
                         .accessibilityIdentifier("tunnel-field-node-name")
                     if invalidName {
                         Text("只允许小写字母、数字和连字符，最长 63 个字符。")
-                            .font(.footnote)
+                            .appFont(.caption)
                             .foregroundStyle(.red)
                     }
-                    TextField("登录密钥（可选）", text: $authKey,
-                              prompt: Text("tskey-auth-…"))
+                    SecureField("登录密钥（可选）", text: $authKey,
+                              prompt: Text(verbatim: "tskey-auth-…"))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .accessibilityIdentifier("tunnel-field-auth-key")
+                    if !authKey.isEmpty {
+                        Button("使用登录密钥连接") { tunnel.start() }
+                    }
                 } header: {
                     Text("节点身份")
+                    .appFont(.caption)
                 } footer: {
                     Text("节点名称只允许小写字母、数字和连字符。登录时默认在浏览器里完成；也可以粘贴 Tailscale 控制台生成的 Auth Key。")
+                    .appFont(.caption)
                 }
+                .disabled(tunnel.accountAddition != nil)
             }
         }
         .navigationTitle("Tailscale 内嵌隧道")
         // 单参数的 onChange 是有意的：双参数形式要 iOS 17，而这个 app 的下限是 16.1。
-        .onChange(of: enabled) { value in
-            TailscaleTunnelSettings.shared.selectEnabled(value)
-            tunnel.setEnabled(value)
+        .onChange(of: settings.selectedAccountID) { _ in
+            nodeName = settings.nodeName
+            authKey = settings.authKey
+            invalidName = false
+        }
+        .onChange(of: settings.authKey) { authKey = $0 }
+        .background {
+            TailscaleAccountLoginAlert(tunnel: tunnel, confirm: {
+                if let url = tunnel.confirmAccountAddition() { openURL(url) }
+            }, cancel: {
+                tunnel.cancelAccountAddition()
+            })
+            .frame(width: 0, height: 0)
+        }
+        .task(id: scenePhase) {
+            if scenePhase == .active { await tunnel.refreshAfterReturningToApp() }
+        }
+        .sheet(item: $editingAccount) { account in
+            TailscaleAccountEditor(title: "重命名", name: account.name) { name in
+                settings.renameAccount(account.id, name: name)
+            }
+        }
+        .alert("删除账号？", isPresented: Binding(
+            get: { deletingAccount != nil },
+            set: { if !$0 { deletingAccount = nil } }
+        ), presenting: deletingAccount) { account in
+            Button("取消", role: .cancel) { deletingAccount = nil }
+            Button("删除账号", role: .destructive) {
+                tunnel.deleteAccount(account.id)
+                deletingAccount = nil
+            }
+        } message: { account in
+            Text(verbatim: account.displayName) + Text(verbatim: "\n\n")
+                + Text("此账号及其登录状态将从本机删除；若正在使用，会停止对应隧道。再次使用需重新登录。")
         }
         .onChange(of: nodeName) { value in
-            invalidName = !TailscaleTunnelSettings.shared.selectNodeName(value)
+            invalidName = !settings.selectNodeName(value)
         }
         .onChange(of: authKey) { value in
-            TailscaleTunnelSettings.shared.selectAuthKey(value)
+            settings.selectAuthKey(value)
+        }
+    }
+}
+
+/// 登录弹窗使用普通 URL 文本与复制文字按钮，不创建可编辑输入框。
+struct TailscaleAccountLoginAlert: UIViewControllerRepresentable {
+    let tunnel: TailscaleTunnelController
+    let confirm: () -> Void
+    let cancel: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIViewController(context: Context) -> Presenter {
+        let presenter = Presenter()
+        presenter.view.backgroundColor = .clear
+        context.coordinator.presenter = presenter
+        context.coordinator.bind(to: tunnel)
+        presenter.onAppear = { [weak coordinator = context.coordinator] in
+            coordinator?.presentIfNeeded()
+        }
+        return presenter
+    }
+
+    func updateUIViewController(_ presenter: Presenter, context: Context) {
+        context.coordinator.confirm = confirm
+        context.coordinator.cancel = cancel
+        context.coordinator.bind(to: tunnel)
+        context.coordinator.presentIfNeeded()
+    }
+
+    static func dismantleUIViewController(_ presenter: Presenter, coordinator: Coordinator) {
+        coordinator.tearDown()
+    }
+
+    final class Presenter: UIViewController {
+        var onAppear: (() -> Void)?
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            onAppear?()
+        }
+    }
+
+    @MainActor
+    final class Coordinator {
+        weak var presenter: UIViewController?
+        private weak var model: TailscaleTunnelController?
+        private var observation: AnyCancellable?
+        var addition: TailscaleAccountAddition?
+        var confirm: () -> Void = {}
+        var cancel: () -> Void = {}
+        private(set) var alert: TailscaleLoginDialogController?
+        var writeClipboard: (String) -> Void = { UIPasteboard.general.string = $0 }
+
+        func bind(to model: TailscaleTunnelController) {
+            guard self.model !== model else { return }
+            observation?.cancel()
+            self.model = model
+            // 弹窗已呈现时也直接更新 UIKit，不依赖被遮挡页面的 SwiftUI 重绘时机。
+            observation = model.$accountAddition.sink { [weak self] addition in
+                self?.addition = addition
+                self?.presentIfNeeded()
+            }
+        }
+
+        func presentIfNeeded() {
+            guard let addition, !addition.confirmed else {
+                alert?.dismiss(animated: true)
+                alert = nil
+                return
+            }
+            if let alert {
+                alert.update(addition)
+            } else if var host = presenter?.view.window?.rootViewController {
+                while let presented = host.presentedViewController { host = presented }
+                guard !(host is UIAlertController), !(host is TailscaleLoginDialogController) else { return }
+                let alert = makeAlert()
+                self.alert = alert
+                host.present(alert, animated: true)
+            }
+        }
+
+        func makeAlert() -> TailscaleLoginDialogController {
+            let alert = TailscaleLoginDialogController()
+            alert.onCopy = { [weak self] in self?.copyLoginURL() }
+            alert.onConfirm = { [weak self] in
+                guard let self, self.addition?.loginURL != nil, self.addition?.failed == false else { return }
+                self.addition?.confirmed = true
+                let dialog = self.alert
+                self.alert = nil
+                if let dialog { dialog.dismiss(animated: true, completion: self.confirm) }
+                else { self.confirm() }
+            }
+            alert.onCancel = { [weak self] in
+                guard let self else { return }
+                self.addition = nil
+                self.alert?.dismiss(animated: true)
+                self.alert = nil
+                self.cancel()
+            }
+            alert.loadViewIfNeeded()
+            if let addition { alert.update(addition) }
+            return alert
+        }
+
+        func copyLoginURL() {
+            guard let url = addition?.loginURL else { return }
+            writeClipboard(url.absoluteString)
+            UIAccessibility.post(notification: .announcement, argument: String(localized: "已复制"))
+        }
+
+        func tearDown() {
+            observation?.cancel()
+            observation = nil
+            alert?.dismiss(animated: false)
+            alert = nil
+            if addition?.confirmed == false { cancel() }
+        }
+    }
+}
+
+@MainActor
+final class TailscaleLoginDialogController: UIViewController {
+    let loginURLLabel = UILabel()
+    let copyButton = UIButton(type: .system)
+    let confirmButton = UIButton(type: .system)
+    let cancelButton = UIButton(type: .system)
+    private let titleLabel = UILabel()
+    private let messageLabel = UILabel()
+    private let urlRow = UIStackView()
+    var onCopy: () -> Void = {}
+    var onConfirm: () -> Void = {}
+    var onCancel: () -> Void = {}
+
+    init() {
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .overFullScreen
+        modalTransitionStyle = .crossDissolve
+        isModalInPresentation = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = UIColor.black.withAlphaComponent(0.28)
+        view.accessibilityViewIsModal = true
+        view.accessibilityIdentifier = "tunnel-login-alert"
+        let card = UIView()
+        card.backgroundColor = .secondarySystemGroupedBackground
+        card.layer.cornerRadius = 24
+        card.layer.cornerCurve = .continuous
+        card.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(card)
+
+        titleLabel.text = String(localized: "添加 Tailscale 账号")
+        titleLabel.font = UIFont.appPreferredFont(forTextStyle: .headline)
+        titleLabel.textColor = .label
+        titleLabel.numberOfLines = 0
+        messageLabel.font = UIFont.appPreferredFont(forTextStyle: .footnote)
+        messageLabel.textColor = .secondaryLabel
+        messageLabel.numberOfLines = 0
+        loginURLLabel.font = UIFont.appPreferredFont(forTextStyle: .caption1)
+        loginURLLabel.textColor = .secondaryLabel
+        loginURLLabel.numberOfLines = 1
+        loginURLLabel.lineBreakMode = .byTruncatingMiddle
+        loginURLLabel.accessibilityIdentifier = "tunnel-login-url"
+        loginURLLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        copyButton.setTitle(String(localized: "复制"), for: .normal)
+        copyButton.setTitleColor(.systemBlue, for: .normal)
+        copyButton.setTitleColor(.tertiaryLabel, for: .disabled)
+        copyButton.titleLabel?.font = UIFont.appPreferredFont(forTextStyle: .footnote)
+        copyButton.setContentHuggingPriority(.required, for: .horizontal)
+        copyButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        copyButton.accessibilityIdentifier = "tunnel-login-copy-url"
+        copyButton.addTarget(self, action: #selector(copyTapped), for: .touchUpInside)
+        urlRow.axis = .horizontal
+        urlRow.alignment = .center
+        urlRow.spacing = 8
+        urlRow.addArrangedSubview(loginURLLabel)
+        urlRow.addArrangedSubview(copyButton)
+        urlRow.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        copyButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        copyButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+
+        cancelButton.setTitle(String(localized: "取消"), for: .normal)
+        confirmButton.setTitle(String(localized: "确认"), for: .normal)
+        cancelButton.accessibilityIdentifier = "tunnel-login-cancel"
+        confirmButton.accessibilityIdentifier = "tunnel-login-confirm"
+        for button in [cancelButton, confirmButton] {
+            button.titleLabel?.font = UIFont.appPreferredFont(forTextStyle: .body)
+            button.backgroundColor = .tertiarySystemFill
+            button.layer.cornerRadius = 18
+            button.setTitleColor(.label, for: .normal)
+            button.setTitleColor(.tertiaryLabel, for: .disabled)
+        }
+        cancelButton.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
+        confirmButton.addTarget(self, action: #selector(confirmTapped), for: .touchUpInside)
+        let actions = UIStackView(arrangedSubviews: [cancelButton, confirmButton])
+        actions.axis = .horizontal
+        actions.spacing = 10
+        actions.distribution = .fillEqually
+        actions.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        let content = UIStackView(arrangedSubviews: [titleLabel, messageLabel, urlRow, actions])
+        content.axis = .vertical
+        content.spacing = 14
+        content.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(content)
+        let preferredWidth = card.widthAnchor.constraint(equalToConstant: 340)
+        preferredWidth.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            card.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            card.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            preferredWidth,
+            card.leadingAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
+            card.trailingAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
+            content.topAnchor.constraint(equalTo: card.topAnchor, constant: 22),
+            content.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 22),
+            content.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -22),
+            content.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -22)
+        ])
+    }
+
+    func update(_ addition: TailscaleAccountAddition) {
+        loadViewIfNeeded()
+        titleLabel.text = addition.isReauthentication
+            ? String(localized: "登录 Tailscale 账号") : String(localized: "添加 Tailscale 账号")
+        messageLabel.text = addition.failed
+            ? String(localized: "无法获取登录链接，请取消后重试。")
+            : addition.loginURL == nil
+                ? String(localized: "正在获取登录链接…")
+                : String(localized: "即将跳转到 Tailscale 登录页面。你可以复制下方链接；点击确认打开页面，登录完成后应用会自动连接。")
+        loginURLLabel.text = addition.loginURL?.absoluteString
+        urlRow.isHidden = addition.loginURL == nil
+        confirmButton.isEnabled = addition.loginURL != nil && !addition.failed
+        copyButton.isEnabled = addition.loginURL != nil
+    }
+
+    @objc private func copyTapped() { onCopy() }
+    @objc private func confirmTapped() { onConfirm() }
+    @objc private func cancelTapped() { onCancel() }
+}
+
+private struct TailscaleAccountEditor: View {
+    let title: LocalizedStringKey
+    @State var name: String
+    let save: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("账号备注（可选）", text: $name)
+                    .accessibilityIdentifier("tunnel-account-name")
+            }
+            .navigationTitle(title)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("确定") {
+                        save(name)
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("tunnel-account-save")
+                }
+            }
         }
     }
 }
@@ -248,6 +647,7 @@ struct TailscaleTunnelSettingsView: View {
 /// 设置页里的主机侧入口（与 Android 的 TailscaleTunnelRow 同形态）。
 struct TailscaleTunnelSettingsRow: View {
     @ObservedObject private var tunnel = TailscaleTunnelController.shared
+    @ObservedObject private var settings = TailscaleTunnelSettings.shared
 
     var body: some View {
         NavigationLink {
@@ -256,7 +656,7 @@ struct TailscaleTunnelSettingsRow: View {
             HStack {
                 Text("内嵌隧道")
                 Spacer()
-                Text(verbatim: TailscaleTunnelSettings.shared.enabled
+                Text(verbatim: settings.enabled
                     ? tunnelStageLabel(tunnel.state.stage) : String(localized: "未启用"))
                     .foregroundStyle(.secondary)
             }

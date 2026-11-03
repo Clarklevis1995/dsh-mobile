@@ -67,18 +67,37 @@ internal object LocalAppLog {
     ) = println(Log.WARN, tag, message)
 
     /** 排在已有写入之后创建一致的快照；只能从后台线程调用。 */
-    fun export(): File =
+    fun export(
+        start: Long? = null,
+        end: Long? = null,
+    ): File =
         executor
             .submit<File> {
-                checkNotNull(store) { "日志尚未初始化" }.export()
+                checkNotNull(store) { "日志尚未初始化" }.export(start, end)
+            }.get()
+
+    fun summary(
+        start: Long,
+        end: Long,
+    ): LogExportSummary =
+        executor
+            .submit<LogExportSummary> {
+                checkNotNull(store) { "日志尚未初始化" }.summary(start, end)
             }.get()
 }
+
+internal data class LogExportSummary(
+    val fileCount: Int,
+    val bytes: Long,
+    val earliest: Long?,
+)
 
 internal class HourlyLogStore(
     private val directory: File,
     private val limit: Long = 200_000_000,
 ) {
     private companion object {
+        const val TIMESTAMP_LENGTH = 29
         const val MAX_DIRECTORY_BYTES = 200_000_000L
         const val MAX_ENTRY_CHARACTERS = 16_384
         const val MAX_CHUNK_BYTES = 4_000_000L
@@ -153,27 +172,88 @@ internal class HourlyLogStore(
         check(directoryBytes() <= budget) { "日志目录容量无法降至上限以内" }
     }
 
-    private fun addToZip(
-        zip: ZipOutputStream,
+    /** 续行继承上一条记录的时间；不把范围外的同小时记录混入导出。 */
+    private fun selected(
         file: File,
-    ) {
-        zip.putNextEntry(ZipEntry(file.name))
-        file.inputStream().use { it.copyTo(zip) }
-        zip.closeEntry()
+        start: Long?,
+        end: Long?,
+    ): ByteArray {
+        if (start == null && end == null) return file.readBytes()
+        val text = StringBuilder()
+        var include = false
+        file.forEachLine { line ->
+            val date =
+                if (line.length >=
+                    TIMESTAMP_LENGTH
+                ) {
+                    runCatching { lineTime.parse(line.take(TIMESTAMP_LENGTH)) }.getOrNull()
+                } else {
+                    null
+                }
+            if (date != null) {
+                include = (start == null || date.time >= start) && (end == null || date.time < end)
+            }
+            if (include) text.append(line).append('\n')
+        }
+        return text.toString().toByteArray(Charsets.UTF_8)
     }
 
-    fun export(): File {
+    fun summary(
+        start: Long,
+        end: Long,
+    ): LogExportSummary {
+        var count = 0
+        var bytes = 0L
+        var earliest: Long? = null
+        for (file in logs()) {
+            file.bufferedReader().use { reader ->
+                val line = reader.readLine().orEmpty()
+                val time = runCatching { lineTime.parse(line.take(TIMESTAMP_LENGTH))?.time }.getOrNull()
+                if (time != null) earliest = minOf(earliest ?: time, time)
+            }
+            val data = selected(file, start, end)
+            if (data.isNotEmpty()) {
+                count++
+                bytes += data.size
+            }
+        }
+        return LogExportSummary(count, bytes, earliest)
+    }
+
+    private fun addSelectedLogs(
+        zip: ZipOutputStream,
+        start: Long?,
+        end: Long?,
+    ): Int {
+        var count = 0
+        for (file in logs()) {
+            val data = selected(file, start, end)
+            if (data.isEmpty()) continue
+            zip.putNextEntry(ZipEntry(file.name))
+            zip.write(data)
+            zip.closeEntry()
+            count++
+        }
+        return count
+    }
+
+    fun export(
+        start: Long? = null,
+        end: Long? = null,
+    ): File {
+        require(start == null || end == null || start < end)
         // 为不易压缩的日志和 ZIP 文件头预留空间，导出期间仍保持总量上限。
         exports.deleteRecursively()
         check(exports.mkdirs())
         trim((limit - ZIP_HEADROOM_BYTES).coerceAtLeast(0) / 2)
-        val target = File(exports, "${timestamp.format(Date())}.zip")
+        val target = File(exports, "Whaleness-logs-${timestamp.format(Date())}.zip")
         var completed = false
         try {
             // ZIP 文件头和不可压缩内容也受实时字节预算约束，不能等写完后才检查。
             val remaining = limit - directoryBytes()
             ZipOutputStream(BudgetOutputStream(target.outputStream().buffered(), remaining)).use { zip ->
-                logs().forEach { file -> addToZip(zip, file) }
+                val count = addSelectedLogs(zip, start, end)
+                check(count > 0) { "所选时间范围内没有日志" }
             }
             check(directoryBytes() <= limit)
             completed = true

@@ -35,7 +35,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.scrollBy
@@ -74,7 +73,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -322,7 +320,7 @@ internal fun ConversationScreen(
                         }
                         if (stateHolder.teamSnapshot.visible) {
                             TeamEntryButton(stateHolder)
-                            Spacer(Modifier.width(16.dp))
+                            Spacer(Modifier.width(8.dp))
                         }
                         if (compactHeader) {
                             sidebarEntry()
@@ -417,7 +415,7 @@ internal fun TopBarCircleButton(
             painter = painterResource(iconRes),
             contentDescription = null,
             modifier = Modifier.size(22.dp),
-            tint = MaterialTheme.colorScheme.onSurface
+            tint = dshGlassForeground()
         )
     }
 }
@@ -429,32 +427,7 @@ internal fun TopBarCircleButton(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    val isDark = isSystemInDarkTheme()
-    val shadowColor = Color.Black.copy(alpha = if (isDark) 0.24f else 0.075f)
-    Box(
-        modifier = modifier.size(46.dp)
-            .dropShadow(
-                shape = CircleShape,
-                shadow = Shadow(
-                    radius = 12.dp,
-                    spread = 0.dp,
-                    color = shadowColor,
-                    offset = DpOffset(x = 0.dp, y = 4.dp)
-                )
-            )
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = if (isDark) 0.82f else 0.94f))
-            .border(
-                0.7.dp,
-                MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.13f else 0.055f),
-                CircleShape
-            )
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center
-    ) {
-        content()
-    }
+    DshGlassButton(description, onClick, modifier.size(44.dp), content = content)
 }
 
 @Composable
@@ -1141,8 +1114,14 @@ private fun ConversationTimeline(
                     interactionGeneration += 1
                     revealIds = emptySet()
                     latestOnUserInteraction()
-                    try { waitForUpOrCancellation(pass = PointerEventPass.Initial) }
-                    finally { touchingTimeline = false }
+                    try {
+                        // 观察实际按压生命周期；列表消费拖动事件不代表手指已经抬起。
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                        } while (event.changes.any { it.pressed })
+                    } finally {
+                        touchingTimeline = false
+                    }
                 }
             }
     ) {
@@ -1484,45 +1463,15 @@ internal fun shouldPublishPinnedState(
 
 @Composable
 internal fun ScrollToBottomButton(isGenerating: Boolean, onClick: () -> Unit) {
-    val shape = CircleShape
-    Surface(
+    DshGlassButton(
+        description = if (isGenerating) appText("正在生成，滚动到最新消息") else appText("滚动到最新消息"),
         onClick = onClick,
-        modifier = Modifier.padding(bottom = 4.dp).size(48.dp)
-            .dropShadow(
-                shape = shape,
-                shadow = Shadow(
-                    radius = 12.dp,
-                    spread = 0.dp,
-                    color = Color.Black.copy(alpha = 0.10f),
-                    offset = DpOffset(0.dp, 4.dp)
-                )
-            )
-            .semantics {
-                contentDescription = if (isGenerating) appText("正在生成，滚动到最新消息") else appText("滚动到最新消息")
-            }
-            .testTag("scroll-to-bottom"),
-        shape = shape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        border = androidx.compose.foundation.BorderStroke(
-            0.7.dp,
-            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)
-        )
+        modifier = Modifier.padding(bottom = 4.dp).size(48.dp).testTag("scroll-to-bottom"),
     ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (isGenerating) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = DshColors.Ocean
-                )
-            } else {
-                Icon(
-                    painter = painterResource(R.drawable.ic_arrow_down),
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
+        if (isGenerating) {
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = DshColors.Ocean)
+        } else {
+            Icon(painterResource(R.drawable.ic_arrow_down), null, Modifier.size(20.dp), tint = dshGlassForeground())
         }
     }
 }
@@ -1790,7 +1739,7 @@ private fun Composer(
                 ) {
                     Box {
                         var attachmentMenu by remember { mutableStateOf(false) }
-                        ComposerIconButton(R.drawable.ic_composer_add, appText("添加附件"), { attachmentMenu = true })
+                        ComposerIconButton(R.drawable.ic_add, appText("添加附件"), { attachmentMenu = true })
                         DshMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
                             DshMenuItem(text = { Text(appText("图片")) },
                                 enabled = "images" in stateHolder.gatewayState.capabilities && stateHolder.preparedImages.size < 20,
@@ -1830,9 +1779,7 @@ private fun Composer(
                                     if (stateHolder.canCancelSelectedSession) 1f else 0.66f
                                 } else 1f
                             )
-                            .clip(CircleShape)
-                            // 背景直接绘制圆形，避免半透明状态依赖图层裁剪后露出方形底色。
-                            .background(DshColors.Ocean, CircleShape)
+                            .dshGlassControl()
                             .clickable(
                                 enabled = if (stateHolder.showsSessionStopButton) {
                                     stateHolder.canCancelSelectedSession
@@ -1874,7 +1821,7 @@ private fun Composer(
                         if (stateHolder.showsSessionStopButton) {
                             Box(
                                 Modifier.size(14.dp)
-                                    .background(Color.White, RoundedCornerShape(3.dp))
+                                    .background(dshGlassForeground(), RoundedCornerShape(3.dp))
                             )
                         } else {
                             Icon(
@@ -1885,7 +1832,7 @@ private fun Composer(
                                 ),
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp),
-                                tint = Color.White
+                                tint = dshGlassForeground()
                             )
                         }
                     }
@@ -1926,10 +1873,10 @@ private fun PreparedImagePreview(image: AndroidPreparedImage, onRemove: () -> Un
             modifier = Modifier.align(Alignment.TopEnd)
                 .padding(4.dp)
                 .size(20.dp)
-                .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                .dshGlassControl()
                 .clickable(onClick = onRemove)
                 .semantics { contentDescription = appText("移除图片") },
-            color = Color.White,
+            color = dshGlassForeground(),
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold
         )
@@ -2182,17 +2129,8 @@ internal fun dshGlassEdge(isDark: Boolean): Brush = Brush.verticalGradient(
 
 @Composable
 private fun ComposerIconButton(iconRes: Int, description: String, onClick: () -> Unit) {
-    Box(
-        Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onClick).semantics { contentDescription = description },
-        contentAlignment = Alignment.CenterStart
-    ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = null,
-            // 加号矢量的描边左侧还留有约 1.5dp 空白，按可见边缘与右侧语音圆按钮对齐。
-            modifier = Modifier.size(22.dp).offset(x = (-1.5).dp),
-            tint = MaterialTheme.colorScheme.onSurface
-        )
+    DshGlassButton(description, onClick, Modifier.size(32.dp)) {
+        Icon(painterResource(iconRes), null, Modifier.size(22.dp), tint = dshGlassForeground())
     }
 }
 
@@ -2608,6 +2546,7 @@ private fun ContextUsageRing(stateHolder: AndroidSharedStateHolder) {
     } else 0f
     Box(
         Modifier.size(32.dp)
+            .dshGlassControl()
             .clickable(role = androidx.compose.ui.semantics.Role.Button) {
                 expanded = true
                 stateHolder.refreshContextUsage()
@@ -3255,22 +3194,8 @@ internal fun ConversationImagePreviewDialog(
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Surface(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .size(38.dp)
-                            .semantics { contentDescription = appText("关闭图片预览") },
-                        shape = RoundedCornerShape(19.dp),
-                        color = Color.White.copy(alpha = 0.16f)
-                    ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_close),
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = Color.White
-                            )
-                        }
+                    DshGlassButton(appText("关闭图片预览"), onDismiss, Modifier.size(38.dp)) {
+                        Icon(painterResource(R.drawable.ic_close), null, Modifier.size(16.dp), tint = dshGlassForeground())
                     }
                     Text(
                         text = "${pagerState.currentPage + 1} / ${request.attachments.size}",

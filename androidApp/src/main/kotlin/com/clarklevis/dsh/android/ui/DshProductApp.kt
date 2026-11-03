@@ -102,6 +102,7 @@ private const val ROUTE_WORKSPACE = "workspace"
 private const val ROUTE_CONVERSATION = "conversation"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SETTINGS_NETWORK = "settings/network-diagnostics"
+private const val ROUTE_SETTINGS_LOGS = "settings/logs"
 private const val ROUTE_SETTINGS_STORAGE = "settings/storage"
 private const val ROUTE_SETTINGS_FONT_SIZE = "settings/font-size"
 private const val ROUTE_SETTINGS_AGENT_PRESETS = "settings/agent-presets"
@@ -149,120 +150,126 @@ internal fun DshProductApp(
             isAppearanceLightNavigationBars = !systemDark
         }
     }
-    NavHost(
-        navController = navController,
-        startDestination = ROUTE_WORKSPACE,
-        enterTransition = {
-            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(260))
-        },
-        exitTransition = {
-            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(260))
-        },
-        popEnterTransition = {
-            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(260))
-        },
-        popExitTransition = {
-            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(260))
-        }
-    ) {
-        composable(ROUTE_WORKSPACE) {
-            val workspaceScope = rememberCoroutineScope()
-            WorkspaceScreen(
-                stateHolder = stateHolder,
-                onOpenSession = { id ->
-                    // 转场期间首页仍能收到点击，直接读取当前目的地以拦截重复事件。
-                    if (navController.currentDestination?.route == ROUTE_WORKSPACE) {
-                        stateHolder.selectSession(id)
+    DshLiquidGlassHost(background = { Box(it.fillMaxSize().background(MaterialTheme.colorScheme.background)) }) {
+        NavHost(
+            navController = navController,
+            startDestination = ROUTE_WORKSPACE,
+            enterTransition = {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(260))
+            },
+            exitTransition = {
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(260))
+            },
+            popEnterTransition = {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(260))
+            },
+            popExitTransition = {
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(260))
+            }
+        ) {
+            composable(ROUTE_WORKSPACE) {
+                val workspaceScope = rememberCoroutineScope()
+                WorkspaceScreen(
+                    stateHolder = stateHolder,
+                    onOpenSession = { id ->
+                        // 转场期间首页仍能收到点击，直接读取当前目的地以拦截重复事件。
+                        if (navController.currentDestination?.route == ROUTE_WORKSPACE) {
+                            stateHolder.selectSession(id)
+                            navController.navigate(ROUTE_CONVERSATION) {
+                                launchSingleTop = true
+                            }
+                        }
+                    },
+                    onNewSession = {
+                        workspaceScope.launch {
+                            if (stateHolder.prepareNewSession()) {
+                                navController.navigate(ROUTE_CONVERSATION)
+                            }
+                        }
+                    },
+                    onSettings = { navController.navigate(ROUTE_SETTINGS) },
+                    onPlugins = { navController.navigate(ROUTE_PLUGINS) },
+                    onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) }
+                )
+            }
+            composable(ROUTE_CONVERSATION) {
+                ConversationScreen(
+                    stateHolder, onPickImage, navController::popBackStack, onPickFile,
+                    onPlugins = { navController.navigate(ROUTE_PLUGINS) { launchSingleTop = true } },
+                    onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) { launchSingleTop = true } },
+                    onSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } }
+                )
+            }
+            composable(ROUTE_SETTINGS) {
+                SettingsScreen(
+                    updateModel = updateModel,
+                    stateHolder = stateHolder,
+                    onBack = navController::popBackStack,
+                    onOpenAgentPresets = { navController.navigate(ROUTE_SETTINGS_AGENT_PRESETS) },
+                    onOpenDefaultModel = { navController.navigate(ROUTE_SETTINGS_DEFAULT_MODEL) },
+                    onOpenFontSize = { navController.navigate(ROUTE_SETTINGS_FONT_SIZE) },
+                    onOpenLogs = { navController.navigate(ROUTE_SETTINGS_LOGS) },
+                    onOpenStorage = { navController.navigate(ROUTE_SETTINGS_STORAGE) },
+                    onOpenNetworkDiagnostics = { navController.navigate(ROUTE_SETTINGS_NETWORK) },
+                    onOpenTunnel = { navController.navigate(ROUTE_SETTINGS_TUNNEL) }
+                )
+            }
+            composable(ROUTE_SETTINGS_LOGS) {
+                LogExportScreen(navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_NETWORK) {
+                NetworkDiagnosticsScreen(stateHolder, navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_TUNNEL) {
+                TailscaleTunnelScreen(navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_STORAGE) {
+                StorageSpaceScreen(stateHolder, navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_FONT_SIZE) {
+                FontSizeSettingsScreen(navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_AGENT_PRESETS) {
+                AgentPresetSelectionScreen(stateHolder, navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_DEFAULT_MODEL) {
+                DefaultModelSelectionScreen(stateHolder, navController::popBackStack)
+            }
+            composable(ROUTE_PLUGINS) {
+                PluginsScreen(
+                    stateHolder = stateHolder,
+                    onBack = navController::popBackStack,
+                    onOpenBundle = { navController.navigate("plugins/bundle/${Uri.encode(it)}") },
+                    onOpenOfficial = { navController.navigate("plugins/official/${Uri.encode(it)}") }
+                )
+            }
+            composable(ROUTE_PLUGIN_BUNDLE) { entry ->
+                PluginBundleDetailScreen(
+                    stateHolder = stateHolder,
+                    bundleName = entry.arguments?.getString("bundleName").orEmpty(),
+                    onBack = navController::popBackStack
+                )
+            }
+            composable(ROUTE_PLUGIN_OFFICIAL) { entry ->
+                OfficialPluginDetailScreen(
+                    stateHolder = stateHolder,
+                    pluginId = entry.arguments?.getString("pluginId").orEmpty(),
+                    onBack = navController::popBackStack
+                )
+            }
+            composable(ROUTE_SCHEDULED_TASKS) {
+                ScheduledTasksScreen(
+                    stateHolder = stateHolder,
+                    onBack = navController::popBackStack,
+                    onOpenSession = { sessionId ->
+                        stateHolder.selectSession(sessionId)
                         navController.navigate(ROUTE_CONVERSATION) {
+                            popUpTo(ROUTE_WORKSPACE)
                             launchSingleTop = true
                         }
                     }
-                },
-                onNewSession = {
-                    workspaceScope.launch {
-                        if (stateHolder.prepareNewSession()) {
-                            navController.navigate(ROUTE_CONVERSATION)
-                        }
-                    }
-                },
-                onSettings = { navController.navigate(ROUTE_SETTINGS) },
-                onPlugins = { navController.navigate(ROUTE_PLUGINS) },
-                onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) }
-            )
-        }
-        composable(ROUTE_CONVERSATION) {
-            ConversationScreen(
-                stateHolder, onPickImage, navController::popBackStack, onPickFile,
-                onPlugins = { navController.navigate(ROUTE_PLUGINS) { launchSingleTop = true } },
-                onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) { launchSingleTop = true } },
-                onSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } }
-            )
-        }
-        composable(ROUTE_SETTINGS) {
-            SettingsScreen(
-                updateModel = updateModel,
-                stateHolder = stateHolder,
-                onBack = navController::popBackStack,
-                onOpenAgentPresets = { navController.navigate(ROUTE_SETTINGS_AGENT_PRESETS) },
-                onOpenDefaultModel = { navController.navigate(ROUTE_SETTINGS_DEFAULT_MODEL) },
-                onOpenFontSize = { navController.navigate(ROUTE_SETTINGS_FONT_SIZE) },
-                onOpenStorage = { navController.navigate(ROUTE_SETTINGS_STORAGE) },
-                onOpenNetworkDiagnostics = { navController.navigate(ROUTE_SETTINGS_NETWORK) },
-                onOpenTunnel = { navController.navigate(ROUTE_SETTINGS_TUNNEL) }
-            )
-        }
-        composable(ROUTE_SETTINGS_NETWORK) {
-            NetworkDiagnosticsScreen(stateHolder, navController::popBackStack)
-        }
-        composable(ROUTE_SETTINGS_TUNNEL) {
-            TailscaleTunnelScreen(navController::popBackStack)
-        }
-        composable(ROUTE_SETTINGS_STORAGE) {
-            StorageSpaceScreen(stateHolder, navController::popBackStack)
-        }
-        composable(ROUTE_SETTINGS_FONT_SIZE) {
-            FontSizeSettingsScreen(navController::popBackStack)
-        }
-        composable(ROUTE_SETTINGS_AGENT_PRESETS) {
-            AgentPresetSelectionScreen(stateHolder, navController::popBackStack)
-        }
-        composable(ROUTE_SETTINGS_DEFAULT_MODEL) {
-            DefaultModelSelectionScreen(stateHolder, navController::popBackStack)
-        }
-        composable(ROUTE_PLUGINS) {
-            PluginsScreen(
-                stateHolder = stateHolder,
-                onBack = navController::popBackStack,
-                onOpenBundle = { navController.navigate("plugins/bundle/${Uri.encode(it)}") },
-                onOpenOfficial = { navController.navigate("plugins/official/${Uri.encode(it)}") }
-            )
-        }
-        composable(ROUTE_PLUGIN_BUNDLE) { entry ->
-            PluginBundleDetailScreen(
-                stateHolder = stateHolder,
-                bundleName = entry.arguments?.getString("bundleName").orEmpty(),
-                onBack = navController::popBackStack
-            )
-        }
-        composable(ROUTE_PLUGIN_OFFICIAL) { entry ->
-            OfficialPluginDetailScreen(
-                stateHolder = stateHolder,
-                pluginId = entry.arguments?.getString("pluginId").orEmpty(),
-                onBack = navController::popBackStack
-            )
-        }
-        composable(ROUTE_SCHEDULED_TASKS) {
-            ScheduledTasksScreen(
-                stateHolder = stateHolder,
-                onBack = navController::popBackStack,
-                onOpenSession = { sessionId ->
-                    stateHolder.selectSession(sessionId)
-                    navController.navigate(ROUTE_CONVERSATION) {
-                        popUpTo(ROUTE_WORKSPACE)
-                        launchSingleTop = true
-                    }
-                }
-            )
+                )
+            }
         }
     }
     stateHolder.platformError?.let { error ->

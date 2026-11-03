@@ -59,6 +59,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.clarklevis.dsh.android.AndroidSharedStateHolder
+import com.clarklevis.dsh.android.DshAndroidApplication
+import com.clarklevis.dsh.android.platform.TunnelUiStage
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
@@ -81,6 +83,7 @@ internal fun SettingsScreen(
     onOpenDefaultModel: () -> Unit,
     onOpenFontSize: () -> Unit,
     onOpenStorage: () -> Unit = {},
+    onOpenLogs: () -> Unit = {},
     onOpenNetworkDiagnostics: () -> Unit = {},
     onOpenTunnel: () -> Unit = {},
     updateModel: com.clarklevis.dsh.android.update.AppUpdateViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -237,10 +240,9 @@ internal fun SettingsScreen(
                             onClick = onOpenStorage
                         )
                     }
-                    SettingsSection(
-                        title = appText("日志"),
-                        footer = appText("按小时保存，日志和导出副本合计不超过 200 MB，自动清理最旧日志。")
-                    ) { LogExportActions() }
+                    SettingsSection(appText("日志")) {
+                        SettingsValueRow(appText("日志导出与分享"), "", onClick = onOpenLogs)
+                    }
                     SettingsSection(appText("关于")) {
                         SettingsValueRow(
                             title = appText("当前版本（去给作者Star🌟）"),
@@ -800,9 +802,11 @@ private fun SettingsValueRow(
 @Composable
 internal fun TailscaleTunnelRow(onClick: () -> Unit) {
     val settings = LocalTailscaleTunnelSettings.current
+    val flow = (LocalContext.current.applicationContext as? DshAndroidApplication)?.tunnel?.state
+    val state = flow?.collectAsStateWithLifecycle()?.value
     SettingsValueRow(
         title = appText("内嵌隧道"),
-        value = if (settings.enabled) appText("已启用") else appText("未启用"),
+        value = if (settings.enabled) tailscaleStageLabel(state?.stage ?: TunnelUiStage.DISABLED) else appText("未启用"),
         onClick = onClick,
         modifier = Modifier.testTag("tailscale-tunnel-settings-row")
     )

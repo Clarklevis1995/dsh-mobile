@@ -24,7 +24,7 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
     // 内嵌 Tailscale 节点的所有者。它必须活过每一次 AndroidAppGraph 重建（切主机会 cancel 图），
     // 所以放在 Application 上，而不是挂在图或某个 Activity 的生命周期里。
     private val tunnelScope = kotlinx.coroutines.CoroutineScope(
-        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate
     )
     /** 隧道开启时请求保持前台服务；最终由 AndroidMultiGatewayStore 统一裁决（回合与隧道是或关系）。 */
     internal var tunnelKeepAliveRequested = false
@@ -48,19 +48,17 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
         if (::hosts.isInitialized) hosts.applyConnectionKeepAlive()
     }
 
+    internal val tunnelSettings by lazy {
+        com.clarklevis.dsh.android.ui.TailscaleTunnelSettings(
+            com.clarklevis.dsh.android.ui.TailscaleTunnelSettings.preferences(this)
+        )
+    }
+
     internal val tunnel: com.clarklevis.dsh.android.platform.TailscaleTunnelController by lazy {
         com.clarklevis.dsh.android.platform.TailscaleTunnelController(
             this,
             tunnelScope,
-            configProvider = {
-                val settings = com.clarklevis.dsh.android.ui.TailscaleTunnelSettings(
-                    com.clarklevis.dsh.android.ui.TailscaleTunnelSettings.preferences(this)
-                )
-                com.clarklevis.dsh.android.platform.TunnelConfig(
-                    settings.effectiveNodeName(),
-                    settings.effectiveAuthKey()
-                )
-            },
+            settings = tunnelSettings,
             // 隧道必须自己发诊断：它是应用级对象，不跟着 AndroidAppGraph 重建，
             // 不传就落到默认的 disabled()，线上什么都不留（这次就是这么丢的）。
             diagnostics = com.clarklevis.dsh.android.platform.AndroidGatewayDiagnostics.forApplication(this)
@@ -127,21 +125,13 @@ class DshAndroidApplication : Application(), DefaultLifecycleObserver {
         isInForeground = true
         graph.diagnostics.lifecycle(GatewayLifecycleEvent.FOREGROUND)
         graph.gatewayRuntime.applicationDidBecomeActive()
-        // 内嵌隧道的保活策略与 app 现有策略一致：跟随前后台，不自建后台常驻服务。
-        // 退后台会停，回到前台自动拉起；登录凭据留在节点 state 目录里，不需要重新登录。
-        autoStartTunnelIfEnabled()
-    }
-
-    internal fun markTunnelAuthenticated() {
-        com.clarklevis.dsh.android.ui.TailscaleTunnelSettings(
-            com.clarklevis.dsh.android.ui.TailscaleTunnelSettings.preferences(this)
-        ).markAuthenticated()
+        // 浏览器授权返回时保留原节点和候选节点，立即刷新授权结果。
+        tunnel.refreshAfterReturningToApp()
+        if (!tunnel.hasSession) autoStartTunnelIfEnabled()
     }
 
     private fun autoStartTunnelIfEnabled() {
-        val settings = com.clarklevis.dsh.android.ui.TailscaleTunnelSettings(
-            com.clarklevis.dsh.android.ui.TailscaleTunnelSettings.preferences(this)
-        )
+        val settings = tunnelSettings
         when {
             settings.shouldAutoStart() -> {
                 graph.diagnostics.tunnel("start", ok = true, backendState = "auto-start")

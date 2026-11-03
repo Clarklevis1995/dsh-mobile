@@ -155,11 +155,13 @@ struct SettingsView: View {
                 .disabled(!gatewayState.isConnected || store.defaultConfigurationLoadingKinds.contains("set-default"))
             } header: {
                 Text("新会话默认配置")
+                    .appFont(.caption)
             } footer: {
                 Text("与 WebUI 使用同一份部署级设置。修改只影响之后新建的会话，运行中的会话保持启动时的配置。")
+                    .appFont(.caption)
             }
 
-            Section("Mobile Gateway") {
+            Section {
                 TextField("ws://host:3080/ws/mobile", text: $store.endpoint)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
@@ -193,16 +195,19 @@ struct SettingsView: View {
                     }
                 }
                 Button("Ping 网关") { store.gateway.ping() }
+            } header: {
+                Text(verbatim: "Mobile Gateway").appFont(.caption)
             }
 
             Section {
                 TailscaleTunnelSettingsRow()
             } header: {
                 Text("Tailscale 内嵌隧道")
+                    .appFont(.caption)
             }
 
             if let host = store.hostSnapshot {
-                Section("DSH Host") {
+                Section {
                     LabeledContent("版本", value: [host.dshVersion, host.version].compactMap { $0 }
                         .first { $0.range(of: "^v?[0-9]+\\.[0-9]+", options: .regularExpression) != nil } ?? "未提供")
                     LabeledContent("已连接会话", value: "\(host.attachedSessions ?? 0)")
@@ -218,6 +223,8 @@ struct SettingsView: View {
                             Text("cwd")
                         }
                     }
+                } header: {
+                    Text(verbatim: "DSH Host").appFont(.caption)
                 }
             }
 
@@ -248,8 +255,10 @@ struct SettingsView: View {
                 .accessibilityIdentifier("font-size-settings-row")
             } header: {
                 Text("外观")
+                    .appFont(.caption)
             } footer: {
                 Text("语言设置将在重新启动应用后生效。")
+                    .appFont(.caption)
             }
 
             Section {
@@ -270,7 +279,7 @@ struct SettingsView: View {
 
             LogExportSection()
 
-            Section("关于") {
+            Section {
                 releaseRow("当前版本（去给作者Star🌟）", value: appVersion, repository: "dsh-mobile", version: appVersion)
                 releaseRow("要求网关版本", value: releaseInfo.map { "≥ \($0.minimumGatewayVersion)" } ?? "未提供",
                            repository: "dsh-plugin-mobile-gateway", version: releaseInfo?.minimumGatewayVersion)
@@ -279,6 +288,8 @@ struct SettingsView: View {
                     repository: "dsh-plugin-mobile-gateway", version: connectedGatewayVersion)
                 Button("本版本新功能") { showsReleaseNotes = true }
                 Button("隐私政策") { showsPrivacyPolicy = true }
+            } header: {
+                Text("关于").appFont(.caption)
             }
         }
         .navigationTitle("设置")
@@ -639,7 +650,7 @@ private struct AgentPresetSelectionView: View {
                     Text("Agent 预设")
                         .appFont(.title2.bold())
                     Text("预设决定 Agent 使用的工具、提示词与能力。选择后只对新建会话生效。")
-                        .appFont(.subheadline)
+                        .appFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -756,7 +767,7 @@ private struct AgentPresetCard: View {
                 }
 
                 Text(preset.displayDescription)
-                    .appFont(.subheadline)
+                    .appFont(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -802,7 +813,7 @@ private struct DefaultModelSelectionView: View {
                     Text("默认模型")
                         .appFont(.title2.bold())
                     Text("为之后新建的会话设置默认模型与思考等级。这会更新部署级设置，同步影响 WebUI，运行中的会话保持启动时的配置。")
-                        .appFont(.subheadline)
+                        .appFont(.footnote)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1212,6 +1223,7 @@ struct StorageSpaceView: View {
                 } footer: {
                     if usage.resources.protectedBytes > 0 {
                         Text(String(localized: "storage.in-use", defaultValue: "其中 \(size(usage.resources.protectedBytes)) 正在使用，关闭文件后可释放。"))
+                            .appFont(.caption)
                     }
                 }
             }
@@ -1265,7 +1277,7 @@ private struct StorageCategoryDetailView: View {
                     StorageCategoryIcon(category: category, side: 56)
                     VStack(alignment: .leading, spacing: 5) {
                         Text(category.title).appFont(.title3.weight(.semibold))
-                        Text(category.detail).appFont(.subheadline).foregroundStyle(.secondary)
+                        Text(category.detail).appFont(.footnote).foregroundStyle(.secondary)
                     }
                 }
                 .padding(.vertical, 12)
@@ -1300,54 +1312,56 @@ private struct StorageCategoryDetailView: View {
 
 
 private struct LogExportSection: View {
-    @State private var busy = false
-    @State private var presentation: LogExportPresentation?
-    @State private var failed = false
-
     var body: some View {
         Section {
-            Button("导出日志") { prepare(share: false) }
-                .accessibilityIdentifier("export-logs")
-            Button("分享日志") { prepare(share: true) }
-                .accessibilityIdentifier("share-logs")
-        } header: { Text("日志")
-        } footer: {
-            Text("按小时保存，日志和导出副本合计不超过 200 MB，自动清理最旧日志。")
-            if busy { ProgressView() }
-        }
-        .disabled(busy)
-        .sheet(item: $presentation) { item in
-            LogExportSheet(urls: item.urls, share: item.share)
-        }
-        .alert("日志导出失败，请重试", isPresented: $failed) {
-            Button("好", role: .cancel) {}
-        }
-    }
-
-    private func prepare(share: Bool) {
-        busy = true
-        Task {
-            defer { busy = false }
-            do {
-                let urls = try await LocalAppLog.shared.export()
-                presentation = LogExportPresentation(urls: urls, share: share)
-            } catch { failed = true }
+            NavigationLink {
+                LogExportView()
+            } label: {
+                Text("日志导出与分享")
+            }
+            .accessibilityIdentifier("log-export-entry")
+        } header: {
+            Text("日志").appFont(.caption)
         }
     }
 }
 
-private struct LogExportPresentation: Identifiable {
+struct LogExportPresentation: Identifiable {
     let id = UUID()
     let urls: [URL]
     let share: Bool
 }
 
-private struct LogExportSheet: UIViewControllerRepresentable {
+struct LogExportSheet: UIViewControllerRepresentable {
     let urls: [URL]
     let share: Bool
+    let onDismiss: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(close: onDismiss)
+    }
+
     func makeUIViewController(context: Context) -> UIViewController {
-        if share { return UIActivityViewController(activityItems: urls, applicationActivities: nil) }
-        return UIDocumentPickerViewController(forExporting: urls, asCopy: true)
+        if share {
+            let controller = UIActivityViewController(activityItems: urls, applicationActivities: nil)
+            controller.completionWithItemsHandler = { [weak coordinator = context.coordinator] _, _, _, _ in
+                Task { @MainActor in coordinator?.close() }
+            }
+            return controller
+        }
+        let controller = UIDocumentPickerViewController(forExporting: urls, asCopy: true)
+        controller.delegate = context.coordinator
+        return controller
     }
     func updateUIViewController(_ controller: UIViewController, context: Context) {}
+
+    @MainActor final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let close: () -> Void
+
+        init(close: @escaping () -> Void) { self.close = close }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { close() }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { close() }
+    }
 }
