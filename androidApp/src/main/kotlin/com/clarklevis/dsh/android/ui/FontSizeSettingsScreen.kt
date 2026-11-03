@@ -4,9 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,17 +37,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.android.R
+import com.clarklevis.dsh.android.localization.appText
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,7 +60,7 @@ internal fun FontSizeSettingsScreen(onBack: () -> Unit) {
         containerColor = background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(appText("字体大小"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
+                title = { Text(appText("字体大小"), style = SettingsTypography.title) },
                 navigationIcon = {
                     TopBarCircleButton(
                         iconRes = R.drawable.ic_back_chevron,
@@ -122,7 +121,7 @@ internal fun FontSizeControls(modifier: Modifier = Modifier) {
     val trackColor = foreground.copy(alpha = 0.22f)
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(appText("跟随系统"), fontSize = 16.sp, modifier = Modifier.weight(1f))
+            Text(appText("跟随系统"), style = SettingsTypography.item, modifier = Modifier.weight(1f))
             Switch(
                 checked = appearance.fontFollowsSystem,
                 onCheckedChange = appearance::selectFontFollowsSystem,
@@ -139,10 +138,14 @@ internal fun FontSizeControls(modifier: Modifier = Modifier) {
                 Text("A", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = foreground)
                 Spacer(Modifier.weight(1f))
                 Text(
-                    if (appearance.fontFollowsSystem) appText("跟随系统")
-                    else if (appearance.fontScale == 1f) appText("标准")
-                    else "${(appearance.fontScale * 100).roundToInt()}%",
-                    fontSize = 14.sp,
+                    if (appearance.fontFollowsSystem) {
+                        appText("跟随系统")
+                    } else if (appearance.fontScale == 1f) {
+                        appText("标准")
+                    } else {
+                        "${(appearance.fontScale * 100).roundToInt()}%"
+                    },
+                    style = SettingsTypography.item,
                     color = foreground,
                     modifier = Modifier.testTag("font-size-value")
                 )
@@ -185,7 +188,7 @@ internal fun FontSizeControls(modifier: Modifier = Modifier) {
                 enabled = !appearance.fontFollowsSystem,
                 modifier = Modifier.align(Alignment.CenterHorizontally).testTag("font-size-reset")
             ) {
-                Text(appText("恢复默认"), fontSize = 13.sp, color = foreground)
+                Text(appText("恢复默认"), style = SettingsTypography.item, color = foreground)
             }
         }
     }

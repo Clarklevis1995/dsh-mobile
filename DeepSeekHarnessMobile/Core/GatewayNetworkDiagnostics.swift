@@ -18,18 +18,18 @@ struct GatewayConnectionPathView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("传输路径").appFont(.subheadline)
+            Text("传输路径").appFont(SettingsTypography.item)
             ForEach(channels, id: \.self) { channel in
                 VStack(alignment: .leading, spacing: 3) {
                     let title = channel == "control" ? String(localized: "控制通道") : String(localized: "会话通道")
                     if let path = paths[channel] {
                         Text("\(title)：\(gatewayPathLabel(path.kind)) · \(path.protocol)")
-                            .appFont(.caption)
+                            .appFont(SettingsTypography.description)
                         Text(verbatim: "\(path.localEndpoint) → \(path.remoteEndpoint)")
-                            .appFont(.caption2.monospaced())
+                            .appFont(SettingsTypography.description.monospaced())
                             .textSelection(.enabled)
                     } else {
-                        Text("\(title)：\(String(localized: "正在确认路径"))").appFont(.caption)
+                        Text("\(title)：\(String(localized: "正在确认路径"))").appFont(SettingsTypography.description)
                     }
                 }
                 .foregroundStyle(.secondary)
@@ -119,11 +119,11 @@ struct GatewayNetworkDiagnosticsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
                         Text(gateway.state.isConnected ? String(localized: String.LocalizationValue(gateway.connectionMethod)) : String(localized: "未连接"))
-                            .appFont(.caption).foregroundStyle(.tint)
+                            .appFont(SettingsTypography.description).foregroundStyle(.tint)
                         Spacer()
                         Text(!gateway.state.isConnected ? String(localized: "等待连接") : !gateway.networkDiagnosticsSupported
                              ? String(localized: "网关需更新") : String(localized: "每秒检测 · 最近 60 秒"))
-                            .appFont(.caption2).foregroundStyle(.secondary)
+                            .appFont(SettingsTypography.description).foregroundStyle(.secondary)
                     }
                     if gateway.state.isConnected && gateway.connectionMethod == "WebRTC" {
                         GatewayConnectionPathView(paths: gateway.connectionPaths)
@@ -154,22 +154,21 @@ struct GatewayNetworkDiagnosticsView: View {
                         Spacer()
                         Text("现在")
                     }
-                    .appFont(.caption2).foregroundStyle(.secondary)
+                    .appFont(SettingsTypography.description).foregroundStyle(.secondary)
                     Text(String(format: String(localized: "平均 %@ · P95 %@"), number(snapshot.averageRoundTripMs, unit: " ms"), number(snapshot.p95RoundTripMs, unit: " ms")))
-                        .appFont(.caption2).foregroundStyle(.secondary)
+                        .appFont(SettingsTypography.description).foregroundStyle(.secondary)
                     Text(String(format: String(localized: "发送 %@ · 成功 %d / 超时 %d"), rate(snapshot.sentBytesPerSecond), Int(snapshot.successfulProbes), Int(snapshot.timedOutProbes)))
-                        .appFont(.caption2).foregroundStyle(.secondary)
+                        .appFont(SettingsTypography.description).foregroundStyle(.secondary)
                     if gateway.state.isConnected && !gateway.networkDiagnosticsSupported {
                         Text("请更新网关以启用可关联的网络探测；旧网关不会被误判为丢包。")
-                            .appFont(.caption2).foregroundStyle(.secondary)
+                            .appFont(SettingsTypography.description).foregroundStyle(.secondary)
                     }
                 }
                 .padding(.vertical, 6)
                 .accessibilityIdentifier("network-diagnostics")
-            } header: {
-                Text("网络检测")
             }
         }
+        .appFont(SettingsTypography.item)
         .navigationTitle("网络检测")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { pageVisible = true; if scenePhase == .active { monitor.start(gateway) } }
@@ -181,8 +180,8 @@ struct GatewayNetworkDiagnosticsView: View {
 
     private func metric(_ title: LocalizedStringKey, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).appFont(.caption2).foregroundStyle(.secondary)
-            Text(verbatim: value).appFont(.title3).monospacedDigit()
+            Text(title).appFont(SettingsTypography.description).foregroundStyle(.secondary)
+            Text(verbatim: value).appFont(SettingsTypography.item).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -215,7 +214,7 @@ struct GatewayNetworkDiagnosticsView: View {
         .frame(height: 180)
         .overlay {
             if !samples.contains(where: { metricValue($0) >= 0 }) {
-                Text("等待探测结果…").appFont(.caption).foregroundStyle(.secondary)
+                Text("等待探测结果…").appFont(SettingsTypography.description).foregroundStyle(.secondary)
             }
         }
         .accessibilityLabel("最近一分钟网络状态折线图")

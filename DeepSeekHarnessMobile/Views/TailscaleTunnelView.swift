@@ -161,10 +161,10 @@ struct TailscaleTunnelSettingsView: View {
                     .disabled(tunnel.accountAddition != nil)
             } header: {
                 Text("Tailscale 内嵌隧道")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
             } footer: {
                 Text("在应用内建立一个 Tailscale 节点：不需要安装 Tailscale，也不会占用系统 VPN。节点只在你自己的 tailnet 内可达。")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
             }
 
             Section {
@@ -178,11 +178,11 @@ struct TailscaleTunnelSettingsView: View {
                                     .foregroundStyle(.primary)
                                 if !account.name.isEmpty, let login = account.loginName,
                                    !login.isEmpty, login != account.displayName {
-                                    Text(verbatim: login).appFont(.caption2).foregroundStyle(.secondary)
+                                    Text(verbatim: login).appFont(SettingsTypography.description).foregroundStyle(.secondary)
                                 }
                                 if let tailnet = account.tailnetName, !tailnet.isEmpty,
                                    tailnet != account.displayName, tailnet != account.loginName {
-                                    Text(verbatim: tailnet).appFont(.caption2).foregroundStyle(.secondary)
+                                    Text(verbatim: tailnet).appFont(SettingsTypography.description).foregroundStyle(.secondary)
                                 }
                             }
                             Spacer()
@@ -217,10 +217,10 @@ struct TailscaleTunnelSettingsView: View {
                 .disabled(tunnel.accountAddition != nil)
             } header: {
                 Text("账号与网络")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
             } footer: {
                 Text("仅显示已登录账号。点击账号可切换网络，登录状态会分别保留。")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
             }
 
             if let addition = tunnel.accountAddition, addition.confirmed {
@@ -230,7 +230,7 @@ struct TailscaleTunnelSettingsView: View {
                         Text(addition.failed ? String(localized: "新账号连接失败")
                             : addition.stage == .waitingRoutes ? String(localized: "正在准备新账号的路由…")
                             : String(localized: "等待新账号登录…"))
-                            .appFont(.caption)
+                            .appFont(SettingsTypography.description)
                             .foregroundStyle(.secondary)
                     }
                     Button("取消添加", role: .cancel) { tunnel.cancelAccountAddition() }
@@ -251,7 +251,7 @@ struct TailscaleTunnelSettingsView: View {
                         } else if tunnel.state.peerCount > 0 {
                             // 与 Android 同形：先用词条，再拼数字，不把插值当成一条本地化键。
                             Text(verbatim: "\(String(localized: "对端数量")) \(tunnel.state.peerCount)")
-                                .appFont(.caption2)
+                                .appFont(SettingsTypography.item)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -292,11 +292,11 @@ struct TailscaleTunnelSettingsView: View {
                     }
                 } header: {
                     Text("隧道状态")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
                 } footer: {
                     if tunnel.state.stage == .needsLogin {
                         Text("等待你在浏览器里完成登录。")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
                     }
                 }
 
@@ -309,7 +309,7 @@ struct TailscaleTunnelSettingsView: View {
                         .accessibilityIdentifier("tunnel-field-node-name")
                     if invalidName {
                         Text("只允许小写字母、数字和连字符，最长 63 个字符。")
-                            .appFont(.caption)
+                            .appFont(SettingsTypography.description)
                             .foregroundStyle(.red)
                     }
                     SecureField("登录密钥（可选）", text: $authKey,
@@ -322,15 +322,17 @@ struct TailscaleTunnelSettingsView: View {
                     }
                 } header: {
                     Text("节点身份")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
                 } footer: {
                     Text("节点名称只允许小写字母、数字和连字符。登录时默认在浏览器里完成；也可以粘贴 Tailscale 控制台生成的 Auth Key。")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
                 }
                 .disabled(tunnel.accountAddition != nil)
             }
         }
+        .appFont(SettingsTypography.item)
         .navigationTitle("Tailscale 内嵌隧道")
+        .navigationBarTitleDisplayMode(.inline)
         // 单参数的 onChange 是有意的：双参数形式要 iOS 17，而这个 app 的下限是 16.1。
         .onChange(of: settings.selectedAccountID) { _ in
             nodeName = settings.nodeName

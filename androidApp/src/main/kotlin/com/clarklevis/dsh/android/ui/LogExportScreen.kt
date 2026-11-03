@@ -51,8 +51,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -61,15 +59,15 @@ import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.android.platform.LocalAppLog
 import com.clarklevis.dsh.android.platform.LogExportSummary
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 internal val LogBlue = Color(0xFF2E6BE6)
 internal val LogSecondary = Color(0xFF8E8E93)
@@ -80,14 +78,11 @@ internal fun logCardColor(): Color = if (isSystemInDarkTheme()) Color(0xFF1C1C1E
 @Composable
 internal fun logTextColor(): Color = if (isSystemInDarkTheme()) Color.White else Color.Black
 
-private enum class LogRange(
-    val title: String,
-    val hours: Int?,
-) {
+private enum class LogRange(val title: String, val hours: Int?) {
     HOUR("1小时", 1),
     TODAY("今天", null),
     DAY("24小时", 24),
-    CUSTOM("自定义", null),
+    CUSTOM("自定义", null)
 }
 
 @Suppress("LongMethod", "CyclomaticComplexMethod")
@@ -131,7 +126,7 @@ internal fun LogExportScreen(onBack: () -> Unit) {
         }
     }
     CompositionLocalProvider(
-        LocalTextStyle provides TextStyle(letterSpacing = 0.sp, platformStyle = PlatformTextStyle(includeFontPadding = false)),
+        LocalTextStyle provides SettingsTypography.item
     ) {
         DshMenuHost {
             DshLiquidGlassHost(background = { Box(it.fillMaxSize().background(background)) }) {
@@ -144,20 +139,20 @@ internal fun LogExportScreen(onBack: () -> Unit) {
                                 exportingShare = share
                                 export(share)
                             }
-                        },
+                        }
                     ) { padding ->
                         Column(
                             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Column(
                                 Modifier.widthIn(max = 600.dp).fillMaxWidth().padding(24.dp),
-                                verticalArrangement = Arrangement.spacedBy(24.dp),
+                                verticalArrangement = Arrangement.spacedBy(24.dp)
                             ) {
                                 LogSection(appText("时间范围")) {
                                     Column(
                                         Modifier.fillMaxWidth().background(logCardColor(), RoundedCornerShape(24.dp)).padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
                                         LogRangeControl(range, ::select)
                                         LogDivider()
@@ -174,14 +169,14 @@ internal fun LogExportScreen(onBack: () -> Unit) {
                                                     appText("结束时间须晚于开始时间")
                                                 },
                                                 Modifier.weight(1f),
-                                                fontSize = 12.sp,
-                                                color = if (valid) LogSecondary else Color(0xFFFF3B30),
+                                                style = SettingsTypography.description,
+                                                color = if (valid) LogSecondary else Color(0xFFFF3B30)
                                             )
                                             Text(
                                                 logTimeZone(start),
-                                                fontSize = 11.sp,
+                                                style = SettingsTypography.description,
                                                 fontFamily = FontFamily.Monospace,
-                                                color = LogSecondary,
+                                                color = LogSecondary
                                             )
                                         }
                                     }
@@ -196,13 +191,13 @@ internal fun LogExportScreen(onBack: () -> Unit) {
                                     Text(
                                         appText(
                                             "日志按小时留存，仅导出所选时段\n" +
-                                                "旧日志会自动清理，可选日期以本机留存为准",
+                                                "旧日志会自动清理，可选日期以本机留存为准"
                                         ),
                                         modifier = Modifier.padding(top = 4.dp),
-                                        fontSize = 13.sp,
+                                        style = SettingsTypography.description,
                                         lineHeight = 18.sp,
                                         letterSpacing = 0.sp,
-                                        color = LogSecondary,
+                                        color = LogSecondary
                                     )
                                 }
                             }
@@ -218,7 +213,7 @@ internal fun LogExportScreen(onBack: () -> Unit) {
                                 if (field.startsWith("start")) start = it else end = it
                                 range = LogRange.CUSTOM
                                 editor = null
-                            },
+                            }
                         )
                     }
                 }
@@ -228,29 +223,22 @@ internal fun LogExportScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun LogNavigationBar(
-    onBack: () -> Unit,
-    enabled: Boolean,
-    busy: Boolean,
-    sharing: Boolean,
-    export: (Boolean) -> Unit,
-) {
+private fun LogNavigationBar(onBack: () -> Unit, enabled: Boolean, busy: Boolean, sharing: Boolean, export: (Boolean) -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
             .statusBarsPadding()
             .height(64.dp)
             .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.Center
     ) {
         Text(
             appText("日志导出与分享"),
             Modifier.padding(horizontal = 100.dp),
             maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = logTextColor(),
+            style = SettingsTypography.title,
+            color = logTextColor()
         )
         LogIconButton(R.drawable.ic_back_chevron, appText("返回"), true, false, Modifier.align(Alignment.CenterStart), onBack)
         Row(Modifier.align(Alignment.CenterEnd), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -259,14 +247,14 @@ private fun LogNavigationBar(
                 appText("导出到文件"),
                 enabled,
                 busy && !sharing,
-                Modifier.testTag("log-save"),
+                Modifier.testTag("log-save")
             ) { export(false) }
             LogIconButton(
                 R.drawable.ic_log_share,
                 appText("分享日志"),
                 enabled,
                 busy && sharing,
-                Modifier.testTag("log-share"),
+                Modifier.testTag("log-share")
             ) { export(true) }
         }
     }
@@ -279,7 +267,7 @@ private fun LogIconButton(
     enabled: Boolean,
     busy: Boolean,
     modifier: Modifier,
-    action: () -> Unit,
+    action: () -> Unit
 ) {
     LogGlassButton(modifier.size(44.dp), CircleShape, enabled, description, action) {
         if (busy) {
@@ -289,7 +277,7 @@ private fun LogIconButton(
                 painterResource(icon),
                 null,
                 Modifier.size(if (icon == R.drawable.ic_back_chevron) 22.dp else 24.dp),
-                tint = logTextColor().copy(alpha = if (enabled) 1f else 0.3f),
+                tint = logTextColor().copy(alpha = if (enabled) 1f else 0.3f)
             )
         }
     }
@@ -302,16 +290,13 @@ internal fun LogGlassButton(
     enabled: Boolean,
     description: String,
     action: () -> Unit,
-    content: @Composable () -> Unit,
+    content: @Composable () -> Unit
 ) {
     DshGlassButton(description, action, modifier, enabled, shape, content)
 }
 
 @Composable
-private fun LogRangeControl(
-    range: LogRange,
-    select: (LogRange) -> Unit,
-) {
+private fun LogRangeControl(range: LogRange, select: (LogRange) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -320,7 +305,7 @@ private fun LogRangeControl(
             .background(if (isSystemInDarkTheme()) Color(0xFF38383A) else Color(0xFFEEEEF0))
             .padding(2.dp)
             .selectableGroup()
-            .testTag("log-range-picker"),
+            .testTag("log-range-picker")
     ) {
         LogRange.entries.forEach { choice ->
             Box(
@@ -330,20 +315,20 @@ private fun LogRangeControl(
                     .background(if (choice == range) logCardColor() else Color.Transparent, CircleShape)
                     .clip(CircleShape)
                     .selectable(choice == range, role = Role.Tab) { select(choice) },
-                contentAlignment = Alignment.Center,
+                contentAlignment = Alignment.Center
             ) {
                 Text(
                     appText(choice.title),
-                    fontSize = 13.sp,
+                    style = SettingsTypography.description,
                     fontWeight =
-                        if (choice ==
-                            range
-                        ) {
-                            FontWeight.SemiBold
-                        } else {
-                            FontWeight.Normal
-                        },
-                    color = logTextColor(),
+                    if (choice ==
+                        range
+                    ) {
+                        FontWeight.SemiBold
+                    } else {
+                        FontWeight.Normal
+                    },
+                    color = logTextColor()
                 )
             }
         }
@@ -351,12 +336,9 @@ private fun LogRangeControl(
 }
 
 @Composable
-private fun LogSection(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit,
-) {
+private fun LogSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, fontSize = 17.sp, color = LogSecondary)
+        Text(title, style = SettingsTypography.section, color = LogSecondary)
         content()
     }
 }
@@ -367,29 +349,20 @@ internal fun LogDivider() {
 }
 
 @Composable
-private fun LogTimeRow(
-    title: String,
-    field: String,
-    value: Long,
-    edit: (String) -> Unit,
-) {
+private fun LogTimeRow(title: String, field: String, value: Long, edit: (String) -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(title, Modifier.weight(1f), fontSize = 15.sp, color = logTextColor())
+        Text(title, Modifier.weight(1f), style = SettingsTypography.item, color = logTextColor())
         LogDateTimeButton(logDateText(value), "$field-date") { edit("$field-date") }
         LogDateTimeButton(logTimeText(value), "$field-time") { edit("$field-time") }
     }
 }
 
 @Composable
-private fun LogDateTimeButton(
-    label: String,
-    tag: String,
-    action: () -> Unit,
-) {
+private fun LogDateTimeButton(label: String, tag: String, action: () -> Unit) {
     Box(
         Modifier
             .heightIn(min = 44.dp)
@@ -398,27 +371,23 @@ private fun LogDateTimeButton(
             .clickable(role = Role.Button, onClick = action)
             .padding(horizontal = 8.dp)
             .testTag("log-$tag"),
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.Center
     ) {
-        Text(label, fontSize = 15.sp, color = LogBlue)
+        Text(label, style = SettingsTypography.item, color = LogBlue)
     }
 }
 
 @Composable
-private fun LogSummary(
-    summary: LogExportSummary?,
-    loading: Boolean,
-    failed: Boolean,
-) {
+private fun LogSummary(summary: LogExportSummary?, loading: Boolean, failed: Boolean) {
     val context = LocalContext.current
     Row(
         Modifier.fillMaxWidth().background(logCardColor(), RoundedCornerShape(24.dp)).padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Icon(painterResource(R.drawable.ic_log_document), null, Modifier.size(20.dp), tint = LogSecondary)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(appText("应用运行日志"), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = logTextColor())
+            Text(appText("应用运行日志"), style = SettingsTypography.item, color = logTextColor())
             Text(
                 when {
                     loading -> appText("正在统计日志…")
@@ -426,8 +395,8 @@ private fun LogSummary(
                     summary?.fileCount == 0 -> appText("所选时间范围内没有日志")
                     else -> appText("%1\$s 个日志文件", summary?.fileCount ?: 0)
                 },
-                fontSize = 12.sp,
-                color = LogSecondary,
+                style = SettingsTypography.description,
+                color = LogSecondary
             )
         }
         if (!loading && !failed && (summary?.fileCount ?: 0) > 0) {
@@ -435,12 +404,12 @@ private fun LogSummary(
                 Text(
                     android.text.format.Formatter
                         .formatFileSize(context, summary?.bytes ?: 0),
-                    fontSize = 15.sp,
+                    style = SettingsTypography.item,
                     fontFamily = FontFamily.Default,
                     letterSpacing = 0.sp,
-                    color = logTextColor(),
+                    color = logTextColor()
                 )
-                Text(appText("预计大小"), fontSize = 12.sp, color = LogSecondary)
+                Text(appText("预计大小"), style = SettingsTypography.description, color = LogSecondary)
             }
         }
     }
@@ -463,6 +432,6 @@ private fun logTimeZone(value: Long): String {
             "+"
         },
         kotlin.math.abs(minutes) / 60,
-        kotlin.math.abs(minutes) % 60,
+        kotlin.math.abs(minutes) % 60
     )
 }

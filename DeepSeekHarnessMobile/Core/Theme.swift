@@ -77,6 +77,14 @@ struct AppFont {
     }
 }
 
+// 设置主页与子页共用的文字层级；所有角色沿用应用字号与 Dynamic Type 缩放。
+enum SettingsTypography {
+    static let title = AppFont.body.weight(.semibold)
+    static let item = AppFont.body
+    static let description = AppFont.caption
+    static let section = description
+}
+
 private struct AppFontModifier: ViewModifier {
     @AppStorage(AppFontScale.key) private var scale = 1.0
     @AppStorage(AppFontScale.followsSystemKey) private var followsSystem = false

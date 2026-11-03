@@ -33,6 +33,37 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class AndroidGatewayRuntimeIntegrationTest {
     @Test
+    fun tailscaleQrPairingAuthenticatesAndConnectsWithoutReopeningTransport() = runTest {
+        val endpoint = "ws://100.100.1.19:3081/ws/mobile"
+        val raw = FakeTransport()
+        val transport = object : com.clarklevis.dsh.shared.platform.GatewayRtcTransport, GatewayTransport by raw {
+            override val conversationEvents: Flow<GatewayTransportEvent> = kotlinx.coroutines.flow.emptyFlow()
+            override fun resetRtcRecovery() = Unit
+        }
+        var savedToken: String? = null
+        val credentials = object : GatewayCredentialStore by FakeCredentials() {
+            override suspend fun saveToken(endpoint: String, token: String) { savedToken = token }
+        }
+        val runtime = GatewayRuntime(
+            transport, FakePreferences(), credentials, FakeAttachmentCache(),
+            FakeNetworkMonitor(), ImmediateClock, backgroundScope
+        )
+        runCurrent()
+        val json = """{"version":2,"publicUrl":"$endpoint","pairingCode":"once","expiresAt":60000,"endpoints":["ws://192.168.1.19:3081/ws/mobile"]}"""
+        runtime.pair(kotlin.io.encoding.Base64.UrlSafe.encode(json.encodeToByteArray()).trimEnd('='))
+        assertEquals(endpoint, raw.specs.single().endpoint)
+        assertEquals("once", raw.specs.single().pairingCode)
+        raw.open()
+        raw.receive("""{"kind":"paired","token":"paired-token"}""")
+        runCurrent()
+        raw.receive("""{"kind":"hello","protocol":3,"authenticated":true}""")
+        runCurrent()
+        assertEquals("paired-token", savedToken)
+        assertEquals(GatewayConnectionState.CONNECTED, runtime.state.value.connection)
+        assertEquals(1, raw.specs.size)
+    }
+
+    @Test
     fun fileFollowUpDoesNotDeadlockWhenConversationFillsRuntimeQueue() = runTest {
         val transport = FakeTransport()
         val runtime = GatewayRuntime(

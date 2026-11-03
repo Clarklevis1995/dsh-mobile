@@ -87,15 +87,15 @@ struct LogExportView: View {
                             .foregroundStyle(.secondary)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("应用运行日志").appFont(.system(size: 15, weight: .medium))
-                            Text(summaryText).appFont(.system(size: 12)).foregroundStyle(.secondary)
+                            Text("应用运行日志").appFont(SettingsTypography.item)
+                            Text(summaryText).appFont(SettingsTypography.description).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 8)
                         if !loading, !failed, let summary, summary.fileCount > 0 {
                             VStack(alignment: .trailing, spacing: 4) {
                                 Text(ByteCountFormatter.string(fromByteCount: summary.bytes, countStyle: .file))
-                                    .appFont(.system(size: 15, design: .monospaced))
-                                Text("预计大小").appFont(.system(size: 12)).foregroundStyle(.secondary)
+                                    .appFont(SettingsTypography.item.monospacedDigit())
+                                Text("预计大小").appFont(SettingsTypography.description).foregroundStyle(.secondary)
                             }
                             .fixedSize(horizontal: true, vertical: false)
                         }
@@ -109,12 +109,13 @@ struct LogExportView: View {
                     }
                 }
                 Text("日志按小时留存，仅导出所选时段\n旧日志会自动清理，可选日期以本机留存为准")
-                    .appFont(.system(size: 13)).foregroundStyle(.secondary)
+                    .appFont(SettingsTypography.description).foregroundStyle(.secondary)
             }
             .padding(24).frame(maxWidth: 600)
             .frame(maxWidth: .infinity)
         }
         .background(background)
+        .appFont(SettingsTypography.item)
         .navigationTitle("日志导出与分享")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { exportToolbar }
@@ -141,7 +142,7 @@ struct LogExportView: View {
 
     private var durationLabel: some View {
         Text(valid ? durationText : String(localized: "结束时间须晚于开始时间"))
-            .appFont(.system(size: 12)).foregroundStyle(valid ? Color.secondary : Color.red)
+            .appFont(SettingsTypography.description).foregroundStyle(valid ? Color.secondary : Color.red)
     }
 
     private var durationText: String {
@@ -156,13 +157,13 @@ struct LogExportView: View {
         let seconds = TimeZone.current.secondsFromGMT(for: start)
         let offset = String(format: "UTC%@%02d:%02d", seconds < 0 ? "−" : "+",
                             abs(seconds) / 3600, abs(seconds) % 3600 / 60)
-        return Text(verbatim: offset).appFont(.system(size: 11, design: .monospaced))
+        return Text(verbatim: offset).appFont(SettingsTypography.description.monospaced())
             .foregroundStyle(.secondary)
     }
 
     private func section<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).appFont(.body).foregroundStyle(.secondary)
+            Text(title).appFont(SettingsTypography.section).foregroundStyle(.secondary)
             content()
         }
     }
@@ -170,13 +171,13 @@ struct LogExportView: View {
     private func timeRow(_ title: LocalizedStringKey, value: Date, isStart: Bool) -> some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
-                Text(title).appFont(.system(size: 15)).fixedSize()
+                Text(title).appFont(SettingsTypography.item).fixedSize()
                 Spacer(minLength: 8)
                 dateButton(value, isStart: isStart)
                 timeButton(value, isStart: isStart)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text(title).appFont(.system(size: 15)).fixedSize()
+                Text(title).appFont(SettingsTypography.item).fixedSize()
                 HStack(spacing: 8) {
                     dateButton(value, isStart: isStart)
                     Spacer(minLength: 0)
@@ -194,7 +195,7 @@ struct LogExportView: View {
             editor = Editor(isStart: isStart, isDate: true, value: value)
         } label: {
             Text(value, format: .dateTime.year().month().day())
-                .appFont(.system(size: 15)).foregroundStyle(DSHColor.ocean)
+                .appFont(SettingsTypography.item).foregroundStyle(DSHColor.ocean)
                 .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 8)
                 .frame(minWidth: 44, minHeight: 44)
@@ -219,7 +220,7 @@ struct LogExportView: View {
             editor = Editor(isStart: isStart, isDate: false, value: value)
         } label: {
             Text(timeString(value))
-                .appFont(.system(size: 15)).monospacedDigit().foregroundStyle(DSHColor.ocean)
+                .appFont(SettingsTypography.item).monospacedDigit().foregroundStyle(DSHColor.ocean)
                 .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 8)
                 .frame(minWidth: 44, minHeight: 44)
@@ -342,7 +343,7 @@ private struct LogDateTimePicker: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(draft, format: .dateTime.year().month().day().weekday())
-                        .appFont(.system(size: 14)).foregroundStyle(.secondary)
+                        .appFont(SettingsTypography.description).foregroundStyle(.secondary)
                     if isDate {
                         DatePicker("日期", selection: dateSelection,
                                    in: Calendar.current.startOfDay(for: earliest)...latest, displayedComponents: .date)
@@ -359,10 +360,11 @@ private struct LogDateTimePicker: View {
                         .accessibilityIdentifier("log-native-hour-picker")
                     }
                     Text(isDate ? "灰色日期不在可导出的日志范围内" : "上下滑动选择整点")
-                        .appFont(.system(size: 12)).foregroundStyle(.secondary)
+                        .appFont(SettingsTypography.description).foregroundStyle(.secondary)
                 }
                 .padding(16)
             }
+            .appFont(SettingsTypography.item)
             .navigationTitle(LocalizedStringKey(title))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

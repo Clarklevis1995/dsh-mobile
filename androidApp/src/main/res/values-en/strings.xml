@@ -4,7 +4,7 @@
     <string name="workspace_hero_title">Into the Unknown</string>
     <string name="gateway_notification_channel">Agent connection</string>
     <string name="gateway_notification_channel_description">Keep the Mobile Gateway connected while an Agent turn runs</string>
-    <string name="gateway_active_notification_title">DeepSeek Harness Agent is running</string>
+    <string name="gateway_active_notification_title">Whaleness Harness Agent is running</string>
     <string name="gateway_active_notification_text">Keep the Gateway connected until the current turn finishes</string>
     <string name="gateway_disconnect_action">Disconnect</string>
     <string name="agent_alert_notification_channel">Agent alerts</string>

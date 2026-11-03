@@ -4,14 +4,19 @@
 package com.clarklevis.dsh.android.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -32,7 +38,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,12 +55,12 @@ internal fun NetworkDiagnosticsScreen(
     stateHolder: AndroidSharedStateHolder,
     onBack: () -> Unit,
 ) {
-    val background = MaterialTheme.colorScheme.surfaceContainerLow
+    val background = if (isSystemInDarkTheme()) Color.Black else Color(0xFFF2F2F7)
     androidx.compose.material3.Scaffold(
         containerColor = background,
         topBar = {
             androidx.compose.material3.CenterAlignedTopAppBar(
-                title = { Text(appText("网络检测"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
+                title = { Text(appText("网络检测"), style = SettingsTypography.title) },
                 navigationIcon = {
                     TopBarCircleButton(
                         iconRes = com.clarklevis.dsh.android.R.drawable.ic_back_chevron,
@@ -79,7 +84,7 @@ internal fun NetworkDiagnosticsScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(Modifier.background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))) {
+            Column(Modifier.background(networkCardColor(), RoundedCornerShape(24.dp))) {
                 NetworkDiagnosticsPanel(stateHolder)
             }
         }
@@ -135,7 +140,7 @@ internal fun NetworkDiagnosticsContent(
                 networkNumber(snapshot.averageRoundTripMs, " ms"),
                 networkNumber(snapshot.p95RoundTripMs, " ms"),
             ),
-            fontSize = 11.sp,
+            style = SettingsTypography.description,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
@@ -145,13 +150,13 @@ internal fun NetworkDiagnosticsContent(
                 snapshot.successfulProbes,
                 snapshot.timedOutProbes,
             ),
-            fontSize = 11.sp,
+            style = SettingsTypography.description,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (snapshot.connected && !snapshot.supported) {
             Text(
                 appText("请更新网关以启用可关联的网络探测；旧网关不会被误判为丢包。"),
-                fontSize = 11.sp,
+                style = SettingsTypography.description,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -164,13 +169,13 @@ internal fun RtcConnectionPathDetails(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxWidth().testTag("gateway-connection-path"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(appText("传输路径"), fontSize = 14.sp)
+        Text(appText("传输路径"), style = SettingsTypography.item)
         for (channel in listOf("control", "conversation")) {
             val title = appText(if (channel == "control") "控制通道" else "会话通道")
             val path = paths[channel]
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 if (path == null) {
-                    Text("$title：${appText("正在确认路径")}", fontSize = 12.sp)
+                    Text("$title：${appText("正在确认路径")}", style = SettingsTypography.description)
                 } else {
                     val kind =
                         when (path.kind) {
@@ -179,8 +184,8 @@ internal fun RtcConnectionPathDetails(
                             "relay" -> "TURN 中继"
                             else -> "直连"
                         }
-                    Text("$title：${appText(kind)} · ${path.protocol}", fontSize = 12.sp)
-                    Text("${path.localEndpoint} → ${path.remoteEndpoint}", fontSize = 11.sp)
+                    Text("$title：${appText(kind)} · ${path.protocol}", style = SettingsTypography.description)
+                    Text("${path.localEndpoint} → ${path.remoteEndpoint}", style = SettingsTypography.description)
                 }
             }
         }
@@ -193,7 +198,19 @@ private fun NetworkConnectionHeader(
     primary: Color,
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(appText(if (snapshot.connected) snapshot.connectionMethod.ifEmpty { "未连接" } else "未连接"), fontSize = 13.sp, color = primary)
+        Text(
+            appText(
+                if (snapshot.connected) {
+                    snapshot.connectionMethod.ifEmpty {
+                        "未连接"
+                    }
+                } else {
+                    "未连接"
+                },
+            ),
+            style = SettingsTypography.item,
+            color = primary,
+        )
         Text(
             appText(
                 if (!snapshot.connected) {
@@ -204,7 +221,7 @@ private fun NetworkConnectionHeader(
                     "每秒检测 · 最近 60 秒"
                 },
             ),
-            fontSize = 11.sp,
+            style = SettingsTypography.description,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -217,21 +234,21 @@ private fun NetworkChartLegend(
     orange: Color,
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(appText("60 秒前"), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(appText("60 秒前"), style = SettingsTypography.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (selectedMetric == 3) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(appText("接收"), fontSize = 10.sp, color = primary)
-                Text(appText("发送"), fontSize = 10.sp, color = orange)
-                Text("KiB/s", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(appText("接收"), style = SettingsTypography.description, color = primary)
+                Text(appText("发送"), style = SettingsTypography.description, color = orange)
+                Text("KiB/s", style = SettingsTypography.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             Text(
                 appText(if (selectedMetric == 1) "探测超时 · %" else "毫秒 · ms"),
-                fontSize = 10.sp,
+                style = SettingsTypography.description,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(appText("现在"), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(appText("现在"), style = SettingsTypography.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -241,30 +258,41 @@ private fun NetworkMetricSelector(
     onSelect: (Int) -> Unit,
 ) {
     val titles = listOf("延迟", "丢包", "抖动", "流量")
-    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(10.dp)).padding(3.dp)) {
+    val track = if (isSystemInDarkTheme()) Color(0xFF38383A) else Color(0xFFEEEEF0)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(32.dp)
+            .clip(CircleShape)
+            .background(track)
+            .padding(2.dp)
+            .selectableGroup()
+            .testTag("network-metric-selector"),
+    ) {
         titles.forEachIndexed { index, title ->
             Box(
                 Modifier
                     .weight(1f)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
                     .background(
                         if (selectedMetric == index) {
-                            MaterialTheme.colorScheme.surface
+                            networkCardColor()
                         } else {
                             Color.Transparent
                         },
-                        RoundedCornerShape(8.dp),
+                        CircleShape,
                     ).selectable(
                         selected = selectedMetric == index,
                         role = Role.Tab,
                         onClick = { onSelect(index) },
-                    ).padding(vertical = 7.dp)
-                    .semantics { contentDescription = appText(title) },
+                    ).semantics { contentDescription = appText(title) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     appText(title),
                     Modifier.padding(horizontal = 12.dp),
-                    fontSize = 12.sp,
+                    style = SettingsTypography.description,
                     fontWeight = if (selectedMetric == index) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }
@@ -279,8 +307,8 @@ private fun NetworkMetric(
     modifier: Modifier,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(title, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontSize = 20.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Text(title, style = SettingsTypography.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = SettingsTypography.item, maxLines = 1)
     }
 }
 
@@ -290,3 +318,6 @@ internal fun networkNumber(
 ): String = if (value < 0 || !value.isFinite()) "—" else String.format(Locale.getDefault(), "%.1f%s", value, unit)
 
 internal fun networkRate(value: Double): String = networkNumber(value / 1024.0, " KiB/s")
+
+@Composable
+private fun networkCardColor(): Color = if (isSystemInDarkTheme()) Color(0xFF1C1C1E) else Color.White

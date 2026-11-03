@@ -53,14 +53,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 import java.text.DateFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -68,17 +65,13 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 @Suppress("LongMethod")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LogDateTimeSheet(
-    field: String,
-    value: Long,
-    earliest: Long,
-    onDismiss: () -> Unit,
-    onConfirm: (Long) -> Unit,
-) {
+internal fun LogDateTimeSheet(field: String, value: Long, earliest: Long, onDismiss: () -> Unit, onConfirm: (Long) -> Unit) {
     var draft by rememberSaveable(field) { mutableLongStateOf(value) }
     val isDate = field.endsWith("date")
     val isStart = field.startsWith("start")
@@ -88,7 +81,7 @@ internal fun LogDateTimeSheet(
                 if (isDate) "开始日期" else "开始时间"
             } else {
                 if (isDate) "结束日期" else "结束时间"
-            },
+            }
         )
     val now = remember(field) { System.currentTimeMillis() }
     val latest = if (isStart) logHourStart(now) else logHourEnd(now)
@@ -104,12 +97,12 @@ internal fun LogDateTimeSheet(
                 Modifier
                     .padding(
                         top = 6.dp,
-                        bottom = 8.dp,
+                        bottom = 8.dp
                     ).width(36.dp)
                     .height(4.dp)
-                    .background(LogSecondary.copy(alpha = 0.5f), CircleShape),
+                    .background(LogSecondary.copy(alpha = 0.5f), CircleShape)
             )
-        },
+        }
     ) {
         DshMenuHost {
             Column(
@@ -117,7 +110,7 @@ internal fun LogDateTimeSheet(
                     .fillMaxWidth()
                     .height(height.dp)
                     .padding(horizontal = 16.dp)
-                    .testTag("log-editor"),
+                    .testTag("log-editor")
             ) {
                 Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
                     LogSheetAction(appText("取消"), true, onDismiss)
@@ -125,14 +118,13 @@ internal fun LogDateTimeSheet(
                         title,
                         Modifier.weight(1f),
                         textAlign = TextAlign.Center,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = logTextColor(),
+                        style = SettingsTypography.title,
+                        color = logTextColor()
                     )
                     LogSheetAction(appText("完成"), draft <= latest) { onConfirm(logHourStart(draft)) }
                 }
                 Spacer(Modifier.height(24.dp))
-                Text(logFullDate(draft), fontSize = 14.sp, color = LogSecondary)
+                Text(logFullDate(draft), style = SettingsTypography.description, color = LogSecondary)
                 Spacer(Modifier.height(24.dp))
                 if (isDate) {
                     LogCalendar(draft, earliest, latest) { draft = logDateWithHour(it, draft, latest) }
@@ -140,7 +132,7 @@ internal fun LogDateTimeSheet(
                     LogHourWheel(draft, latest) { draft = it }
                 }
                 Spacer(Modifier.weight(1f))
-                Text(appText(if (isDate) "灰色日期不在可导出的日志范围内" else "上下滑动选择整点"), fontSize = 12.sp, color = LogSecondary)
+                Text(appText(if (isDate) "灰色日期不在可导出的日志范围内" else "上下滑动选择整点"), style = SettingsTypography.description, color = LogSecondary)
                 Spacer(Modifier.height(48.dp))
             }
         }
@@ -148,13 +140,9 @@ internal fun LogDateTimeSheet(
 }
 
 @Composable
-private fun LogSheetAction(
-    title: String,
-    enabled: Boolean,
-    action: () -> Unit,
-) {
+private fun LogSheetAction(title: String, enabled: Boolean, action: () -> Unit) {
     LogGlassButton(Modifier.width(64.dp).height(44.dp), CircleShape, enabled, title, action) {
-        Text(title, fontSize = 17.sp, color = logTextColor().copy(alpha = if (enabled) 1f else 0.3f))
+        Text(title, style = SettingsTypography.item, color = logTextColor().copy(alpha = if (enabled) 1f else 0.3f))
     }
 }
 
@@ -164,23 +152,14 @@ private fun logFullDate(value: Long): String {
 }
 
 @Composable
-private fun LogHourWheel(
-    value: Long,
-    latest: Long,
-    select: (Long) -> Unit,
-) {
+private fun LogHourWheel(value: Long, latest: Long, select: (Long) -> Unit) {
     val hours = remember(value, latest) { logHoursOnDay(value, latest) }
     LogWheel(hours.map(::logTimeText), hours.indexOf(value).coerceAtLeast(0), "log-native-hour-picker") { select(hours[it]) }
 }
 
 /** 单列系统风格滚轮：中心吸附，取消时不修改外部范围，分钟始终为 00。 */
 @Composable
-private fun LogWheel(
-    labels: List<String>,
-    initial: Int,
-    tag: String,
-    select: (Int) -> Unit,
-) {
+private fun LogWheel(labels: List<String>, initial: Int, tag: String, select: (Int) -> Unit) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = initial)
     val scope = rememberCoroutineScope()
     val itemPx = with(LocalDensity.current) { 32.dp.toPx() }
@@ -188,10 +167,9 @@ private fun LogWheel(
     LaunchedEffect(state, view, itemPx, labels.size) {
         if (labels.isEmpty()) return@LaunchedEffect
 
-        fun centeredIndex(): Int =
-            (state.firstVisibleItemIndex + state.firstVisibleItemScrollOffset / itemPx)
-                .roundToInt()
-                .coerceIn(labels.indices)
+        fun centeredIndex(): Int = (state.firstVisibleItemIndex + state.firstVisibleItemScrollOffset / itemPx)
+            .roundToInt()
+            .coerceIn(labels.indices)
         var previousIndex = centeredIndex()
         // 只在滚动跨过中心刻度时轻震；首次展示、相同刻度和停止滚动不额外触发。
         // 使用平台触感接口，遵守系统触感开关，不直接强制驱动振动器。
@@ -214,13 +192,13 @@ private fun LogWheel(
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp)
                 .height(32.dp)
-                .background(LogSecondary.copy(alpha = 0.09f), CircleShape),
+                .background(LogSecondary.copy(alpha = 0.09f), CircleShape)
         )
         LazyColumn(
             Modifier.fillMaxWidth().height(160.dp).testTag("$tag-list"),
             state = state,
             contentPadding = PaddingValues(vertical = 64.dp),
-            flingBehavior = rememberSnapFlingBehavior(state),
+            flingBehavior = rememberSnapFlingBehavior(state)
         ) {
             itemsIndexed(labels) { index, label ->
                 val distance = abs(index - state.firstVisibleItemIndex - state.firstVisibleItemScrollOffset / itemPx)
@@ -234,7 +212,7 @@ private fun LogWheel(
                                 (1f - distance * 0.13f).coerceAtLeast(0.5f)
                         }.clickable(role = Role.Button) { scope.launch { state.animateScrollToItem(index) } }
                         .semantics { selected = distance < 0.5f },
-                    contentAlignment = Alignment.Center,
+                    contentAlignment = Alignment.Center
                 ) { Text(label, fontSize = 22.sp, color = logTextColor()) }
             }
         }
@@ -243,12 +221,7 @@ private fun LogWheel(
 
 @Suppress("LongMethod", "CyclomaticComplexMethod")
 @Composable
-private fun LogCalendar(
-    value: Long,
-    earliest: Long,
-    latest: Long,
-    select: (Long) -> Unit,
-) {
+private fun LogCalendar(value: Long, earliest: Long, latest: Long, select: (Long) -> Unit) {
     val initial =
         remember(value) {
             Calendar
@@ -282,17 +255,16 @@ private fun LogCalendar(
                     } else {
                         "MMMM yyyy  ›"
                     },
-                    Locale.getDefault(),
+                    Locale.getDefault()
                 ).format(Date(month)),
                 Modifier
                     .weight(
-                        1f,
+                        1f
                     ).clip(RoundedCornerShape(8.dp))
                     .clickable(role = Role.Button) { choosingMonth = !choosingMonth }
                     .padding(8.dp),
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = logTextColor(),
+                style = SettingsTypography.title,
+                color = logTextColor()
             )
             LogCalendarArrow(false, month > firstDay) {
                 month =
@@ -319,7 +291,13 @@ private fun LogCalendar(
             val weekdays = DateFormatSymbols.getInstance().shortWeekdays
             Row(Modifier.fillMaxWidth().height(32.dp), verticalAlignment = Alignment.CenterVertically) {
                 for (day in Calendar.SUNDAY..Calendar.SATURDAY) {
-                    Text(weekdays[day], Modifier.weight(1f), textAlign = TextAlign.Center, fontSize = 12.sp, color = LogSecondary)
+                    Text(
+                        weekdays[day],
+                        Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        style = SettingsTypography.description,
+                        color = LogSecondary
+                    )
                 }
             }
             val offset = calendar.get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY
@@ -349,25 +327,25 @@ private fun LogCalendar(
                                                 today -> LogBlue.copy(alpha = 0.12f)
                                                 else -> Color.Transparent
                                             },
-                                            CircleShape,
+                                            CircleShape
                                         ).clip(CircleShape)
                                         .clickable(enabled, role = Role.Button) { select(date) }
                                         .semantics {
                                             this.selected = selected
                                             contentDescription = logDateText(date)
                                         }.testTag("log-calendar-day-$day"),
-                                    contentAlignment = Alignment.Center,
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         day.toString(),
                                         fontSize = 20.sp,
                                         color =
-                                            when {
-                                                selected -> logCardColor()
-                                                !enabled -> LogSecondary.copy(alpha = 0.3f)
-                                                today -> LogBlue
-                                                else -> logTextColor()
-                                            },
+                                        when {
+                                            selected -> logCardColor()
+                                            !enabled -> LogSecondary.copy(alpha = 0.3f)
+                                            today -> LogBlue
+                                            else -> logTextColor()
+                                        }
                                     )
                                 }
                             }
@@ -380,35 +358,26 @@ private fun LogCalendar(
 }
 
 @Composable
-private fun LogCalendarArrow(
-    next: Boolean,
-    enabled: Boolean,
-    action: () -> Unit,
-) {
+private fun LogCalendarArrow(next: Boolean, enabled: Boolean, action: () -> Unit) {
     Box(
         Modifier
             .size(44.dp)
             .clip(CircleShape)
             .clickable(enabled, role = Role.Button, onClick = action)
             .semantics { contentDescription = appText(if (next) "下个月" else "上个月") },
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.Center
     ) {
         Icon(
             painterResource(R.drawable.ic_back_chevron),
             null,
             Modifier.size(20.dp).graphicsLayer { rotationZ = if (next) 180f else 0f },
-            tint = if (enabled) LogBlue else LogSecondary.copy(alpha = 0.4f),
+            tint = if (enabled) LogBlue else LogSecondary.copy(alpha = 0.4f)
         )
     }
 }
 
 @Composable
-private fun LogMonthSelection(
-    month: Long,
-    earliest: Long,
-    latest: Long,
-    select: (Long) -> Unit,
-) {
+private fun LogMonthSelection(month: Long, earliest: Long, latest: Long, select: (Long) -> Unit) {
     val calendar = Calendar.getInstance().apply { timeInMillis = month }
     val firstYear = Calendar.getInstance().apply { timeInMillis = earliest }.get(Calendar.YEAR)
     val lastYear = Calendar.getInstance().apply { timeInMillis = latest }.get(Calendar.YEAR)

@@ -74,6 +74,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -1739,7 +1740,7 @@ private fun Composer(
                 ) {
                     Box {
                         var attachmentMenu by remember { mutableStateOf(false) }
-                        ComposerIconButton(R.drawable.ic_add, appText("添加附件"), { attachmentMenu = true })
+                        ComposerIconButton(R.drawable.ic_composer_add, appText("添加附件"), { attachmentMenu = true })
                         DshMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
                             DshMenuItem(text = { Text(appText("图片")) },
                                 enabled = "images" in stateHolder.gatewayState.capabilities && stateHolder.preparedImages.size < 20,
@@ -1779,7 +1780,9 @@ private fun Composer(
                                     if (stateHolder.canCancelSelectedSession) 1f else 0.66f
                                 } else 1f
                             )
-                            .dshGlassControl()
+                            .clip(CircleShape)
+                            // 背景直接绘制圆形，避免半透明状态依赖图层裁剪后露出方形底色。
+                            .background(DshColors.Ocean, CircleShape)
                             .clickable(
                                 enabled = if (stateHolder.showsSessionStopButton) {
                                     stateHolder.canCancelSelectedSession
@@ -1821,7 +1824,7 @@ private fun Composer(
                         if (stateHolder.showsSessionStopButton) {
                             Box(
                                 Modifier.size(14.dp)
-                                    .background(dshGlassForeground(), RoundedCornerShape(3.dp))
+                                    .background(Color.White, RoundedCornerShape(3.dp))
                             )
                         } else {
                             Icon(
@@ -1832,7 +1835,7 @@ private fun Composer(
                                 ),
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp),
-                                tint = dshGlassForeground()
+                                tint = Color.White
                             )
                         }
                     }
@@ -1873,10 +1876,10 @@ private fun PreparedImagePreview(image: AndroidPreparedImage, onRemove: () -> Un
             modifier = Modifier.align(Alignment.TopEnd)
                 .padding(4.dp)
                 .size(20.dp)
-                .dshGlassControl()
+                .background(Color.Black.copy(alpha = 0.65f), CircleShape)
                 .clickable(onClick = onRemove)
                 .semantics { contentDescription = appText("移除图片") },
-            color = dshGlassForeground(),
+            color = Color.White,
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Bold
         )
@@ -2129,8 +2132,17 @@ internal fun dshGlassEdge(isDark: Boolean): Brush = Brush.verticalGradient(
 
 @Composable
 private fun ComposerIconButton(iconRes: Int, description: String, onClick: () -> Unit) {
-    DshGlassButton(description, onClick, Modifier.size(32.dp)) {
-        Icon(painterResource(iconRes), null, Modifier.size(22.dp), tint = dshGlassForeground())
+    Box(
+        Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onClick).semantics { contentDescription = description },
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            // 加号矢量的描边左侧还留有约 1.5dp 空白，按可见边缘与右侧语音圆按钮对齐。
+            modifier = Modifier.size(22.dp).offset(x = (-1.5).dp),
+            tint = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
@@ -2546,7 +2558,6 @@ private fun ContextUsageRing(stateHolder: AndroidSharedStateHolder) {
     } else 0f
     Box(
         Modifier.size(32.dp)
-            .dshGlassControl()
             .clickable(role = androidx.compose.ui.semantics.Role.Button) {
                 expanded = true
                 stateHolder.refreshContextUsage()

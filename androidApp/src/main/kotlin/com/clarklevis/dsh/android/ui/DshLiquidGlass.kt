@@ -88,7 +88,8 @@ internal enum class DshGlassStyle(
 @Composable
 internal fun Modifier.dshLiquidGlass(
     shape: Shape,
-    style: DshGlassStyle = DshGlassStyle.CARD
+    style: DshGlassStyle = DshGlassStyle.CARD,
+    shadowsEnabled: Boolean = true
 ): Modifier {
     val backdrop = LocalDshBackdrop.current
     val frameSignal = LocalDshGlassFrameSignal.current
@@ -124,18 +125,12 @@ internal fun Modifier.dshLiquidGlass(
                 alpha = style.borderAlpha.coerceAtLeast(0.10f)
             )
         },
-        shadow = {
-            Shadow(
-                radius = style.shadowRadiusDp.dp,
-                color = Color.Black.copy(alpha = 0.09f)
-            )
-        },
-        innerShadow = {
-            InnerShadow.Default.copy(
-                radius = 4.dp,
-                alpha = style.borderAlpha * 0.22f
-            )
-        },
+        shadow = if (shadowsEnabled) {
+            { Shadow(radius = style.shadowRadiusDp.dp, color = Color.Black.copy(alpha = 0.09f)) }
+        } else null,
+        innerShadow = if (shadowsEnabled) {
+            { InnerShadow.Default.copy(radius = 4.dp, alpha = style.borderAlpha * 0.22f) }
+        } else null,
         onDrawSurface = {
             if (style.navyTintAlpha > 0f) {
                 drawRect(Color(0xFF031B3D).copy(alpha = style.navyTintAlpha), blendMode = BlendMode.SrcOver)

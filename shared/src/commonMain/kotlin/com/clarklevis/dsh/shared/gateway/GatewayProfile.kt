@@ -20,7 +20,7 @@ data class GatewayProfile(
         get() = (listOfNotNull(preferredEndpoint) + endpoints).filter { it in endpoints }.distinct()
 }
 
-// 直接保留协议数量/长度限制和 RFC 私网地址段边界，便于核对。
+// 直接保留协议数量/长度限制和私网、RFC 6598 共享地址段边界，便于核对。
 @Suppress("MagicNumber")
 object GatewayIdentity {
     private val uuid = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
@@ -72,6 +72,8 @@ object GatewayIdentity {
             parts.size != 4 || octets.size != 4 || octets.any { it !in 0..255 } -> false
             else -> when (octets[0]) {
                 10, 127 -> true
+                // Tailscale 的 100.64.0.0/10 共享地址段，与 iOS 的入口校验一致。
+                100 -> octets[1] in 64..127
                 192 -> octets[1] == 168
                 172 -> octets[1] in 16..31
                 169 -> octets[1] == 254

@@ -130,7 +130,7 @@ private fun TunnelMenuHost(content: @Composable () -> Unit) {
         if (density is AppFontDensity) density else AppFontDensity(density, fontScale)
     }
     val foreground = MaterialTheme.colorScheme.onSurface
-    val style = LocalTextStyle.current.copy(
+    val style = SettingsTypography.item.copy(
         color = foreground,
         letterSpacing = 0.sp,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
@@ -224,7 +224,7 @@ private fun TunnelPage(onBack: () -> Unit, content: @Composable ColumnScope.() -
     TunnelMenuHost {
         Scaffold(containerColor = background, topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(appText("Tailscale 内嵌隧道"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
+                title = { Text(appText("Tailscale 内嵌隧道"), style = SettingsTypography.title) },
                 navigationIcon = {
                     TopBarCircleButton(R.drawable.ic_back_chevron, appText("返回"), onBack, Modifier.padding(start = 16.dp))
                 },
@@ -249,7 +249,7 @@ private fun EnabledSection(settings: TailscaleTunnelSettings, pending: Boolean, 
         appText("在应用内建立一个 Tailscale 节点：不需要安装 Tailscale，也不会占用系统 VPN。节点只在你自己的 tailnet 内可达。")
     ) {
         TunnelRow {
-            Text(appText("启用内嵌隧道"), fontSize = 17.sp, modifier = Modifier.weight(1f))
+            Text(appText("启用内嵌隧道"), style = SettingsTypography.item, modifier = Modifier.weight(1f))
             TunnelSwitch(settings.enabled, !pending, onEnabled)
         }
     }
@@ -280,9 +280,14 @@ private fun AccountsSection(
             DividerRow()
         }
         TunnelRow(Modifier.clickable(enabled = !pending, onClick = onAdd).testTag("tunnel-add-account")) {
-            Text("+", color = TunnelBlue.copy(alpha = if (pending) .4f else 1f), fontSize = 30.sp)
+            Icon(
+                painterResource(R.drawable.ic_tailscale_add),
+                contentDescription = null,
+                tint = TunnelBlue.copy(alpha = if (pending) .4f else 1f),
+                modifier = Modifier.size(22.dp)
+            )
             Spacer(Modifier.width(18.dp))
-            Text(appText("添加 Tailscale 账号"), fontSize = 17.sp, color = TunnelBlue.copy(alpha = if (pending) .4f else 1f))
+            Text(appText("添加 Tailscale 账号"), style = SettingsTypography.item, color = TunnelBlue.copy(alpha = if (pending) .4f else 1f))
         }
     }
 }
@@ -303,7 +308,7 @@ private fun AdditionSection(addition: TailscaleAddition, onCancel: () -> Unit) {
                         else -> "等待新账号登录…"
                     }
                 ),
-                fontSize = 12.sp,
+                style = SettingsTypography.description,
                 color = tunnelSecondaryColor()
             )
         }
@@ -374,7 +379,7 @@ private fun StatusSummary(state: TailscaleTunnelUiState) {
     TunnelRow(Modifier.testTag("tunnel-status-row")) {
         Box(Modifier.size(8.dp).background(stageColor(state), CircleShape))
         Spacer(Modifier.width(8.dp))
-        Text(tailscaleStageLabel(state.stage), fontSize = 17.sp, modifier = Modifier.weight(1f))
+        Text(tailscaleStageLabel(state.stage), style = SettingsTypography.item, modifier = Modifier.weight(1f))
         if (state.isTransient) {
             CircularProgressIndicator(
                 Modifier.size(14.dp).testTag("tunnel-starting-progress"),
@@ -382,7 +387,7 @@ private fun StatusSummary(state: TailscaleTunnelUiState) {
                 strokeWidth = 2.dp
             )
         } else if (state.peerCount > 0) {
-            Text("${appText("对端数量")} ${state.peerCount}", fontSize = 11.sp, color = tunnelSecondaryColor())
+            Text("${appText("对端数量")} ${state.peerCount}", style = SettingsTypography.item, color = tunnelSecondaryColor())
         }
     }
 }
@@ -408,7 +413,7 @@ private fun IdentitySection(settings: TailscaleTunnelSettings, pending: Boolean,
         if (invalidName) {
             Text(
                 appText("只允许小写字母、数字和连字符，最长 63 个字符。"),
-                fontSize = 12.sp,
+                style = SettingsTypography.description,
                 color = tunnelRed(),
                 modifier = Modifier.padding(bottom = 8.dp)
             )
@@ -491,18 +496,18 @@ private fun AccountRow(account: TailscaleAccount, isSelected: Boolean, onSelect:
                 Text(
                     account.displayName.ifBlank { appText("已登录账号") },
                     color = TunnelBlue,
-                    fontSize = 17.sp,
+                    style = SettingsTypography.item,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (account.name.isNotEmpty() && !account.loginName.isNullOrBlank() && account.loginName != account.displayName) {
-                    Text(account.loginName.orEmpty(), color = tunnelSecondaryColor(), fontSize = 11.sp, lineHeight = 14.sp)
+                    Text(account.loginName.orEmpty(), color = tunnelSecondaryColor(), style = SettingsTypography.description)
                 }
                 if (!account.tailnetName.isNullOrBlank() &&
                     account.tailnetName != account.displayName &&
                     account.tailnetName != account.loginName
                 ) {
-                    Text(account.tailnetName.orEmpty(), color = tunnelSecondaryColor(), fontSize = 11.sp, lineHeight = 14.sp)
+                    Text(account.tailnetName.orEmpty(), color = tunnelSecondaryColor(), style = SettingsTypography.description)
                 }
             }
             if (isSelected) Text("✓", color = TunnelBlue, fontSize = 22.sp)
@@ -737,12 +742,14 @@ private fun tunnelCardColor() = if (isSystemInDarkTheme()) Color(0xFF1C1C1E) els
 @Composable
 private fun TunnelSection(title: String? = null, footer: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        title?.let { Text(it, Modifier.padding(horizontal = 16.dp), fontSize = 12.sp, lineHeight = 16.sp, color = tunnelSecondaryColor()) }
+        title?.let { Text(it, Modifier.padding(horizontal = 16.dp), style = SettingsTypography.section, color = tunnelSecondaryColor()) }
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(tunnelCardColor()).padding(horizontal = 16.dp),
             content = content
         )
-        footer?.let { Text(it, Modifier.padding(horizontal = 16.dp), fontSize = 12.sp, lineHeight = 16.sp, color = tunnelSecondaryColor()) }
+        footer?.let {
+            Text(it, Modifier.padding(horizontal = 16.dp), style = SettingsTypography.description, color = tunnelSecondaryColor())
+        }
     }
 }
 
@@ -757,11 +764,11 @@ private fun DividerRow() = HorizontalDivider(thickness = .5.dp, color = tunnelSe
 @Composable
 private fun ValueRow(title: String, value: String) {
     TunnelRow {
-        Text(title, fontSize = 17.sp, modifier = Modifier.weight(1f))
+        Text(title, style = SettingsTypography.item, modifier = Modifier.weight(1f))
         Text(
             value,
             Modifier.widthIn(max = 210.dp),
-            fontSize = 17.sp,
+            style = SettingsTypography.item,
             color = tunnelSecondaryColor(),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -771,7 +778,9 @@ private fun ValueRow(title: String, value: String) {
 
 @Composable
 private fun ActionRow(title: String, color: Color = TunnelBlue, tag: String = "", enabled: Boolean = true, onClick: () -> Unit) {
-    TunnelRow(Modifier.clickable(enabled = enabled, onClick = onClick).testTag(tag)) { Text(title, fontSize = 17.sp, color = color) }
+    TunnelRow(Modifier.clickable(enabled = enabled, onClick = onClick).testTag(tag)) {
+        Text(title, style = SettingsTypography.item, color = color)
+    }
 }
 
 @Suppress("LongParameterList")
@@ -788,8 +797,7 @@ private fun FieldRow(
     TunnelRow {
         BasicTextField(
             value, onChange, enabled = enabled, singleLine = true,
-            textStyle = LocalTextStyle.current.copy(
-                fontSize = 17.sp,
+            textStyle = SettingsTypography.item.copy(
                 lineHeight = 22.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else .4f)
             ),
@@ -800,7 +808,7 @@ private fun FieldRow(
             visualTransformation = if (secure) PasswordVisualTransformation() else VisualTransformation.None,
             modifier = Modifier.fillMaxWidth().padding(vertical = 15.dp).testTag(tag).semantics { contentDescription = label },
             decorationBox = { inner ->
-                if (value.isEmpty()) Text(placeholder, color = tunnelTertiaryColor(), fontSize = 17.sp)
+                if (value.isEmpty()) Text(placeholder, color = tunnelTertiaryColor(), style = SettingsTypography.item)
                 inner()
             }
         )

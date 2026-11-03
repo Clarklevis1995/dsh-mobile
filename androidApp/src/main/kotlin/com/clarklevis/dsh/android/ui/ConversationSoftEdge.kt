@@ -23,30 +23,49 @@ import com.kyant.backdrop.effects.blur
 internal fun Modifier.conversationTopGlass(
     backdrop: LayerBackdrop,
     protectedHeight: Dp,
-    fadeHeight: Dp
+    fadeHeight: Dp,
+): Modifier = topBarGlassOverlay(backdrop, protectedHeight, fadeHeight, MaterialTheme.colorScheme.surface)
+
+/** 顶栏采样实际滚动内容，下沿使用渐变衔接；旧系统使用半透明底色降级。 */
+@Composable
+internal fun Modifier.topBarGlassOverlay(
+    backdrop: LayerBackdrop,
+    protectedHeight: Dp,
+    fadeHeight: Dp,
+    tint: Color,
+    surfaceAlpha: Float = 0.95f,
 ): Modifier {
-    val tint = MaterialTheme.colorScheme.surface
-    val surface = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        Modifier.drawPlainBackdrop(
-            backdrop,
-            shape = { RectangleShape },
-            effects = { blur(24.dp.toPx()) },
-            onDrawSurface = { drawRect(tint.copy(alpha = 0.95f)) }
-        )
-    } else {
-        Modifier.background(tint.copy(alpha = 0.95f))
-    }
+    val surface = Modifier.topBarGlassSurface(backdrop, tint, surfaceAlpha)
     return drawWithContent {
         val edge = protectedHeight.toPx().coerceAtMost(size.height)
         clipRect(bottom = edge) { this@drawWithContent.drawContent() }
         drawRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(tint.copy(alpha = 0.95f), Color.Transparent),
-                startY = edge,
-                endY = edge + fadeHeight.toPx()
-            ),
+            brush =
+                Brush.verticalGradient(
+                    colors = listOf(tint.copy(alpha = surfaceAlpha), Color.Transparent),
+                    startY = edge,
+                    endY = edge + fadeHeight.toPx(),
+                ),
             topLeft = Offset(0f, edge),
-            size = Size(size.width, size.height - edge)
+            size = Size(size.width, size.height - edge),
         )
     }.then(surface)
 }
+
+/** 矩形顶栏毛玻璃，边界外不绘制模糊或渐变。裁剪范围由顶栏宿主确定。 */
+@Composable
+internal fun Modifier.topBarGlassSurface(
+    backdrop: LayerBackdrop,
+    tint: Color,
+    surfaceAlpha: Float = 0.85f,
+): Modifier =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        drawPlainBackdrop(
+            backdrop,
+            shape = { RectangleShape },
+            effects = { blur(24.dp.toPx()) },
+            onDrawSurface = { drawRect(tint.copy(alpha = surfaceAlpha)) },
+        )
+    } else {
+        background(tint.copy(alpha = surfaceAlpha))
+    }

@@ -47,13 +47,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.android.R
+import com.clarklevis.dsh.android.localization.appText
 
 private const val PRIVACY_POLICY_URL = "https://clarklevis1995.github.io/dsh-mobile/privacy/"
 
@@ -104,8 +102,7 @@ internal fun PrivacyPolicyBottomSheet(onDismiss: () -> Unit) {
                     Text(
                         appText("隐私政策"),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = titleSidePadding),
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        style = SettingsTypography.title,
                         textAlign = TextAlign.Center
                     )
                     Surface(
@@ -116,7 +113,7 @@ internal fun PrivacyPolicyBottomSheet(onDismiss: () -> Unit) {
                         shadowElevation = 2.dp
                     ) {
                         Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
-                            Text(appText("完成"), fontSize = 16.sp)
+                            Text(appText("完成"), style = SettingsTypography.item)
                         }
                     }
                 }
@@ -155,11 +152,7 @@ internal fun PrivacyPolicyBottomSheet(onDismiss: () -> Unit) {
                                             isLoading = false
                                         }
 
-                                        override fun onReceivedError(
-                                            view: WebView,
-                                            request: WebResourceRequest,
-                                            error: WebResourceError
-                                        ) {
+                                        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                                             if (request.isForMainFrame) {
                                                 isLoading = false
                                                 loadFailed = true
@@ -202,8 +195,16 @@ internal fun PrivacyPolicyBottomSheet(onDismiss: () -> Unit) {
                     }
 
                     nativeMenu?.let { menu ->
-                        DshTextActions(androidx.compose.ui.geometry.Rect(menu.bounds.left.toFloat(), menu.bounds.top.toFloat(),
-                            menu.bounds.right.toFloat(), menu.bounds.bottom.toFloat()), menu.dismiss, menu.actions)
+                        DshTextActions(
+                            androidx.compose.ui.geometry.Rect(
+                                menu.bounds.left.toFloat(),
+                                menu.bounds.top.toFloat(),
+                                menu.bounds.right.toFloat(),
+                                menu.bounds.bottom.toFloat()
+                            ),
+                            menu.dismiss,
+                            menu.actions
+                        )
                     }
 
                     if (isLoading) {
@@ -215,12 +216,12 @@ internal fun PrivacyPolicyBottomSheet(onDismiss: () -> Unit) {
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            Text(appText("无法打开隐私政策"))
+                            Text(appText("无法打开隐私政策"), style = SettingsTypography.description)
                             TextButton(onClick = {
                                 loadFailed = false
                                 isLoading = true
                                 reloadKey++
-                            }) { Text(appText("重试")) }
+                            }) { Text(appText("重试"), style = SettingsTypography.item) }
                         }
                     }
                 }

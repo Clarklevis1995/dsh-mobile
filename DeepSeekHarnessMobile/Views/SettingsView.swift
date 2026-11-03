@@ -47,7 +47,7 @@ struct SettingsView: View {
                 Text(LocalizedStringKey(title))
                 Spacer()
                 Text(verbatim: value).foregroundStyle(.secondary)
-                Image(systemName: "chevron.right").appFont(.footnote).foregroundStyle(.tertiary)
+                Image(systemName: "chevron.right").appFont(SettingsTypography.description).foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, minHeight: 32)
             .contentShape(Rectangle())
@@ -155,10 +155,10 @@ struct SettingsView: View {
                 .disabled(!gatewayState.isConnected || store.defaultConfigurationLoadingKinds.contains("set-default"))
             } header: {
                 Text("新会话默认配置")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
             } footer: {
                 Text("与 WebUI 使用同一份部署级设置。修改只影响之后新建的会话，运行中的会话保持启动时的配置。")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
             }
 
             Section {
@@ -196,14 +196,14 @@ struct SettingsView: View {
                 }
                 Button("Ping 网关") { store.gateway.ping() }
             } header: {
-                Text(verbatim: "Mobile Gateway").appFont(.caption)
+                Text(verbatim: "Mobile Gateway").appFont(SettingsTypography.description)
             }
 
             Section {
                 TailscaleTunnelSettingsRow()
             } header: {
                 Text("Tailscale 内嵌隧道")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
             }
 
             if let host = store.hostSnapshot {
@@ -214,17 +214,17 @@ struct SettingsView: View {
                     if let cwd = host.cwd {
                         LabeledContent {
                             Text(cwd)
-                                .appFont(.caption.monospaced())
+                                .appFont(SettingsTypography.item.monospaced())
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                                 .textSelection(.enabled)
                         } label: {
-                            Text("cwd")
+                            Text("cwd").appFont(SettingsTypography.item)
                         }
                     }
                 } header: {
-                    Text(verbatim: "DSH Host").appFont(.caption)
+                    Text(verbatim: "DSH Host").appFont(SettingsTypography.description)
                 }
             }
 
@@ -255,10 +255,10 @@ struct SettingsView: View {
                 .accessibilityIdentifier("font-size-settings-row")
             } header: {
                 Text("外观")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
             } footer: {
                 Text("语言设置将在重新启动应用后生效。")
-                    .appFont(.caption)
+                    .appFont(SettingsTypography.description)
             }
 
             Section {
@@ -289,10 +289,12 @@ struct SettingsView: View {
                 Button("本版本新功能") { showsReleaseNotes = true }
                 Button("隐私政策") { showsPrivacyPolicy = true }
             } header: {
-                Text("关于").appFont(.caption)
+                Text("关于").appFont(SettingsTypography.description)
             }
         }
+        .appFont(SettingsTypography.item)
         .navigationTitle("设置")
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             store.refreshDefaultConfiguration()
             await store.refreshCacheStorage()
@@ -324,6 +326,7 @@ struct SettingsView: View {
                     Markdown(releaseInfo?.version == appVersion ? releaseInfo!.notes : "本版本发布说明暂未提供，请查看 GitHub 发布页。")
                         .padding(20)
                 }
+                .appFont(SettingsTypography.item)
                 .navigationTitle("本版本新功能")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -381,6 +384,7 @@ struct FontSizeSettingsView: View {
             }
         }
         .background(Color(uiColor: .systemGroupedBackground))
+        .appFont(SettingsTypography.item)
         .navigationTitle("字体大小")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { fontScale = AppFontScale.normalized(fontScale) }
@@ -393,7 +397,7 @@ struct FontSizeSettingsView: View {
                     HStack {
                         Spacer(minLength: 0)
                         Text("预览文字大小")
-                            .appFont(.system(size: 17))
+                            .appFont(SettingsTypography.item)
                             .accessibilityIdentifier("font-size-preview-title")
                             .padding(.horizontal, 18)
                             .padding(.vertical, 14)
@@ -403,7 +407,7 @@ struct FontSizeSettingsView: View {
                             ))
                     }
                     Text("你可以拖动滑块来调整字体大小。")
-                        .appFont(.system(size: 17))
+                        .appFont(SettingsTypography.item)
                         .lineSpacing(6)
                     MarkdownContent(String(localized: "调整后的字体大小会应用到所有页面，包括对话、按钮和 `代码`。"))
                 }
@@ -417,7 +421,7 @@ struct FontSizeSettingsView: View {
             VStack(spacing: 16) {
                 Toggle("跟随系统", isOn: $fontFollowsSystem)
                     .tint(DSHColor.ocean)
-                    .appFont(.system(size: 16))
+                    .appFont(SettingsTypography.item)
                     .accessibilityIdentifier("font-size-follow-system")
                 Divider()
                 VStack(spacing: 8) {
@@ -427,7 +431,7 @@ struct FontSizeSettingsView: View {
                         Text(verbatim: fontFollowsSystem ? String(localized: "跟随系统")
                             : fontScale == 1 ? String(localized: "标准")
                             : "\(Int((AppFontScale.normalized(fontScale) * 100).rounded()))%")
-                            .appFont(.system(size: 14))
+                            .appFont(SettingsTypography.item)
                         Spacer()
                         Text(verbatim: "A").appFont(.system(size: 22, weight: .medium))
                     }
@@ -455,7 +459,7 @@ struct FontSizeSettingsView: View {
                             }
                         }
                     Button("恢复默认") { fontScale = 1 }
-                        .appFont(.system(size: 13))
+                        .appFont(SettingsTypography.item)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("font-size-reset")
                         .padding(.vertical, 6)
@@ -491,7 +495,7 @@ private struct PrivacyPolicySheet: View {
 
                 if loadFailed {
                     VStack(spacing: 12) {
-                        Text("无法打开隐私政策")
+                        Text("无法打开隐私政策").appFont(SettingsTypography.description)
                         Button("重试") {
                             loadFailed = false
                             isLoading = true
@@ -500,6 +504,7 @@ private struct PrivacyPolicySheet: View {
                     }
                 }
             }
+            .appFont(SettingsTypography.item)
             .navigationTitle("隐私政策")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -648,9 +653,9 @@ private struct AgentPresetSelectionView: View {
             LazyVStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("Agent 预设")
-                        .appFont(.title2.bold())
+                        .appFont(SettingsTypography.title)
                     Text("预设决定 Agent 使用的工具、提示词与能力。选择后只对新建会话生效。")
-                        .appFont(.footnote)
+                        .appFont(SettingsTypography.description)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -659,6 +664,7 @@ private struct AgentPresetSelectionView: View {
                 if let error = store.agentPresetsLoadError {
                     VStack(alignment: .leading, spacing: 10) {
                         Label(error, systemImage: "exclamationmark.circle")
+                            .appFont(SettingsTypography.description)
                             .foregroundStyle(.secondary)
                         Button("重试") { store.retryAgentPresets() }
                             .disabled(store.defaultConfigurationLoadingKinds.contains("agent-presets"))
@@ -675,11 +681,14 @@ private struct AgentPresetSelectionView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 48)
                 } else if store.agentPresets.isEmpty && store.agentPresetsLoadError == nil {
-                    DshEmptyState(
-                        "没有可用的 Agent 预设",
-                        systemImage: "point.3.filled.connected.trianglepath.dotted",
-                        description: Text("网关暂无可用预设，可下拉刷新。")
-                    )
+                    DshEmptyState {
+                        VStack(spacing: 10) {
+                            Image(systemName: "point.3.filled.connected.trianglepath.dotted").font(.system(size: 40, weight: .light))
+                            Text("没有可用的 Agent 预设").appFont(SettingsTypography.title)
+                        }
+                    } description: {
+                        Text("网关暂无可用预设，可下拉刷新。").appFont(SettingsTypography.description)
+                    }
                     .padding(.vertical, 24)
                 } else {
                     ForEach(store.agentPresets) { preset in
@@ -695,7 +704,7 @@ private struct AgentPresetSelectionView: View {
 
                 if store.agentPresetsAuthorable || store.agentPresetsHasDocument {
                     Label(presetCapabilityText, systemImage: "info.circle")
-                        .appFont(.footnote)
+                        .appFont(SettingsTypography.description)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
                 }
@@ -704,6 +713,7 @@ private struct AgentPresetSelectionView: View {
             .readableContentWidth()
         }
         .background(Color(uiColor: .systemGroupedBackground))
+        .appFont(SettingsTypography.item)
         .navigationTitle("Agent 预设")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
@@ -747,10 +757,10 @@ private struct AgentPresetCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(preset.displayName)
-                        .appFont(.headline)
+                        .appFont(SettingsTypography.item)
                         .foregroundStyle(.primary)
                     Text(preset.id)
-                        .appFont(.caption.monospaced())
+                        .appFont(SettingsTypography.description.monospaced())
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -758,7 +768,7 @@ private struct AgentPresetCard: View {
                     Spacer()
                     if isSelected {
                         Text("当前使用")
-                            .appFont(.caption.weight(.semibold))
+                            .appFont(SettingsTypography.description.weight(.semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
@@ -767,13 +777,13 @@ private struct AgentPresetCard: View {
                 }
 
                 Text(preset.displayDescription)
-                    .appFont(.footnote)
+                    .appFont(SettingsTypography.description)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if preset.broken == true {
                     Label("该预设存在配置错误，暂时不能设为默认值", systemImage: "exclamationmark.triangle.fill")
-                        .appFont(.caption)
+                        .appFont(SettingsTypography.description)
                         .foregroundStyle(.orange)
                 }
             }
@@ -811,9 +821,9 @@ private struct DefaultModelSelectionView: View {
             LazyVStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("默认模型")
-                        .appFont(.title2.bold())
+                        .appFont(SettingsTypography.title)
                     Text("为之后新建的会话设置默认模型与思考等级。这会更新部署级设置，同步影响 WebUI，运行中的会话保持启动时的配置。")
-                        .appFont(.footnote)
+                        .appFont(SettingsTypography.description)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -828,17 +838,20 @@ private struct DefaultModelSelectionView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 48)
                 } else if modelGroups.isEmpty {
-                    DshEmptyState(
-                        "暂无可用模型",
-                        systemImage: "cpu",
-                        description: Text("未能读取到模型列表，请检查网关连接后下拉重试。")
-                    )
+                    DshEmptyState {
+                        VStack(spacing: 10) {
+                            Image(systemName: "cpu").font(.system(size: 40, weight: .light))
+                            Text("暂无可用模型").appFont(SettingsTypography.title)
+                        }
+                    } description: {
+                        Text("未能读取到模型列表，请检查网关连接后下拉重试。").appFont(SettingsTypography.description)
+                    }
                     .padding(.vertical, 24)
                 } else {
                     ForEach(modelGroups) { group in
                         VStack(alignment: .leading, spacing: 10) {
                             Text(group.name)
-                                .appFont(.subheadline.weight(.semibold))
+                                .appFont(SettingsTypography.section)
                                 .foregroundStyle(.secondary)
                             ForEach(group.models) { model in
                                 DefaultModelCard(
@@ -859,6 +872,7 @@ private struct DefaultModelSelectionView: View {
             .readableContentWidth()
         }
         .background(Color(uiColor: .systemGroupedBackground))
+        .appFont(SettingsTypography.item)
         .navigationTitle("默认模型")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
@@ -942,12 +956,12 @@ private struct DefaultModelCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(model.name)
-                    .appFont(.headline)
+                    .appFont(SettingsTypography.item)
                     .foregroundStyle(.primary)
                 Spacer()
                 if isSelected {
                     Text("当前使用")
-                        .appFont(.caption.weight(.semibold))
+                        .appFont(SettingsTypography.description.weight(.semibold))
                         .foregroundStyle(.white)
                         .fixedSize()
                         .padding(.horizontal, 10)
@@ -961,7 +975,7 @@ private struct DefaultModelCard: View {
             if !efforts.isEmpty {
                 ReasoningEffortFlowLayout(spacing: 8) {
                     Text("思考等级")
-                        .appFont(.caption)
+                        .appFont(SettingsTypography.item)
                         .foregroundStyle(.secondary)
                         .fixedSize()
                     ForEach(efforts) { effort in
@@ -970,7 +984,7 @@ private struct DefaultModelCard: View {
                             onSelectEffort(effort)
                         } label: {
                             Text(effort.name)
-                                .appFont(.caption.weight(.medium))
+                                .appFont(SettingsTypography.item)
                                 .fixedSize()
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
@@ -1157,7 +1171,7 @@ struct StorageSpaceView: View {
                                 .monospacedDigit()
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.6)
-                            Text("本机缓存").appFont(.subheadline).foregroundStyle(.secondary)
+                            Text("本机缓存").appFont(SettingsTypography.description).foregroundStyle(.secondary)
                         }
                         .frame(width: 154)
                         .accessibilityElement(children: .combine)
@@ -1167,14 +1181,14 @@ struct StorageSpaceView: View {
                     .padding(.vertical, 22)
                     if usage.freeBytes != Int64.max {
                         LabeledContent("设备可用空间", value: size(usage.freeBytes))
-                            .appFont(.subheadline).foregroundStyle(.secondary)
+                            .appFont(SettingsTypography.item).foregroundStyle(.secondary)
                     }
                 } else {
                     ProgressView("正在统计…")
                         .frame(maxWidth: .infinity, minHeight: 230)
                 }
             } header: {
-                Text("磁盘占用")
+                Text("磁盘占用").appFont(SettingsTypography.section)
             }
 
             if let usage = store.storageUsage {
@@ -1186,13 +1200,13 @@ struct StorageSpaceView: View {
                             HStack(spacing: 14) {
                                 StorageCategoryIcon(category: category)
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(category.title).appFont(.body).foregroundStyle(.primary)
-                                    Text(category.detail).appFont(.caption).foregroundStyle(.secondary)
+                                    Text(category.title).appFont(SettingsTypography.item).foregroundStyle(.primary)
+                                    Text(category.detail).appFont(SettingsTypography.description).foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
                                 Spacer(minLength: 8)
                                 Text(verbatim: size(usage.bytes(for: category)))
-                                    .appFont(.body.monospacedDigit()).foregroundStyle(.secondary)
+                                    .appFont(SettingsTypography.item.monospacedDigit()).foregroundStyle(.secondary)
                                     .lineLimit(1).fixedSize()
                             }
                             .padding(.vertical, 8)
@@ -1213,7 +1227,7 @@ struct StorageSpaceView: View {
                                 Text(sortsBySize ? "大小" : "名称")
                                 Image(systemName: "chevron.up.chevron.down").imageScale(.small)
                             }
-                            .appFont(.body)
+                            .appFont(SettingsTypography.item)
                             .foregroundStyle(.tint)
                         }
                         .textCase(nil)
@@ -1223,14 +1237,15 @@ struct StorageSpaceView: View {
                 } footer: {
                     if usage.resources.protectedBytes > 0 {
                         Text(String(localized: "storage.in-use", defaultValue: "其中 \(size(usage.resources.protectedBytes)) 正在使用，关闭文件后可释放。"))
-                            .appFont(.caption)
+                            .appFont(SettingsTypography.description)
                     }
                 }
             }
             if let notice = store.cacheStorageNotice {
-                Section { Text(notice).appFont(.footnote).foregroundStyle(.secondary) }
+                Section { Text(notice).appFont(SettingsTypography.description).foregroundStyle(.secondary) }
             }
         }
+        .appFont(SettingsTypography.item)
         .navigationTitle("存储空间")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("storage-space-page")
@@ -1276,8 +1291,8 @@ private struct StorageCategoryDetailView: View {
                 HStack(spacing: 16) {
                     StorageCategoryIcon(category: category, side: 56)
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(category.title).appFont(.title3.weight(.semibold))
-                        Text(category.detail).appFont(.footnote).foregroundStyle(.secondary)
+                        Text(category.title).appFont(SettingsTypography.title)
+                        Text(category.detail).appFont(SettingsTypography.description).foregroundStyle(.secondary)
                     }
                 }
                 .padding(.vertical, 12)
@@ -1301,9 +1316,10 @@ private struct StorageCategoryDetailView: View {
                 .accessibilityIdentifier("storage-clear-\(category.rawValue)")
             }
             if let notice = store.cacheStorageNotice {
-                Section { Text(notice).appFont(.footnote).foregroundStyle(.secondary) }
+                Section { Text(notice).appFont(SettingsTypography.description).foregroundStyle(.secondary) }
             }
         }
+        .appFont(SettingsTypography.item)
         .navigationTitle(category.title)
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("storage-category-detail")
@@ -1321,7 +1337,7 @@ private struct LogExportSection: View {
             }
             .accessibilityIdentifier("log-export-entry")
         } header: {
-            Text("日志").appFont(.caption)
+            Text("日志").appFont(SettingsTypography.description)
         }
     }
 }
