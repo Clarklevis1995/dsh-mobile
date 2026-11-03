@@ -399,6 +399,23 @@ final class GatewayClient: ObservableObject {
         isApplicationInBackground = false
         if wasInBackground { startSubscriptionTimeout() }
         guard wantsConnection, !isManualPairingAttempt, !probeOnly else { return }
+        // 处于重连退避等待中时，回到前台应立即重试，而不是让用户干等退避窗口
+        // （reconnectAttempt 累积后 delay 最长 30 秒）。退避等待的特征是
+        // `reconnectTask` 已挂起、而握手任务尚未开始，因此取消它不会打断握手；
+        // 正在进行握手时 `reconnectTask` 为 nil，仍然落到下面的 guard。
+        if state == .connecting, reconnectTask != nil {
+            reconnectAttempt = 0
+            reconnectTask?.cancel()
+            reconnectTask = nil
+            if let fallbackEndpoint = lastSuccessfulEndpoint ?? endpoint {
+                beginConnection(
+                    to: fallbackEndpoint.absoluteString,
+                    pairingCode: pairingCode,
+                    resetReportedFailure: false
+                )
+            }
+            return
+        }
         // 首次 active 通知可能晚于冷启动连接任务；不能打断正在进行的握手。
         guard wasInBackground || state != .connecting else { return }
         if wasInBackground {
