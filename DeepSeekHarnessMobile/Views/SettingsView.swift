@@ -4,7 +4,62 @@ import MarkdownUI
 import Charts
 import DeepSeekHarnessShared
 
+/// 设置及其子页统一由根 NavigationStack 的路径管理。
+enum SettingsRoute: Hashable {
+    case agentPreset, defaultModel, networkDiagnostics, tailscaleTunnel
+    case fontSize, storage, logs
+    case storageCategory(CacheStorageCategory)
+}
+
+struct SettingsDestinationView: View {
+    @EnvironmentObject private var store: AppStore
+    let route: SettingsRoute
+    let open: (SettingsRoute) -> Void
+    let close: () -> Void
+
+    @ViewBuilder var body: some View {
+        switch route {
+        case .agentPreset: AgentPresetSelectionView()
+        case .defaultModel: DefaultModelSelectionView()
+        case .networkDiagnostics:
+            GatewayNetworkDiagnosticsView(gateway: store.gateway)
+                .id(ObjectIdentifier(store.gateway))
+        case .tailscaleTunnel: TailscaleTunnelSettingsView()
+        case .fontSize: FontSizeSettingsView()
+        case .storage: StorageSpaceView(open: open)
+        case .storageCategory(let category): StorageCategoryDetailView(category: category)
+        case .logs: LogExportView()
+        }
+    }
+}
+
+private struct SettingsNavigationButton<Label: View>: View {
+    let route: SettingsRoute
+    let open: (SettingsRoute) -> Void
+    let label: () -> Label
+
+    init(_ route: SettingsRoute, open: @escaping (SettingsRoute) -> Void, @ViewBuilder label: @escaping () -> Label) {
+        self.route = route
+        self.open = open
+        self.label = label
+    }
+
+    var body: some View {
+        Button { open(route) } label: {
+            HStack(spacing: 8) {
+                label().frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct SettingsView: View {
+    let open: (SettingsRoute) -> Void
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var store: AppStore
     @State private var pendingPermission: DefaultPermissionChoice?
@@ -110,29 +165,31 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                NavigationLink {
-                    AgentPresetSelectionView()
-                } label: {
+                SettingsNavigationButton(.agentPreset, open: open) {
                     DefaultConfigurationRow(
                         title: String(localized: "Agent 预设"),
                         value: selectedPresetName,
                         isLoading: defaultsAreLoading
                     )
                 }
+                .accessibilityIdentifier("agent-preset-settings-row")
                 .disabled(!gatewayState.isConnected)
 
-                NavigationLink {
-                    DefaultModelSelectionView()
-                } label: {
+                SettingsNavigationButton(.defaultModel, open: open) {
                     DefaultConfigurationRow(
                         title: String(localized: "默认模型"),
                         value: defaultModelValueText,
                         isLoading: defaultModelIsLoading
                     )
                 }
+                .accessibilityIdentifier("default-model-settings-row")
                 .disabled(!gatewayState.isConnected)
 
-                Menu {
+                SettingsChoiceMenu(
+                    title: "权限", value: selectedPermissionName,
+                    identifier: "permission-settings-row", isLoading: defaultsAreLoading,
+                    indicator: "chevron.right"
+                ) {
                     ForEach(store.permissionDefaultOptions.map(DefaultPermissionChoice.init)) { option in
                         Button {
                             pendingPermission = option
@@ -144,15 +201,7 @@ struct SettingsView: View {
                             }
                         }
                     }
-                } label: {
-                    DefaultConfigurationRow(
-                        title: String(localized: "权限"),
-                        value: selectedPermissionName,
-                        isLoading: defaultsAreLoading
-                    )
-                    .contentShape(Rectangle())
                 }
-                .tint(.primary)
                 .disabled(!gatewayState.isConnected || store.defaultConfigurationLoadingKinds.contains("set-default"))
             } header: {
                 Text("新会话默认配置")
@@ -181,10 +230,7 @@ struct SettingsView: View {
                 if gatewayState.isConnected && observedConnectionMethod == "WebRTC" {
                     GatewayConnectionPathView(paths: observedConnectionPaths)
                 }
-                NavigationLink {
-                    GatewayNetworkDiagnosticsView(gateway: store.gateway)
-                        .id(ObjectIdentifier(store.gateway))
-                } label: {
+                SettingsNavigationButton(.networkDiagnostics, open: open) {
                     LabeledContent("网络检测", value: String(localized: "实时延迟与丢包"))
                 }
                 .accessibilityIdentifier("network-diagnostics-entry")
@@ -201,7 +247,7 @@ struct SettingsView: View {
             }
 
             Section {
-                TailscaleTunnelSettingsRow()
+                TailscaleTunnelSettingsRow(open: { open(.tailscaleTunnel) })
             } header: {
                 Text("Tailscale 内嵌隧道")
                     .appFont(SettingsTypography.description)
@@ -230,21 +276,29 @@ struct SettingsView: View {
             }
 
             Section {
-                Picker("界面", selection: $store.interfaceStyle) {
-                    ForEach(InterfaceStyle.allCases) {
-                        Text($0.title).tag($0)
+                SettingsChoiceMenu(
+                    title: "界面", value: store.interfaceStyle.title,
+                    identifier: "interface-style-settings-row"
+                ) {
+                    Picker("界面", selection: $store.interfaceStyle) {
+                        ForEach(InterfaceStyle.allCases) { style in
+                            Text(verbatim: style.title).tag(style)
+                        }
                     }
+                    .pickerStyle(.inline)
                 }
-                .pickerStyle(.navigationLink)
-                Picker("语言", selection: $store.appLanguage) {
-                    ForEach(AppLanguage.allCases) { language in
-                        Text(verbatim: language.title).tag(language)
+                SettingsChoiceMenu(
+                    title: "语言", value: store.appLanguage.title,
+                    identifier: "language-settings-row"
+                ) {
+                    Picker("语言", selection: $store.appLanguage) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(verbatim: language.title).tag(language)
+                        }
                     }
+                    .pickerStyle(.inline)
                 }
-                .pickerStyle(.navigationLink)
-                NavigationLink {
-                    FontSizeSettingsView()
-                } label: {
+                SettingsNavigationButton(.fontSize, open: open) {
                     HStack {
                         Text("字体大小")
                         Spacer()
@@ -263,9 +317,7 @@ struct SettingsView: View {
             }
 
             Section {
-                NavigationLink {
-                    StorageSpaceView()
-                } label: {
+                SettingsNavigationButton(.storage, open: open) {
                     HStack {
                         Text("存储空间")
                         Spacer()
@@ -278,7 +330,7 @@ struct SettingsView: View {
                 .accessibilityIdentifier("storage-space-settings-row")
             }
 
-            LogExportSection()
+            LogExportSection(open: open)
 
             Section {
                 releaseRow("当前版本（去给作者Star🌟）", value: appVersion, repository: "dsh-mobile", version: appVersion)
@@ -342,6 +394,45 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showsPrivacyPolicy) {
             PrivacyPolicySheet()
+        }
+    }
+}
+
+/// 将原生菜单锚定到右侧当前值，避免 iPad 将整行中心作为弹出位置。
+private struct SettingsChoiceMenu<Content: View>: View {
+    let title: LocalizedStringKey
+    let value: String
+    let identifier: String
+    var isLoading = false
+    var indicator = "chevron.up.chevron.down"
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title).foregroundStyle(.primary)
+            Spacer(minLength: 12)
+            Menu {
+                content()
+            } label: {
+                HStack(spacing: 8) {
+                    if isLoading {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text(verbatim: value)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Image(systemName: indicator)
+                        .font(indicator == "chevron.right" ? .body : .system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .tint(.primary)
+            .accessibilityLabel(Text(title) + Text("，") + Text(verbatim: value))
+            .accessibilityIdentifier(identifier)
         }
     }
 }
@@ -1122,6 +1213,7 @@ private extension CacheStorageCategory {
 struct StorageSpaceView: View {
     @EnvironmentObject private var store: AppStore
     @State private var sortsBySize = true
+    let open: (SettingsRoute) -> Void
 
     private func size(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
@@ -1195,9 +1287,7 @@ struct StorageSpaceView: View {
             if let usage = store.storageUsage {
                 Section {
                     ForEach(sortedCategories(usage)) { category in
-                        NavigationLink {
-                            StorageCategoryDetailView(category: category)
-                        } label: {
+                        SettingsNavigationButton(.storageCategory(category), open: open) {
                             HStack(spacing: 14) {
                                 StorageCategoryIcon(category: category)
                                 VStack(alignment: .leading, spacing: 4) {
@@ -1329,11 +1419,11 @@ private struct StorageCategoryDetailView: View {
 
 
 private struct LogExportSection: View {
+    let open: (SettingsRoute) -> Void
+
     var body: some View {
         Section {
-            NavigationLink {
-                LogExportView()
-            } label: {
+            SettingsNavigationButton(.logs, open: open) {
                 Text("日志导出与分享")
             }
             .accessibilityIdentifier("log-export-entry")

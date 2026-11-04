@@ -650,19 +650,23 @@ private struct TailscaleAccountEditor: View {
 struct TailscaleTunnelSettingsRow: View {
     @ObservedObject private var tunnel = TailscaleTunnelController.shared
     @ObservedObject private var settings = TailscaleTunnelSettings.shared
+    let open: () -> Void
 
     var body: some View {
-        NavigationLink {
-            TailscaleTunnelSettingsView()
-        } label: {
+        Button(action: open) {
             HStack {
                 Text("内嵌隧道")
                 Spacer()
                 Text(verbatim: settings.enabled
                     ? tunnelStageLabel(tunnel.state.stage) : String(localized: "未启用"))
                     .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .accessibilityIdentifier("tailscale-tunnel-settings-row")
     }
 }

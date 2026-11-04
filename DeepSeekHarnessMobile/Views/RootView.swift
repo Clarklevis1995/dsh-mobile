@@ -146,7 +146,13 @@ private struct RootNavigationHost: View, Equatable {
                 ConversationView(activeView: activeView, topContentInset: topInset)
             }
         case .settings:
-            SettingsView()
+            // 设置及其子页共用根路径，避免 iOS 17 真机的目标式导航反复布局。
+            SettingsView(open: openSettingsPage)
+        case .settingsDetail(let route):
+            SettingsDestinationView(route: route, open: openSettingsPage, close: {
+                guard navigationPath.last == .settingsDetail(route) else { return }
+                navigationPath.removeLast()
+            })
         case .plugins:
             PluginsView(store: store)
         case .scheduledTasks:
@@ -195,6 +201,10 @@ private struct RootNavigationHost: View, Equatable {
     private func navigate(to route: AppRoute) {
         guard navigationPath.last != route else { return }
         navigationPath.append(route)
+    }
+
+    private func openSettingsPage(_ route: SettingsRoute) {
+        navigate(to: .settingsDetail(route))
     }
 
     private func openLiveActivityURL(_ url: URL) {
@@ -266,6 +276,7 @@ private struct RootNavigationHost: View, Equatable {
     private enum AppRoute: Hashable {
         case conversation(ConversationNavigationHeader)
         case settings
+        case settingsDetail(SettingsRoute)
         case plugins
         case scheduledTasks
     }

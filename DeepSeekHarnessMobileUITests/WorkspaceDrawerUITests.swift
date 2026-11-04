@@ -234,6 +234,143 @@ final class WorkspaceDrawerUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 3))
     }
 
+    func testTailscaleSettingsCanBeOpenedAndReturnedToRepeatedly() {
+        homeSettings.tap()
+        XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+        var initialEnabledValue: String?
+
+        for attempt in 0..<3 {
+            let entry = app.buttons["tailscale-tunnel-settings-row"]
+            for _ in 0..<6 {
+                if entry.exists && entry.isHittable { break }
+                app.swipeUp()
+            }
+            XCTAssertTrue(entry.waitForExistence(timeout: 3))
+            XCTAssertTrue(entry.isHittable)
+            entry.tap()
+
+            let bar = app.navigationBars["Tailscale 内嵌隧道"]
+            XCTAssertTrue(bar.waitForExistence(timeout: 5))
+            let enabled = app.switches["tunnel-enabled-switch"]
+            XCTAssertTrue(enabled.waitForExistence(timeout: 5), "必须呈现完整页面，不能只检查导航标题")
+            XCTAssertTrue(app.buttons["tunnel-add-account"].exists)
+            if attempt == 0 { initialEnabledValue = enabled.value as? String }
+            XCTAssertEqual(enabled.value as? String, initialEnabledValue, "页面往返不得修改隧道开关")
+
+            // 不启用隧道、不新增账号；验证返回与再次进入都能完成。
+            bar.buttons.firstMatch.tap()
+            XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+            XCTAssertFalse(enabled.exists)
+            XCTAssertEqual(app.state, .runningForeground)
+        }
+
+        app.navigationBars["设置"].buttons.firstMatch.tap()
+        XCTAssertTrue(homeSettings.waitForExistence(timeout: 5))
+        XCTAssertTrue(homeSettings.isHittable)
+    }
+
+    func testSettingsSecondaryPagesAndStorageDetailsCanReturn() {
+        homeSettings.tap()
+        let pages = [
+            ("network-diagnostics-entry", "网络检测"),
+            ("font-size-settings-row", "字体大小"),
+            ("storage-space-settings-row", "存储空间"),
+            ("log-export-entry", "日志导出与分享")
+        ]
+
+        for (identifier, title) in pages {
+            settingsEntry(identifier).tap()
+            let bar = app.navigationBars[title]
+            XCTAssertTrue(bar.waitForExistence(timeout: 5), "无法进入\(title)")
+            if identifier == "storage-space-settings-row" {
+                for (category, categoryTitle) in [("chats", "聊天记录"), ("images", "图片"),
+                                                   ("previews", "文件预览"), ("temporary", "临时文件")] {
+                    settingsEntry("storage-category-\(category)").tap()
+                    let detailBar = app.navigationBars[categoryTitle]
+                    XCTAssertTrue(detailBar.waitForExistence(timeout: 5))
+                    XCTAssertTrue(app.buttons["storage-clear-\(category)"].waitForExistence(timeout: 5))
+                    // 只验证导航，不清理缓存。
+                    detailBar.buttons.firstMatch.tap()
+                    XCTAssertTrue(bar.waitForExistence(timeout: 5))
+                }
+            } else if identifier == "font-size-settings-row" {
+                XCTAssertTrue(app.switches["font-size-follow-system"].exists)
+            } else if identifier == "log-export-entry" {
+                XCTAssertTrue(app.segmentedControls["log-range-picker"].exists)
+            }
+            bar.buttons.firstMatch.tap()
+            XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+            XCTAssertEqual(app.state, .runningForeground)
+        }
+    }
+
+    func testSettingsChoiceMenusReselectWithoutLeavingSettings() {
+        homeSettings.tap()
+        for (identifier, title, labels) in [("interface-style-settings-row", "界面", ["跟随系统", "浅色", "深色"]),
+                                            ("language-settings-row", "语言", ["跟随系统", "简体中文", "English"])] {
+            let entry = settingsEntry(identifier)
+            let previousLabel = entry.label
+            entry.tap()
+            let choices = app.buttons.matching(NSPredicate(format: "label IN %@", labels))
+            XCTAssertTrue(choices.firstMatch.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.navigationBars["设置"].exists, "选择菜单应留在设置页")
+            XCTAssertFalse(app.navigationBars[title].exists, "界面和语言不再打开子页面")
+            XCTAssertEqual(choices.count, 3)
+            if app.frame.width > 700 {
+                XCTAssertGreaterThan(choices.firstMatch.frame.midX, app.frame.midX, "iPad 菜单应锚定右侧当前值")
+            }
+            let screenshotURL = FileManager.default.temporaryDirectory.appendingPathComponent("settings-menu-\(identifier).png")
+            try? app.screenshot().pngRepresentation.write(to: screenshotURL)
+            print("SETTINGS_MENU_SCREENSHOT: \(screenshotURL.path)")
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "设置-\(title)-菜单"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            guard let selected = choices.allElementsBoundByIndex.first(where: \.isSelected)
+                ?? choices.allElementsBoundByIndex.first(where: { previousLabel.contains($0.label) }) else {
+                XCTFail("缺少已选择项")
+                return
+            }
+            selected.tap()
+            XCTAssertFalse(choices.firstMatch.waitForExistence(timeout: 1), "选择后菜单应关闭")
+            XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+            XCTAssertEqual(settingsEntry(identifier).label, previousLabel)
+        }
+    }
+
+    func testConnectedDefaultSettingsPagesCanReturn() throws {
+        homeSettings.tap()
+        let preset = settingsEntry("agent-preset-settings-row")
+        try XCTSkipUnless(preset.isEnabled, "需要已连接网关；不为导航测试修改连接或配对")
+        for (identifier, title) in [("agent-preset-settings-row", "Agent 预设"), ("default-model-settings-row", "默认模型")] {
+            settingsEntry(identifier).tap()
+            let bar = app.navigationBars[title]
+            XCTAssertTrue(bar.waitForExistence(timeout: 5))
+            bar.buttons.firstMatch.tap()
+            XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+        }
+    }
+
+    private func settingsEntry(_ identifier: String) -> XCUIElement {
+        let entry = app.buttons[identifier]
+        for _ in 0..<12 {
+            let top = app.navigationBars.firstMatch.frame.maxY
+            let bottom = app.frame.maxY - 40
+            if entry.exists && entry.isHittable && entry.frame.minY >= top && entry.frame.maxY <= bottom {
+                return entry
+            }
+            // Menu 不会像导航按钮那样自动滚入视口；先让整行可见再点击。
+            if entry.exists && entry.frame.midY < top {
+                app.swipeDown()
+            } else {
+                app.swipeUp()
+            }
+        }
+        XCTAssertTrue(entry.exists, "缺少入口：\(identifier)")
+        XCTAssertTrue(entry.isHittable, "入口不可点击：\(identifier)")
+        return entry
+    }
+
     func testMarkdownLongPressOpensFullScreenSelectionAndRestoresReadingPosition() {
         openFontSizePage()
         let preview = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "调整后的字体大小")).firstMatch

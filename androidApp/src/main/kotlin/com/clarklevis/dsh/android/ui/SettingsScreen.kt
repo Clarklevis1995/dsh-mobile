@@ -806,6 +806,7 @@ private fun SettingsValueRow(
     enabled: Boolean = true,
     isLoading: Boolean = false,
     modifier: Modifier = Modifier,
+    isMenu: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val rowAlpha = if (enabled) 1f else 0.4f
@@ -838,7 +839,7 @@ private fun SettingsValueRow(
         }
         if (onClick != null) {
             Icon(
-                painterResource(R.drawable.ic_chevron_right),
+                painterResource(if (isMenu) R.drawable.ic_chevrons_up_down else R.drawable.ic_chevron_right),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.30f else 0.15f),
                 modifier = Modifier.padding(start = 8.dp).size(12.dp)
@@ -906,7 +907,12 @@ internal fun InterfaceStyleSettingsRow() {
     val appearance = LocalAppearanceSettings.current
     var expanded by remember { mutableStateOf(false) }
     Box {
-        SettingsValueRow(appText("界面"), appearance.interfaceStyle.title) { expanded = true }
+        SettingsValueRow(
+            title = appText("界面"),
+            value = appearance.interfaceStyle.title,
+            modifier = Modifier.testTag("interface-style-settings-row"),
+            isMenu = true,
+        ) { expanded = true }
         DshSelectionPopup(
             expanded = expanded,
             options = InterfaceStyle.entries.map { DshSelectionOption(it.name, it.title) },
@@ -925,7 +931,12 @@ internal fun LanguageSettingsRow() {
     val appearance = LocalAppearanceSettings.current
     var expanded by remember { mutableStateOf(false) }
     Box {
-        SettingsValueRow(appText("语言"), appearance.language.title) { expanded = true }
+        SettingsValueRow(
+            title = appText("语言"),
+            value = appearance.language.title,
+            modifier = Modifier.testTag("language-settings-row"),
+            isMenu = true,
+        ) { expanded = true }
         DshSelectionPopup(
             expanded = expanded,
             options = AppLanguage.entries.map { DshSelectionOption(it.name, it.title) },
