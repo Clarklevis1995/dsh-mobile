@@ -21,6 +21,42 @@ import kotlin.test.assertTrue
 
 class SharedHistoryStoreTest {
     @Test
+    fun recentSnapshotLoadsExactlyOneOlderPageAndPreservesLiveTail() {
+        val store = SharedHistoryStore()
+        val received = mutableListOf<SharedMviEvent>()
+        store.subscribe(SharedMviEventObserver(received::add))
+        val snapshot = wireJson.encodeToString(listOf(event(100, "tail")))
+        store.installSnapshot("s1", snapshot, true, 95, loadRecentPages = true)
+        assertTrue(patch(received.last()).session!!.isLoadingOlder)
+        assertEquals(95, effects(received.last()).single().beforeSequence)
+        store.liveEventReceived(wireJson.encodeToString(event(101, "live")))
+        store.pageReceived("s1", wireJson.encodeToString(listOf(event(90, "older"))),
+            100, true, 90, null)
+        val completed = patch(received.last())
+        assertEquals("completed", completed.outcome)
+        assertFalse(completed.session!!.isLoading)
+        assertTrue(completed.session.hasMore)
+        assertTrue(effects(received.last()).isEmpty())
+        assertEquals(listOf(90, 100, 101), completed.eventPatch!!.replacementEvents!!.map { it.seq })
+        // 每次重新进入都会重新补第二页，包括内容相同的订阅快照。
+        store.installSnapshot("s1", snapshot, true, 95, loadRecentPages = true)
+        assertEquals(95, effects(received.last()).single().beforeSequence)
+    }
+
+    @Test
+    fun recentSnapshotSkipsPaginationAtEndOrWithoutExplicitCursor() {
+        val store = SharedHistoryStore()
+        val received = mutableListOf<SharedMviEvent>()
+        store.subscribe(SharedMviEventObserver(received::add))
+        store.installSnapshot("s1", "[]", false, null, loadRecentPages = true)
+        assertFalse(patch(received.last()).session!!.isLoading)
+        assertTrue(effects(received.last()).isEmpty())
+        store.installSnapshot("s1", "[]", true, null, loadRecentPages = true)
+        assertFalse(patch(received.last()).session!!.isLoading)
+        assertTrue(effects(received.last()).isEmpty())
+    }
+
+    @Test
     fun unchangedSnapshotUpdatesPaginationWithoutReplacingHistory() {
         val store = SharedHistoryStore()
         val received = mutableListOf<SharedMviEvent>()

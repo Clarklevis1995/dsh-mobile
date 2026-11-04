@@ -2833,6 +2833,7 @@ final class AppStore: ObservableObject {
         guard let id = pendingSnapshotSessionID else { return }
         pendingSnapshotSessionID = nil
         finishHistoryLoading(id)
+        scheduleConversationProjection(for: id)
     }
 
     private func subscribeToSession(_ sessionID: String?) {
@@ -3046,7 +3047,7 @@ final class AppStore: ObservableObject {
                     let replaced = try kmpHistoryStore.installSnapshot(sessionID: id,
                         events: records,
                         hasMore: frame.hasMore == true, nextBeforeSequence: frame.nextBeforeSeq)
-                    if pendingSnapshotSessionID == id { pendingSnapshotSessionID = nil }
+                    // 首屏两页作为一次呈现提交，补页期间继续接收实时事件。
                     applyHistoryProjections(frame.projections, sessionId: id)
                     installTaskGoalBaseline(frame.projections, sessionID: id)
                     drainKMPEventDeliveries()
@@ -3057,6 +3058,7 @@ final class AppStore: ObservableObject {
                             chunksJSON: assistantStreamState.replayChunksJson())
                         drainKMPEventDeliveries()
                     }
+                    scheduleConversationProjection(for: id)
                     return
                 }
                 if let attemptID = update.attemptId, let id = update.sessionId, update.chunksJson != "[]" {
@@ -4436,6 +4438,12 @@ final class AppStore: ObservableObject {
     /// 一次发布给 UIKit timeline，避免高频 token 让 SwiftUI 根视图失效。
     private func projectIncrementally(for sessionId: String) async {
         guard !Task.isCancelled else { return }
+        if pendingSnapshotSessionID == sessionId {
+            guard !kmpHistoryStore.isLoading(sessionID: sessionId),
+                  pendingConversationHistory[sessionId] == nil,
+                  activeConversationHistory[sessionId] == nil else { return }
+            pendingSnapshotSessionID = nil
+        }
         let items = kmpConversationStore.items(for: sessionId)
         if let batch = historyReadingBatches[sessionId] {
             guard batch.responseReady, !kmpHistoryStore.isLoading(sessionID: sessionId),
@@ -5167,8 +5175,10 @@ final class AppStore: ObservableObject {
             break
         case "stopped":
             historySyncEngine.finish(sessionID: change.sessionID)
+            scheduleConversationProjection(for: change.sessionID)
         case "failed":
             historySyncEngine.finish(sessionID: change.sessionID)
+            scheduleConversationProjection(for: change.sessionID)
             let message: String
             switch change.failureCode {
             case "MISSING_NEXT_CURSOR":
@@ -5187,6 +5197,8 @@ final class AppStore: ObservableObject {
             )
         case "completed":
             historySyncEngine.finish(sessionID: change.sessionID)
+            // 空页或完全重复的第二页没有行补丁，也必须释放首屏呈现。
+            scheduleConversationProjection(for: change.sessionID)
             let eventCount = change.completedEventCount ?? 0
             let byteCount = change.completedByteCount ?? 0
             let byteDetail = byteCount > 0

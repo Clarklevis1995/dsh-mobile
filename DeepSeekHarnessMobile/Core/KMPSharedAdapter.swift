@@ -1341,7 +1341,7 @@ final class KMPHistoryStoreAdapter {
         let previousRevision = replacementRevision
         try dispatch(.page(sessionID: sessionID)) {
             shared.installSnapshot(sessionId: sessionID, eventsJson: try encode(events), hasMore: hasMore,
-                nextBeforeSequence: nextBeforeSequence.map { KotlinInt(int: Int32($0)) })
+                nextBeforeSequence: nextBeforeSequence.map { KotlinInt(int: Int32($0)) }, loadRecentPages: true)
         }
         return replacementRevision != previousRevision
     }

@@ -2975,7 +2975,19 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertTrue(store.historyLoadingSessionIds.contains("mask-session"), "迟到快照不能撤掉当前遮罩")
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"历史回复"}]}}}],"hasMore":true,"nextBeforeSeq":10}"#)
+        XCTAssertTrue(store.historyLoadingSessionIds.contains("mask-session"), "首屏自动补第二页")
+        XCTAssertTrue(store.historyLoadingOlderSessionIds.contains("mask-session"))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        XCTAssertTrue(store.conversationTimeline(for: "mask-session").currentSnapshot.items.isEmpty,
+            "第二页到达前不能先呈现尾窗，否则后续前插会与首屏贴底竞争")
+        XCTAssertTrue(store.isPreparingConversation("mask-session"))
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"history","sessionId":"mask-session","historyFormatVersion":3,"events":[{"type":"user/message","seq":9,"time":9,"data":{"content":[{"type":"text","text":"上一页的问题"}]}}],"hasMore":true,"nextBeforeSeq":9}"#)
+        for _ in 0..<200 where store.historyLoadingSessionIds.contains("mask-session") {
+            try await Task.sleep(for: .milliseconds(5))
+        }
         XCTAssertFalse(store.historyLoadingSessionIds.contains("mask-session"))
+        XCTAssertEqual(store.events["mask-session"]?.map(\.seq), [9, 10])
         XCTAssertEqual(store.historyHasMore["mask-session"], true)
         await store.awaitConversationProjectionForTesting(sessionID: "mask-session", expectedText: "历史回复")
         XCTAssertEqual(store.renderedConversationItems["mask-session"]?.last?.text, "历史回复")
@@ -3012,6 +3024,7 @@ final class GatewayProtocolTests: XCTestCase {
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
         try await deliverHistoryLoadingFrame(store, snapshot)
+        try await completeInitialHistoryPage(store)
         await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "已有历史")
         let revision = store.conversationTimeline(for: session.id).currentSnapshot.revision
         // 主动后台挂起后的 hello，没有先调用 onConnectionFailure。
@@ -3023,6 +3036,7 @@ final class GatewayProtocolTests: XCTestCase {
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
         try await deliverHistoryLoadingFrame(store, snapshot)
+        try await completeInitialHistoryPage(store)
         XCTAssertFalse(store.historyLoadingSessionIds.contains(session.id))
         XCTAssertEqual(store.conversationTimeline(for: session.id).currentSnapshot.revision, revision,
             "相同快照不应重建投影或重新发布 UIKit 列表")
@@ -3253,6 +3267,7 @@ final class GatewayProtocolTests: XCTestCase {
             #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"existing"}]}}}],"hasMore":true,"nextBeforeSeq":10}"#)
+        try await completeInitialHistoryPage(store)
         await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "existing")
         let consumerID = UUID()
         var completed: [HistoryPresentationOutcome] = []
@@ -3302,6 +3317,7 @@ final class GatewayProtocolTests: XCTestCase {
             #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
         let snapshot = #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"existing"}]}}}],"hasMore":true,"nextBeforeSeq":10}"#
         try await deliverHistoryLoadingFrame(store, snapshot)
+        try await completeInitialHistoryPage(store)
         await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "existing")
         let consumerID = UUID()
         var completed: [HistoryPresentationOutcome] = []
@@ -3537,6 +3553,7 @@ final class GatewayProtocolTests: XCTestCase {
             #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":100,"events":[{"type":"assistant/message","seq":100,"time":100,"data":{"message":{"content":[{"type":"text","text":"existing"}]}}}],"hasMore":true,"nextBeforeSeq":100}"#)
+        try await completeInitialHistoryPage(store)
         await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "existing")
         let consumer = UUID(), probe = HistoryReadingProbe()
         store.attachHistoryPresentationConsumer(sessionID: session.id, consumer: .init(id: consumer) { probe.receive($0) })
@@ -3652,6 +3669,16 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
+    private func completeInitialHistoryPage(_ store: AppStore) async throws {
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"history","sessionId":"mask-session","historyFormatVersion":3,"events":[],"hasMore":true,"nextBeforeSeq":9}"#)
+        for _ in 0..<200 where store.historyLoadingSessionIds.contains("mask-session") {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertFalse(store.historyLoadingSessionIds.contains("mask-session"))
+    }
+
+    @MainActor
     private func deliverHistoryLoadingFrame(_ store: AppStore, _ json: String) async throws {
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(json.utf8)))
         await flushDeferredKMPEvents(in: store)
@@ -3662,7 +3689,8 @@ final class GatewayProtocolTests: XCTestCase {
         let session = SessionSummary(id: "s", title: "Stream", lastActivity: Date(timeIntervalSince1970: 100),
             isRunning: true, hasUnread: false)
         let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://127.0.0.1:3080/ws/mobile",
-            selectedWorkspaceID: nil, sessions: [session]))
+            selectedWorkspaceID: nil, sessions: [session]), chatHistoryCache: nil)
+        store.gateway.installConnectedTransportForTesting()
         let prepared = await store.prepareConversation(for: session)
         XCTAssertTrue(prepared)
         func deliver(_ json: String) async throws {
@@ -3672,14 +3700,14 @@ final class GatewayProtocolTests: XCTestCase {
         try await deliver(#"{"kind":"hello","historyFormatVersion":3,"capabilities":["assistant-stream-v1"]}"#)
         try await deliver(#"{"kind":"subscribed","sessionId":"s","subscriptionId":"sub","assistantStream":true}"#)
         try await deliver(#"{"kind":"session-snapshot","sessionId":"s","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":41,"events":[],"hasMore":true,"nextBeforeSeq":20,"assistantStream":{"revision":2,"activeAttempt":{"attemptId":"s:1","turn":2,"step":3,"startedAfterSeq":41,"nextIndex":1,"stream":[{"type":"text-chunks","index":0,"time0":100,"texts":["Hello"],"dt":[]}]}}}"#)
-        await store.awaitConversationProjectionForTesting(sessionID: "s", expectedText: "Hello")
-        XCTAssertEqual(store.renderedConversationItems["s", default: []].last?.text, "Hello")
+        XCTAssertTrue(store.renderedConversationItems["s", default: []].isEmpty,
+            "生成前缀要与完整首屏一起呈现")
         XCTAssertTrue(store.events["s", default: []].isEmpty)
         let chunk = #"{"kind":"assistant-stream","sessionId":"s","subscriptionId":"sub","streamId":"stream","frame":{"type":"chunk","attemptId":"s:1","revision":3,"index":1,"time":101,"turn":2,"step":3,"chunk":{"type":"text-delta","index":0,"text":" world"}}}"#
         try await deliver(chunk)
         try await deliver(chunk)
-        await store.awaitConversationProjectionForTesting(sessionID: "s", expectedText: "Hello world")
-        XCTAssertEqual(store.renderedConversationItems["s", default: []].last?.text, "Hello world")
+        XCTAssertTrue(store.renderedConversationItems["s", default: []].isEmpty,
+            "补第二页期间实时增量继续归并，但不能提前发布半页")
         try await deliver(#"{"kind":"history","sessionId":"s","historyFormatVersion":3,"events":[],"hasMore":false}"#)
         await store.awaitConversationProjectionForTesting(sessionID: "s", expectedText: "Hello world")
         XCTAssertEqual(store.renderedConversationItems["s", default: []].last?.text, "Hello world")

@@ -2160,7 +2160,8 @@ struct ConversationView: View {
                 return processViewportEntries(for: group)
             }
         }
-        if store.selectedSession?.isRunning == true {
+        // 首屏历史尚未合并时不创建进度占位，避免它提前完成首次贴底定位。
+        if store.selectedSession?.isRunning == true, !items.isEmpty || !isLoadingSelectedHistory {
             let timing = store.selectedTurnTiming
             let latestUserIndex = items.lastIndex { $0.kind == .user } ?? -1
             let cues = items.dropFirst(latestUserIndex + 1).compactMap(DeepSearchProgressCue.init)
