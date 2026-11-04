@@ -46,6 +46,7 @@ private extension ConversationItem.Kind {
         case "TOOL": self = .tool
         case "JSON_TOOL": self = .jsonTool
         case "TOOL_RESULT": self = .toolResult
+        case "GENERATED_IMAGES": self = .generatedImages
         case "STATUS": self = .status
         case "SYSTEM": self = .system
         default: return nil

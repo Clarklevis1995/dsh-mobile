@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 struct ConversationItem: Identifiable, Sendable {
-    enum Kind: Equatable, Sendable { case user, context, assistant, reasoning, tool, jsonTool, toolResult, status, system }
+    enum Kind: Equatable, Sendable { case user, context, assistant, reasoning, tool, jsonTool, toolResult, generatedImages, status, system }
     let id: String
     let kind: Kind
     let title: String

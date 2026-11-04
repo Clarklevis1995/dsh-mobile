@@ -1,4 +1,6 @@
 import Foundation
+import Photos
+import UniformTypeIdentifiers
 
 struct AttachmentLoadRequest: Equatable, Sendable {
     var sessionID: String
@@ -56,5 +58,23 @@ struct AttachmentLoader: Equatable {
             ready.append(request)
         }
         return ready
+    }
+}
+
+
+enum PhotoLibraryImageSaver {
+    static func save(_ data: Data, mediaType: String) async throws {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            throw NSError(domain: "PhotoLibraryImageSaver", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: String(localized: "请在系统设置中允许添加照片后重试")
+            ])
+        }
+        let options = PHAssetResourceCreationOptions()
+        let fileExtension = UTType(mimeType: mediaType)?.preferredFilenameExtension ?? "png"
+        options.originalFilename = "DshMobile-\(UUID().uuidString).\(fileExtension)"
+        try await PHPhotoLibrary.shared().performChanges {
+            PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: options)
+        }
     }
 }

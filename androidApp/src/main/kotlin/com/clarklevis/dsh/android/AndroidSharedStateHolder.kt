@@ -1999,6 +1999,9 @@ class AndroidSharedStateHolder(
         drainAttachmentQueue()
     }
 
+    suspend fun imageAttachmentData(sessionId: String, attachmentId: String): ByteArray? =
+        graph?.gatewayRuntime?.readCachedAttachment(sessionId, attachmentId)
+
     fun retryAttachment(attachmentId: String) {
         val key = cacheKeyForCurrentSession(attachmentId) ?: return
         if (key !in visibleAttachmentKeys) return

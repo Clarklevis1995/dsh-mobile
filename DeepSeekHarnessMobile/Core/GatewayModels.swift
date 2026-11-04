@@ -1032,7 +1032,8 @@ struct RawSessionEvent: Codable, Hashable, Sendable {
         case "tool/result":
             let content = data["message"]?["content"]?.arrayValue ?? []
             return GatewayEvent(type: type, turn: turn, step: step,
-                callId: data["message"]?["toolCallId"]?.stringValue ?? data["message"]?["source"]?["callId"]?.stringValue,
+                images: toolImageReferences(data),
+                callId: data["callId"]?.stringValue ?? data["message"]?["toolCallId"]?.stringValue ?? data["message"]?["source"]?["callId"]?.stringValue,
                 isError: (data["error"] != nil && data["error"] != .null && data["error"] != .bool(false)) ||
                     data["message"]?["isError"]?.boolValue == true ||
                     content.contains { $0["type"]?.stringValue == "tool-result" && $0["isError"]?.boolValue == true },
@@ -1054,9 +1055,10 @@ struct RawSessionEvent: Codable, Hashable, Sendable {
                 subCallId: data["subCallId"]?.stringValue,
                 raw: data
             )
-        case "tool/code-dispatch":
+        case "tool/code-dispatch", "tool/ptc-dispatch":
             return GatewayEvent(
                 type: type,
+                images: toolImageReferences(data),
                 name: data["name"]?.stringValue,
                 arguments: data["arguments"],
                 isError: data["isError"]?.boolValue,
@@ -1453,4 +1455,47 @@ struct MobileConversationTarget: Codable {
     var sessionId: String
     var parentSessionId: String?
     var subagentMode: String?
+}
+
+// 可选图片字段逐项容错，不能让插件元数据损坏中断 Agent 正文解码。
+extension KeyedDecodingContainer {
+    func decodeIfPresent(_ type: [GatewayImageAttachment].Type, forKey key: Key) throws -> [GatewayImageAttachment]? {
+        guard let value = try? decodeIfPresent(JSONValue.self, forKey: key) else { return nil }
+        return value.arrayValue?.compactMap { $0.decode(GatewayImageAttachment.self) }.filter { $0.isValidToolImage }
+    }
+}
+
+extension GatewayImageAttachment {
+    var isValidToolImage: Bool {
+        !attachmentId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            ["image/png", "image/jpeg", "image/webp", "image/gif"].contains(mediaType) &&
+            bytes > 0 && width > 0 && height > 0
+    }
+}
+
+func toolImageReferences(_ data: JSONValue) -> [GatewayImageAttachment] {
+    guard data["isError"]?.boolValue != true, data["message"]?["isError"]?.boolValue != true,
+          data["error"] == nil || data["error"] == .null || data["error"] == .bool(false) else { return [] }
+    var images: [GatewayImageAttachment] = []
+    var seen: Set<String> = []
+    func add(_ value: JSONValue?) {
+        guard let image = value?.decode(GatewayImageAttachment.self), image.isValidToolImage,
+              seen.insert(image.id).inserted else { return }
+        images.append(image)
+    }
+    func visit(_ value: JSONValue?, depth: Int = 0) {
+        guard depth < 16 else { return }
+        for block in value?.arrayValue ?? [] {
+            if block["type"]?.stringValue == "image" { add(block["attachment"]) }
+            else if block["type"]?.stringValue == "tool-result", block["isError"]?.boolValue != true {
+                visit(block["content"], depth: depth + 1)
+            }
+        }
+    }
+    for value in data["images"]?.arrayValue ?? [] { add(value) }
+    visit(data["message"]?["content"] ?? data["content"])
+    let meta = data["meta"]
+    let candidates = meta?["kind"]?.stringValue == "dsh-image-gen-batch" ? meta?["images"]?.arrayValue ?? [] : [meta].compactMap { $0 }
+    for value in candidates where value["kind"]?.stringValue == "dsh-image-gen" { add(value["attachment"]) }
+    return images
 }

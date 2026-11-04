@@ -15262,3 +15262,91 @@ final class GatewayRtcLoggingTests: XCTestCase {
         })
     }
 }
+
+final class GeneratedToolImageTests: XCTestCase {
+    @MainActor
+    func testGeneratedImageHasRoundedVisibleCornersAndLeadingAlignment() async throws {
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 400)).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 400, height: 400))
+        }
+        let data = try XCTUnwrap(source.pngData())
+        let image = GatewayImageAttachment(attachmentId: "rounded", mediaType: "image/png", bytes: data.count, width: 400, height: 400)
+        let item = ConversationItem(id: "image", kind: .generatedImages, title: "", text: "", images: [image], isError: false, date: .now)
+        let host = UIHostingController(rootView: ConversationRow(item: item, showsCopyButton: false, imageData: { _ in data })
+            .frame(width: 390, height: 450, alignment: .topLeading).background(Color.white))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 450))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let rendered = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            host.view.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: rendered)
+        attachment.name = "聊天图片圆角与左对齐"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        let cgImage = try XCTUnwrap(rendered.cgImage)
+        let width = cgImage.width
+        let height = cgImage.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        func isRed(_ x: Int, _ y: Int) -> Bool {
+            let offset = (y * width + x) * 4
+            return pixels[offset] > 200 && pixels[offset + 1] < 50 && pixels[offset + 2] < 50
+        }
+        var minX = width, minY = height, maxX = 0, maxY = 0
+        for y in 0..<height {
+            for x in 0..<width where isRed(x, y) {
+                minX = min(minX, x); minY = min(minY, y)
+                maxX = max(maxX, x); maxY = max(maxY, y)
+            }
+        }
+        XCTAssertLessThan(minX, 4, "图片应贴齐回复左边缘")
+        XCTAssertGreaterThan(maxX - minX, Int(300 * rendered.scale))
+        XCTAssertFalse(isRed(minX, minY), "圆角应裁切可见图片而非外层留白")
+        XCTAssertFalse(isRed(maxX, maxY))
+    }
+
+    func testGeneratedImagesRemainOutsideToolProcess() {
+        let image = GatewayImageAttachment(attachmentId: "generated", mediaType: "image/png", bytes: 100, width: 1536, height: 1024)
+        let items = [
+            ConversationItem(id: "tool", kind: .tool, title: "generate", text: "", isError: false, date: .now),
+            ConversationItem(id: "image", kind: .generatedImages, title: "", text: "", images: [image], isError: false, date: .now)
+        ]
+        let entries = ConversationDisplayEntry.make(from: items)
+        XCTAssertEqual(entries.count, 2)
+        guard case .message(let item) = entries.last?.content else { return XCTFail("图片被折叠") }
+        XCTAssertEqual(item.images, [image])
+    }
+
+    private let imageJSON = #"{"attachmentId":"generated","mediaType":"image/png","bytes":100,"width":1536,"height":1024}"#
+
+    func testMalformedOptionalImageDoesNotDiscardAssistantText() throws {
+        let data = Data("{\"kind\":\"event\",\"sessionId\":\"s\",\"seq\":1,\"time\":1,\"event\":{\"type\":\"assistant/message\",\"text\":\"answer\",\"images\":[{},null,\(imageJSON)]}}".utf8)
+        let frame = try GatewayWireDecoder.decode(data)
+        XCTAssertEqual(frame.event?.text, "answer")
+        XCTAssertEqual(frame.event?.images?.count, 1)
+    }
+
+    func testRawToolAndPtcHistoryRestoreImageReferences() throws {
+        for type in ["tool/result", "tool/ptc-dispatch", "tool/code-dispatch"] {
+            let content = "[{\"type\":\"image\",\"attachment\":\(imageJSON)}]"
+            let payload = type == "tool/result" ? "{\"message\":{\"content\":\(content)}}" : "{\"content\":\(content)}"
+            let raw = try JSONDecoder().decode(RawSessionEvent.self, from: Data("{\"type\":\"\(type)\",\"seq\":1,\"time\":1,\"data\":\(payload)}".utf8))
+            XCTAssertEqual(raw.normalized(sessionId: "s").event.images?.first?.attachmentId, "generated")
+        }
+    }
+
+    func testFailedAndDuplicateToolImages() throws {
+        let data = try JSONDecoder().decode(JSONValue.self, from: Data("{\"images\":[\(imageJSON),\(imageJSON)]}".utf8))
+        XCTAssertEqual(toolImageReferences(data).count, 1)
+        let failed = try JSONDecoder().decode(JSONValue.self, from: Data("{\"isError\":true,\"images\":[\(imageJSON)]}".utf8))
+        XCTAssertTrue(toolImageReferences(failed).isEmpty)
+    }
+}

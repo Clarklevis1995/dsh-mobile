@@ -2038,6 +2038,31 @@ class GatewayRuntimeIntegrationTest {
     }
 
     @Test
+    fun generatedImageAttachmentMayExceedOldEightMegabyteLimit() = runTest {
+        val transport = FakeTransport()
+        val cache = FakeAttachmentCache()
+        val runtime = newRuntime(transport, cache = cache)
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        val byteCount = 9 * 1024 * 1024
+        assertTrue(runtime.requestAttachment("session-a", "large"))
+        val base64 = "AAAA".repeat(byteCount / 3)
+        transport.receive(
+            """{"kind":"attachment","sessionId":"session-a","attachment":{"attachmentId":"large","mediaType":"image/png","bytes":$byteCount,"width":4096,"height":4096},"data":"$base64"}"""
+        )
+        runCurrent()
+        assertEquals(byteCount, cache.values[gatewayAttachmentCacheKey("session-a", "large")]?.size)
+        val frame = events.filterIsInstance<GatewayRuntimeEvent.Frame>().last { it.frame.kind == "attachment" }
+        assertNull(frame.frame.data)
+        assertTrue(frame.rawJson.length < 1024, "图片字节不能进入会话事件快照")
+    }
+
+    @Test
     fun attachmentFifoDeliversThreeItemsAndIgnoresDuplicateTerminal() = runTest {
         val transport = FakeTransport()
         val cache = FakeAttachmentCache()

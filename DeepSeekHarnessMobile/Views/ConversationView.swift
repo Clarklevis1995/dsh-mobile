@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 import MarkdownUI
 import PhotosUI
@@ -2112,6 +2113,7 @@ struct ConversationView: View {
     }
 
     private func makeConversationViewportEntries(from items: [ConversationItem]) -> [ConversationViewportEntry] {
+        guard let sessionID = store.selectedSessionId else { return [] }
         var entries = ConversationDisplayEntry.make(from: items).flatMap { entry in
             let revision = viewportEntryRevision(entry)
             if case .message(let item) = entry.content,
@@ -2131,7 +2133,7 @@ struct ConversationView: View {
                 return [ConversationViewportEntry(
                     id: entry.id,
                     revision: revision,
-                    userMessage: .init(item: item, imageData: { store.imageData(for: $0) },
+                    userMessage: .init(item: item, imageData: { store.imageData(for: $0, sessionID: sessionID) },
                         showsCopyButton: entry.showsCopyButton, onOpenFile: uploadedFileOpener())
                 )]
             }
@@ -2143,7 +2145,9 @@ struct ConversationView: View {
                     content: AnyView(ConversationRow(
                         item: item,
                         showsCopyButton: entry.showsCopyButton,
-                        imageData: { store.imageData(for: $0) },
+                        imageData: { store.imageData(for: $0, sessionID: sessionID) },
+                        imageError: { store.imageLoadError(for: $0, sessionID: sessionID) },
+                        onRetryImage: { store.retryImageAttachment($0, sessionID: sessionID) },
                         onOpenFile: conversationFileOpener(),
                         onOpenUploadedFile: uploadedFileOpener()
                     )),
@@ -2278,6 +2282,7 @@ struct ConversationView: View {
     }
 
     private func viewportEntryRevision(_ entry: ConversationDisplayEntry) -> Int {
+        let sessionID = store.selectedSessionId ?? ""
         var hasher = Hasher()
         hasher.combine(entry.id)
         hasher.combine(entry.showsCopyButton)
@@ -2291,7 +2296,8 @@ struct ConversationView: View {
             hasher.combine(item.knownFiles)
             for image in item.images {
                 hasher.combine(image)
-                hasher.combine(store.imageData(for: image.id) != nil)
+                hasher.combine(store.imageData(for: image.id, sessionID: sessionID) != nil)
+                hasher.combine(store.imageLoadError(for: image.id, sessionID: sessionID))
             }
         case .process(let group):
             for item in group.items {
@@ -2329,7 +2335,7 @@ private struct DeepSearchProgressCue: Hashable {
         case .toolResult: kind = .toolResult
         case .assistant: kind = .assistant
         case .status: kind = .status
-        case .user, .system: return nil
+        case .user, .generatedImages, .system: return nil
         }
         id = item.id
         date = item.date
@@ -3658,7 +3664,7 @@ struct ConversationProcessGroup: Identifiable {
     }
 }
 
-private struct ConversationDisplayEntry: Identifiable {
+struct ConversationDisplayEntry: Identifiable {
     enum Content {
         case message(ConversationItem)
         case process(ConversationProcessGroup)
@@ -3689,7 +3695,7 @@ private struct ConversationDisplayEntry: Identifiable {
             case .status:
                 flushProcess()
                 processItems.append(item)
-            case .user, .assistant, .system:
+            case .user, .assistant, .generatedImages, .system:
                 flushProcess()
                 result.append(.init(id: "message-\(item.id)", content: .message(item), showsCopyButton: false))
             }
@@ -3777,7 +3783,7 @@ extension ConversationProcessGroup {
                 } else {
                     tools.append(.init(id: item.id, call: nil, result: item))
                 }
-            case .user, .assistant, .status, .system:
+            case .user, .assistant, .generatedImages, .status, .system:
                 break
             }
         }
@@ -4464,41 +4470,133 @@ private struct ToolArgumentsView: View {
 private struct AttachmentImageGrid: View {
     let attachments: [GatewayImageAttachment]
     let imageData: (String) -> Data?
-
-    private var columns: [GridItem] {
-        Array(
-            repeating: GridItem(.flexible(), spacing: 6),
-            count: attachments.count == 1 ? 1 : 2
-        )
-    }
+    var imageError: (String) -> String? = { _ in nil }
+    var onRetry: (GatewayImageAttachment) -> Void = { _ in }
+    @State private var preview: GatewayImageAttachment?
 
     var body: some View {
-        LazyVGrid(columns: columns, alignment: .trailing, spacing: 6) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6, alignment: .leading), count: attachments.count == 1 ? 1 : 2), spacing: 6) {
             ForEach(attachments) { attachment in
-                Group {
-                    if let data = imageData(attachment.id), let image = UIImage(data: data) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        ZStack {
-                            Color(uiColor: .secondarySystemFill)
-                            ProgressView().controlSize(.small)
+                VStack(alignment: .leading, spacing: 6) {
+                    let ratio = CGFloat(max(1, attachment.width)) / CGFloat(max(1, attachment.height))
+                    AttachmentBitmap(data: imageData(attachment.id), maximumSide: 900, fillsBounds: true)
+                        .aspectRatio(ratio, contentMode: .fit)
+                        .frame(maxWidth: min(attachments.count == 1 ? 320 : 180, 320 * ratio))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .contentShape(Rectangle())
+                        .onTapGesture { preview = attachment }
+                        .overlay {
+                            if imageData(attachment.id) == nil && imageError(attachment.id) == nil {
+                                ProgressView().controlSize(.small)
+                            }
                         }
+                    if let error = imageError(attachment.id) {
+                        Text(error).appFont(.caption).foregroundStyle(.secondary).lineLimit(3)
+                        Button("重试") { onRetry(attachment) }.appFont(.caption)
                     }
-                }
-                .aspectRatio(
-                    attachment.height > 0 ? CGFloat(attachment.width) / CGFloat(attachment.height) : 1,
-                    contentMode: .fit
-                )
-                .frame(maxWidth: attachments.count == 1 ? 320 : 180, maxHeight: 280)
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(.white.opacity(0.16), lineWidth: 0.7)
                 }
                 .accessibilityLabel(attachment.name ?? String(localized: "图片附件"))
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fullScreenCover(item: $preview) { image in
+            AttachmentGallery(attachments: attachments, initialID: image.id, imageData: imageData,
+                              imageError: imageError, onRetry: onRetry)
+        }
+    }
+}
+
+// 解码在后台执行；列表与全屏分别限制像素大小，关闭预览即释放大图。
+private struct AttachmentBitmap: View {
+    let data: Data?
+    let maximumSide: Int
+    var fillsBounds = false
+    @State private var bitmap: UIImage?
+
+    var body: some View {
+        Group {
+            if let bitmap { Image(uiImage: bitmap).resizable().aspectRatio(contentMode: fillsBounds ? .fill : .fit) }
+            else { ZStack { Color.secondary.opacity(0.12); Image(systemName: "photo").foregroundStyle(.secondary) } }
+        }
+        .task(id: data) {
+            bitmap = nil
+            guard let data else { return }
+            let decoded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+                      let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceCreateThumbnailWithTransform: true,
+                        kCGImageSourceThumbnailMaxPixelSize: maximumSide,
+                        kCGImageSourceShouldCacheImmediately: true
+                      ] as CFDictionary) else { return nil }
+                return UIImage(cgImage: image)
+            }.value
+            guard !Task.isCancelled else { return }
+            bitmap = decoded
+        }
+    }
+}
+
+private struct AttachmentGallery: View {
+    let attachments: [GatewayImageAttachment]
+    let initialID: String
+    let imageData: (String) -> Data?
+    let imageError: (String) -> String?
+    let onRetry: (GatewayImageAttachment) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedID = ""
+    @GestureState private var magnification: CGFloat = 1
+    @State private var saving = false
+    @State private var saveMessage: String?
+
+    private func save(_ attachment: GatewayImageAttachment) {
+        guard !saving, let data = imageData(attachment.id) else { return }
+        saving = true
+        Task {
+            defer { saving = false }
+            do {
+                try await PhotoLibraryImageSaver.save(data, mediaType: attachment.mediaType)
+                saveMessage = String(localized: "已保存到相册")
+            } catch {
+                saveMessage = error.localizedDescription
+            }
+        }
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            TabView(selection: $selectedID) {
+                ForEach(attachments) { attachment in
+                    VStack(spacing: 16) {
+                        AttachmentBitmap(data: imageData(attachment.id), maximumSide: 2048)
+                            .scaleEffect(max(1, min(4, magnification)))
+                            .gesture(MagnificationGesture().updating($magnification) { value, state, _ in state = value })
+                            .contextMenu {
+                                Button { save(attachment) } label: {
+                                    Label("保存到相册", systemImage: "square.and.arrow.down")
+                                }
+                                .disabled(saving || imageData(attachment.id) == nil)
+                            }
+                        if let error = imageError(attachment.id) {
+                            Text(error).foregroundStyle(.white)
+                        }
+                        if imageData(attachment.id) == nil { Button("重试") { onRetry(attachment) } }
+                    }
+                    .padding(16).tag(attachment.id)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: attachments.count > 1 ? .always : .never))
+            Button { dismiss() } label: {
+                Image(systemName: "xmark.circle.fill").font(.system(size: 30)).foregroundStyle(.white)
+            }
+            .accessibilityLabel("关闭").padding(20)
+        }
+        .onAppear { selectedID = initialID }
+        .alert("保存图片", isPresented: Binding(get: { saveMessage != nil }, set: { if !$0 { saveMessage = nil } })) {
+            Button("好", role: .cancel) { saveMessage = nil }
+        } message: {
+            Text(saveMessage ?? "")
         }
     }
 }
@@ -4507,6 +4605,8 @@ struct ConversationRow: View {
     let item: ConversationItem
     let showsCopyButton: Bool
     let imageData: (String) -> Data?
+    var imageError: (String) -> String? = { _ in nil }
+    var onRetryImage: (GatewayImageAttachment) -> Void = { _ in }
     var onOpenFile: ((String) -> Void)? = nil
     var onOpenUploadedFile: ((PresentedFile) -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
@@ -4517,7 +4617,7 @@ struct ConversationRow: View {
             VStack(alignment: .trailing, spacing: 5) {
                 VStack(alignment: .trailing, spacing: 8) {
                     if !item.images.isEmpty {
-                        AttachmentImageGrid(attachments: item.images, imageData: imageData)
+                        AttachmentImageGrid(attachments: item.images, imageData: imageData, imageError: imageError, onRetry: onRetryImage)
                     }
                     ForEach(item.files.filter { $0.attachmentId != nil }, id: \.attachmentId) { file in
                         UploadedFileCard(file: file) { onOpenUploadedFile?(file) }
@@ -4547,10 +4647,10 @@ struct ConversationRow: View {
                 icon: .asset("DshContextInjection"),
                 tint: .green
             )
-        case .assistant:
+        case .assistant, .generatedImages:
             VStack(alignment: .leading, spacing: 7) {
                 if !item.images.isEmpty {
-                    AttachmentImageGrid(attachments: item.images, imageData: imageData)
+                    AttachmentImageGrid(attachments: item.images, imageData: imageData, imageError: imageError, onRetry: onRetryImage)
                 }
                 if !item.text.isEmpty {
                     MarkdownContent(item.text, knownFiles: item.knownFiles, onOpenFile: onOpenFile)

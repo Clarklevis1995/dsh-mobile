@@ -680,7 +680,7 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
                 type,
                 turn,
                 step,
-                callId = data["message"]?.get("toolCallId")?.stringValue
+                callId = data["callId"]?.stringValue ?: data["message"]?.get("toolCallId")?.stringValue
                     ?: data["message"]?.get("source")?.get("callId")?.stringValue,
                 isError = (data["error"] != null && data["error"] != JsonValue.NullValue &&
                     data["error"] != JsonValue.BooleanValue(false)) ||
@@ -689,17 +689,22 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
                         it["type"]?.stringValue == "tool-result" && it["isError"]?.booleanValue == true
                     },
                 preview = toolResultText(data["message"]),
+                images = toolImageReferences(data),
                 output = data["output"]?.stringValue,
                 outputTruncated = data["outputTruncated"]?.booleanValue,
                 error = failureText(data["error"]),
                 raw = data
             )
-            "tool/code-dispatch-start", "tool/code-dispatch" -> GatewayEvent(
+            "tool/code-dispatch-start", "tool/code-dispatch", "tool/ptc-dispatch" -> GatewayEvent(
                 type = type,
                 name = data["name"]?.stringValue,
                 arguments = data["arguments"],
                 isError = data["isError"]?.booleanValue,
                 preview = textBlocks(data["content"]),
+                images = toolImageReferences(data),
+                output = data["output"]?.stringValue,
+                outputTruncated = data["outputTruncated"]?.booleanValue,
+                error = failureText(data["error"]),
                 rootCallId = data["rootCallId"]?.stringValue,
                 parentCallId = data["parentCallId"]?.stringValue,
                 subCallId = data["subCallId"]?.stringValue,

@@ -1,5 +1,11 @@
 package com.clarklevis.dsh.android.ui
 
+import android.os.Build
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.core.content.ContextCompat
+import androidx.compose.foundation.gestures.detectTapGestures
+import com.clarklevis.dsh.android.platform.saveImageToPhotos
 import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -683,6 +689,7 @@ private fun ConversationPage(
         ConversationImagePreviewDialog(
             request = request,
             thumbnails = stateHolder.attachmentThumbnails,
+            loadOriginal = { attachment -> sessionId?.let { stateHolder.imageAttachmentData(it, attachment.attachmentId) } },
             onDismiss = { imagePreview = null }
         )
     }
@@ -1389,7 +1396,7 @@ private fun deepSearchActivityAt(cues: List<DeepSearchProgressCue>, cutoff: Doub
             }
             ConversationItemKind.ASSISTANT -> DeepSearchActivity.COMPOSING
             ConversationItemKind.STATUS -> DeepSearchActivity.WORKING
-            ConversationItemKind.USER, ConversationItemKind.SYSTEM -> activity
+            ConversationItemKind.USER, ConversationItemKind.GENERATED_IMAGES, ConversationItemKind.SYSTEM -> activity
         }
     }
     return activity
@@ -2651,6 +2658,9 @@ private fun ConversationRow(
             onRetryAttachment,
             onPreviewImages
         )
+        ConversationItemKind.GENERATED_IMAGES -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+            UserAttachmentPreview(item.images, thumbnails, attachmentStates, onRetryAttachment, onPreviewImages, stacked = false)
+        }
         ConversationItemKind.ASSISTANT -> AssistantMessage(item, thumbnails, attachmentStates, onRetryAttachment)
         ConversationItemKind.STATUS -> StatusRow(item)
         ConversationItemKind.SYSTEM -> SystemRow(item)
@@ -3043,7 +3053,8 @@ private fun UserAttachmentPreview(
     thumbnails: Map<String, ImageBitmap>,
     states: Map<String, AttachmentLoadState>,
     onRetry: (String) -> Unit,
-    onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit
+    onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit,
+    stacked: Boolean = true
 ) {
     if (attachments.isEmpty()) return
     BoxWithConstraints(Modifier.testTag("user-image-bubble")) {
@@ -3061,9 +3072,28 @@ private fun UserAttachmentPreview(
                 onRetry = onRetry,
                 onPreview = { onPreviewImages(attachments, 0) },
                 modifier = Modifier.size(previewSize.width, previewSize.height),
-                cornerRadius = 11.dp,
+                cornerRadius = 12.dp,
                 borderWidth = 0.dp
             )
+        } else if (!stacked) {
+            val columnWidth = minOf(180.dp, (maxWidth - 6.dp) / 2)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                attachments.chunked(2).forEachIndexed { rowIndex, row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEachIndexed { columnIndex, attachment ->
+                            val previewSize = userSingleAttachmentPreviewSize(attachment.width, attachment.height, columnWidth)
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                UserAttachmentImage(
+                                    attachment, thumbnails[attachment.attachmentId], states[attachment.attachmentId],
+                                    onRetry, { onPreviewImages(attachments, rowIndex * 2 + columnIndex) },
+                                    Modifier.size(previewSize.width, previewSize.height), 12.dp, 0.dp
+                                )
+                            }
+                        }
+                        if (row.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
         } else {
             val visibleAttachments = attachments.take(3)
             val cardOffset = 12.dp
@@ -3167,9 +3197,39 @@ internal fun imagePreviewInitialPage(imageCount: Int, requestedIndex: Int): Int 
 internal fun ConversationImagePreviewDialog(
     request: ConversationImagePreviewRequest,
     thumbnails: Map<String, ImageBitmap>,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    loadOriginal: suspend (GatewayImageAttachment) -> ByteArray? = { null }
 ) {
     if (request.attachments.isEmpty()) return
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
+    var saveTarget by remember { mutableStateOf<GatewayImageAttachment?>(null) }
+    var saveMenuPosition by remember { mutableStateOf<IntOffset?>(null) }
+    var permissionTarget by remember { mutableStateOf<GatewayImageAttachment?>(null) }
+    fun save(attachment: GatewayImageAttachment) {
+        if (saving) return
+        saving = true
+        scope.launch {
+            try {
+                val bytes = loadOriginal(attachment) ?: error(appText("图片尚未加载，请重试"))
+                saveImageToPhotos(context, bytes, attachment.mediaType)
+                Toast.makeText(context, appText("已保存到相册"), Toast.LENGTH_SHORT).show()
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Toast.makeText(context, appText("保存失败，请重试"), Toast.LENGTH_LONG).show()
+            } finally {
+                saving = false
+            }
+        }
+    }
+    val storagePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val attachment = permissionTarget
+        permissionTarget = null
+        if (granted && attachment != null) save(attachment)
+        else Toast.makeText(context, appText("请允许存储权限后重试"), Toast.LENGTH_LONG).show()
+    }
     val pagerState = rememberPagerState(
         initialPage = imagePreviewInitialPage(request.attachments.size, request.initialIndex),
         pageCount = request.attachments::size
@@ -3195,8 +3255,26 @@ internal fun ConversationImagePreviewDialog(
                     val attachment = request.attachments[page]
                     ZoomablePreviewImage(
                         image = thumbnails[attachment.attachmentId],
-                        contentDescription = attachment.name ?: appText("图片")
+                        contentDescription = attachment.name ?: appText("图片"),
+                        onLongPress = { position ->
+                            saveTarget = attachment
+                            saveMenuPosition = IntOffset(position.x.toInt(), position.y.toInt())
+                        }
                     )
+                }
+                DshPointMenu(point = saveMenuPosition, onDismiss = { saveMenuPosition = null; saveTarget = null }) {
+                    DshMenuItem(text = { Text(appText("保存到相册")) }, enabled = !saving, onClick = {
+                        val attachment = saveTarget
+                        saveTarget = null
+                        saveMenuPosition = null
+                        if (attachment != null) {
+                            if (Build.VERSION.SDK_INT <= 28 && ContextCompat.checkSelfPermission(context,
+                                    Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                                permissionTarget = attachment
+                                storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                            } else save(attachment)
+                        }
+                    })
                 }
                 Row(
                     modifier = Modifier
@@ -3226,13 +3304,17 @@ internal fun ConversationImagePreviewDialog(
 @Composable
 internal fun ZoomablePreviewImage(
     image: ImageBitmap?,
-    contentDescription: String
+    contentDescription: String,
+    onLongPress: ((Offset) -> Unit)? = null
 ) {
     var scale by remember(image) { mutableFloatStateOf(1f) }
     var translation by remember(image) { mutableStateOf(Offset.Zero) }
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .pointerInput(image, onLongPress) {
+                detectTapGestures(onLongPress = { onLongPress?.invoke(it) })
+            }
             .pointerInput(image) {
                 awaitEachGesture {
                     var event = awaitPointerEvent()

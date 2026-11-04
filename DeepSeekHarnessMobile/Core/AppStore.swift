@@ -730,7 +730,11 @@ final class AppStore: ObservableObject {
     /// Decoded bytes live outside the raw/history message models. A bounded
     /// memory layer fronts a seven-day, purgeable on-disk cache.
     private let imageAttachmentCache: ImageAttachmentCache
-    private var attachmentLoader = AttachmentLoader()
+    private var attachmentLoaders: [String: AttachmentLoader] = [:]
+    private var imageAttachmentRequests: [String: AttachmentLoadRequest] = [:]
+    private var imageAttachmentTokens: [String: UUID] = [:]
+    private var imageAttachmentErrors: [String: String] = [:]
+    private var imageLoadingGeneration = UUID()
     private var pendingModelsSessionId: String?
     private var isPendingGlobalModelsRequest = false
     private var pendingModelSelectionSessionId: String?
@@ -1026,8 +1030,19 @@ final class AppStore: ObservableObject {
             ?? normalized["command"]?.stringValue
             ?? (normalized.objectValue == nil ? rawText : nil)
     }
-    func imageData(for attachmentId: String) -> Data? {
-        imageAttachmentCache.data(for: attachmentId)
+    private func imageCacheKey(_ attachmentID: String, sessionID: String) -> String {
+        "\(gatewayLocalID):\(sessionID.count):\(sessionID):\(attachmentID)"
+    }
+    func imageData(for attachmentId: String, sessionID: String? = nil) -> Data? {
+        guard let sessionID = sessionID ?? selectedSessionId else { return nil }
+        return imageAttachmentCache.data(for: imageCacheKey(attachmentId, sessionID: sessionID))
+    }
+    func imageLoadError(for attachmentID: String, sessionID: String) -> String? {
+        imageAttachmentErrors[imageCacheKey(attachmentID, sessionID: sessionID)]
+    }
+    func retryImageAttachment(_ attachment: GatewayImageAttachment, sessionID: String) {
+        imageAttachmentErrors.removeValue(forKey: imageCacheKey(attachment.id, sessionID: sessionID))
+        enqueueImageAttachments([attachment], sessionId: sessionID)
     }
     func conversationTimeline(for sessionId: String) -> ConversationTimeline {
         if let timeline = conversationTimelines[sessionId] { return timeline }
@@ -1282,7 +1297,12 @@ final class AppStore: ObservableObject {
         fileUploads.clear()
         gateway.disconnect()
         pendingKMPEventDeliveries.removeAll()
-        attachmentLoader.reset()
+        attachmentLoaders.removeAll()
+        imageLoadingGeneration = UUID()
+        imageAttachmentRequests.removeAll()
+        imageAttachmentTokens.removeAll()
+        imageAttachmentErrors.removeAll()
+        imageAttachmentRequestEpochs.removeAll()
         localSearchTask?.cancel()
         remoteSearchTimeout?.cancel()
         cancelWorkspaceFileDownload()
@@ -3193,7 +3213,12 @@ final class AppStore: ObservableObject {
             }
             if workspaceFilePreviewNeedsConnection { workspaceFileOperationID = UUID() }
             applyWorkspaceFileTransition(kmpWorkspaceFileStore.reset(sessionId: selectedSessionId))
-            attachmentLoader.reset()
+            attachmentLoaders.removeAll()
+            imageLoadingGeneration = UUID()
+            imageAttachmentRequests.removeAll()
+            imageAttachmentTokens.removeAll()
+            imageAttachmentErrors.removeAll()
+            imageAttachmentRequestEpochs.removeAll()
             presentsNextConnectionFailureAsAlert = false
             let authentication = payload.authenticated
                 ? String(localized: "设备鉴权成功")
@@ -3961,6 +3986,12 @@ final class AppStore: ObservableObject {
             recordHistoryFailure([payload.code, payload.message].compactMap { $0 }.joined(separator: ": "), sessionID: sessionID)
         }
         let detail = [payload.code, payload.message].compactMap { $0 }.joined(separator: ": ")
+        if payload.requestType == "attachment", let sessionID = payload.sessionID {
+            // 旧协议错误没有附件 ID：结束该会话的待处理请求，避免永久占用下载槽。
+            let requests = imageAttachmentRequests.values.filter { $0.sessionID == sessionID }
+            for request in requests { finishImageRequest(request, error: detail) }
+            return
+        }
         if let requestType = payload.requestType,
            ["question-answer", "question-cancel"].contains(requestType) {
             if let rpcID = payload.rpcID {
@@ -4130,56 +4161,75 @@ final class AppStore: ObservableObject {
         enqueueImageAttachments(records.flatMap { $0.event.images ?? [] }, sessionId: sessionId)
     }
 
+    private func publishAttachmentChange(sessionID: String) {
+        if let items = renderedConversationItems[sessionID] { conversationTimeline(for: sessionID).publish(items) }
+        if isShowingSearchContext, let timeline = searchContextTimeline { timeline.publish(timeline.currentSnapshot.items) }
+    }
+
     private func enqueueImageAttachments(_ attachments: [GatewayImageAttachment], sessionId: String) {
-        guard supportsImages else { return }
+        guard supportsImages, !attachments.isEmpty else { return }
         let cache = imageAttachmentCache
+        let generation = imageLoadingGeneration
         Task { [weak self] in
-            for attachment in attachments { _ = await cache.loadData(for: attachment.id) }
-            guard let self, !self.evictedConversationSessionIDs.contains(sessionId) else { return }
-            if let items = self.renderedConversationItems[sessionId] { self.conversationTimeline(for: sessionId).publish(items) }
-            let requests = self.attachmentLoader.enqueue(attachments, sessionID: sessionId) {
-                cache.data(for: $0) != nil
+            guard let self else { return }
+            for attachment in attachments {
+                _ = await cache.loadData(for: self.imageCacheKey(attachment.id, sessionID: sessionId))
             }
+            guard self.imageLoadingGeneration == generation, !self.evictedConversationSessionIDs.contains(sessionId) else { return }
+            self.publishAttachmentChange(sessionID: sessionId)
+            let requests = self.attachmentLoaders[sessionId, default: AttachmentLoader()].enqueue(
+                attachments.filter { self.imageAttachmentErrors[self.imageCacheKey($0.id, sessionID: sessionId)] == nil },
+                sessionID: sessionId
+            ) { cache.data(for: self.imageCacheKey($0, sessionID: sessionId)) != nil }
             self.requestImageAttachments(requests)
         }
     }
 
     private func requestImageAttachments(_ requests: [AttachmentLoadRequest]) {
         for request in requests {
-            imageAttachmentRequestEpochs[request.attachment.id] = imageAttachmentCache.epoch
-            gateway.requestAttachment(
-                sessionId: request.sessionID,
-                attachmentId: request.attachment.id
-            )
+            let key = imageCacheKey(request.attachment.id, sessionID: request.sessionID)
+            let token = UUID()
+            imageAttachmentRequestEpochs[key] = imageAttachmentCache.epoch
+            imageAttachmentRequests[key] = request
+            imageAttachmentTokens[key] = token
+            gateway.requestAttachment(sessionId: request.sessionID, attachmentId: request.attachment.id)
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                guard let self, self.imageAttachmentTokens[key] == token else { return }
+                self.finishImageRequest(request, error: String(localized: "图片加载超时，请重试"))
+            }
         }
+    }
+
+    private func finishImageRequest(_ request: AttachmentLoadRequest, error: String? = nil) {
+        let key = imageCacheKey(request.attachment.id, sessionID: request.sessionID)
+        imageAttachmentRequests.removeValue(forKey: key)
+        imageAttachmentRequestEpochs.removeValue(forKey: key)
+        imageAttachmentTokens.removeValue(forKey: key)
+        imageAttachmentErrors[key] = error
+        let ready = attachmentLoaders[request.sessionID, default: AttachmentLoader()].complete(attachmentID: request.attachment.id) {
+            imageAttachmentCache.data(for: imageCacheKey($0, sessionID: request.sessionID)) != nil
+        }
+        publishAttachmentChange(sessionID: request.sessionID)
+        requestImageAttachments(ready)
     }
 
     private func handleImageAttachment(_ payload: GatewayAttachmentPayload) {
         let attachment = payload.attachment
-        let requestEpoch = imageAttachmentRequestEpochs.removeValue(forKey: attachment.id)
-        let nextRequests = attachmentLoader.complete(attachmentID: attachment.id) {
-            imageAttachmentCache.data(for: $0) != nil
-        }
-        defer { requestImageAttachments(nextRequests) }
-        guard let encoded = payload.base64Data,
-              let decoded = Data(base64Encoded: encoded),
-              decoded.count == attachment.bytes else {
-            notice(
-                String(localized: "notice.image.load-failed", defaultValue: "图片加载失败"),
-                String(localized: "image.invalid.base64", defaultValue: "附件 \(attachment.id.prefix(12))… 的 Base64 或字节数无效。"),
-                sessionId: payload.sessionID,
-                isError: true
-            )
+        guard let sessionID = payload.sessionID else { return }
+        let key = imageCacheKey(attachment.id, sessionID: sessionID)
+        guard let request = imageAttachmentRequests[key], let epoch = imageAttachmentRequestEpochs[key] else { return }
+        guard let encoded = payload.base64Data, encoded.count <= 48 * 1024 * 1024,
+              let decoded = Data(base64Encoded: encoded), decoded.count == attachment.bytes,
+              let dimensions = GatewayImageInspector.dimensions(of: decoded),
+              dimensions.width > 0, dimensions.height > 0,
+              dimensions.width <= 16_384, dimensions.height <= 16_384,
+              dimensions.width * dimensions.height <= 80_000_000, decoded.count <= 32 * 1024 * 1024 else {
+            finishImageRequest(request, error: String(localized: "图片数据无效或尺寸超过限制"))
             return
         }
-        guard let requestEpoch else { return }
-        imageAttachmentCache.store(decoded, for: attachment.id, expectedEpoch: requestEpoch)
-        if isShowingSearchContext, let timeline = searchContextTimeline { timeline.publish(timeline.currentSnapshot.items) }
-        guard let sessionId = payload.sessionID,
-              let items = renderedConversationItems[sessionId] else { return }
-        // The row revision also includes cache presence, so this publication
-        // replaces only rows whose attachment just became renderable.
-        conversationTimeline(for: sessionId).publish(items)
+        imageAttachmentCache.store(decoded, for: key, expectedEpoch: epoch)
+        finishImageRequest(request)
     }
 
     private func scheduleConversationProjection(for sessionId: String) {

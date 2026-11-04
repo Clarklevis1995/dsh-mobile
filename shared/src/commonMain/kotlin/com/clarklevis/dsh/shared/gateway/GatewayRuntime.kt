@@ -1485,7 +1485,7 @@ class GatewayRuntime(
         private const val DEFAULT_CONNECTION_ATTEMPT_TIMEOUT_MILLISECONDS = 15_000L
         private const val DEFAULT_FOREGROUND_PROBE_TIMEOUT_MILLISECONDS = 2_000L
         private const val FOREGROUND_RESUME_RETRY_WINDOW_MILLISECONDS = 5_000L
-        private const val MAXIMUM_ATTACHMENT_BYTES = 8 * 1_024 * 1_024
+        private const val MAXIMUM_ATTACHMENT_BYTES = 32 * 1_024 * 1_024
         private const val MAXIMUM_OUTGOING_IMAGE_COUNT = 4
         private const val MAXIMUM_OUTGOING_IMAGE_CHARACTERS = 4_893_356
         private const val MAXIMUM_OUTGOING_TOTAL_BASE64_CHARACTERS = 16L * 1_024 * 1_024

@@ -124,6 +124,15 @@ object GatewayWireDecoder {
                 )) else preset
             })))
         }
+        // 图片是可选增强：单张元数据损坏不能丢掉整条工具结果/助手回复。
+        val event = normalized["event"] as? JsonObject
+        if (event != null && "images" in event) {
+            val images = (event["images"] as? JsonArray).orEmpty().filter { value ->
+                runCatching { wireJson.decodeFromJsonElement<GatewayImageAttachment>(value) }
+                    .getOrNull()?.isValidToolImage() == true
+            }
+            normalized = JsonObject(normalized + ("event" to JsonObject(event + ("images" to JsonArray(images)))))
+        }
         return wireJson.decodeFromJsonElement(GatewayFrame.serializer(), normalized)
     }
 }
