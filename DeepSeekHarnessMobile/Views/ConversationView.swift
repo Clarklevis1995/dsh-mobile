@@ -1931,7 +1931,7 @@ struct ConversationView: View {
                         store.setPermission(option.value)
                     } label: {
                         Label(
-                            option.name,
+                            L10n.permissionName(for: option.value, fallback: option.name),
                             systemImage: option.value == currentPermission ? "checkmark" : permissionIcon(option.value)
                         )
                     }
@@ -2024,9 +2024,9 @@ struct ConversationView: View {
     }
 
     private func permissionTitle(_ value: String) -> String {
-        permissionOptions.first(where: { $0.value == value })?.name
+        let serverLabel = permissionOptions.first(where: { $0.value == value })?.name
             ?? store.permissionDefaultOptions.first(where: { $0.value == value })?.name
-            ?? L10n.permissionName(for: value)
+        return L10n.permissionName(for: value, fallback: serverLabel)
     }
     private func permissionIcon(_ value: String) -> String {
         switch value {
@@ -3099,10 +3099,11 @@ private struct ContentSizedCommandScrollView<Content: View>: View {
 }
 
 private struct ComposerHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 168
+    static var defaultValue: CGFloat = 0
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+        // 未提供测量值的分支不能覆盖输入区实际高度。
+        value = max(value, nextValue())
     }
 }
 
