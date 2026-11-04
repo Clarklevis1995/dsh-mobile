@@ -1840,8 +1840,11 @@ final class ConversationViewportLayoutTests: XCTestCase {
             showsCopyButton: true,
             imageData: { _ in nil }
         )
+        let measurementLayout = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)?.collectionViewLayout as? CollectionViewChatLayout
+        )
         let expectedResponseHeight = UIHostingController(rootView: responseView).sizeThatFits(
-            in: CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)
+            in: CGSize(width: measurementLayout.layoutFrame.width, height: CGFloat.greatestFiniteMagnitude)
         ).height
         let entries = [
             ConversationViewportEntry(
@@ -2170,6 +2173,7 @@ final class ConversationViewportLayoutTests: XCTestCase {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
+        window.frame = scene.coordinateSpace.bounds
         window.rootViewController = controller
         window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
@@ -2189,7 +2193,9 @@ final class ConversationViewportLayoutTests: XCTestCase {
             objective: "完成持久目标与权限显示回归验证", phase: "active"), roundsStarted: 1)
         store.gateway.onFrame?(frame)
         try await waitForLayout {
-            store.selectedGoalProjection?.goal != nil && list.contentInset.bottom > previousInset + 40
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
+            return store.selectedGoalProjection?.goal != nil && list.contentInset.bottom > previousInset + 40
         }
         controller.view.layoutIfNeeded()
         XCTAssertNotNil(store.selectedGoalProjection?.goal)
@@ -2230,6 +2236,8 @@ final class ConversationViewportLayoutTests: XCTestCase {
         window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
 
+        controller.view.layoutIfNeeded()
+        let timeline = ConversationTimeline()
         let rows = (0..<12).map { index in
             ConversationViewportEntry(
                 id: "bottom-inset-\(index)",
@@ -2237,15 +2245,22 @@ final class ConversationViewportLayoutTests: XCTestCase {
                 content: AnyView(Text("消息 \(index)").frame(height: 90))
             )
         }
-        controller.apply(entries: rows, revision: 1, bottomInset: 0, hasConversationContent: true)
-        try await Task.sleep(for: .milliseconds(180))
+        controller.configure(sessionID: rows[0].id, timeline: timeline, supplementalEntries: rows,
+                             makeEntries: { _ in [] }, bottomInset: 0)
         let list = try XCTUnwrap(firstDescendant(of: UICollectionView.self, in: controller.view))
+        try await waitForLayout {
+            list.layoutIfNeeded()
+            return list.numberOfSections > 0 && list.numberOfItems(inSection: 0) == rows.count
+                && list.contentSize.height > list.bounds.height
+                && abs(list.contentOffset.y - (list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)) <= 1
+        }
         list.layoutIfNeeded()
         let oldBottom = list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom
         XCTAssertEqual(list.contentOffset.y, oldBottom, accuracy: 1)
 
-        controller.apply(entries: rows, revision: 1, bottomInset: 120, hasConversationContent: true)
-        try await Task.sleep(for: .milliseconds(80))
+        controller.configure(sessionID: rows[0].id, timeline: timeline, supplementalEntries: rows,
+                             makeEntries: { _ in [] }, bottomInset: 120)
+        try await waitForLayout { list.contentInset.bottom == 120 }
         list.layoutIfNeeded()
         let newBottom = list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom
         XCTAssertGreaterThan(newBottom, oldBottom + 100)
@@ -2271,6 +2286,8 @@ final class ConversationViewportLayoutTests: XCTestCase {
         window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
 
+        controller.view.layoutIfNeeded()
+        let timeline = ConversationTimeline()
         let rows = (0..<18).map { index in
             ConversationViewportEntry(
                 id: "reading-inset-\(index)",
@@ -2278,9 +2295,15 @@ final class ConversationViewportLayoutTests: XCTestCase {
                 content: AnyView(Text("消息 \(index)").frame(height: 80))
             )
         }
-        controller.apply(entries: rows, revision: 1, bottomInset: 0, hasConversationContent: true)
-        try await Task.sleep(for: .milliseconds(180))
+        controller.configure(sessionID: rows[0].id, timeline: timeline, supplementalEntries: rows,
+                             makeEntries: { _ in [] }, bottomInset: 0)
         let list = try XCTUnwrap(firstDescendant(of: UICollectionView.self, in: controller.view))
+        try await waitForLayout {
+            list.layoutIfNeeded()
+            return list.numberOfSections > 0 && list.numberOfItems(inSection: 0) == rows.count
+                && list.contentSize.height > list.bounds.height
+                && abs(list.contentOffset.y - (list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)) <= 1
+        }
         controller.scrollViewWillBeginDragging(list)
         list.setContentOffset(CGPoint(x: 0, y: 260), animated: false)
         controller.scrollViewDidScroll(list)
@@ -2288,8 +2311,9 @@ final class ConversationViewportLayoutTests: XCTestCase {
         let readingOffset = list.contentOffset.y
         XCTAssertLessThan(readingOffset, list.contentSize.height - list.bounds.height - 28)
 
-        controller.apply(entries: rows, revision: 1, bottomInset: 120, hasConversationContent: true)
-        try await Task.sleep(for: .milliseconds(80))
+        controller.configure(sessionID: rows[0].id, timeline: timeline, supplementalEntries: rows,
+                             makeEntries: { _ in [] }, bottomInset: 120)
+        try await waitForLayout { list.contentInset.bottom == 120 }
         XCTAssertEqual(list.contentOffset.y, readingOffset, accuracy: 1,
                        "用户离开底部后，目标面板变化不能抢夺阅读位置")
     }
@@ -14680,7 +14704,6 @@ final class SentFileCardViewportTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         let preview = FileManager.default.temporaryDirectory.appendingPathComponent("sent-file-cards.png")
-        try image.pngData()?.write(to: preview)
         print("SENT_FILE_CARDS_PREVIEW=\(preview.path)")
         fixture.timeline.publish([item([], text: "仅文字的新消息")])
         try await wait { self.cards(fixture).isEmpty && self.texts(fixture).contains("仅文字的新消息") }

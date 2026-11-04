@@ -3099,10 +3099,11 @@ private struct ContentSizedCommandScrollView<Content: View>: View {
 }
 
 private struct ComposerHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 168
+    static var defaultValue: CGFloat = 0
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+        // 未提供测量值的分支不能覆盖输入区实际高度。
+        value = max(value, nextValue())
     }
 }
 
