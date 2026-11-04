@@ -8,7 +8,9 @@ plugins {
 
 android {
     namespace = "com.clarklevis.dsh.android"
-    compileSdk = 36
+    compileSdk {
+        version = release(37) { minorApiLevel = 0 }
+    }
 
     defaultConfig {
         applicationId = "com.clarklevis.dsh.android"

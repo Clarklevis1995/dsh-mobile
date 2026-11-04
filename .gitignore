@@ -33,6 +33,9 @@ captures/
 .externalNativeBuild/
 .cxx/
 
+# 本地生成产物与验证截图
+/output/
+
 # Local environment files
 .env
 .env.*

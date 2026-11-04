@@ -65,7 +65,6 @@ import com.clarklevis.dsh.android.AndroidWorkspaceLocalFile
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.facade.FileIconCatalog
-import com.clarklevis.dsh.shared.facade.WorkspaceCodePreviewSupport
 import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -128,37 +127,41 @@ internal fun WorkspaceFilePreviewHost(stateHolder: AndroidSharedStateHolder) {
     ) { contentPadding ->
         if (file == null) {
             WorkspaceFilePreviewLoadingContent(
-                stateHolder.conversationFileIsOpening, stateHolder.platformError,
-                contentPadding, stateHolder.workspaceFilePreviewProgress
+                stateHolder.conversationFileIsOpening,
+                stateHolder.platformError,
+                contentPadding,
+                stateHolder.workspaceFilePreviewProgress
             )
         } else {
             val external = { openWorkspaceFileExternally(context, stateHolder, file) }
-            when {
-                WorkspaceCodePreviewSupport.isSupported(file.name, file.mediaType) ->
-                    WorkspaceCodePreviewContent(file, external, contentPadding)
-                file.mediaType == "application/pdf" || file.name.endsWith(".pdf", true) ->
-                    WorkspacePdfPreviewContent(file, external, contentPadding)
-                else -> Column(
-                    Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    FileTypeIcon(FileIconCatalog.resolve(file.name, file.mediaType), Modifier.size(64.dp))
-                    Text(appText("此文件可使用其他应用打开或保存。"), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = external) { Text(appText("使用其他应用打开")) }
-                }
+            WorkspaceFilePreviewContent(file, external, contentPadding)
+        }
+    }
+}
+
+@Composable
+internal fun WorkspaceFilePreviewContent(file: AndroidWorkspaceLocalFile, onOpenExternal: () -> Unit, contentPadding: PaddingValues) {
+    androidx.compose.runtime.key(file.file) {
+        when (workspacePreviewKind(file.name, file.mediaType)) {
+            WorkspacePreviewKind.IMAGE -> WorkspaceImagePreviewContent(file, onOpenExternal, contentPadding)
+            WorkspacePreviewKind.VIDEO -> WorkspaceVideoPreviewContent(file, onOpenExternal, contentPadding)
+            WorkspacePreviewKind.CODE -> WorkspaceCodePreviewContent(file, onOpenExternal, contentPadding)
+            WorkspacePreviewKind.PDF -> WorkspacePdfPreviewContent(file, onOpenExternal, contentPadding)
+            WorkspacePreviewKind.EXTERNAL -> Column(
+                Modifier.fillMaxSize().padding(contentPadding).verticalScroll(rememberScrollState()).padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                FileTypeIcon(FileIconCatalog.resolve(file.name, file.mediaType), Modifier.size(64.dp))
+                Text(appText("此文件可使用其他应用打开或保存。"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = onOpenExternal) { Text(appText("使用其他应用打开")) }
             }
         }
     }
 }
 
 @Composable
-internal fun WorkspaceFilePreviewLoadingContent(
-    isLoading: Boolean,
-    error: String?,
-    contentPadding: PaddingValues,
-    progress: Float
-) {
+internal fun WorkspaceFilePreviewLoadingContent(isLoading: Boolean, error: String?, contentPadding: PaddingValues, progress: Float) {
     Column(
         Modifier.fillMaxSize().padding(contentPadding).padding(24.dp).testTag("workspace-preview-loading"),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -242,16 +245,24 @@ internal fun WorkspaceFilePreviewSheet(
                             expanded = showsMenu,
                             onDismissRequest = { showsMenu = false },
                             modifier = Modifier.width(232.dp).testTag("workspace-preview-menu"),
-                            offset = DpOffset(0.dp, 8.dp)) {
+                            offset = DpOffset(0.dp, 8.dp)
+                        ) {
                             DshMenuItem(
                                 text = { Text(appText("保存"), fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurface) },
                                 trailingIcon = {
-                                    Icon(painterResource(R.drawable.ic_save_to_files), appText("保存到文件"), Modifier.size(20.dp),
-                                        tint = MaterialTheme.colorScheme.onSurface)
+                                    Icon(
+                                        painterResource(R.drawable.ic_save_to_files),
+                                        appText("保存到文件"),
+                                        Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
                                 },
                                 contentPadding = PaddingValues(horizontal = 20.dp),
                                 enabled = onSave != null,
-                                onClick = { showsMenu = false; onSave?.invoke() }
+                                onClick = {
+                                    showsMenu = false
+                                    onSave?.invoke()
+                                }
                             )
                         }
                     }
@@ -274,11 +285,7 @@ internal fun WorkspacePdfPreviewSheet(
 }
 
 @Composable
-internal fun WorkspacePdfPreviewContent(
-    file: AndroidWorkspaceLocalFile,
-    onOpenExternal: () -> Unit,
-    contentPadding: PaddingValues
-) {
+internal fun WorkspacePdfPreviewContent(file: AndroidWorkspaceLocalFile, onOpenExternal: () -> Unit, contentPadding: PaddingValues) {
     var pageCount by remember(file.file) { mutableIntStateOf(0) }
     var error by remember(file.file) { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
@@ -306,8 +313,11 @@ internal fun WorkspacePdfPreviewContent(
     }
     Box(Modifier.fillMaxSize()) {
         when {
-            error != null -> Column(Modifier.fillMaxSize().padding(contentPadding).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            error != null -> Column(
+                Modifier.fillMaxSize().padding(contentPadding).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
                 Text(error.orEmpty())
                 TextButton(onClick = onOpenExternal) { Text(appText("使用系统应用打开")) }
             }
@@ -356,7 +366,8 @@ private fun WorkspacePdfPage(file: AndroidWorkspaceLocalFile, page: Int) {
                             val scale = min(1600f / pdfPage.width, 2200f / pdfPage.height).coerceAtMost(2f)
                             val bitmap = Bitmap.createBitmap(
                                 (pdfPage.width * scale).toInt().coerceAtLeast(1),
-                                (pdfPage.height * scale).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888
+                                (pdfPage.height * scale).toInt().coerceAtLeast(1),
+                                Bitmap.Config.ARGB_8888
                             )
                             bitmap.eraseColor(AndroidColor.WHITE)
                             pdfPage.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)

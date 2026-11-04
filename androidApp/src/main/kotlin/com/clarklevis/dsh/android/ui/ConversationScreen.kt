@@ -3224,7 +3224,7 @@ internal fun ConversationImagePreviewDialog(
 }
 
 @Composable
-private fun ZoomablePreviewImage(
+internal fun ZoomablePreviewImage(
     image: ImageBitmap?,
     contentDescription: String
 ) {

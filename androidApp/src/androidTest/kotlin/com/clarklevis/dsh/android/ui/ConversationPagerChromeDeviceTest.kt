@@ -159,7 +159,7 @@ class ConversationPagerChromeDeviceTest {
     }
 
     @Test
-    fun softEdgeProtectsTheWholeToolbarAndFadesBelowIt() {
+    fun softEdgeProtectsToolbarAndEndsBeforeTheFirstBubble() {
         compose.setContent {
             MaterialTheme {
                 val pager = rememberPagerState(pageCount = { 2 })
@@ -191,11 +191,14 @@ class ConversationPagerChromeDeviceTest {
             return row.max() - row.min()
         }
         val body = contrast(160)
-        val toolbarEdge = contrast(64)
-        val transition = contrast(104)
+        val toolbarEdge = contrast(63)
+        val transition = contrast(68)
         assertTrue("标题下缘不能透出清晰正文产生重影", toolbarEdge < body * 0.05f)
         assertTrue("状态栏后方也应充分遮挡正文", contrast(16) < body * 0.05f)
-        assertTrue("导航栏下方应保留较宽的渐隐区", transition > body * 0.10f && transition < body * 0.90f)
+        assertTrue("渐隐只能位于顶栏与首条消息之间的留白", transition > body * 0.10f && transition < body * 0.90f)
+        for (yDp in listOf(72, 80, 104)) {
+            assertEquals("首条气泡所在区域不能被蒙层覆盖", body, contrast(yDp), 0.01f)
+        }
         InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
             .resolve("conversation-soft-edge-contrast.png").outputStream().use {
                 image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
@@ -230,7 +233,7 @@ class ConversationPagerChromeDeviceTest {
         val blue = topSample()
         assertTrue("正文变化后玻璃应同步更新采样", blue.blue > blue.red + 0.005f)
         val root = compose.onNodeWithTag("glass-root").captureToImage().toPixelMap()
-        val body = root[root.width / 4, with(compose.density) { 160.dp.roundToPx() }]
+        val body = root[root.width / 4, with(compose.density) { 72.dp.roundToPx() }]
         assertTrue("玻璃不能改变下方正文的颜色", body.blue > 0.95f && body.red < 0.05f)
     }
 }
