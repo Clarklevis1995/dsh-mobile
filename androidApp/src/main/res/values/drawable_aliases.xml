@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 工作区菜单和其他页面统一使用同一份文件夹矢量。 -->
+    <item name="ic_workspace_folder" type="drawable">@drawable/ic_folder_outline</item>
+</resources>

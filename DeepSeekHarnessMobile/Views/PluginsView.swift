@@ -128,7 +128,7 @@ struct PluginsView: View {
                 }
             ))
             .labelsHidden()
-            .tint(pluginSwitchTint(for: colorScheme))
+            .tint(DSHColor.switchTint(for: colorScheme))
             .disabled(!store.gateway.state.isConnected || bundle.readOnlyReason != nil ||
                 store.pluginCatalog?.managementAvailable != true)
             .allowsHitTesting(store.pluginPendingName == nil)
@@ -163,7 +163,7 @@ private struct PluginDetailView: View {
                             }
                         ))
                         .labelsHidden()
-                        .tint(pluginSwitchTint(for: colorScheme))
+                        .tint(DSHColor.switchTint(for: colorScheme))
                         .disabled(!store.gateway.state.isConnected || bundle.readOnlyReason != nil)
                         .allowsHitTesting(store.pluginPendingName == nil)
                     }
@@ -222,7 +222,7 @@ private struct PluginDetailView: View {
                                     get: { entry.enabled },
                                     set: { store.setPluginEnabled(name: bundle.name, enabled: $0, entryID: entryID) }
                                 )).labelsHidden()
-                                    .tint(pluginSwitchTint(for: colorScheme))
+                                    .tint(DSHColor.switchTint(for: colorScheme))
                                     .disabled(!store.gateway.state.isConnected || entry.readOnlyReason != nil)
                                     .allowsHitTesting(store.pluginPendingName == nil)
                             }
@@ -298,12 +298,6 @@ private struct PluginComponentSheet: View {
             Text(value).appFont(.subheadline.monospaced()).textSelection(.enabled)
         }
     }
-}
-
-private func pluginSwitchTint(for scheme: ColorScheme) -> Color {
-    scheme == .dark
-        ? Color(red: 29.0 / 255, green: 68.0 / 255, blue: 127.0 / 255)
-        : Color(red: 36.0 / 255, green: 90.0 / 255, blue: 196.0 / 255)
 }
 
 private struct OfficialPluginDetailView: View {

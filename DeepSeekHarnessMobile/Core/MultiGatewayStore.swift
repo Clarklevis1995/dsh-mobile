@@ -18,6 +18,7 @@ final class MultiGatewayStore: ObservableObject {
     private var probes: [GatewayClient] = []
     @Published private(set) var isReady = false
     private var initializationTask: Task<Void, Never>?
+    private var coldLaunchConnectionTask: Task<Void, Never>?
     private static let profilesKey = "gateway.profiles.v1"
 
     init(defaults: UserDefaults = .standard, credentials: (any GatewayCredentialStoring)? = nil) {
@@ -62,6 +63,11 @@ final class MultiGatewayStore: ObservableObject {
             }
             if let profile = profiles.first(where: { $0.id == defaults.string(forKey: "gateway.activeID") }) ?? profiles.first {
                 activate(profile, connect: false)
+                // 恢复连接由主机容器持有，不依赖导航页面 task 是否挂载或被取消。
+                let store = activeStore
+                coldLaunchConnectionTask = Task { [weak store] in
+                    await store?.connectOnColdLaunchIfPaired()
+                }
             } else {
                 installPairingHandler(on: activeStore)
             }
@@ -146,6 +152,8 @@ final class MultiGatewayStore: ObservableObject {
     }
 
     private func activate(_ profile: GatewayProfile, connect: Bool) {
+        coldLaunchConnectionTask?.cancel()
+        coldLaunchConnectionTask = nil
         let style = activeStore.interfaceStyle
         activeStore.deactivateGateway()
         activeStore = makeStore(profile)
@@ -254,6 +262,8 @@ final class MultiGatewayStore: ObservableObject {
         cancelPairing()
         stopProbes()
         if activeID.map(knownIDs.contains) == true {
+            coldLaunchConnectionTask?.cancel()
+            coldLaunchConnectionTask = nil
             let style = activeStore.interfaceStyle
             observation = nil
             activeStore.deactivateGateway()

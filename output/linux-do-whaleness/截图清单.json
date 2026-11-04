@@ -1,0 +1,192 @@
+[
+  {
+    "key": "home",
+    "caption": "工作区与最近会话",
+    "source": "website/assets/home.webp",
+    "local": "screenshots/01-home.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/website/assets/home.webp",
+    "width": 804,
+    "height": 1748,
+    "sha256": "4905bc257398c91caf3a740b471678a9babaebff38ed357e70dc682d70edb842"
+  },
+  {
+    "key": "conversation",
+    "caption": "原生对话与任务执行",
+    "source": "website/assets/conversation.webp",
+    "local": "screenshots/02-conversation.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/website/assets/conversation.webp",
+    "width": 804,
+    "height": 1748,
+    "sha256": "2dd611065dbe340847d7f4fca029defe0f4a8629777830608310257bcdfbfe9c"
+  },
+  {
+    "key": "trajectory",
+    "caption": "Agent 执行轨迹",
+    "source": "website/assets/trajectory.webp",
+    "local": "screenshots/03-trajectory.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/website/assets/trajectory.webp",
+    "width": 804,
+    "height": 1748,
+    "sha256": "ed6642459f50fa3728ef59fcb3b7553ac5ebdf1e8a3c437204532ecb2cbdf4f8"
+  },
+  {
+    "key": "trajectory-detail",
+    "caption": "工具调用参数与结果详情",
+    "source": "Docs/images/screenshots/trajectory-detail-light.png",
+    "local": "screenshots/04-trajectory-detail.png",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/trajectory-detail-light.png",
+    "width": 1206,
+    "height": 2622,
+    "sha256": "3e94603c5b05e6722b41ff92430a134bb8d4b133a235f9b1952ea14df5418333"
+  },
+  {
+    "key": "team-members",
+    "caption": "切换 Lead 与子 Agent",
+    "source": "Docs/images/screenshots/2026-10-23/team-members.webp",
+    "local": "screenshots/05-team-members.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10-23/team-members.webp",
+    "width": 1206,
+    "height": 2622,
+    "sha256": "5fa567682a90a1e7f52a0f974ae704aac72e35d201ba246d5d5e060cc646f023"
+  },
+  {
+    "key": "team-tasks",
+    "caption": "团队共享任务看板",
+    "source": "Docs/images/screenshots/2026-10-23/team-tasks.webp",
+    "local": "screenshots/06-team-tasks.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10-23/team-tasks.webp",
+    "width": 1206,
+    "height": 2622,
+    "sha256": "98db492dae617a4b53839da20871be7432de471e9cfef564d386e128d1adb390"
+  },
+  {
+    "key": "file-upload",
+    "caption": "从手机添加文件附件",
+    "source": "Docs/images/screenshots/2026-10-23/file-upload.webp",
+    "local": "screenshots/07-file-upload.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10-23/file-upload.webp",
+    "width": 1206,
+    "height": 2622,
+    "sha256": "c9a2f73d10935e02a757f1fcd28c9d43ecdfb3cda11e23838256380a91c6a64f"
+  },
+  {
+    "key": "conversation-files",
+    "caption": "会话中的生成文件",
+    "source": "Docs/images/screenshots/2026-10-23/conversation-files.webp",
+    "local": "screenshots/08-conversation-files.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10-23/conversation-files.webp",
+    "width": 1206,
+    "height": 2622,
+    "sha256": "689b1c1332102dfa9d72ad6cc9b175b767124fdf76b1e9938718bf4a9a9e3d16"
+  },
+  {
+    "key": "pdf-preview",
+    "caption": "直接预览 PDF",
+    "source": "Docs/images/screenshots/2026-10/pdf-preview.png",
+    "local": "screenshots/09-pdf-preview.png",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10/pdf-preview.png",
+    "width": 1206,
+    "height": 2622,
+    "sha256": "e9bea8374a33be84e41bc4e8f9b24b7b4be6d6db48f87a53efdeeca354568cf2"
+  },
+  {
+    "key": "voice-input",
+    "caption": "按住说话输入",
+    "source": "Docs/images/screenshots/2026-10-23/voice-input.webp",
+    "local": "screenshots/10-voice-input.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10-23/voice-input.webp",
+    "width": 1206,
+    "height": 2622,
+    "sha256": "e05258aa067405a0b4357432b86267a59b289a789b4181f1500f4a21cc620aa5"
+  },
+  {
+    "key": "text-selection",
+    "caption": "独立文字选择页面",
+    "source": "Docs/images/screenshots/2026-10-23/text-selection.webp",
+    "local": "screenshots/11-text-selection.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10-23/text-selection.webp",
+    "width": 1206,
+    "height": 2622,
+    "sha256": "53523b915de955e51042d01013766f4052a4931b6e01a7924869f61f0172cf85"
+  },
+  {
+    "key": "plugins",
+    "caption": "主机插件管理",
+    "source": "website/assets/plugins.webp",
+    "local": "screenshots/12-plugins.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/website/assets/plugins.webp",
+    "width": 804,
+    "height": 1748,
+    "sha256": "541a24184dd505d867d242af03826bbcaf73c0e8c6d549165a004850742303f5"
+  },
+  {
+    "key": "scheduled-tasks",
+    "caption": "定时任务与执行详情",
+    "source": "website/assets/tasks.webp",
+    "local": "screenshots/13-scheduled-tasks.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/website/assets/tasks.webp",
+    "width": 804,
+    "height": 1748,
+    "sha256": "d112d37516b2ebb3f86e5c86919229596f146f8a797843e74cc02fe9322e7a0a"
+  },
+  {
+    "key": "presets",
+    "caption": "Agent 预设",
+    "source": "website/assets/presets.webp",
+    "local": "screenshots/14-presets.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/website/assets/presets.webp",
+    "width": 804,
+    "height": 1748,
+    "sha256": "d3e20cb6b426fef10f65d76629d542dfb8db34760403fc93021c7173b8ab99ae"
+  },
+  {
+    "key": "storage",
+    "caption": "本地缓存分类管理",
+    "source": "Docs/images/screenshots/2026-10-23/storage.webp",
+    "local": "screenshots/15-storage.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10-23/storage.webp",
+    "width": 1206,
+    "height": 2622,
+    "sha256": "c731d40f63f9f1d2fe8f4e578aa3c5bb57f4659830aab3488cc19ac5929a0986"
+  },
+  {
+    "key": "ipad-home",
+    "caption": "iPad 工作区与会话分栏",
+    "source": "Docs/images/screenshots/2026-10/ipad-home.png",
+    "local": "screenshots/16-ipad-home.png",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10/ipad-home.png",
+    "width": 2752,
+    "height": 2064,
+    "sha256": "2437fadceec6f62d3cccd9a45c22132f86fdd182abbd8a8431912129a23671a8"
+  },
+  {
+    "key": "wide-home",
+    "caption": "宽屏首页布局",
+    "source": "Docs/images/screenshots/2026-10-26-duo/landscape-home.webp",
+    "local": "screenshots/17-wide-home.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10-26-duo/landscape-home.webp",
+    "width": 1920,
+    "height": 1351,
+    "sha256": "0b94d2b0eeb5a0035a793902e29a204e3fdca23310299fe2d14e86c11f967ffa"
+  },
+  {
+    "key": "wide-conversation",
+    "caption": "宽屏对话布局",
+    "source": "Docs/images/screenshots/2026-10-26-duo/landscape-conversation.webp",
+    "local": "screenshots/18-wide-conversation.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/Docs/images/screenshots/2026-10-26-duo/landscape-conversation.webp",
+    "width": 1920,
+    "height": 1351,
+    "sha256": "1b09eada2f748bbceeb5b408a736470a72f4d16b8fe0379be0b17602c0f8b2c9"
+  },
+  {
+    "key": "gateway",
+    "caption": "桌面端移动设备网关设置",
+    "source": "website/assets/setup/gateway.webp",
+    "local": "screenshots/19-gateway.webp",
+    "url": "https://raw.githubusercontent.com/Clarklevis1995/dsh-mobile/497947559a29eb6108efa34b6aced30822beafdb/website/assets/setup/gateway.webp",
+    "width": 1600,
+    "height": 1115,
+    "sha256": "89da74c81303183ed43a6e28fc69235a088061cf59c80499c0269ea6b80b47ba"
+  }
+]

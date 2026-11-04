@@ -45,6 +45,7 @@ internal class AndroidGatewayProjection(
     ),
     private val conversationStore: SharedConversationStore = SharedConversationStore(mobileConversationLabels()),
     private val onResubscribe: (String) -> Unit = {},
+    private val nowMonotonicSeconds: () -> Double = { System.nanoTime() / 1e9 },
     private val onHistoryPageRequested: (sessionId: String, beforeSequence: Int?, historyFormatVersion: Int?) -> Unit = { _, _, _ -> }
 ) {
     private data class SearchFragment(
@@ -77,6 +78,7 @@ internal class AndroidGatewayProjection(
     private val conversationItems = mutableMapOf<String, List<ConversationItem>>()
     private val conversationLastSequences = mutableMapOf<String, Int>()
     private var controlSnapshot = mobileStore.snapshot()
+    private val turnTiming = com.clarklevis.dsh.shared.facade.SharedTurnTimingStore()
     private var lastFrameKind: String? = null
     private var queueSessionIds = emptySet<String>()
     private var lastError: String? = null
@@ -97,6 +99,7 @@ internal class AndroidGatewayProjection(
             preview?.let { request.rpcId to it }
         }.toMap()
         val normal = controlSnapshot.copy(
+            activeTurnTiming = controlSnapshot.selectedSessionId?.let(turnTiming::snapshot),
             selectedHistoryError = controlSnapshot.selectedSessionId?.let(historyErrors::get),
             conversation = controlSnapshot.selectedSessionId?.let(conversationItems::get).orEmpty(),
             approvalCommandPreviews = commandPreviews,
@@ -410,6 +413,7 @@ internal class AndroidGatewayProjection(
             if (!result.accepted) lastError = result.errorMessage
         }
         if (frame.kind == "hello") {
+            (frame.at ?: frame.time)?.let { turnTiming.observeServerTime(it, nowMonotonicSeconds()) }
             cancelSnapshotWait()
             usesAssistantStream = "assistant-stream-v1" in frame.capabilities.orEmpty()
             helloReceived = true
@@ -421,6 +425,7 @@ internal class AndroidGatewayProjection(
         val update = assistantStream.accept(frame)
         if (update.accepted) lastError = null
         update.invalidatedSessionIds.forEach {
+            turnTiming.clear(it)
             onCacheInvalidated(it)
             historyStore.clearSession(it)
             conversationStore.clearSession(it)
@@ -447,6 +452,9 @@ internal class AndroidGatewayProjection(
             historyCancelled(id)
         }
         if (!update.accepted) return snapshot()
+        if (frame.kind == "assistant-stream") {
+            frame.frame?.get("time")?.doubleValue?.let { turnTiming.observeServerTime(it, nowMonotonicSeconds()) }
+        }
         val previouslyVisible = controlSnapshot.sessions.map { it.id }.toSet()
         when (frame.kind) {
             "session-snapshot" -> if (id != null) {
@@ -455,6 +463,7 @@ internal class AndroidGatewayProjection(
                 historyStore.clearSession(id)
                 conversationStore.clearSession(id)
                 val records = frame.events.orEmpty().map { it.normalized(id) }
+                updateTurnTimingHistory(id, records)
                 historyStore.installSnapshot(id, adapterJson.encodeToString(records), frame.hasMore == true, frame.nextBeforeSeq)
                 historyHasMore[id] = frame.hasMore == true
                 conversationStore.replaceSession(id, adapterJson.encodeToString(records))
@@ -466,6 +475,10 @@ internal class AndroidGatewayProjection(
             "hello" -> if (usesAssistantStream) controlSnapshot.selectedSessionId?.let(::awaitSnapshot)
             "paired", "attachment" -> Unit
             else -> {
+                if (frame.kind == "sent" && id != null &&
+                    controlSnapshot.sessions.none { it.id == id && it.isRunning } && turnTiming.snapshot(id) == null) {
+                    turnTiming.awaitStart(id, historyLastSequences[id] ?: -1)
+                }
                 controlSnapshot = mobileStore.acceptFrame(rawJson)
                 if (frame.kind == "sent" && frame.sessionId == controlSnapshot.selectedSessionId) assistantStream.selectSession(controlSnapshot.selectedSessionId)
             }
@@ -593,6 +606,7 @@ internal class AndroidGatewayProjection(
             return
         }
         historyHasMore[sessionId] = frame.hasMore == true
+        updateTurnTimingHistory(sessionId, historyEvents[sessionId].orEmpty())
         if (assistantStream.activeAttemptId() == null) {
             controlSnapshot = mobileStore.reconcileHistory(sessionId, historyEvents[sessionId].orEmpty())
         }
@@ -611,6 +625,7 @@ internal class AndroidGatewayProjection(
             lastError = "live-event-invalid"
             return
         }
+        turnTiming.receiveLiveEvent(sessionId, sequence, timestamp, gatewayEvent.type, nowMonotonicSeconds())
         // ConversationStore 已经增量处理 token。旧 MobileStore 会为每个 chunk 复制全部
         // SessionEvent 并从头重建 Conversation；长回复因此越到后面越慢。chunk 不会更新
         // Session 列表元数据，禁止再进入这条兼容性全量投影路径。
@@ -628,6 +643,15 @@ internal class AndroidGatewayProjection(
         if (!conversationResult.accepted) {
             conversationStore.replaceTypedSession(sessionId, historyEvents[sessionId].orEmpty())
         }
+    }
+
+    private fun updateTurnTimingHistory(sessionId: String, records: List<SessionEvent>) {
+        turnTiming.receiveHistory(sessionId, records.mapNotNull { record ->
+            if (record.event.type !in setOf("turn/start", "turn/end")) return@mapNotNull null
+            com.clarklevis.dsh.shared.facade.SharedTurnBoundary(
+                record.seq, record.time, record.event.type == "turn/start"
+            )
+        })
     }
 
     private fun acceptHistoryMviEvent(event: SharedMviEvent) {

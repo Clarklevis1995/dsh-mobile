@@ -26,6 +26,24 @@ class R2UpdateManifestTest {
         assertTrue(requireNotNull(release.fallbackUrl).startsWith("https://github.com/"))
     }
 
+    @Test fun selectsPreferredCompatibleAbiAndUsesItsOwnChecksum() {
+        val variant = """"abiApks":{"arm64-v8a":{"size":123,"sha256":"${"b".repeat(64)}",
+            "downloadUrl":"https://download.whaleness.cc/arm64.apk"},
+            "armeabi-v7a":{"size":456,"sha256":"${"c".repeat(64)}",
+            "downloadUrl":"https://download.whaleness.cc/arm.apk"}},"""
+        val source = manifest().replace("\"schemaVersion\":1,", "\"schemaVersion\":1,$variant")
+        val release = requireNotNull(parseUpdateManifest(source, "com.clarklevis.dsh.android", "1.7.3", 21,
+            listOf("arm64-v8a", "armeabi-v7a")))
+        assertEquals("sha256:${"b".repeat(64)}", release.digest)
+        assertNull(release.fallbackUrl)
+        assertEquals("sha256:${"a".repeat(64)}", requireNotNull(parse(source)).digest)
+        assertEquals("sha256:${"a".repeat(64)}", requireNotNull(parseUpdateManifest(source,
+            "com.clarklevis.dsh.android", "1.7.3", 21, listOf("unknown"))).digest)
+        assertTrue(runCatching { parseUpdateManifest(source.replace("https://download.whaleness.cc/arm64.apk",
+            "https://evil.example/arm64.apk"), "com.clarklevis.dsh.android", "1.7.3", 21,
+            listOf("arm64-v8a")) }.isFailure)
+    }
+
     @Test fun handlesSameVersionRebuildAndDoesNotDowngrade() {
         assertNotNull(parse(manifest(), "1.7.4", 21))
         assertNull(parse(manifest(), "1.7.4", 22))

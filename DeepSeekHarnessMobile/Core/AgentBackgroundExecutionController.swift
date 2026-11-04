@@ -14,10 +14,10 @@ extension UIApplication: BackgroundTaskApplication {}
 
 @MainActor
 final class AgentBackgroundExecutionController {
-    private static let logger = Logger(subsystem: "ai.dsh.mobile.ios", category: "agent-background")
+    private static let logger = LocalLogger(subsystem: "ai.dsh.mobile.ios", category: "agent-background")
 
     private func traceBackground(_ event: String) {
-        Self.logger.notice("[AgentBackground] event=\(event, privacy: .public) background=\(self.applicationIsInBackground) turns=\(self.outstandingTurns) questions=\(self.questionAllowanceSessionIDs.count) queued=\(self.queuedSessionIDs.count) idleAllowance=\(self.holdsIdleBackgroundAllowance) hasTask=\(self.taskIdentifier != .invalid) longKeepAlive=\(self.longRunningKeepAlive?.isKeepingAlive == true)")
+        Self.logger.notice("[AgentBackground] event=\(event) background=\(self.applicationIsInBackground) turns=\(self.outstandingTurns) questions=\(self.questionAllowanceSessionIDs.count) queued=\(self.queuedSessionIDs.count) idleAllowance=\(self.holdsIdleBackgroundAllowance) hasTask=\(self.taskIdentifier != .invalid) longKeepAlive=\(self.longRunningKeepAlive?.isKeepingAlive == true)")
     }
 
     private let application: BackgroundTaskApplication

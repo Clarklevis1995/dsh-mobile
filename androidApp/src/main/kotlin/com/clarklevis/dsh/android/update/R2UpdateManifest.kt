@@ -16,7 +16,8 @@ internal fun parseUpdateManifest(
     source: String,
     packageName: String,
     installedVersion: String,
-    installedBuild: Long
+    installedBuild: Long,
+    supportedAbis: List<String> = emptyList()
 ): AndroidRelease? {
     val manifest = Json.parseToJsonElement(source).jsonObject
     require(manifest.getValue("schemaVersion").jsonPrimitive.int == 1) { appText("不支持的更新配置格式") }
@@ -24,13 +25,15 @@ internal fun parseUpdateManifest(
     val version = manifest.getValue("version").jsonPrimitive.content
     require(Regex("\\d+\\.\\d+\\.\\d+").matches(version)) { appText("无效的更新版本") }
     val build = manifest.getValue("versionCode").jsonPrimitive.long
-    val size = manifest.getValue("size").jsonPrimitive.long
-    val hash = manifest.getValue("sha256").jsonPrimitive.content.lowercase()
+    val variants = manifest["abiApks"]?.jsonObject
+    val selected = supportedAbis.firstNotNullOfOrNull { variants?.get(it)?.jsonObject } ?: manifest
+    val size = selected.getValue("size").jsonPrimitive.long
+    val hash = selected.getValue("sha256").jsonPrimitive.content.lowercase()
     require(build > 0 && size > 0 && Regex("[0-9a-f]{64}").matches(hash)) { appText("无效的安装包校验信息") }
-    val url = manifest.getValue("downloadUrl").jsonPrimitive.content.toHttpUrl()
+    val url = selected.getValue("downloadUrl").jsonPrimitive.content.toHttpUrl()
     require(url.scheme == "https" && url.host == "download.whaleness.cc" &&
         url.username.isEmpty() && url.password.isEmpty() && url.encodedPath.endsWith(".apk")) { appText("不可信的 APK 下载地址") }
-    val fallback = manifest["githubDownloadUrl"]?.jsonPrimitive?.contentOrNull?.toHttpUrl()
+    val fallback = selected["githubDownloadUrl"]?.jsonPrimitive?.contentOrNull?.toHttpUrl()
     require(fallback == null || (fallback.scheme == "https" && fallback.host == "github.com" &&
         fallback.username.isEmpty() && fallback.password.isEmpty() &&
         fallback.encodedPath.startsWith("/Clarklevis1995/dsh-mobile/releases/download/v$version/") &&

@@ -1,4 +1,6 @@
 import XCTest
+import SwiftUI
+import UIKit
 @testable import DeepSeekHarnessMobile
 
 /// 覆盖折叠屏适配涉及的纯逻辑：
@@ -6,6 +8,33 @@ import XCTest
 /// - `HarnessBackgroundStyle.resolve`：展开后复用平板背景
 /// - `SessionGroups.group`：会话页侧栏的工作区分组
 final class AdaptiveLayoutTests: XCTestCase {
+
+    @MainActor
+    func testConversationViewportFillsPageWhileMessagesKeepReadingWidth() async throws {
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in }, onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {}, onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        let list = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? UICollectionView }.first)
+        // 同一视口从手机宽度切到平板再切回，验证尺寸变化不会留下旧的正文留白。
+        for (revision, width) in [CGFloat(390), 1366, 844, 390].enumerated() {
+            controller.view.frame = CGRect(x: 0, y: 0, width: width, height: 500)
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
+            controller.apply(entries: [
+                ConversationViewportEntry(id: "layout", revision: revision,
+                    content: AnyView(Text("消息正文").frame(height: 80)))
+            ], revision: revision, bottomInset: 0, hasConversationContent: true)
+            try await Task.sleep(for: .milliseconds(100))
+            list.layoutIfNeeded()
+
+            XCTAssertEqual(list.frame, controller.view.bounds, "系统毛玻璃所依附的视口必须铺满页面")
+            let frame = try XCTUnwrap(list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))).frame
+            XCTAssertEqual(frame.width, min(width, 1040) - 40, accuracy: 0.5)
+            XCTAssertEqual(frame.midX, width / 2, accuracy: 0.5)
+        }
+    }
 
     // MARK: - workspaceUsesColumns
 

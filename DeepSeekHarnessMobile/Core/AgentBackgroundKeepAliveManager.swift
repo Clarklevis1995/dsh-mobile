@@ -19,10 +19,10 @@ protocol AgentLongRunningKeepAlive: AnyObject {
 /// 获得执行时间的机会。所有资源只在确有 Agent 工作时创建，并在工作结束后释放。
 @MainActor
 final class AgentBackgroundKeepAliveManager: NSObject, AgentLongRunningKeepAlive {
-    private static let logger = Logger(subsystem: "ai.dsh.mobile.ios", category: "agent-keepalive")
+    private static let logger = LocalLogger(subsystem: "ai.dsh.mobile.ios", category: "agent-keepalive")
 
     private func traceKeepAlive(_ event: String) {
-        Self.logger.notice("[AgentKeepAlive] event=\(event, privacy: .public) background=\(self.applicationIsInBackground) workActive=\(self.agentWorkIsActive) location=\(self.isUpdatingLocation) audio=\(self.silentAudioIsRunning) authorization=\(self.locationManager.authorizationStatus.rawValue) liveActivitiesEnabled=\(ActivityAuthorizationInfo().areActivitiesEnabled)")
+        Self.logger.notice("[AgentKeepAlive] event=\(event) background=\(self.applicationIsInBackground) workActive=\(self.agentWorkIsActive) location=\(self.isUpdatingLocation) audio=\(self.silentAudioIsRunning) authorization=\(self.locationManager.authorizationStatus.rawValue) liveActivitiesEnabled=\(ActivityAuthorizationInfo().areActivitiesEnabled)")
     }
 
     static let shared = AgentBackgroundKeepAliveManager()
@@ -295,7 +295,7 @@ final class AgentBackgroundKeepAliveManager: NSObject, AgentLongRunningKeepAlive
         } catch {
             stopSilentAudio()
 #if DEBUG
-            print("[AgentKeepAlive] 无法启动静音音频：\(error.localizedDescription)")
+            appPrint("[AgentKeepAlive] 无法启动静音音频：\(error.localizedDescription)")
 #endif
         }
     }
@@ -411,7 +411,7 @@ extension AgentBackgroundKeepAliveManager: @preconcurrency CLLocationManagerDele
 #if DEBUG
         let locationError = error as? CLError
         if locationError?.code != .locationUnknown {
-            print("[AgentKeepAlive] 后台定位失败：\(error.localizedDescription)")
+            appPrint("[AgentKeepAlive] 后台定位失败：\(error.localizedDescription)")
         }
 #endif
     }

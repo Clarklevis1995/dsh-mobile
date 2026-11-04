@@ -105,9 +105,11 @@ internal fun ConversationPagerChrome(
                     page(index, topInset)
                 }
             }
+            val glassProtectedHeight = topInset + 8.dp
+            val glassFadeHeight = 56.dp
             Box(
-                Modifier.fillMaxWidth().height(topInset + 32.dp)
-                    .conversationTopGlass(backdrop)
+                Modifier.fillMaxWidth().height(glassProtectedHeight + glassFadeHeight)
+                    .conversationTopGlass(backdrop, glassProtectedHeight, glassFadeHeight)
                     .semantics { hideFromAccessibility() }
                     .testTag("conversation-top-glass")
             )

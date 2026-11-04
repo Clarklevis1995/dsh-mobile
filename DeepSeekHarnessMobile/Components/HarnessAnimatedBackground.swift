@@ -24,29 +24,28 @@ struct HarnessAnimatedBackground: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
+    private var usesStaticBackground: Bool {
+        if #available(iOS 26.0, *) {
+            return reduceMotion
+        }
+        return true
+    }
+
     private var pausesAnimation: Bool {
-        animationPaused || reduceMotion || scenePhase != .active
+        animationPaused || usesStaticBackground || scenePhase != .active
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: pausesAnimation)) { timeline in
-            let elapsed = reduceMotion
-                ? 0
-                : animationClock.elapsed(at: timeline.date).truncatingRemainder(dividingBy: 4_096)
-
-            ZStack {
-                HarnessFluidLayer(
-                    time: elapsed, style: style, prefersOpenLightArcs: prefersOpenLightArcs
-                )
-                HarnessTechnicalGrid(style: style)
-                HarnessWhaleField(time: elapsed, isStatic: reduceMotion, style: style)
-                    .blendMode(.screen)
-
-                LinearGradient(
-                    colors: [.clear, DSHColor.navy.opacity(0.12), Color.black.opacity(0.58)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+        Group {
+            if usesStaticBackground {
+                // 低版本保留静态粒子与构图，不创建逐帧更新时间线。
+                backgroundLayers(time: 0, isStatic: true)
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: pausesAnimation)) { timeline in
+                    let elapsed = animationClock.elapsed(at: timeline.date)
+                        .truncatingRemainder(dividingBy: 4_096)
+                    backgroundLayers(time: elapsed, isStatic: false)
+                }
             }
         }
         .onAppear { animationClock.setPaused(pausesAnimation, at: Date()) }
@@ -56,6 +55,23 @@ struct HarnessAnimatedBackground: View {
         .clipped()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    private func backgroundLayers(time: TimeInterval, isStatic: Bool) -> some View {
+        ZStack {
+            HarnessFluidLayer(
+                time: time, style: style, prefersOpenLightArcs: prefersOpenLightArcs
+            )
+            HarnessTechnicalGrid(style: style)
+            HarnessWhaleField(time: time, isStatic: isStatic, style: style)
+                .blendMode(.screen)
+
+            LinearGradient(
+                colors: [.clear, DSHColor.navy.opacity(0.12), Color.black.opacity(0.58)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
     }
 }
 

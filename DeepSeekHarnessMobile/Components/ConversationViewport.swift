@@ -295,7 +295,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     var onApproachingTop: () -> Void
     let historyPresentationConsumerID = UUID()
     var historyReadingWindowSize: CGSize {
-        CGSize(width: max(120, collectionView.bounds.width - 40),
+        CGSize(width: max(120, chatLayout.layoutFrame.width),
                height: max(160, collectionView.bounds.height - collectionView.adjustedContentInset.top
                    - collectionView.adjustedContentInset.bottom))
     }
@@ -308,6 +308,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         layout.delegate = self
         layout.settings.estimatedItemSize = CGSize(width: 390, height: 80)
         layout.settings.interItemSpacing = 0
+        layout.settings.additionalInsets = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 20)
         layout.keepContentOffsetAtBottomOnBatchUpdates = false
         return layout
     }()
@@ -1005,7 +1006,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                 cell.onOpenImagePreview = { [weak self] items, initialIndex in
                     self?.presentImagePreview(items, initialIndex: initialIndex)
                 }
-                cell.apply(userMessage, containerWidth: collectionView.bounds.width)
+                cell.apply(userMessage, containerWidth: self.chatLayout.layoutFrame.width)
                 return cell
             }
             guard let cell = collectionView.dequeueReusableCell(
@@ -1146,6 +1147,15 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         guard wasPinnedToBottom else { return }
         collectionView.layoutIfNeeded()
         followStreamingTail()
+    }
+
+    override func viewWillLayoutSubviews() {
+        // 只收窄消息布局，滚动视口和系统软边缘始终覆盖整个页面宽度。
+        let inset = 20 + AdaptiveLayout.horizontalInset(width: view.bounds.width, maximumWidth: AdaptiveLayout.pageWidth)
+        if chatLayout.settings.additionalInsets.left != inset {
+            chatLayout.settings.additionalInsets = UIEdgeInsets(top: 0, left: inset, bottom: 0, right: inset)
+        }
+        super.viewWillLayoutSubviews()
     }
 
     override func viewDidLayoutSubviews() {
@@ -1631,7 +1641,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                   let cell = collectionView.cellForItem(at: indexPath) as? UserMessageCell else { continue }
             // Geometry is deliberately unchanged. Updating only UIImageView.image
             // avoids a collection-layout invalidation and preserves the anchor.
-            cell.apply(payload, containerWidth: collectionView.bounds.width)
+            cell.apply(payload, containerWidth: chatLayout.layoutFrame.width)
         }
     }
 
@@ -2092,7 +2102,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         _ userMessage: ConversationViewportEntry.UserMessage,
         entry: ConversationViewportEntry
     ) {
-        let width = collectionView.bounds.width
+        let width = chatLayout.layoutFrame.width
         guard width > 0 else { return }
         let key = CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
         guard cellHeightCache[key] == nil else { return }
@@ -3861,7 +3871,7 @@ final class DebugHistoryCommitDiagnostics {
     private let recordLimit: Int
     init(environment: [String: String], recordLimit: Int = 16,
          clock: @escaping () -> CFTimeInterval = CACurrentMediaTime,
-         sink: @escaping (String) -> Void = { NSLog("%@", $0) }) {
+         sink: @escaping (String) -> Void = { appLog("%@", $0) }) {
         enabled = environment["DSH_HISTORY_COMMIT_DIAGNOSTICS"] == "1"
         self.recordLimit = max(0, recordLimit); self.clock = clock; self.sink = sink
     }
@@ -4011,7 +4021,7 @@ final class DebugConversationWarmHostPool {
     private var didReportFinal = false
     private let sink: (String) -> Void
     private let initialRSS: UInt64
-    init(sink: @escaping (String) -> Void = { NSLog("%@", $0) }) {
+    init(sink: @escaping (String) -> Void = { appLog("%@", $0) }) {
         self.sink = sink
         initialRSS = Self.residentBytes()
     }

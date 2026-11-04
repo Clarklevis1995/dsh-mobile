@@ -33,7 +33,11 @@ class GatewayConnectionService : Service() {
         createNotificationChannel()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
         if (intent?.action == ACTION_DISCONNECT) {
             graph.diagnostics.lifecycle(GatewayLifecycleEvent.SERVICE_DISCONNECT)
             graph.gatewayScope.launch { graph.gatewayRuntime.disconnect() }
@@ -49,20 +53,23 @@ class GatewayConnectionService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun makeNotification(): Notification {
-        val openIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val disconnectIntent = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, GatewayConnectionService::class.java).setAction(ACTION_DISCONNECT),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+        val openIntent =
+            PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        val disconnectIntent =
+            PendingIntent.getService(
+                this,
+                1,
+                Intent(this, GatewayConnectionService::class.java).setAction(ACTION_DISCONNECT),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        return NotificationCompat
+            .Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.dsh_orca_mark)
             .setContentTitle(getString(R.string.gateway_active_notification_title))
             .setContentText(getString(R.string.gateway_active_notification_text))
             .setContentIntent(openIntent)
@@ -80,11 +87,11 @@ class GatewayConnectionService : Service() {
             NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.gateway_notification_channel),
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 description = getString(R.string.gateway_notification_channel_description)
                 setShowBadge(false)
-            }
+            },
         )
     }
 

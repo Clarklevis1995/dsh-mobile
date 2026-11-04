@@ -453,6 +453,8 @@ final class VoiceInputTests: XCTestCase {
 
     @MainActor
     func testConversationVoiceModeKeepsComposerCompactAcrossWindowSizes() async throws {
+        // 也需在 iPhone 真机执行：此用例可复现输入卡片泛型过深造成的主线程栈溢出，
+        // 只跑模拟器可能漏掉首次进入会话时的崩溃。
         let suiteName = "VoiceComposerLayout.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }

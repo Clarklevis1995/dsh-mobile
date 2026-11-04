@@ -87,6 +87,7 @@ private val DarkColors = darkColorScheme(
 @Composable
 internal fun DshTheme(
     appearance: AppearanceSettings = rememberAppearanceSettings(),
+    tunnelSettings: TailscaleTunnelSettings = rememberTailscaleTunnelSettings(),
     content: @Composable () -> Unit
 ) {
     val view = LocalView.current
@@ -113,6 +114,7 @@ internal fun DshTheme(
     // 所有页面的深浅色判断使用同一份有效配置，避免只更新 MaterialTheme 而留下浅色背景。
     CompositionLocalProvider(
         LocalAppearanceSettings provides appearance,
+        LocalTailscaleTunnelSettings provides tunnelSettings,
         LocalDensity provides appDensity,
         LocalConfiguration provides configuration
     ) {
@@ -137,8 +139,11 @@ internal class AppFontDensity(
 }
 
 @Composable
+internal fun dshSwitchTrackColor(): Color = if (isSystemInDarkTheme()) Color(0xFF1D447F) else Color(0xFF245AC4)
+
+@Composable
 internal fun dshSwitchColors(preserveDisabledColors: Boolean = false): SwitchColors {
-    val blue = if (isSystemInDarkTheme()) Color(0xFF1D447F) else Color(0xFF245AC4)
+    val blue = dshSwitchTrackColor()
     if (!preserveDisabledColors) return SwitchDefaults.colors(
         checkedTrackColor = blue,
         checkedBorderColor = blue,

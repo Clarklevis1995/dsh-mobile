@@ -77,6 +77,14 @@ struct AppFont {
     }
 }
 
+// 设置主页与子页共用的文字层级；所有角色沿用应用字号与 Dynamic Type 缩放。
+enum SettingsTypography {
+    static let title = AppFont.body.weight(.semibold)
+    static let item = AppFont.body
+    static let description = AppFont.caption
+    static let section = description
+}
+
 private struct AppFontModifier: ViewModifier {
     @AppStorage(AppFontScale.key) private var scale = 1.0
     @AppStorage(AppFontScale.followsSystemKey) private var followsSystem = false
@@ -139,6 +147,13 @@ enum DSHColor {
     static let orange = Color(red: 0.94, green: 0.49, blue: 0.08)
     static let amber = Color(red: 1.0, green: 0.68, blue: 0.12)
     static let success = Color(red: 0.18, green: 0.72, blue: 0.36)
+
+    /// 插件与设置开关共用的开启底色，分别适配浅色和深色外观。
+    static func switchTint(for scheme: ColorScheme) -> Color {
+        scheme == .dark
+            ? Color(red: 29.0 / 255, green: 68.0 / 255, blue: 127.0 / 255)
+            : Color(red: 36.0 / 255, green: 90.0 / 255, blue: 196.0 / 255)
+    }
 }
 
 struct DeepOceanBackground: View {

@@ -828,11 +828,11 @@ private fun FooterIconButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(36.dp)) {
+    DshGlassButton(contentDescription, onClick, Modifier.size(36.dp), enabled) {
         Icon(
             painterResource(iconRes),
-            contentDescription,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.86f else 0.24f),
+            null,
+            tint = dshGlassForeground().copy(alpha = if (enabled) 1f else 0.3f),
             modifier = Modifier.size(20.dp)
         )
     }

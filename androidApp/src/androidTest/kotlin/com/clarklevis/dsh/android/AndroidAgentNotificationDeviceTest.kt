@@ -39,7 +39,7 @@ class AndroidAgentNotificationDeviceTest {
             complete(manager)
             awaitCount(gateway, 1)
             val notification = system.activeNotifications.single { it.tag?.contains(gateway) == true }.notification
-            assertEquals(context.getString(R.string.agent_execution_completed_notification_title),
+            assertEquals(context.applicationContext.getString(R.string.agent_execution_completed_notification_title),
                 notification.extras.getString(Notification.EXTRA_TITLE))
             assertTrue(notification.contentIntent != null)
             clear(gateway)

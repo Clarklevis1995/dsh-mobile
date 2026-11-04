@@ -21,7 +21,7 @@ internal object AndroidCacheStorage {
                     .sumOf { if (it.isFile) allocatedSize(it) else 0 }
             },
             allocatedBytes = ::allocatedSize,
-            log = { runCatching { Log.i("CacheStorage", it) } }
+            log = { runCatching { com.clarklevis.dsh.android.platform.LocalAppLog.i("CacheStorage", it) } }
         ).also { manager = it }
     }
 }

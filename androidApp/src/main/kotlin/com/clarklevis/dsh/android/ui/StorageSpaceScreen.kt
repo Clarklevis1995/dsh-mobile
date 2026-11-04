@@ -114,7 +114,7 @@ internal fun StorageSpaceScreen(stateHolder: AndroidSharedStateHolder, onBack: (
         containerColor = background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(appText(selectedCategory?.title ?: "存储空间"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold) },
+                title = { Text(appText(selectedCategory?.title ?: "存储空间"), style = SettingsTypography.title) },
                 navigationIcon = {
                     TopBarCircleButton(
                         R.drawable.ic_back_chevron,
@@ -153,14 +153,22 @@ internal fun StorageSpaceScreen(stateHolder: AndroidSharedStateHolder, onBack: (
                             StorageCategoryIcon(selected, Modifier.size(56.dp))
                             Spacer(Modifier.width(16.dp))
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text(appText(selected.title), fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                                Text(appText(selected.detail), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                                Text(appText(selected.title), style = SettingsTypography.title)
+                                Text(
+                                    appText(selected.detail),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = SettingsTypography.description
+                                )
                             }
                         }
                         HorizontalDivider(Modifier.padding(start = 20.dp))
                         Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(appText("占用空间"), modifier = Modifier.weight(1f))
-                            Text(size(usage?.bytes(selected) ?: 0), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(appText("占用空间"), modifier = Modifier.weight(1f), style = SettingsTypography.item)
+                            Text(
+                                size(usage?.bytes(selected) ?: 0),
+                                style = SettingsTypography.item,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -179,6 +187,7 @@ internal fun StorageSpaceScreen(stateHolder: AndroidSharedStateHolder, onBack: (
                             } else {
                                 Text(
                                     appText("清理本机缓存"),
+                                    style = SettingsTypography.item,
                                     color = if ((usage?.bytes(selected) ?: 0) > 0) {
                                         MaterialTheme.colorScheme.error
                                     } else {
@@ -195,9 +204,13 @@ internal fun StorageSpaceScreen(stateHolder: AndroidSharedStateHolder, onBack: (
                         if (usage != null) {
                             StorageUsageChart(usage, size(usage.totalBytes))
                             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(appText("设备可用空间"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                                Text(appText("设备可用空间"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = SettingsTypography.item)
                                 Spacer(Modifier.weight(1f))
-                                Text(size(usage.freeBytes), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                                Text(
+                                    size(usage.freeBytes),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = SettingsTypography.item
+                                )
                             }
                         } else if (busy) {
                             Box(Modifier.fillMaxWidth().heightIn(min = 240.dp), contentAlignment = Alignment.Center) {
@@ -231,11 +244,11 @@ internal fun StorageSpaceScreen(stateHolder: AndroidSharedStateHolder, onBack: (
                                         StorageCategoryIcon(category, Modifier.size(32.dp))
                                         Spacer(Modifier.width(14.dp))
                                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text(appText(category.title), fontSize = 17.sp, maxLines = 1)
+                                            Text(appText(category.title), style = SettingsTypography.item, maxLines = 1)
                                             Text(
                                                 appText(category.detail),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                fontSize = 12.sp,
+                                                style = SettingsTypography.description,
                                                 maxLines = 1,
                                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                             )
@@ -244,7 +257,7 @@ internal fun StorageSpaceScreen(stateHolder: AndroidSharedStateHolder, onBack: (
                                         Text(
                                             size(usage.bytes(category)),
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            fontSize = 16.sp
+                                            style = SettingsTypography.item
                                         )
                                         Icon(
                                             painterResource(R.drawable.ic_chevron_right),
@@ -265,15 +278,15 @@ internal fun StorageSpaceScreen(stateHolder: AndroidSharedStateHolder, onBack: (
                         appText("其中 %1\$s 正在使用，关闭文件后可释放。", size(usage.protectedBytes)),
                         modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth(),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
+                        style = SettingsTypography.description
                     )
                 }
             }
             stateHolder.cacheStorageNotice?.let { message ->
-                item { Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+                item { Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = SettingsTypography.description) }
             }
             stateHolder.cacheStorageError?.let { message ->
-                item { Text(message, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                item { Text(message, color = MaterialTheme.colorScheme.error, style = SettingsTypography.description) }
             }
         }
     }
@@ -297,7 +310,7 @@ private fun StorageSortMenu(sortsBySize: Boolean, onChange: (Boolean) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         TextButton(onClick = { expanded = true }, modifier = Modifier.testTag("storage-sort-menu")) {
-            Text(appText(if (sortsBySize) "大小" else "名称"), fontSize = 16.sp)
+            Text(appText(if (sortsBySize) "大小" else "名称"), style = SettingsTypography.item)
             Icon(painterResource(R.drawable.ic_chevrons_up_down), null, Modifier.padding(start = 5.dp).size(14.dp))
         }
         DshMenu(expanded, onDismissRequest = { expanded = false }) {
@@ -317,7 +330,12 @@ private fun StorageSortMenu(sortsBySize: Boolean, onChange: (Boolean) -> Unit) {
 private fun StorageSection(title: String? = null, content: @Composable () -> Unit) {
     Column(Modifier.widthIn(max = 640.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (title != null) {
-            Text(title, modifier = Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+            Text(
+                title,
+                modifier = Modifier.padding(start = 16.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = SettingsTypography.section
+            )
         }
         Column(
             Modifier.fillMaxWidth().background(
@@ -359,7 +377,7 @@ private fun StorageUsageChart(usage: AndroidStorageUsage, total: String) {
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(total, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
-            Text(appText("本机缓存"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+            Text(appText("本机缓存"), color = MaterialTheme.colorScheme.onSurfaceVariant, style = SettingsTypography.description)
         }
     }
 }

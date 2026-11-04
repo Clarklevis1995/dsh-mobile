@@ -1633,7 +1633,7 @@ final class KMPHistoryStoreAdapter {
                     guard validReplacement(replacement, sessionID: sessionID) else {
                         throw KMPHistoryStoreError.invalidEvent("history reference fallback snapshot is invalid")
                     }
-                    NSLog("history-reference-mirror-recovered sequence=%lld", baseEventSequence + 1)
+                    appLog("history-reference-mirror-recovered sequence=%lld", baseEventSequence + 1)
                     records = replacement
                     return
                 }

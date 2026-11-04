@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import urllib.request
+import zipfile
 
 CONFIG = Path.home() / '.config/whaleness/r2-release.json'
 PUBLIC_BASE = 'https://download.whaleness.cc'
@@ -55,7 +56,9 @@ def remote_manifest(client, bucket):
 
 
 def prepare(release_directory, aapt):
-    apks = list((release_directory / 'artifacts/android').glob('*.apk'))
+    # 顶层通用包兼容旧客户端；新客户端按设备支持顺序选择 ABI。
+    apks = [p for p in (release_directory / 'artifacts/android').glob('*.apk')
+            if re.fullmatch(r'DshMobile-android-v\d+\.\d+\.\d+\.apk', p.name)]
     if len(apks) != 1:
         raise ValueError('发布目录中必须恰好包含一个 APK')
     apk = apks[0]
@@ -77,6 +80,30 @@ def prepare(release_directory, aapt):
         githubDownloadUrl=f'https://github.com/Clarklevis1995/dsh-mobile/releases/download/v{version}/{apk.name}',
         releasePageUrl='https://github.com/Clarklevis1995/dsh-mobile/releases',
         size=apk.stat().st_size, sha256=sha, releaseNotes=notes)
+    variants = {}
+    for abi in ('arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'):
+        variant = apk.parent / f'DshMobile-android-v{version}-{abi}.apk'
+        if not variant.is_file():
+            raise ValueError(f'缺少 ABI 安装包：{abi}')
+        info = subprocess.check_output([aapt, 'dump', 'badging', str(variant)], text=True)
+        variant_fields = dict(re.findall(r"(\w+)='([^']*)'", info.splitlines()[0]))
+        if any(variant_fields.get(k) != fields[k] for k in ('name', 'versionName', 'versionCode')):
+            raise ValueError(f'ABI 安装包版本或包名不一致：{abi}')
+        with zipfile.ZipFile(variant) as archive:
+            abis = {name.split('/')[1] for name in archive.namelist()
+                    if name.startswith('lib/') and len(name.split('/')) > 2}
+        if abis != {abi}:
+            raise ValueError(f'ABI 安装包架构不一致：{abi}')
+        with variant.open('rb') as stream:
+            variant_sha = digest_stream(stream)
+        checksum = Path(str(variant) + '.sha256')
+        if not checksum.exists() or checksum.read_text().split()[0] != variant_sha:
+            raise ValueError(f'ABI 安装包 SHA-256 不一致：{abi}')
+        variant_key = f'DshMobile-android-v{version}-build{build}-{abi}.apk'
+        variants[abi] = dict(downloadUrl=f'{PUBLIC_BASE}/{variant_key}',
+            githubDownloadUrl=f'https://github.com/Clarklevis1995/dsh-mobile/releases/download/v{version}/{variant.name}',
+            size=variant.stat().st_size, sha256=variant_sha)
+    manifest['abiApks'] = variants
     (release_directory / 'latest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
     return apk, key, manifest
 
@@ -94,20 +121,26 @@ def publish(client, bucket, apk, key, manifest, verify_public):
     from botocore.exceptions import ClientError
     current, etag = remote_manifest(client, bucket)
     validate_upgrade(current, manifest)
-    # 条件写入，禁止覆盖不可变的 APK；重试时验证既有对象。
-    try:
-        with apk.open('rb') as body:
-            client.put_object(Bucket=bucket, Key=key, Body=body,
-                ContentType='application/vnd.android.package-archive',
-                CacheControl='public, max-age=31536000, immutable', IfNoneMatch='*')
-    except ClientError as error:
-        if error.response['Error']['Code'] not in ('PreconditionFailed', '412'):
-            raise
-    response = client.get_object(Bucket=bucket, Key=key)
-    with response['Body'] as stream:
-        if response['ContentLength'] != manifest['size'] or digest_stream(stream) != manifest['sha256']:
-            raise ValueError('R2 APK 完整性校验失败，未更新 latest.json')
-    verify_public(manifest)
+    # 所有包上传并校验后才更新清单，避免客户端遇到缺失或损坏的包。
+    packages = [(apk, key, manifest)]
+    for abi, entry in manifest.get('abiApks', {}).items():
+        variant = apk.parent / f"DshMobile-android-v{manifest['version']}-{abi}.apk"
+        variant_key = f"DshMobile-android-v{manifest['version']}-build{manifest['versionCode']}-{abi}.apk"
+        packages.append((variant, variant_key, entry))
+    for path, object_key, entry in packages:
+        try:
+            with path.open('rb') as body:
+                client.put_object(Bucket=bucket, Key=object_key, Body=body,
+                    ContentType='application/vnd.android.package-archive',
+                    CacheControl='public, max-age=31536000, immutable', IfNoneMatch='*')
+        except ClientError as error:
+            if error.response['Error']['Code'] not in ('PreconditionFailed', '412'):
+                raise
+        response = client.get_object(Bucket=bucket, Key=object_key)
+        with response['Body'] as stream:
+            if response['ContentLength'] != entry['size'] or digest_stream(stream) != entry['sha256']:
+                raise ValueError('R2 APK 完整性校验失败，未更新 latest.json')
+        verify_public(entry)
     # 最后更新清单；并发发布时按读取到的 ETag 条件更新，避免覆盖新版本。
     condition = {'IfMatch': etag} if etag else {'IfNoneMatch': '*'}
     client.put_object(Bucket=bucket, Key='latest.json',

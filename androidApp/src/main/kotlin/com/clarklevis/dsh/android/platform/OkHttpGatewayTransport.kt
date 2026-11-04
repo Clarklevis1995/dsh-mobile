@@ -19,9 +19,13 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 
 internal class OkHttpGatewayTransport(
-    private val client: OkHttpClient = defaultClient(),
+    private val clientProvider: () -> OkHttpClient = { defaultClient() },
     private val diagnostics: AndroidGatewayDiagnostics = AndroidGatewayDiagnostics.disabled()
 ) : GatewayTransport {
+    // 传输层不知道网络路径：走不走"内部节点"由外部提供的策略决定。
+    // 刻意不在构造时取客户端：构造发生在 Application 启动早期，那时 graph 与隧道都还不存在
+    // （真机崩溃实证：lateinit property hosts has not been initialized）。每次 open 才问一次策略——
+    // 代理可能刚起来，也可能刚被关掉。
     private val activeGeneration = AtomicLong()
     private val mutableState = MutableStateFlow<GatewayTransportState>(GatewayTransportState.Closed())
     private val eventQueue = BoundedTransportEventQueue(
@@ -45,6 +49,7 @@ internal class OkHttpGatewayTransport(
             socket?.cancel()
             socket = null
         }
+        val client = clientProvider()
         publishState(GatewayTransportState.Opening(spec.generation))
         val request = Request.Builder()
             .url(spec.endpoint)
@@ -59,6 +64,7 @@ internal class OkHttpGatewayTransport(
             )
             .apply {
                 spec.channel?.let { header("X-DSH-Channel", it) }
+                if (spec.negotiateRtc) header("X-DSH-Transport-Intent", "negotiate-v1")
                 spec.bearerToken?.takeIf(String::isNotBlank)?.let {
                     header("Authorization", "Bearer $it")
                 }
@@ -137,7 +143,22 @@ internal class OkHttpGatewayTransport(
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             if (!isCurrent(listenerGeneration, webSocket)) return
-            diagnostics.transportFailure(listenerGeneration, channel, GatewayTransportFailureCause.from(t))
+            diagnostics.transportFailure(
+                listenerGeneration, channel, GatewayTransportFailureCause.from(t),
+                httpStatus = response?.code
+            )
+            if (response != null) {
+                // 握手被拒绝时，服务端的原因文本就是答案（例如插件的 "LAN listener accepts
+                // private-network clients only"）。只取状态行与极短正文，不记录 URL、凭据。
+                val snippet = runCatching { response.peekBody(200).string() }.getOrNull()
+                    ?.replace(Regex("\\s+"), " ")?.take(120).orEmpty()
+                diagnostics.emitTransportRejection(
+                    listenerGeneration,
+                    status = response.code,
+                    reason = response.message.take(60),
+                    body = snippet
+                )
+            }
             synchronized(lock) { socket = null }
             publishState(GatewayTransportState.Failed(
                 generation = listenerGeneration,
@@ -202,7 +223,32 @@ internal class OkHttpGatewayTransport(
         private const val AUTHENTICATION_REQUIRED = 4003
         private const val HTTP_UNAUTHORIZED = 401
 
-        private fun defaultClient(): OkHttpClient = sharedClient
+        internal fun defaultClient(): OkHttpClient = sharedClient
+
+        /**
+         * 走进程内 tsnet 节点的客户端：SOCKS5 代理 + 凭据（凭据不能塞在代理 URL 里，
+         * OkHttp 只通过 ProxyAuthenticator 提供）。其余配置全部继承共享客户端，
+         * 避免两条路径的超时/心跳参数不一致。
+         */
+        internal fun proxiedClient(
+            host: String,
+            port: Int,
+            user: String,
+            pass: String,
+            callTimeoutSeconds: Long = 0
+        ): OkHttpClient {
+            val builder = sharedClient.newBuilder()
+                .callTimeout(callTimeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)
+                .proxy(java.net.Proxy(java.net.Proxy.Type.HTTP, java.net.InetSocketAddress(host, port)))
+            if (user.isNotEmpty()) {
+                builder.proxyAuthenticator { _, response ->
+                    response.request.newBuilder()
+                        .header("Proxy-Authorization", okhttp3.Credentials.basic(user, pass))
+                        .build()
+                }
+            }
+            return builder.build()
+        }
 
         private val sharedClient: OkHttpClient by lazy { OkHttpClient.Builder()
             .followRedirects(false)

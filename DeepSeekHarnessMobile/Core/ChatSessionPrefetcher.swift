@@ -20,7 +20,7 @@ final class ChatSessionPrefetcher {
         var deferredForeground = false
         var recoveryRequested = false
     }
-    private static let logger = Logger(subsystem: "ai.dsh.mobile.ios", category: "chat-prefetch")
+    private static let logger = LocalLogger(subsystem: "ai.dsh.mobile.ios", category: "chat-prefetch")
     private let rank: ([Candidate], String?) async -> [String]
     private let ticket: (String) async -> String?
     private let accept: (String, String, String) async -> Bool
@@ -94,7 +94,7 @@ final class ChatSessionPrefetcher {
             }
         }
         writes.removeAll(); writeTickets.removeAll()
-        Self.logger.debug("[ChatPrefetch] event=cancel reason=\(reason, privacy: .public) count=\(self.requestCount)")
+        Self.logger.debug("[ChatPrefetch] event=cancel reason=\(reason) count=\(self.requestCount)")
     }
 
     /// 返回 true 表示可以发送正常请求；false 表示接管最新页，或等待旧响应消化后重发。

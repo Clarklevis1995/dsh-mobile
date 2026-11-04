@@ -402,39 +402,32 @@ struct ConversationView: View {
     @State private var viewportContentSessionID: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
     @State private var voiceWindowHeight: CGFloat = 0
+    @State private var teamHeaderHeight: CGFloat = 0
     // 输入主体是 UIKit UITextView，不需要 SwiftUI FocusState 参与焦点仲裁。
     // 普通 State 作为单向的显式聚焦/失焦请求，UITextView 自己持有第一响应者。
     @State private var composerIsFocused = false
     @State private var showsAgentPresetMenu = false
-    @State private var showsModelMenu = false
     @ScaledMetric(relativeTo: .caption) private var composerCapsuleHeight: CGFloat = 34
     private let conversationBottomClearance: CGFloat = 22
 
     var body: some View {
         ZStack {
             conversationBackground.ignoresSafeArea()
-            VStack(spacing: 0) {
-                if store.isViewingTeamMember {
-                    Text("团队 › \(store.selectedSession?.title ?? "成员")" + (store.selectedMemberCanSend ? "" : " · 只读"))
-                        .appFont(.caption).foregroundStyle(.secondary).lineLimit(1).padding(.bottom, 4)
-                        .padding(.top, topContentInset)
-                }
-                PersistentSessionPager(selection: $activeView) {
-                    chat
-                } trajectory: {
-                    TrajectoryView(
-                        sessionId: store.selectedSessionId,
-                        timeline: store.trajectoryTimeline(for: store.selectedSessionId),
-                        isActive: activeView == 1
-                    )
-                    .padding(.top, pageTopInset)
-                }
-                .overlay(alignment: .top) {
-                    SessionPageIndicator(selection: activeView, sessionID: store.selectedSessionId)
-                        .padding(.top, pageTopInset + 4)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
+            PersistentSessionPager(selection: $activeView) {
+                chat
+            } trajectory: {
+                TrajectoryView(
+                    sessionId: store.selectedSessionId,
+                    timeline: store.trajectoryTimeline(for: store.selectedSessionId),
+                    isActive: activeView == 1
+                )
+                .padding(.top, pageTopInset)
+            }
+            .overlay(alignment: .top) {
+                SessionPageIndicator(selection: activeView, sessionID: store.selectedSessionId)
+                    .padding(.top, pageTopInset + 4)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -442,10 +435,19 @@ struct ConversationView: View {
             if #unavailable(iOS 26.0) {
                 if topContentInset > 0 {
                     ConversationTopGlass()
-                        .frame(height: topContentInset + 32)
+                        .frame(height: pageTopInset + 32)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
+            }
+        }
+        .overlay(alignment: .top) {
+            if store.isViewingTeamMember {
+                Text("团队 › \(store.selectedSession?.title ?? "成员")" + (store.selectedMemberCanSend ? "" : " · 只读"))
+                    .appFont(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    .padding(.bottom, 4)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { teamHeaderHeight = $0 }
+                    .padding(.top, topContentInset)
             }
         }
         .ignoresSafeArea(.container, edges: .bottom)
@@ -457,12 +459,10 @@ struct ConversationView: View {
             if view != 0 { composerIsFocused = false }
             showsSessionStatsPopover = false
             showsAgentPresetMenu = false
-            showsModelMenu = false
         }
         .onChangeCompat(of: store.selectedSessionId) { _, _ in
             showsSessionStatsPopover = false
             showsAgentPresetMenu = false
-            showsModelMenu = false
         }
         .onDisappear {
             if store.conversationFileIsOpening { store.cancelWorkspaceFileDownload() }
@@ -509,10 +509,18 @@ struct ConversationView: View {
     }
 
     private var pageTopInset: CGFloat {
-        store.isViewingTeamMember ? 0 : topContentInset
+        // 成员标题只覆盖正文，不缩小滚动视口，消息才能从导航栏后方经过。
+        topContentInset + (store.isViewingTeamMember ? teamHeaderHeight : 0)
     }
 
     private var chat: some View {
+        GeometryReader { geometry in
+            // 使用避让键盘后的页面高度，给输入框和聊天内容保留空间。
+            chatContent(taskListMaximumHeight: min(280, max(0, geometry.size.height - pageTopInset) * 0.3))
+        }
+    }
+
+    private func chatContent(taskListMaximumHeight: CGFloat) -> some View {
         let sessionID = store.selectedSessionId
         return ZStack(alignment: .bottom) {
             ConversationViewport(
@@ -564,9 +572,7 @@ struct ConversationView: View {
             // Session 是 UIKit viewport 的身份边界。切换时直接销毁旧
             // controller，不能让上一 Session 的 diffable snapshot 参与新页面首帧。
             .id(sessionID ?? "__empty__")
-            .padding(.horizontal, 20)
             .opacity(shouldShowHistoryPresentationMask ? 0 : 1)
-            .readableContentWidth()
 
             if !hasVisibleConversationContent, let error = selectedHistoryError {
                 historyFailureState(error)
@@ -599,6 +605,24 @@ struct ConversationView: View {
                 .allowsHitTesting(false)
 
             VStack(spacing: 0) {
+                if hasVisibleConversationContent, store.gateway.subscriptionRecoveryExhausted,
+                   let error = selectedHistoryError {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        Text(error).appFont(.footnote).lineLimit(2)
+                        Spacer(minLength: 0)
+                        Button("重新加载历史") {
+                            if let id = store.selectedSessionId { store.loadHistory(for: id) }
+                        }
+                        .disabled(!store.gateway.state.isConnected)
+                    }
+                    .padding(12)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 8)
+                    .accessibilityIdentifier("conversation-sync-retry")
+                }
                 Group {
                     if shouldShowScrollToBottom {
                         scrollToBottomButton {
@@ -651,6 +675,7 @@ struct ConversationView: View {
                            let goal = store.selectedGoalProjection?.goal {
                             TaskGoalPanels(
                                 tasks: tasks,
+                                taskListMaximumHeight: taskListMaximumHeight,
                                 goal: goal,
                                 isMutatingGoal: store.goalMutationKind != nil,
                                 tasksExpanded: $tasksExpanded,
@@ -669,6 +694,7 @@ struct ConversationView: View {
                         } else if let tasks = store.selectedTaskProjection?.todos {
                             TaskGoalPanels(
                                 tasks: tasks,
+                                taskListMaximumHeight: taskListMaximumHeight,
                                 goal: nil,
                                 isMutatingGoal: false,
                                 tasksExpanded: $tasksExpanded,
@@ -681,6 +707,7 @@ struct ConversationView: View {
                         } else if let goal = store.selectedGoalProjection?.goal {
                             TaskGoalPanels(
                                 tasks: nil,
+                                taskListMaximumHeight: taskListMaximumHeight,
                                 goal: goal,
                                 isMutatingGoal: store.goalMutationKind != nil,
                                 tasksExpanded: $tasksExpanded,
@@ -760,35 +787,6 @@ struct ConversationView: View {
                         maximumContentHeight: 380
                     ) {
                         sessionAgentPresetMenuContent
-                    }
-                }
-            }
-        }
-        .overlayPreferenceValue(SessionModelPopoverAnchorKey.self) { anchor in
-            if let anchor {
-                GeometryReader { geometry in
-                    ComposerPopoverOverlay(
-                        sourceFrame: geometry[anchor],
-                        availableSize: geometry.size,
-                        isPresented: showsModelMenu,
-                        onDismiss: { showsModelMenu = false },
-                        preferredWidth: 286,
-                        maximumContentHeight: 560,
-                        showsArrow: false
-                    ) {
-                        ConversationModelMenuContent(
-                            groups: modelGroups,
-                            selection: currentModelSelection,
-                            efforts: currentEfforts,
-                            onSelectModel: { group, model in
-                                showsModelMenu = false
-                                select(group: group, model: model)
-                            },
-                            onSelectEffort: { effort in
-                                showsModelMenu = false
-                                select(effort: effort)
-                            }
-                        )
                     }
                 }
             }
@@ -1161,7 +1159,80 @@ struct ConversationView: View {
         }
     }
 
+    // 真机主线程栈有限；在内容、外观和生命周期之间截断嵌套泛型，
+    // 避免首次进入会话时解析整个输入卡片类型导致栈溢出。
     private var composerCard: some View {
+        AnyView(composerCardSessionLifecycle)
+        .onChangeCompat(of: selectedPhotoItems) { _, items in
+            guard !items.isEmpty else { return }
+            store.voiceInput.setVoiceMode(false)
+            let target = store.selectedSessionId
+            Task { await importPhotos(items, targetSessionID: target) }
+        }
+        .onChangeCompat(of: draft) { _, value in
+            store.voiceInput.draftChanged(value)
+            store.updateSlashCommandInput(value)
+        }
+        .onChangeCompat(of: store.commandDraftClearToken) { _, _ in
+            draft = ""
+            pendingImages = []
+            selectedPhotoItems = []
+            composerIsFocused = false
+        }
+    }
+
+    private var composerCardSessionLifecycle: some View {
+        AnyView(composerCardSurface)
+        .onChangeCompat(of: store.messageAcceptedRevision) { _, _ in
+            guard let submitted = submittedQueueDraft else { return }
+            defer { submittedQueueDraft = nil; submittedQueueImages = [] }
+            if let target = submittedQueueSessionID, target != store.selectedSessionId {
+                if memberDrafts[target] == submitted, memberImages[target] == submittedQueueImages {
+                    memberDrafts[target] = ""
+                    memberImages[target] = []
+                }
+                return
+            }
+            guard (submittedQueueSessionID == nil || submittedQueueSessionID == store.selectedSessionId),
+                  draft == submitted, pendingImages == submittedQueueImages else { return }
+            draft = ""
+            pendingImages = []
+            selectedPhotoItems = []
+            store.clearActiveSlashCommand()
+            composerIsFocused = false
+            viewportScrollToBottomToken &+= 1
+        }
+        .onChangeCompat(of: store.queueRevision) { _, _ in restoreQueuedDraft() }
+        .onChangeCompat(of: store.selectedSessionId) { _, _ in
+            store.fileUploads.select(sessionID: store.selectedSessionId, allowed: !store.isViewingTeamMember)
+            queueExpanded = false
+            restoreQueuedDraft()
+        }
+        .onAppear {
+            store.fileUploads.select(sessionID: store.selectedSessionId, allowed: !store.isViewingTeamMember)
+            restoreQueuedDraft()
+        }
+    }
+
+    private var composerCardSurface: some View {
+        AnyView(composerCardContent)
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
+        .glassSurface(radius: 24, tint: glassTint, shadowOpacity: 0)
+        // 先收住玻璃自带的向下投影，再单独控制输入框阴影。
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(glassEdge, lineWidth: 0.7)
+        }
+        // 轻微下移增强底部层次，保持原有扩散范围。
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.10), radius: 10, x: 0, y: 2)
+        .padding(.horizontal, 14)
+        .padding(.bottom, composerBottomPadding)
+    }
+
+    private var composerCardContent: some View {
         let slashPresentation = slashCommandComposerPresentation(
             draft: draft,
             token: store.slashCommands.commandToken,
@@ -1193,177 +1264,122 @@ struct ConversationView: View {
                     }.appFont(.caption)
                 }
             }
-            HStack(spacing: 7) {
-                attachmentMenu
+            AnyView(composerControls)
+        }
+    }
 
-                if !store.isViewingTeamMember { permissionControl }
+    private var composerControls: some View {
+        HStack(spacing: 7) {
+            attachmentMenu
 
-                Spacer(minLength: 2)
+            if !store.isViewingTeamMember { permissionControl }
 
-                if !store.isViewingTeamMember { modelControl }
-                else {
-                    Text(store.selectedSession?.title ?? "成员会话").appFont(.caption).foregroundStyle(.secondary).lineLimit(1)
+            Spacer(minLength: 2)
+
+            if !store.isViewingTeamMember { modelControl }
+            else {
+                Text(store.selectedSession?.title ?? "成员会话").appFont(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+
+            Button { showsContextUsage = true } label: {
+                if contextIsLoading && store.selectedContextSnapshot == nil {
+                    ProgressView().controlSize(.small).frame(width: 26, height: 26)
+                } else {
+                    ContextUsageRing(progress: contextProgress)
                 }
-
-                Button { showsContextUsage = true } label: {
-                    if contextIsLoading && store.selectedContextSnapshot == nil {
-                        ProgressView().controlSize(.small).frame(width: 26, height: 26)
-                    } else {
-                        ContextUsageRing(progress: contextProgress)
-                    }
+            }
+            .buttonStyle(.plain)
+            .disabled(store.selectedContextSnapshot == nil)
+            .accessibilityLabel(String(localized: "a11y.context.percent", defaultValue: "上下文已用 \(Int(contextProgress * 100))%"))
+            .popover(isPresented: $showsContextUsage, arrowEdge: .bottom) {
+                if #available(iOS 16.4, *) {
+                    ContextUsagePopover(snapshot: store.selectedContextSnapshot)
+                        .presentationCompactAdaptation(.popover)
+                } else {
+                    ContextUsagePopover(snapshot: store.selectedContextSnapshot)
+                        .background(.ultraThinMaterial)
                 }
-                .buttonStyle(.plain)
-                .disabled(store.selectedContextSnapshot == nil)
-                .accessibilityLabel(String(localized: "a11y.context.percent", defaultValue: "上下文已用 \(Int(contextProgress * 100))%"))
-                .popover(isPresented: $showsContextUsage, arrowEdge: .bottom) {
-                    if #available(iOS 16.4, *) {
-                        ContextUsagePopover(snapshot: store.selectedContextSnapshot)
-                            .presentationCompactAdaptation(.popover)
-                            .presentationBackground(.ultraThinMaterial)
-                    } else {
-                        ContextUsagePopover(snapshot: store.selectedContextSnapshot)
-                    }
-                }
+            }
 
-                Button {
-                    if showsSessionStopButton {
-                        store.cancelSelectedSession()
-                        return
-                    }
-                    if !composerHasContent {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        let enteringVoice = !voiceState.voiceMode
-                        composerIsFocused = !enteringVoice
-                        store.voiceInput.setVoiceMode(enteringVoice)
-                        return
-                    }
-                    let content = store.composedSlashMessage(arguments: draft)
-                    let images = pendingImages
-                    guard store.send(content, images: images) else { return }
-                    if store.messageSubmissionPending {
-                        submittedQueueDraft = draft
-                        submittedQueueImages = images
-                        submittedQueueSessionID = store.selectedSessionId
-                        return
-                    }
-                    if store.commandSubmissionPending {
-                        composerIsFocused = false
-                        return
-                    }
-                    draft = ""
-                    store.clearActiveSlashCommand()
-                    pendingImages = []
-                    selectedPhotoItems = []
+            Button {
+                if showsSessionStopButton {
+                    store.cancelSelectedSession()
+                    return
+                }
+                if !composerHasContent {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    let enteringVoice = !voiceState.voiceMode
+                    composerIsFocused = !enteringVoice
+                    store.voiceInput.setVoiceMode(enteringVoice)
+                    return
+                }
+                let content = store.composedSlashMessage(arguments: draft)
+                let images = pendingImages
+                guard store.send(content, images: images) else { return }
+                if store.messageSubmissionPending {
+                    submittedQueueDraft = draft
+                    submittedQueueImages = images
+                    submittedQueueSessionID = store.selectedSessionId
+                    return
+                }
+                if store.commandSubmissionPending {
                     composerIsFocused = false
-                    // Sending establishes a new tail-following intent before
-                    // the gateway echoes the user event. The subsequent user
-                    // bubble and first reasoning block can therefore grow
-                    // above the composer without ever being hidden behind it.
-                    viewportScrollToBottomToken &+= 1
-                } label: {
-                    Group {
-                        if showsSessionStopButton {
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(.white)
-                                .frame(width: 14, height: 14)
-                        } else {
-                            Image(systemName: composerHasContent ? "arrow.up" : (voiceState.voiceMode ? "keyboard" : "waveform"))
-                                .appFont(.system(size: 17, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
+                    return
+                }
+                draft = ""
+                store.clearActiveSlashCommand()
+                pendingImages = []
+                selectedPhotoItems = []
+                composerIsFocused = false
+                // Sending establishes a new tail-following intent before
+                // the gateway echoes the user event. The subsequent user
+                // bubble and first reasoning block can therefore grow
+                // above the composer without ever being hidden behind it.
+                viewportScrollToBottomToken &+= 1
+            } label: {
+                Group {
+                    if showsSessionStopButton {
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(.white)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: composerHasContent ? "arrow.up" : (voiceState.voiceMode ? "keyboard" : "waveform"))
+                            .appFont(.system(size: 17, weight: .bold))
+                            .foregroundStyle(.white)
                     }
-                    .frame(width: 42, height: 42)
-                    .background(DSHColor.ocean, in: Circle())
                 }
-                .buttonStyle(.plain)
-                .disabled(
-                    !store.selectedMemberCanSend || (showsSessionStopButton
-                        ? store.isCancellingSelectedSession
-                        : (composerHasContent && (store.sessionAgentPreset.blocksSending || store.waitingForNewSession || isImportingImages || store.fileUploads.preparing || (!store.fileUploads.drafts.isEmpty && !store.fileUploads.canSend) || store.commandSubmissionPending || store.messageSubmissionPending)))
-                )
-                .opacity(
-                    showsSessionStopButton
-                        ? (store.isCancellingSelectedSession ? 0.66 : 1)
-                        : 1
-                )
-                .accessibilityLabel(
-                    showsSessionStopButton
-                        ? String(localized: "a11y.stop-generation", defaultValue: "停止生成")
-                        : (composerHasContent ? String(localized: "a11y.send-message", defaultValue: "发送")
-                           : (voiceState.voiceMode ? String(localized: "切换到文字输入") : String(localized: "切换到语音输入")))
-                )
-                .accessibilityIdentifier("composer-action")
+                .frame(width: 42, height: 42)
+                .background(DSHColor.ocean, in: Circle())
             }
-            .overlay(alignment: .top) {
-                if voiceState.voiceMode {
-                    // 复用原有 12pt 间隔绘制分割线，不增加输入卡片高度。
-                    Rectangle()
-                        .fill(Color.primary.opacity(0.08))
-                        .frame(height: 0.5)
-                        .offset(y: -6)
-                        .accessibilityHidden(true)
-                        .allowsHitTesting(false)
-                }
+            .buttonStyle(.plain)
+            .disabled(
+                !store.selectedMemberCanSend || (showsSessionStopButton
+                    ? store.isCancellingSelectedSession
+                    : (composerHasContent && (store.sessionAgentPreset.blocksSending || store.waitingForNewSession || isImportingImages || store.fileUploads.preparing || (!store.fileUploads.drafts.isEmpty && !store.fileUploads.canSend) || store.commandSubmissionPending || store.messageSubmissionPending)))
+            )
+            .opacity(
+                showsSessionStopButton
+                    ? (store.isCancellingSelectedSession ? 0.66 : 1)
+                    : 1
+            )
+            .accessibilityLabel(
+                showsSessionStopButton
+                    ? String(localized: "a11y.stop-generation", defaultValue: "停止生成")
+                    : (composerHasContent ? String(localized: "a11y.send-message", defaultValue: "发送")
+                       : (voiceState.voiceMode ? String(localized: "切换到文字输入") : String(localized: "切换到语音输入")))
+            )
+            .accessibilityIdentifier("composer-action")
+        }
+        .overlay(alignment: .top) {
+            if voiceState.voiceMode {
+                // 复用原有 12pt 间隔绘制分割线，不增加输入卡片高度。
+                Rectangle()
+                    .fill(Color.primary.opacity(0.08))
+                    .frame(height: 0.5)
+                    .offset(y: -6)
+                    .accessibilityHidden(true)
+                    .allowsHitTesting(false)
             }
-        }
-        .padding(.horizontal, 14)
-        .padding(.top, 14)
-        .padding(.bottom, 12)
-        .glassSurface(radius: 24, tint: glassTint, shadowOpacity: 0)
-        // 先收住玻璃自带的向下投影，再单独控制输入框阴影。
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(glassEdge, lineWidth: 0.7)
-        }
-        // 轻微下移增强底部层次，保持原有扩散范围。
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.10), radius: 10, x: 0, y: 2)
-        .padding(.horizontal, 14)
-        .padding(.bottom, composerBottomPadding)
-        .onChangeCompat(of: store.messageAcceptedRevision) { _, _ in
-            guard let submitted = submittedQueueDraft else { return }
-            defer { submittedQueueDraft = nil; submittedQueueImages = [] }
-            if let target = submittedQueueSessionID, target != store.selectedSessionId {
-                if memberDrafts[target] == submitted, memberImages[target] == submittedQueueImages {
-                    memberDrafts[target] = ""
-                    memberImages[target] = []
-                }
-                return
-            }
-            guard (submittedQueueSessionID == nil || submittedQueueSessionID == store.selectedSessionId),
-                  draft == submitted, pendingImages == submittedQueueImages else { return }
-            draft = ""
-            pendingImages = []
-            selectedPhotoItems = []
-            store.clearActiveSlashCommand()
-            composerIsFocused = false
-            viewportScrollToBottomToken &+= 1
-        }
-        .onChangeCompat(of: store.queueRevision) { _, _ in restoreQueuedDraft() }
-        .onChangeCompat(of: store.selectedSessionId) { _, _ in
-            store.fileUploads.select(sessionID: store.selectedSessionId, allowed: !store.isViewingTeamMember)
-            queueExpanded = false
-            restoreQueuedDraft()
-        }
-        .onAppear {
-            store.fileUploads.select(sessionID: store.selectedSessionId, allowed: !store.isViewingTeamMember)
-            restoreQueuedDraft()
-        }
-        .onChangeCompat(of: selectedPhotoItems) { _, items in
-            guard !items.isEmpty else { return }
-            store.voiceInput.setVoiceMode(false)
-            let target = store.selectedSessionId
-            Task { await importPhotos(items, targetSessionID: target) }
-        }
-        .onChangeCompat(of: draft) { _, value in
-            store.voiceInput.draftChanged(value)
-            store.updateSlashCommandInput(value)
-        }
-        .onChangeCompat(of: store.commandDraftClearToken) { _, _ in
-            draft = ""
-            pendingImages = []
-            selectedPhotoItems = []
-            composerIsFocused = false
         }
     }
 
@@ -1733,7 +1749,6 @@ struct ConversationView: View {
                 else {
                     viewportProxy.prepareForOverlayPresentation()
                     showsSessionStatsPopover = false
-                    showsModelMenu = false
                     showsAgentPresetMenu = true
                 }
             } label: {
@@ -1827,7 +1842,6 @@ struct ConversationView: View {
             Button {
                 viewportProxy.prepareForOverlayPresentation()
                 showsAgentPresetMenu = false
-                showsModelMenu = false
                 showsSessionStatsPopover.toggle()
             } label: {
                 HStack(spacing: 7) {
@@ -1899,12 +1913,10 @@ struct ConversationView: View {
                 effortTitle: currentEffortTitle,
                 isLoading: modelIsLoading,
                 isDisabled: modelGroups.isEmpty || store.selectedModelCatalog?.routable == false,
-                onOpen: {
-                    viewportProxy.prepareForOverlayPresentation()
-                    showsAgentPresetMenu = false
-                    showsSessionStatsPopover = false
-                    showsModelMenu.toggle()
-                }
+                groups: modelGroups,
+                selection: currentModelSelection,
+                onSelectModel: { group, model in select(group: group, model: model) },
+                onSelectEffort: { effort in select(effort: effort) }
             )
         }
     }
@@ -1986,7 +1998,7 @@ struct ConversationView: View {
     private var currentEfforts: [GatewayReasoningEffort] { currentModelItem?.reasoning?.efforts ?? [] }
     private var currentEffortTitle: String? {
         guard let id = currentModelSelection?.reasoningEffort else { return nil }
-        return currentEfforts.first(where: { $0.id == id })?.name ?? id.capitalized
+        return currentEfforts.first(where: { $0.id == id })?.name
     }
     private func modelTitle(for id: String) -> String {
         switch id {
@@ -2036,7 +2048,8 @@ struct ConversationView: View {
         )
     }
     private func select(effort: GatewayReasoningEffort) {
-        guard let current = currentModelSelection else { return }
+        guard let current = currentModelSelection,
+              currentEfforts.contains(where: { $0.id == effort.id }) else { return }
         store.selectModel(provider: current.provider, model: current.model, reasoningEffort: effort.id)
     }
 
@@ -2144,15 +2157,13 @@ struct ConversationView: View {
             }
         }
         if store.selectedSession?.isRunning == true {
-            let previousReplyIndex = items.lastIndex {
-                $0.kind == .assistant && $0.title != L10n.streamingAssistantTitle
-            } ?? -1
-            let latestUser = items.dropFirst(previousReplyIndex + 1).first { $0.kind == .user }
-                ?? items.last { $0.kind == .user }
+            let timing = store.selectedTurnTiming
             let latestUserIndex = items.lastIndex { $0.kind == .user } ?? -1
             let cues = items.dropFirst(latestUserIndex + 1).compactMap(DeepSearchProgressCue.init)
             var hasher = Hasher()
-            hasher.combine(latestUser?.id)
+            hasher.combine(timing?.startSequence)
+            hasher.combine(timing?.anchorMonotonicSeconds)
+            hasher.combine(timing?.elapsedAtAnchor)
             for cue in cues {
                 hasher.combine(cue.id)
                 hasher.combine(cue.kind)
@@ -2161,7 +2172,7 @@ struct ConversationView: View {
             entries.append(ConversationViewportEntry(
                 id: "deep-search-progress",
                 revision: hasher.finalize(),
-                content: AnyView(DeepSearchProgressRow(startDate: latestUser?.date ?? .now, cues: cues))
+                content: AnyView(DeepSearchProgressRow(timing: timing, cues: cues))
             ))
         }
         return entries
@@ -2330,8 +2341,9 @@ private struct DeepSearchProgressRow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
-    let startDate: Date
+    let timing: SharedTurnTimingSnapshot?
     let cues: [DeepSearchProgressCue]
+    private var startDate: Date { Date(timeIntervalSince1970: timing?.startEpochSeconds ?? 0) }
 
     private enum Activity: Hashable { case thinking, gathering, exploring, reviewing, revisiting, composing, working }
     private static let phraseIntervalSeconds = 30
@@ -2382,7 +2394,9 @@ private struct DeepSearchProgressRow: View {
                 .frame(height: 0.5)
 
             TimelineView(.animation(minimumInterval: reduceMotion ? 1 : 1.0 / 30.0)) { timeline in
-                let elapsed = max(0, Int(timeline.date.timeIntervalSince(startDate)))
+                let elapsed = Int(min(Double(Int32.max), timing?.elapsedSeconds(
+                    nowMonotonicSeconds: AgentTurnMonotonicClock.now
+                ) ?? 0))
                 let phrase = phrase(for: elapsed)
                 let phase = reduceMotion ? -1.0 :
                     timeline.date.timeIntervalSinceReferenceDate
@@ -2398,7 +2412,7 @@ private struct DeepSearchProgressRow: View {
                         .foregroundStyle(base)
                         .frame(width: 18, height: 18)
                         .accessibilityHidden(true)
-                    Text("\(phrase)，用时 \(elapsed) 秒…")
+                    (timing == nil ? Text("正在同步执行状态…") : Text("\(phrase)，用时 \(elapsed) 秒…"))
                         .appFont(.system(size: 14, weight: .medium))
                         .foregroundStyle(
                             LinearGradient(
@@ -2440,6 +2454,7 @@ private struct TaskGoalPanels: View {
     @Environment(\.colorScheme) private var colorScheme
 
     let tasks: [GatewayTodoItem]?
+    let taskListMaximumHeight: CGFloat
     let goal: GatewayGoalPayload?
     let isMutatingGoal: Bool
     @Binding var tasksExpanded: Bool
@@ -2495,18 +2510,22 @@ private struct TaskGoalPanels: View {
             .accessibilityLabel(tasksExpanded ? "收起任务" : "展开任务")
 
             if tasksExpanded {
-                VStack(alignment: .leading, spacing: 9) {
-                    ForEach(Array(tasks.enumerated()), id: \.offset) { _, task in
-                        HStack(spacing: 11) {
-                            taskStatusIcon(task.status)
-                            Text(task.content)
-                                .appFont(.body)
-                                .foregroundStyle(task.status == "completed" ? .secondary : .primary)
-                                .multilineTextAlignment(.leading)
-                            Spacer(minLength: 0)
+                ContentSizedCommandScrollView(maximumHeight: taskListMaximumHeight) {
+                    VStack(alignment: .leading, spacing: 9) {
+                        ForEach(Array(tasks.enumerated()), id: \.offset) { _, task in
+                            HStack(spacing: 11) {
+                                taskStatusIcon(task.status)
+                                Text(task.content)
+                                    .appFont(.body)
+                                    .foregroundStyle(task.status == "completed" ? .secondary : .primary)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 0)
+                            }
                         }
                     }
                 }
+                .accessibilityIdentifier("conversation-task-list")
                 .padding(.top, 12)
             }
         }
@@ -2657,15 +2676,24 @@ private struct ConversationModelMenu: View {
     let effortTitle: String?
     let isLoading: Bool
     let isDisabled: Bool
-    let onOpen: () -> Void
+    let groups: [GatewayModelGroup]
+    let selection: GatewayModelSelection?
+    let onSelectModel: (GatewayModelGroup, GatewayModelItem) -> Void
+    let onSelectEffort: (GatewayReasoningEffort) -> Void
 
     var body: some View {
-        Button(action: onOpen) {
+        Menu {
+            ConversationModelMenuContent(
+                groups: groups,
+                selection: selection,
+                onSelectModel: onSelectModel,
+                onSelectEffort: onSelectEffort
+            )
+        } label: {
             ConversationModelMenuLabel(title: title, effortTitle: effortTitle, isLoading: isLoading)
         }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .anchorPreference(key: SessionModelPopoverAnchorKey.self, value: .bounds) { $0 }
+        .menuOrder(.fixed)
+        .disabled(isDisabled || isLoading)
         .accessibilityIdentifier("conversation-model-menu-toggle")
     }
 }
@@ -2673,78 +2701,79 @@ private struct ConversationModelMenu: View {
 private struct ConversationModelMenuContent: View {
     let groups: [GatewayModelGroup]
     let selection: GatewayModelSelection?
-    let efforts: [GatewayReasoningEffort]
     let onSelectModel: (GatewayModelGroup, GatewayModelItem) -> Void
     let onSelectEffort: (GatewayReasoningEffort) -> Void
 
+    private var currentModel: GatewayModelItem? {
+        guard let selection else { return nil }
+        return groups.first(where: { $0.id == selection.provider })?
+            .models.first(where: { $0.id == selection.model })
+    }
+
+    private var efforts: [GatewayReasoningEffort] {
+        currentModel?.reasoning?.efforts ?? []
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        Group {
             if groups.isEmpty {
-                Text("正在读取模型…").padding(18)
+                Text("正在读取模型…")
             } else {
-                if !efforts.isEmpty {
-                    sectionTitle(String(localized: "推理等级"))
-                    ForEach(efforts) { effort in
-                        option(effort.name, selected: effort.id == selection?.reasoningEffort,
-                               identifier: "model-effort-\(effort.id)") {
-                            onSelectEffort(effort)
+                Menu {
+                    ForEach(groups) { group in
+                        Section(group.name) {
+                            ForEach(group.models) { model in
+                                option(model.name,
+                                       selected: selection?.provider == group.id && selection?.model == model.id,
+                                       identifier: "model-option-\(group.id)-\(model.id)") {
+                                    onSelectModel(group, model)
+                                }
+                            }
                         }
                     }
-                    sectionDivider
+                } label: {
+                    Text("Model")
+                    if let modelName = currentModel?.name ?? selection?.model {
+                        Text(verbatim: modelName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
-                    if index > 0 { sectionDivider }
-                    sectionTitle(group.name)
-                    ForEach(group.models) { model in
-                        option(model.name,
-                               selected: selection?.provider == group.id && selection?.model == model.id,
-                               identifier: "model-option-\(group.id)-\(model.id)") {
-                            onSelectModel(group, model)
+                .accessibilityIdentifier("conversation-model-selection-submenu")
+
+                if efforts.isEmpty {
+                    Button("推理等级") {}
+                        .disabled(true)
+                        .accessibilityIdentifier("conversation-reasoning-effort-submenu")
+                } else {
+                    Menu {
+                        ForEach(efforts) { effort in
+                            option(effort.name, selected: effort.id == selection?.reasoningEffort,
+                                   identifier: "model-effort-\(effort.id)") {
+                                onSelectEffort(effort)
+                            }
                         }
+                    } label: {
+                        Text(verbatim: submenuTitle(
+                            String(localized: "推理等级"),
+                            value: efforts.first(where: { $0.id == selection?.reasoningEffort })?.name
+                        ))
                     }
+                    .accessibilityIdentifier("conversation-reasoning-effort-submenu")
                 }
             }
         }
-        .padding(.vertical, 8)
-        .foregroundStyle(.primary)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("conversation-model-menu")
     }
 
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .appFont(.system(size: 13, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 18)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
-    }
-
-    private var sectionDivider: some View {
-        Divider().padding(.horizontal, 18).padding(.vertical, 4)
+    private func submenuTitle(_ title: String, value: String?) -> String {
+        value.map { "\(title)  \($0)" } ?? title
     }
 
     private func option(_ title: String, selected: Bool, identifier: String,
                         action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: selected ? "checkmark" : "circle")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 22, height: 22)
-                    .accessibilityIdentifier("\(identifier)-\(selected ? "checkmark" : "circle")")
-                Text(title)
-                    .appFont(.system(size: 17, weight: .medium))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .contentShape(Rectangle())
+            Label(title, systemImage: selected ? "checkmark" : "circle")
         }
-        .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
         .accessibilityIdentifier(identifier)
     }
@@ -3044,9 +3073,10 @@ private enum NestedHorizontalScrollResolver {
     }
 }
 
-/// 按实际内容收缩；目录较长时保留滚动，标题和加载条也计入高度上限。
+/// 按实际内容收缩，超过调用方指定的高度后在内部滚动。
 private struct ContentSizedCommandScrollView<Content: View>: View {
     @State private var contentHeight: CGFloat = 0
+    var maximumHeight: CGFloat = 300
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -3064,7 +3094,7 @@ private struct ContentSizedCommandScrollView<Content: View>: View {
                     }
                 }
         }
-        .frame(height: min(contentHeight, 300))
+        .frame(height: min(contentHeight, maximumHeight))
     }
 }
 
@@ -3334,14 +3364,6 @@ private struct SessionAgentPresetPopoverAnchorKey: PreferenceKey {
     }
 }
 
-private struct SessionModelPopoverAnchorKey: PreferenceKey {
-    static var defaultValue: Anchor<CGRect>? { nil }
-
-    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
-        value = nextValue() ?? value
-    }
-}
-
 /// 模式与统计共用液态玻璃和箭头，原生玻璃自行处理高光与投影。
 private struct ComposerPopoverOverlay<Content: View>: View {
     let sourceFrame: CGRect
@@ -3351,7 +3373,6 @@ private struct ComposerPopoverOverlay<Content: View>: View {
     let preferredWidth: CGFloat
     let alignsToTrailing: Bool
     let maximumContentHeight: CGFloat
-    let showsArrow: Bool
     let content: Content
 
     init(
@@ -3362,7 +3383,6 @@ private struct ComposerPopoverOverlay<Content: View>: View {
         preferredWidth: CGFloat = 300,
         alignsToTrailing: Bool = true,
         maximumContentHeight: CGFloat = .infinity,
-        showsArrow: Bool = true,
         @ViewBuilder content: () -> Content
     ) {
         self.sourceFrame = sourceFrame
@@ -3372,7 +3392,6 @@ private struct ComposerPopoverOverlay<Content: View>: View {
         self.preferredWidth = preferredWidth
         self.alignsToTrailing = alignsToTrailing
         self.maximumContentHeight = maximumContentHeight
-        self.showsArrow = showsArrow
         self.content = content()
     }
 
@@ -3390,7 +3409,7 @@ private struct ComposerPopoverOverlay<Content: View>: View {
     var body: some View {
         let margin: CGFloat = 14
         let gap: CGFloat = 6
-        let arrowHeight: CGFloat = showsArrow ? 8 : 0
+        let arrowHeight: CGFloat = 8
         let width = min(preferredWidth, max(1, availableSize.width - margin * 2))
         let above = max(0, sourceFrame.minY - margin - gap)
         let below = max(0, availableSize.height - sourceFrame.maxY - margin - gap)
@@ -3404,8 +3423,7 @@ private struct ComposerPopoverOverlay<Content: View>: View {
             : sourceFrame.maxY + gap + height / 2
         let shape = ComposerPopoverShape(
             arrowX: sourceFrame.midX - (centerX - width / 2),
-            pointsUp: !displaysAbove,
-            showsArrow: showsArrow
+            pointsUp: !displaysAbove
         )
         // 缩放原点使用胶囊中心，即使弹窗显示在胶囊下方，也从触发处展开。
         let scaleAnchor = UnitPoint(
@@ -3463,12 +3481,8 @@ private struct ComposerPopoverOverlay<Content: View>: View {
 private struct ComposerPopoverShape: Shape {
     let arrowX: CGFloat
     let pointsUp: Bool
-    var showsArrow = true
 
     func path(in rect: CGRect) -> Path {
-        if !showsArrow {
-            return RoundedRectangle(cornerRadius: 24, style: .continuous).path(in: rect)
-        }
         let arrowHeight = min(8, rect.height / 3)
         let top = rect.minY + arrowHeight
         let bottom = rect.maxY
@@ -3606,7 +3620,6 @@ private struct ContextUsagePopover: View {
         }
         .padding(18)
         .frame(width: 300)
-        .background(.ultraThinMaterial)
     }
 
     private func usageRow(_ title: String, value: Int?, color: Color) -> some View {
