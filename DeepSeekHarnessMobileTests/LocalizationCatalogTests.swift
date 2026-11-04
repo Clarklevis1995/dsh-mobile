@@ -148,6 +148,28 @@ final class LocalizationCatalogTests: XCTestCase {
         XCTAssertEqual(table["Input"], "输入")
     }
 
+    func testBuiltInPermissionLabelsUseAppLanguageAndPreserveCustomNames() throws {
+        let cases = [
+            ("ask", "Ask every time", "每次询问", "Ask every time"),
+            ("read-only", "Read-only", "只读", "Read-only"),
+            ("workspace-write", "Workspace write", "工作区写入", "Workspace write"),
+            ("danger-full-access", "Full access", "完全访问", "Full access")
+        ]
+        for language in ["zh-Hans", "en"] {
+            let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
+            let bundle = try XCTUnwrap(Bundle(path: path))
+            for (id, legacyName, chinese, english) in cases {
+                let expected = language == "zh-Hans" ? chinese : english
+                for serverName in [nil, "", id, legacyName] {
+                    XCTAssertEqual(L10n.permissionName(for: id, fallback: serverName, bundle: bundle), expected)
+                }
+                XCTAssertEqual(L10n.permissionName(for: id, fallback: "Team review", bundle: bundle), "Team review")
+            }
+            XCTAssertEqual(L10n.permissionName(for: "future-permission", fallback: "Future permission", bundle: bundle), "Future permission")
+            XCTAssertEqual(L10n.permissionName(for: "future-permission", bundle: bundle), "future-permission")
+        }
+    }
+
     func testAgentNotificationCopyIsReadableInChinese() throws {
         let table = try localizedTable("Localizable", localization: "zh-Hans")
         XCTAssertEqual(table["agent.notification.question.title"], "需要回答")
