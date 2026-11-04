@@ -41,7 +41,7 @@ Whaleness は独立して開発された DeepSeek Harness のサードパーテ�
 
 - **iOS**：[TestFlight ベータに参加](https://testflight.apple.com/join/1Euwby6r)。iOS / iPadOS 16.1 以降の iPhone と iPad に対応します。
 - **Android**：[GitHub Releases から APK をダウンロード](https://github.com/Clarklevis1995/dsh-mobile/releases)。Android 7.0（API 24）以降が必要です。アプリ内の更新確認では高速ダウンロード元を優先し、取得したパッケージを検証します。
-- **デスクトップホスト**：DeepSeek Harness を起動し、**`dsh-plugin-mobile-gateway` 0.11.1 以降**をインストールして有効にしてください。最低バージョンは [`AppRelease/release-info.json`](../../AppRelease/release-info.json) で定義されています。
+- **デスクトップホスト**：DeepSeek Harness を起動し、**`dsh-plugin-mobile-gateway` 0.11.2 以降**をインストールして有効にしてください。最低バージョンは [`AppRelease/release-info.json`](../../AppRelease/release-info.json) で定義されています。
 - **音声入力**：ホストのプラグイン画面で公式の音声入力プラグインを有効にし、モデルのダウンロードと初期化を完了して、モバイル端末のマイクへのアクセスを許可してください。
 
 ## ベータコミュニティ
@@ -355,7 +355,7 @@ Whaleness の WeChat ベータグループ 2では、体験の共有、不具合
 ### 共通
 
 - Java 17.
-- `dsh-plugin-mobile-gateway` 0.11.1 以降を有効にした DeepSeek Harness。
+- `dsh-plugin-mobile-gateway` 0.11.2 以降を有効にした DeepSeek Harness。
 - Mobile Gateway に接続できるシミュレーター、エミュレーター、または実機。
 
 ### Android
@@ -416,7 +416,7 @@ adb reverse tcp:3080 tcp:3080
 
 ## 接続とペアリング
 
-1. DeepSeek Harness で `dsh-plugin-mobile-gateway`（最低 0.11.1）をインストールまたは更新し、`dsh web` を完全終了して再起動します。
+1. DeepSeek Harness で `dsh-plugin-mobile-gateway`（最低 0.11.2）をインストールまたは更新し、`dsh web` を完全終了して再起動します。
 
    ```bash
    dsh plugin --profile web add dsh-plugin-mobile-gateway@latest

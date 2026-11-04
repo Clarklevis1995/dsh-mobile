@@ -41,7 +41,7 @@ Ambos se conectam ao Harness por WebSocket via [`dsh-plugin-mobile-gateway`](htt
 
 - **iOS**: [Participar do beta no TestFlight](https://testflight.apple.com/join/1Euwby6r). Compatível com iPhone e iPad com iOS / iPadOS 16.1 ou posterior.
 - **Android**: [Baixar um APK pelo GitHub Releases](https://github.com/Clarklevis1995/dsh-mobile/releases). Requer Android 7.0 (API 24) ou posterior. A busca de atualizações prioriza a fonte de download acelerada e verifica os pacotes baixados.
-- **Host de desktop**: execute o DeepSeek Harness com **`dsh-plugin-mobile-gateway` 0.11.1 ou posterior** instalado e ativado. [`AppRelease/release-info.json`](../../AppRelease/release-info.json) define a versão mínima exigida.
+- **Host de desktop**: execute o DeepSeek Harness com **`dsh-plugin-mobile-gateway` 0.11.2 ou posterior** instalado e ativado. [`AppRelease/release-info.json`](../../AppRelease/release-info.json) define a versão mínima exigida.
 - **Entrada de voz**: ative o plugin oficial de entrada de voz na seção de plugins do host, conclua o download e a inicialização do modelo e permita acesso ao microfone no dispositivo móvel.
 
 ## Comunidade beta
@@ -355,7 +355,7 @@ Cada plataforma cuida de armazenamento seguro, imagens, arquivos temporários, c
 ### Comuns
 
 - Java 17.
-- DeepSeek Harness com `dsh-plugin-mobile-gateway` 0.11.1 ou posterior ativado.
+- DeepSeek Harness com `dsh-plugin-mobile-gateway` 0.11.2 ou posterior ativado.
 - Um simulador, emulador ou dispositivo físico com acesso ao Mobile Gateway.
 
 ### Android
@@ -416,7 +416,7 @@ Não é preciso compilar o framework manualmente antes. Para compilar somente o 
 
 ## Conexão e pareamento
 
-1. Instale ou atualize `dsh-plugin-mobile-gateway` no DeepSeek Harness (mínimo 0.11.1), encerre completamente `dsh web` e reinicie:
+1. Instale ou atualize `dsh-plugin-mobile-gateway` no DeepSeek Harness (mínimo 0.11.2), encerre completamente `dsh web` e reinicie:
 
    ```bash
    dsh plugin --profile web add dsh-plugin-mobile-gateway@latest

@@ -41,7 +41,7 @@ Ambas aplicaciones se conectan a Harness por WebSocket a través de [`dsh-plugin
 
 - **iOS**: [Participar en la beta de TestFlight](https://testflight.apple.com/join/1Euwby6r). Compatible con iPhone y iPad con iOS / iPadOS 16.1 o posterior.
 - **Android**: [Descargar un APK desde GitHub Releases](https://github.com/Clarklevis1995/dsh-mobile/releases). Requiere Android 7.0 (API 24) o posterior. La búsqueda de actualizaciones prioriza la fuente de descarga acelerada y verifica los paquetes descargados.
-- **Host de escritorio**: ejecuta DeepSeek Harness con **`dsh-plugin-mobile-gateway` 0.11.1 o posterior** instalado y habilitado. [`AppRelease/release-info.json`](../../AppRelease/release-info.json) define la versión mínima requerida.
+- **Host de escritorio**: ejecuta DeepSeek Harness con **`dsh-plugin-mobile-gateway` 0.11.2 o posterior** instalado y habilitado. [`AppRelease/release-info.json`](../../AppRelease/release-info.json) define la versión mínima requerida.
 - **Entrada de voz**: habilita el plugin oficial de entrada de voz en la sección de plugins del host, completa la descarga e inicialización del modelo y concede acceso al micrófono en el dispositivo móvil.
 
 ## Comunidad de la beta
@@ -355,7 +355,7 @@ Cada plataforma gestiona el almacenamiento seguro, imágenes, archivos temporale
 ### Comunes
 
 - Java 17.
-- DeepSeek Harness con `dsh-plugin-mobile-gateway` 0.11.1 o posterior habilitado.
+- DeepSeek Harness con `dsh-plugin-mobile-gateway` 0.11.2 o posterior habilitado.
 - Un simulador, emulador o dispositivo físico con acceso a Mobile Gateway.
 
 ### Android
@@ -416,7 +416,7 @@ No necesitas compilar primero el framework de forma manual. Para compilar única
 
 ## Conexión y emparejamiento
 
-1. Instala o actualiza `dsh-plugin-mobile-gateway` en DeepSeek Harness (mínimo 0.11.1), cierra por completo `dsh web` y reinícialo:
+1. Instala o actualiza `dsh-plugin-mobile-gateway` en DeepSeek Harness (mínimo 0.11.2), cierra por completo `dsh web` y reinícialo:
 
    ```bash
    dsh plugin --profile web add dsh-plugin-mobile-gateway@latest

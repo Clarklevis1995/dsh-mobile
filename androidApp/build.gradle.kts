@@ -14,8 +14,8 @@ android {
         applicationId = "com.clarklevis.dsh.android"
         minSdk = 24
         targetSdk = 36
-        versionCode = 34
-        versionName = "1.7.13"
+        versionCode = 37
+        versionName = "1.7.14"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -43,6 +43,15 @@ android {
     buildFeatures {
         compose = true
         buildConfig = false
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            isUniversalApk = true
+        }
     }
 
     sourceSets.getByName("main").assets.srcDir(rootProject.file("AppRelease"))
@@ -73,6 +82,7 @@ val buildTsnetAar = tasks.register<Exec>("buildTsnetAar") {
     group = "build"
     description = "gomobile bind ./tsnetgo -> AAR（需要 Go 与 Android NDK）"
     val apiLevel = 24 // 必须 <= android.defaultConfig.minSdk，否则低版本设备 UnsatisfiedLinkError
+    val goEnvironment = rootProject.file("scripts/with_go_toolchain.sh")
     // 只在这个任务被配置时求值，并且**不在配置期抛错**：之前抛错让任何 Gradle 调用
     // （包括 Xcode 的 "Build KMP Framework" 阶段）都要求本机有 Android SDK，iOS 构建被无端挡住。
     // 这里用局部变量而不是脚本级属性：doFirst 捕获局部值才符合配置缓存的要求。
@@ -92,8 +102,14 @@ val buildTsnetAar = tasks.register<Exec>("buildTsnetAar") {
         File("/opt/homebrew/bin/gomobile"),
         File("/usr/local/bin/gomobile")
     ).firstOrNull { it.canExecute() }?.absolutePath
-    inputs.dir(tsnetSrcDir)
-    outputs.dir(File(tsnetSrcDir, "build"))
+    inputs.files(
+        fileTree(tsnetSrcDir) {
+            include("**/*.go", "go.mod", "go.sum")
+            exclude("build/**")
+        }
+    )
+    inputs.file(goEnvironment)
+    outputs.files(tsnetAarFile, File(tsnetSrcDir, "build/tsnetgo/tsnetgo-sources.jar"))
     workingDir = tsnetSrcDir
     doFirst {
         val sdk = sdkDir ?: throw GradleException(
@@ -113,11 +129,14 @@ val buildTsnetAar = tasks.register<Exec>("buildTsnetAar") {
         // 实测证据：不加这行时 libgojni.so 的 LOAD 对齐是 0x1000（真机上 HyperOS 会弹「Android 应用兼容性」警告），
         // 加上后是 0x4000，且 16 KB 对齐的库在 4 KB 页设备上照常加载。
         environment("CGO_LDFLAGS", "-Wl,-z,max-page-size=16384")
-        environment("PATH", listOf(goBin.absolutePath, System.getenv("PATH").orEmpty())
-            .filter(String::isNotBlank).joinToString(":"))
+        environment(
+            "PATH",
+            listOf(goBin.absolutePath, System.getenv("PATH").orEmpty())
+                .filter(String::isNotBlank).joinToString(":")
+        )
         val args = mutableListOf(tool, "bind", "-target=android", "-androidapi", apiLevel.toString())
         args += listOf("-o", "build/tsnetgo/tsnetgo.aar", ".")
-        commandLine(args)
+        commandLine(listOf("/bin/sh", goEnvironment.absolutePath) + args)
     }
 }
 

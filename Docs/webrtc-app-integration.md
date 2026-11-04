@@ -46,6 +46,7 @@ iOS 在 Xcode 控制台筛选 `[GatewayRTC]`（OSLog category 为 `gateway-rtc`�
 - iOS `GatewayRtcLink` 在 `GatewayClient` 内抽出传输边界；与 Android 共用协商状态机，Swift `GatewayMgwCodec` 直接读写 64 位整数头。
 - 每条通道可靠、有序，仅传数据。临时 PC 在失败、退出、切换主机及关闭时释放；旧连接回调通过连接代次或实例身份丢弃。
 - 原生库锁定为 Android `io.github.webrtc-sdk:android:144.7559.15` 和 iOS `stasel/WebRTC` `154.0.0`。SPM 归档校验值为 `a2bcdda93578c82452ceb6e49d54a2746e1bcb4caf7c2fa601ffac8028b58c16`。依赖来源：[Android SDK](https://github.com/webrtc-sdk/android)、[iOS Package](https://github.com/stasel/WebRTC/tree/154.0.0)。
+- iOS 真机 Archive 的 `Collect WebRTC dSYM` 阶段自动下载同版本官方独立符号包（首次约 397 MiB，缓存于 `build/ios-symbols/`），校验 SHA-256 后按二进制 UUID 选取 dSYM，供 Xcode 收入归档；普通运行和模拟器构建跳过。升级 WebRTC 时须同步更新 `scripts/collect_webrtc_symbols.py` 中的版本、下载地址及官方资产 SHA-256。已有归档也可用 `python3 scripts/collect_webrtc_symbols.py --symbols-zip <官方符号.zip> --framework <归档内 WebRTC.framework/WebRTC> --destination <归档/dSYMs>` 补入匹配符号，无需改动 App 二进制。
 
 协商超时不延长网关给出的总预算；预留最后 1.5 秒用于显式选择 WebSocket。提交状态不确定时关闭整组，下一次连接使用普通 WebSocket。安全校验失败或网关明确 `recoverable=false` 时停止自动恢复。
 

@@ -41,7 +41,7 @@ Both apps connect to Harness over WebSocket through [`dsh-plugin-mobile-gateway`
 
 - **iOS**: [Join the TestFlight beta](https://testflight.apple.com/join/1Euwby6r). Supports iPhone and iPad running iOS / iPadOS 16.1 or later.
 - **Android**: [Download an APK from GitHub Releases](https://github.com/Clarklevis1995/dsh-mobile/releases). Requires Android 7.0 (API 24) or later. In-app update checks prefer the accelerated download source and verify downloaded packages.
-- **Desktop host**: Run DeepSeek Harness with **`dsh-plugin-mobile-gateway` 0.11.1 or later** installed and enabled. [`AppRelease/release-info.json`](AppRelease/release-info.json) defines the required minimum version.
+- **Desktop host**: Run DeepSeek Harness with **`dsh-plugin-mobile-gateway` 0.11.2 or later** installed and enabled. [`AppRelease/release-info.json`](AppRelease/release-info.json) defines the required minimum version.
 - **Voice input**: Enable the official Voice Input plugin in the desktop host's Plugins section, finish model download and initialization, and grant microphone access on the mobile device.
 
 ## Beta Community
@@ -355,7 +355,7 @@ Each platform handles secure storage, image processing, temporary files, system 
 ### Common
 
 - Java 17.
-- DeepSeek Harness with `dsh-plugin-mobile-gateway` 0.11.1+ enabled.
+- DeepSeek Harness with `dsh-plugin-mobile-gateway` 0.11.2+ enabled.
 - A simulator, emulator, or physical device that can reach Mobile Gateway.
 
 ### Android
@@ -416,7 +416,7 @@ You do not need to build the framework manually first. To build only the Apple S
 
 ## Connection and Pairing
 
-1. Install or upgrade `dsh-plugin-mobile-gateway` in DeepSeek Harness (minimum 0.11.1), then fully exit and restart `dsh web`:
+1. Install or upgrade `dsh-plugin-mobile-gateway` in DeepSeek Harness (minimum 0.11.2), then fully exit and restart `dsh web`:
 
    ```bash
    dsh plugin --profile web add dsh-plugin-mobile-gateway@latest

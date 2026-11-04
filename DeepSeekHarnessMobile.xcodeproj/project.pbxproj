@@ -535,6 +535,7 @@
 				2730CFAAB3AB8815D8F74EB4 /* Frameworks */,
 				29B92305AFBD472635128223 /* Resources */,
 				F1A000000000000000000033 /* Embed App Extensions */,
+				D5A7E9207B78404E93B653A6 /* Collect WebRTC dSYM */,
 			);
 			buildRules = (
 			);
@@ -682,6 +683,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		D5A7E9207B78404E93B653A6 /* Collect WebRTC dSYM */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/collect_webrtc_symbols.py",
+				"$(BUILT_PRODUCTS_DIR)/WebRTC.framework/WebRTC",
+			);
+			name = "Collect WebRTC dSYM";
+			outputPaths = (
+				"$(DWARF_DSYM_FOLDER_PATH)/WebRTC.framework.dSYM",
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+			shellPath = /bin/sh;
+			shellScript = "/usr/bin/xcrun python3 \"$SRCROOT/scripts/collect_webrtc_symbols.py\"\n";
+			showEnvVarsInLog = 0;
+		};
 		A9FC00000000000000000003 /* Build KMP Framework */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -1069,7 +1089,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = SHVN6YQNQF;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AgentLiveActivityWidget/Info.plist;
@@ -1079,7 +1099,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.13;
+				MARKETING_VERSION = 1.7.14;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(LOCAL_BUNDLE_IDENTIFIER).AgentLiveActivityWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1097,7 +1117,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_TEAM = T58RY5HUA7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AgentLiveActivityWidget/Info.plist;
@@ -1107,7 +1127,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.13;
+				MARKETING_VERSION = 1.7.14;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(LOCAL_BUNDLE_IDENTIFIER).AgentLiveActivityWidget";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.lichaofan.dshmobile.AgentLiveActivityWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";

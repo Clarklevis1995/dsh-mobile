@@ -1,1510 +1,6 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
-  "此账号及其登录状态将从本机删除；若正在使用，会停止对应隧道。再次使用需重新登录。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "This account and its sign-in state will be removed from this device. Its active tunnel will stop. You will need to sign in again to use it."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "此账号及其登录状态将从本机删除；若正在使用，会停止对应隧道。再次使用需重新登录。"
-        }
-      }
-    }
-  },
-  "删除账号？": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Delete account?"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "删除账号？"
-        }
-      }
-    }
-  },
-  "删除账号": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Delete account"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "删除账号"
-        }
-      }
-    }
-  },
-  "新账号连接失败": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "New account connection failed"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "新账号连接失败"
-        }
-      }
-    }
-  },
-  "正在准备新账号的路由…": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Preparing routes for the new account…"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "正在准备新账号的路由…"
-        }
-      }
-    }
-  },
-  "等待新账号登录…": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Waiting for the new account to sign in…"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "等待新账号登录…"
-        }
-      }
-    }
-  },
-  "取消添加": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Cancel adding account"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "取消添加"
-        }
-      }
-    }
-  },
-  "无法获取登录链接，请取消后重试。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Unable to get a sign-in link. Cancel and try again."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "无法获取登录链接，请取消后重试。"
-        }
-      }
-    }
-  },
-  "正在获取登录链接…": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Getting sign-in link…"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "正在获取登录链接…"
-        }
-      }
-    }
-  },
-  "即将跳转到 Tailscale 登录页面。你可以复制下方链接；点击确认打开页面，登录完成后应用会自动连接。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "You are about to open the Tailscale sign-in page. You can copy the link below. Tap Confirm to open the page. The app will connect automatically after you sign in."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "即将跳转到 Tailscale 登录页面。你可以复制下方链接；点击确认打开页面，登录完成后应用会自动连接。"
-        }
-      }
-    }
-  },
-  "仅显示已登录账号。点击账号可切换网络，登录状态会分别保留。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Only signed-in accounts are shown. Tap an account to switch networks. Each account keeps its own sign-in state."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "仅显示已登录账号。点击账号可切换网络，登录状态会分别保留。"
-        }
-      }
-    }
-  },
-  "确认": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Confirm"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "确认"
-        }
-      }
-    }
-  },
-  "确定": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Confirm"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "确定"
-        }
-      }
-    }
-  },
-  "已登录账号": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Signed-in account"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "已登录账号"
-        }
-      }
-    }
-  },
-  "待登录账号": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Account awaiting login"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "待登录账号"
-        }
-      }
-    }
-  },
-  "未启用": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Disabled"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "未启用"
-        }
-      }
-    }
-  },
-  "启动中": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Starting"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "启动中"
-        }
-      }
-    }
-  },
-  "需要登录": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Sign in required"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "需要登录"
-        }
-      }
-    }
-  },
-  "正在建立连接": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Establishing connection"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "正在建立连接"
-        }
-      }
-    }
-  },
-  "网络接口读取失败": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Failed to read network interfaces"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "网络接口读取失败"
-        }
-      }
-    }
-  },
-  "运行库加载失败": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Failed to load runtime"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "运行库加载失败"
-        }
-      }
-    }
-  },
-  "节点启动失败": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Failed to start node"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "节点启动失败"
-        }
-      }
-    }
-  },
-  "登录等待超时": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Login timed out"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "登录等待超时"
-        }
-      }
-    }
-  },
-  "状态查询失败": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Failed to query status"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "状态查询失败"
-        }
-      }
-    }
-  },
-  "未知错误": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Unknown error"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "未知错误"
-        }
-      }
-    }
-  },
-  "对端数量": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Peers"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "对端数量"
-        }
-      }
-    }
-  },
-  "复制链接": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Copy link"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "复制链接"
-        }
-      }
-    }
-  },
-  "停止启动": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Cancel startup"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "停止启动"
-        }
-      }
-    }
-  },
-  "停止隧道": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Stop tunnel"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "停止隧道"
-        }
-      }
-    }
-  },
-  "内嵌隧道": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Embedded tunnel"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "内嵌隧道"
-        }
-      }
-    }
-  },
-  "启用内嵌隧道": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Enable embedded tunnel"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "启用内嵌隧道"
-        }
-      }
-    }
-  },
-  "Tailscale 内嵌隧道": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Embedded Tailscale tunnel"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Tailscale 内嵌隧道"
-        }
-      }
-    }
-  },
-  "本机地址": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Node address"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "本机地址"
-        }
-      }
-    }
-  },
-  "失败原因": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Failure reason"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "失败原因"
-        }
-      }
-    }
-  },
-  "打开登录链接": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Open login link"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "打开登录链接"
-        }
-      }
-    }
-  },
-  "隧道状态": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Tunnel status"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "隧道状态"
-        }
-      }
-    }
-  },
-  "等待你在浏览器里完成登录。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Waiting for you to sign in using the browser."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "等待你在浏览器里完成登录。"
-        }
-      }
-    }
-  },
-  "节点名称": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Node name"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "节点名称"
-        }
-      }
-    }
-  },
-  "只允许小写字母、数字和连字符，最长 63 个字符。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Use lowercase letters, numbers and hyphens, up to 63 characters."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "只允许小写字母、数字和连字符，最长 63 个字符。"
-        }
-      }
-    }
-  },
-  "登录密钥（可选）": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Auth Key (optional)"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "登录密钥（可选）"
-        }
-      }
-    }
-  },
-  "节点身份": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Node identity"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "节点身份"
-        }
-      }
-    }
-  },
-  "节点名称只允许小写字母、数字和连字符。登录时默认在浏览器里完成；也可以粘贴 Tailscale 控制台生成的 Auth Key。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Node names support lowercase letters, numbers and hyphens. Sign in using the browser, or paste an Auth Key generated in the Tailscale admin console."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "节点名称只允许小写字母、数字和连字符。登录时默认在浏览器里完成；也可以粘贴 Tailscale 控制台生成的 Auth Key。"
-        }
-      }
-    }
-  },
-  "在应用内建立一个 Tailscale 节点：不需要安装 Tailscale，也不会占用系统 VPN。节点只在你自己的 tailnet 内可达。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Run a Tailscale node inside the app, without installing Tailscale or using the system VPN. The node is only reachable within your tailnet."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "在应用内建立一个 Tailscale 节点：不需要安装 Tailscale，也不会占用系统 VPN。节点只在你自己的 tailnet 内可达。"
-        }
-      }
-    }
-  },
-  "使用登录密钥连接": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Connect with Auth Key"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "使用登录密钥连接"
-        }
-      }
-    }
-  },
-  "Tailscale 账号": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Tailscale account"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Tailscale 账号"
-        }
-      }
-    }
-  },
-  "旧隧道未能关闭，请重试或重启应用。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "The previous tunnel could not be closed. Try again or restart the app."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "旧隧道未能关闭，请重试或重启应用。"
-        }
-      }
-    }
-  },
-  "已保存登录状态": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Login saved"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "已保存登录状态"
-        }
-      }
-    }
-  },
-  "等待登录": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Waiting for login"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "等待登录"
-        }
-      }
-    }
-  },
-  "当前账号": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Current account"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "当前账号"
-        }
-      }
-    }
-  },
-  "登录 Tailscale 账号": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Sign in to Tailscale"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "登录 Tailscale 账号"
-        }
-      }
-    }
-  },
-  "添加 Tailscale 账号": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Add Tailscale account"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "添加 Tailscale 账号"
-        }
-      }
-    }
-  },
-  "账号与网络": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Accounts and networks"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "账号与网络"
-        }
-      }
-    }
-  },
-  "各账号分别保存登录状态。切换账号会断开当前隧道；添加账号后需要重新授权，可选择其他账号或 tailnet。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Login state is saved separately for each account. Switching accounts disconnects the current tunnel. Adding an account starts a new authorization, where you can choose another account or tailnet."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "各账号分别保存登录状态。切换账号会断开当前隧道；添加账号后需要重新授权，可选择其他账号或 tailnet。"
-        }
-      }
-    }
-  },
-  "继续连接": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Connect again"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "继续连接"
-        }
-      }
-    }
-  },
-  "账号备注（可选）": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Account label (optional)"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "账号备注（可选）"
-        }
-      }
-    }
-  },
-  "1小时": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "1 hour"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "1小时"
-        }
-      }
-    }
-  },
-  "24小时": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "24 hours"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "24小时"
-        }
-      }
-    }
-  },
-  "预计大小": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Estimated size"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "预计大小"
-        }
-      }
-    }
-  },
-  "%lld 个日志文件": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "%lld log files"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "%lld 个日志文件"
-        }
-      }
-    }
-  },
-  "已选择 %@": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Selected %@"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "已选择 %@"
-        }
-      }
-    }
-  },
-  "日志按小时留存，仅导出所选时段\n旧日志会自动清理，可选日期以本机留存为准": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Logs are saved hourly; only the selected time range is exported.\nOlder logs are removed automatically. Available dates depend on logs retained on this device."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "日志按小时留存，仅导出所选时段\n旧日志会自动清理，可选日期以本机留存为准"
-        }
-      }
-    }
-  },
-  "日志导出与分享": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Log export and sharing"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "日志导出与分享"
-        }
-      }
-    }
-  },
-  "最近1小时": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Last hour"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "最近1小时"
-        }
-      }
-    }
-  },
-  "最近24小时": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Last 24 hours"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "最近24小时"
-        }
-      }
-    }
-  },
-  "今天": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Today"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "今天"
-        }
-      }
-    }
-  },
-  "自定义": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Custom"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "自定义"
-        }
-      }
-    }
-  },
-  "时间范围": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Time range"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "时间范围"
-        }
-      }
-    }
-  },
-  "起止时间": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Start and end"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "起止时间"
-        }
-      }
-    }
-  },
-  "开始": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Start"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "开始"
-        }
-      }
-    }
-  },
-  "结束": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "End"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "结束"
-        }
-      }
-    }
-  },
-  "开始日期": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Start date"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "开始日期"
-        }
-      }
-    }
-  },
-  "结束日期": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "End date"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "结束日期"
-        }
-      }
-    }
-  },
-  "开始时间": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Start time"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "开始时间"
-        }
-      }
-    }
-  },
-  "结束时间": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "End time"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "结束时间"
-        }
-      }
-    }
-  },
-  "导出内容": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Export contents"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "导出内容"
-        }
-      }
-    }
-  },
-  "应用运行日志": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Application logs"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "应用运行日志"
-        }
-      }
-    }
-  },
-  "导出到文件": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Save to Files"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "导出到文件"
-        }
-      }
-    }
-  },
-  "正在统计日志…": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Checking logs…"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "正在统计日志…"
-        }
-      }
-    }
-  },
-  "正在生成日志…": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Preparing logs…"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "正在生成日志…"
-        }
-      }
-    }
-  },
-  "无法读取日志，请重试": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Could not read logs. Please retry."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "无法读取日志，请重试"
-        }
-      }
-    }
-  },
-  "所选时间范围内没有日志": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "No logs in this time range"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "所选时间范围内没有日志"
-        }
-      }
-    }
-  },
-  "结束时间须晚于开始时间": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "End time must be later than start time"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "结束时间须晚于开始时间"
-        }
-      }
-    }
-  },
-  "选择最近24小时": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Select last 24 hours"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "选择最近24小时"
-        }
-      }
-    }
-  },
-  "导出后选择保存位置或分享给他人": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Save the export or share it with others"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "导出后选择保存位置或分享给他人"
-        }
-      }
-    }
-  },
-  "日志按小时保存，导出时仅包含所选时间段。\n最旧日志会自动清理，可选范围以本机留存为准。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Logs are saved hourly; only the selected time range is exported.\nOlder logs are removed automatically. Availability depends on logs retained on this device."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "日志按小时保存，导出时仅包含所选时间段。\n最旧日志会自动清理，可选范围以本机留存为准。"
-        }
-      }
-    }
-  },
-  "灰色日期不在可导出的日志范围内": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Unavailable dates are shown in gray"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "灰色日期不在可导出的日志范围内"
-        }
-      }
-    }
-  },
-  "上下滑动选择整点": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Scroll to choose a whole hour"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "上下滑动选择整点"
-        }
-      }
-    }
-  },
-  "已选择 %lld 分钟 · 本机时间": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Selected %lld min · Local time"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "已选择 %lld 分钟 · 本机时间"
-        }
-      }
-    }
-  },
-  "%lld 个日志文件 · 预计 %@": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "%lld log files · About %@"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "%lld 个日志文件 · 预计 %@"
-        }
-      }
-    }
-  },
-  "按小时保存，日志和导出副本合计不超过 200 MB，自动清理最旧日志。": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Logs are saved hourly. Logs and export copies use up to 200 MB in total; the oldest logs are removed automatically."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "按小时保存，日志和导出副本合计不超过 200 MB，自动清理最旧日志。"
-        }
-      }
-    }
-  },
-  "日志导出失败，请重试": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Could not export logs. Please try again."
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "日志导出失败，请重试"
-        }
-      }
-    }
-  },
-  "分享日志": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Share logs"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "分享日志"
-        }
-      }
-    }
-  },
-  "导出日志": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Export logs"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "导出日志"
-        }
-      }
-    }
-  },
-  "日志": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Logs"
-        }
-      },
-      "zh-Hans": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "日志"
-        }
-      }
-    }
-  },
     " 等工具" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1755,6 +251,40 @@
         }
       }
     },
+    "%lld 个日志文件" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld log files"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个日志文件"
+          }
+        }
+      }
+    },
+    "%lld 个日志文件 · 预计 %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld log files · About %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个日志文件 · 预计 %@"
+          }
+        }
+      }
+    },
     "~%@ / %@" : {
       "localizations" : {
         "en" : {
@@ -1783,6 +313,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "0 秒"
+          }
+        }
+      }
+    },
+    "1小时" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 hour"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1小时"
+          }
+        }
+      }
+    },
+    "24小时" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24 hours"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "24小时"
           }
         }
       }
@@ -4772,6 +3336,39 @@
         }
       }
     },
+    "Tailscale 内嵌隧道" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Embedded Tailscale tunnel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscale 内嵌隧道"
+          }
+        }
+      }
+    },
+    "Tailscale 账号" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscale account"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tailscale 账号"
+          }
+        }
+      }
+    },
     "Think" : {
       "localizations" : {
         "en" : {
@@ -5397,6 +3994,23 @@
         }
       }
     },
+    "上下滑动选择整点" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scroll to choose a whole hour"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上下滑动选择整点"
+          }
+        }
+      }
+    },
     "上传中" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -5719,6 +4333,22 @@
         }
       }
     },
+    "仅显示已登录账号。点击账号可切换网络，登录状态会分别保留。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only signed-in accounts are shown. Tap an account to switch networks. Each account keeps its own sign-in state."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅显示已登录账号。点击账号可切换网络，登录状态会分别保留。"
+          }
+        }
+      }
+    },
     "仅此页可见时检测，离开页面或进入后台即停止。丢包率为 3 秒内未响应的探测占比；速率为应用层实际收发流量。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -5732,6 +4362,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仅此页可见时检测，离开页面或进入后台即停止。丢包率为 3 秒内未响应的探测占比；速率为应用层实际收发流量。"
+          }
+        }
+      }
+    },
+    "今天" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今天"
           }
         }
       }
@@ -5949,6 +4596,23 @@
         }
       }
     },
+    "使用登录密钥连接" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect with Auth Key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用登录密钥连接"
+          }
+        }
+      }
+    },
     "使用系统预览" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6060,6 +4724,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "值"
+          }
+        }
+      }
+    },
+    "停止启动" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel startup"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止启动"
+          }
+        }
+      }
+    },
+    "停止隧道" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop tunnel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止隧道"
           }
         }
       }
@@ -6298,7 +4996,6 @@
       }
     },
     "关于" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6369,6 +5066,22 @@
         }
       }
     },
+    "内嵌隧道" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Embedded tunnel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内嵌隧道"
+          }
+        }
+      }
+    },
     "内网直连" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6392,6 +5105,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Up to 120 characters"
+          }
+        }
+      }
+    },
+    "最近1小时" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last hour"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近1小时"
+          }
+        }
+      }
+    },
+    "最近24小时" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last 24 hours"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近24小时"
           }
         }
       }
@@ -6482,6 +5229,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "准备语音模型"
+          }
+        }
+      }
+    },
+    "分享日志" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share logs"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享日志"
           }
         }
       }
@@ -6728,6 +5492,40 @@
         }
       }
     },
+    "删除账号" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete account"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除账号"
+          }
+        }
+      }
+    },
+    "删除账号？" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete account?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除账号？"
+          }
+        }
+      }
+    },
     "刷新存储统计" : {
       "localizations" : {
         "en" : {
@@ -6800,6 +5598,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "占用空间"
+          }
+        }
+      }
+    },
+    "即将跳转到 Tailscale 登录页面。你可以复制下方链接；点击确认打开页面，登录完成后应用会自动连接。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You are about to open the Tailscale sign-in page. You can copy the link below. Tap Confirm to open the page. The app will connect automatically after you sign in."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即将跳转到 Tailscale 登录页面。你可以复制下方链接；点击确认打开页面，登录完成后应用会自动连接。"
           }
         }
       }
@@ -6956,6 +5771,23 @@
         }
       }
     },
+    "取消添加" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel adding account"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消添加"
+          }
+        }
+      }
+    },
     "取消连接" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6980,6 +5812,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "受阻"
+          }
+        }
+      }
+    },
+    "只允许小写字母、数字和连字符，最长 63 个字符。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use lowercase letters, numbers and hyphens, up to 63 characters."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只允许小写字母、数字和连字符，最长 63 个字符。"
           }
         }
       }
@@ -7074,6 +5922,23 @@
         }
       }
     },
+    "各账号分别保存登录状态。切换账号会断开当前隧道；添加账号后需要重新授权，可选择其他账号或 tailnet。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Login state is saved separately for each account. Switching accounts disconnects the current tunnel. Adding an account starts a new authorization, where you can choose another account or tailnet."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "各账号分别保存登录状态。切换账号会断开当前隧道；添加账号后需要重新授权，可选择其他账号或 tailnet。"
+          }
+        }
+      }
+    },
     "名称" : {
       "localizations" : {
         "en" : {
@@ -7086,6 +5951,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "名称"
+          }
+        }
+      }
+    },
+    "启动中" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Starting"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动中"
+          }
+        }
+      }
+    },
+    "启用内嵌隧道" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enable embedded tunnel"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用内嵌隧道"
           }
         }
       }
@@ -7255,6 +6154,22 @@
         }
       }
     },
+    "在应用内建立一个 Tailscale 节点：不需要安装 Tailscale，也不会占用系统 VPN。节点只在你自己的 tailnet 内可达。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run a Tailscale node inside the app, without installing Tailscale or using the system VPN. The node is only reachable within your tailnet."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在应用内建立一个 Tailscale 节点：不需要安装 Tailscale，也不会占用系统 VPN。节点只在你自己的 tailnet 内可达。"
+          }
+        }
+      }
+    },
     "在当前工作区新建会话" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -7365,6 +6280,23 @@
         }
       }
     },
+    "复制链接" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy link"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制链接"
+          }
+        }
+      }
+    },
     "外观" : {
       "localizations" : {
         "en" : {
@@ -7414,6 +6346,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Failure"
+          }
+        }
+      }
+    },
+    "失败原因" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failure reason"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败原因"
           }
         }
       }
@@ -7679,6 +6628,23 @@
         }
       }
     },
+    "对端数量" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对端数量"
+          }
+        }
+      }
+    },
     "对话" : {
       "localizations" : {
         "en" : {
@@ -7696,6 +6662,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Conversation messages"
+          }
+        }
+      }
+    },
+    "导出内容" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export contents"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出内容"
+          }
+        }
+      }
+    },
+    "导出到文件" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save to Files"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出到文件"
+          }
+        }
+      }
+    },
+    "导出后选择保存位置或分享给他人" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save the export or share it with others"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出后选择保存位置或分享给他人"
+          }
+        }
+      }
+    },
+    "导出日志" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export logs"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出日志"
           }
         }
       }
@@ -7913,6 +6947,23 @@
         }
       }
     },
+    "已保存登录状态" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Login saved"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存登录状态"
+          }
+        }
+      }
+    },
     "已保留本地内容并继续接收实时事件" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8054,6 +7105,23 @@
         }
       }
     },
+    "已登录账号" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signed-in account"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已登录账号"
+          }
+        }
+      }
+    },
     "已结束" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8171,6 +7239,40 @@
         }
       }
     },
+    "已选择 %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已选择 %@"
+          }
+        }
+      }
+    },
+    "已选择 %lld 分钟 · 本机时间" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected %lld min · Local time"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已选择 %lld 分钟 · 本机时间"
+          }
+        }
+      }
+    },
     "平均 %@ · P95 %@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8184,6 +7286,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "平均 %@ · P95 %@"
+          }
+        }
+      }
+    },
+    "应用运行日志" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Application logs"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用运行日志"
           }
         }
       }
@@ -8222,6 +7340,23 @@
         }
       }
     },
+    "开始" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始"
+          }
+        }
+      }
+    },
     "开始上传…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8235,6 +7370,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开始上传…"
+          }
+        }
+      }
+    },
+    "开始日期" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start date"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始日期"
+          }
+        }
+      }
+    },
+    "开始时间" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start time"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始时间"
           }
         }
       }
@@ -8570,6 +7739,23 @@
         }
       }
     },
+    "当前账号" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current account"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前账号"
+          }
+        }
+      }
+    },
     "往返延迟" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8622,6 +7808,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pending approval restored"
+          }
+        }
+      }
+    },
+    "待登录账号" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account awaiting login"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待登录账号"
           }
         }
       }
@@ -8735,6 +7938,23 @@
         }
       }
     },
+    "所选时间范围内没有日志" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No logs in this time range"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选时间范围内没有日志"
+          }
+        }
+      }
+    },
     "手动输入配对信息" : {
       "localizations" : {
         "en" : {
@@ -8762,6 +7982,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Open sidebar"
+          }
+        }
+      }
+    },
+    "打开登录链接" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open login link"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开登录链接"
           }
         }
       }
@@ -8966,6 +8203,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按住说话"
+          }
+        }
+      }
+    },
+    "按小时保存，日志和导出副本合计不超过 200 MB，自动清理最旧日志。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logs are saved hourly. Logs and export copies use up to 200 MB in total; the oldest logs are removed automatically."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按小时保存，日志和导出副本合计不超过 200 MB，自动清理最旧日志。"
           }
         }
       }
@@ -9764,6 +9018,23 @@
         }
       }
     },
+    "新账号连接失败" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New account connection failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新账号连接失败"
+          }
+        }
+      }
+    },
     "旋转屏幕" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -9874,6 +9145,23 @@
         }
       }
     },
+    "无法获取登录链接，请取消后重试。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to get a sign-in link. Cancel and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法获取登录链接，请取消后重试。"
+          }
+        }
+      }
+    },
     "无法解码所选图片。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -9898,6 +9186,139 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法读取所选文件"
+          }
+        }
+      }
+    },
+    "无法读取日志，请重试" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not read logs. Please retry."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取日志，请重试"
+          }
+        }
+      }
+    },
+    "日志" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logs"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日志"
+          }
+        }
+      }
+    },
+    "日志导出与分享" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log export and sharing"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日志导出与分享"
+          }
+        }
+      }
+    },
+    "日志导出失败，请重试" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not export logs. Please try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日志导出失败，请重试"
+          }
+        }
+      }
+    },
+    "日志按小时保存，导出时仅包含所选时间段。\n最旧日志会自动清理，可选范围以本机留存为准。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logs are saved hourly; only the selected time range is exported.\nOlder logs are removed automatically. Availability depends on logs retained on this device."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日志按小时保存，导出时仅包含所选时间段。\n最旧日志会自动清理，可选范围以本机留存为准。"
+          }
+        }
+      }
+    },
+    "日志按小时留存，仅导出所选时段\n旧日志会自动清理，可选日期以本机留存为准" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logs are saved hourly; only the selected time range is exported.\nOlder logs are removed automatically. Available dates depend on logs retained on this device."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日志按小时留存，仅导出所选时段\n旧日志会自动清理，可选日期以本机留存为准"
+          }
+        }
+      }
+    },
+    "旧隧道未能关闭，请重试或重启应用。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The previous tunnel could not be closed. Try again or restart the app."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧隧道未能关闭，请重试或重启应用。"
+          }
+        }
+      }
+    },
+    "时间范围" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time range"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "时间范围"
           }
         }
       }
@@ -9930,7 +9351,6 @@
       }
     },
     "暂无可用模型" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10126,6 +9546,23 @@
         }
       }
     },
+    "未启用" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disabled"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未启用"
+          }
+        }
+      }
+    },
     "未命名会话" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10144,6 +9581,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unknown gateway response"
+          }
+        }
+      }
+    },
+    "未知错误" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown error"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知错误"
           }
         }
       }
@@ -10294,6 +9748,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地缓存片段"
+          }
+        }
+      }
+    },
+    "本机地址" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node address"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机地址"
           }
         }
       }
@@ -10607,6 +10078,23 @@
         }
       }
     },
+    "正在准备新账号的路由…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing routes for the new account…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在准备新账号的路由…"
+          }
+        }
+      }
+    },
     "正在准备语音模型" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10734,6 +10222,23 @@
         }
       }
     },
+    "正在建立连接" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Establishing connection"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在建立连接"
+          }
+        }
+      }
+    },
     "正在开启麦克风" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10764,6 +10269,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在整理录音"
+          }
+        }
+      }
+    },
+    "正在生成日志…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing logs…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成日志…"
           }
         }
       }
@@ -10808,6 +10330,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在统计…"
+          }
+        }
+      }
+    },
+    "正在统计日志…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking logs…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在统计日志…"
+          }
+        }
+      }
+    },
+    "正在获取登录链接…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Getting sign-in link…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在获取登录链接…"
           }
         }
       }
@@ -11046,6 +10602,22 @@
         }
       }
     },
+    "此账号及其登录状态将从本机删除；若正在使用，会停止对应隧道。再次使用需重新登录。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This account and its sign-in state will be removed from this device. Its active tunnel will stop. You will need to sign in again to use it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此账号及其登录状态将从本机删除；若正在使用，会停止对应隧道。再次使用需重新登录。"
+          }
+        }
+      }
+    },
     "步骤" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -11136,7 +10708,6 @@
       }
     },
     "没有可用的 Agent 预设" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11246,6 +10817,23 @@
         }
       }
     },
+    "添加 Tailscale 账号" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Tailscale account"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加 Tailscale 账号"
+          }
+        }
+      }
+    },
     "添加图片" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -11351,6 +10939,23 @@
         }
       }
     },
+    "灰色日期不在可导出的日志范围内" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unavailable dates are shown in gray"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "灰色日期不在可导出的日志范围内"
+          }
+        }
+      }
+    },
     "点击连接" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11418,6 +11023,23 @@
         }
       }
     },
+    "状态查询失败" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to query status"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状态查询失败"
+          }
+        }
+      }
+    },
     "现在" : {
       "localizations" : {
         "en" : {
@@ -11477,6 +11099,57 @@
         }
       }
     },
+    "登录 Tailscale 账号" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to Tailscale"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 Tailscale 账号"
+          }
+        }
+      }
+    },
+    "登录密钥（可选）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auth Key (optional)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录密钥（可选）"
+          }
+        }
+      }
+    },
+    "登录等待超时" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Login timed out"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录等待超时"
+          }
+        }
+      }
+    },
     "目录已加载" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -11529,6 +11202,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "知道了"
+          }
+        }
+      }
+    },
+    "确定" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确定"
+          }
+        }
+      }
+    },
+    "确认" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确认"
           }
         }
       }
@@ -11671,6 +11378,22 @@
         }
       }
     },
+    "等待你在浏览器里完成登录。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for you to sign in using the browser."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待你在浏览器里完成登录。"
+          }
+        }
+      }
+    },
     "等待前置任务完成" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11722,6 +11445,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "等待探测结果…"
+          }
+        }
+      }
+    },
+    "等待新账号登录…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for the new account to sign in…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待新账号登录…"
+          }
+        }
+      }
+    },
+    "等待登录" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for login"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待登录"
           }
         }
       }
@@ -11835,6 +11592,74 @@
         }
       }
     },
+    "结束" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束"
+          }
+        }
+      }
+    },
+    "结束日期" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End date"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束日期"
+          }
+        }
+      }
+    },
+    "结束时间" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End time"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束时间"
+          }
+        }
+      }
+    },
+    "结束时间须晚于开始时间" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End time must be later than start time"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束时间须晚于开始时间"
+          }
+        }
+      }
+    },
     "结果" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -11863,6 +11688,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keep answering"
+          }
+        }
+      }
+    },
+    "继续连接" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect again"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续连接"
           }
         }
       }
@@ -12047,7 +11889,25 @@
         }
       }
     },
+    "网络接口读取失败" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to read network interfaces"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络接口读取失败"
+          }
+        }
+      }
+    },
     "网络检测" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12104,6 +11964,89 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "聊天记录"
+          }
+        }
+      }
+    },
+    "自定义" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义"
+          }
+        }
+      }
+    },
+    "节点名称" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "节点名称"
+          }
+        }
+      }
+    },
+    "节点名称只允许小写字母、数字和连字符。登录时默认在浏览器里完成；也可以粘贴 Tailscale 控制台生成的 Auth Key。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node names support lowercase letters, numbers and hyphens. Sign in using the browser, or paste an Auth Key generated in the Tailscale admin console."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "节点名称只允许小写字母、数字和连字符。登录时默认在浏览器里完成；也可以粘贴 Tailscale 控制台生成的 Auth Key。"
+          }
+        }
+      }
+    },
+    "节点启动失败" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to start node"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "节点启动失败"
+          }
+        }
+      }
+    },
+    "节点身份" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node identity"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "节点身份"
           }
         }
       }
@@ -12649,6 +12592,56 @@
         }
       }
     },
+    "账号与网络" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accounts and networks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "账号与网络"
+          }
+        }
+      }
+    },
+    "账号备注（可选）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account label (optional)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "账号备注（可选）"
+          }
+        }
+      }
+    },
+    "起止时间" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start and end"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起止时间"
+          }
+        }
+      }
+    },
     "跟随系统" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -12854,6 +12847,23 @@
         }
       }
     },
+    "运行库加载失败" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to load runtime"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行库加载失败"
+          }
+        }
+      }
+    },
     "返回上一级" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -13023,6 +13033,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Choose conversation mode"
+          }
+        }
+      }
+    },
+    "选择最近24小时" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select last 24 hours"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择最近24小时"
           }
         }
       }
@@ -13280,6 +13307,22 @@
         }
       }
     },
+    "隧道状态" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tunnel status"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隧道状态"
+          }
+        }
+      }
+    },
     "需要你的回答" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -13298,6 +13341,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Asks for confirmation before writing or running sensitive operations"
+          }
+        }
+      }
+    },
+    "需要登录" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in required"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要登录"
           }
         }
       }
@@ -13341,6 +13401,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "预览文字大小"
+          }
+        }
+      }
+    },
+    "预计大小" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimated size"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预计大小"
           }
         }
       }

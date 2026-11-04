@@ -41,7 +41,7 @@ Whaleness는 독립적으로 개발된 DeepSeek Harness 서드파티 네이티�
 
 - **iOS**: [TestFlight 베타 참여](https://testflight.apple.com/join/1Euwby6r). iOS / iPadOS 16.1 이상을 실행하는 iPhone과 iPad를 지원합니다.
 - **Android**: [GitHub Releases에서 APK 다운로드](https://github.com/Clarklevis1995/dsh-mobile/releases). Android 7.0(API 24) 이상이 필요합니다. 앱 내 업데이트 확인은 가속 다운로드 소스를 우선 사용하며 다운로드한 패키지를 검증합니다.
-- **데스크톱 호스트**: DeepSeek Harness를 실행하고 **`dsh-plugin-mobile-gateway` 0.11.1 이상**을 설치하여 활성화하세요. 최소 버전은 [`AppRelease/release-info.json`](../../AppRelease/release-info.json)에 정의되어 있습니다.
+- **데스크톱 호스트**: DeepSeek Harness를 실행하고 **`dsh-plugin-mobile-gateway` 0.11.2 이상**을 설치하여 활성화하세요. 최소 버전은 [`AppRelease/release-info.json`](../../AppRelease/release-info.json)에 정의되어 있습니다.
 - **음성 입력**: 호스트의 플러그인 화면에서 공식 음성 입력 플러그인을 활성화하고 모델 다운로드와 초기화를 완료한 후 모바일 기기의 마이크 접근을 허용하세요.
 
 ## 베타 커뮤니티
@@ -355,7 +355,7 @@ Whaleness WeChat 베타 그룹 2에서 사용 경험을 나누고 문제를 제�
 ### 공통
 
 - Java 17.
-- `dsh-plugin-mobile-gateway` 0.11.1 이상이 활성화된 DeepSeek Harness.
+- `dsh-plugin-mobile-gateway` 0.11.2 이상이 활성화된 DeepSeek Harness.
 - Mobile Gateway에 접근할 수 있는 시뮬레이터, 에뮬레이터 또는 실제 기기.
 
 ### Android
@@ -416,7 +416,7 @@ adb reverse tcp:3080 tcp:3080
 
 ## 연결 및 페어링
 
-1. DeepSeek Harness에서 `dsh-plugin-mobile-gateway`를 설치 또는 업그레이드하고(최소 0.11.1), `dsh web`을 완전히 종료한 뒤 다시 실행합니다.
+1. DeepSeek Harness에서 `dsh-plugin-mobile-gateway`를 설치 또는 업그레이드하고(최소 0.11.2), `dsh web`을 완전히 종료한 뒤 다시 실행합니다.
 
    ```bash
    dsh plugin --profile web add dsh-plugin-mobile-gateway@latest

@@ -21,6 +21,7 @@ val buildTsnetXcframework = tasks.register<Exec>("buildTsnetXcframework") {
     description = "gomobile bind ./tsnetgo -> Tsnetgo.xcframework（需要 Go 与 Xcode）"
     val outDir = File(tsnetAppleDir, "build/tsnetgo")
     val xcframework = File(outDir, "Tsnetgo.xcframework")
+    val goEnvironment = rootProject.file("scripts/with_go_toolchain.sh")
     val goBin: File = System.getenv("GOPATH")?.let { File(it, "bin") }
         ?: File(System.getProperty("user.home"), "go/bin")
     val gomobile: String? = listOf(
@@ -28,8 +29,14 @@ val buildTsnetXcframework = tasks.register<Exec>("buildTsnetXcframework") {
         File("/opt/homebrew/bin/gomobile"),
         File("/usr/local/bin/gomobile")
     ).firstOrNull { it.canExecute() }?.absolutePath
-    inputs.dir(tsnetAppleDir)
-    outputs.dir(outDir)
+    inputs.files(
+        fileTree(tsnetAppleDir) {
+            include("**/*.go", "go.mod", "go.sum")
+            exclude("build/**")
+        }
+    )
+    inputs.file(goEnvironment)
+    outputs.dir(xcframework)
     workingDir = tsnetAppleDir
     doFirst {
         val tool = gomobile ?: throw GradleException(
@@ -37,13 +44,16 @@ val buildTsnetXcframework = tasks.register<Exec>("buildTsnetXcframework") {
         )
         // gomobile 不会自建输出目录。
         outDir.mkdirs()
-        environment("PATH", listOf(goBin.absolutePath, System.getenv("PATH").orEmpty())
-            .filter(String::isNotBlank).joinToString(":"))
+        environment(
+            "PATH",
+            listOf(goBin.absolutePath, System.getenv("PATH").orEmpty())
+                .filter(String::isNotBlank).joinToString(":")
+        )
         // ios + iossimulator 一次产出同一个 xcframework 的两个切片，Xcode 自己按 sdk 选。
         // 不传 -iosversion：gomobile 的默认最低版本是 13.0，比 app 的 16.1 更低，链接照常通过
         // （实测过在 -mios-version-min=16.1 下链接成功）。
         val args = mutableListOf(tool, "bind", "-target=ios,iossimulator")
         args += listOf("-o", "build/tsnetgo/Tsnetgo.xcframework", ".")
-        commandLine(args)
+        commandLine(listOf("/bin/sh", goEnvironment.absolutePath) + args)
     }
 }
