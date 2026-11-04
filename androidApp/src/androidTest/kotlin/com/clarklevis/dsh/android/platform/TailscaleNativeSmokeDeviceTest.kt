@@ -4,6 +4,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.clarklevis.dsh.shared.tailscale.TailscalePolicy
 import com.clarklevis.dsh.shared.tailscale.TailscaleStage
 import java.io.File
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.UUID
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
@@ -17,8 +19,44 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import tsnetgo.Tsnetgo
 
-/** 显式传 tailscaleNativeSmoke=true 才运行；访问登录服务生成链接，不执行账号授权。 */
+/** 本地生命周期检查无需外网；登录服务检查需显式传 tailscaleNativeSmoke=true，不执行账号授权。 */
 class TailscaleNativeSmokeDeviceTest {
+    @Test fun nativeNodesKeepIndependentLocalListenersWithoutInternet() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "tailscale-native-offline-${UUID.randomUUID()}")
+        val first = Tsnetgo.start("dsh-offline-a", File(root, "a").absolutePath)
+        val second = Tsnetgo.start("dsh-offline-b", File(root, "b").absolutePath)
+        var secondClosed = false
+        fun port(raw: String): Int {
+            val proxy = Json.parseToJsonElement(raw) as JsonObject
+            assertEquals(JsonPrimitive(true), proxy["ok"])
+            assertEquals(JsonPrimitive("127.0.0.1"), proxy["host"])
+            return (proxy.getValue("port") as JsonPrimitive).content.toInt()
+        }
+        fun connect(port: Int) {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress("127.0.0.1", port), 1_000)
+                assertTrue(socket.isConnected)
+            }
+        }
+        try {
+            val firstPort = port(first.startProxy())
+            val secondPort = port(second.startProxy())
+            assertTrue(firstPort != secondPort)
+            connect(firstPort)
+            connect(secondPort)
+            second.close()
+            secondClosed = true
+            assertTrue(runCatching { connect(secondPort) }.isFailure)
+            assertEquals(firstPort, port(first.startProxy()))
+            connect(firstPort)
+        } finally {
+            first.close()
+            if (!secondClosed) second.close()
+            root.deleteRecursively()
+        }
+    }
+
     @Test fun twoNativeNodesObtainIndependentLinksAndClosingOneKeepsTheOtherAlive() = runBlocking {
         assumeTrue(InstrumentationRegistry.getArguments().getString("tailscaleNativeSmoke") == "true")
         val context = InstrumentationRegistry.getInstrumentation().targetContext

@@ -565,6 +565,8 @@ internal object AndroidStrings {
         "在当前目录创建工作区" to "Create workspace in current directory",
         "复制正文" to "Copy body",
         "外观" to "Appearance",
+        "UI 降级" to "Reduce UI effects",
+        "停止主页背景动画，降低毛玻璃效果" to "Stop home background animations and reduce glass effects",
         "失败" to "Failure",
         "好" to "OK",
         "子智能体" to "Subagent",

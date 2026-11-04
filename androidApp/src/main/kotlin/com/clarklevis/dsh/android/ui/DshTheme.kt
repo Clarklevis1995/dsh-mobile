@@ -114,6 +114,7 @@ internal fun DshTheme(
     // 所有页面的深浅色判断使用同一份有效配置，避免只更新 MaterialTheme 而留下浅色背景。
     CompositionLocalProvider(
         LocalAppearanceSettings provides appearance,
+        LocalUiEffectsReduced provides appearance.uiEffectsReduced,
         LocalTailscaleTunnelSettings provides tunnelSettings,
         LocalDensity provides appDensity,
         LocalConfiguration provides configuration

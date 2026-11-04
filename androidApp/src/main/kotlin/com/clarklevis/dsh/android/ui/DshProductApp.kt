@@ -384,18 +384,24 @@ internal fun WorkspaceScreen(
         }
     }
 
+    val sessionScopeId = stateHolder.selectedWorkspaceId.orEmpty()
     // 分组排序与展开投影在后台执行；滚动只消费稳定 key 的扁平条目。
-    val allSessionEntries by produceState(
+    val sessionEntries by produceState(
         initialValue = emptyList<WorkspaceSessionListEntry>(),
         key1 = sessions,
         key2 = workspaces,
-        key3 = showingAllWorkspaces to expandedSectionIds
+        key3 = Triple(showingAllWorkspaces, sessionScopeId, expandedSectionIds)
     ) {
-        value = if (showingAllWorkspaces) {
-            withContext(Dispatchers.Default) {
-                allWorkspaceSessionEntries(sessions, workspaces, expandedSectionIds.toSet())
+        val expandedIds = expandedSectionIds.toSet()
+        value = withContext(Dispatchers.Default) {
+            if (showingAllWorkspaces) {
+                allWorkspaceSessionEntries(sessions, workspaces, expandedIds)
+            } else {
+                recentWorkspaceSessionEntries(
+                    sessions, sessionScopeId, expandedIds
+                )
             }
-        } else emptyList()
+        }
     }
 
     WorkspaceDrawer(onPlugins = onPlugins, onScheduledTasks = onScheduledTasks) { openDrawer, canScrollVertically ->
@@ -485,40 +491,31 @@ internal fun WorkspaceScreen(
                             }
                             LocalChatSearchContent(stateHolder, searchQuery, { searchQuery = it }, onOpenSession)
                             if (sessions.isEmpty()) EmptySessions()
-                            else if (!showingAllWorkspaces) SessionList(sessions, { id ->
-                                if (searchQuery.isNotBlank()) stateHolder.localChatMatches.firstOrNull { it.sessionId == id }
-                                    ?.let(stateHolder::prepareLocalChatMatch)
-                                onOpenSession(id)
-                            }, stateHolder::renameSession, stateHolder::archiveSession,
-                                folderLabels = sessionFolderLabels)
-                            Spacer(Modifier.height(24.dp))
                         }
                     )
                 }
-                if (showingAllWorkspaces) {
-                    items(allSessionEntries, key = { it.key }, contentType = { it::class }) { entry ->
-                        AdaptiveWorkspaceSessionContent(window) {
-                            when (entry) {
-                                is WorkspaceSessionListEntry.Header -> WorkspaceSessionSectionHeader(entry)
-                                is WorkspaceSessionListEntry.Toggle -> WorkspaceSessionSectionToggle(entry) { id ->
-                                    expandedSectionIds = if (id in expandedSectionIds) expandedSectionIds - id else expandedSectionIds + id
-                                }
-                                is WorkspaceSessionListEntry.Session -> SessionListItem(
-                                    session = entry.session,
-                                    folderLabel = null,
-                                    onOpen = { id ->
-                                        if (searchQuery.isNotBlank()) stateHolder.localChatMatches.firstOrNull { it.sessionId == id }
-                                            ?.let(stateHolder::prepareLocalChatMatch)
-                                        onOpenSession(id)
-                                    },
-                                    onRename = stateHolder::renameSession,
-                                    onArchive = stateHolder::archiveSession
-                                )
+                items(sessionEntries, key = { it.key }, contentType = { it::class }) { entry ->
+                    AdaptiveWorkspaceSessionContent(window) {
+                        when (entry) {
+                            is WorkspaceSessionListEntry.Header -> WorkspaceSessionSectionHeader(entry)
+                            is WorkspaceSessionListEntry.Toggle -> WorkspaceSessionSectionToggle(entry) { id ->
+                                expandedSectionIds = if (id in expandedSectionIds) expandedSectionIds - id else expandedSectionIds + id
                             }
+                            is WorkspaceSessionListEntry.Session -> SessionListItem(
+                                session = entry.session,
+                                folderLabel = if (showingAllWorkspaces) null else sessionFolderLabel(entry.session, sessionFolderLabels),
+                                onOpen = { id ->
+                                    if (searchQuery.isNotBlank()) stateHolder.localChatMatches.firstOrNull { it.sessionId == id }
+                                        ?.let(stateHolder::prepareLocalChatMatch)
+                                    onOpenSession(id)
+                                },
+                                onRename = stateHolder::renameSession,
+                                onArchive = stateHolder::archiveSession
+                            )
                         }
                     }
-                    item(key = "workspace-sessions-footer", contentType = "footer") { Spacer(Modifier.height(24.dp)) }
                 }
+                item(key = "workspace-sessions-footer", contentType = "footer") { Spacer(Modifier.height(24.dp)) }
             }
         }
     }
@@ -814,24 +811,6 @@ private fun sessionFolderLabel(session: SessionSummary, folderLabels: Map<String
     val label = folderLabels[session.id]
         ?: session.cwd?.trimEnd('/')?.substringAfterLast('/')?.takeIf { it.isNotEmpty() }
     return label?.takeIf { it != session.title }
-}
-
-@Composable
-private fun SessionList(
-    sessions: List<SessionSummary>,
-    onOpen: (String) -> Unit,
-    onRename: (String, String) -> Unit,
-    onArchive: (String) -> Unit,
-    folderLabels: Map<String, String> = emptyMap(),
-    maxRows: Int = 12
-) {
-    Column(Modifier.background(Color.Transparent)) {
-        sessions.take(maxRows).forEach { session ->
-            androidx.compose.runtime.key(session.id) {
-                SessionListItem(session, sessionFolderLabel(session, folderLabels), onOpen, onRename, onArchive)
-            }
-        }
-    }
 }
 
 @Composable

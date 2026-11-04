@@ -82,6 +82,8 @@ val buildTsnetAar = tasks.register<Exec>("buildTsnetAar") {
     group = "build"
     description = "gomobile bind ./tsnetgo -> AAR（需要 Go 与 Android NDK）"
     val apiLevel = 24 // 必须 <= android.defaultConfig.minSdk，否则低版本设备 UnsatisfiedLinkError
+    // AGP 未能自动裁剪 Go 的共享库；由 Go 链接器去除 DWARF 和普通符号表，保留 JNI 动态导出。
+    val goLinkerFlags = "-s -w"
     val goEnvironment = rootProject.file("scripts/with_go_toolchain.sh")
     // 只在这个任务被配置时求值，并且**不在配置期抛错**：之前抛错让任何 Gradle 调用
     // （包括 Xcode 的 "Build KMP Framework" 阶段）都要求本机有 Android SDK，iOS 构建被无端挡住。
@@ -109,6 +111,7 @@ val buildTsnetAar = tasks.register<Exec>("buildTsnetAar") {
         }
     )
     inputs.file(goEnvironment)
+    inputs.property("goLinkerFlags", goLinkerFlags)
     outputs.files(tsnetAarFile, File(tsnetSrcDir, "build/tsnetgo/tsnetgo-sources.jar"))
     workingDir = tsnetSrcDir
     doFirst {
@@ -135,6 +138,7 @@ val buildTsnetAar = tasks.register<Exec>("buildTsnetAar") {
                 .filter(String::isNotBlank).joinToString(":")
         )
         val args = mutableListOf(tool, "bind", "-target=android", "-androidapi", apiLevel.toString())
+        args += listOf("-ldflags", goLinkerFlags)
         args += listOf("-o", "build/tsnetgo/tsnetgo.aar", ".")
         commandLine(listOf("/bin/sh", goEnvironment.absolutePath) + args)
     }

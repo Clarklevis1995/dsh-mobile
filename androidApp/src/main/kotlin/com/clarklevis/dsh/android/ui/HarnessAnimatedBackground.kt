@@ -54,6 +54,7 @@ import kotlin.math.sin
 internal fun HarnessAnimatedBackground(modifier: Modifier = Modifier, animationEnabled: Boolean = true) {
     val context = LocalContext.current
     val active = rememberBackgroundActive()
+    val effectsReduced = LocalUiEffectsReduced.current
     val liquidGlassFrameSignal = LocalDshGlassFrameSignal.current
     val motionEnabled = remember {
         Settings.Global.getFloat(
@@ -64,9 +65,9 @@ internal fun HarnessAnimatedBackground(modifier: Modifier = Modifier, animationE
     }
     val elapsed = remember { mutableFloatStateOf(0f) }
     val currentTime = remember { { elapsed.floatValue } }
-    LaunchedEffect(active, motionEnabled, animationEnabled) {
+    LaunchedEffect(active, motionEnabled, animationEnabled, effectsReduced) {
         // 手势期间保留当前画面与玻璃采样，恢复后接着播放，避免回到第一帧。
-        if (!active || !motionEnabled || !animationEnabled) return@LaunchedEffect
+        if (!active || !motionEnabled || !animationEnabled || effectsReduced) return@LaunchedEffect
         val initialTime = elapsed.floatValue
         var started = 0L
         var lastFrame = 0L

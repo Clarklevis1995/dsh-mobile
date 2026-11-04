@@ -91,6 +91,49 @@ class WorkspaceSessionSectionsDeviceTest {
     }
 
     @Test
+    fun recentSessionsCanExpandOpenTheFourteenthSessionAndCollapse() {
+        val holder = AndroidSharedStateHolder()
+        var opened: String? = null
+        try {
+            val rows = (0..<14).joinToString(",") { id ->
+                """{"sessionId":"s$id","updatedAt":${1_800_000_000 - id},"running":false,"blank":false,
+                    "projections":{"values":{"title":"任务 $id"}}}"""
+            }
+            holder.wirePayload = """{"kind":"sessions","items":[$rows]}"""
+            holder.submitWirePayload()
+            val ids = (0..<14).joinToString(",") { "\"s$it\"" }
+            holder.wirePayload = """{"kind":"workspaces","items":[
+                {"workspaceId":"w1","path":"/repo","title":"移动端工程","sessionIds":[$ids],"createdAt":"","updatedAt":""}
+            ]}"""
+            holder.submitWirePayload()
+            holder.selectWorkspace("w1")
+            compose.setContent {
+                DshTheme {
+                    AdaptiveWindowHost { WorkspaceScreen(holder, { opened = it }, {}, {}, {}, {}) }
+                }
+            }
+            val list = compose.onNodeWithTag("workspace-session-list")
+            val toggle = compose.onNodeWithTag("workspace-section-toggle-recent-w1")
+            list.performScrollToNode(hasTestTag("workspace-section-toggle-recent-w1"))
+            toggle.assertTextContains("展开其余 2 个会话")
+            compose.onNodeWithTag("workspace-session-s12").assertDoesNotExist()
+            toggle.performClick()
+            list.performScrollToNode(hasTestTag("workspace-session-s13"))
+            compose.onNodeWithTag("workspace-session-s13").assertIsDisplayed().performClick()
+            compose.runOnIdle { assertEquals("s13", opened) }
+            list.performScrollToNode(hasTestTag("workspace-section-toggle-recent-w1"))
+            toggle.assertTextContains("收起").performClick()
+            compose.waitUntil(5_000) {
+                compose.onAllNodes(hasTestTag("workspace-section-toggle-recent-w1") and hasText("展开其余 2 个会话"))
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithTag("workspace-session-s13").assertDoesNotExist()
+        } finally {
+            compose.runOnIdle { holder.close() }
+        }
+    }
+
+    @Test
     fun sectionsExpandIndependentlyAndSingleWorkspaceStillShowsMoreThanFiveRows() {
         val holder = AndroidSharedStateHolder()
         try {

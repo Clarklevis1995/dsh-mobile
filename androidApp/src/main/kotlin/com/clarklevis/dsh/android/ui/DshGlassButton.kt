@@ -35,6 +35,11 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun Modifier.dshGlassControl(shape: Shape = CircleShape): Modifier {
     val surface = if (isSystemInDarkTheme()) Color(0xFF1C1C1E) else Color.White
+    if (LocalUiEffectsReduced.current) {
+        return background(surface.copy(alpha = 0.92f), shape)
+            .border(0.5.dp, Color(0xFF8E8E93).copy(alpha = 0.4f), shape)
+            .clip(shape)
+    }
     val shadowColor = Color.Black.copy(alpha = if (isSystemInDarkTheme()) 0.20f else 0.08f)
     return dshOuterShadow(shape, Shadow(radius = 6.dp, color = shadowColor, offset = DpOffset(0.dp, 2.dp)))
         .dshLiquidGlass(shape, DshGlassStyle.CONTROL, shadowsEnabled = false)

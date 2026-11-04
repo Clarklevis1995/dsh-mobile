@@ -1,9 +1,6 @@
 package com.clarklevis.dsh.android.ui
 
 import android.content.res.Configuration
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,13 +20,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -715,26 +710,14 @@ private fun DialogAction(text: String, modifier: Modifier, enabled: Boolean = tr
 
 @Composable
 private fun TunnelSwitch(checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
-    // 与 iOS 插件和设置页共用蓝色开启底色，保留 51×31 尺寸及标准 Toggle 语义。
-    val blue = dshSwitchTrackColor()
-    val track by animateColorAsState(
-        if (checked) blue.copy(alpha = if (enabled) 1f else .5f) else tunnelSecondaryColor().copy(alpha = .3f),
-        animationSpec = tween(180),
-        label = "tunnel-switch-track"
+    DshSwitch(
+        checked = checked,
+        enabled = enabled,
+        onCheckedChange = onChange,
+        modifier = Modifier.testTag("tunnel-enabled-switch")
+            .semantics { contentDescription = appText("启用内嵌隧道") }
     )
-    val thumbOffset by animateDpAsState(if (checked) 20.dp else 0.dp, animationSpec = tween(180), label = "tunnel-switch-thumb")
-    androidx.compose.foundation.layout.Box(
-        Modifier.size(51.dp, 31.dp).clip(CircleShape)
-            .background(track)
-            .then(Modifier.toggleableTunnel(checked, enabled, onChange))
-            .testTag("tunnel-enabled-switch"),
-        contentAlignment = Alignment.CenterStart
-    ) { Box(Modifier.offset(x = thumbOffset).padding(2.dp).size(27.dp).background(Color.White, CircleShape)) }
 }
-
-private fun Modifier.toggleableTunnel(checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit): Modifier =
-    this.then(Modifier.semantics { contentDescription = appText("启用内嵌隧道") })
-        .then(Modifier.toggleable(checked, enabled = enabled, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onChange))
 
 @Composable
 private fun tunnelCardColor() = if (isSystemInDarkTheme()) Color(0xFF1C1C1E) else Color.White

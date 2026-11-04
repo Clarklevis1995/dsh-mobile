@@ -5,6 +5,37 @@ import Darwin
 @testable import DeepSeekHarnessMobile
 
 final class WorkspaceSessionListTests: XCTestCase {
+    func testRecentSessionsExpandPastTwelveAndCollapseWithoutTruncatingSearchOrUngrouped() {
+        let rows = (0..<113).map { session("recent-\($0)", time: Double(113 - $0)) }
+        var input = WorkspaceSessionListInput(sessions: rows,
+            workspaces: [workspace("w1", rows.map(\.id))], selection: "w1")
+        let collapsed = input.project()
+        XCTAssertEqual(collapsed.matchingCount, 113)
+        XCTAssertEqual(sessionIDs(collapsed), Array(rows.prefix(12)).map(\.id))
+        XCTAssertEqual(collapsed.entries.last, .sectionToggle(id: "recent-w1", remainingCount: 101, isExpanded: false))
+        input.expandedSectionIDs = ["recent-w1"]
+        let expanded = input.project()
+        XCTAssertEqual(sessionIDs(expanded), rows.map(\.id))
+        XCTAssertEqual(expanded.entries.last, .sectionToggle(id: "recent-w1", remainingCount: 101, isExpanded: true))
+        XCTAssertEqual(Set(expanded.entries.map(\.id)).count, expanded.entries.count)
+        input.query = "recent"
+        XCTAssertEqual(sessionIDs(input.project()).count, 113, "搜索结果展开后也不应在一百条截断")
+        input.expandedSectionIDs = []
+        input.query = ""
+        XCTAssertEqual(input.project(), collapsed)
+        input.sessions = Array(rows.prefix(12))
+        XCTAssertEqual(input.project().entries.count, 12, "正好十二条不显示展开按钮")
+        input.sessions = []
+        XCTAssertTrue(input.project().entries.isEmpty)
+        input.sessions = rows
+        input.workspaces = []
+        input.selection = WorkspaceSessionScope.ungrouped
+        input.expandedSectionIDs = ["recent-w1"]
+        XCTAssertEqual(sessionIDs(input.project()).count, 12, "切换工作区不应串用展开状态")
+        input.expandedSectionIDs = ["recent-\(WorkspaceSessionScope.ungrouped)"]
+        XCTAssertEqual(sessionIDs(input.project()).count, 113)
+    }
+
     func testHeadersUseWorkspaceNamesAndStableIDsIncludingRenameAndUngroupedFallback() {
         var input = WorkspaceSessionListInput(sessions: [session("a"), session("free")],
             workspaces: [workspace("w1", ["a"])], selection: "__all_sessions__")

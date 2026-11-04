@@ -1180,6 +1180,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
+				DEPLOYMENT_POSTPROCESSING = YES;
 				DEVELOPMENT_TEAM = T58RY5HUA7;
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/shared/build/bin/iosArm64/releaseFramework";
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=arm64]" = "$(SRCROOT)/shared/build/bin/iosSimulatorArm64/releaseFramework";
@@ -1198,6 +1199,7 @@
 				PRODUCT_NAME = DshMobile;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
+				STRIP_INSTALLED_PRODUCT = YES;
 				SWIFT_VERSION = 5.10;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;

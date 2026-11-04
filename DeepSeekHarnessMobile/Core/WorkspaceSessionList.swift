@@ -28,6 +28,7 @@ enum WorkspaceSessionCopy {
 /// 主线程只交接值快照；筛选、索引、排序和分组均在后台完成。
 struct WorkspaceSessionListInput: Equatable, Sendable {
     static let collapsedSectionLimit = 5
+    static let collapsedRecentLimit = 12
 
     var sessions: [SessionSummary] = []
     var workspaces: [GatewayWorkspace] = []
@@ -95,7 +96,6 @@ struct WorkspaceSessionListInput: Equatable, Sendable {
             $0.lastActivity == $1.lastActivity ? $0.id < $1.id : $0.lastActivity > $1.lastActivity
         }
         let count = scoped.count
-        if !isAll { scoped = Array(scoped.prefix(query.isEmpty ? 12 : 100)) }
         var entries: [WorkspaceSessionListEntry] = []
         entries.reserveCapacity(scoped.count + workspaces.count + 1)
         if isAll {
@@ -121,7 +121,14 @@ struct WorkspaceSessionListInput: Equatable, Sendable {
                 }
             }
         } else {
-            entries = scoped.map { .session($0, snippet: query.isEmpty ? nil : hits[$0.id]) }
+            let toggleID = "recent-\(selection ?? selected?.id ?? "")"
+            let isExpanded = expandedSectionIDs.contains(toggleID)
+            let displayedRows = isExpanded ? scoped[...] : scoped.prefix(Self.collapsedRecentLimit)
+            entries = displayedRows.map { .session($0, snippet: query.isEmpty ? nil : hits[$0.id]) }
+            if count > Self.collapsedRecentLimit {
+                entries.append(.sectionToggle(id: toggleID,
+                    remainingCount: count - Self.collapsedRecentLimit, isExpanded: isExpanded))
+            }
         }
         return WorkspaceSessionListSnapshot(entries: entries, matchingCount: count, visibleCount: visible.count)
     }

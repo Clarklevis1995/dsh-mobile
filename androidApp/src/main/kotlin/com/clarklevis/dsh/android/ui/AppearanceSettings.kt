@@ -43,6 +43,14 @@ internal fun appLocale(language: AppLanguage, systemLocale: Locale): Locale = wh
 }
 
 internal class AppearanceSettings(private val preferences: SharedPreferences) {
+    var uiEffectsReduced by mutableStateOf(preferences.getBoolean("ui_effects_reduced", false))
+        private set
+
+    fun selectUiEffectsReduced(value: Boolean) {
+        preferences.edit().putBoolean("ui_effects_reduced", value).apply()
+        uiEffectsReduced = value
+    }
+
     var fontScale by mutableStateOf(normalizeFontScale(preferences.getFloat("font_scale", 1f)))
         private set
 
@@ -105,6 +113,9 @@ internal class AppearanceSettings(private val preferences: SharedPreferences) {
 
 internal fun normalizeFontScale(value: Float): Float =
     if (value.isFinite()) value.coerceIn(0.8f, 1.5f) else 1f
+
+// 独立预览和组件测试默认保留完整效果。
+internal val LocalUiEffectsReduced = staticCompositionLocalOf { false }
 
 internal val LocalAppearanceSettings = staticCompositionLocalOf<AppearanceSettings> {
     error("AppearanceSettings must be provided by DshTheme")

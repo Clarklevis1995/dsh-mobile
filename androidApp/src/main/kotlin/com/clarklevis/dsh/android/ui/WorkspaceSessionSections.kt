@@ -31,8 +31,9 @@ import com.clarklevis.dsh.shared.domain.SessionSummary
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 
 private const val COLLAPSED_SECTION_LIMIT = 5
+private const val COLLAPSED_RECENT_LIMIT = 12
 
-/** 只用于全部会话；分区显示工作区名称，所有元素都有跨展开状态稳定的 key。 */
+/** 主页会话的懒加载条目；全部会话额外显示工作区分区，展开前后 key 保持稳定。 */
 internal sealed interface WorkspaceSessionListEntry {
     val key: String
 
@@ -46,6 +47,23 @@ internal sealed interface WorkspaceSessionListEntry {
 
     data class Toggle(val workspaceId: String, val remainingCount: Int, val expanded: Boolean) : WorkspaceSessionListEntry {
         override val key: String get() = "toggle-$workspaceId"
+    }
+}
+
+/** 单工作区和未分组保留十二条预览，展开后使用同一外层懒加载列表。 */
+internal fun recentWorkspaceSessionEntries(
+    sessions: List<SessionSummary>,
+    scopeId: String,
+    expandedSectionIds: Set<String> = emptySet()
+): List<WorkspaceSessionListEntry> {
+    val toggleId = "recent-$scopeId"
+    val expanded = toggleId in expandedSectionIds
+    return buildList {
+        val visible = if (expanded) sessions else sessions.take(COLLAPSED_RECENT_LIMIT)
+        visible.forEach { add(WorkspaceSessionListEntry.Session(it)) }
+        if (sessions.size > COLLAPSED_RECENT_LIMIT) {
+            add(WorkspaceSessionListEntry.Toggle(toggleId, sessions.size - COLLAPSED_RECENT_LIMIT, expanded))
+        }
     }
 }
 

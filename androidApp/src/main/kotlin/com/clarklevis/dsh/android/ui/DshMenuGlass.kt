@@ -39,10 +39,11 @@ private val LocalDshMenuBackdrop = staticCompositionLocalOf<Backdrop?> { null }
 /** 只录制宿主页面；Popup 位于独立窗口，不会把自己的文字和阴影再次采样。 */
 @Composable
 internal fun DshMenuBackdropHost(content: @Composable (Modifier) -> Unit) {
+    val effectsReduced = LocalUiEffectsReduced.current
     val layer = rememberLayerBackdrop()
     val backdrop = remember(layer) { DshWindowBackdrop(layer) }
-    CompositionLocalProvider(LocalDshMenuBackdrop provides backdrop) {
-        content(Modifier.layerBackdrop(layer).onGloballyPositioned {
+    CompositionLocalProvider(LocalDshMenuBackdrop provides backdrop.takeUnless { effectsReduced }) {
+        content(if (effectsReduced) Modifier else Modifier.layerBackdrop(layer).onGloballyPositioned {
             backdrop.sourceOrigin = it.positionOnScreen()
         })
     }
@@ -100,7 +101,7 @@ private fun Modifier.dshBackdropGlass(
     dark: Boolean
 ): Modifier {
     val backdrop = LocalDshMenuBackdrop.current
-    val surface = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && backdrop != null) {
+    val surface = if (!LocalUiEffectsReduced.current && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && backdrop != null) {
         Modifier.drawPlainBackdrop(
             backdrop = backdrop,
             // 箭头位置在 Popup 完成定位后才确定。模糊库的内部裁切层不会随

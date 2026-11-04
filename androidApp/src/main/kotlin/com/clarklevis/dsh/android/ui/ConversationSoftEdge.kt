@@ -59,7 +59,7 @@ internal fun Modifier.topBarGlassSurface(
     tint: Color,
     surfaceAlpha: Float = 0.85f,
 ): Modifier =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    if (!LocalUiEffectsReduced.current && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         drawPlainBackdrop(
             backdrop,
             shape = { RectangleShape },

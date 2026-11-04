@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -60,6 +61,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -258,6 +260,8 @@ internal fun SettingsScreen(
                             LanguageSettingsRow()
                             SettingsDivider()
                             FontSizeSettingsRow(onOpenFontSize)
+                            SettingsDivider()
+                            UiEffectsSettingsRow()
                         }
                         SettingsSection(appText("本地存储")) {
                             SettingsValueRow(
@@ -864,6 +868,37 @@ internal fun FontSizeSettingsRow(onClick: () -> Unit) {
         value = if (appearance.fontFollowsSystem) appText("跟随系统") else "${(appearance.fontScale * 100).roundToInt()}%",
         onClick = onClick
     )
+}
+
+@Composable
+internal fun UiEffectsSettingsRow() {
+    val appearance = LocalAppearanceSettings.current
+    Row(
+        Modifier.fillMaxWidth()
+            .testTag("ui-effects-reduced-switch")
+            .toggleable(
+                value = appearance.uiEffectsReduced,
+                role = Role.Switch,
+                onValueChange = appearance::selectUiEffectsReduced
+            )
+            .heightIn(min = 54.dp)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(appText("UI 降级"), style = SettingsTypography.item)
+            Text(
+                appText("停止主页背景动画，降低毛玻璃效果"),
+                style = SettingsTypography.description,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        DshSwitch(
+            checked = appearance.uiEffectsReduced,
+            onCheckedChange = null
+        )
+    }
 }
 
 @Composable
