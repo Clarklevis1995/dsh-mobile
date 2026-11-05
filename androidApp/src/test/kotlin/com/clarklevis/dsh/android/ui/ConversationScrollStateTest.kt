@@ -1,11 +1,16 @@
 package com.clarklevis.dsh.android.ui
 
+import com.clarklevis.dsh.android.localization.LocaleTestRule
+import java.util.Locale
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 class ConversationScrollStateTest {
+    @get:Rule val locale = LocaleTestRule(Locale.ENGLISH)
+
     @Test
     fun `bottom delta includes the full last row and composer padding`() {
         assertEquals(
@@ -132,15 +137,15 @@ class ConversationScrollStateTest {
     @Test
     fun `history progress text follows the ios states`() {
         assertEquals(
-            "正在从 Mobile Gateway 同步会话内容…",
+            "Syncing conversation from Mobile Gateway…",
             historyLoadingProgressText(0, null)
         )
         assertEquals(
-            "正在自动加载更早记录 · 已同步 12 个事件",
+            "Auto-loading earlier messages · 12 events synced",
             historyLoadingProgressText(12, null)
         )
         assertEquals(
-            "正在加载历史记录 · 12/20",
+            "Loading history · 12/20",
             historyLoadingProgressText(12, 20)
         )
     }

@@ -2873,7 +2873,7 @@ private fun ProcessToolDisclosure(tool: ConversationProcessTool) {
     val failed = tool.result?.isError == true
     val summary = remember(tool.call?.title, tool.call?.text, tool.result?.title) {
         com.clarklevis.dsh.shared.projection.ToolActivitySummaryFormatter.summarize(
-            tool.call?.title ?: tool.result?.title ?: appText("工具"), tool.call?.text.orEmpty()
+            tool.call?.title ?: tool.result?.title ?: "", tool.call?.text.orEmpty()
         ).let(::localizedToolActivitySummary)
     }
     ProcessDisclosure(

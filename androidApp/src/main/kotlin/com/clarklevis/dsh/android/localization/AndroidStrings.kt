@@ -12,12 +12,17 @@ import java.util.Locale
 internal fun appText(source: String, vararg arguments: Any?): String =
     AndroidStrings.text(source, Locale.getDefault(), *arguments)
 
+/** 当前活动界面语言是否为中文；与 [appText] 使用同一判定。 */
+internal fun appUsesChinese(): Boolean = AndroidStrings.isChinese(Locale.getDefault())
+
 internal object AndroidStrings {
     private val placeholder = Regex("%(\\d+)\\\$s")
 
+    fun isChinese(locale: Locale): Boolean = locale.language == "zh"
+
     fun text(source: String, locale: Locale, vararg arguments: Any?): String {
         val template = when {
-            locale.language == "zh" -> source
+            isChinese(locale) -> source
             arguments.firstOrNull()?.toString() == "1" -> singularEnglish[source] ?: english[source] ?: source
             else -> english[source] ?: source
         }
@@ -36,6 +41,7 @@ internal object AndroidStrings {
         "%1\$s 轨迹节点" to "%1\$s trace node",
         "%1\$s 个会话（跨全部工作区）" to "%1\$s session across all workspaces",
         "%1\$s 个会话" to "%1\$s session",
+        "正在自动加载更早记录 · 已同步 %1\$s 个事件" to "Auto-loading earlier messages · %1\$s event synced",
         "展开其余 %1\$s 个会话" to "Show %1\$s more session",
         "%1\$s 个未归属会话" to "%1\$s unassigned session",
         "%1\$s 个附件" to "%1\$s attachment",
@@ -586,7 +592,7 @@ internal object AndroidStrings {
         "切换主机" to "Switch host",
         "刚刚" to "Just now",
         "创建" to "Create",
-        "创建会话失败" to "Failed to create session",
+        "创建会话失败" to "Could not create a session.",
         "创建会话失败，请检查连接后重试" to "Failed to create a session. Check the connection and try again.",
         "创建和调试自定义 Agent" to "Create and debug custom agents",
         "创造模式" to "Cordis mode",
@@ -665,7 +671,7 @@ internal object AndroidStrings {
         "完整工具，适合日常开发" to "Full toolset for everyday development",
         "官方" to "Official",
         "定时任务" to "Scheduled tasks",
-        "定时任务加载失败" to "Failed to load scheduled tasks",
+        "定时任务加载失败" to "Could not load scheduled tasks.",
         "定时任务操作失败" to "Scheduled task operation failed",
         "定时任务请求未发送，请重试" to "Scheduled task request was not sent. Try again.",
         "定时任务请求超时，请重试" to "Scheduled task request timed out. Try again.",
@@ -694,6 +700,8 @@ internal object AndroidStrings {
         "工作区根目录" to "Workspace root",
         "工作区请求失败" to "Workspace request failed",
         "工具" to "Tools",
+        "未命名工具" to "Tool",
+        "运行" to "Run",
         "工具调用" to "Tool calls",
         "已从断线前恢复" to "Recovered from the disconnect",
         "已停用" to "Disabled",
@@ -769,7 +777,7 @@ internal object AndroidStrings {
         "插件操作失败" to "Plugin action failed",
         "插件操作未生效" to "Plugin action did not take effect",
         "插件状态被其他配置覆盖，请检查 Host 配置" to "Plugin state is overridden by another configuration. Check the host settings.",
-        "插件目录加载失败" to "Failed to load the plugin catalog",
+        "插件目录加载失败" to "Could not load the plugin catalog.",
         "插件目录请求未发送，请重试" to "Plugin catalog request was not sent. Try again.",
         "插件目录请求超时，请重试" to "Plugin catalog request timed out. Try again.",
         "插件详情" to "Plugin details",
@@ -920,7 +928,7 @@ internal object AndroidStrings {
         "正在检查更新…" to "Checking for updates…",
         "正在生成轨迹…" to "Generating trace…",
         "正在生成，滚动到最新消息" to "Generating — jump to the latest message",
-        "正在自动加载更早记录 · 已同步 %1\$s 个事件" to "Auto-loading earlier messages · %1\$s synced",
+        "正在自动加载更早记录 · 已同步 %1\$s 个事件" to "Auto-loading earlier messages · %1\$s events synced",
         "正在读取 Agent 预设…" to "Loading agent presets…",
         "正在读取…" to "Reading…",
         "正在读取会话统计" to "Loading session statistics",

@@ -353,7 +353,7 @@ final class AgentLiveActivityLifecycleTests: XCTestCase {
         XCTAssertTrue(requestedDetails.isEmpty)
         appState = .active
         manager.applicationDidBecomeActive()
-        XCTAssertEqual(requestedDetails, ["正在执行 Bash"])
+        XCTAssertEqual(requestedDetails, [String(format: String(localized: "正在执行 %@"), "Bash")])
         // 请求失败后，后续高频进度不能不断重试系统调用。
         manager.stepStarted(gatewayID: "gateway", sessionID: "session", title: "任务", step: 2)
         XCTAssertEqual(requestedDetails.count, 1)
@@ -467,7 +467,7 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
             source: "skill-catalog"
         )))
 
-        XCTAssertEqual(projected.headline, "上下文注入 · skill-catalog")
+        XCTAssertEqual(projected.headline, String(format: String(localized: "上下文注入 · %@"), "skill-catalog"))
         XCTAssertEqual(projected.detail, "Use the repository skill catalog before choosing a workflow.")
         XCTAssertEqual(projected.kind, .context)
     }
@@ -484,8 +484,12 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
             ])
         )))
 
-        XCTAssertEqual(projected.headline, "写入")
-        XCTAssertEqual(projected.detail, "articles/北京中轴线.md · 2 行")
+        XCTAssertEqual(projected.headline, String(localized: "写入"))
+        XCTAssertEqual(
+            projected.detail,
+            ["articles/北京中轴线.md", String(format: String(localized: "tool.activity.lines"), 2)]
+                .joined(separator: " · ")
+        )
         XCTAssertEqual(projected.kind, .writing)
     }
 
@@ -496,7 +500,7 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
             toolName: nil
         ))
 
-        XCTAssertEqual(projected.headline, "思考")
+        XCTAssertEqual(projected.headline, String(localized: "思考"))
         XCTAssertEqual(projected.detail, "Now check character count")
         XCTAssertEqual(projected.kind, .reasoning)
     }
@@ -504,10 +508,10 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
     func testToolResultRetainsTheStartedToolLabel() throws {
         let projected = try XCTUnwrap(AgentLiveActivityEventProjection.progress(
             for: GatewayEvent(type: "tool/result", isError: false, preview: "saved"),
-            completedToolLabel: "写入"
+            completedToolLabel: String(localized: "写入")
         ))
 
-        XCTAssertEqual(projected.headline, "写入完成")
+        XCTAssertEqual(projected.headline, String(format: String(localized: "%@完成"), String(localized: "写入")))
         XCTAssertEqual(projected.detail, "saved")
         XCTAssertEqual(projected.kind, .result)
     }
@@ -13540,8 +13544,10 @@ final class GatewaySubscriptionLifecycleTests: XCTestCase {
             await fulfillment(of: [timedOut], timeout: 2)
             XCTAssertEqual(error?.code, "subscription-timeout")
             XCTAssertEqual(error?.sessionId, "current")
-            XCTAssertEqual(error?.message?.contains("Lead"), child)
-            XCTAssertEqual(error?.message?.contains("成员会话"), child)
+            let expectedMessage = child
+                ? String(localized: "成员会话订阅超时，请重试或返回 Lead")
+                : String(localized: "会话订阅超时，请重试")
+            XCTAssertEqual(error?.message, expectedMessage)
         }
     }
 

@@ -105,7 +105,7 @@ enum AgentLiveActivityEventProjection {
             )
         case "command/done":
             return progress(
-                event.isError == true ? "命令执行失败" : String(localized: "命令执行完成"),
+                event.isError == true ? String(localized: "命令执行失败") : String(localized: "命令执行完成"),
                 detail: preview(event.error ?? event.outcome ?? event.text),
                 kind: event.isError == true ? .command : .result
             )
@@ -153,26 +153,26 @@ enum AgentLiveActivityEventProjection {
     }
 
     private static func toolProgress(name: String?, arguments: JSONValue?) -> AgentLiveActivityProgress {
-        let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let summary = ToolActivitySummaryFormatter.shared.summarize(
-            name: displayName?.isEmpty == false ? displayName! : "工具",
+            name: displayName,
             arguments: arguments?.jsonDisplayText ?? ""
         )
-        let localized = L10n.toolActivitySummary(summary)
-        let detail = [localized.detail, localized.annotation]
+        let display = L10n.toolActivityDisplay(for: summary)
+        let detail = [display.detail, display.annotation]
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .joined(separator: " · ")
         let kind: AgentActivityStepKind
-        switch summary.label {
-        case "写入": kind = .writing
-        case "修改": kind = .editing
-        case "读取": kind = .reading
-        case "执行": kind = .command
-        case "搜索", "列出", "获取": kind = .searching
+        switch summary.kind {
+        case "write": kind = .writing
+        case "edit": kind = .editing
+        case "read": kind = .reading
+        case "run": kind = .command
+        case "search", "list", "fetch": kind = .searching
         default: kind = .tool
         }
         return progress(
-            localized.label,
+            display.label,
             detail: preview(detail),
             kind: kind,
             toolName: name
@@ -3798,7 +3798,11 @@ final class AppStore: ObservableObject {
             let transition = dispatchSessionControlAction(action)
             if tracksPresets {
                 if transition.applied { agentPresetsLoadError = nil }
-                notice(String(localized: "Agent 预设诊断"), "响应处理完成 applied=\(transition.applied)")
+                notice(
+                    String(localized: "Agent 预设诊断"),
+                    String(localized: "agentPresetDiag.processed",
+                           defaultValue: "响应处理完成 applied=\(String(describing: transition.applied))")
+                )
             }
             // KMP 响应事务已原子完成 active 并可能启动 queued；
             // 这里不能再按 kind finish，否则会误结束新 generation。
@@ -4241,7 +4245,12 @@ final class AppStore: ObservableObject {
         guard correlatedControlFailure != false else { return }
         if payload.requestType == "agent-presets" {
             agentPresetsLoadError = String(localized: "Agent 预设加载失败，请重试。")
-            notice(String(localized: "Agent 预设诊断"), "网关返回错误 code=\(payload.code ?? "unknown")", isError: true)
+            notice(
+                String(localized: "Agent 预设诊断"),
+                String(localized: "agentPresetDiag.error",
+                       defaultValue: "网关返回错误 code=\(payload.code ?? "unknown")"),
+                isError: true
+            )
             return
         }
         lastError = detail
@@ -5575,7 +5584,11 @@ final class AppStore: ObservableObject {
         let startedAt = Date()
         if effect.requestKey == "agent-presets" {
             agentPresetsLoadError = nil
-            notice(String(localized: "Agent 预设诊断"), "开始请求 token=\(effect.requestToken) connected=\(gateway.state.isConnected)")
+            notice(
+                String(localized: "Agent 预设诊断"),
+                String(localized: "agentPresetDiag.start",
+                       defaultValue: "开始请求 token=\(String(describing: effect.requestToken)) connected=\(String(describing: gateway.state.isConnected))")
+            )
         }
         tracker.begin(effect.requestKey, timeout: sessionControlRequestTimeout) { [weak self] in
             guard let self,
@@ -5589,7 +5602,13 @@ final class AppStore: ObservableObject {
             ))
             if effect.requestKey == "agent-presets" {
                 self.agentPresetsLoadError = String(localized: "Agent 预设加载超时，请重试。")
-                self.notice(String(localized: "Agent 预设诊断"), "请求超时 token=\(effect.requestToken) elapsed=\(Date().timeIntervalSince(startedAt))s connected=\(self.gateway.state.isConnected)", isError: true)
+                let elapsed = String(format: "%.1f", Date().timeIntervalSince(startedAt))
+                self.notice(
+                    String(localized: "Agent 预设诊断"),
+                    String(localized: "agentPresetDiag.timeout",
+                           defaultValue: "请求超时 token=\(String(describing: effect.requestToken)) elapsed=\(elapsed)s connected=\(String(describing: self.gateway.state.isConnected))"),
+                    isError: true
+                )
                 return
             }
             if let sessionID = effect.sessionId, self.preparedConversationActivationKey != sessionID { return }

@@ -43,17 +43,62 @@ final class LocalizationCatalogTests: XCTestCase {
         for language in ["en", "zh-Hans"] {
             let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
             let bundle = try XCTUnwrap(Bundle(path: path))
-            let summary = ToolActivitySummary(label: "写入", detail: "项目/100%.swift", annotation: "1 行")
-            let result = L10n.toolActivitySummary(summary, bundle: bundle)
-            XCTAssertEqual(result.label, language == "en" ? "Write" : "写入")
-            XCTAssertEqual(result.annotation, language == "en" ? "1 line" : "1 行")
-            XCTAssertEqual(result.detail, summary.detail)
-            let replacement = L10n.toolActivitySummary(
-                ToolActivitySummary(label: "修改", detail: "custom description", annotation: "替换 1 → 2 行"), bundle: bundle
+
+            let write = L10n.toolActivityDisplay(
+                for: ToolActivitySummaryFormatter.shared.summarize(
+                    name: "write_file",
+                    arguments: #"{"path":"项目/100%.swift","content":"one\ntwo"}"#
+                ),
+                bundle: bundle
             )
-            XCTAssertEqual(replacement.annotation, language == "en" ? "Replace lines: 1 → 2" : "替换 1 → 2 行")
-            XCTAssertEqual(replacement.detail, "custom description")
+            XCTAssertEqual(write.label, language == "en" ? "Write" : "写入")
+            XCTAssertEqual(write.annotation, language == "en" ? "2 lines" : "2 行")
+            XCTAssertEqual(write.detail, "项目/100%.swift")
+
+            let read = L10n.toolActivityDisplay(
+                for: ToolActivitySummaryFormatter.shared.summarize(
+                    name: "read_file",
+                    arguments: #"{"path":"项目/100%.swift","limit":1}"#
+                ),
+                bundle: bundle
+            )
+            XCTAssertEqual(read.label, language == "en" ? "Read" : "读取")
+            XCTAssertEqual(read.annotation, language == "en" ? "1 line" : "1 行")
+
+            let replacement = L10n.toolActivityDisplay(
+                for: ToolActivitySummaryFormatter.shared.summarize(
+                    name: "edit_file",
+                    arguments: #"{"path":"Main.kt","old_string":"a","new_string":"a\nb\nc"}"#
+                ),
+                bundle: bundle
+            )
+            XCTAssertEqual(replacement.label, language == "en" ? "Edit" : "修改")
+            XCTAssertEqual(replacement.annotation, language == "en" ? "Replace lines: 1 → 3" : "替换 1 → 3 行")
+            XCTAssertEqual(replacement.detail, "Main.kt")
+
+            let unknown = L10n.toolActivityDisplay(
+                for: ToolActivitySummaryFormatter.shared.summarize(name: "mcp__custom", arguments: "{}"),
+                bundle: bundle
+            )
+            XCTAssertEqual(unknown.label, "mcp__custom")
+
+            let unnamed = L10n.toolActivityDisplay(
+                for: ToolActivitySummaryFormatter.shared.summarize(name: "", arguments: "{}"),
+                bundle: bundle
+            )
+            XCTAssertEqual(unnamed.label, language == "en" ? "Tool" : "未命名工具")
         }
+    }
+
+    func testBridgeDiagnosticsShipInTheirOwnTable() throws {
+        let diagnostics = try englishTable("Diagnostics")
+        XCTAssertEqual(diagnostics["MVI 信封无效"], "Invalid MVI envelope")
+        XCTAssertEqual(diagnostics["未知 operation：%@"], "Unknown operation: %@")
+        XCTAssertFalse(diagnostics.isEmpty, "en.lproj/Diagnostics.strings is missing from the app bundle")
+        // 内部不变量诊断不得混入产品文案，避免用户目录被桥接错误撑大。
+        let product = try englishTable("Localizable")
+        XCTAssertNil(product["MVI 信封无效"])
+        XCTAssertNil(product["未知 operation：%@"])
     }
 
     func testFontScaleNormalizesInvalidValues() {

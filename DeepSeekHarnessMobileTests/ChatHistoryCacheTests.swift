@@ -536,7 +536,7 @@ final class ChatHistoryCacheTests: XCTestCase {
         let session = SessionSummary(id: "missing", title: "未缓存", lastActivity: .distantPast, isRunning: false, hasUnread: false)
         _ = await store.prepareConversation(for: session)
         try await Task.sleep(for: .milliseconds(80))
-        XCTAssertTrue(store.historyLoadErrors["missing"]?.contains("尚未缓存") == true)
+        XCTAssertEqual(store.historyLoadErrors["missing"], String(localized: "此会话尚未缓存，连接后可加载聊天内容"))
         XCTAssertFalse(store.isPreparingConversation("missing"))
         XCTAssertTrue(store.historyLoadingSessionIds.isEmpty)
         store.resumeWorkspace()
@@ -702,7 +702,7 @@ final class ChatHistoryCacheTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTAssertEqual(store.searchResults.first?.sessionId, "missing")
-        XCTAssertTrue(store.searchCoverage.contains("已缓存"))
+        XCTAssertEqual(store.searchCoverage, String(localized: "本地结果仅涵盖已缓存聊天"))
         let session = SessionSummary(id: "missing", title: "缓存结果", lastActivity: .distantPast, isRunning: false, hasUnread: false)
         _ = await store.prepareConversation(for: session)
         await store.awaitConversationProjectionForTesting(sessionID: "missing", expectedText: "视频缓存方案")

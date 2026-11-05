@@ -1,0 +1,22 @@
+name: Localization checks
+
+# 中文目录、KMP 诊断目录、Info.plist 权限说明与 Android 字符串的静态校验。
+# 编译器抽取（--swift-extractions）需要 macOS/Xcode 构建产物，此处不执行。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 校验本地化目录与调用
+        run: python3 scripts/verify-localizations.py
+
+      - name: 校验脚本自身的测试
+        run: python3 scripts/test_verify_localizations.py

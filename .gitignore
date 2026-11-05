@@ -36,6 +36,9 @@ captures/
 # 本地生成产物与验证截图
 /output/
 
+# Python 校验脚本缓存
+__pycache__/
+
 # Local environment files
 .env
 .env.*

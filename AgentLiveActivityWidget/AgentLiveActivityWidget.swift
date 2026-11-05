@@ -123,6 +123,7 @@ private enum AgentActivityMetrics {
     static let expandedBrandTopInset: CGFloat = 8
     static let expandedTrailingInset: CGFloat = 10
     // 胶囊的长度和高度
+    // 按两种语言里最长的状态词（"Unconfirmed"）预留；新增语言时需复核胶囊宽度。
     static let expandedStatusCapsuleWidth: CGFloat = 124
     static let expandedStatusCapsuleHeight: CGFloat = 24
     // 胶囊的内部padding

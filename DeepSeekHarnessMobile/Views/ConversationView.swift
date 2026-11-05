@@ -618,7 +618,7 @@ struct ConversationView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
-                        Text(LocalizedStringKey(error)).appFont(.footnote).lineLimit(2)
+                        Text(error).appFont(.footnote).lineLimit(2)
                         Spacer(minLength: 0)
                         Button("重新加载历史") {
                             if let id = store.selectedSessionId { store.loadHistory(for: id) }
@@ -941,7 +941,7 @@ struct ConversationView: View {
     private func historyFailureState(_ error: String) -> some View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle").appFont(.largeTitle).foregroundStyle(.orange)
-            Text((error == String(localized: "此会话尚未缓存，连接后可加载聊天内容") || error.contains("尚未缓存")) ? String(localized: "离线内容不可用") : String(localized: "历史记录加载失败")).appFont(.title3.weight(.semibold))
+            Text(error == String(localized: "此会话尚未缓存，连接后可加载聊天内容") ? String(localized: "离线内容不可用") : String(localized: "历史记录加载失败")).appFont(.title3.weight(.semibold))
             Text(error.contains("refuses this format")
                  ? String(localized: "Host 无法读取旧格式会话，请修复或升级 Host 后重试。原始记录未修改。")
                  : error)
@@ -3758,9 +3758,9 @@ struct ConversationProcessTool: Identifiable {
     let call: ConversationItem?
     let result: ConversationItem?
 
-    var activitySummary: ToolActivitySummary {
-        L10n.toolActivitySummary(ToolActivitySummaryFormatter.shared.summarize(
-            name: call?.title ?? result?.title ?? String(localized: "工具"),
+    var activitySummary: L10n.ToolActivityDisplay {
+        L10n.toolActivityDisplay(for: ToolActivitySummaryFormatter.shared.summarize(
+            name: call?.title ?? result?.title ?? "",
             arguments: call?.text ?? ""
         ))
     }
@@ -5933,7 +5933,7 @@ struct TeamContentSheet: View {
                             Text("当前会话使用普通子智能体").appFont(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    if let error = store.teamSnapshot.error { Text(LocalizedStringKey(error)).foregroundStyle(.orange).appFont(.callout) }
+                    if let error = store.teamSnapshot.error { Text(error).foregroundStyle(.orange).appFont(.callout) }
                     if store.teamSnapshot.state != "ready" {
                         HStack {
                             Text(store.teamSnapshot.state == "migration-required" ? String(localized: "团队数据待刷新，请在桌面端确认会话格式") : String(localized: "团队数据暂不可用"))

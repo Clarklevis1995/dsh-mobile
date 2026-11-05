@@ -1,0 +1,2194 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "%@ patch 没有变化" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ patch contains no changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ patch 没有变化"
+          }
+        }
+      }
+    },
+    "%@ payload 缺少 changed 标记" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ payload is missing the changed flag"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ payload 缺少 changed 标记"
+          }
+        }
+      }
+    },
+    "%@ 包含未知字段 %@；新语义必须升级 schema" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ contains unknown fields %2$@; new semantics require a schema upgrade"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 包含未知字段 %@；新语义必须升级 schema"
+          }
+        }
+      }
+    },
+    "%@ 必须是 array" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ must be an array"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 必须是 array"
+          }
+        }
+      }
+    },
+    "%@ 必须是 object" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ must be an object"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 必须是 object"
+          }
+        }
+      }
+    },
+    "Context 投影缺少 sessionId" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Context projection is missing sessionId"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Context 投影缺少 sessionId"
+          }
+        }
+      }
+    },
+    "Conversation bridge 不支持 MVI event stream" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conversation bridge does not support the MVI event stream"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conversation bridge 不支持 MVI event stream"
+          }
+        }
+      }
+    },
+    "History bridge 不支持 MVI event stream" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "History bridge does not support the MVI event stream"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "History bridge 不支持 MVI event stream"
+          }
+        }
+      }
+    },
+    "Int 超出 KMP Int 范围" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Integer is outside the KMP Int range"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Int 超出 KMP Int 范围"
+          }
+        }
+      }
+    },
+    "KMP Conversation 事件流已停止：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Conversation event stream stopped: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Conversation 事件流已停止：%@"
+          }
+        }
+      }
+    },
+    "KMP Conversation 增量事件无效：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid KMP Conversation incremental event: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Conversation 增量事件无效：%@"
+          }
+        }
+      }
+    },
+    "KMP History 事件流已停止：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP History event stream stopped: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP History 事件流已停止：%@"
+          }
+        }
+      }
+    },
+    "KMP History 增量事件无效：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid KMP History incremental event: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP History 增量事件无效：%@"
+          }
+        }
+      }
+    },
+    "KMP MVI event sequence 不连续" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP MVI event sequence is not contiguous"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP MVI event sequence 不连续"
+          }
+        }
+      }
+    },
+    "KMP MVI event 信封无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP MVI event envelope is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP MVI event 信封无效"
+          }
+        }
+      }
+    },
+    "KMP Question event sequence 不连续" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Question event sequence is not contiguous"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Question event sequence 不连续"
+          }
+        }
+      }
+    },
+    "KMP Question event 信封无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Question event envelope is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Question event 信封无效"
+          }
+        }
+      }
+    },
+    "KMP Question 初始化失败，已停止后续状态写入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Question initialization failed. Further state writes were stopped: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Question 初始化失败，已停止后续状态写入：%@"
+          }
+        }
+      }
+    },
+    "KMP Question 运行期结果失效，已停止后续状态写入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Question runtime result is invalid. Further state writes were stopped: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Question 运行期结果失效，已停止后续状态写入：%@"
+          }
+        }
+      }
+    },
+    "KMP SessionControl 初始化失败，已停止后续状态写入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionControl initialization failed. Further state writes were stopped: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionControl 初始化失败，已停止后续状态写入：%@"
+          }
+        }
+      }
+    },
+    "KMP SessionControl 增量 patch 无效：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid KMP SessionControl incremental patch: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionControl 增量 patch 无效：%@"
+          }
+        }
+      }
+    },
+    "KMP SessionControl 运行期结果失效，已停止后续状态写入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionControl runtime result is invalid. Further state writes were stopped: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionControl 运行期结果失效，已停止后续状态写入：%@"
+          }
+        }
+      }
+    },
+    "KMP SessionList event sequence 不连续" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionList event sequence is not contiguous"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionList event sequence 不连续"
+          }
+        }
+      }
+    },
+    "KMP SessionList event 信封无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionList event envelope is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionList event 信封无效"
+          }
+        }
+      }
+    },
+    "KMP SessionList 初始化失败，已停止后续状态写入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionList initialization failed. Further state writes were stopped: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionList 初始化失败，已停止后续状态写入：%@"
+          }
+        }
+      }
+    },
+    "KMP SessionList 运行期快照失效，已停止后续状态写入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionList runtime snapshot is invalid. Further state writes were stopped: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP SessionList 运行期快照失效，已停止后续状态写入：%@"
+          }
+        }
+      }
+    },
+    "KMP Trajectory 事件流已停止：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Trajectory event stream stopped: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Trajectory 事件流已停止：%@"
+          }
+        }
+      }
+    },
+    "KMP Trajectory 增量事件无效：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid KMP Trajectory incremental event: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP Trajectory 增量事件无效：%@"
+          }
+        }
+      }
+    },
+    "KMP mutation 未发布对应的 MVI event" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP mutation did not publish a matching MVI event"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP mutation 未发布对应的 MVI event"
+          }
+        }
+      }
+    },
+    "KMP 未返回初始化快照" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP did not return an initial snapshot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP 未返回初始化快照"
+          }
+        }
+      }
+    },
+    "KMP 返回了未知动作或不完整 payload" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP returned an unknown action or an incomplete payload"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP 返回了未知动作或不完整 payload"
+          }
+        }
+      }
+    },
+    "KMP 返回了未知状态或动作" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP returned an unknown state or action"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KMP 返回了未知状态或动作"
+          }
+        }
+      }
+    },
+    "MVI event sequence 不连续" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MVI event sequence is not contiguous"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MVI event sequence 不连续"
+          }
+        }
+      }
+    },
+    "MVI 信封 schema、domain 或 transactionId 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid MVI envelope schema, domain, or transactionId"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MVI 信封 schema、domain 或 transactionId 无效"
+          }
+        }
+      }
+    },
+    "MVI 信封无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid MVI envelope"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MVI 信封无效"
+          }
+        }
+      }
+    },
+    "Question event 至多包含一个 effect" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Question event can contain at most one effect"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Question event 至多包含一个 effect"
+          }
+        }
+      }
+    },
+    "SessionControl event metadata 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SessionControl event metadata is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SessionControl event metadata 无效"
+          }
+        }
+      }
+    },
+    "Stats 投影缺少 sessionId" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stats projection is missing sessionId"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stats 投影缺少 sessionId"
+          }
+        }
+      }
+    },
+    "Swift 不得直接启动 KMP 请求状态" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swift cannot start a KMP request state directly"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swift 不得直接启动 KMP 请求状态"
+          }
+        }
+      }
+    },
+    "Swift 不得直接启动 KMP 默认配置请求状态" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swift cannot start a KMP default-configuration request state directly"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swift 不得直接启动 KMP 默认配置请求状态"
+          }
+        }
+      }
+    },
+    "Trajectory batch 包含多个 session" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trajectory batch contains multiple sessions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trajectory batch 包含多个 session"
+          }
+        }
+      }
+    },
+    "Trajectory bridge 不支持 MVI event stream" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trajectory bridge does not support the MVI event stream"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trajectory bridge 不支持 MVI event stream"
+          }
+        }
+      }
+    },
+    "WebSocket 已断开，重连后再处理审批。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The WebSocket is disconnected. Reconnect before handling approvals."
+          }
+        }
+      }
+    },
+    "agentPresets patch 没有变化" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "agentPresets patch contains no changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "agentPresets patch 没有变化"
+          }
+        }
+      }
+    },
+    "agentPresets payload 与 changed 标记不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "agentPresets payload does not match the changed flag"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "agentPresets payload 与 changed 标记不一致"
+          }
+        }
+      }
+    },
+    "agentPresetsAuthorable patch 没有变化" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "agentPresetsAuthorable patch contains no changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "agentPresetsAuthorable patch 没有变化"
+          }
+        }
+      }
+    },
+    "agentPresetsHasDocument patch 没有变化" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "agentPresetsHasDocument patch contains no changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "agentPresetsHasDocument patch 没有变化"
+          }
+        }
+      }
+    },
+    "append event patch 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "append event patch is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "append event patch 无效"
+          }
+        }
+      }
+    },
+    "append-text operation 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "append-text operation is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "append-text operation 无效"
+          }
+        }
+      }
+    },
+    "clear patch 与 intent 不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "clear patch does not match the intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "clear patch 与 intent 不一致"
+          }
+        }
+      }
+    },
+    "clear patch 与当前 intent 不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "clear patch does not match the current intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "clear patch 与当前 intent 不一致"
+          }
+        }
+      }
+    },
+    "committed 与增量 patch 必须同时存在" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "committed and the incremental patch must both be present"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "committed 与增量 patch 必须同时存在"
+          }
+        }
+      }
+    },
+    "committed 结果缺少同事务快照" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Committed result is missing a snapshot from the same transaction"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "committed 结果缺少同事务快照"
+          }
+        }
+      }
+    },
+    "completed generation 与提交前后快照不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completed generation does not match the snapshots before and after submission"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "completed generation 与提交前后快照不一致"
+          }
+        }
+      }
+    },
+    "completed kind/token 必须同时存在" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completed kind and token must both be present"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "completed kind/token 必须同时存在"
+          }
+        }
+      }
+    },
+    "control patch 没有变化" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "control patch contains no changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "control patch 没有变化"
+          }
+        }
+      }
+    },
+    "effect 与同事务 intent/state 不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effect does not match intent/state from the same transaction"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "effect 与同事务 intent/state 不一致"
+          }
+        }
+      }
+    },
+    "effect 与同事务快照或提交 intent 语义不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effect does not match the snapshot or submission intent from the same transaction"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "effect 与同事务快照或提交 intent 语义不一致"
+          }
+        }
+      }
+    },
+    "effect 与待审批请求不匹配" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effect does not match the pending approval request"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "effect 与待审批请求不匹配"
+          }
+        }
+      }
+    },
+    "effect 与快照、request token 或 intent 语义不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effect does not match the snapshot, request token, or intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "effect 与快照、request token 或 intent 语义不一致"
+          }
+        }
+      }
+    },
+    "effect 数量无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid number of effects"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "effect 数量无效"
+          }
+        }
+      }
+    },
+    "effect 缺少同事务快照" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effect is missing a snapshot from the same transaction"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "effect 缺少同事务快照"
+          }
+        }
+      }
+    },
+    "globalModelCatalog patch 没有变化" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "globalModelCatalog patch contains no changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "globalModelCatalog patch 没有变化"
+          }
+        }
+      }
+    },
+    "globalModelCatalog payload 缺少 changed 标记" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "globalModelCatalog payload is missing the changed flag"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "globalModelCatalog payload 缺少 changed 标记"
+          }
+        }
+      }
+    },
+    "history patch 与当前 intent 不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "history patch does not match the current intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "history patch 与当前 intent 不一致"
+          }
+        }
+      }
+    },
+    "insert operation 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "insert operation is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "insert operation 无效"
+          }
+        }
+      }
+    },
+    "insert-before operation 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "insert-before operation is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "insert-before operation 无效"
+          }
+        }
+      }
+    },
+    "live intent 缺少 event patch" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "live intent is missing an event patch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "live intent 缺少 event patch"
+          }
+        }
+      }
+    },
+    "live patch 与 event intent 不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "live patch does not match the event intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "live patch 与 event intent 不一致"
+          }
+        }
+      }
+    },
+    "live patch 与当前 event intent 不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "live patch does not match the current event intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "live patch 与当前 event intent 不一致"
+          }
+        }
+      }
+    },
+    "loading kind、request token 或 target 关联无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid association between loading kind, request token, and target"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "loading kind、request token 或 target 关联无效"
+          }
+        }
+      }
+    },
+    "move operation 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "move operation is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "move operation 无效"
+          }
+        }
+      }
+    },
+    "patch payload 缺少 committed 信号" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Patch payload is missing the committed signal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch payload 缺少 committed 信号"
+          }
+        }
+      }
+    },
+    "patch schema 或 sessionId 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid patch schema or sessionId"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch schema 或 sessionId 无效"
+          }
+        }
+      }
+    },
+    "patch upsert/remove 重叠、冗余或引用了不存在的 key" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Patch upsert/remove operations overlap, are redundant, or reference missing keys"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch upsert/remove 重叠、冗余或引用了不存在的 key"
+          }
+        }
+      }
+    },
+    "patch 与 intent 或 wire state 不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Patch does not match the intent or wire state"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 与 intent 或 wire state 不一致"
+          }
+        }
+      }
+    },
+    "patch 为空或生成了非法状态" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Patch is empty or produced an invalid state"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 为空或生成了非法状态"
+          }
+        }
+      }
+    },
+    "patch 携带了当前 intent 不允许的 session 或字段" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Patch contains a session or fields not allowed by the current intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 携带了当前 intent 不允许的 session 或字段"
+          }
+        }
+      }
+    },
+    "patch 顶层必须是 object" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Patch must be an object at the top level"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "patch 顶层必须是 object"
+          }
+        }
+      }
+    },
+    "permissionDefaultOptions patch 没有变化" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "permissionDefaultOptions patch contains no changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "permissionDefaultOptions patch 没有变化"
+          }
+        }
+      }
+    },
+    "remove operation 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "remove operation is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "remove operation 无效"
+          }
+        }
+      }
+    },
+    "replace event patch 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replace event patch is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replace event patch 无效"
+          }
+        }
+      }
+    },
+    "replace operation 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replace operation is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replace operation 无效"
+          }
+        }
+      }
+    },
+    "replace patch 与 intent 不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replace patch does not match the intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replace patch 与 intent 不一致"
+          }
+        }
+      }
+    },
+    "replace patch 与当前 intent 不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replace patch does not match the current intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replace patch 与当前 intent 不一致"
+          }
+        }
+      }
+    },
+    "replace patch 缺少 replacementItems" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replace patch is missing replacementItems"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replace patch 缺少 replacementItems"
+          }
+        }
+      }
+    },
+    "replacement item id 重复" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replacement item id is duplicated"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replacement item id 重复"
+          }
+        }
+      }
+    },
+    "replacement item wire value 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replacement item wire value is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replacement item wire value 无效"
+          }
+        }
+      }
+    },
+    "replacement node id 重复" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replacement node id is duplicated"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replacement node id 重复"
+          }
+        }
+      }
+    },
+    "replacement node wire value 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replacement node wire value is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "replacement node wire value 无效"
+          }
+        }
+      }
+    },
+    "request token 已变化但缺少 completed generation 信号" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Request token changed without a completed-generation signal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "request token 已变化但缺少 completed generation 信号"
+          }
+        }
+      }
+    },
+    "request-page 缺少 effect" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "request-page is missing an effect"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "request-page 缺少 effect"
+          }
+        }
+      }
+    },
+    "stream event patch 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "stream event patch is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "stream event patch 无效"
+          }
+        }
+      }
+    },
+    "transition 缺少 patch" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "transition is missing a patch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "transition 缺少 patch"
+          }
+        }
+      }
+    },
+    "transition 缺少对应 UI intent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "transition is missing a matching UI intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "transition 缺少对应 UI intent"
+          }
+        }
+      }
+    },
+    "transition 缺少对应 intent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "transition is missing a matching intent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "transition 缺少对应 intent"
+          }
+        }
+      }
+    },
+    "update operation 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "update operation is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "update operation 无效"
+          }
+        }
+      }
+    },
+    "upsert event patch 无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "upsert event patch is invalid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "upsert event patch 无效"
+          }
+        }
+      }
+    },
+    "upsert 后事件顺序无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid event order after upsert"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "upsert 后事件顺序无效"
+          }
+        }
+      }
+    },
+    "临时流改变了持久流水位" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Temporary stream changed the persisted stream watermark"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "临时流改变了持久流水位"
+          }
+        }
+      }
+    },
+    "单选题只能选择一个选项，且不能同时填写自定义答案。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A single-choice question allows only one option and no custom answer at the same time."
+          }
+        }
+      }
+    },
+    "同 token 的 active target 不得变化" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The active target cannot change for the same token"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同 token 的 active target 不得变化"
+          }
+        }
+      }
+    },
+    "审批响应发送失败，请重试。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to send the approval response. Please try again."
+          }
+        }
+      }
+    },
+    "无法编码 iOS Approval 输入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not encode iOS Approval input: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法编码 iOS Approval 输入：%@"
+          }
+        }
+      }
+    },
+    "无法编码 iOS Conversation 输入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not encode iOS Conversation input: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法编码 iOS Conversation 输入：%@"
+          }
+        }
+      }
+    },
+    "无法编码 iOS History 输入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not encode iOS History input: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法编码 iOS History 输入：%@"
+          }
+        }
+      }
+    },
+    "无法编码 iOS Question 输入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not encode iOS Question input: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法编码 iOS Question 输入：%@"
+          }
+        }
+      }
+    },
+    "无法编码 iOS SessionControl 输入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not encode iOS SessionControl input: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法编码 iOS SessionControl 输入：%@"
+          }
+        }
+      }
+    },
+    "无法编码 iOS SessionList 输入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not encode iOS SessionList input: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法编码 iOS SessionList 输入：%@"
+          }
+        }
+      }
+    },
+    "无法编码 iOS Trajectory 输入：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not encode iOS Trajectory input: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法编码 iOS Trajectory 输入：%@"
+          }
+        }
+      }
+    },
+    "无法解码 KMP Approval effect：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not decode KMP Approval effect: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法解码 KMP Approval effect：%@"
+          }
+        }
+      }
+    },
+    "无法解码 KMP Approval 快照：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not decode KMP Approval snapshot: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法解码 KMP Approval 快照：%@"
+          }
+        }
+      }
+    },
+    "无法解码 KMP Question effect：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not decode KMP Question effect: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法解码 KMP Question effect：%@"
+          }
+        }
+      }
+    },
+    "无法解码 KMP Question 快照：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not decode KMP Question snapshot: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法解码 KMP Question 快照：%@"
+          }
+        }
+      }
+    },
+    "无法解码 KMP SessionControl effect：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not decode KMP SessionControl effect: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法解码 KMP SessionControl effect：%@"
+          }
+        }
+      }
+    },
+    "无法解码 KMP SessionControl 快照：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not decode KMP SessionControl snapshot: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法解码 KMP SessionControl 快照：%@"
+          }
+        }
+      }
+    },
+    "无法解码 KMP SessionList 快照：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not decode KMP SessionList snapshot: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法解码 KMP SessionList 快照：%@"
+          }
+        }
+      }
+    },
+    "无详细信息" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No details available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无详细信息"
+          }
+        }
+      }
+    },
+    "服务端拒绝了问题响应。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server rejected the question response."
+          }
+        }
+      }
+    },
+    "服务端未接受审批决定（%@），请重试。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The server did not accept the approval decision (%@). Please try again."
+          }
+        }
+      }
+    },
+    "未 applied 的结果不得提交、完成 generation 或产生 effect" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An unapplied result cannot commit, complete a generation, or produce an effect"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未 applied 的结果不得提交、完成 generation 或产生 effect"
+          }
+        }
+      }
+    },
+    "未 committed 的完整快照不得修改状态" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An uncommitted full snapshot cannot change state"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未 committed 的完整快照不得修改状态"
+          }
+        }
+      }
+    },
+    "未知 KMP MVI event kind：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown KMP MVI event kind: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知 KMP MVI event kind：%@"
+          }
+        }
+      }
+    },
+    "未知 MVI event kind：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown MVI event kind: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知 MVI event kind：%@"
+          }
+        }
+      }
+    },
+    "未知 Question event kind：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown Question event kind: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知 Question event kind：%@"
+          }
+        }
+      }
+    },
+    "未知 SessionList event kind：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown SessionList event kind: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知 SessionList event kind：%@"
+          }
+        }
+      }
+    },
+    "未知 event patch：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown event patch: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知 event patch：%@"
+          }
+        }
+      }
+    },
+    "未知 operation：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown operation: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知 operation：%@"
+          }
+        }
+      }
+    },
+    "未知 patch schema: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown patch schema: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知 patch schema: %@"
+          }
+        }
+      }
+    },
+    "权限事件投影缺少 sessionId" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permission event projection is missing sessionId"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "权限事件投影缺少 sessionId"
+          }
+        }
+      }
+    },
+    "权限投影缺少 sessionId" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permission projection is missing sessionId"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "权限投影缺少 sessionId"
+          }
+        }
+      }
+    },
+    "模型投影缺少 sessionId" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model projection is missing sessionId"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型投影缺少 sessionId"
+          }
+        }
+      }
+    },
+    "独立流需要共享 Conversation Store" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An independent stream requires the shared Conversation Store"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "独立流需要共享 Conversation Store"
+          }
+        }
+      }
+    },
+    "答案必须按原顺序覆盖整组问题。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Answers must cover every question, in the original order."
+          }
+        }
+      }
+    },
+    "订阅基线与初始化快照不一致" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subscription baseline does not match the initial snapshot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "订阅基线与初始化快照不一致"
+          }
+        }
+      }
+    },
+    "订阅基线无效" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid subscription baseline"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "订阅基线无效"
+          }
+        }
+      }
+    },
+    "订阅快照需要共享 History Store" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Snapshot subscription requires the shared History Store"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "订阅快照需要共享 History Store"
+          }
+        }
+      }
+    },
+    "请求 target 必须与 KMP effect 在同一事务建立" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The request target and KMP effect must be created in the same transaction"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求 target 必须与 KMP effect 在同一事务建立"
+          }
+        }
+      }
+    },
+    "非空 effect 必须来自 applied + committed 的同事务快照" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A nonempty effect must come from an applied and committed snapshot in the same transaction"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非空 effect 必须来自 applied + committed 的同事务快照"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

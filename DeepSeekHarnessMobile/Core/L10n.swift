@@ -105,33 +105,52 @@ enum L10n {
         }
     }
 
-    /// Translate only formatter-owned labels and counts, preserving paths and tool descriptions.
-    static func toolActivitySummary(_ summary: ToolActivitySummary, bundle: Bundle = .main) -> ToolActivitySummary {
+    /// Display copy for a shared tool summary. The shared formatter only emits a
+    /// stable `kind` plus counts, so labels are resolved here instead of parsing
+    /// localized text. Keep the kind names in sync with `ToolActivityKind`.
+    struct ToolActivityDisplay {
         let label: String
-        switch summary.label {
-        case "写入": label = String(localized: "写入", bundle: bundle)
-        case "修改": label = String(localized: "修改", bundle: bundle)
-        case "读取": label = String(localized: "读取", bundle: bundle)
-        case "执行": label = String(localized: "tool.activity.run", defaultValue: "执行", bundle: bundle)
-        case "搜索": label = String(localized: "搜索", bundle: bundle)
-        case "列出": label = String(localized: "列出", bundle: bundle)
-        case "获取": label = String(localized: "获取", bundle: bundle)
-        case "工具": label = String(localized: "工具", bundle: bundle)
-        default: label = summary.label
-        }
-        let parts = summary.annotation.split(separator: " ")
+        let detail: String
         let annotation: String
-        if parts.count == 2, parts[1] == "行", let count = Int(parts[0]) {
-            annotation = count == 1
-                ? String(localized: "tool.activity.line.one", defaultValue: "1 行", bundle: bundle)
-                : String(localized: "tool.activity.lines", defaultValue: "\(count) 行", bundle: bundle)
-        } else if parts.count == 5, parts[0] == "替换", parts[2] == "→", parts[4] == "行",
-                  let before = Int(parts[1]), let after = Int(parts[3]) {
-            annotation = String(localized: "tool.activity.replacement", defaultValue: "替换 \(before) → \(after) 行", bundle: bundle)
-        } else {
-            annotation = summary.annotation
+    }
+
+    static func toolActivityDisplay(for summary: ToolActivitySummary, bundle: Bundle = .main) -> ToolActivityDisplay {
+        let label: String
+        switch summary.kind {
+        case "write": label = String(localized: "写入", bundle: bundle)
+        case "edit": label = String(localized: "修改", bundle: bundle)
+        case "read": label = String(localized: "读取", bundle: bundle)
+        case "run": label = String(localized: "运行", bundle: bundle)
+        case "search": label = String(localized: "搜索", bundle: bundle)
+        case "list": label = String(localized: "列出", bundle: bundle)
+        case "fetch": label = String(localized: "获取", bundle: bundle)
+        default:
+            let name = summary.toolName.trimmingCharacters(in: .whitespacesAndNewlines)
+            label = name.isEmpty ? String(localized: "未命名工具", bundle: bundle) : name
         }
-        return ToolActivitySummary(label: label, detail: summary.detail, annotation: annotation)
+        let annotation: String
+        switch summary.kind {
+        case "write":
+            annotation = lineCountText(summary.lineCount, bundle: bundle)
+        case "read":
+            annotation = lineCountText(summary.requestedLineCount, bundle: bundle)
+        case "edit" where summary.replacedLineCount > 0 && summary.replacementLineCount > 0:
+            annotation = String(
+                localized: "tool.activity.replacement",
+                defaultValue: "替换 \(Int(summary.replacedLineCount)) → \(Int(summary.replacementLineCount)) 行",
+                bundle: bundle
+            )
+        default:
+            annotation = ""
+        }
+        return ToolActivityDisplay(label: label, detail: summary.detail, annotation: annotation)
+    }
+
+    private static func lineCountText(_ count: Int32, bundle: Bundle) -> String {
+        guard count > 0 else { return "" }
+        return count == 1
+            ? String(localized: "tool.activity.line.one", defaultValue: "1 行", bundle: bundle)
+            : String(localized: "tool.activity.lines", defaultValue: "\(Int(count)) 行", bundle: bundle)
     }
 
     // MARK: Reasoning effort labels

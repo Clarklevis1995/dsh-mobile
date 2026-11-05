@@ -86,6 +86,7 @@
 		CA11E0000000000000000009 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E000000000000000000A /* L10n.swift */; };
 		CA11E000000000000000000B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CA11E000000000000000000C /* Localizable.xcstrings */; };
 		CA11E000000000000000000D /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CA11E000000000000000000E /* InfoPlist.xcstrings */; };
+		CA11E0000000000000000021 /* Diagnostics.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000020 /* Diagnostics.xcstrings */; };
 		CA11E000000000000000000F /* LocalizationCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11E0000000000000000011 /* LocalizationCatalogTests.swift */; };
 		CD86C5C4C6FF6F4BD8D715A6 /* VoiceInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81886703A6C3AB2164852990 /* VoiceInputTests.swift */; };
 		CF2010000000000000000001 /* ChatHistoryCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF2010000000000000000002 /* ChatHistoryCache.swift */; };
@@ -221,6 +222,7 @@
 		CA11E000000000000000000A /* L10n.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
 		CA11E000000000000000000C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		CA11E000000000000000000E /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		CA11E0000000000000000020 /* Diagnostics.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Diagnostics.xcstrings; sourceTree = "<group>"; };
 		CA11E0000000000000000011 /* LocalizationCatalogTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalizationCatalogTests.swift; sourceTree = "<group>"; };
 		CF2010000000000000000002 /* ChatHistoryCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryCache.swift; sourceTree = "<group>"; };
 		CF2010000000000000000004 /* ChatHistoryCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryCacheTests.swift; sourceTree = "<group>"; };
@@ -422,6 +424,7 @@
 				152A3874C0D169644C9C7B6D /* Assets.xcassets */,
 				CA11E000000000000000000C /* Localizable.xcstrings */,
 				CA11E000000000000000000E /* InfoPlist.xcstrings */,
+				CA11E0000000000000000020 /* Diagnostics.xcstrings */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -667,6 +670,7 @@
 				6FED6D958ABD07A258CC53F0 /* Assets.xcassets in Resources */,
 				CA11E000000000000000000B /* Localizable.xcstrings in Resources */,
 				CA11E000000000000000000D /* InfoPlist.xcstrings in Resources */,
+				CA11E0000000000000000021 /* Diagnostics.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

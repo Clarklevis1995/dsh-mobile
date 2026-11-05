@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import plistlib
-import argparse
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -20,7 +20,11 @@ ANDROID_SOURCES = ROOT / "androidApp" / "src" / "main" / "kotlin"
 HAN = re.compile(r"[\u3400-\u9fff]")
 IOS_ARGUMENT = re.compile(r"%(?:\d+\$)?(?:@|lld|ld|zd|d|lu|u|f|g|s|c|i)")
 ANDROID_ARGUMENT = re.compile(r"%(?:\d+\$)?(?:s|d|f)")
-LOCALIZED_CALL = re.compile(r'String\s*\(\s*localized:\s*"((?:\\.|[^"\\])*)"')
+# 本地化表：用户文案、KMP 诊断、Info.plist 权限说明各用一份，避免互相污染。
+LOCALIZATION_TABLES = ("Localizable", "Diagnostics", "InfoPlist")
+LOCALIZED_CALL = re.compile(
+    r'String\s*\(\s*localized:\s*"((?:\\.|[^"\\])*)",?\s*(?:table:\s*"([^"]+)")?'
+)
 UI_CALL_NAMES = (
     "Text", "Button", "Label", "TextField", "SecureField", "Toggle", "Picker",
     "Section", "navigationTitle", "accessibilityLabel", "accessibilityValue",
@@ -40,6 +44,35 @@ KOTLIN_UI_LITERAL = re.compile(
 )
 
 
+def swift_unescape(raw: str) -> str:
+    """解码 Swift 字符串字面量内容，覆盖界面文案会用到的转义。"""
+    result: list[str] = []
+    index = 0
+    while index < len(raw):
+        character = raw[index]
+        if character != "\\":
+            result.append(character)
+            index += 1
+            continue
+        index += 1
+        if index >= len(raw):
+            raise ValueError("字符串以未完成的转义结尾")
+        escape = raw[index]
+        simple = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", '"': '"', "'": "'", "\\": "\\"}
+        if escape in simple:
+            result.append(simple[escape])
+            index += 1
+        elif escape == "u" and raw[index + 1:index + 2] == "{":
+            end = raw.find("}", index)
+            if end < 0:
+                raise ValueError("未闭合的 \\u{...} 转义")
+            result.append(chr(int(raw[index + 2:end], 16)))
+            index = end + 1
+        else:
+            raise ValueError(f"不支持的转义 \\{escape}")
+    return "".join(result)
+
+
 def arguments(value: str, pattern: re.Pattern[str]) -> list[str]:
     return sorted(re.sub(r"^%\d+\$", "%", match) for match in pattern.findall(value))
 
@@ -51,7 +84,12 @@ def value(entry: dict, language: str) -> str | None:
 def check_catalog(name: str, errors: list[str]) -> set[str]:
     data = json.loads((IOS_RESOURCES / f"{name}.xcstrings").read_text())
     strings = data["strings"]
+    usable: set[str] = set()
     for key, entry in strings.items():
+        if entry.get("extractionState") == "stale":
+            errors.append(f"{name}: {key!r} 已过时，请删除或改为 manual")
+            continue
+        usable.add(key)
         english = value(entry, "en")
         chinese = value(entry, "zh-Hans")
         if not english or not english.strip():
@@ -68,10 +106,10 @@ def check_catalog(name: str, errors: list[str]) -> set[str]:
             source = chinese if chinese is not None else key
             if arguments(source, IOS_ARGUMENT) != arguments(english, IOS_ARGUMENT):
                 errors.append(f"{name}: {key!r} 的中英文格式参数不一致")
-    return set(strings)
+    return usable
 
 
-def check_swift_calls(keys: set[str], errors: list[str]) -> None:
+def check_swift_calls(catalogs: dict[str, set[str]], errors: list[str]) -> None:
     paths = list(IOS_SOURCES.rglob("*.swift")) + list((ROOT / "AgentLiveActivityWidget").rglob("*.swift"))
     for path in paths:
         source = path.read_text()
@@ -80,13 +118,21 @@ def check_swift_calls(keys: set[str], errors: list[str]) -> None:
                 key = match.group(1)
                 if "\\(" in key:
                     continue
-                key = json.loads('"' + key + '"')
-                if key and key not in keys:
-                    errors.append(f"{path.relative_to(ROOT)}: {key!r} 未收录到 Localizable.xcstrings")
+                try:
+                    key = swift_unescape(key)
+                except ValueError as error:
+                    errors.append(f"{path.relative_to(ROOT)}: {key!r} 无法解析：{error}")
+                    continue
+                table = (match.group(2) if pattern is LOCALIZED_CALL else None) or "Localizable"
+                keys = catalogs.get(table)
+                if keys is None:
+                    errors.append(f"{path.relative_to(ROOT)}: 未知本地化表 {table!r}")
+                elif key and key not in keys:
+                    errors.append(f"{path.relative_to(ROOT)}: {key!r} 未收录到 {table}.xcstrings")
 
 
-def check_swift_extractions(directory: Path, keys: set[str], errors: list[str]) -> int:
-    """Check compiler-resolved keys, including interpolated integer formats."""
+def check_swift_extractions(directory: Path, catalogs: dict[str, set[str]], errors: list[str]) -> int:
+    """Check compiler-resolved keys, including interpolated integer formats and tables."""
     count = 0
     for path in directory.rglob("*.stringsdata"):
         data = json.loads(path.read_text())
@@ -94,10 +140,15 @@ def check_swift_extractions(directory: Path, keys: set[str], errors: list[str]) 
         if not any(source.is_relative_to(root) for root in (IOS_SOURCES, ROOT / "AgentLiveActivityWidget")):
             continue
         count += 1
-        for entry in data.get("tables", {}).get("Localizable", []):
-            key = entry["key"]
-            if key and key not in keys:
-                errors.append(f"{source.relative_to(ROOT)}: {key!r} 未收录到 Localizable.xcstrings")
+        for table, entries in data.get("tables", {}).items():
+            keys = catalogs.get(table)
+            if keys is None:
+                errors.append(f"{source.relative_to(ROOT)}: 未知本地化表 {table!r}")
+                continue
+            for entry in entries:
+                key = entry["key"]
+                if key and key not in keys:
+                    errors.append(f"{source.relative_to(ROOT)}: {key!r} 未收录到 {table}.xcstrings")
     if count == 0:
         errors.append(f"{directory}: 未找到应用的 Swift 编译器本地化输出")
     return count
@@ -160,23 +211,24 @@ def main() -> int:
                         help="检查以 SWIFT_EMIT_LOC_STRINGS=YES 构建的 Xcode 中间产物目录")
     options = parser.parse_args()
     errors: list[str] = []
-    keys = set()
+    catalogs: dict[str, set[str]] = {}
     if not options.android_only:
-        keys = check_catalog("Localizable", errors)
-        info_keys = check_catalog("InfoPlist", errors)
+        for name in LOCALIZATION_TABLES:
+            catalogs[name] = check_catalog(name, errors)
         with (IOS_RESOURCES / "Info.plist").open("rb") as plist:
             privacy_keys = {key for key in plistlib.load(plist) if key.endswith("UsageDescription")}
-        for key in sorted(privacy_keys - info_keys):
+        for key in sorted(privacy_keys - catalogs["InfoPlist"]):
             errors.append(f"InfoPlist: {key!r} 缺少权限说明译文")
-        check_swift_calls(keys, errors)
+        check_swift_calls(catalogs, errors)
         if options.swift_extractions:
-            check_swift_extractions(options.swift_extractions, keys, errors)
+            check_swift_extractions(options.swift_extractions, catalogs, errors)
     android_count = check_android(errors)
     android_ui_count = check_android_ui(errors)
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print(f"本地化检查通过：{len(keys)} 条 iOS 文案，{android_count} 条 Android 系统文案，"
+    print(f"本地化检查通过：{len(catalogs.get('Localizable', ()))} 条 iOS 文案，"
+          f"{len(catalogs.get('Diagnostics', ()))} 条诊断文案，{android_count} 条 Android 系统文案，"
           f"{android_ui_count} 条 Android 界面文案。")
     return 0
 

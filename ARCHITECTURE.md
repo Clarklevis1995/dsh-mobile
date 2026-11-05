@@ -72,6 +72,13 @@ SwiftUI View 仅读取 `AppStore` 状态并调用语义化 Intent 方法。Conve
 
 `androidApp` 使用 Compose 验证 KMP Store 和增量协议。真实 OkHttp WebSocket、DataStore/Keystore、附件和生命周期平台实现属于阶段 12。
 
+### 4.4 本地化文本
+
+- 产品文案：iOS `DeepSeekHarnessMobile/Resources/Localizable.xcstrings`，Android `AndroidStrings.english`；中文 key 即源语言，英文为目标语言。
+- KMP 桥接诊断：iOS `Resources/Diagnostics.xcstrings`，只由 `KMPSharedAdapter` 的 `table: "Diagnostics"` 读取，与产品文案分表，避免内部不变量诊断污染用户目录。
+- 权限说明：`Resources/InfoPlist.xcstrings`，必须覆盖 `Info.plist` 中全部 `*UsageDescription`。
+- 共享层不生成用户文案：`ToolActivitySummary` 只给出 `kind` 与计数，iOS/Android 各自选择标签和数量语法，禁止解析中文文本。
+
 ## 5. 关键 Use Case
 
 ### 5.1 发送消息并接收 Agent 回复
@@ -109,6 +116,8 @@ Question request 进入 `SharedQuestionStore`，UI answer/cancel 作为 Intent �
 ## 8. 测试门禁
 
 - `shared:allTests`：Reducer、Projection、History、MVI Event、增量 payload 和异常原子性。
+- `scripts/verify-localizations.py`：校验 `Localizable`（产品文案）、`Diagnostics`（KMP 桥接诊断）、`InfoPlist`（权限说明）三份 String Catalog 与 Android `AndroidStrings` / `values-en` 的译文完整性、占位符一致性和静态调用覆盖；传 `--swift-extractions <DerivedData 中间产物>` 时还会用编译器抽取结果校验插值 key 及所在 table。CI 执行静态部分。
+- `scripts/test_verify_localizations.py`：上述校验脚本的单元测试。
 - Android JVM tests / APK build：KMP Android target 与 Compose 工程可编译。
 - iOS XCTest：真实 KMP framework 桥接、坏 Event fail-closed、平台 effect、产品源码架构门禁。
 - iPhoneOS Release 无签名构建：Device Kotlin/Native framework 和 Swift 产品编译。
