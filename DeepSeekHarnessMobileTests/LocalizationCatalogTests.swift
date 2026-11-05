@@ -97,10 +97,12 @@ final class LocalizationCatalogTests: XCTestCase {
     func testEnglishLocalizableTableIsPresentAndPopulated() throws {
         let table = try englishTable("Localizable")
         XCTAssertFalse(table.isEmpty, "en.lproj/Localizable.strings is missing from the app bundle")
-        XCTAssertGreaterThanOrEqual(table.count, 600, "English Localizable table looks truncated")
+        XCTAssertGreaterThanOrEqual(table.count, 1200, "English Localizable table looks truncated")
 
         let blank = table.filter { $0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         XCTAssertTrue(blank.isEmpty, "Blank English translations for: \(blank.keys.sorted())")
+        let withHan = table.filter { $0.value.range(of: "\\p{Han}", options: .regularExpression) != nil }
+        XCTAssertTrue(withHan.isEmpty, "English translations still contain Chinese: \(withHan.keys.sorted())")
         XCTAssertEqual(table["语言"], "Language")
         XCTAssertEqual(table["语言设置将在重新启动应用后生效。"],
                        "Language changes take effect after restarting the app.")
