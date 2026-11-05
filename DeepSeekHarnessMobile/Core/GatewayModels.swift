@@ -51,6 +51,17 @@ enum JSONValue: Codable, Hashable, Sendable {
         }
     }
 
+    var foundationValue: Any {
+        switch self {
+        case .string(let v): return v
+        case .number(let v): return v
+        case .bool(let v): return v
+        case .object(let v): return v.mapValues { $0.foundationValue }
+        case .array(let v): return v.map { $0.foundationValue }
+        case .null: return NSNull()
+        }
+    }
+
     var displayText: String {
         guard let data = try? JSONEncoder.pretty.encode(self) else { return "" }
         return String(decoding: data, as: UTF8.self)
@@ -168,6 +179,11 @@ extension KeyedDecodingContainer {
     }
 }
 
+struct GatewayTextPart: Codable, Hashable, Sendable {
+    var type: String
+    var text: String
+}
+
 struct GatewayFrame: Codable, Sendable {
     var kind: String
     var gatewayId: String?
@@ -207,6 +223,7 @@ struct GatewayFrame: Codable, Sendable {
     var event: GatewayEvent?
     var code: String?
     var message: String?
+    var text: String?
     var mode: String?
     var command: JSONValue?
     var line: String?
@@ -217,6 +234,12 @@ struct GatewayFrame: Codable, Sendable {
     var id: String?
     var record: JSONValue?
     var records: [JSONValue]?
+    var shown: Int?
+    var total: Int?
+    var limit: Int?
+    var deletedCount: Int?
+    var step: String?
+    var schedule: JSONValue?
     var updated: Bool?
     var deleted: Bool?
     var earlierRecordsUnavailable: Bool?
@@ -683,9 +706,22 @@ enum GatewayWireDecoder {
         return "\(path.isEmpty ? "$" : path): \(context.debugDescription)"
     }
 
+    private struct ManagementHeader: Decodable { let kind: String }
+
     static func decode(_ data: Data) throws -> GatewayFrame {
         // 带 kind 的控制响应和大 history 页直接解码，避免先完整解析、
         // 再序列化整个 JSON。只为旧版无 kind 的实时事件走兼容路径。
+        if let header = try? JSONDecoder().decode(ManagementHeader.self, from: data),
+           ["schedule-view", "schedule-create", "schedule-edit", "schedule-run", "schedule-delete-inactive"].contains(header.kind),
+           var object = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if header.kind == "schedule-delete-inactive" {
+                object["deletedCount"] = object.removeValue(forKey: "deleted")
+            } else {
+                object["schedule"] = object
+                object.removeValue(forKey: "target")
+            }
+            return try JSONDecoder().decode(GatewayFrame.self, from: JSONSerialization.data(withJSONObject: object))
+        }
         do {
             return try JSONDecoder().decode(GatewayFrame.self, from: data)
         } catch DecodingError.keyNotFound(let key, let context)
@@ -985,7 +1021,9 @@ struct RawSessionEvent: Codable, Hashable, Sendable {
                     guard block["type"]?.stringValue == "file", let file = block["attachment"],
                           let id = file["attachmentId"]?.stringValue else { return nil }
                     return PresentedFile(attachmentId: id, name: file["name"]?.stringValue, bytes: file["bytes"]?.doubleValue.map(Int64.init))
-                }
+                },
+                textParts: data["textParts"]?.decode([GatewayTextPart].self),
+                requestId: data["source"]?["rpcId"]?.stringValue
             )
         case "assistant/chunk":
             let chunk = data["chunk"]
@@ -1181,6 +1219,8 @@ struct GatewayEvent: Codable, Hashable, Sendable, Identifiable {
     var delayMs: Double?
     var failure: JSONValue?
     var files: [PresentedFile]?
+    var textParts: [GatewayTextPart]?
+    var requestId: String?
 
     init(
         type: String,
@@ -1224,12 +1264,16 @@ struct GatewayEvent: Codable, Hashable, Sendable, Identifiable {
         maxRetries: Int? = nil,
         delayMs: Double? = nil,
         failure: JSONValue? = nil,
-        files: [PresentedFile]? = nil
+        files: [PresentedFile]? = nil,
+        textParts: [GatewayTextPart]? = nil,
+        requestId: String? = nil
     ) {
         self.type = type
         self.turn = turn
         self.step = step
         self.text = text
+        self.textParts = textParts
+        self.requestId = requestId
         self._source = GatewayEventSource(wrappedValue: source)
         self.chunkType = chunkType
         self.tool = tool
@@ -1319,6 +1363,11 @@ struct SessionSummary: Codable, Hashable, Sendable, Identifiable {
 }
 
 struct ScheduledTask: Identifiable, Hashable {
+    var everySeconds: Double? { raw["every_seconds"]?.doubleValue ?? raw["everySeconds"]?.doubleValue }
+    var expression: String? { raw["cron"]?["expression"]?.stringValue ?? raw["expression"]?.stringValue }
+    var clock: String? { raw[kind]?["time"]?.stringValue ?? raw["time"]?.stringValue }
+    var timeZone: String? { raw[kind]?["time_zone"]?.stringValue ?? raw["timeZone"]?.stringValue }
+    var weekdays: JSONValue? { raw["weekly"]?["weekdays"] ?? raw["weekdays"] }
     let id: String
     let sessionID: String
     let title: String
@@ -1331,19 +1380,17 @@ struct ScheduledTask: Identifiable, Hashable {
 
     init?(_ raw: JSONValue) {
         guard let id = raw["id"]?.stringValue,
-              let sessionID = raw["sessionId"]?.stringValue,
               let title = raw["title"]?.stringValue,
               let prompt = raw["prompt"]?.stringValue,
-              let kind = raw["kind"]?.stringValue,
-              let status = raw["status"]?.stringValue,
-              let scheduledAt = raw["scheduledAt"]?.stringValue else { return nil }
+              let status = raw["status"]?.stringValue else { return nil }
         self.id = id
-        self.sessionID = sessionID
+        self.sessionID = raw["target"]?["sessionId"]?.stringValue ?? raw["sessionId"]?.stringValue
+            ?? raw["involvedSessionIds"]?.arrayValue?.first?.stringValue ?? ""
         self.title = title
         self.prompt = prompt
-        self.kind = kind
+        self.kind = raw["kind"]?.stringValue ?? raw["timing"]?["kind"]?.stringValue ?? "unknown"
         self.status = status
-        self.scheduledAt = scheduledAt
+        self.scheduledAt = raw["scheduledAt"]?.stringValue ?? ""
         self.raw = raw
         self.lastDelivery = raw["lastDelivery"]
     }

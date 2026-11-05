@@ -54,7 +54,7 @@ internal fun ScheduledTaskEditSheet(
 ) {
     val context = LocalContext.current
     val repeating = task.kind !in setOf("at", "after")
-    val zone = remember(task.id) { TimeZone.getTimeZone(task.raw["timeZone"]?.stringValue ?: TimeZone.getDefault().id) }
+    val zone = remember(task.id) { TimeZone.getTimeZone(task.timeZone ?: TimeZone.getDefault().id) }
     var title by remember(task.id) { mutableStateOf(task.title) }
     var prompt by remember(task.id) { mutableStateOf(task.prompt) }
     var useSpecificDate by remember(task.id) { mutableStateOf(!repeating) }
@@ -177,18 +177,22 @@ internal fun scheduleTimingChange(
         formatter.timeZone = TimeZone.getTimeZone("UTC")
         return JsonValue.ObjectValue(mapOf(
             "kind" to JsonValue.StringValue("at"),
-            "at" to JsonValue.StringValue(formatter.format(selectedDate))
+            "at" to JsonValue.ObjectValue(mapOf(
+                "date" to JsonValue.StringValue(SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = zone }.format(selectedDate)),
+                "time" to JsonValue.StringValue(SimpleDateFormat("HH:mm:ss", Locale.US).apply { timeZone = zone }.format(selectedDate)),
+                "time_zone" to JsonValue.StringValue(zone.id)
+            ))
         ))
     }
     val clock = formatSelectedTime(selectedTime, zone) + ":00"
-    if (clock.take(5) == task.raw["time"]?.stringValue?.take(5)) return null
-    val timeZone = task.raw["timeZone"]?.stringValue ?: zone.id
+    if (clock.take(5) == task.time?.take(5)) return null
+    val timeZone = task.timeZone ?: zone.id
     val parameters = mutableMapOf<String, JsonValue>(
         "time" to JsonValue.StringValue(clock),
         "time_zone" to JsonValue.StringValue(timeZone)
     )
     if (task.kind == "weekly") {
-        parameters["weekdays"] = task.raw["weekdays"] ?: JsonValue.ArrayValue(emptyList())
+        parameters["weekdays"] = task.weekdays ?: JsonValue.ArrayValue(emptyList())
     }
     if (task.kind !in setOf("daily", "weekly")) return null
     return JsonValue.ObjectValue(mapOf(
@@ -203,7 +207,7 @@ private fun parseScheduleInstant(value: String): Date? =
     }
 
 private fun initialScheduleClock(task: MobileScheduledTask, zone: TimeZone): Date {
-    val parts = task.raw["time"]?.stringValue.orEmpty().split(":")
+    val parts = task.time.orEmpty().split(":")
     val hour = parts.getOrNull(0)?.toIntOrNull() ?: return Date()
     val minute = parts.getOrNull(1)?.toIntOrNull() ?: return Date()
     return Calendar.getInstance(zone).apply {
@@ -218,8 +222,8 @@ private fun formatSelectedTime(date: Date, zone: TimeZone): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).apply { timeZone = zone }.format(date)
 
 private fun scheduleRuleLabel(task: MobileScheduledTask): String = when (task.kind) {
-    "every" -> appText("每 %1\$s 秒", task.raw["everySeconds"]?.doubleValue?.toInt() ?: 0)
-    "cron" -> "Cron ${task.raw["expression"]?.stringValue.orEmpty()}"
+    "every" -> appText("每 %1\$s 秒", task.everySeconds?.toInt() ?: 0)
+    "cron" -> "Cron ${task.expression.orEmpty()}"
     else -> task.kind
 }
 

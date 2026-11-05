@@ -15378,3 +15378,29 @@ final class GeneratedToolImageTests: XCTestCase {
         XCTAssertTrue(toolImageReferences(failed).isEmpty)
     }
 }
+
+final class Gateway022ProtocolTests: XCTestCase {
+    func testHostTaskWithoutSessionAndNextExecutionIsPreserved() throws {
+        let raw = try JSONDecoder().decode(JSONValue.self, from: Data(#"{"id":"task","title":"检查构建","prompt":"检查状态","kind":"every","every_seconds":3600,"status":"paused","target":{"kind":"new_once"},"updatedAt":"revision"}"#.utf8))
+        let task = try XCTUnwrap(ScheduledTask(raw))
+        XCTAssertEqual(task.sessionID, "")
+        XCTAssertEqual(task.status, "paused")
+        XCTAssertEqual(task.everySeconds, 3600)
+        XCTAssertEqual(task.raw["updatedAt"]?.stringValue, "revision")
+    }
+
+    func testFlatTaskAndCleanupResponsesDoNotConflictWithLegacyFields() throws {
+        let task = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-view","id":"task","target":{"kind":"new"}}"#.utf8))
+        XCTAssertEqual(task.schedule?["target"]?["kind"]?.stringValue, "new")
+        let cleanup = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-delete-inactive","deleted":3}"#.utf8))
+        XCTAssertEqual(cleanup.deletedCount, 3)
+        XCTAssertNil(cleanup.deleted)
+    }
+
+    func testHistoryQuoteAndRequestIDSurviveNormalization() throws {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"history","events":[{"type":"user/message","seq":1,"time":1,"data":{"content":[{"type":"text","text":"> 原文"}],"textParts":[{"type":"quote","text":"原文"}],"source":{"kind":"user","rpcId":"send"}}}]}"#.utf8))
+        let event = try XCTUnwrap(frame.events?.first).normalized(sessionId: "s").event
+        XCTAssertEqual(event.textParts, [GatewayTextPart(type: "quote", text: "原文")])
+        XCTAssertEqual(event.requestId, "send")
+    }
+}

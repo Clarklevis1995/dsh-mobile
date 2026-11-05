@@ -484,6 +484,9 @@ final class AppStore: ObservableObject {
     private let sessionAgentPresetStore = SharedSessionAgentPresetStore()
     private var sessionAgentPresetTimeout: Task<Void, Never>?
     private var isPreparingNewConversation = false
+    @Published private(set) var supportsScheduleManagement = false
+    @Published private(set) var supportsPluginUpdates = false
+    @Published private(set) var supportsMessageQuotes = false
     @Published private(set) var supportsTasks = false
     @Published private(set) var supportsGoals = false
     @Published private(set) var supportsSessionCancel = false
@@ -1654,7 +1657,35 @@ final class AppStore: ObservableObject {
         if gateway.state.isConnected, !assistantStreamState.hasBaseline(sessionId: id) { loadHistory(for: id) }
     }
 
-    func refreshScheduledTasks() {
+    private var scheduleActiveFilter: Bool?
+    private var scheduleListRequestID: String?
+    private var scheduleListOffset = 0
+    @Published private(set) var scheduledTasksTotal = 0
+    @Published private(set) var scheduleHistory: JSONValue?
+    private var scheduleHistoryRequestID: String?
+
+    func loadScheduleHistory(_ task: ScheduledTask, before: String? = nil) {
+        let id = UUID().uuidString
+        scheduleHistoryRequestID = id
+        if before == nil { scheduleHistory = nil }
+        var payload: [String: Any] = ["type": "schedule-history", "requestId": id, "id": task.id, "limit": 100]
+        if let before { payload["before"] = before }
+        sendManagement(payload)
+    }
+
+    func filterScheduledTasks(active: Bool?) {
+        scheduleActiveFilter = active
+        refreshScheduledTasks()
+    }
+
+    func loadMoreScheduledTasks() {
+        guard !scheduledTasksLoading, scheduledTasks.count < scheduledTasksTotal else { return }
+        loadScheduledTasks(offset: scheduledTasks.count)
+    }
+
+    func refreshScheduledTasks() { loadScheduledTasks(offset: 0) }
+
+    private func loadScheduledTasks(offset: Int) {
         guard gateway.state.isConnected else {
             scheduledTasksLoading = false
             scheduledTasksError = "连接网关后可查看定时任务"
@@ -1664,7 +1695,14 @@ final class AppStore: ObservableObject {
         scheduledTasksError = nil
         let requestID = UUID()
         scheduledTasksRequestID = requestID
-        gateway.requestScheduleCatalog()
+        scheduleListOffset = offset
+        if supportsScheduleManagement {
+            let id = requestID.uuidString
+            scheduleListRequestID = id
+            var payload: [String: Any] = ["type": "schedule-list", "requestId": id, "limit": 100, "offset": offset]
+            if let active = scheduleActiveFilter { payload["active"] = active }
+            sendManagement(payload)
+        } else { gateway.requestScheduleCatalog() }
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(12))
             guard let self, self.scheduledTasksRequestID == requestID,
@@ -1696,7 +1734,7 @@ final class AppStore: ObservableObject {
 
     func setPluginEnabled(name: String, enabled: Bool, entryID: String? = nil) {
         guard gateway.state.isConnected, pluginCatalog?.managementAvailable == true,
-              pluginToggleRequestID == nil else { return }
+              pluginToggleRequestID == nil, pluginUpdateRequestID == nil else { return }
         let requestID = UUID().uuidString
         pluginToggleRequestID = requestID
         pluginPendingName = name
@@ -1716,10 +1754,93 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func sendManagement(_ payload: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+        gateway.sendRequestPayload(String(decoding: data, as: UTF8.self))
+    }
+
+    @Published private(set) var pluginVersions: JSONValue?
+    @Published private(set) var pluginDetail: JSONValue?
+    @Published private(set) var pluginUpdateResult: JSONValue?
+    @Published private(set) var pluginUpdateLogs: [String] = []
+    @Published private(set) var pluginUpdateStep: String?
+    private var pluginInformationName: String?
+    private var pluginVersionsRequestID: String?
+    private var pluginDetailRequestID: String?
+    private var pluginUpdateRequestID: String?
+
+    func loadPluginInformation(_ name: String, versions: Bool = false) {
+        guard supportsPluginUpdates, gateway.state.isConnected else { return }
+        if pluginInformationName != name {
+            pluginInformationName = name
+            pluginVersions = nil
+            pluginDetail = nil
+            pluginVersionsRequestID = nil
+            pluginDetailRequestID = nil
+            pluginUpdateResult = nil
+        }
+        let id = UUID().uuidString
+        if versions { pluginVersions = nil; pluginVersionsRequestID = id }
+        else { pluginDetail = nil; pluginDetailRequestID = id }
+        var payload: [String: Any] = ["type": versions ? "plugin-versions" : "plugin-detail", "name": name, "requestId": id]
+        if !versions { payload["language"] = Locale.current.identifier.replacingOccurrences(of: "_", with: "-") }
+        sendManagement(payload)
+    }
+
+    func updatePlugin(_ name: String, version: String) {
+        guard supportsPluginUpdates, gateway.state.isConnected, pluginPendingName == nil else { return }
+        let id = UUID().uuidString
+        pluginUpdateRequestID = id
+        pluginPendingName = name
+        pluginUpdateStep = "checking"
+        pluginUpdateLogs = []
+        pluginUpdateResult = nil
+        pluginNotice = nil
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(600))
+            guard let self, self.pluginUpdateRequestID == id else { return }
+            self.pluginUpdateRequestID = nil
+            self.pluginPendingName = nil
+            self.pluginUpdateStep = "unverified"
+            self.pluginNotice = "更新及恢复结果待核实，请刷新实际版本并检查 Host 日志"
+            self.refreshPlugins()
+        }
+        sendManagement(["type": "plugin-update", "requestId": id, "name": name, "version": version,
+            "registry": pluginVersions?["registry"]?.foundationValue ?? NSNull()])
+    }
+
     func clearPluginNotice() { pluginNotice = nil }
 
     private func acceptPluginFrame(_ frame: GatewayFrame) {
         switch frame.kind {
+        case "plugin-versions", "plugin-detail", "plugin-update-state", "plugin-install-state", "plugin-install-log", "plugin-update-result", "error"
+            where frame.requestId != nil && [pluginVersionsRequestID, pluginDetailRequestID, pluginUpdateRequestID].contains(frame.requestId):
+            if frame.requestId == pluginVersionsRequestID {
+                pluginVersions = frame.result
+                pluginVersionsRequestID = nil
+            } else if frame.requestId == pluginDetailRequestID {
+                pluginDetail = frame.result
+                pluginDetailRequestID = nil
+            } else if frame.kind == "plugin-install-log" {
+                let lines = String((frame.text ?? "").suffix(16_384)).components(separatedBy: .newlines)
+                pluginUpdateLogs = Array((pluginUpdateLogs + lines).suffix(200))
+            } else if frame.kind == "plugin-update-state" || frame.kind == "plugin-install-state" {
+                pluginUpdateStep = frame.step ?? pluginUpdateStep
+            } else {
+                pluginUpdateResult = frame.result
+                if frame.result?["restore"]?["application"]?.stringValue == "failed" {
+                    pluginNotice = "更新失败，旧版本恢复失败。请刷新目录并检查 Host 日志。"
+                } else if frame.result?["result"]?["application"]?.stringValue == "restart-required" {
+                    pluginNotice = "请重启 DSH 后刷新目录确认实际版本"
+                } else if ["failed", "cancelled", "overridden"].contains(frame.result?["result"]?["application"]?.stringValue ?? "") {
+                    pluginNotice = "目标版本更新未生效，请检查更新及恢复结果"
+                }
+                pluginUpdateRequestID = nil
+                pluginPendingName = nil
+                pluginUpdateStep = nil
+                refreshPlugins()
+            }
+            if frame.kind == "error" { pluginNotice = frame.message }
         case "plugin-catalog" where frame.requestId == pluginCatalogRequestID:
             pluginCatalog = MobilePluginCatalog(
                 managementAvailable: frame.managementAvailable == true,
@@ -1758,10 +1879,70 @@ final class AppStore: ObservableObject {
         }
     }
 
+    private func scheduleManagementTimeout(_ id: String) {
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(15))
+            guard let self, self.scheduledTaskMutationRequestID == id else { return }
+            self.finishScheduledTaskMutation(error: "操作结果待核实，请刷新后确认")
+        }
+    }
+
+    @discardableResult
+    func createScheduledTask(title: String, prompt: String, timingJSON: String, targetKind: String, sessionID: String) -> String? {
+        guard supportsScheduleManagement, gateway.state.isConnected, scheduledTaskPendingID == nil else { return nil }
+        guard let timing = try? JSONSerialization.jsonObject(with: Data(timingJSON.utf8)) as? [String: Any],
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.count <= 120,
+              !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              targetKind != "session" || !sessionID.isEmpty else {
+            scheduledTaskMutationError = "请填写标题、任务内容、有效的执行规则和目标"
+            return nil
+        }
+        var target: [String: Any] = ["kind": targetKind]
+        if targetKind == "session" { target["sessionId"] = sessionID }
+        let id = UUID().uuidString
+        scheduledTaskMutationRequestID = id
+        scheduledTaskMutationKind = "schedule-create"
+        scheduledTaskPendingID = "creating"
+        scheduledTaskMutationError = nil
+        scheduleManagementTimeout(id)
+        sendManagement(["type": "schedule-create", "requestId": id, "title": title, "prompt": prompt,
+            "timing": timing, "target": target])
+        return id
+    }
+
+    func setScheduledTaskActive(_ task: ScheduledTask, active: Bool) {
+        guard beginScheduledTaskMutation(task, kind: "schedule-edit") else { return }
+        sendManagement(["type": "schedule-edit", "requestId": scheduledTaskMutationRequestID!, "id": task.id,
+            "action": "update", "expectedUpdatedAt": task.raw["updatedAt"]?.foundationValue ?? NSNull(), "patch": ["active": active]])
+    }
+
+    func runScheduledTask(_ task: ScheduledTask) {
+        guard beginScheduledTaskMutation(task, kind: "schedule-run") else { return }
+        sendManagement(["type": "schedule-run", "requestId": scheduledTaskMutationRequestID!, "id": task.id])
+    }
+
+    func clearEndedScheduledTasks() {
+        guard supportsScheduleManagement, gateway.state.isConnected, scheduledTaskPendingID == nil else { return }
+        let id = UUID().uuidString
+        scheduledTaskMutationRequestID = id
+        scheduledTaskMutationKind = "schedule-delete-inactive"
+        scheduledTaskPendingID = "clearing"
+        scheduleManagementTimeout(id)
+        sendManagement(["type": "schedule-delete-inactive", "requestId": id, "confirm": true])
+    }
+
     @discardableResult
     func updateScheduledTask(_ task: ScheduledTask, title: String, prompt: String, change: JSONValue?) -> String? {
-        guard beginScheduledTaskMutation(task, kind: "schedule-update") else { return nil }
+        guard beginScheduledTaskMutation(task, kind: supportsScheduleManagement ? "schedule-edit" : "schedule-update") else { return nil }
         let requestID = scheduledTaskMutationRequestID!
+        if supportsScheduleManagement {
+            var patch: [String: JSONValue] = ["title": .string(title.trimmingCharacters(in: .whitespacesAndNewlines)), "prompt": .string(prompt)]
+            if let change { patch["timing"] = change }
+            sendManagement(["type": "schedule-edit", "requestId": requestID, "id": task.id,
+                "action": "update", "expectedUpdatedAt": task.raw["updatedAt"]?.foundationValue ?? NSNull(),
+                "patch": JSONValue.object(patch).foundationValue])
+            return requestID
+        }
         gateway.updateSchedule(
             sessionId: task.sessionID, id: task.id, expected: task.raw,
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1773,9 +1954,12 @@ final class AppStore: ObservableObject {
 
     @discardableResult
     func deleteScheduledTask(_ task: ScheduledTask) -> String? {
-        guard beginScheduledTaskMutation(task, kind: "schedule-delete") else { return nil }
+        guard beginScheduledTaskMutation(task, kind: supportsScheduleManagement ? "schedule-edit" : "schedule-delete") else { return nil }
         let requestID = scheduledTaskMutationRequestID!
-        gateway.deleteSchedule(sessionId: task.sessionID, id: task.id, requestId: requestID)
+        if supportsScheduleManagement {
+            sendManagement(["type": "schedule-edit", "requestId": requestID, "id": task.id,
+                "action": "delete", "expectedUpdatedAt": task.raw["updatedAt"]?.foundationValue ?? NSNull()])
+        } else { gateway.deleteSchedule(sessionId: task.sessionID, id: task.id, requestId: requestID) }
         return requestID
     }
 
@@ -2716,7 +2900,10 @@ final class AppStore: ObservableObject {
             sessionId: selectedSessionId,
             workspaceId: selectedSessionId == nil ? activeWorkspace?.id : nil,
             mode: mode,
-            requestId: messageSubmissionRequestID
+            requestId: messageSubmissionRequestID,
+            textParts: supportsMessageQuotes ? GatewayQuoteTextParts.shared.parseJson(text: trimmed).flatMap {
+                try? JSONDecoder().decode([GatewayTextPart].self, from: Data($0.utf8))
+            } : nil
         )
         return true
     }
@@ -2918,7 +3105,7 @@ final class AppStore: ObservableObject {
             remoteSearchTimeout?.cancel()
             guard accepted else { requestRemoteSearchIfPossible(); return }
         }
-        if frame.kind == "plugin-catalog" || frame.kind == "plugins-changed" ||
+        if frame.kind.hasPrefix("plugin-") || frame.kind == "plugins-changed" ||
             frame.kind == "plugin-bundle-set-enabled" || frame.kind == "plugin-entry-set-enabled" ||
             (frame.kind == "error" && frame.requestType?.hasPrefix("plugin-") == true) {
             acceptPluginFrame(frame)
@@ -2926,7 +3113,8 @@ final class AppStore: ObservableObject {
         }
         if frame.kind == scheduledTaskMutationKind,
            frame.requestId == scheduledTaskMutationRequestID {
-            let succeeded = frame.kind == "schedule-update" ? frame.updated == true : frame.deleted == true
+            let succeeded = frame.kind == "schedule-update" ? frame.updated == true :
+                (["schedule-edit", "schedule-create", "schedule-run", "schedule-delete-inactive"].contains(frame.kind) ? frame.code == nil : frame.deleted == true)
             finishScheduledTaskMutation(error: succeeded ? nil : scheduledTaskFailureMessage(frame.code, frame.message))
             return
         }
@@ -2935,20 +3123,33 @@ final class AppStore: ObservableObject {
             finishScheduledTaskMutation(error: scheduledTaskFailureMessage(frame.code, frame.message))
             return
         }
-        if frame.kind == "schedule-catalog" {
-            scheduledTasks = (frame.items ?? []).compactMap(ScheduledTask.init).sorted {
+        if frame.kind == "error", frame.requestType == "schedule-history", frame.requestId == scheduleHistoryRequestID {
+            scheduleHistory = .object(["records": .string(frame.message ?? "执行记录加载失败")])
+            return
+        }
+        if frame.kind == "schedule-history", frame.requestId == scheduleHistoryRequestID {
+            scheduleHistory = .object(["records": .array(frame.records ?? []), "nextBefore": frame.nextBefore.map(JSONValue.string) ?? .null,
+                "retention": frame.retention ?? .null])
+            return
+        }
+        if frame.kind == "schedule-catalog" || frame.kind == "schedule-list" {
+            if frame.kind == "schedule-list", frame.requestId != scheduleListRequestID { return }
+            let previous = frame.kind == "schedule-list" && scheduleListOffset > 0 ? scheduledTasks : []
+            var seen: Set<String> = []
+            scheduledTasks = (previous + (frame.items ?? []).compactMap(ScheduledTask.init)).filter { seen.insert($0.id).inserted }.sorted {
                 if $0.status != $1.status { return $0.status == "active" }
                 return $0.scheduledAt < $1.scheduledAt
             }
+            scheduledTasksTotal = frame.total ?? scheduledTasks.count
             scheduledTasksLoading = false
             scheduledTasksError = nil
             return
         }
         if frame.kind == "schedule-changed" {
-            if gateway.state.isConnected { gateway.requestScheduleCatalog() }
+            if gateway.state.isConnected { refreshScheduledTasks() }
             return
         }
-        if frame.kind == "error" && frame.requestType == "schedule-catalog" {
+        if frame.kind == "error" && ["schedule-catalog", "schedule-list"].contains(frame.requestType ?? "") {
             scheduledTasksLoading = false
             scheduledTasksError = frame.message ?? "定时任务加载失败"
             return
@@ -3201,6 +3402,9 @@ final class AppStore: ObservableObject {
             supportsSlashCommands = payload.capabilities.contains("commands")
             supportsSessionCreation = payload.capabilities.contains("session-create")
             supportsSessionAgentPreset = payload.capabilities.contains("session-agent-preset")
+            supportsScheduleManagement = payload.capabilities.contains("schedule-management-v2")
+            supportsPluginUpdates = payload.capabilities.contains("plugin-updates-v1")
+            supportsMessageQuotes = payload.capabilities.contains("message-quotes-v1")
             supportsTasks = payload.capabilities.contains("tasks")
             supportsGoals = payload.capabilities.contains("goals")
             supportsSessionCancel = payload.capabilities.contains("session-cancel")
@@ -4722,6 +4926,12 @@ final class AppStore: ObservableObject {
             failWorkspaceFilePreview(detail)
         }
         applyWorkspaceFileTransition(kmpWorkspaceFileStore.reset(sessionId: selectedSessionId))
+        if pluginUpdateRequestID != nil {
+            pluginUpdateRequestID = nil
+            pluginPendingName = nil
+            pluginUpdateStep = "unverified"
+            pluginNotice = "连接中断，更新及恢复结果待核实，请重连后检查实际版本"
+        }
         if pluginToggleRequestID != nil {
             pluginNotice = pluginPendingName == "dsh-plugin-mobile-gateway"
                 ? "网关连接已断开，停用结果待重连确认。若已停用，请从 DSH Web 或 CLI 重新开启。"

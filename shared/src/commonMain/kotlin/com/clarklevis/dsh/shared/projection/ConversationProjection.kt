@@ -54,7 +54,9 @@ data class ConversationItem(
     val epochSeconds: Double,
     val turn: Int? = null,
     val files: List<PresentedFile> = emptyList(),
-    val knownFiles: List<PresentedFile> = emptyList()
+    val knownFiles: List<PresentedFile> = emptyList(),
+    val textParts: List<com.clarklevis.dsh.shared.protocol.GatewayTextPart>? = null,
+    val requestId: String? = null
 )
 
 /** 高频 token 流只发送有序操作，不重复发送已经累计的完整消息文本。 */
@@ -235,6 +237,8 @@ class ConversationProjector(
                         kind = ConversationItemKind.USER,
                         title = labels.userMessage,
                         text = event.text.orEmpty(),
+                        textParts = event.textParts,
+                        requestId = event.requestId,
                         images = event.images.orEmpty(),
                         files = event.files.orEmpty(),
                         epochSeconds = date

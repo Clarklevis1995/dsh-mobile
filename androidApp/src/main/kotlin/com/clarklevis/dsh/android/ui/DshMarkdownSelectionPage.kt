@@ -32,6 +32,7 @@ internal fun DshMarkdownSelectionPage(markdown: String, onDismiss: () -> Unit) {
         DshTableTextSelectionPage(markdown, onDismiss)
         return
     }
+    val onQuote = LocalMessageQuote.current
     val configuration = LocalConfiguration.current
     val dark = configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
     val background = if (dark) Color.Black else Color.White
@@ -104,7 +105,15 @@ internal fun DshMarkdownSelectionPage(markdown: String, onDismiss: () -> Unit) {
                 selectionAnchor?.let { anchor ->
                     DshSelectionToolbar(anchor,
                         onCopy = { selectionView?.onTextContextMenuItem(android.R.id.copy) },
-                        onSelectAll = { selectionView?.onTextContextMenuItem(android.R.id.selectAll) })
+                        onSelectAll = { selectionView?.onTextContextMenuItem(android.R.id.selectAll) },
+                        onQuote = onQuote?.let { action -> {
+                            selectionView?.let { view ->
+                                val start = minOf(view.selectionStart, view.selectionEnd).coerceAtLeast(0)
+                                val end = maxOf(view.selectionStart, view.selectionEnd).coerceAtMost(view.text.length)
+                                if (end > start) action(markdownSelectionText(view.text, start, end))
+                            }
+                            onDismiss()
+                        } })
                 }
             }
         }

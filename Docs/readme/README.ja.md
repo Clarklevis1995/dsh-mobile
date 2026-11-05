@@ -49,10 +49,10 @@ Whaleness は独立して開発された DeepSeek Harness のサードパーテ�
 Whaleness の WeChat ベータグループ 2では、体験の共有、不具合の報告、サポートの相談ができます。WeChat でスキャンするか、画像を保存して WeChat で読み取ってください。
 
 <p align="center">
-  <a href="../../website/assets/support-wechat-2026-10-28.png"><img src="../../website/assets/support-wechat-2026-10-28.png" alt="Whaleness ベータ WeChat グループ 2の QR コード、2026 年 11 月 4 日より前まで有効（原画像の表記）" width="320"></a>
+  <a href="../../website/assets/support-wechat-2026-11-05.png"><img src="../../website/assets/support-wechat-2026-11-05.png" alt="Whaleness ベータ WeChat グループ 2の QR コード、2026 年 11 月 12 日より前まで有効（原画像の表記）" width="320"></a>
 </p>
 
-> 2026 年 10 月 28 日更新。原画像には「2026 年 11 月 4 日前まで有効」と記載されています。期限切れの場合は[製品ページ](https://clarklevis1995.github.io/dsh-mobile/)で最新の QR コードを確認してください。
+> 2026 年 11 月 5 日更新。原画像には「2026 年 11 月 12 日前まで有効」と記載されています。期限切れの場合は[製品ページ](https://clarklevis1995.github.io/dsh-mobile/)で最新の QR コードを確認してください。
 
 ## プラットフォームの対応状況
 

@@ -61,6 +61,8 @@ struct SlashCommandTextView: UIViewRepresentable {
     let presentation: SlashCommandComposerPresentation?
     let placeholder: String
     @Binding var isFocused: Bool
+    var onSelectionChange: (NSRange) -> Void = { _ in }
+
     func makeUIView(context: Context) -> CommandTextView {
         let textView = CommandTextView()
         textView.delegate = context.coordinator
@@ -133,6 +135,8 @@ struct SlashCommandTextView: UIViewRepresentable {
             }
         }
 
+        func textViewDidChangeSelection(_ textView: UITextView) { parent.onSelectionChange(textView.selectedRange) }
+
         func textViewDidChange(_ textView: UITextView) {
             guard parent.text != textView.text else { return }
             parent.text = textView.text
@@ -157,6 +161,7 @@ struct VoiceComposerTextInput: View {
     let state: SharedVoiceInputSnapshot
     let voice: VoiceInputAdapter
     var onHoldingChanged: (Bool) -> Void = { _ in }
+    var onSelectionChange: (NSRange) -> Void = { _ in }
 
     var body: some View {
         Group {
@@ -168,7 +173,8 @@ struct VoiceComposerTextInput: View {
                     text: $text,
                     presentation: presentation,
                     placeholder: String(localized: String.LocalizationValue(state.hint)),
-                    isFocused: $isFocused
+                    isFocused: $isFocused,
+                    onSelectionChange: onSelectionChange
                 )
                 .padding(.horizontal, 3)
                 .frame(minHeight: 38, alignment: .top)
@@ -369,6 +375,7 @@ struct ConversationView: View {
     @Binding var activeView: Int
     var topContentInset: CGFloat = 0
     @State private var draft = ""
+    @State private var draftSelection = NSRange(location: NSNotFound, length: 0)
     @State private var memberDrafts: [String: String] = [:]
     @State private var memberImages: [String: [GatewayOutgoingImage]] = [:]
     @State private var voiceSnapshot: SharedVoiceInputSnapshot?
@@ -1240,6 +1247,18 @@ struct ConversationView: View {
             hint: store.slashCommands.argumentHint
         )
         return VStack(alignment: .leading, spacing: 12) {
+            if store.supportsMessageQuotes,
+               let json = GatewayQuoteTextParts.shared.parseJson(text: draft),
+               let parts = try? JSONDecoder().decode([GatewayTextPart].self, from: Data(json.utf8)) {
+                ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                    if part.type == "quote" {
+                        HStack {
+                            Text(part.text).lineLimit(2)
+                            Button("移除引用") { draft = GatewayQuoteTextParts.shared.removeQuote(text: draft, index: Int32(index)) }
+                        }
+                    }
+                }
+            }
             if !pendingImages.isEmpty {
                 pendingImageStrip
             }
@@ -1251,7 +1270,8 @@ struct ConversationView: View {
                 presentation: slashPresentation,
                 state: voiceState,
                 voice: store.voiceInput,
-                onHoldingChanged: { voiceTouchActive = $0 }
+                onHoldingChanged: { voiceTouchActive = $0 },
+                onSelectionChange: { draftSelection = $0 }
             )
             .offset(y: voiceState.voiceMode ? -4 : 0)
             if let pending = voiceState.pendingTranscript {
@@ -2150,7 +2170,15 @@ struct ConversationView: View {
                         onRetryImage: { store.retryImageAttachment($0, sessionID: sessionID) },
                         onOpenFile: conversationFileOpener(),
                         onOpenUploadedFile: uploadedFileOpener()
-                    )),
+                    ).environment(\.messageQuoteAction, store.supportsMessageQuotes ? { selected in
+                        guard !selected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                        let block = selected.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n").map { "> " + $0 }.joined(separator: "\n")
+                        let source = draft as NSString
+                        let start = min(draftSelection.location, source.length)
+                        let length = min(draftSelection.length, source.length - start)
+                        let inserted = (start == 0 ? "" : "\n\n") + block + "\n\n"
+                        draft = source.replacingCharacters(in: NSRange(location: start, length: length), with: inserted)
+                    } : nil)),
                     // Completed responses are immutable for this revision.
                     // The viewport measures their SwiftUI root directly before
                     // caching, including fenced-code horizontal scroll views.
@@ -4624,7 +4652,12 @@ struct ConversationRow: View {
                         UploadedFileCard(file: file) { onOpenUploadedFile?(file) }
                     }
                     if !item.text.isEmpty {
-                        Text(item.text).appFont(.body)
+                        if let parts = item.textParts, !parts.isEmpty {
+                            ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
+                                if part.type == "quote" { CompactMessageQuote(text: part.text) }
+                                else { Text(part.text).appFont(.body) }
+                            }
+                        } else { Text(item.text).appFont(.body) }
                     }
                 }
                 .padding(.horizontal, 10).padding(.vertical, 10)
@@ -5036,10 +5069,33 @@ final class MarkdownLongPressMenuView: UIView, UIGestureRecognizerDelegate, UIEd
 }
 
 /// 选择页持有打开时的正文快照，流式更新不重置用户正在拖动的选区。
+private struct CompactMessageQuote: View {
+    let text: String
+    @State private var expanded = false
+    var body: some View {
+        Text(text).appFont(.body).lineLimit(expanded ? nil : 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8).background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            .onTapGesture { expanded.toggle() }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(expanded ? "收起引用" : "展开引用")
+    }
+}
+
 struct MarkdownSelectionDocument: Identifiable {
     let id = UUID()
     let text: String
     let fontSize: CGFloat
+}
+
+private struct MessageQuoteActionKey: EnvironmentKey {
+    static let defaultValue: ((String) -> Void)? = nil
+}
+private extension EnvironmentValues {
+    var messageQuoteAction: ((String) -> Void)? {
+        get { self[MessageQuoteActionKey.self] }
+        set { self[MessageQuoteActionKey.self] = newValue }
+    }
 }
 
 struct MarkdownSelectionPage: View {
@@ -5123,6 +5179,8 @@ struct MarkdownTableTextSelection: UIViewRepresentable {
 /// 原生 TextView 独立滚动，聊天页的 MarkdownUI 始终保留在原来的布局中。
 struct MarkdownTextSelection: UIViewRepresentable {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.messageQuoteAction) private var onQuote
+    @Environment(\.dismiss) private var dismiss
     let document: MarkdownUI.MarkdownContent
     let font: UIFont
 
@@ -5142,6 +5200,7 @@ struct MarkdownTextSelection: UIViewRepresentable {
     }
 
     func updateUIView(_ view: MarkdownSelectionTextView, context: Context) {
+        view.onQuote = onQuote.map { action in { selected in action(selected); dismiss() } }
         let highlighter = DSHCodeSyntaxHighlighter(dark: colorScheme == .dark)
         let value = document.renderSelectableText(font: font, codeHighlighter: highlighter.attributedCode)
         if !view.attributedText.isEqual(to: value) { view.attributedText = value }
@@ -5149,6 +5208,7 @@ struct MarkdownTextSelection: UIViewRepresentable {
 }
 
 final class MarkdownSelectionTextView: UITextView, UITextViewDelegate, UIEditMenuInteractionDelegate {
+    var onQuote: ((String) -> Void)?
     private var hasSelected = false
     private lazy var selectionMenu = UIEditMenuInteraction(delegate: self)
 
@@ -5194,16 +5254,18 @@ final class MarkdownSelectionTextView: UITextView, UITextViewDelegate, UIEditMen
         }
     }
 
-    override func copy(_ sender: Any?) {
+    private func selectedPlainText() -> String {
         let range = selectedRange
-        guard range.location != NSNotFound, range.length > 0, NSMaxRange(range) <= attributedText.length else { return }
+        guard range.location != NSNotFound, range.length > 0, NSMaxRange(range) <= attributedText.length else { return "" }
         var selected = ""
         attributedText.enumerateAttribute(SelectableCodeBlockStyle.decoration, in: range) { decoration, part, _ in
             if decoration == nil { selected += (attributedText.string as NSString).substring(with: part) }
         }
-        UIPasteboard.general.string = selected.replacingOccurrences(of: "\u{2028}", with: "\n")
         selectionMenu.dismissMenu()
+        return selected.replacingOccurrences(of: "\u{2028}", with: "\n")
     }
+
+    override func copy(_ sender: Any?) { UIPasteboard.general.string = selectedPlainText() }
 
     func textView(_ textView: UITextView, editMenuForTextIn range: NSRange,
                   suggestedActions: [UIMenuElement]) -> UIMenu? {
@@ -5216,12 +5278,17 @@ final class MarkdownSelectionTextView: UITextView, UITextViewDelegate, UIEditMen
     }
 
     private func selectionActions() -> UIMenu {
-        UIMenu(children: [
-            UIAction(title: String(localized: "复制"), image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in
-                self?.copy(nil)
-            },
+        var actions: [UIMenuElement] = [
+            UIAction(title: String(localized: "复制"), image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in self?.copy(nil) },
             UIAction(title: String(localized: "全选")) { [weak self] _ in self?.selectAll(nil) }
-        ])
+        ]
+        if onQuote != nil {
+            actions.append(UIAction(title: "引用", image: UIImage(systemName: "text.quote")) { [weak self] _ in
+                guard let self else { return }
+                self.onQuote?(self.selectedPlainText())
+            })
+        }
+        return UIMenu(children: actions)
     }
 }
 

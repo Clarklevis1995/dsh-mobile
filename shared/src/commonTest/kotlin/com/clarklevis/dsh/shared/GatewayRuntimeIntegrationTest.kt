@@ -52,6 +52,30 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class GatewayRuntimeIntegrationTest {
     @Test
+    fun pluginUpdateProgressKeepsLaneUntilMatchingFinalResult() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport)
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
+        runCurrent()
+        runtime.connect("ws://localhost/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","protocol":3,"capabilities":["plugin-updates-v1"]}""")
+        runCurrent()
+        assertTrue(runtime.sendRequest(GatewayRequests.pluginUpdate("update-1", "pkg", "2")))
+        transport.receive("""{"kind":"plugin-update-state","requestId":"update-1","step":"restoring"}""")
+        runCurrent()
+        assertFalse(runtime.sendRequest(GatewayRequests.pluginUpdate("update-2", "pkg", "3")))
+        transport.receive("""{"kind":"plugin-update-result","requestId":"wrong","result":{}}""")
+        runCurrent()
+        assertFalse(runtime.sendRequest(GatewayRequests.pluginUpdate("update-2", "pkg", "3")))
+        transport.receive("""{"kind":"plugin-update-result","requestId":"update-1","result":{"restore":{"application":"failed"}}}""")
+        runCurrent()
+        assertTrue(events.filterIsInstance<GatewayRuntimeEvent.Frame>().any { it.frame.step == "restoring" })
+        assertTrue(runtime.sendRequest(GatewayRequests.pluginUpdate("update-2", "pkg", "3")))
+    }
+
+    @Test
     fun networkDiagnosticsAreColdCorrelatedAndCancelledWithThePage() = runTest {
         val transport = FakeTransport()
         val runtime = GatewayRuntime(transport, FakePreferences(), FakeCredentials(), FakeAttachmentCache(),

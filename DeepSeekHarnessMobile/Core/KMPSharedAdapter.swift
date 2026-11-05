@@ -17,6 +17,7 @@ private struct KMPConversationItemSnapshot: Decodable {
     let epochSeconds: Double
     let files: [PresentedFile]?
     let knownFiles: [PresentedFile]?
+    let textParts: [GatewayTextPart]?
 
     var item: ConversationItem? {
         guard !id.isEmpty,
@@ -31,7 +32,8 @@ private struct KMPConversationItemSnapshot: Decodable {
             isError: isError,
             date: Date(timeIntervalSince1970: epochSeconds),
             files: files ?? [],
-            knownFiles: knownFiles ?? []
+            knownFiles: knownFiles ?? [],
+            textParts: textParts
         )
     }
 }
@@ -496,7 +498,8 @@ final class KMPConversationStoreAdapter {
                         isError: old.isError,
                         date: Date(timeIntervalSince1970: epochSeconds),
                         files: old.files,
-                        knownFiles: old.knownFiles
+                        knownFiles: old.knownFiles,
+                        textParts: old.textParts
                     )
                 case "replace":
                     guard let item = operation.item?.item,

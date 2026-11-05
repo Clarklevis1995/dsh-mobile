@@ -13,6 +13,7 @@ struct ConversationItem: Identifiable, Sendable {
     let date: Date
     let files: [PresentedFile]
     let knownFiles: [PresentedFile]
+    let textParts: [GatewayTextPart]?
 
     init(
         id: String,
@@ -23,7 +24,8 @@ struct ConversationItem: Identifiable, Sendable {
         isError: Bool,
         date: Date,
         files: [PresentedFile] = [],
-        knownFiles: [PresentedFile] = []
+        knownFiles: [PresentedFile] = [],
+        textParts: [GatewayTextPart]? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -33,6 +35,7 @@ struct ConversationItem: Identifiable, Sendable {
         self.isError = isError
         self.files = files
         self.knownFiles = knownFiles
+        self.textParts = textParts
         self.date = date
     }
 

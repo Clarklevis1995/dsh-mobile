@@ -339,6 +339,9 @@ private struct ScheduledTasksView: View {
 
     @ObservedObject var store: AppStore
     let onOpenSession: (String) -> Void
+    @State private var historyTask: ScheduledTask?
+    @State private var creatingTask = false
+    @State private var confirmsClear = false
     @State private var expandedTaskIDs: Set<String> = []
     @State private var editingTask: ScheduledTask?
     @State private var activeAlert: ActiveAlert?
@@ -352,6 +355,13 @@ private struct ScheduledTasksView: View {
 
     var body: some View {
         List {
+            if store.supportsScheduleManagement {
+                Button("创建任务") { creatingTask = true }
+                if store.scheduledTasks.count < store.scheduledTasksTotal {
+                    Button("加载更多任务") { store.loadMoreScheduledTasks() }.disabled(store.scheduledTasksLoading)
+                }
+                Button("清理已结束任务", role: .destructive) { confirmsClear = true }
+            }
             if store.scheduledTasksLoading && store.scheduledTasks.isEmpty {
                 ProgressView("正在加载定时任务…")
                     .frame(maxWidth: .infinity)
@@ -391,7 +401,7 @@ private struct ScheduledTasksView: View {
                         task: task,
                         sessionTitle: store.sessions.first(where: { $0.id == task.sessionID })?.title ?? task.sessionID,
                         expanded: expandedTaskIDs.contains(task.id),
-                        onOpen: { onOpenSession(task.sessionID) },
+                        onOpen: { if !task.sessionID.isEmpty { onOpenSession(task.sessionID) } },
                         onExpand: {
                             if !expandedTaskIDs.insert(task.id).inserted { expandedTaskIDs.remove(task.id) }
                         }
@@ -399,6 +409,17 @@ private struct ScheduledTasksView: View {
                     .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        if store.supportsScheduleManagement {
+                            Button("执行记录") { historyTask = task; store.loadScheduleHistory(task) }
+                            Button("立即执行") { store.runScheduledTask(task) }
+                            if task.status != "ended" {
+                                Button(task.status == "active" ? "暂停" : "恢复") {
+                                    store.setScheduledTaskActive(task, active: task.status != "active")
+                                }
+                            }
+                        }
+                    }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) { activeAlert = .delete(task) } label: {
                             Label("删除", systemImage: "trash")
@@ -419,6 +440,9 @@ private struct ScheduledTasksView: View {
         .adaptiveListWidth()
         .scrollContentBackground(.hidden)
         .refreshable { store.refreshScheduledTasks() }
+        .onChangeCompat(of: statusFilter) { _, filter in
+            store.filterScheduledTasks(active: filter == .all ? nil : filter == .active)
+        }
         .background(Color(uiColor: .systemBackground))
         .safeAreaInset(edge: .top, spacing: 0) {
             if isSearching {
@@ -448,6 +472,22 @@ private struct ScheduledTasksView: View {
         .onReceive(store.gateway.$state) { state in
             if state.isConnected { store.refreshScheduledTasks() }
         }
+        .sheet(item: $historyTask) { task in
+            NavigationStack {
+                ScrollView {
+                    Text(store.scheduleHistory?["records"]?.displayText ?? "正在加载…").padding()
+                    if let before = store.scheduleHistory?["nextBefore"]?.stringValue {
+                        Button("更早记录") { store.loadScheduleHistory(task, before: before) }
+                    }
+                }.navigationTitle("执行记录")
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { historyTask = nil } } }
+            }
+        }
+        .sheet(isPresented: $creatingTask) { ScheduleCreateForm(store: store) }
+        .alert("清理已结束任务？", isPresented: $confirmsClear) {
+            Button("取消", role: .cancel) {}
+            Button("清理", role: .destructive) { store.clearEndedScheduledTasks() }
+        } message: { Text("清理后无法恢复。") }
         .sheet(item: $editingTask) { task in
             ScheduledTaskEditSheet(task: task, store: store)
                 .presentationDetents([.large])
@@ -695,7 +735,7 @@ private struct ScheduledTaskEditSheet: View {
     }
 
     private var isRepeating: Bool { !["at", "after"].contains(task.kind) }
-    private var zone: TimeZone { TimeZone(identifier: task.raw["timeZone"]?.stringValue ?? "") ?? .current }
+    private var zone: TimeZone { TimeZone(identifier: task.timeZone ?? "") ?? .current }
     private var clock: String {
         let formatter = DateFormatter()
         formatter.timeZone = zone
@@ -708,10 +748,18 @@ private struct ScheduledTaskEditSheet: View {
             guard isRepeating || original == nil || abs(selectedDate.timeIntervalSince(original!)) > 1 else { return nil }
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            return .object(["kind": .string("at"), "at": .string(formatter.string(from: selectedDate))])
+            let date = DateFormatter()
+            date.timeZone = zone
+            date.dateFormat = "yyyy-MM-dd"
+            let time = DateFormatter()
+            time.timeZone = zone
+            time.dateFormat = "HH:mm:ss"
+            return .object(["kind": .string("at"), "at": .object([
+                "date": .string(date.string(from: selectedDate)), "time": .string(time.string(from: selectedDate)),
+                "time_zone": .string(zone.identifier)])])
         }
-        guard String(clock.prefix(5)) != String((task.raw["time"]?.stringValue ?? "").prefix(5)) else { return nil }
-        let timeZone = task.raw["timeZone"]?.stringValue ?? zone.identifier
+        guard String(clock.prefix(5)) != String((task.clock ?? "").prefix(5)) else { return nil }
+        let timeZone = task.timeZone ?? zone.identifier
         if task.kind == "daily" {
             return .object(["kind": .string("daily"), "daily": .object([
                 "time": .string(clock), "time_zone": .string(timeZone)
@@ -720,7 +768,7 @@ private struct ScheduledTaskEditSheet: View {
         if task.kind == "weekly" {
             return .object(["kind": .string("weekly"), "weekly": .object([
                 "time": .string(clock), "time_zone": .string(timeZone),
-                "weekdays": task.raw["weekdays"] ?? .array([])
+                "weekdays": task.weekdays ?? .array([])
             ])])
         }
         return nil
@@ -838,10 +886,10 @@ private struct ScheduledTaskEditSheet: View {
     }
 
     private static func initialClock(_ task: ScheduledTask) -> Date {
-        let parts = (task.raw["time"]?.stringValue ?? "").split(separator: ":")
+        let parts = (task.clock ?? "").split(separator: ":")
         guard parts.count >= 2, let hour = Int(parts[0]), let minute = Int(parts[1]) else { return .now }
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: task.raw["timeZone"]?.stringValue ?? "") ?? .current
+        calendar.timeZone = TimeZone(identifier: task.timeZone ?? "") ?? .current
         return calendar.date(from: DateComponents(year: 2026, month: 1, day: 1, hour: hour, minute: minute)) ?? .now
     }
 }
@@ -853,7 +901,7 @@ private enum ScheduledTaskFormat {
         case "weekly": String(localized: "每周")
         case "every": String(
             localized: "schedule.every.short",
-            defaultValue: "每 \(duration(Int(task.raw["everySeconds"]?.doubleValue ?? 0)))"
+            defaultValue: "每 \(duration(Int(task.everySeconds ?? 0)))"
         )
         case "cron": "Cron"
         default: String(localized: "一次")
@@ -861,13 +909,13 @@ private enum ScheduledTaskFormat {
     }
 
     static func fullRule(_ task: ScheduledTask) -> String {
-        let time = task.raw["time"]?.stringValue ?? ""
-        let zone = task.raw["timeZone"]?.stringValue ?? ""
+        let time = task.clock ?? ""
+        let zone = task.timeZone ?? ""
         switch task.kind {
         case "daily":
             return String(localized: "schedule.daily.detail", defaultValue: "每天 \(time) · \(zone)")
         case "weekly":
-            let days = (task.raw["weekdays"]?.arrayValue ?? []).compactMap { $0.doubleValue.map(Int.init) }
+            let days = (task.weekdays?.arrayValue ?? []).compactMap { $0.doubleValue.map(Int.init) }
             let names = [
                 String(localized: "周一"), String(localized: "周二"), String(localized: "周三"),
                 String(localized: "周四"), String(localized: "周五"), String(localized: "周六"),
@@ -877,14 +925,18 @@ private enum ScheduledTaskFormat {
             let weekdays = days.compactMap { (1...7).contains($0) ? names[$0 - 1] : nil }.joined(separator: separator)
             return String(localized: "schedule.weekly.detail", defaultValue: "每周 \(weekdays) · \(time) · \(zone)")
         case "every":
-            return String(localized: "schedule.every.detail", defaultValue: "每 \(duration(Int(task.raw["everySeconds"]?.doubleValue ?? 0)))执行一次")
+            return String(localized: "schedule.every.detail", defaultValue: "每 \(duration(Int(task.everySeconds ?? 0)))执行一次")
         case "cron":
-            return "\(task.raw["expression"]?.stringValue ?? "") · \(zone)"
+            return "\(task.expression ?? "") · \(zone)"
         case "after":
             let seconds = Int(task.raw["afterSeconds"]?.doubleValue ?? 0)
             return String(localized: "schedule.after.detail", defaultValue: "\(seconds) 秒后执行一次")
-        default:
+        case "at":
             return String(localized: "指定时间执行一次")
+        case "rrule":
+            return task.raw["rrule"]?.stringValue ?? ""
+        default:
+            return task.raw.displayText
         }
     }
 
@@ -2110,6 +2162,88 @@ private struct ConversationNavigationStatus: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: !compact, vertical: false)
                 .accessibilityIdentifier("conversation-mode-label")
+        }
+    }
+}
+
+private struct ScheduleCreateForm: View {
+    @ObservedObject var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var prompt = ""
+    @State private var timing = "{\"kind\":\"every\",\"every_seconds\":3600}"
+    @State private var target = "new_once"
+    @State private var sessionID = ""
+    @State private var requestID: String?
+    private var nextExecutionPreview: String {
+        guard let rule = try? JSONDecoder().decode(JSONValue.self, from: Data(timing.utf8)),
+              let kind = rule["kind"]?.stringValue else { return "请填写有效规则" }
+        let spec = rule[kind]
+        let zone = TimeZone(identifier: spec?["time_zone"]?.stringValue ?? "") ?? .current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let now = Date()
+        var next: Date?
+        if kind == "after" || kind == "every" {
+            if let seconds = rule[kind == "after" ? "after_seconds" : "every_seconds"]?.doubleValue,
+               seconds > 0, seconds < 315_576_000 { next = now.addingTimeInterval(seconds) }
+        } else if kind == "at" {
+            let formatter = DateFormatter()
+            formatter.timeZone = zone
+            let time = spec?["time"]?.stringValue ?? ""
+            formatter.dateFormat = time.count == 5 ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd HH:mm:ss"
+            next = formatter.date(from: (spec?["date"]?.stringValue ?? "") + " " + time)
+        } else if kind == "daily" || kind == "weekly" {
+            let clock = (spec?["time"]?.stringValue ?? "").split(separator: ":").compactMap { Int($0) }
+            if clock.count >= 2, (0...23).contains(clock[0]), (0...59).contains(clock[1]) {
+                let components = DateComponents(hour: clock[0], minute: clock[1], second: clock.count > 2 ? clock[2] : 0)
+                let days = (spec?["weekdays"]?.arrayValue ?? []).compactMap { $0.doubleValue.map(Int.init) }
+                var candidate = now
+                for _ in 0...7 {
+                    guard let date = calendar.nextDate(after: candidate, matching: components, matchingPolicy: .nextTime) else { break }
+                    if kind == "daily" || days.contains((calendar.component(.weekday, from: date) + 5) % 7 + 1) { next = date; break }
+                    candidate = date
+                }
+            }
+        }
+        guard let next else { return "下次执行时间由 Host 校验并计算" }
+        let formatter = DateFormatter()
+        formatter.timeZone = zone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss z"
+        return "预计下次执行 · \(formatter.string(from: next))\n最终以 Host 返回时间为准"
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("标题", text: $title)
+                TextField("任务内容", text: $prompt, axis: .vertical)
+                Section("执行规则 JSON") {
+                    TextEditor(text: $timing).frame(minHeight: 100)
+                    Text("支持 after、at、every、daily、weekly、cron、rrule，时区使用 IANA 名称。")
+                    if let data = timing.data(using: .utf8),
+                       let value = try? JSONDecoder().decode(JSONValue.self, from: data) {
+                        Text("规则预览 · \(value.displayText)").appFont(.footnote.monospaced())
+                    }
+                    Text(nextExecutionPreview)
+                    Text("当前时区 · \(TimeZone.current.identifier)")
+                }
+                Picker("投递目标", selection: $target) {
+                    Text("首次新建并复用会话").tag("new_once")
+                    Text("每次新建会话").tag("new")
+                    Text("已有会话").tag("session")
+                }
+                if target == "session" { TextField("会话 ID", text: $sessionID) }
+                if let error = store.scheduledTaskMutationError { Text(error).foregroundStyle(.red) }
+                Button("创建") {
+                    requestID = store.createScheduledTask(title: title, prompt: prompt, timingJSON: timing, targetKind: target, sessionID: sessionID)
+                }.disabled(store.scheduledTaskPendingID != nil)
+            }
+            .navigationTitle("创建定时任务")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+            .onChangeCompat(of: store.scheduledTaskCompletedRequestID) { _, id in
+                if requestID != nil && id == requestID { dismiss() }
+            }
         }
     }
 }

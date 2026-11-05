@@ -200,8 +200,39 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
+internal val LocalMessageQuote = androidx.compose.runtime.staticCompositionLocalOf<((String) -> Unit)?> { null }
+
 @Composable
 internal fun ConversationScreen(
+    stateHolder: AndroidSharedStateHolder,
+    onPickImage: () -> Unit,
+    onBack: () -> Unit,
+    onPickFile: () -> Unit = {},
+    onPlugins: () -> Unit = {},
+    onScheduledTasks: () -> Unit = {},
+    onSettings: () -> Unit = {}
+) {
+    val quote: ((String) -> Unit)? = if ("message-quotes-v1" in stateHolder.gatewayState.capabilities) {
+        { selected ->
+            if (selected.isNotBlank()) {
+                val block = selected.replace("\r\n", "\n").split("\n").joinToString("\n") { "> $it" }
+                val draft = stateHolder.messageDraft
+                val start = minOf(stateHolder.messageSelectionStart, stateHolder.messageSelectionEnd).coerceIn(0, draft.length)
+                val end = maxOf(stateHolder.messageSelectionStart, stateHolder.messageSelectionEnd).coerceIn(start, draft.length)
+                val inserted = (if (start > 0) "\n\n" else "") + block + "\n\n"
+                stateHolder.messageDraft = draft.replaceRange(start, end, inserted)
+                stateHolder.messageSelectionStart = start + inserted.length
+                stateHolder.messageSelectionEnd = stateHolder.messageSelectionStart
+            }
+        }
+    } else null
+    androidx.compose.runtime.CompositionLocalProvider(LocalMessageQuote provides quote) {
+        ConversationScreenContent(stateHolder, onPickImage, onBack, onPickFile, onPlugins, onScheduledTasks, onSettings)
+    }
+}
+
+@Composable
+private fun ConversationScreenContent(
     stateHolder: AndroidSharedStateHolder,
     onPickImage: () -> Unit,
     onBack: () -> Unit,
@@ -1571,6 +1602,9 @@ private fun Composer(
     val isDark = isSystemInDarkTheme()
     val shadowColor = dshFloatingSurfaceShadow(isDark)
     val glassEdge = dshGlassEdge(isDark)
+    val draftQuotes = remember(stateHolder.messageDraft) {
+        com.clarklevis.dsh.shared.protocol.GatewayQuoteTextParts.parse(stateHolder.messageDraft)
+    }
     val composerHasContent = stateHolder.messageDraft.trim().isNotEmpty() || stateHolder.preparedImages.isNotEmpty() || stateHolder.fileUploads.drafts.isNotEmpty() || stateHolder.fileUploads.preparing
     val voiceDividerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     LaunchedEffect(stateHolder.preparedImages.isNotEmpty()) {
@@ -1609,7 +1643,7 @@ private fun Composer(
         if (inputValue.text != stateHolder.messageDraft) {
             inputValue = TextFieldValue(
                 text = stateHolder.messageDraft,
-                selection = TextRange(stateHolder.messageDraft.length)
+                selection = TextRange(stateHolder.messageSelectionStart.coerceIn(0, stateHolder.messageDraft.length))
             )
         }
     }
@@ -1668,6 +1702,14 @@ private fun Composer(
                         }
                     }
                 }
+                if ("message-quotes-v1" in stateHolder.gatewayState.capabilities) {
+                    draftQuotes.orEmpty().forEachIndexed { index, part ->
+                        if (part.type == "quote") Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(part.text, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { stateHolder.messageDraft = com.clarklevis.dsh.shared.protocol.GatewayQuoteTextParts.removeQuote(stateHolder.messageDraft, index) }) { Text("移除引用") }
+                        }
+                    }
+                }
                 val commandToken = stateHolder.slashCommands.commandToken
                 val commandHint = stateHolder.slashCommands.argumentHint
                 if (voice.state.voiceMode) {
@@ -1679,6 +1721,8 @@ private fun Composer(
                     onValueChange = {
                         inputValue = it
                         stateHolder.messageDraft = it.text
+                        stateHolder.messageSelectionStart = it.selection.start
+                        stateHolder.messageSelectionEnd = it.selection.end
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3010,7 +3054,19 @@ private fun UserMessage(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                Text(
+                if (!item.textParts.isNullOrEmpty()) {
+                    Column(Modifier.background(bubbleFill, RoundedCornerShape(15.dp)).padding(12.dp)) {
+                        item.textParts.orEmpty().forEach { part ->
+                            if (part.type == "quote") {
+                                var expanded by remember(item.id, part) { mutableStateOf(false) }
+                                Text(part.text, maxLines = if (expanded) Int.MAX_VALUE else 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }
+                                        .background(bubbleEdge, RoundedCornerShape(8.dp)).padding(8.dp))
+                            } else Text(part.text, fontSize = 16.sp)
+                        }
+                    }
+                } else Text(
                     text = item.text,
                     modifier = Modifier
                         .background(bubbleFill, RoundedCornerShape(15.dp))

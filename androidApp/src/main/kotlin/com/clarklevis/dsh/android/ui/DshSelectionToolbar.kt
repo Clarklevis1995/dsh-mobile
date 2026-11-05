@@ -28,7 +28,7 @@ internal data class DshSelectionToolbarAnchor(val selection: Rect, val viewport:
 
 /** 菜单不获取焦点，TextView 始终持有原生选区与双端手柄。 */
 @Composable
-internal fun DshSelectionToolbar(anchor: DshSelectionToolbarAnchor, onCopy: () -> Unit, onSelectAll: () -> Unit) {
+internal fun DshSelectionToolbar(anchor: DshSelectionToolbarAnchor, onCopy: () -> Unit, onSelectAll: () -> Unit, onQuote: (() -> Unit)? = null) {
     val density = LocalDensity.current
     val shadow = with(density) { 16.dp.roundToPx() }
     val gap = with(density) { 10.dp.roundToPx() }
@@ -57,6 +57,7 @@ internal fun DshSelectionToolbar(anchor: DshSelectionToolbarAnchor, onCopy: () -
         Row(Modifier.testTag("markdown-selection-toolbar"), verticalAlignment = Alignment.CenterVertically) {
             DshMenuAction(appText("复制"), onCopy, Modifier.testTag("markdown-selection-copy"))
             Box(Modifier.width(0.5.dp).height(20.dp).background(Color.Black.copy(alpha = .10f)))
+            if (onQuote != null) DshMenuAction("引用", onQuote, Modifier.testTag("markdown-selection-quote"))
             DshMenuAction(appText("全选"), onSelectAll, Modifier.testTag("markdown-selection-all"))
         }
     }

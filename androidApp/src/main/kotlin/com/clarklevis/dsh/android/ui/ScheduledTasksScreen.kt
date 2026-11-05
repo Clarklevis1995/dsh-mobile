@@ -9,6 +9,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -131,6 +134,9 @@ internal fun ScheduledTasksScreen(
     onOpenSession: (String) -> Unit
 ) {
     val dark = isSystemInDarkTheme()
+    var historyTask by remember { mutableStateOf<MobileScheduledTask?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<MobileScheduledTask?>(null) }
     var deletingTask by remember { mutableStateOf<MobileScheduledTask?>(null) }
     var revealedTaskId by remember { mutableStateOf<String?>(null) }
@@ -165,9 +171,27 @@ internal fun ScheduledTasksScreen(
                 isSearching = isSearching,
                 onSearchingChange = { isSearching = it },
                 status = statusFilter,
-                onStatusChange = { statusFilter = it; revealedTaskId = null },
+                onStatusChange = {
+                    statusFilter = it
+                    revealedTaskId = null
+                    stateHolder.filterScheduledTasks(when (it) {
+                        ScheduledTaskStatusFilter.ALL -> null
+                        ScheduledTaskStatusFilter.ACTIVE -> true
+                        ScheduledTaskStatusFilter.ENDED -> false
+                    })
+                },
                 modifier = Modifier.align(Alignment.CenterEnd)
             )
+        }
+        if ("schedule-management-v2" in stateHolder.gatewayState.capabilities) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+                TextButton(onClick = { creating = true }) { Text("创建任务") }
+                TextButton(onClick = { confirmClear = true }) { Text("清理已结束任务") }
+            }
+            stateHolder.scheduledTaskMutationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+        if (stateHolder.scheduledTasks.size < stateHolder.scheduledTasksTotal) {
+            TextButton(onClick = stateHolder::loadMoreScheduledTasks, enabled = !stateHolder.scheduledTasksLoading) { Text("加载更多任务") }
         }
         when {
             stateHolder.scheduledTasksLoading && stateHolder.scheduledTasks.isEmpty() -> {
@@ -207,6 +231,7 @@ internal fun ScheduledTasksScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(visibleTasks, key = { it.id }) { task ->
+                    Column {
                     ScheduledTaskCard(
                         task = task,
                         sessionTitle = stateHolder.snapshot.sessions.firstOrNull { it.id == task.sessionId }?.title
@@ -217,7 +242,7 @@ internal fun ScheduledTasksScreen(
                             if (revealedTaskId == task.id) revealedTaskId = null
                             else {
                                 revealedTaskId = null
-                                onOpenSession(task.sessionId)
+                                if (task.sessionId.isNotBlank()) onOpenSession(task.sessionId)
                             }
                         },
                         onEdit = {
@@ -230,10 +255,35 @@ internal fun ScheduledTasksScreen(
                         },
                         busy = stateHolder.scheduledTaskPendingId == task.id
                     )
+                    if ("schedule-management-v2" in stateHolder.gatewayState.capabilities) {
+                        Row {
+                            if (task.status != "ended") TextButton(onClick = {
+                                stateHolder.setScheduledTaskActive(task, task.status != "active")
+                            }, enabled = stateHolder.scheduledTaskPendingId == null) { Text(if (task.status == "active") "暂停" else "恢复") }
+                            TextButton(onClick = { historyTask = task; stateHolder.loadScheduleHistory(task) }) { Text("执行记录") }
+                            TextButton(onClick = { stateHolder.runScheduledTask(task) },
+                                enabled = stateHolder.scheduledTaskPendingId == null) { Text("立即执行") }
+                        }
+                    }
+                    }
                 }
             }
         }
     }
+    historyTask?.let { task ->
+        AlertDialog(onDismissRequest = { historyTask = null }, title = { Text("执行记录 · ${task.title}") },
+            text = { Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
+                Text(stateHolder.scheduleHistory?.get("records")?.toJsonElement()?.toString() ?: "正在加载…")
+                stateHolder.scheduleHistory?.get("nextBefore")?.stringValue?.let { before ->
+                    TextButton(onClick = { stateHolder.loadScheduleHistory(task, before) }) { Text("更早记录") }
+                }
+            } }, confirmButton = { TextButton(onClick = { historyTask = null }) { Text("关闭") } })
+    }
+    if (creating) ScheduleCreateDialog(stateHolder) { creating = false }
+    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
+        title = { Text("清理已结束任务？") }, text = { Text("清理后无法恢复。") },
+        confirmButton = { TextButton(onClick = { confirmClear = false; stateHolder.clearEndedScheduledTasks() }) { Text("清理") } },
+        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
     editingTask?.let { task ->
         ScheduledTaskEditSheet(task, stateHolder, onDismiss = { editingTask = null })
     }
@@ -584,22 +634,24 @@ private fun ScheduleDetail(label: String, value: String) {
 private fun shortRule(task: MobileScheduledTask): String = when (task.kind) {
     "daily" -> appText("每天")
     "weekly" -> appText("每周")
-    "every" -> appText("每 %1\$s", duration(task.raw["everySeconds"]?.doubleValue?.toInt() ?: 0))
+    "every" -> appText("每 %1\$s", duration(task.everySeconds?.toInt() ?: 0))
     "cron" -> "Cron"
     else -> appText("一次")
 }
 
 private fun fullRule(task: MobileScheduledTask): String = when (task.kind) {
-    "daily" -> appText("每天 %1\$s · %2\$s", task.raw["time"]?.stringValue.orEmpty(), task.raw["timeZone"]?.stringValue.orEmpty())
+    "daily" -> appText("每天 %1\$s · %2\$s", task.time.orEmpty(), task.timeZone.orEmpty())
     "weekly" -> {
-        val days = task.raw["weekdays"]?.arrayValue.orEmpty().mapNotNull { it.doubleValue?.toInt() }
+        val days = task.weekdays?.arrayValue.orEmpty().mapNotNull { it.doubleValue?.toInt() }
         val dayNames = listOf(appText("一"), appText("二"), appText("三"), appText("四"), appText("五"), appText("六"), appText("日"))
-        appText("每周%1\$s · %2\$s · %3\$s", days.mapNotNull { dayNames.getOrNull(it - 1) }.joinToString(appText("、周")), task.raw["time"]?.stringValue.orEmpty(), task.raw["timeZone"]?.stringValue.orEmpty())
+        appText("每周%1\$s · %2\$s · %3\$s", days.mapNotNull { dayNames.getOrNull(it - 1) }.joinToString(appText("、周")), task.time.orEmpty(), task.timeZone.orEmpty())
     }
-    "every" -> appText("每 %1\$s执行一次", duration(task.raw["everySeconds"]?.doubleValue?.toInt() ?: 0))
-    "cron" -> "${task.raw["expression"]?.stringValue.orEmpty()} · ${task.raw["timeZone"]?.stringValue.orEmpty()}"
+    "every" -> appText("每 %1\$s执行一次", duration(task.everySeconds?.toInt() ?: 0))
+    "cron" -> "${task.expression.orEmpty()} · ${task.timeZone.orEmpty()}"
     "after" -> appText("%1\$s 秒后执行一次", task.raw["afterSeconds"]?.doubleValue?.toInt() ?: 0)
-    else -> appText("指定时间执行一次")
+    "at" -> appText("指定时间执行一次")
+    "rrule" -> task.raw["rrule"]?.stringValue.orEmpty()
+    else -> task.raw.toJsonElement().toString()
 }
 
 private fun duration(seconds: Int): String = when {
@@ -615,4 +667,83 @@ private fun formatScheduleDate(value: String): String {
         runCatching { SimpleDateFormat(pattern, Locale.US).parse(value) }.getOrNull()
     } ?: return value
     return SimpleDateFormat(appText("yyyy年M月d日 HH:mm"), Locale.getDefault()).format(date)
+}
+
+@Composable
+private fun ScheduleCreateDialog(stateHolder: AndroidSharedStateHolder, onDismiss: () -> Unit) {
+    var title by remember { mutableStateOf("") }
+    var prompt by remember { mutableStateOf("") }
+    var timing by remember { mutableStateOf("{\"kind\":\"every\",\"every_seconds\":3600}") }
+    var target by remember { mutableStateOf("new_once") }
+    var sessionId by remember { mutableStateOf(stateHolder.snapshot.selectedSessionId.orEmpty()) }
+    var requestId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(stateHolder.scheduledTaskCompletedRequestId) {
+        if (requestId != null && requestId == stateHolder.scheduledTaskCompletedRequestId) onDismiss()
+    }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("创建定时任务") },
+        text = {
+            DshMenuHost {
+                Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    androidx.compose.material3.OutlinedTextField(title, { title = it }, label = { Text("标题") })
+                    androidx.compose.material3.OutlinedTextField(prompt, { prompt = it }, label = { Text("任务内容") })
+                    Text("执行规则使用 Host JSON，支持 after、at、every、daily、weekly、cron、rrule。时区使用 IANA 名称。")
+                    androidx.compose.material3.OutlinedTextField(timing, { timing = it }, label = { Text("执行规则 JSON") })
+                    listOf("new_once" to "首次新建并复用会话", "new" to "每次新建会话", "session" to "已有会话").forEach { (kind, label) ->
+                        TextButton(onClick = { target = kind }) { Text((if (target == kind) "✓ " else "") + label) }
+                    }
+                    if (target == "session") androidx.compose.material3.OutlinedTextField(sessionId, { sessionId = it }, label = { Text("会话 ID") })
+                    val preview = remember(timing) {
+                        runCatching { kotlinx.serialization.json.Json.parseToJsonElement(timing).toString() }.getOrNull()
+                    }
+                    Text("规则预览 · ${preview ?: "执行规则 JSON 无效"}")
+                    Text(scheduleNextExecutionPreview(timing))
+                    Text("当前时区 · ${java.util.TimeZone.getDefault().id}")
+                    stateHolder.scheduledTaskMutationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { requestId = stateHolder.createScheduledTask(title, prompt, timing, target, sessionId) },
+            enabled = stateHolder.scheduledTaskPendingId == null) { Text("创建") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+}
+
+private fun scheduleNextExecutionPreview(json: String): String {
+    val rule = runCatching { com.clarklevis.dsh.shared.protocol.JsonValue.fromJsonElement(
+        kotlinx.serialization.json.Json.parseToJsonElement(json)) }.getOrNull() ?: return "请填写有效规则"
+    val kind = rule["kind"]?.stringValue ?: return "请填写规则类型"
+    val spec = rule[kind]
+    val zone = java.util.TimeZone.getTimeZone(spec?.get("time_zone")?.stringValue ?: java.util.TimeZone.getDefault().id)
+    val now = java.util.Date()
+    val next = when (kind) {
+        "after", "every" -> rule[if (kind == "after") "after_seconds" else "every_seconds"]?.doubleValue
+            ?.takeIf { it > 0 && it < 315_576_000 }?.let { java.util.Date(now.time + (it * 1000).toLong()) }
+        "at" -> runCatching {
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply { timeZone = zone; isLenient = false }
+                .parse("${spec?.get("date")?.stringValue} ${spec?.get("time")?.stringValue?.let { if (it.length == 5) "$it:00" else it }}")
+        }.getOrNull()
+        "daily", "weekly" -> {
+            val clock = spec?.get("time")?.stringValue.orEmpty().split(":")
+            val hour = clock.getOrNull(0)?.toIntOrNull()
+            val minute = clock.getOrNull(1)?.toIntOrNull()
+            if (hour == null || minute == null || hour !in 0..23 || minute !in 0..59) null else {
+                val calendar = java.util.Calendar.getInstance(zone).apply {
+                    set(java.util.Calendar.HOUR_OF_DAY, hour)
+                    set(java.util.Calendar.MINUTE, minute)
+                    set(java.util.Calendar.SECOND, clock.getOrNull(2)?.toIntOrNull() ?: 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                }
+                val days = spec?.get("weekdays")?.arrayValue.orEmpty().mapNotNull { it.doubleValue?.toInt() }
+                (0..7).firstNotNullOfOrNull {
+                    val weekday = (calendar.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7 + 1
+                    val date = calendar.time.takeIf { it.after(now) && (kind == "daily" || weekday in days) }
+                    calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+                    date
+                }
+            }
+        }
+        else -> null
+    }
+    if (next == null) return "下次执行时间由 Host 校验并计算"
+    val display = SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.getDefault()).apply { timeZone = zone }
+    return "预计下次执行 · ${display.format(next)}\n最终以 Host 返回时间为准"
 }

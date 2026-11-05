@@ -386,6 +386,8 @@ class AndroidSharedStateHolder(
     private var trajectoryIsActive = false
     private var trajectoryPublishJob: Job? = null
     private var trajectoryPublishPending = false
+    var messageSelectionStart: Int = Int.MAX_VALUE
+    var messageSelectionEnd: Int = Int.MAX_VALUE
     private var messageDraftState: String by mutableStateOf("")
     private var pendingCommandSubmission: MessageSubmission? = null
     var messageDraft: String
@@ -638,7 +640,35 @@ class AndroidSharedStateHolder(
         }
     }
 
-    fun refreshScheduledTasks() {
+    private var scheduleActiveFilter: Boolean? = null
+    private var scheduleListRequestId: String? = null
+    private var scheduleListOffset = 0
+    var scheduledTasksTotal: Int by mutableStateOf(0)
+        private set
+    var scheduleHistory: JsonValue? by mutableStateOf(null)
+        private set
+    private var scheduleHistoryRequestId: String? = null
+
+    fun loadScheduleHistory(task: MobileScheduledTask, before: String? = null) {
+        val appGraph = graph ?: return
+        val id = UUID.randomUUID().toString()
+        scheduleHistoryRequestId = id
+        if (before == null) scheduleHistory = null
+        appGraph.gatewayScope.launch { appGraph.gatewayRuntime.sendRequest(GatewayRequests.hostScheduleHistory(id, task.id, before = before)) }
+    }
+
+    fun filterScheduledTasks(active: Boolean?) {
+        scheduleActiveFilter = active
+        refreshScheduledTasks()
+    }
+
+    fun loadMoreScheduledTasks() {
+        if (!scheduledTasksLoading && scheduledTasks.size < scheduledTasksTotal) loadScheduledTasks(scheduledTasks.size)
+    }
+
+    fun refreshScheduledTasks() = loadScheduledTasks(0)
+
+    private fun loadScheduledTasks(offset: Int) {
         val appGraph = graph
         if (appGraph == null || gatewayState.connection != GatewayConnectionState.CONNECTED) {
             scheduledTasksLoading = false
@@ -647,8 +677,13 @@ class AndroidSharedStateHolder(
         }
         scheduledTasksLoading = true
         scheduledTasksError = null
+        scheduleListOffset = offset
+        val id = UUID.randomUUID().toString()
+        scheduleListRequestId = id
+        val request = if ("schedule-management-v2" in gatewayState.capabilities) GatewayRequests.hostScheduleList(id, active = scheduleActiveFilter, offset = offset)
+            else GatewayRequests.scheduleCatalog()
         appGraph.gatewayScope.launch {
-            val sent = appGraph.gatewayRuntime.sendRequest(GatewayRequests.scheduleCatalog())
+            val sent = appGraph.gatewayRuntime.sendRequest(request)
             if (!sent) withContext(Dispatchers.Main.immediate) {
                 scheduledTasksLoading = false
                 scheduledTasksError = appText("定时任务请求未发送，请重试")
@@ -689,7 +724,7 @@ class AndroidSharedStateHolder(
     fun setPluginEnabled(name: String, enabled: Boolean, entryId: String? = null) {
         val appGraph = graph ?: return
         if (gatewayState.connection != GatewayConnectionState.CONNECTED ||
-            pluginCatalog?.managementAvailable != true || pluginToggleRequestId != null) return
+            pluginCatalog?.managementAvailable != true || pluginToggleRequestId != null || pluginUpdateRequestId != null) return
         val requestId = UUID.randomUUID().toString()
         pluginToggleRequestId = requestId
         pluginPendingName = name
@@ -718,10 +753,117 @@ class AndroidSharedStateHolder(
         }
     }
 
+    var pluginVersions: JsonValue? by mutableStateOf(null)
+        private set
+    var pluginDetail: JsonValue? by mutableStateOf(null)
+        private set
+    var pluginUpdateResult: JsonValue? by mutableStateOf(null)
+        private set
+    var pluginUpdateLogs: List<String> by mutableStateOf(emptyList())
+        private set
+    var pluginUpdateStep: String? by mutableStateOf(null)
+        private set
+    private var pluginInformationName: String? = null
+    private var pluginVersionsRequestId: String? = null
+    private var pluginDetailRequestId: String? = null
+    private var pluginUpdateRequestId: String? = null
+
+    fun loadPluginInformation(name: String, versions: Boolean = false) {
+        if ("plugin-updates-v1" !in gatewayState.capabilities) return
+        val appGraph = graph ?: return
+        if (pluginInformationName != name) {
+            pluginInformationName = name
+            pluginVersions = null
+            pluginDetail = null
+            pluginVersionsRequestId = null
+            pluginDetailRequestId = null
+            pluginUpdateResult = null
+        }
+        val id = UUID.randomUUID().toString()
+        val request = if (versions) {
+            pluginVersions = null
+            pluginVersionsRequestId = id
+            GatewayRequests.pluginVersions(id, name)
+        } else {
+            pluginDetail = null
+            pluginDetailRequestId = id
+            GatewayRequests.pluginDetail(id, name, java.util.Locale.getDefault().toLanguageTag())
+        }
+        appGraph.gatewayScope.launch {
+            if (!appGraph.gatewayRuntime.sendRequest(request)) withContext(Dispatchers.Main.immediate) {
+                pluginNotice = appText("请求未发送，请重试")
+            }
+        }
+    }
+
+    fun updatePlugin(name: String, version: String) {
+        if ("plugin-updates-v1" !in gatewayState.capabilities || pluginUpdateRequestId != null ||
+            pluginToggleRequestId != null || gatewayState.connection != GatewayConnectionState.CONNECTED) return
+        val appGraph = graph ?: return
+        val id = UUID.randomUUID().toString()
+        pluginUpdateRequestId = id
+        pluginPendingName = name
+        pluginUpdateStep = "checking"
+        pluginUpdateLogs = emptyList()
+        pluginUpdateResult = null
+        pluginNotice = null
+        scope?.launch {
+            delay(600_000)
+            if (pluginUpdateRequestId == id) {
+                pluginUpdateRequestId = null
+                pluginPendingName = null
+                pluginUpdateStep = "unverified"
+                pluginNotice = "更新及恢复结果待核实，请刷新目录并检查 Host 日志"
+                refreshPlugins()
+            }
+        }
+        appGraph.gatewayScope.launch {
+            val sent = appGraph.gatewayRuntime.sendRequest(GatewayRequests.pluginUpdate(id, name, version,
+                pluginVersions?.get("registry")?.stringValue))
+            if (!sent) withContext(Dispatchers.Main.immediate) {
+                pluginUpdateRequestId = null
+                pluginPendingName = null
+                pluginUpdateStep = null
+                pluginNotice = appText("更新未发送，请重试")
+            }
+        }
+    }
+
     fun clearPluginNotice() { pluginNotice = null }
 
     private fun acceptPluginFrame(frame: GatewayFrame) {
         when {
+            frame.requestId != null && frame.requestId == pluginVersionsRequestId && frame.kind in setOf("plugin-versions", "error") -> {
+                pluginVersions = frame.result
+                if (frame.kind == "error") pluginNotice = frame.message
+                pluginVersionsRequestId = null
+            }
+            frame.requestId != null && frame.requestId == pluginDetailRequestId && frame.kind in setOf("plugin-detail", "error") -> {
+                pluginDetail = frame.result
+                if (frame.kind == "error") pluginNotice = frame.message
+                pluginDetailRequestId = null
+            }
+            frame.requestId != null && frame.requestId == pluginUpdateRequestId -> {
+                when (frame.kind) {
+                    "plugin-update-state", "plugin-install-state" -> pluginUpdateStep = frame.step ?: pluginUpdateStep
+                    "plugin-install-log" -> {
+                        pluginUpdateLogs = (pluginUpdateLogs + frame.text.orEmpty().takeLast(16_384).lines()).takeLast(200)
+                    }
+                    "plugin-update-result", "error" -> {
+                        pluginUpdateResult = frame.result
+                        pluginNotice = when {
+                            frame.result?.get("restore")?.get("application")?.stringValue == "failed" -> "更新失败，旧版本恢复失败。请刷新目录并检查 Host 日志。"
+                            frame.result?.get("result")?.get("application")?.stringValue == "restart-required" -> "请重启 DSH 后刷新目录确认实际版本"
+                            frame.result?.get("result")?.get("application")?.stringValue in setOf("failed", "cancelled", "overridden") -> "目标版本更新未生效，请检查更新及恢复结果"
+                            else -> frame.message
+                        }
+                        pluginUpdateRequestId = null
+                        pluginPendingName = null
+                        pluginUpdateStep = null
+                        refreshPlugins()
+                    }
+                }
+            }
             frame.kind == "plugin-catalog" && frame.requestId == pluginCatalogRequestId -> {
                 pluginCatalog = MobilePluginCatalog(
                     managementAvailable = frame.managementAvailable == true,
@@ -764,19 +906,72 @@ class AndroidSharedStateHolder(
         }
     }
 
+    fun createScheduledTask(title: String, prompt: String, timingJson: String, targetKind: String, sessionId: String?): String? {
+        if ("schedule-management-v2" !in gatewayState.capabilities || scheduledTaskPendingId != null) return null
+        val timing = runCatching { JsonValue.fromJsonElement(kotlinx.serialization.json.Json.parseToJsonElement(timingJson)) }.getOrNull()
+            ?: run { scheduledTaskMutationError = "执行规则 JSON 无效"; return null }
+        val target = mutableMapOf<String, JsonValue>("kind" to JsonValue.StringValue(targetKind))
+        if (targetKind == "session") {
+            if (sessionId.isNullOrBlank()) { scheduledTaskMutationError = "请选择目标会话"; return null }
+            target["sessionId"] = JsonValue.StringValue(sessionId)
+        }
+        val id = UUID.randomUUID().toString()
+        val request = runCatching { GatewayRequests.scheduleCreate(id, title, prompt, timing, JsonValue.ObjectValue(target)) }
+            .getOrElse { scheduledTaskMutationError = "标题或任务内容无效"; return null }
+        scheduledTaskMutationRequestId = id
+        scheduledTaskMutationKind = "schedule-create"
+        scheduledTaskPendingId = "creating"
+        scheduledTaskMutationError = null
+        sendScheduleMutation(request)
+        return id
+    }
+
+    fun setScheduledTaskActive(task: MobileScheduledTask, active: Boolean) {
+        val id = beginScheduledTaskMutation(task, "schedule-edit") ?: return
+        sendScheduleMutation(GatewayRequests.scheduleEdit(id, task.id, task.raw["updatedAt"],
+            JsonValue.ObjectValue(mapOf("active" to JsonValue.BooleanValue(active)))))
+    }
+
+    fun runScheduledTask(task: MobileScheduledTask) {
+        val id = beginScheduledTaskMutation(task, "schedule-run") ?: return
+        sendScheduleMutation(GatewayRequests.scheduleRun(id, task.id))
+    }
+
+    fun clearEndedScheduledTasks() {
+        if (scheduledTaskPendingId != null) return
+        val id = UUID.randomUUID().toString()
+        scheduledTaskMutationRequestId = id
+        scheduledTaskMutationKind = "schedule-delete-inactive"
+        scheduledTaskPendingId = "clearing"
+        sendScheduleMutation(GatewayRequests.scheduleDeleteInactive(id, confirmed = true))
+    }
+
+    private fun sendScheduleMutation(request: com.clarklevis.dsh.shared.gateway.GatewayRequest) {
+        val appGraph = graph ?: return
+        appGraph.gatewayScope.launch {
+            if (!appGraph.gatewayRuntime.sendRequest(request)) withContext(Dispatchers.Main.immediate) {
+                if (request.correlationId == scheduledTaskMutationRequestId) finishScheduledTaskMutation("操作未发送，请重试")
+            }
+        }
+    }
+
     fun updateScheduledTask(
         task: MobileScheduledTask,
         title: String,
         prompt: String,
         change: JsonValue?
     ): String? {
-        val requestId = beginScheduledTaskMutation(task, "schedule-update") ?: return null
+        val requestId = beginScheduledTaskMutation(task, if ("schedule-management-v2" in gatewayState.capabilities) "schedule-edit" else "schedule-update") ?: return null
         val appGraph = graph ?: return null
         appGraph.gatewayScope.launch {
-            val sent = appGraph.gatewayRuntime.sendRequest(GatewayRequests.scheduleUpdate(
-                task.sessionId, task.id, task.raw,
-                title = title.trim(), prompt = prompt.trim(), change = change, requestId = requestId
-            ))
+            val request = if ("schedule-management-v2" in gatewayState.capabilities) {
+                val patch = mutableMapOf<String, JsonValue>("title" to JsonValue.StringValue(title.trim()),
+                    "prompt" to JsonValue.StringValue(prompt.trim()))
+                change?.let { patch["timing"] = it }
+                GatewayRequests.scheduleEdit(requestId, task.id, task.raw["updatedAt"], JsonValue.ObjectValue(patch))
+            } else GatewayRequests.scheduleUpdate(task.sessionId, task.id, task.raw,
+                title = title.trim(), prompt = prompt.trim(), change = change, requestId = requestId)
+            val sent = appGraph.gatewayRuntime.sendRequest(request)
             if (!sent) withContext(Dispatchers.Main.immediate) {
                 if (scheduledTaskMutationRequestId == requestId) finishScheduledTaskMutation(appText("操作未发送，请重试"))
             }
@@ -785,12 +980,13 @@ class AndroidSharedStateHolder(
     }
 
     fun deleteScheduledTask(task: MobileScheduledTask): String? {
-        val requestId = beginScheduledTaskMutation(task, "schedule-delete") ?: return null
+        val requestId = beginScheduledTaskMutation(task, if ("schedule-management-v2" in gatewayState.capabilities) "schedule-edit" else "schedule-delete") ?: return null
         val appGraph = graph ?: return null
         appGraph.gatewayScope.launch {
-            val sent = appGraph.gatewayRuntime.sendRequest(GatewayRequests.scheduleDelete(
-                task.sessionId, task.id, requestId
-            ))
+            val request = if ("schedule-management-v2" in gatewayState.capabilities) {
+                GatewayRequests.scheduleEdit(requestId, task.id, task.raw["updatedAt"], delete = true)
+            } else GatewayRequests.scheduleDelete(task.sessionId, task.id, requestId)
+            val sent = appGraph.gatewayRuntime.sendRequest(request)
             if (!sent) withContext(Dispatchers.Main.immediate) {
                 if (scheduledTaskMutationRequestId == requestId) finishScheduledTaskMutation(appText("操作未发送，请重试"))
             }
@@ -1856,7 +2052,9 @@ class AndroidSharedStateHolder(
                     clientTimeZone = TimeZone.getDefault().id,
                     mode = mode,
                     receipts = submission.receipts,
-                    requestId = submission.requestId.takeIf { submission.fileIds.isNotEmpty() }
+                    requestId = submission.requestId,
+                    textParts = if ("message-quotes-v1" in gatewayState.capabilities)
+                        com.clarklevis.dsh.shared.protocol.GatewayQuoteTextParts.parse(submission.draft) else null
                 )
                 if (!sent) withContext(Dispatchers.Main.immediate) {
                     pendingMessageSubmission = null
@@ -2869,6 +3067,12 @@ class AndroidSharedStateHolder(
                                 shouldCatchUpSelectedHistory = sessionIdToRefresh != null
                                 if (pluginPageVisited) refreshPlugins()
                             }
+                            if (state.connection != GatewayConnectionState.CONNECTED && pluginUpdateRequestId != null) {
+                                pluginNotice = appText("连接中断，更新及恢复结果待核实，请重连后检查实际版本")
+                                pluginUpdateRequestId = null
+                                pluginPendingName = null
+                                pluginUpdateStep = "unverified"
+                            }
                             if (state.connection != GatewayConnectionState.CONNECTED && pluginToggleRequestId != null) {
                                 pluginNotice = if (pluginPendingName == "dsh-plugin-mobile-gateway") {
                                     appText("网关连接已断开，停用结果待重连确认。若已停用，请从 DSH Web 或 CLI 重新开启。")
@@ -3000,6 +3204,8 @@ class AndroidSharedStateHolder(
                                         ) {
                                             val succeeded = if (event.frame.kind == "schedule-update") {
                                                 event.frame.updated == true
+                                            } else if (event.frame.kind in setOf("schedule-edit", "schedule-create", "schedule-run", "schedule-delete-inactive")) {
+                                                event.frame.code == null
                                             } else event.frame.deleted == true
                                             finishScheduledTaskMutation(
                                                 if (succeeded) null else scheduledTaskFailureMessage(event.frame.code, event.frame.message)
@@ -3011,14 +3217,23 @@ class AndroidSharedStateHolder(
                                             finishScheduledTaskMutation(scheduledTaskFailureMessage(event.frame.code, event.frame.message))
                                         }
                                         when (event.frame.kind) {
-                                            "schedule-catalog" -> {
-                                                scheduledTasks = event.frame.items.orEmpty().mapNotNull(MobileScheduledTask::from)
+                                            "schedule-history" -> if (event.frame.requestId == scheduleHistoryRequestId) {
+                                                scheduleHistory = JsonValue.fromJsonElement(kotlinx.serialization.json.Json.parseToJsonElement(event.rawJson))
+                                            }
+                                            "schedule-list", "schedule-catalog" -> {
+                                                if (event.frame.kind == "schedule-list" && event.frame.requestId != scheduleListRequestId) return@withContext
+                                                val previous = if (event.frame.kind == "schedule-list" && scheduleListOffset > 0) scheduledTasks else emptyList()
+                                                scheduledTasks = (previous + event.frame.items.orEmpty().mapNotNull(MobileScheduledTask::from)).distinctBy { it.id }
                                                     .sortedWith(compareBy<MobileScheduledTask> { it.status != "active" }.thenBy { it.scheduledAt })
+                                                scheduledTasksTotal = event.frame.total ?: scheduledTasks.size
                                                 scheduledTasksLoading = false
                                                 scheduledTasksError = null
                                             }
                                             "schedule-changed" -> refreshScheduledTasks()
-                                            "error" -> if (event.frame.requestType == "schedule-catalog") {
+                                            "error" -> if (event.frame.requestType == "schedule-history" && event.frame.requestId == scheduleHistoryRequestId) {
+                                                scheduleHistory = JsonValue.ObjectValue(mapOf("records" to JsonValue.StringValue(event.frame.message ?: "执行记录加载失败")))
+                                            } else if (event.frame.requestType in setOf("schedule-catalog", "schedule-list") &&
+                                                (event.frame.requestId == null || event.frame.requestId == scheduleListRequestId)) {
                                                 scheduledTasksLoading = false
                                                 scheduledTasksError = event.frame.message ?: appText("定时任务加载失败")
                                             }
@@ -3213,7 +3428,7 @@ class AndroidSharedStateHolder(
                                     ) withContext(Dispatchers.Main.immediate) {
                                         finishScheduledTaskMutation(appText("操作超时，请刷新任务后重试"))
                                     }
-                                    if (event.requestType == "schedule-catalog") {
+                                    if (event.requestType in setOf("schedule-catalog", "schedule-list")) {
                                         withContext(Dispatchers.Main.immediate) {
                                             scheduledTasksLoading = false
                                             scheduledTasksError = appText("定时任务请求超时，请重试")

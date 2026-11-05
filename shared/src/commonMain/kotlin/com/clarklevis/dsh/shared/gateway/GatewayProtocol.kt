@@ -5,6 +5,9 @@ import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayGoalRef
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
 import com.clarklevis.dsh.shared.protocol.JsonValue
+import com.clarklevis.dsh.shared.protocol.GatewayTextPart
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.encodeToJsonElement
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonArray
@@ -77,6 +80,83 @@ data class GatewayRequest(
 
 /** 请求字段逐项复制现有 iOS GatewayClient 与 Mobile Gateway 已验证协议。 */
 object GatewayRequests {
+    private fun managementRequest(type: String, requestId: String, mutation: Boolean = false,
+        responseKind: String = type, fields: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit
+    ): GatewayRequest {
+        require(requestId.isNotBlank() && requestId.length <= 128)
+        return request(type, responseKind, correlationId = requestId,
+            lanePolicy = if (mutation) GatewayRequestLanePolicy.REJECT_IF_BUSY else GatewayRequestLanePolicy.COALESCE_LATEST
+        ) {
+            put("requestId", requestId)
+            fields()
+        }.copy(timeoutMilliseconds = if (type == "plugin-update") 600_000 else null)
+    }
+
+    fun pluginVersions(requestId: String, name: String): GatewayRequest =
+        managementRequest("plugin-versions", requestId) { put("name", name) }
+
+    fun pluginDetail(requestId: String, name: String, language: String): GatewayRequest =
+        managementRequest("plugin-detail", requestId) {
+            put("name", name)
+            put("language", language)
+        }
+
+    fun pluginUpdate(requestId: String, name: String, version: String, registry: String? = null): GatewayRequest =
+        managementRequest("plugin-update", requestId, true, "plugin-update-result") {
+            put("name", name)
+            put("version", version)
+            put("registry", registry?.let(::JsonPrimitive) ?: JsonNull)
+        }
+
+    fun hostScheduleList(requestId: String, active: Boolean? = null, limit: Int = 100, offset: Int = 0): GatewayRequest {
+        require(limit in 1..500 && offset >= 0)
+        return managementRequest("schedule-list", requestId) {
+            active?.let { put("active", it) }
+            put("limit", limit)
+            put("offset", offset)
+        }
+    }
+
+    fun scheduleView(requestId: String, id: String): GatewayRequest =
+        managementRequest("schedule-view", requestId) { put("id", id) }
+
+    fun scheduleCreate(requestId: String, title: String, prompt: String, timing: JsonValue,
+        target: JsonValue? = null): GatewayRequest {
+        require(title.trim().length in 1..120 && prompt.isNotBlank())
+        return managementRequest("schedule-create", requestId, true) {
+            put("title", title.trim())
+            put("prompt", prompt)
+            put("timing", timing.toJsonElement())
+            target?.let { put("target", it.toJsonElement()) }
+        }
+    }
+
+    fun scheduleEdit(requestId: String, id: String, expectedUpdatedAt: JsonValue?,
+        patch: JsonValue? = null, delete: Boolean = false): GatewayRequest {
+        require(delete || !patch?.objectValue.isNullOrEmpty())
+        return managementRequest("schedule-edit", requestId, true) {
+            put("id", id)
+            put("action", if (delete) "delete" else "update")
+            put("expectedUpdatedAt", expectedUpdatedAt?.toJsonElement() ?: JsonNull)
+            if (!delete) put("patch", requireNotNull(patch).toJsonElement())
+        }
+    }
+
+    fun hostScheduleHistory(requestId: String, id: String, limit: Int = 100, before: String? = null): GatewayRequest =
+        managementRequest("schedule-history", requestId) {
+            put("id", id)
+            put("limit", limit)
+            before?.let { put("before", it) }
+        }
+
+    fun scheduleRun(requestId: String, id: String): GatewayRequest =
+        managementRequest("schedule-run", requestId, true) { put("id", id) }
+
+    fun scheduleDeleteInactive(requestId: String, confirmed: Boolean): GatewayRequest {
+        require(confirmed)
+        return managementRequest("schedule-delete-inactive", requestId, true) { put("confirm", true) }
+    }
+
     fun pluginCatalog(requestId: String): GatewayRequest = request(
         "plugin-catalog", "plugin-catalog", correlationId = requestId
     ) { put("requestId", requestId) }
@@ -479,7 +559,8 @@ object GatewayRequests {
         clientTimeZone: String,
         mode: String = "queue",
         receipts: List<String> = emptyList(),
-        requestId: String? = null
+        requestId: String? = null,
+        textParts: List<GatewayTextPart>? = null
     ): GatewayRequest = request(
         "message",
         "sent",
@@ -494,7 +575,10 @@ object GatewayRequests {
         if (receipts.isNotEmpty()) put("files", buildJsonArray {
             receipts.forEach { add(buildJsonObject { put("receiptId", it) }) }
         })
-        put("text", text)
+        if (textParts == null) put("text", text) else {
+            GatewayTextPart.validate(textParts)
+            put("textParts", wireJson.encodeToJsonElement(textParts))
+        }
         put("images", buildJsonArray {
             images.forEach { image ->
                 add(buildJsonObject {
@@ -510,6 +594,18 @@ object GatewayRequests {
         require(mode == "queue" || mode == "steer")
         put("mode", mode)
         put("clientTimeZone", clientTimeZone)
+    }
+
+    fun queueEdit(sessionId: String, itemId: String, requestId: String, text: String,
+        textParts: List<GatewayTextPart>? = null): GatewayRequest = request(
+        "queue-update", "queue-item-updated", targetSessionId = sessionId, correlationId = itemId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("sessionId", sessionId); put("itemId", itemId); put("requestId", requestId); put("action", "edit")
+        if (textParts == null) put("text", text) else {
+            GatewayTextPart.validate(textParts)
+            put("textParts", wireJson.encodeToJsonElement(textParts))
+        }
     }
 
     fun queueUpdate(sessionId: String, itemId: String, action: String): GatewayRequest = request(

@@ -874,14 +874,16 @@ final class GatewayClient: ObservableObject {
         sessionId: String?,
         workspaceId: String? = nil,
         mode: String = "queue",
-        requestId: String? = nil
+        requestId: String? = nil,
+        textParts: [GatewayTextPart]? = nil
     ) {
         let address = sessionId.flatMap { conversationTarget?($0) }
         let request = GatewayMessageRequest(
             sessionId: sessionId?.isEmpty == false ? sessionId : nil,
             parentSessionId: address?.parentSessionId,
             subagentMode: address?.subagentMode,
-            text: text,
+            text: textParts == nil ? text : nil,
+            textParts: textParts,
             images: images.map {
                 GatewayMessageRequest.Image(
                     mediaType: $0.mediaType,
@@ -1676,7 +1678,8 @@ private struct GatewayMessageRequest: Encodable, Sendable {
     var sessionId: String?
     var parentSessionId: String?
     var subagentMode: String?
-    var text: String
+    var text: String?
+    var textParts: [GatewayTextPart]?
     var images: [Image]
     var files: [File]?
     var workspaceId: String?

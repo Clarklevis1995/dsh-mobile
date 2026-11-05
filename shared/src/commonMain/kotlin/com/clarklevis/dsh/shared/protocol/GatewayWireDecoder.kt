@@ -113,6 +113,14 @@ object GatewayWireDecoder {
         if ((normalized["kind"] as? JsonPrimitive)?.contentOrNull in setOf("speech-catalog", "speech-state")) {
             normalized = JsonObject(normalized - "selection")
         }
+        val kind = (normalized["kind"] as? JsonPrimitive)?.contentOrNull
+        // 新管理响应平铺完整任务，target 为对象，与旧设置响应的字符串 target 不同。
+        if (kind in setOf("schedule-view", "schedule-create", "schedule-edit", "schedule-run")) {
+            normalized = JsonObject((normalized - "target") + ("schedule" to normalized))
+        }
+        if (kind == "schedule-delete-inactive") {
+            normalized = JsonObject((normalized - "deleted") + ("deletedCount" to (normalized["deleted"] ?: JsonPrimitive(0))))
+        }
         val presets = normalized["presets"] as? JsonArray
         if (presets != null) {
             normalized = JsonObject(normalized + ("presets" to JsonArray(presets.map { item ->

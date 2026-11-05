@@ -104,6 +104,7 @@ internal fun PluginBundleDetailScreen(
     var confirmGatewayDisable by remember { mutableStateOf(false) }
     LaunchedEffect(bundleName) {
         if (stateHolder.pluginCatalog == null) stateHolder.refreshPlugins()
+        stateHolder.loadPluginInformation(bundleName)
     }
     val bundle = stateHolder.pluginCatalog?.bundles?.firstOrNull { it.name == bundleName }
     PluginPage(appText("插件详情"), onBack) {
@@ -304,6 +305,33 @@ private fun PluginBundleDetail(
                 stateHolder.pluginNotice?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
                 if (stateHolder.gatewayState.connection != GatewayConnectionState.CONNECTED) {
                     Text(appText("网关已断开，插件状态待重新连接确认"), color = MaterialTheme.colorScheme.tertiary)
+                }
+            }
+        }
+        if ("plugin-updates-v1" in stateHolder.gatewayState.capabilities) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (bundle.raw["updatable"]?.booleanValue == true) {
+                        TextButton(onClick = { stateHolder.loadPluginInformation(bundle.name, versions = true) },
+                            enabled = stateHolder.pluginPendingName == null) { Text("检查更新") }
+                    }
+                    stateHolder.pluginVersions?.let { result ->
+                        if (result["status"]?.stringValue != "listed") Text(result.toString())
+                        result["versions"]?.arrayValue.orEmpty().forEach { entry ->
+                            val version = entry["version"]?.stringValue ?: entry.stringValue
+                            if (version != null) TextButton(onClick = { stateHolder.updatePlugin(bundle.name, version) },
+                                enabled = stateHolder.pluginPendingName == null && entry["selectable"]?.booleanValue != false && entry["compatible"]?.booleanValue != false) {
+                                Text("更新到 $version")
+                            }
+                        }
+                    }
+                    stateHolder.pluginUpdateStep?.let { Text("更新进度 · $it") }
+                    stateHolder.pluginUpdateResult?.let { Text(it.toJsonElement().toString()) }
+                    if (stateHolder.pluginUpdateLogs.isNotEmpty()) Text(stateHolder.pluginUpdateLogs.joinToString("\n"), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                    stateHolder.pluginDetail?.get("markdown")?.stringValue?.let { markdown ->
+                        // 使用原生 Markdown 渲染，图片保留替代文字，避免未鉴权的远端读取。
+                        DshMarkdownText(markdown.replace(Regex("!\\[([^]]*)]\\([^)]*\\)"), "[图片 · $1]"))
+                    }
                 }
             }
         }

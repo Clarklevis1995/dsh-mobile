@@ -442,16 +442,21 @@ class GatewayRuntime(
         clientTimeZone: String,
         mode: String = "queue",
         receipts: List<String> = emptyList(),
-        requestId: String? = null
+        requestId: String? = null,
+        textParts: List<com.clarklevis.dsh.shared.protocol.GatewayTextPart>? = null
     ): Boolean = serialized {
-        if (text.isBlank() && images.isEmpty() && receipts.isEmpty()) return@serialized false
+        if (text.isBlank() && textParts.orEmpty().none { it.text.isNotBlank() } && images.isEmpty() && receipts.isEmpty()) return@serialized false
+        if (textParts != null && runCatching { com.clarklevis.dsh.shared.protocol.GatewayTextPart.validate(textParts) }.isFailure) {
+            rejectLocked("message", "invalid-text-parts")
+            return@serialized false
+        }
         if (!outgoingImagesAreWithinLimits(images)) {
             rejectLocked("message", ERROR_IMAGE_LIMITS)
             return@serialized false
         }
         markTurnLocked(sessionId)
         val sent = sendRequestLocked(
-            GatewayRequests.message(text.trim(), images, sessionId, workspaceId, clientTimeZone, mode, receipts, requestId)
+            GatewayRequests.message(text.trim(), images, sessionId, workspaceId, clientTimeZone, mode, receipts, requestId, textParts)
         )
         if (!sent) releaseTurnLocked(sessionId)
         sent
@@ -961,7 +966,7 @@ class GatewayRuntime(
             "session-created", "session-agent-preset", "select-agent-preset", "file-resolved", "file-list", "file-download-opened" -> request.correlationId == frame.requestId
             "file-download-chunk", "file-download-cancelled" -> request.correlationId == frame.transferId
             "command-options", "command-selected" -> request.correlationId == frame.command?.stringValue
-            else -> true
+            else -> request.correlationId == null || request.correlationId == frame.requestId
         }
 
     private fun responseCorrelation(frame: GatewayFrame): String? =

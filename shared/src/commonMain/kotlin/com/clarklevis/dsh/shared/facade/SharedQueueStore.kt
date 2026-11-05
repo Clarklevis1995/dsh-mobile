@@ -11,7 +11,8 @@ data class SharedQueueItem(
     val text: String,
     val preview: String,
     val attachmentCount: Int,
-    val editable: Boolean
+    val editable: Boolean,
+    val textParts: List<com.clarklevis.dsh.shared.protocol.GatewayTextPart>? = null
 )
 
 data class SharedQueueSnapshot(
@@ -109,6 +110,7 @@ class SharedQueueStore {
             val text = content.mapNotNull { if (it["type"]?.stringValue == "text") it["text"]?.stringValue else null }
                 .joinToString("\n")
             val attachments = content.count { it["type"]?.stringValue != "text" }
-            SharedQueueItem(id, text, text.ifBlank { "附件消息" }, attachments, attachments == 0 && text.isNotBlank())
+            SharedQueueItem(id, text, text.ifBlank { "附件消息" }, attachments, attachments == 0 && text.isNotBlank(),
+                com.clarklevis.dsh.shared.protocol.GatewayTextPart.from(row["message"]?.get("textParts")))
         }.distinctBy { it.id }
 }
