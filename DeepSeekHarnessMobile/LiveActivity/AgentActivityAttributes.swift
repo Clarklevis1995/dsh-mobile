@@ -17,6 +17,8 @@ struct AgentActivityAttributes: ActivityAttributes {
         var approvalID: String?
         var toolName: String?
         var stepKind: AgentActivityStepKind?
+        /// 失敗が確定した実行かどうか。旧バージョンの活動では nil。
+        var failureConfirmed: Bool? = nil
         var updatedAt: Date
     }
 

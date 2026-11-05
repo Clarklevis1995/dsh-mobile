@@ -115,9 +115,10 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .running,
-                status: "正在执行",
-                detail: "Agent 正在处理",
-                secondaryDetail: turn.map { "第 \($0) 轮 · 等待执行步骤" } ?? "正在等待执行步骤",
+                status: String(localized: "正在执行"),
+                detail: String(localized: "Agent 正在处理"),
+                secondaryDetail: turn.map { String(localized: "第 \($0) 轮 · 等待执行步骤") }
+                    ?? String(localized: "正在等待执行步骤"),
                 sourceLabel: sourceLabel,
                 stepKind: .preparing
             )
@@ -137,9 +138,10 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .running,
-                status: "正在执行",
-                detail: "正在分析执行步骤",
-                secondaryDetail: step.map { "第 \($0) 步 · Agent 正在处理" } ?? "Agent 正在处理",
+                status: String(localized: "正在执行"),
+                detail: String(localized: "正在分析执行步骤"),
+                secondaryDetail: step.map { String(localized: "第 \($0) 步 · Agent 正在处理") }
+                    ?? String(localized: "Agent 正在处理"),
                 sourceLabel: sourceLabel,
                 stepKind: .reasoning
             )
@@ -163,7 +165,7 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .running,
-                status: "正在执行",
+                status: String(localized: "正在执行"),
                 detail: headline,
                 secondaryDetail: detail,
                 sourceLabel: sourceLabel,
@@ -187,9 +189,11 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .running,
-                status: "正在执行",
-                detail: displayName?.isEmpty == false ? "正在执行 \(displayName!)" : "正在调用工具",
-                secondaryDetail: "Agent 正在处理当前步骤",
+                status: String(localized: "正在执行"),
+                detail: displayName?.isEmpty == false
+                    ? String(localized: "正在执行 \(displayName!)")
+                    : String(localized: "正在调用工具"),
+                secondaryDetail: String(localized: "Agent 正在处理当前步骤"),
                 sourceLabel: sourceLabel,
                 toolName: toolName,
                 stepKind: .tool
@@ -210,9 +214,9 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .awaitingApproval,
-                status: "需要批准 · 仅限本次",
+                status: String(localized: "需要批准 · 仅限本次"),
                 detail: request.reason ?? request.toolName,
-                secondaryDetail: "仅授权本次操作",
+                secondaryDetail: String(localized: "仅授权本次操作"),
                 sourceLabel: sourceLabel,
                 command: command,
                 rpcID: request.rpcId,
@@ -236,11 +240,11 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .awaitingChoice,
-                status: "需要选择",
-                detail: "请打开 App 完成选择",
+                status: String(localized: "需要选择"),
+                detail: String(localized: "请打开 App 完成选择"),
                 secondaryDetail: normalizedPrompt?.isEmpty == false
                     ? normalizedPrompt
-                    : "Agent 正在等待你的回答",
+                    : String(localized: "Agent 正在等待你的回答"),
                 sourceLabel: sourceLabel,
                 rpcID: request.rpcId,
                 stepKind: .message
@@ -266,9 +270,9 @@ final class AgentLiveActivityManager {
             fallbackTitle: title,
             state: state(
                 phase: .running,
-                status: "正在执行",
-                detail: cancelled ? "已跳过选择" : "选择已提交",
-                secondaryDetail: "等待 Agent 继续执行",
+                status: String(localized: "正在执行"),
+                detail: cancelled ? String(localized: "已跳过选择") : String(localized: "选择已提交"),
+                secondaryDetail: String(localized: "等待 Agent 继续执行"),
                 sourceLabel: sourceLabel,
                 rpcID: rpcID,
                 stepKind: .message
@@ -334,16 +338,18 @@ final class AgentLiveActivityManager {
         command: String?,
         sourceLabel: String? = nil
     ) {
-        let detail = outcome == .allowedOnce ? "正在提交「允许一次」" : "正在提交「拒绝」"
+        let detail = outcome == .allowedOnce
+            ? String(localized: "正在提交「允许一次」")
+            : String(localized: "正在提交「拒绝」")
         upsert(
             gatewayID: gatewayID,
             sessionID: request.sessionId,
             title: title,
             state: state(
                 phase: .submittingApproval,
-                status: "正在提交决定",
+                status: String(localized: "正在提交决定"),
                 detail: detail,
-                secondaryDetail: "正在等待主机确认",
+                secondaryDetail: String(localized: "正在等待主机确认"),
                 sourceLabel: sourceLabel,
                 command: command,
                 rpcID: request.rpcId,
@@ -368,9 +374,11 @@ final class AgentLiveActivityManager {
             fallbackTitle: title,
             state: state(
                 phase: approved ? .approved : .rejected,
-                status: approved ? "已允许本次操作" : "已拒绝本次操作",
-                detail: approved ? "批准已送达" : "本次命令未执行",
-                secondaryDetail: approved ? "等待 Agent 更新下一步" : "决定已送达，等待 Agent 后续状态",
+                status: approved ? String(localized: "已允许本次操作") : String(localized: "已拒绝本次操作"),
+                detail: approved ? String(localized: "批准已送达") : String(localized: "本次命令未执行"),
+                secondaryDetail: approved
+                    ? String(localized: "等待 Agent 更新下一步")
+                    : String(localized: "决定已送达，等待 Agent 后续状态"),
                 sourceLabel: sourceLabel,
                 rpcID: rpcID
             )
@@ -391,9 +399,9 @@ final class AgentLiveActivityManager {
             fallbackTitle: title,
             state: state(
                 phase: .failed,
-                status: "未能确认审批结果",
-                detail: reason?.isEmpty == false ? reason : "确认结果后才能继续操作",
-                secondaryDetail: "确认结果后才能继续操作",
+                status: String(localized: "未能确认审批结果"),
+                detail: reason?.isEmpty == false ? reason : String(localized: "确认结果后才能继续操作"),
+                secondaryDetail: String(localized: "确认结果后才能继续操作"),
                 sourceLabel: sourceLabel,
                 rpcID: rpcID
             ),
@@ -415,22 +423,25 @@ final class AgentLiveActivityManager {
         if current.phase == .rejected {
             finalState = state(
                 phase: .rejected,
-                status: "已拒绝本次操作",
-                detail: "本次命令未执行",
-                secondaryDetail: "决定已送达，Agent 已停止当前操作",
+                status: String(localized: "已拒绝本次操作"),
+                detail: String(localized: "本次命令未执行"),
+                secondaryDetail: String(localized: "决定已送达，Agent 已停止当前操作"),
                 sourceLabel: sourceLabel ?? current.sourceLabel,
                 rpcID: current.rpcID
             )
         } else {
             finalState = state(
                 phase: failed ? .failed : .completed,
-                status: failed ? "执行失败" : "执行完成",
-                detail: failed ? "执行未完成" : "任务已完成",
-                secondaryDetail: failed ? "打开 App 查看详情" : "Agent 已完成本次任务",
+                status: failed ? String(localized: "执行失败") : String(localized: "执行完成"),
+                detail: failed ? String(localized: "执行未完成") : String(localized: "任务已完成"),
+                secondaryDetail: failed
+                    ? String(localized: "打开 App 查看详情")
+                    : String(localized: "Agent 已完成本次任务"),
                 sourceLabel: sourceLabel ?? current.sourceLabel
             )
         }
         finalState.sessionTitle = normalizedTitle(title) ?? current.sessionTitle
+        if finalState.phase == .failed { finalState.failureConfirmed = failed }
 
         // 一旦收到 turn/end，就从可更新集合移除并封住后续脉冲，避免较早的 running 更新反写。
         endingSessionKeys.insert(activityKey)

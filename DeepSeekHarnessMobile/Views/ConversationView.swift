@@ -451,7 +451,10 @@ struct ConversationView: View {
         }
         .overlay(alignment: .top) {
             if store.isViewingTeamMember {
-                Text("团队 › \(store.selectedSession?.title ?? "成员")" + (store.selectedMemberCanSend ? "" : " · 只读"))
+                let memberTitle = store.selectedSession?.title ?? String(localized: "成员")
+                Text(store.selectedMemberCanSend
+                     ? String(localized: "团队 › \(memberTitle)")
+                     : String(localized: "团队 › \(memberTitle) · 只读"))
                     .appFont(.caption).foregroundStyle(.secondary).lineLimit(1)
                     .padding(.bottom, 4)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { teamHeaderHeight = $0 }
@@ -939,11 +942,15 @@ struct ConversationView: View {
     }
 
     private func historyFailureState(_ error: String) -> some View {
-        VStack(spacing: 14) {
+        let failureKind = store.selectedSessionId.flatMap { store.historyLoadFailureKinds[$0] }
+        return VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle").appFont(.largeTitle).foregroundStyle(.orange)
-            Text(error.contains("尚未缓存") ? "离线内容不可用" : "历史记录加载失败").appFont(.title3.weight(.semibold))
-            Text(error.contains("refuses this format")
-                 ? "Host 无法读取旧格式会话，请修复或升级 Host 后重试。原始记录未修改。"
+            Text(failureKind == .offlineCache
+                 ? String(localized: "离线内容不可用")
+                 : String(localized: "历史记录加载失败"))
+                .appFont(.title3.weight(.semibold))
+            Text(failureKind == .hostFormatUnsupported || error.contains("refuses this format")
+                 ? String(localized: "Host 无法读取旧格式会话，请修复或升级 Host 后重试。原始记录未修改。")
                  : error)
                 .appFont(.subheadline).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center).lineLimit(6)
@@ -1579,9 +1586,9 @@ struct ConversationView: View {
                     if store.queueState.pendingItemId == item.id {
                         ProgressView().frame(width: 36, height: 40)
                     } else {
-                        queueActionButton("pencil", label: "编辑排队消息", itemID: item.id, action: "edit", enabled: item.editable)
-                        queueActionButton("trash", label: "删除排队消息", itemID: item.id, action: "remove")
-                        queueActionButton("arrow.up", label: "立即插话", itemID: item.id, action: "steer", enabled: store.selectedSession?.isRunning == true)
+                        queueActionButton("pencil", label: String(localized: "编辑排队消息"), itemID: item.id, action: "edit", enabled: item.editable)
+                        queueActionButton("trash", label: String(localized: "删除排队消息"), itemID: item.id, action: "remove")
+                        queueActionButton("arrow.up", label: String(localized: "立即插话"), itemID: item.id, action: "steer", enabled: store.selectedSession?.isRunning == true)
                     }
                 }
                 .padding(.leading, 10)
@@ -1780,8 +1787,8 @@ struct ConversationView: View {
                         .scaledToFit()
                         .frame(width: 16, height: 16)
                         .accessibilityHidden(true)
-                    Text(state.saving ? "切换中…" : current?.name ?? state.agentPreset.map(agentPresetTitle)
-                         ?? (state.loading ? "读取模式…" : "重试模式"))
+                    Text(state.saving ? String(localized: "切换中…") : current?.name ?? state.agentPreset.map(agentPresetTitle)
+                         ?? (state.loading ? String(localized: "读取模式…") : String(localized: "重试模式")))
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Image(systemName: "chevron.down")
@@ -1820,7 +1827,7 @@ struct ConversationView: View {
                             Text(preset.name ?? agentPresetTitle(preset.id))
                                 .appFont(.body.weight(.medium))
                             Text(preset.broken?.boolValue == true
-                                 ? preset.brokenReason ?? "模式不可用"
+                                 ? preset.brokenReason ?? String(localized: "模式不可用")
                                  : agentPresetCompactDescription(preset.id, description: preset.description_))
                                 .appFont(.caption)
                                 .foregroundStyle(.secondary)
@@ -1849,11 +1856,11 @@ struct ConversationView: View {
 
     private func agentPresetCompactDescription(_ id: String, description: String?) -> String {
         switch id {
-        case "standard": return "完整工具，适合日常开发"
-        case "code": return "用代码组合多步工具操作"
-        case "minimal": return "仅用 Shell，轻量直接"
-        case "cordis": return "创建和调试自定义 Agent"
-        default: return description ?? "自定义 Agent 模式"
+        case "standard": return String(localized: "完整工具，适合日常开发")
+        case "code": return String(localized: "用代码组合多步工具操作")
+        case "minimal": return String(localized: "仅用 Shell，轻量直接")
+        case "cordis": return String(localized: "创建和调试自定义 Agent")
+        default: return description ?? String(localized: "自定义 Agent 模式")
         }
     }
 
@@ -2382,14 +2389,17 @@ private struct DeepSearchProgressRow: View {
 
     private enum Activity: Hashable { case thinking, gathering, exploring, reviewing, revisiting, composing, working }
     private static let phraseIntervalSeconds = 30
+    private static func localizedPhrase(_ key: String) -> String {
+        NSLocalizedString(key, bundle: .main, comment: "")
+    }
     private static let phrases: [Activity: [String]] = [
-        .thinking: ["梳理脉络中", "推敲细节中", "酝酿下一步中", "沿着思路前行中"],
-        .gathering: ["翻阅已有线索中", "收拢相关信息中", "寻找切入点中", "铺开问题脉络中"],
-        .exploring: ["向外寻找线索中", "打捞新线索中", "沿途探查中", "搜集更多拼图中"],
-        .reviewing: ["对照新发现中", "拼合新线索中", "检视所得中", "把发现串起来中"],
-        .revisiting: ["回看已有线索中", "重新校准方向中", "再推敲一遍中", "换个角度审视中"],
-        .composing: ["组织回应中", "整理表达中", "将思路落成文字中", "勾勒答案中"],
-        .working: ["继续推进中", "稳步探索中", "梳理当前进展中", "逐步展开中"]
+        .thinking: ["梳理脉络中", "推敲细节中", "酝酿下一步中", "沿着思路前行中"].map(localizedPhrase),
+        .gathering: ["翻阅已有线索中", "收拢相关信息中", "寻找切入点中", "铺开问题脉络中"].map(localizedPhrase),
+        .exploring: ["向外寻找线索中", "打捞新线索中", "沿途探查中", "搜集更多拼图中"].map(localizedPhrase),
+        .reviewing: ["对照新发现中", "拼合新线索中", "检视所得中", "把发现串起来中"].map(localizedPhrase),
+        .revisiting: ["回看已有线索中", "重新校准方向中", "再推敲一遍中", "换个角度审视中"].map(localizedPhrase),
+        .composing: ["组织回应中", "整理表达中", "将思路落成文字中", "勾勒答案中"].map(localizedPhrase),
+        .working: ["继续推进中", "稳步探索中", "梳理当前进展中", "逐步展开中"].map(localizedPhrase)
     ]
 
     private func phrase(for elapsed: Int) -> String {
@@ -2542,7 +2552,7 @@ private struct TaskGoalPanels: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(tasksExpanded ? "收起任务" : "展开任务")
+            .accessibilityLabel(tasksExpanded ? String(localized: "收起任务") : String(localized: "展开任务"))
 
             if tasksExpanded {
                 ContentSizedCommandScrollView(maximumHeight: taskListMaximumHeight) {
@@ -2594,11 +2604,11 @@ private struct TaskGoalPanels: View {
             } else {
                 goalActionButton(
                     active ? "pause.circle" : "play.circle",
-                    active ? "暂停目标" : "继续目标",
+                    active ? String(localized: "暂停目标") : String(localized: "继续目标"),
                     onPauseResume
                 )
-                goalActionButton("pencil", "编辑目标", onEdit)
-                goalActionButton("trash", "删除目标", onClear)
+                goalActionButton("pencil", String(localized: "编辑目标"), onEdit)
+                goalActionButton("trash", String(localized: "删除目标"), onClear)
             }
         }
         .padding(15)
@@ -2612,9 +2622,9 @@ private struct TaskGoalPanels: View {
 
     private var taskSummary: String {
         [
-            completedCount > 0 ? "\(completedCount) 已完成" : nil,
-            activeCount > 0 ? "\(activeCount) 进行中" : nil,
-            pendingCount > 0 ? "\(pendingCount) 待处理" : nil
+            completedCount > 0 ? String(localized: "taskSummary.completed", defaultValue: "\(completedCount) 已完成") : nil,
+            activeCount > 0 ? String(localized: "taskSummary.active", defaultValue: "\(activeCount) 进行中") : nil,
+            pendingCount > 0 ? String(localized: "taskSummary.pending", defaultValue: "\(pendingCount) 待处理") : nil
         ]
         .compactMap { $0 }
         .joined(separator: " · ")
@@ -2661,10 +2671,10 @@ private struct TaskGoalPanels: View {
 
     private func goalPhaseLabel(_ phase: String) -> String {
         switch phase {
-        case "active": "进行中的目标"
-        case "paused": "已暂停的目标"
-        case "blocked": "受阻的目标"
-        default: "当前目标"
+        case "active": String(localized: "进行中的目标")
+        case "paused": String(localized: "已暂停的目标")
+        case "blocked": String(localized: "受阻的目标")
+        default: String(localized: "当前目标")
         }
     }
 }
@@ -3760,7 +3770,7 @@ struct ConversationProcessTool: Identifiable {
 
     var activitySummary: ToolActivitySummary {
         ToolActivitySummaryFormatter.shared.summarize(
-            name: call?.title ?? result?.title ?? "工具",
+            name: call?.title ?? result?.title ?? String(localized: "工具"),
             arguments: call?.text ?? ""
         )
     }
@@ -4371,11 +4381,11 @@ private struct ConversationProcessToolHeaderRow: View {
                 .frame(width: 17)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 7) {
-                    Text(summary.label)
+                    Text(L10n.toolActionLabel(summary.label))
                         .appFont(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                     if !summary.annotation.isEmpty {
-                        Text(summary.annotation)
+                        Text(L10n.toolAnnotation(summary.annotation))
                             .appFont(.caption.monospacedDigit())
                             .foregroundStyle(.tertiary)
                     }
@@ -5078,7 +5088,7 @@ private struct CompactMessageQuote: View {
             .padding(8).background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
             .onTapGesture { expanded.toggle() }
             .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(expanded ? "收起引用" : "展开引用")
+            .accessibilityLabel(expanded ? String(localized: "收起引用") : String(localized: "展开引用"))
     }
 }
 
@@ -5653,7 +5663,7 @@ private struct TeamCachedMenuButton: UIViewRepresentable {
         let button = UIButton(configuration: configuration)
         button.layer.cornerRadius = 22
         button.clipsToBounds = true
-        button.accessibilityLabel = "查看智能体团队"
+        button.accessibilityLabel = String(localized: "查看智能体团队")
         button.accessibilityIdentifier = "team-entry"
         button.addTarget(context.coordinator, action: #selector(Coordinator.open(_:)), for: .touchUpInside)
         updateUIView(button, context: context)
@@ -5691,7 +5701,7 @@ private struct TeamCachedMenuButton: UIViewRepresentable {
         var content: UIHostingController<TeamMemberPopover>?
 
         func prepareContent() {
-            let root = TeamMemberPopover(members: members, title: title ?? "Lead 会话", selectedID: selectedID,
+            let root = TeamMemberPopover(members: members, title: title ?? String(localized: "Lead 会话"), selectedID: selectedID,
                 select: { [weak self] member in
                     self?.content?.dismiss(animated: true) { [weak self] in
                         self?.clearSource()
