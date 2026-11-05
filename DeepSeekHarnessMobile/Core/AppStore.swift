@@ -43,7 +43,8 @@ enum AgentLiveActivityEventProjection {
         case "step/start":
             return progress(
                 String(localized: "正在分析执行步骤"),
-                detail: event.step.map { String(localized: "第 \($0) 步") },
+                // The step number is added by publishLiveActivityProgress(step:).
+                detail: nil,
                 kind: .reasoning
             )
         case "step/end":
