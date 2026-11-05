@@ -137,6 +137,7 @@ struct LogExportView: View {
         if loading { return String(localized: "正在统计日志…") }
         if failed { return String(localized: "无法读取日志，请重试") }
         guard let summary, summary.fileCount > 0 else { return String(localized: "所选时间范围内没有日志") }
+        if summary.fileCount == 1 { return String(localized: "1 个日志文件") }
         return String(format: String(localized: "%lld 个日志文件"), Int64(summary.fileCount))
     }
 

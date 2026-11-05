@@ -402,14 +402,14 @@ struct MobilePluginRow: Identifiable {
     var readOnlyReason: String? { live?.readOnlyReason }
     var rowIdAndModule: String { moduleName.isEmpty ? id : "\(id) · \(moduleName)" }
     var statusText: String {
-        guard enabled else { return "已停用" }
+        guard enabled else { return String(localized: "已停用") }
         switch phase {
-        case "active": return "运行中"
-        case "failed": return "运行失败"
-        case "loading": return "加载中"
-        case "unloading": return "卸载中"
-        case "pending": return "待启动"
-        default: return "空闲"
+        case "active": return String(localized: "运行中")
+        case "failed": return String(localized: "运行失败")
+        case "loading": return String(localized: "加载中")
+        case "unloading": return String(localized: "卸载中")
+        case "pending": return String(localized: "待启动")
+        default: return String(localized: "空闲")
         }
     }
 }
@@ -420,19 +420,19 @@ struct MobileOfficialPlugin: Identifiable {
     var namespaces: [String] { raw["namespaces"]?.arrayValue?.compactMap(\.stringValue) ?? [] }
     var title: String {
         switch id {
-        case "shell": "终端"
-        case "agent-loop": "Agent 循环"
-        case "subagent": "子智能体"
-        case "web-search": "网页搜索"
+        case "shell": String(localized: "终端")
+        case "agent-loop": String(localized: "Agent 循环")
+        case "subagent": String(localized: "子智能体")
+        case "web-search": String(localized: "网页搜索")
         default: id
         }
     }
     var description: String {
         switch id {
-        case "shell": "限制每条命令最多能跑多久、最多输出多少内容。"
-        case "agent-loop": "控制 Agent 派发工具调用的方式。"
-        case "subagent": "设置子智能体的递归层级、数量和模型。"
-        case "web-search": "设置 DeepSeek 的搜索提供方。"
+        case "shell": String(localized: "限制每条命令最多能跑多久、最多输出多少内容。")
+        case "agent-loop": String(localized: "控制 Agent 派发工具调用的方式。")
+        case "subagent": String(localized: "设置子智能体的递归层级、数量和模型。")
+        case "web-search": String(localized: "设置 DeepSeek 的搜索提供方。")
         default: ""
         }
     }

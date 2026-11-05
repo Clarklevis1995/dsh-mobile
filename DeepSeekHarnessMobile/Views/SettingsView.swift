@@ -73,7 +73,7 @@ struct SettingsView: View {
     private let releaseInfo = BundledAppReleaseInfo.load()
 
     private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? String(localized: "未知")
     }
 
     private var connectedGatewayVersion: String? {
@@ -256,7 +256,7 @@ struct SettingsView: View {
             if let host = store.hostSnapshot {
                 Section {
                     LabeledContent("版本", value: [host.dshVersion, host.version].compactMap { $0 }
-                        .first { $0.range(of: "^v?[0-9]+\\.[0-9]+", options: .regularExpression) != nil } ?? "未提供")
+                        .first { $0.range(of: "^v?[0-9]+\\.[0-9]+", options: .regularExpression) != nil } ?? String(localized: "未提供"))
                     LabeledContent("已连接会话", value: "\(host.attachedSessions ?? 0)")
                     if let cwd = host.cwd {
                         LabeledContent {
@@ -334,10 +334,10 @@ struct SettingsView: View {
 
             Section {
                 releaseRow("当前版本（去给作者Star🌟）", value: appVersion, repository: "dsh-mobile", version: appVersion)
-                releaseRow("要求网关版本", value: releaseInfo.map { "≥ \($0.minimumGatewayVersion)" } ?? "未提供",
+                releaseRow(String(localized: "要求网关版本"), value: releaseInfo.map { "≥ \($0.minimumGatewayVersion)" } ?? String(localized: "未提供"),
                            repository: "dsh-plugin-mobile-gateway", version: releaseInfo?.minimumGatewayVersion)
-                releaseRow("已连接网关版本", value: !gatewayState.isConnected ? "未连接" :
-                    store.pluginsLoading ? "读取中…" : connectedGatewayVersion ?? "未提供",
+                releaseRow(String(localized: "已连接网关版本"), value: !gatewayState.isConnected ? "未连接" :
+                    store.pluginsLoading ? "读取中…" : connectedGatewayVersion ?? String(localized: "未提供"),
                     repository: "dsh-plugin-mobile-gateway", version: connectedGatewayVersion)
                 Button("本版本新功能") { showsReleaseNotes = true }
                 Button("隐私政策") { showsPrivacyPolicy = true }
@@ -376,7 +376,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showsReleaseNotes) {
             NavigationStack {
                 ScrollView {
-                    Markdown(releaseInfo?.version == appVersion ? releaseInfo!.notes : "本版本发布说明暂未提供，请查看 GitHub 发布页。")
+                    Markdown(releaseInfo?.version == appVersion ? releaseInfo!.notes : String(localized: "本版本发布说明暂未提供，请查看 GitHub 发布页。"))
                         .padding(20)
                 }
                 .appFont(SettingsTypography.item)
@@ -1165,8 +1165,10 @@ private struct BundledAppReleaseInfo: Decodable {
     private enum CodingKeys: String, CodingKey { case version, minimumGatewayVersion }
 
     static func load() -> BundledAppReleaseInfo? {
+        let notesName = Bundle.main.preferredLocalizations.first?.hasPrefix("zh") == true
+            ? "release-notes" : "release-notes.en"
         guard let metadataURL = Bundle.main.url(forResource: "release-info", withExtension: "json"),
-              let notesURL = Bundle.main.url(forResource: "release-notes", withExtension: "md"),
+              let notesURL = Bundle.main.url(forResource: notesName, withExtension: "md"),
               let data = try? Data(contentsOf: metadataURL),
               var info = try? JSONDecoder().decode(Self.self, from: data),
               let notes = try? String(contentsOf: notesURL, encoding: .utf8) else { return nil }

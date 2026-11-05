@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import plistlib
 import argparse
 import re
 import sys
@@ -24,7 +25,7 @@ UI_CALL_NAMES = (
     "Text", "Button", "Label", "TextField", "SecureField", "Toggle", "Picker",
     "Section", "navigationTitle", "accessibilityLabel", "accessibilityValue",
     "confirmationDialog", "ContentUnavailableView", "ProgressView", "DatePicker",
-    "alert", "Menu",
+    "alert", "Menu", "LabeledContent", "IntentDescription",
 )
 UI_CALL = re.compile(
     r"(?<![A-Za-z0-9_])(?:" + "|".join(UI_CALL_NAMES) + r')\s*\(\s*"((?:\\.|[^"\\])*)"'
@@ -71,13 +72,35 @@ def check_catalog(name: str, errors: list[str]) -> set[str]:
 
 
 def check_swift_calls(keys: set[str], errors: list[str]) -> None:
-    for path in IOS_SOURCES.rglob("*.swift"):
+    paths = list(IOS_SOURCES.rglob("*.swift")) + list((ROOT / "AgentLiveActivityWidget").rglob("*.swift"))
+    for path in paths:
         source = path.read_text()
         for pattern in (LOCALIZED_CALL, UI_CALL):
             for match in pattern.finditer(source):
                 key = match.group(1)
-                if key and "\\(" not in key and key not in keys:
+                if "\\(" in key:
+                    continue
+                key = json.loads('"' + key + '"')
+                if key and key not in keys:
                     errors.append(f"{path.relative_to(ROOT)}: {key!r} 未收录到 Localizable.xcstrings")
+
+
+def check_swift_extractions(directory: Path, keys: set[str], errors: list[str]) -> int:
+    """Check compiler-resolved keys, including interpolated integer formats."""
+    count = 0
+    for path in directory.rglob("*.stringsdata"):
+        data = json.loads(path.read_text())
+        source = Path(data.get("source", ""))
+        if not any(source.is_relative_to(root) for root in (IOS_SOURCES, ROOT / "AgentLiveActivityWidget")):
+            continue
+        count += 1
+        for entry in data.get("tables", {}).get("Localizable", []):
+            key = entry["key"]
+            if key and key not in keys:
+                errors.append(f"{source.relative_to(ROOT)}: {key!r} 未收录到 Localizable.xcstrings")
+    if count == 0:
+        errors.append(f"{directory}: 未找到应用的 Swift 编译器本地化输出")
+    return count
 
 
 def android_strings(language: str) -> dict[str, str]:
@@ -133,13 +156,21 @@ def check_android_ui(errors: list[str]) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--android-only", action="store_true", help="仅检查 Android 本地化")
+    parser.add_argument("--swift-extractions", type=Path,
+                        help="检查以 SWIFT_EMIT_LOC_STRINGS=YES 构建的 Xcode 中间产物目录")
     options = parser.parse_args()
     errors: list[str] = []
     keys = set()
     if not options.android_only:
         keys = check_catalog("Localizable", errors)
-        check_catalog("InfoPlist", errors)
+        info_keys = check_catalog("InfoPlist", errors)
+        with (IOS_RESOURCES / "Info.plist").open("rb") as plist:
+            privacy_keys = {key for key in plistlib.load(plist) if key.endswith("UsageDescription")}
+        for key in sorted(privacy_keys - info_keys):
+            errors.append(f"InfoPlist: {key!r} 缺少权限说明译文")
         check_swift_calls(keys, errors)
+        if options.swift_extractions:
+            check_swift_extractions(options.swift_extractions, keys, errors)
     android_count = check_android(errors)
     android_ui_count = check_android_ui(errors)
     if errors:

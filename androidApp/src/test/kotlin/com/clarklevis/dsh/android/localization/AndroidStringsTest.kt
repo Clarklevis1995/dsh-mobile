@@ -37,6 +37,22 @@ class AndroidStringsTest {
     }
 
     @Test
+    fun newFeatureCopyPreservesArgumentsAndCountGrammar() {
+        val title = "中文项目 100% \$1"
+        assertEquals("Run history · $title", appText("执行记录 · %1\$s", title))
+        assertEquals("Schedule preview · $title", appText("规则预览 · %1\$s", title))
+        assertEquals("Remove quote", appText("移除引用"))
+        assertEquals("Check for updates", appText("检查更新"))
+        assertEquals("1 log file", appText("%1\$s 个日志文件", 1))
+        assertEquals("2 log files", appText("%1\$s 个日志文件", 2))
+        assertEquals("1 trace node", appText("%1\$s 轨迹节点", 1))
+        assertEquals("2 trace nodes", appText("%1\$s 轨迹节点", 2))
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+        assertEquals("执行记录 · $title", appText("执行记录 · %1\$s", title))
+        assertEquals("移除引用", appText("移除引用"))
+    }
+
+    @Test
     fun screenshotChromeAndComposerAreFullyEnglish() {
         val labels = listOf(
             "已连接Deepseek Harness预览版", "新建会话", "最近会话", "搜索会话内容", "已连接",

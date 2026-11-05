@@ -20,6 +20,8 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		B1D0C22B96BB46D7AE1E2294 /* release-notes.en.md in Resources */ = {isa = PBXBuildFile; fileRef = AB0170000000000000000006 /* release-notes.en.md */; };
+		B9DAE97E66B94B0F8D090E2C /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CA11E000000000000000000C /* Localizable.xcstrings */; };
 		10EBA8F511A44135A7B876AC /* TailscaleAccountTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D800EB089E66481480D3C8A0 /* TailscaleAccountTests.swift */; };
 		DA3200000000000000000001 /* LogExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3200000000000000000002 /* LogExportView.swift */; };
 		DA4300000000000000000001 /* TunnelDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4300000000000000000002 /* TunnelDiagnostics.swift */; };
@@ -155,6 +157,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AB0170000000000000000006 /* release-notes.en.md */ = {isa = PBXFileReference; lastKnownFileType = text; path = "../../AppRelease/release-notes.en.md"; sourceTree = "<group>"; };
 		D800EB089E66481480D3C8A0 /* TailscaleAccountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TailscaleAccountTests.swift; sourceTree = "<group>"; };
 		DA3200000000000000000002 /* LogExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogExportView.swift; sourceTree = "<group>"; };
 		DA4300000000000000000002 /* TunnelDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelDiagnostics.swift; sourceTree = "<group>"; };
@@ -413,6 +416,7 @@
 			children = (
 				AB0170000000000000000003 /* ../../AppRelease/release-info.json */,
 				AB0170000000000000000004 /* ../../AppRelease/release-notes.md */,
+				AB0170000000000000000006 /* release-notes.en.md */,
 				59B069578BB7F31AD35F601A /* Info.plist */,
 				A1A0C0000000000000000002 /* LaunchScreen.storyboard */,
 				152A3874C0D169644C9C7B6D /* Assets.xcassets */,
@@ -658,6 +662,7 @@
 			files = (
 				AB0170000000000000000001 /* ../../AppRelease/release-info.json in Resources */,
 				AB0170000000000000000002 /* ../../AppRelease/release-notes.md in Resources */,
+				B1D0C22B96BB46D7AE1E2294 /* release-notes.en.md in Resources */,
 				A1A0C0000000000000000001 /* LaunchScreen.storyboard in Resources */,
 				6FED6D958ABD07A258CC53F0 /* Assets.xcassets in Resources */,
 				CA11E000000000000000000B /* Localizable.xcstrings in Resources */,
@@ -677,6 +682,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F1A000000000000000000008 /* Assets.xcassets in Resources */,
+				B9DAE97E66B94B0F8D090E2C /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -33,7 +33,7 @@ struct AgentLiveActivityWidget: Widget {
                             Text(expandedStatusText(context))
                                 .foregroundStyle(expandedStatusColor(context))
                                 .minimumScaleFactor(0.9)
-                                .frame(width: 28, height: 14, alignment: .leading)
+                                .frame(minWidth: 28, maxWidth: 60, alignment: .leading)
                         }
                         AgentElapsedTime(context: context)
                             .foregroundStyle(AgentActivityColors.islandDimmed)
@@ -95,17 +95,17 @@ private func expandedStatusText(
     _ context: ActivityViewContext<AgentActivityAttributes>
 ) -> String {
     if context.isStaleCompat && !context.state.phase.isTerminal {
-        return "待同步"
+        return String(localized: "待同步")
     }
     switch context.state.phase {
-    case .running: return "执行中"
-    case .awaitingChoice: return "待选择"
-    case .awaitingApproval: return "待审批"
-    case .submittingApproval: return "提交中"
-    case .approved: return "已允许"
-    case .rejected: return "已拒绝"
-    case .failed: return "失败"
-    case .completed: return "已完成"
+    case .running: return String(localized: "执行中")
+    case .awaitingChoice: return String(localized: "待选择")
+    case .awaitingApproval: return String(localized: "待审批")
+    case .submittingApproval: return String(localized: "提交中")
+    case .approved: return String(localized: "已允许")
+    case .rejected: return String(localized: "已拒绝")
+    case .failed: return String(localized: "失败")
+    case .completed: return String(localized: "已完成")
     }
 }
 
@@ -123,7 +123,7 @@ private enum AgentActivityMetrics {
     static let expandedBrandTopInset: CGFloat = 8
     static let expandedTrailingInset: CGFloat = 10
     // 胶囊的长度和高度
-    static let expandedStatusCapsuleWidth: CGFloat = 92
+    static let expandedStatusCapsuleWidth: CGFloat = 124
     static let expandedStatusCapsuleHeight: CGFloat = 24
     // 胶囊的内部padding
     static let expandedStatusCapsuleLeadingInset: CGFloat = 8
@@ -177,7 +177,7 @@ private struct AgentDynamicIslandExpandedContent: View {
                 Spacer(minLength: 8)
                 Link(destination: AgentActivityLink.session(context)) {
                     HStack(spacing: 3) {
-                        Text("详情")
+                        Text(String(localized: "详情"))
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .semibold))
                     }
@@ -215,7 +215,7 @@ private struct AgentDynamicIslandExpandedContent: View {
     }
 
     private var approvalOperation: some View {
-        Text(state.command?.isEmpty == false ? state.command! : (state.detail ?? "等待操作详情"))
+        Text(state.command?.isEmpty == false ? state.command! : (state.detail ?? String(localized: "等待操作详情")))
             .font(.system(size: 13, design: .monospaced))
             .tracking(-0.3)
             .lineLimit(1)
@@ -291,12 +291,12 @@ private struct AgentDynamicIslandExpandedContent: View {
     private var failureActions: some View {
         HStack(spacing: 7) {
             Link(destination: AgentActivityLink.session(context)) {
-                Text("查看详情")
+                Text(String(localized: "查看详情"))
                     .frame(maxWidth: .infinity, minHeight: AgentActivityMetrics.islandActionHeight)
                     .background(AgentActivityColors.islandTile, in: Capsule())
             }
             Link(destination: AgentActivityLink.session(context)) {
-                Label("检查结果", systemImage: "arrow.clockwise")
+                Label(String(localized: "检查结果"), systemImage: "arrow.clockwise")
                     .frame(maxWidth: .infinity, minHeight: AgentActivityMetrics.islandActionHeight)
                     .foregroundStyle(Color(red: 0.09, green: 0.16, blue: 0.19))
                     .background(AgentActivityColors.accent, in: Capsule())
@@ -312,7 +312,7 @@ private struct AgentDynamicIslandExpandedContent: View {
     }
 
     private var stepTitle: String {
-        if context.isStaleCompat && !state.phase.isTerminal { return "打开 App 获取最新进度" }
+        if context.isStaleCompat && !state.phase.isTerminal { return String(localized: "打开 App 获取最新进度") }
         return state.detail?.isEmpty == false
             ? state.detail!
             : AgentActivityPresentation.stepTitle(for: state.phase)
@@ -387,7 +387,7 @@ private struct AgentActivityCard: View {
             Spacer(minLength: 8)
             Link(destination: AgentActivityLink.session(context)) {
                 HStack(spacing: 3) {
-                    Text("详情")
+                    Text(String(localized: "详情"))
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .semibold))
                 }
@@ -399,7 +399,7 @@ private struct AgentActivityCard: View {
     }
 
     private var operation: some View {
-        Text(state.command?.isEmpty == false ? state.command! : "等待操作详情")
+        Text(state.command?.isEmpty == false ? state.command! : String(localized: "等待操作详情"))
             .font(.system(size: 12, design: .monospaced))
             .tracking(-0.4)
             .lineLimit(2)
@@ -447,7 +447,7 @@ private struct AgentActivityCard: View {
             Spacer(minLength: 12)
             Link(destination: AgentActivityLink.session(context)) {
                 HStack(spacing: 3) {
-                    Text("查看会话")
+                    Text(String(localized: "查看会话"))
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .semibold))
                 }
@@ -466,7 +466,7 @@ private struct AgentActivityCard: View {
     private var submitting: some View {
         HStack(spacing: 7) {
             ProgressView().controlSize(.small).tint(dimmed)
-            Text(state.detail?.isEmpty == false ? state.detail! : "正在等待主机确认")
+            Text(state.detail?.isEmpty == false ? state.detail! : String(localized: "正在等待主机确认"))
                 .lineLimit(1)
         }
         .font(.system(size: 13))
@@ -478,12 +478,12 @@ private struct AgentActivityCard: View {
     private var failureActions: some View {
         HStack(spacing: AgentActivityMetrics.actionSpacing) {
             Link(destination: AgentActivityLink.session(context)) {
-                Text("查看详情")
+                Text(String(localized: "查看详情"))
                     .frame(maxWidth: .infinity, minHeight: AgentActivityMetrics.actionHeight)
                     .background(tile, in: Capsule())
             }
             Link(destination: AgentActivityLink.session(context)) {
-                Label("检查结果", systemImage: "arrow.clockwise")
+                Label(String(localized: "检查结果"), systemImage: "arrow.clockwise")
                     .frame(maxWidth: .infinity, minHeight: AgentActivityMetrics.actionHeight)
                     .foregroundStyle(Color(red: 0.09, green: 0.16, blue: 0.19))
                     .background(AgentActivityColors.accent, in: Capsule())
@@ -497,7 +497,7 @@ private struct AgentActivityCard: View {
         AgentActivityPresentation.stepSymbol(for: state)
     }
     private var stepTitle: String {
-        if context.isStaleCompat && !state.phase.isTerminal { return "打开 App 获取最新进度" }
+        if context.isStaleCompat && !state.phase.isTerminal { return String(localized: "打开 App 获取最新进度") }
         return state.detail?.isEmpty == false ? state.detail! : AgentActivityPresentation.stepTitle(for: state.phase)
     }
     private var stepDetail: String {
@@ -537,7 +537,7 @@ private struct AgentApprovalButtons: View {
                 approvalButtons(rpcID: rpcID, approvalID: approvalID)
             } else {
                 // iOS 16.1 不支持实时活动内的交互按钮，提示回 App 处理。
-                Label("在 App 内处理审批", systemImage: "hand.tap")
+                Label(String(localized: "在 App 内处理审批"), systemImage: "hand.tap")
                     .font(.system(size: 13, weight: .medium))
                     .frame(maxWidth: .infinity, minHeight: height)
                     .foregroundStyle(foreground)
@@ -556,7 +556,7 @@ private struct AgentApprovalButtons: View {
                 rpcID: rpcID,
                 approvalID: approvalID
             )) {
-                Label("拒绝", systemImage: "xmark")
+                Label(String(localized: "拒绝"), systemImage: "xmark")
                     .frame(maxWidth: .infinity, minHeight: height)
                     .foregroundStyle(foreground)
                     .background(tile, in: Capsule())
@@ -568,7 +568,7 @@ private struct AgentApprovalButtons: View {
                 rpcID: rpcID,
                 approvalID: approvalID
             )) {
-                Label("允许一次", systemImage: "checkmark")
+                Label(String(localized: "允许一次"), systemImage: "checkmark")
                     .frame(maxWidth: .infinity, minHeight: height)
                     .foregroundStyle(Color(red: 0.09, green: 0.16, blue: 0.19))
                     .background(AgentActivityColors.accent, in: Capsule())
@@ -699,37 +699,37 @@ private enum AgentActivityPresentation {
     static func compactText(for phase: AgentActivityPhase, status: String) -> String {
         switch phase {
         case .running: ""
-        case .awaitingChoice: "待选择"
-        case .awaitingApproval: "待审批"
-        case .submittingApproval: "提交中"
-        case .approved: "已允许"
-        case .rejected: "已拒绝"
-        case .failed: status == "执行失败" ? "失败" : "待确认"
-        case .completed: "已完成"
+        case .awaitingChoice: String(localized: "待选择")
+        case .awaitingApproval: String(localized: "待审批")
+        case .submittingApproval: String(localized: "提交中")
+        case .approved: String(localized: "已允许")
+        case .rejected: String(localized: "已拒绝")
+        case .failed: (status == String(localized: "执行失败") || status == "执行失败") ? String(localized: "失败") : String(localized: "待确认")
+        case .completed: String(localized: "已完成")
         }
     }
 
     static func stepTitle(for phase: AgentActivityPhase) -> String {
         switch phase {
-        case .running: "Agent 正在处理"
-        case .awaitingChoice: "请打开 App 完成选择"
-        case .approved: "批准已送达"
-        case .rejected: "本次命令未执行"
-        case .completed: "任务已完成"
-        case .failed: "执行未完成"
-        case .awaitingApproval, .submittingApproval: "等待操作"
+        case .running: String(localized: "Agent 正在处理")
+        case .awaitingChoice: String(localized: "请打开 App 完成选择")
+        case .approved: String(localized: "批准已送达")
+        case .rejected: String(localized: "本次命令未执行")
+        case .completed: String(localized: "任务已完成")
+        case .failed: String(localized: "执行未完成")
+        case .awaitingApproval, .submittingApproval: String(localized: "等待操作")
         }
     }
 
     static func stepDetail(for phase: AgentActivityPhase) -> String {
         switch phase {
-        case .running: "正在等待下一步"
-        case .awaitingChoice: "Agent 正在等待你的回答"
-        case .approved: "等待 Agent 更新下一步"
-        case .rejected: "决定已送达，等待 Agent 后续状态"
-        case .completed: "Agent 已完成本次任务"
-        case .failed: "打开 App 查看详情"
-        case .awaitingApproval, .submittingApproval: "仅授权本次操作"
+        case .running: String(localized: "正在等待下一步")
+        case .awaitingChoice: String(localized: "Agent 正在等待你的回答")
+        case .approved: String(localized: "等待 Agent 更新下一步")
+        case .rejected: String(localized: "决定已送达，等待 Agent 后续状态")
+        case .completed: String(localized: "Agent 已完成本次任务")
+        case .failed: String(localized: "打开 App 查看详情")
+        case .awaitingApproval, .submittingApproval: String(localized: "仅授权本次操作")
         }
     }
 

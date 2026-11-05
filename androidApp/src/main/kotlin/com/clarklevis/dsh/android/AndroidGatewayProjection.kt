@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.android
 
+import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.cache.ChatCacheDiagnostics
 import com.clarklevis.dsh.shared.cache.ChatCacheRestoreSkipReason
 import com.clarklevis.dsh.shared.facade.CachedHistoryWindow
@@ -448,7 +449,7 @@ internal class AndroidGatewayProjection(
             historyCancelled(id)
         }
         if (frame.kind == "error" && frame.requestType in setOf("history", "subscribe") && id != null) {
-            historyErrors[id] = frame.message ?: "历史记录加载失败"
+            historyErrors[id] = frame.message ?: appText("历史记录加载失败")
             historyCancelled(id)
         }
         if (!update.accepted) return snapshot()
@@ -542,10 +543,10 @@ internal class AndroidGatewayProjection(
     }
 
     fun historyTimedOut(sessionId: String) {
-        historyErrors[sessionId] = "历史记录加载超时，请重试"
+        historyErrors[sessionId] = appText("历史记录加载超时，请重试")
         if (snapshotWait?.first == sessionId) {
             snapshotWait = null
-            lastError = "历史记录加载超时，请重试"
+            lastError = appText("历史记录加载超时，请重试")
         }
         historyStore.timedOut(sessionId)
     }

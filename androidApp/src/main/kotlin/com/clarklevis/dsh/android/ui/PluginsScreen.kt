@@ -313,7 +313,7 @@ private fun PluginBundleDetail(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (bundle.raw["updatable"]?.booleanValue == true) {
                         TextButton(onClick = { stateHolder.loadPluginInformation(bundle.name, versions = true) },
-                            enabled = stateHolder.pluginPendingName == null) { Text("检查更新") }
+                            enabled = stateHolder.pluginPendingName == null) { Text(appText("检查更新")) }
                     }
                     stateHolder.pluginVersions?.let { result ->
                         if (result["status"]?.stringValue != "listed") Text(result.toString())
@@ -321,16 +321,16 @@ private fun PluginBundleDetail(
                             val version = entry["version"]?.stringValue ?: entry.stringValue
                             if (version != null) TextButton(onClick = { stateHolder.updatePlugin(bundle.name, version) },
                                 enabled = stateHolder.pluginPendingName == null && entry["selectable"]?.booleanValue != false && entry["compatible"]?.booleanValue != false) {
-                                Text("更新到 $version")
+                                Text(appText("更新到 %1\$s", version))
                             }
                         }
                     }
-                    stateHolder.pluginUpdateStep?.let { Text("更新进度 · $it") }
+                    stateHolder.pluginUpdateStep?.let { Text(appText("更新进度 · %1\$s", it)) }
                     stateHolder.pluginUpdateResult?.let { Text(it.toJsonElement().toString()) }
                     if (stateHolder.pluginUpdateLogs.isNotEmpty()) Text(stateHolder.pluginUpdateLogs.joinToString("\n"), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                     stateHolder.pluginDetail?.get("markdown")?.stringValue?.let { markdown ->
                         // 使用原生 Markdown 渲染，图片保留替代文字，避免未鉴权的远端读取。
-                        DshMarkdownText(markdown.replace(Regex("!\\[([^]]*)]\\([^)]*\\)"), "[图片 · $1]"))
+                        DshMarkdownText(markdown.replace(Regex("!\\[([^]]*)]\\([^)]*\\)"), appText("[图片 · %1\$s]", "$1")))
                     }
                 }
             }

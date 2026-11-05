@@ -1,6 +1,7 @@
 import XCTest
 import UIKit
 import SwiftUI
+import DeepSeekHarnessShared
 @testable import DeepSeekHarnessMobile
 
 /// Guards the localization catalogs shipped in the app bundle: compiled
@@ -23,6 +24,36 @@ final class LocalizationCatalogTests: XCTestCase {
             "Workspace dsh-mobile, 7 sessions")
         XCTAssertEqual(String(format: try XCTUnwrap(chinese["workspace.section.named-accessibility"]), "移动端工程", 7),
             "工作区 移动端工程，7 个会话")
+    }
+
+    func testNewFeatureCopyAndPhotoPermissionShipInEnglish() throws {
+        let english = try englishTable("Localizable")
+        for key in ["创建定时任务", "执行记录", "移除引用", "检查更新", "规则预览 · %@", "当前时区 · %@",
+                    "正在执行", "更新进度 · %@", "保存到相册"] {
+            let value = try XCTUnwrap(english[key], "Missing translation: \(key)")
+            XCTAssertNil(value.range(of: "[\\u3400-\\u9fff]", options: .regularExpression))
+        }
+        XCTAssertEqual(String(format: try XCTUnwrap(english["团队 › %@"]), "中文项目 100%"), "Team › 中文项目 100%")
+        XCTAssertEqual(english["1 个日志文件"], "1 log file")
+        XCTAssertEqual(String(format: try XCTUnwrap(english["%lld 个日志文件"]), 2), "2 log files")
+        XCTAssertNotNil(try englishTable("InfoPlist")["NSPhotoLibraryAddUsageDescription"])
+    }
+
+    func testToolSummaryLocalizesOnlyAppText() throws {
+        for language in ["en", "zh-Hans"] {
+            let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
+            let bundle = try XCTUnwrap(Bundle(path: path))
+            let summary = ToolActivitySummary(label: "写入", detail: "项目/100%.swift", annotation: "1 行")
+            let result = L10n.toolActivitySummary(summary, bundle: bundle)
+            XCTAssertEqual(result.label, language == "en" ? "Write" : "写入")
+            XCTAssertEqual(result.annotation, language == "en" ? "1 line" : "1 行")
+            XCTAssertEqual(result.detail, summary.detail)
+            let replacement = L10n.toolActivitySummary(
+                ToolActivitySummary(label: "修改", detail: "custom description", annotation: "替换 1 → 2 行"), bundle: bundle
+            )
+            XCTAssertEqual(replacement.annotation, language == "en" ? "Replace lines: 1 → 2" : "替换 1 → 2 行")
+            XCTAssertEqual(replacement.detail, "custom description")
+        }
     }
 
     func testFontScaleNormalizesInvalidValues() {
@@ -185,11 +216,13 @@ final class LocalizationCatalogTests: XCTestCase {
 
         let sessionTitle = "模拟器测试会话"
         let chinese = Locale(identifier: "zh-Hans")
+        let path = try XCTUnwrap(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
+        let chineseBundle = try XCTUnwrap(Bundle(path: path))
         XCTAssertEqual(
             String(
                 localized: "agent.notification.execution.completed.title",
                 defaultValue: "执行完成",
-                bundle: .main,
+                bundle: chineseBundle,
                 locale: chinese
             ),
             "执行完成"
@@ -198,7 +231,7 @@ final class LocalizationCatalogTests: XCTestCase {
             String(
                 localized: "agent.notification.execution.completed.body",
                 defaultValue: "\(sessionTitle)：Agent 已完成本次任务",
-                bundle: .main,
+                bundle: chineseBundle,
                 locale: chinese
             ),
             "模拟器测试会话：Agent 已完成本次任务"

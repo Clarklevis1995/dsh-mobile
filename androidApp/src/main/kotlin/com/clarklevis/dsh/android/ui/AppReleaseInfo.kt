@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.android.ui
 
 import android.content.Context
+import java.util.Locale
 import com.clarklevis.dsh.android.localization.appText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -11,7 +12,8 @@ internal data class AppReleaseInfo(val version: String, val minimumGatewayVersio
         fun load(context: Context): AppReleaseInfo? = runCatching {
             val metadata = context.assets.open("release-info.json").bufferedReader().use { it.readText() }
             val json = Json.parseToJsonElement(metadata).jsonObject
-            val notes = context.assets.open("release-notes.md").bufferedReader().use { it.readText() }
+            val notesName = if (Locale.getDefault().language == "zh") "release-notes.md" else "release-notes.en.md"
+            val notes = context.assets.open(notesName).bufferedReader().use { it.readText() }
             AppReleaseInfo(json.getValue("version").jsonPrimitive.content,
                 json.getValue("minimumGatewayVersion").jsonPrimitive.content, notes)
         }.getOrNull()

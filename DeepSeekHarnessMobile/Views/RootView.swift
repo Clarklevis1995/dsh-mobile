@@ -159,7 +159,7 @@ private struct RootNavigationHost: View, Equatable {
             ScheduledTasksView(store: store) { sessionID in
                 let session = store.sessions.first(where: { $0.id == sessionID }) ?? SessionSummary(
                     id: sessionID,
-                    title: store.scheduledTasks.first(where: { $0.sessionID == sessionID })?.title ?? "会话",
+                    title: store.scheduledTasks.first(where: { $0.sessionID == sessionID })?.title ?? String(localized: "会话"),
                     lastActivity: .now,
                     isRunning: false,
                     hasUnread: false
@@ -414,7 +414,7 @@ private struct ScheduledTasksView: View {
                             Button("执行记录") { historyTask = task; store.loadScheduleHistory(task) }
                             Button("立即执行") { store.runScheduledTask(task) }
                             if task.status != "ended" {
-                                Button(task.status == "active" ? "暂停" : "恢复") {
+                                Button(task.status == "active" ? String(localized: "暂停") : String(localized: "恢复")) {
                                     store.setScheduledTaskActive(task, active: task.status != "active")
                                 }
                             }
@@ -475,7 +475,7 @@ private struct ScheduledTasksView: View {
         .sheet(item: $historyTask) { task in
             NavigationStack {
                 ScrollView {
-                    Text(store.scheduleHistory?["records"]?.displayText ?? "正在加载…").padding()
+                    Text(store.scheduleHistory?["records"]?.displayText ?? String(localized: "正在加载…")).padding()
                     if let before = store.scheduleHistory?["nextBefore"]?.stringValue {
                         Button("更早记录") { store.loadScheduleHistory(task, before: before) }
                     }
@@ -835,7 +835,7 @@ private struct ScheduledTaskEditSheet: View {
                             DatePicker("执行时刻", selection: $selectedTime, displayedComponents: .hourAndMinute)
                                 .datePickerStyle(.wheel)
                                 .environment(\.timeZone, zone)
-                            Text("保留原有\(task.kind == "daily" ? "每日" : "每周")规则和时区 \(zone.identifier)。")
+                            Text("保留原有\(task.kind == "daily" ? String(localized: "每日") : String(localized: "每周"))规则和时区 \(zone.identifier)。")
                                 .appFont(.caption).foregroundStyle(.secondary)
                         } else {
                             Text("当前规则：\(ScheduledTaskFormat.fullRule(task))。选择上方选项后，可用日期和时间选择器改为单次执行。")
@@ -1286,7 +1286,7 @@ private struct WorkspaceFilesSheet: View {
     private var workspaceFilePathBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "folder")
-            Text(store.workspaceFilePath == "." ? "工作区根目录" : store.workspaceFilePath)
+            Text(store.workspaceFilePath == "." ? String(localized: "工作区根目录") : store.workspaceFilePath)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
@@ -1386,7 +1386,7 @@ private struct WorkspaceFileRow: View {
                 .buttonStyle(.plain)
                 .disabled(isDownloading)
                 .accessibilityLabel(
-                    isDownloaded ? "\(item.name) 已下载，点击重新下载" : "下载 \(item.name)"
+                    isDownloaded ? String(localized: "\(item.name) 已下载，点击重新下载") : String(localized: "下载 \(item.name)")
                 )
             }
             .listRowBackground(FileIconCatalog.shared.resolve(name: item.name, mediaType: item.mediaType).cardBackground)
@@ -1413,7 +1413,7 @@ private struct WorkspaceFileRow: View {
     private func workspaceFileDetail(_ item: GatewayDirectoryItem) -> String {
         let size = item.bytes.map {
             ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)
-        } ?? "文件"
+        } ?? String(localized: "文件")
         guard let modifiedAt = item.modifiedAt else { return size }
         let date = Date(timeIntervalSince1970: modifiedAt / 1_000)
         return "\(size) · \(date.formatted(date: .abbreviated, time: .shortened))"
@@ -1660,10 +1660,10 @@ struct WorkspaceCodePreview: View {
             guard !Task.isCancelled else { return }
             document = loaded.value
         } catch WorkspaceCodePreviewLoadError.fileTooLarge {
-            errorMessage = "文件超过 2 MB，请使用系统应用打开"
+            errorMessage = String(localized: "文件超过 2 MB，请使用系统应用打开")
         } catch {
             guard !Task.isCancelled else { return }
-            errorMessage = "读取代码失败：\(error.localizedDescription)"
+            errorMessage = String(localized: "读取代码失败：\(error.localizedDescription)")
         }
     }
 }
@@ -2177,7 +2177,7 @@ private struct ScheduleCreateForm: View {
     @State private var requestID: String?
     private var nextExecutionPreview: String {
         guard let rule = try? JSONDecoder().decode(JSONValue.self, from: Data(timing.utf8)),
-              let kind = rule["kind"]?.stringValue else { return "请填写有效规则" }
+              let kind = rule["kind"]?.stringValue else { return String(localized: "请填写有效规则") }
         let spec = rule[kind]
         let zone = TimeZone(identifier: spec?["time_zone"]?.stringValue ?? "") ?? .current
         var calendar = Calendar(identifier: .gregorian)
@@ -2206,11 +2206,11 @@ private struct ScheduleCreateForm: View {
                 }
             }
         }
-        guard let next else { return "下次执行时间由 Host 校验并计算" }
+        guard let next else { return String(localized: "下次执行时间由 Host 校验并计算") }
         let formatter = DateFormatter()
         formatter.timeZone = zone
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss z"
-        return "预计下次执行 · \(formatter.string(from: next))\n最终以 Host 返回时间为准"
+        return String(localized: "预计下次执行 · \(formatter.string(from: next))\n最终以 Host 返回时间为准")
     }
 
     var body: some View {

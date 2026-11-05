@@ -946,3 +946,42 @@ final class LogExportUITests: XCTestCase {
         add(attachment)
     }
 }
+
+final class EnglishLocalizationUITests: XCTestCase {
+    func testEnglishSettingsAndLogExport() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        defer { app.terminate() }
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: 2) { alert.buttons.firstMatch.tap() }
+        let settings = app.buttons["Settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        attachEnglishScreenshot(app, name: "English settings")
+        let logs = app.buttons["log-export-entry"]
+        for _ in 0..<6 {
+            if logs.exists && logs.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(logs.isHittable)
+        logs.tap()
+        XCTAssertTrue(app.navigationBars["Log export and sharing"].waitForExistence(timeout: 5))
+        let ranges = app.segmentedControls["log-range-picker"]
+        XCTAssertTrue(ranges.buttons["Today"].exists)
+        XCTAssertTrue(ranges.buttons["Custom"].exists)
+        XCTAssertTrue(app.buttons["log-save"].exists)
+        XCTAssertTrue(app.buttons["log-share"].exists)
+        XCTAssertFalse(app.staticTexts["1 log files"].exists)
+        attachEnglishScreenshot(app, name: "English log export")
+    }
+
+    private func attachEnglishScreenshot(_ app: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}

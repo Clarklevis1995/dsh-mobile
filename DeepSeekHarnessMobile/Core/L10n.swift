@@ -1,4 +1,5 @@
 import Foundation
+import DeepSeekHarnessShared
 
 /// Centralized user-facing strings that are compared programmatically, shared
 /// across screens, or need stable localization keys with interpolated
@@ -102,6 +103,35 @@ enum L10n {
         default:
             return serverName ?? id
         }
+    }
+
+    /// Translate only formatter-owned labels and counts, preserving paths and tool descriptions.
+    static func toolActivitySummary(_ summary: ToolActivitySummary, bundle: Bundle = .main) -> ToolActivitySummary {
+        let label: String
+        switch summary.label {
+        case "写入": label = String(localized: "写入", bundle: bundle)
+        case "修改": label = String(localized: "修改", bundle: bundle)
+        case "读取": label = String(localized: "读取", bundle: bundle)
+        case "执行": label = String(localized: "tool.activity.run", defaultValue: "执行", bundle: bundle)
+        case "搜索": label = String(localized: "搜索", bundle: bundle)
+        case "列出": label = String(localized: "列出", bundle: bundle)
+        case "获取": label = String(localized: "获取", bundle: bundle)
+        case "工具": label = String(localized: "工具", bundle: bundle)
+        default: label = summary.label
+        }
+        let parts = summary.annotation.split(separator: " ")
+        let annotation: String
+        if parts.count == 2, parts[1] == "行", let count = Int(parts[0]) {
+            annotation = count == 1
+                ? String(localized: "tool.activity.line.one", defaultValue: "1 行", bundle: bundle)
+                : String(localized: "tool.activity.lines", defaultValue: "\(count) 行", bundle: bundle)
+        } else if parts.count == 5, parts[0] == "替换", parts[2] == "→", parts[4] == "行",
+                  let before = Int(parts[1]), let after = Int(parts[3]) {
+            annotation = String(localized: "tool.activity.replacement", defaultValue: "替换 \(before) → \(after) 行", bundle: bundle)
+        } else {
+            annotation = summary.annotation
+        }
+        return ToolActivitySummary(label: label, detail: summary.detail, annotation: annotation)
     }
 
     // MARK: Reasoning effort labels

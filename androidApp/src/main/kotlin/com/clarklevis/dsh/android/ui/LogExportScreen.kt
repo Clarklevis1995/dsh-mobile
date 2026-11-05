@@ -190,8 +190,7 @@ internal fun LogExportScreen(onBack: () -> Unit) {
                                     }
                                     Text(
                                         appText(
-                                            "日志按小时留存，仅导出所选时段\n" +
-                                                "旧日志会自动清理，可选日期以本机留存为准"
+                                            "日志按小时留存，仅导出所选时段\n旧日志会自动清理，可选日期以本机留存为准"
                                         ),
                                         modifier = Modifier.padding(top = 4.dp),
                                         style = SettingsTypography.description,

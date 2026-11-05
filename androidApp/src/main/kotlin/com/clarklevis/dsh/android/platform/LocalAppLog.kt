@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.android.platform
 
+import com.clarklevis.dsh.android.localization.appText
 import android.content.Context
 import android.util.Log
 import java.io.File
@@ -73,7 +74,7 @@ internal object LocalAppLog {
     ): File =
         executor
             .submit<File> {
-                checkNotNull(store) { "日志尚未初始化" }.export(start, end)
+                checkNotNull(store) { appText("日志尚未初始化") }.export(start, end)
             }.get()
 
     fun summary(
@@ -82,7 +83,7 @@ internal object LocalAppLog {
     ): LogExportSummary =
         executor
             .submit<LogExportSummary> {
-                checkNotNull(store) { "日志尚未初始化" }.summary(start, end)
+                checkNotNull(store) { appText("日志尚未初始化") }.summary(start, end)
             }.get()
 }
 
@@ -134,7 +135,7 @@ internal class HourlyLogStore(
             val part = next.toString().padStart(PART_DIGITS, '0')
             file = File(directory, "$prefix-part-$part.log")
         }
-        require(data.size <= limit) { "单条日志超过目录容量上限" }
+        require(data.size <= limit) { appText("单条日志超过目录容量上限") }
         trim(limit - data.size)
         file.appendBytes(data)
     }
@@ -166,10 +167,10 @@ internal class HourlyLogStore(
         for (file in files) {
             if (bytes <= budget) break
             val size = file.length()
-            check(file.delete()) { "无法清理旧日志" }
+            check(file.delete()) { appText("无法清理旧日志") }
             bytes -= size
         }
-        check(directoryBytes() <= budget) { "日志目录容量无法降至上限以内" }
+        check(directoryBytes() <= budget) { appText("日志目录容量无法降至上限以内") }
     }
 
     /** 续行继承上一条记录的时间；不把范围外的同小时记录混入导出。 */
@@ -253,7 +254,7 @@ internal class HourlyLogStore(
             val remaining = limit - directoryBytes()
             ZipOutputStream(BudgetOutputStream(target.outputStream().buffered(), remaining)).use { zip ->
                 val count = addSelectedLogs(zip, start, end)
-                check(count > 0) { "所选时间范围内没有日志" }
+                check(count > 0) { appText("所选时间范围内没有日志") }
             }
             check(directoryBytes() <= limit)
             completed = true
@@ -285,7 +286,7 @@ internal class BudgetOutputStream(
     }
 
     private fun reserve(bytes: Int) {
-        if (bytes > remaining) throw IOException("日志目录已达到容量上限")
+        if (bytes > remaining) throw IOException(appText("日志目录已达到容量上限"))
         remaining -= bytes
     }
 

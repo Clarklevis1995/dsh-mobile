@@ -1706,7 +1706,7 @@ private fun Composer(
                     draftQuotes.orEmpty().forEachIndexed { index, part ->
                         if (part.type == "quote") Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(part.text, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            TextButton(onClick = { stateHolder.messageDraft = com.clarklevis.dsh.shared.protocol.GatewayQuoteTextParts.removeQuote(stateHolder.messageDraft, index) }) { Text("移除引用") }
+                            TextButton(onClick = { stateHolder.messageDraft = com.clarklevis.dsh.shared.protocol.GatewayQuoteTextParts.removeQuote(stateHolder.messageDraft, index) }) { Text(appText("移除引用")) }
                         }
                     }
                 }

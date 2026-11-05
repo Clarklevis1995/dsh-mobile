@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.android.platform
 
+import com.clarklevis.dsh.android.localization.appText
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Base64
@@ -107,7 +108,7 @@ class AndroidFileUploadController(
                     graph?.application?.cacheDir?.let { File(it, "upload-drafts/$id").delete() }
                     localFiles.remove(id)
                     if (failure is kotlinx.coroutines.CancellationException) throw failure
-                    if (context == token) error(failure.message ?: "文件准备失败")
+                    if (context == token) error(failure.message ?: appText("文件准备失败"))
                 }
             }
         } finally {
@@ -141,7 +142,7 @@ class AndroidFileUploadController(
                 apply(shared.chunkReady(read.token, data, read.length))
             } catch (failure: Exception) {
                 if (failure is kotlinx.coroutines.CancellationException) throw failure
-                apply(shared.readFailed(read.token, failure.message ?: "文件读取失败"))
+                apply(shared.readFailed(read.token, failure.message ?: appText("文件读取失败")))
             }
         }
     }
@@ -161,7 +162,7 @@ class AndroidFileUploadController(
     private fun prepare(uri: Uri, id: String): Prepared {
         val app = requireNotNull(graph).application
         val resolver = app.contentResolver
-        var name = "附件"
+        var name = appText("附件")
         var declaredSize: Long? = null
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
@@ -172,14 +173,14 @@ class AndroidFileUploadController(
             }
         }
         require(name.isNotBlank() && name.length <= 255 && name !in setOf(".", "..") &&
-            name.none { it == '/' || it == '\\' || it.isISOControl() }) { "文件名无效" }
-        require((declaredSize ?: 0) <= SharedFileUploadStore.MAX_BYTES) { "文件不能超过 512 MiB" }
+            name.none { it == '/' || it == '\\' || it.isISOControl() }) { appText("文件名无效") }
+        require((declaredSize ?: 0) <= SharedFileUploadStore.MAX_BYTES) { appText("文件不能超过 512 MiB") }
         val folder = File(app.cacheDir, "upload-drafts").apply { mkdirs() }
         val file = File(folder, id)
         try {
             val digest = MessageDigest.getInstance("SHA-256")
             var size = 0L
-            requireNotNull(resolver.openInputStream(uri)) { "无法读取所选文件" }.use { input ->
+            requireNotNull(resolver.openInputStream(uri)) { appText("无法读取所选文件") }.use { input ->
                 file.outputStream().use { output ->
                     val buffer = ByteArray(256 * 1024)
                     while (true) {
@@ -187,7 +188,7 @@ class AndroidFileUploadController(
                         if (count < 0) break
                         if (count == 0) continue
                         size += count
-                        require(size <= SharedFileUploadStore.MAX_BYTES) { "文件不能超过 512 MiB" }
+                        require(size <= SharedFileUploadStore.MAX_BYTES) { appText("文件不能超过 512 MiB") }
                         digest.update(buffer, 0, count)
                         output.write(buffer, 0, count)
                     }
