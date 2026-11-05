@@ -110,6 +110,8 @@
 		F1A000000000000000000006 /* AgentLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A000000000000000000014 /* AgentLiveActivityWidget.swift */; };
 		F1A000000000000000000007 /* AgentLiveActivityWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = F1A000000000000000000016 /* AgentLiveActivityWidget.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		F1A000000000000000000008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F1A000000000000000000017 /* Assets.xcassets */; };
+		F1A000000000000000000009 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = F1A000000000000000000018 /* Localizable.xcstrings */; };
+		F1A00000000000000000000A /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = F1A000000000000000000019 /* InfoPlist.xcstrings */; };
 		F2B000000000000000000001 /* WorkspaceDrawerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B000000000000000000002 /* WorkspaceDrawerUITests.swift */; };
 		F5CD0CFD51B8D80944F87550 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BE407E6C6512836EB108990D /* Foundation.framework */; };
 		CF228000000000000000001 /* MarkdownMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF228000000000000000002 /* MarkdownMath.swift */; };
@@ -244,6 +246,8 @@
 		F1A000000000000000000015 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F1A000000000000000000016 /* AgentLiveActivityWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AgentLiveActivityWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F1A000000000000000000017 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F1A000000000000000000018 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		F1A000000000000000000019 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		F2A000000000000000000001 /* config/Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = config/Debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		F2B000000000000000000002 /* WorkspaceDrawerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceDrawerUITests.swift; sourceTree = "<group>"; };
 		F2B000000000000000000003 /* DeepSeekHarnessMobileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeepSeekHarnessMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -509,6 +513,8 @@
 				F1A000000000000000000014 /* AgentLiveActivityWidget.swift */,
 				F1A000000000000000000015 /* Info.plist */,
 				F1A000000000000000000017 /* Assets.xcassets */,
+				F1A000000000000000000018 /* Localizable.xcstrings */,
+				F1A000000000000000000019 /* InfoPlist.xcstrings */,
 			);
 			path = AgentLiveActivityWidget;
 			sourceTree = "<group>";
@@ -677,6 +683,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F1A000000000000000000008 /* Assets.xcassets in Resources */,
+				F1A000000000000000000009 /* Localizable.xcstrings in Resources */,
+				F1A00000000000000000000A /* InfoPlist.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1093,6 +1101,7 @@
 				DEVELOPMENT_TEAM = SHVN6YQNQF;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AgentLiveActivityWidget/Info.plist;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1121,6 +1130,7 @@
 				DEVELOPMENT_TEAM = T58RY5HUA7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AgentLiveActivityWidget/Info.plist;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
