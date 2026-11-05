@@ -73,7 +73,8 @@ struct SettingsView: View {
     private let releaseInfo = BundledAppReleaseInfo.load()
 
     private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? String(localized: "未知")
     }
 
     private var connectedGatewayVersion: String? {

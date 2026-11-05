@@ -2992,7 +2992,7 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
                 imageViewsByID[payload.id] = imageView
             }
 
-            countLabel.text = "\(images.count)张"
+            countLabel.text = String(format: String(localized: "image.attachment.count"), Int64(images.count))
             countLabel.font = .appPreferredFont(forTextStyle: .caption1).withWeight(.semibold)
             countLabel.textColor = .white
             countLabel.textAlignment = .center

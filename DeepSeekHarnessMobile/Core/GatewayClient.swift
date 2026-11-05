@@ -296,7 +296,7 @@ final class GatewayClient: ObservableObject {
         } else {
             continuation.resume(throwing: NSError(
                 domain: "GatewaySessionCreation", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: frame.message ?? "创建会话失败"]
+                userInfo: [NSLocalizedDescriptionKey: frame.message ?? String(localized: "创建会话失败")]
             ))
         }
         return true
@@ -562,7 +562,7 @@ final class GatewayClient: ObservableObject {
                 }, failure: { [weak self, weak socket] recoverable in
                     guard let self, let socket, self.socket === socket else { return }
                     self.forceNextWebsocket = recoverable
-                    self.fail(recoverable ? "RTC 连接已中断，正在使用 WebSocket 重新连接。" : "RTC 身份或传输校验失败，请重新连接。",
+                    self.fail(recoverable ? String(localized: "RTC 连接已中断，正在使用 WebSocket 重新连接。") : String(localized: "RTC 身份或传输校验失败，请重新连接。"),
                               shouldReconnect: recoverable)
                 })
             }
@@ -575,7 +575,7 @@ final class GatewayClient: ObservableObject {
                           self.connectionGeneration == generation, !self.state.isConnected,
                           !self.isApplicationInBackground else { return }
                     self.traceLifecycle("foreground-rtc-recovery-timeout fallback=websocket")
-                    self.fail("RTC 恢复超时，正在使用 WebSocket 恢复连接。", shouldReconnect: true, reportFailure: false)
+                    self.fail(String(localized: "RTC 恢复超时，正在使用 WebSocket 恢复连接。"), shouldReconnect: true, reportFailure: false)
                 }
             }
             self.receiveTask = Task { [weak self] in await self?.receiveLoop(socket) }
@@ -829,7 +829,7 @@ final class GatewayClient: ObservableObject {
             guard let target, !target.isEmpty else { return }
             let isChild = self.conversationTarget?(target)?.parentSessionId != nil
             self.onFrame?(GatewayFrame(kind: "error", sessionId: target, code: "subscription-timeout",
-                message: isChild ? "成员会话订阅超时，请重试或返回 Lead" : "会话订阅超时，请重试",
+                message: isChild ? String(localized: "成员会话订阅超时，请重试或返回 Lead") : String(localized: "会话订阅超时，请重试"),
                 requestType: "subscribe"))
         }
     }
@@ -994,7 +994,7 @@ final class GatewayClient: ObservableObject {
                 if let object = try? JSONSerialization.jsonObject(with: Data(originalPayload.utf8)) as? [String: Any],
                    let type = object["type"] as? String, type.hasPrefix("file-") {
                     onFrame?(GatewayFrame(kind: "error", sessionId: object["sessionId"] as? String,
-                        code: "file-workspace-unavailable", message: "无法确定文件所属工作区，请重新打开会话后重试。",
+                        code: "file-workspace-unavailable", message: String(localized: "无法确定文件所属工作区，请重新打开会话后重试。"),
                         requestType: type, requestId: object["requestId"] as? String,
                         transferId: object["transferId"] as? String))
                 }
@@ -1022,12 +1022,12 @@ final class GatewayClient: ObservableObject {
                     guard !Task.isCancelled, self.rtcLink === rtcLink else { return }
                     let envelope = (try? JSONSerialization.jsonObject(with: Data(payload.utf8))) as? [String: Any]
                     self.onFrame?(GatewayFrame(kind: "error", code: "transport/ws-required",
-                        message: "消息超过 RTC 传输上限，请使用 WebSocket 连接后重新提交。", requestType: type,
+                        message: String(localized: "消息超过 RTC 传输上限，请使用 WebSocket 连接后重新提交。"), requestType: type,
                         requestId: envelope?["requestId"] as? String))
                 } catch {
                     guard self.rtcLink === rtcLink else { return }
                     self.forceNextWebsocket = true
-                    self.fail("RTC 发送中断，请确认操作状态后重试。", shouldReconnect: true)
+                    self.fail(String(localized: "RTC 发送中断，请确认操作状态后重试。"), shouldReconnect: true)
                 }
             }
             return
@@ -1073,7 +1073,7 @@ final class GatewayClient: ObservableObject {
         let bytes = payload.utf8.count
         guard pendingConversationPayloads.count < 64,
               pendingConversationBytes + bytes <= 16 * 1024 * 1024 else {
-            fail("会话通道尚未就绪，请稍后重试。", shouldReconnect: false)
+            fail(String(localized: "会话通道尚未就绪，请稍后重试。"), shouldReconnect: false)
             return true
         }
         pendingConversationPayloads.append(payload)
@@ -1159,7 +1159,7 @@ final class GatewayClient: ObservableObject {
                 )
             }
             if frame.kind == "hello", isManualPairingAttempt, pairingCode != nil {
-                fail("配对未返回长期凭据，请重新生成二维码。", shouldReconnect: false)
+                fail(String(localized: "配对未返回长期凭据，请重新生成二维码。"), shouldReconnect: false)
                 return
             }
             if frame.kind == "paired" || frame.kind == "hello" {
@@ -1256,7 +1256,7 @@ final class GatewayClient: ObservableObject {
         } catch {
             guard !Task.isCancelled, self.socket === socket else { return }
             forceNextWebsocket = true
-            fail("RTC 业务消息格式校验失败。", shouldReconnect: false)
+            fail(String(localized: "RTC 业务消息格式校验失败。"), shouldReconnect: false)
         }
     }
 
@@ -1520,7 +1520,7 @@ final class GatewayClient: ObservableObject {
                     } else {
                         self.traceLifecycle("foreground-rtc-probe-failed reason=business-channel-send-failed")
                     }
-                    self.fail("RTC 业务通道未响应，正在恢复连接。", shouldReconnect: true, reportFailure: false)
+                    self.fail(String(localized: "RTC 业务通道未响应，正在恢复连接。"), shouldReconnect: true, reportFailure: false)
                 }
             }
             return

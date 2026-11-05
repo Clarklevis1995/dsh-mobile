@@ -82,13 +82,13 @@ enum KMPConversationStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .encoding(let message):
-            "无法编码 iOS Conversation 输入：\(message)"
+            String(localized: "无法编码 iOS Conversation 输入：\(message)")
         case .bridge(let code, let message):
-            "KMP Conversation 失败（\(code)）：\(message ?? "无详细信息")"
+            String(localized: "KMP Conversation 失败（\(code)）：\(message ?? String(localized: "无详细信息"))")
         case .invalidEvent(let message):
-            "KMP Conversation 增量事件无效：\(message)"
+            String(localized: "KMP Conversation 增量事件无效：\(message)")
         case .runtimeFailed(let message):
-            "KMP Conversation 事件流已停止：\(message)"
+            String(localized: "KMP Conversation 事件流已停止：\(message)")
         }
     }
 }
@@ -675,10 +675,10 @@ enum KMPTrajectoryStoreError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .encoding(let message): "无法编码 iOS Trajectory 输入：\(message)"
-        case .bridge(let code, let message): "KMP Trajectory 失败（\(code)）：\(message ?? "无详细信息")"
-        case .invalidEvent(let message): "KMP Trajectory 增量事件无效：\(message)"
-        case .runtimeFailed(let message): "KMP Trajectory 事件流已停止：\(message)"
+        case .encoding(let message): String(localized: "无法编码 iOS Trajectory 输入：\(message)")
+        case .bridge(let code, let message): String(localized: "KMP Trajectory 失败（\(code)）：\(message ?? String(localized: "无详细信息"))")
+        case .invalidEvent(let message): String(localized: "KMP Trajectory 增量事件无效：\(message)")
+        case .runtimeFailed(let message): String(localized: "KMP Trajectory 事件流已停止：\(message)")
         }
     }
 }
@@ -1087,10 +1087,10 @@ enum KMPHistoryStoreError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .encoding(let message): "无法编码 iOS History 输入：\(message)"
-        case .bridge(let code, let message): "KMP History 失败（\(code)）：\(message ?? "无详细信息")"
-        case .invalidEvent(let message): "KMP History 增量事件无效：\(message)"
-        case .runtimeFailed(let message): "KMP History 事件流已停止：\(message)"
+        case .encoding(let message): String(localized: "无法编码 iOS History 输入：\(message)")
+        case .bridge(let code, let message): String(localized: "KMP History 失败（\(code)）：\(message ?? String(localized: "无详细信息"))")
+        case .invalidEvent(let message): String(localized: "KMP History 增量事件无效：\(message)")
+        case .runtimeFailed(let message): String(localized: "KMP History 事件流已停止：\(message)")
         }
     }
 }
@@ -1860,15 +1860,15 @@ enum KMPSessionListStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .encoding(let message):
-            "无法编码 iOS SessionList 输入：\(message)"
+            String(localized: "无法编码 iOS SessionList 输入：\(message)")
         case .bridge(let code, let message):
-            "KMP SessionList 失败（\(code)）：\(message ?? "无详细信息")"
+            String(localized: "KMP SessionList 失败（\(code)）：\(message ?? String(localized: "无详细信息"))")
         case .invalidSnapshot(let message):
-            "无法解码 KMP SessionList 快照：\(message)"
+            String(localized: "无法解码 KMP SessionList 快照：\(message)")
         case .initializationFailed(let message):
-            "KMP SessionList 初始化失败，已停止后续状态写入：\(message)"
+            String(localized: "KMP SessionList 初始化失败，已停止后续状态写入：\(message)")
         case .runtimeFailed(let message):
-            "KMP SessionList 运行期快照失效，已停止后续状态写入：\(message)"
+            String(localized: "KMP SessionList 运行期快照失效，已停止后续状态写入：\(message)")
         }
     }
 }
@@ -2235,12 +2235,12 @@ enum KMPQuestionStoreError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .encoding(let message): "无法编码 iOS Question 输入：\(message)"
-        case .bridge(let code, let message): "KMP Question 失败（\(code)）：\(message ?? "无详细信息")"
-        case .invalidSnapshot(let message): "无法解码 KMP Question 快照：\(message)"
-        case .invalidEffect(let message): "无法解码 KMP Question effect：\(message)"
-        case .initializationFailed(let message): "KMP Question 初始化失败，已停止后续状态写入：\(message)"
-        case .runtimeFailed(let message): "KMP Question 运行期结果失效，已停止后续状态写入：\(message)"
+        case .encoding(let message): String(localized: "无法编码 iOS Question 输入：\(message)")
+        case .bridge(let code, let message): String(localized: "KMP Question 失败（\(code)）：\(message ?? String(localized: "无详细信息"))")
+        case .invalidSnapshot(let message): String(localized: "无法解码 KMP Question 快照：\(message)")
+        case .invalidEffect(let message): String(localized: "无法解码 KMP Question effect：\(message)")
+        case .initializationFailed(let message): String(localized: "KMP Question 初始化失败，已停止后续状态写入：\(message)")
+        case .runtimeFailed(let message): String(localized: "KMP Question 运行期结果失效，已停止后续状态写入：\(message)")
         }
     }
 }
@@ -2621,10 +2621,10 @@ enum KMPApprovalStoreError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .encoding(let message): "无法编码 iOS Approval 输入：\(message)"
-        case .bridge(let code, let message): "KMP Approval 失败（\(code)）：\(message ?? "无详细信息")"
-        case .invalidSnapshot(let message): "无法解码 KMP Approval 快照：\(message)"
-        case .invalidEffect(let message): "无法解码 KMP Approval effect：\(message)"
+        case .encoding(let message): String(localized: "无法编码 iOS Approval 输入：\(message)")
+        case .bridge(let code, let message): String(localized: "KMP Approval 失败（\(code)）：\(message ?? String(localized: "无详细信息"))")
+        case .invalidSnapshot(let message): String(localized: "无法解码 KMP Approval 快照：\(message)")
+        case .invalidEffect(let message): String(localized: "无法解码 KMP Approval effect：\(message)")
         }
     }
 }
@@ -3045,13 +3045,13 @@ enum KMPSessionControlStoreError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .encoding(let message): "无法编码 iOS SessionControl 输入：\(message)"
-        case .bridge(let code, let message): "KMP SessionControl 失败（\(code)）：\(message ?? "无详细信息")"
-        case .invalidSnapshot(let message): "无法解码 KMP SessionControl 快照：\(message)"
-        case .invalidPatch(let message): "KMP SessionControl 增量 patch 无效：\(message)"
-        case .invalidEffect(let message): "无法解码 KMP SessionControl effect：\(message)"
-        case .initializationFailed(let message): "KMP SessionControl 初始化失败，已停止后续状态写入：\(message)"
-        case .runtimeFailed(let message): "KMP SessionControl 运行期结果失效，已停止后续状态写入：\(message)"
+        case .encoding(let message): String(localized: "无法编码 iOS SessionControl 输入：\(message)")
+        case .bridge(let code, let message): String(localized: "KMP SessionControl 失败（\(code)）：\(message ?? String(localized: "无详细信息"))")
+        case .invalidSnapshot(let message): String(localized: "无法解码 KMP SessionControl 快照：\(message)")
+        case .invalidPatch(let message): String(localized: "KMP SessionControl 增量 patch 无效：\(message)")
+        case .invalidEffect(let message): String(localized: "无法解码 KMP SessionControl effect：\(message)")
+        case .initializationFailed(let message): String(localized: "KMP SessionControl 初始化失败，已停止后续状态写入：\(message)")
+        case .runtimeFailed(let message): String(localized: "KMP SessionControl 运行期结果失效，已停止后续状态写入：\(message)")
         }
     }
 }

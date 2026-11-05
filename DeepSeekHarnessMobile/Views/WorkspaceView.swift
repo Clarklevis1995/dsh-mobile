@@ -353,7 +353,7 @@ struct WorkspaceView: View {
     }
 
     private func drawerItem<Icon: View>(
-        _ title: String,
+        _ title: LocalizedStringKey,
         @ViewBuilder icon: () -> Icon,
         action: @escaping () -> Void
     ) -> some View {

@@ -247,7 +247,7 @@ struct ConversationSidebar: View {
     // MARK: - 导航行
 
     private func navigationRow<Icon: View>(
-        _ title: String,
+        _ title: LocalizedStringKey,
         action: @escaping () -> Void,
         @ViewBuilder icon: () -> Icon
     ) -> some View {

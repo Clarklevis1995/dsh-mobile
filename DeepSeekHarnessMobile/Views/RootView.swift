@@ -14,7 +14,9 @@ struct RootView: View {
             .preferredColorScheme(store.interfaceStyle.colorScheme)
             .alert("Whaleness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
                 Button(String(localized: "好"), role: .cancel) { store.lastError = nil }
-            } message: { Text(store.lastError ?? "") }
+            } message: {
+                Text(String(localized: String.LocalizationValue(store.lastError ?? "")))
+            }
             .modifier(AppConnectionLifecycleModifier(tunnel: .shared, phaseChanged: store.handleScenePhase))
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
                 store.handleMemoryWarning()
@@ -159,7 +161,8 @@ private struct RootNavigationHost: View, Equatable {
             ScheduledTasksView(store: store) { sessionID in
                 let session = store.sessions.first(where: { $0.id == sessionID }) ?? SessionSummary(
                     id: sessionID,
-                    title: store.scheduledTasks.first(where: { $0.sessionID == sessionID })?.title ?? "会话",
+                    title: store.scheduledTasks.first(where: { $0.sessionID == sessionID })?.title
+                        ?? String(localized: "会话"),
                     lastActivity: .now,
                     isRunning: false,
                     hasUnread: false
@@ -1286,7 +1289,7 @@ private struct WorkspaceFilesSheet: View {
     private var workspaceFilePathBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "folder")
-            Text(store.workspaceFilePath == "." ? "工作区根目录" : store.workspaceFilePath)
+            Text(store.workspaceFilePath == "." ? String(localized: "工作区根目录") : store.workspaceFilePath)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
@@ -1386,7 +1389,9 @@ private struct WorkspaceFileRow: View {
                 .buttonStyle(.plain)
                 .disabled(isDownloading)
                 .accessibilityLabel(
-                    isDownloaded ? "\(item.name) 已下载，点击重新下载" : "下载 \(item.name)"
+                    isDownloaded
+                        ? String(localized: "\(item.name) 已下载，点击重新下载")
+                        : String(localized: "下载 \(item.name)")
                 )
             }
             .listRowBackground(FileIconCatalog.shared.resolve(name: item.name, mediaType: item.mediaType).cardBackground)
@@ -1660,10 +1665,10 @@ struct WorkspaceCodePreview: View {
             guard !Task.isCancelled else { return }
             document = loaded.value
         } catch WorkspaceCodePreviewLoadError.fileTooLarge {
-            errorMessage = "文件超过 2 MB，请使用系统应用打开"
+            errorMessage = String(localized: "文件超过 2 MB，请使用系统应用打开")
         } catch {
             guard !Task.isCancelled else { return }
-            errorMessage = "读取代码失败：\(error.localizedDescription)"
+            errorMessage = String(localized: "读取代码失败：\(error.localizedDescription)")
         }
     }
 }
@@ -2177,7 +2182,7 @@ private struct ScheduleCreateForm: View {
     @State private var requestID: String?
     private var nextExecutionPreview: String {
         guard let rule = try? JSONDecoder().decode(JSONValue.self, from: Data(timing.utf8)),
-              let kind = rule["kind"]?.stringValue else { return "请填写有效规则" }
+              let kind = rule["kind"]?.stringValue else { return String(localized: "请填写有效规则") }
         let spec = rule[kind]
         let zone = TimeZone(identifier: spec?["time_zone"]?.stringValue ?? "") ?? .current
         var calendar = Calendar(identifier: .gregorian)
@@ -2206,11 +2211,14 @@ private struct ScheduleCreateForm: View {
                 }
             }
         }
-        guard let next else { return "下次执行时间由 Host 校验并计算" }
+        guard let next else { return String(localized: "下次执行时间由 Host 校验并计算") }
         let formatter = DateFormatter()
         formatter.timeZone = zone
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss z"
-        return "预计下次执行 · \(formatter.string(from: next))\n最终以 Host 返回时间为准"
+        return String(
+            localized: "schedule.preview.next",
+            defaultValue: "预计下次执行 · \(formatter.string(from: next))\n最终以 Host 返回时间为准"
+        )
     }
 
     var body: some View {

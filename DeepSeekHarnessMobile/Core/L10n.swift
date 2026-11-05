@@ -114,4 +114,41 @@ enum L10n {
         default: level
         }
     }
+
+    // MARK: Shared tool activity labels
+    //
+    // The shared KMP formatter returns Chinese labels/annotations so that both
+    // platforms receive stable values. Each platform localizes them at the
+    // display boundary.
+
+    static func toolActionLabel(_ label: String) -> String {
+        switch label {
+        case "写入": String(localized: "写入")
+        case "修改": String(localized: "修改")
+        case "读取": String(localized: "读取")
+        case "执行": String(localized: "执行")
+        case "搜索": String(localized: "搜索")
+        case "列出": String(localized: "列出")
+        case "获取": String(localized: "获取")
+        case "工具": String(localized: "工具")
+        default: label
+        }
+    }
+
+    static func toolAnnotation(_ annotation: String) -> String {
+        guard annotation.hasSuffix(" 行") else { return annotation }
+        let body = String(annotation.dropLast(2))
+        if body.hasPrefix("替换 ") {
+            let parts = String(body.dropFirst(3)).components(separatedBy: " → ")
+            if parts.count == 2 {
+                return String(
+                    localized: "tool.annotation.replaced",
+                    defaultValue: "替换 \(parts[0]) → \(parts[1]) 行"
+                )
+            }
+        } else if let count = Int(body) {
+            return String(localized: "tool.annotation.lines", defaultValue: "\(count) 行")
+        }
+        return annotation
+    }
 }

@@ -202,7 +202,11 @@ private struct PluginDetailView: View {
                         if let result = store.pluginUpdateResult { Text(result.displayText).appFont(.footnote.monospaced()) }
                         if !store.pluginUpdateLogs.isEmpty { Text(store.pluginUpdateLogs.joined(separator: "\n")).appFont(.caption.monospaced()) }
                         if let markdown = store.pluginDetail?["markdown"]?.stringValue {
-                            MarkdownContent(markdown.replacingOccurrences(of: #"!\[([^]]*)]\([^)]*\)"#, with: "[图片 · $1]", options: .regularExpression))
+                            MarkdownContent(markdown.replacingOccurrences(
+                                of: #"!\[([^]]*)]\([^)]*\)"#,
+                                with: "[\(String(localized: "图片")) · $1]",
+                                options: .regularExpression
+                            ))
                         }
                     }
                     let entries = bundle.rows.map { row -> MobilePluginRow in
@@ -314,7 +318,7 @@ private struct PluginComponentSheet: View {
         .presentationDragIndicator(.visible)
     }
 
-    private func componentField(_ title: String, value: String) -> some View {
+    private func componentField(_ title: LocalizedStringKey, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).appFont(.caption).foregroundStyle(.secondary)
             Text(value).appFont(.subheadline.monospaced()).textSelection(.enabled)

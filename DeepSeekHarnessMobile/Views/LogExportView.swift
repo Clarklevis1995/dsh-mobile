@@ -22,7 +22,9 @@ struct LogExportView: View {
         let value: Date
         var id: String { "\(isStart)-\(isDate)" }
         var title: String {
-            isStart ? (isDate ? "开始日期" : "开始时间") : (isDate ? "结束日期" : "结束时间")
+            isStart
+                ? (isDate ? String(localized: "开始日期") : String(localized: "开始时间"))
+                : (isDate ? String(localized: "结束日期") : String(localized: "结束时间"))
         }
     }
     @State private var start = LogExportHour.start(of: Date())
