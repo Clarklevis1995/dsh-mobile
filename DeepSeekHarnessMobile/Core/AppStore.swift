@@ -155,23 +155,23 @@ enum AgentLiveActivityEventProjection {
     private static func toolProgress(name: String?, arguments: JSONValue?) -> AgentLiveActivityProgress {
         let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = ToolActivitySummaryFormatter.shared.summarize(
-            name: displayName?.isEmpty == false ? displayName! : "工具",
+            name: displayName ?? "",
             arguments: arguments?.jsonDisplayText ?? ""
         )
-        let detail = [summary.detail, summary.annotation]
+        let detail = [summary.detail, summary.annotationMessage?.localized ?? ""]
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .joined(separator: " · ")
         let kind: AgentActivityStepKind
-        switch summary.label {
-        case "写入": kind = .writing
-        case "修改": kind = .editing
-        case "读取": kind = .reading
-        case "执行": kind = .command
-        case "搜索", "列出", "获取": kind = .searching
+        switch summary.kind {
+        case .write: kind = .writing
+        case .edit: kind = .editing
+        case .read: kind = .reading
+        case .exec: kind = .command
+        case .search, .list, .fetch: kind = .searching
         default: kind = .tool
         }
         return progress(
-            summary.label,
+            summary.labelMessage.localized,
             detail: preview(detail),
             kind: kind,
             toolName: name
@@ -654,8 +654,8 @@ final class AppStore: ObservableObject {
         queueActionTimeout = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(20)) } catch { return }
             guard let self, self.queueState.pendingItemId == itemID else { return }
-            self.queueState = self.queueStore.failPending(message: "队列操作超时，请检查队列最新状态后重试")
-            self.lastError = self.queueState.lastError
+            self.queueState = self.queueStore.failPending(message: "队列操作超时，请检查队列最新状态后重试".rawUiMessage)
+            self.lastError = self.queueState.lastError?.localized
         }
     }
 
@@ -684,7 +684,7 @@ final class AppStore: ObservableObject {
         }
         queueState = queueStore.acceptFrame(json: String(decoding: data, as: UTF8.self))
         if queueState.pendingItemId == nil { queueActionTimeout?.cancel() }
-        if let error = queueState.lastError { lastError = error }
+        if let error = queueState.lastError { lastError = error.localized }
         backgroundExecutionController.updateQueuedSessions(Set(queueState.queues.filter { !$0.value.isEmpty }.keys))
         queueRevision &+= 1
     }
@@ -2682,7 +2682,7 @@ final class AppStore: ObservableObject {
     private func applySessionAgentPresetTransition(_ transition: SharedSessionAgentPresetTransition) {
         sessionAgentPreset = transition.snapshot
         if !sessionAgentPreset.loading && !sessionAgentPreset.saving { sessionAgentPresetTimeout?.cancel() }
-        if let error = transition.error { lastError = error }
+        if let error = transition.error { lastError = error.localized }
         if transition.refreshCommands, let id = transition.snapshot.sessionId {
             applySlashCommandTransition(kmpSlashCommandStore.invalidateCatalog(
                 sessionId: id, isSupported: supportsSlashCommands, locale: Locale.current.identifier
@@ -2704,7 +2704,7 @@ final class AppStore: ObservableObject {
                 guard let self else { return }
                 self.applySessionAgentPresetTransition(self.sessionAgentPresetStore.requestFailed(
                     type: request.requestType, sessionId: request.targetSessionId,
-                    requestId: request.correlationId, message: "模式请求超时，请重试"
+                    requestId: request.correlationId, message: "模式请求超时，请重试".rawUiMessage
                 ))
             }
         }
@@ -3208,7 +3208,8 @@ final class AppStore: ObservableObject {
                     try kmpConversationStore.clearAssistantChunks(sessionID: id)
                     if activeTrajectorySessionIDs.contains(id) { scheduleTrajectoryProjection(for: id) }
                 }
-                if let error = update.error {
+                if let message = update.error {
+                    let error = message.localized
                     lastError = error
                     if !update.resubscribe, let id = update.sessionId {
                         recordHistoryFailure(error, sessionID: id)

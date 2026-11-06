@@ -2,6 +2,7 @@ package com.clarklevis.dsh.shared.facade
 
 import com.clarklevis.dsh.shared.gateway.GatewayRequest
 import com.clarklevis.dsh.shared.gateway.GatewayRequestLanePolicy
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -30,14 +31,14 @@ data class SharedVoiceInputSnapshot(
     val level: Float = 0f,
     val waveformLevels: List<Float> = List(WAVEFORM_HISTORY_SIZE) { 0f },
     val waveformActive: Boolean = false,
-    val alertMessage: String? = null,
+    val alertMessage: UiMessage? = null,
     val recordingSeconds: Double = 0.0,
     val recordingLimitSeconds: Double = VoiceAudioFormat.MAX_DURATION_SECONDS,
     val cancelArmed: Boolean = false,
-    val error: String? = null,
+    val error: UiMessage? = null,
     val pendingTranscript: String? = null,
 ) {
-    val hint: String get() = "描述你想要构建的内容"
+    val hint: UiMessage get() = UiMessage("voice.hint")
     val visualActivity: Float get() = if (waveformActive) 1f else 0f
     val active: Boolean get() = phase != "idle"
 
@@ -53,16 +54,17 @@ data class SharedVoiceInputSnapshot(
     private fun clock(seconds: Int): String =
         "${seconds / SECONDS_PER_MINUTE}:${(seconds % SECONDS_PER_MINUTE).toString().padStart(2, '0')}"
 
-    val status: String get() =
+    /** 蒙层外不显示状态行；为 null 时平台不渲染。 */
+    val status: UiMessage? get() =
         when {
-            !overlayVisible -> ""
-            cancelArmed -> "松手取消"
-            phase == "authorizing" -> "正在获取麦克风权限"
-            phase == "starting" -> "正在开启麦克风"
-            recordingLimitApproaching -> "即将达到录音上限 · 松手转文字"
-            phase == "recording" -> "松手转文字 · 上滑取消"
-            preparing -> "正在准备语音模型"
-            else -> error.orEmpty()
+            !overlayVisible -> null
+            cancelArmed -> UiMessage("voice.status.releaseToCancel")
+            phase == "authorizing" -> UiMessage("voice.status.authorizing")
+            phase == "starting" -> UiMessage("voice.status.starting")
+            recordingLimitApproaching -> UiMessage("voice.status.limitApproaching")
+            phase == "recording" -> UiMessage("voice.status.recording")
+            preparing -> UiMessage("voice.status.preparing")
+            else -> error
         }
 }
 
@@ -70,7 +72,7 @@ data class VoiceHardwareEffect(
     val action: String,
     val recordingId: String = "",
     val discard: Boolean = false,
-    val message: String = "",
+    val message: UiMessage? = null,
     val delayMilliseconds: Long = 0,
 )
 
@@ -279,10 +281,10 @@ class SharedVoiceInputStore {
         if (state.active || state.keyboardVisible) return result()
         val unavailableMessage =
             when {
-                !state.connected -> "请先连接网关，再使用语音输入。"
-                !state.supported -> "当前网关尚不支持语音输入。请在桌面端升级移动网关插件，并在「插件」模块启用官方「语音输入」插件，完成模型初始化准备。完成后重新连接网关。"
-                !state.ready && state.preparing -> "桌面端正在准备语音模型，请等待下载和初始化完成后再试。"
-                !state.ready -> "请在桌面端的「插件」模块启用官方「语音输入」插件，并完成模型下载和初始化准备。准备完成后再试。"
+                !state.connected -> UiMessage("voice.unavailable.notConnected")
+                !state.supported -> UiMessage("voice.unavailable.unsupported")
+                !state.ready && state.preparing -> UiMessage("voice.unavailable.preparing")
+                !state.ready -> UiMessage("voice.unavailable.notReady")
                 else -> null
             }
         if (unavailableMessage != null) {
@@ -306,7 +308,7 @@ class SharedVoiceInputStore {
         nowMilliseconds: Long,
     ): SharedVoiceInputTransition {
         if (id != recordingId || state.phase != "authorizing") return result()
-        if (!granted) return fail("请在系统设置中允许麦克风权限")
+        if (!granted) return fail(UiMessage("voice.permissionDenied"))
         phaseStartedAt = nowMilliseconds
         state = state.copy(phase = "starting")
         return result(effects = listOf(VoiceHardwareEffect("start", id)))
@@ -339,7 +341,7 @@ class SharedVoiceInputStore {
 
     fun captureFailed(
         id: String,
-        message: String,
+        message: UiMessage,
     ): SharedVoiceInputTransition =
         when {
             id != recordingId -> result()
@@ -420,12 +422,12 @@ class SharedVoiceInputStore {
         nowMilliseconds: Long,
     ): SharedVoiceInputTransition {
         if (id != recordingId || state.phase != "stopping") return result()
-        val capturedPcm = runCatching { Base64.decode(pcmBase64) }.getOrNull() ?: return fail("录音数据无效，请重试")
+        val capturedPcm = runCatching { Base64.decode(pcmBase64) }.getOrNull() ?: return fail(UiMessage("voice.recordingInvalid"))
         if (capturedPcm.isEmpty()) return noSpeech()
         if (capturedPcm.size % 2 != 0 ||
             capturedPcm.size > VoiceAudioFormat.MAX_CAPTURE_BYTES
         ) {
-            return fail("录音数据无效，请重试")
+            return fail(UiMessage("voice.recordingInvalid"))
         }
         // 到达上限的硬件回调可能多出一个采样窗口，统一裁到公布的限制。
         val allowedBytes =
@@ -434,7 +436,7 @@ class SharedVoiceInputStore {
                 (maxDurationSeconds * VoiceAudioFormat.BYTES_PER_SECOND).toInt(),
             ).coerceAtLeast(0) / 2 * 2
         val pcm = capturedPcm.copyOf(minOf(capturedPcm.size, allowedBytes))
-        if (pcm.size < VoiceAudioFormat.MIN_PCM_BYTES) return fail("当前语音服务的录音限制过小")
+        if (pcm.size < VoiceAudioFormat.MIN_PCM_BYTES) return fail(UiMessage("voice.recordingLimitTooSmall"))
         val wav = VoiceAudioFormat.wav(VoiceAudioFormat.prepareRecognitionPcm(pcm, allowedBytes))
         phaseStartedAt = nowMilliseconds
         state =
@@ -466,7 +468,7 @@ class SharedVoiceInputStore {
                 if (finished.snapshot.phase != "stopping") return finished
                 return finished.copy(
                     effects = finished.effects +
-                        VoiceHardwareEffect("showToast", message = "已达到录音上限，正在转文字")
+                        VoiceHardwareEffect("showToast", message = UiMessage("voice.limitReached"))
                 )
             }
         }
@@ -474,7 +476,7 @@ class SharedVoiceInputStore {
         if (state.active && state.phase != "recording" &&
             nowMilliseconds - phaseStartedAt >= timeout
         ) {
-            return fail("语音处理超时，请重试")
+            return fail(UiMessage("voice.timeout"))
         }
         return result()
     }
@@ -492,7 +494,7 @@ class SharedVoiceInputStore {
         return when (frame.voiceString("kind")) {
             "speech-catalog", "speech-state" -> acceptCatalog(frame)
             "speech-transcript" -> acceptTranscript(frame)
-            "error" -> acceptError(frame.voiceString("requestId"), frame.voiceString("message"))
+            "error" -> acceptError(frame.voiceString("requestId"), frame.voiceString("message")?.let { UiMessage.raw(it) })
             else -> result()
         }
     }
@@ -519,7 +521,7 @@ class SharedVoiceInputStore {
                 error = catalog.error
             )
         return if (!catalog.available && state.active) {
-            fail("语音服务已关闭，请重试")
+            fail(UiMessage("voice.serviceClosed"))
         } else {
             result(
                 effects =
@@ -554,20 +556,20 @@ class SharedVoiceInputStore {
 
     private fun acceptError(
         requestId: String?,
-        message: String?,
+        message: UiMessage?,
     ): SharedVoiceInputTransition {
         if (requestId == null) return result()
         if (requestId == recordingId) {
             recordingId = null
-            return fail(message ?: "语音识别失败，请重试")
+            return fail(message ?: UiMessage("voice.recognitionFailed"))
         }
         if (requestId in listOf(catalogId, followId, preparationId)) {
-            state = state.copy(error = message ?: "语音服务暂不可用", preparing = false)
+            state = state.copy(error = message ?: UiMessage("voice.serviceUnavailable"), preparing = false)
             if (requestId != preparationId) {
                 state = state.copy(ready = false, canPrepare = false)
                 catalogId = null
                 followId = null
-                if (state.active) return fail(message ?: "语音服务暂不可用")
+                if (state.active) return fail(message ?: UiMessage("voice.serviceUnavailable"))
             }
             preparationId = null
         }
@@ -599,15 +601,8 @@ class SharedVoiceInputStore {
 
     fun requestFailed(
         requestId: String,
-        message: String,
-    ): SharedVoiceInputTransition =
-        acceptJson(
-            buildJsonObject {
-                put("kind", "error")
-                put("requestId", requestId)
-                put("message", message)
-            }.toString(),
-        )
+        message: UiMessage,
+    ): SharedVoiceInputTransition = acceptError(requestId, message)
 
     fun cancel(): SharedVoiceInputTransition {
         val token = recordingId
@@ -662,11 +657,11 @@ class SharedVoiceInputStore {
         state = state.copy(error = null, alertMessage = null, pendingTranscript = null)
         return cancelled.copy(
             snapshot = state,
-            effects = cancelled.effects + VoiceHardwareEffect("showToast", message = "未识别到人声"),
+            effects = cancelled.effects + VoiceHardwareEffect("showToast", message = UiMessage("voice.noSpeech")),
         )
     }
 
-    private fun fail(message: String): SharedVoiceInputTransition {
+    private fun fail(message: UiMessage): SharedVoiceInputTransition {
         val cancelled = cancel()
         state = state.copy(error = message, alertMessage = message)
         return cancelled.copy(snapshot = state)

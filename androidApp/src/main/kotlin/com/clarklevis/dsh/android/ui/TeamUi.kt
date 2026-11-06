@@ -327,7 +327,7 @@ private fun TeamSheetContent(
         item {
             Text(holder.teamSessionTitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
         }
-        team.error?.let { error -> item { Text(error, color = MaterialTheme.colorScheme.error) } }
+        team.error?.let { error -> item { Text(appText(error), color = MaterialTheme.colorScheme.error) } }
         if (team.state != "ready") {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {

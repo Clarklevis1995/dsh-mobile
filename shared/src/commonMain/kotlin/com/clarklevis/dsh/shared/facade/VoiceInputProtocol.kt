@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.shared.facade
 
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -134,7 +135,7 @@ internal data class VoiceCatalogState(
     val canPrepare: Boolean,
     val preparing: Boolean,
     val progress: Double,
-    val error: String?,
+    val error: UiMessage?,
     val maxAudioBytes: Int?,
     val maxDurationSeconds: Double?,
 ) {
@@ -162,7 +163,7 @@ internal data class VoiceCatalogState(
                 canPrepare = available && provider != null,
                 preparing = phase in setOf("checking", "downloading", "loading", "waking", "cancelling"),
                 progress = if (total > 0) (completed / total).coerceIn(0.0, 1.0) else 0.0,
-                error = if (available) preparation?.voiceString("message") else "请在 DSH 插件管理中启用官方语音输入",
+                error = if (available) preparation?.voiceString("message")?.let { UiMessage.raw(it) } else UiMessage("voice.pluginDisabled"),
                 maxAudioBytes =
                     frame
                         .number("maxAudioBytes")

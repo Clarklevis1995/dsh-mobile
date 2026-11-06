@@ -2,6 +2,7 @@ package com.clarklevis.dsh.shared.facade
 
 import com.clarklevis.dsh.shared.gateway.GatewayRequest
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.protocol.GatewayAgentPreset
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
@@ -31,7 +32,7 @@ data class SharedSessionAgentPresetTransition(
     val requests: List<GatewayRequest> = emptyList(),
     val refreshCommands: Boolean = false,
     val invalidSession: Boolean = false,
-    val error: String? = null
+    val error: UiMessage? = null
 )
 
 class SharedSessionAgentPresetStore {
@@ -108,18 +109,18 @@ class SharedSessionAgentPresetStore {
         return result()
     }
 
-    fun requestFailed(type: String, sessionId: String?, requestId: String?, message: String?): SharedSessionAgentPresetTransition {
+    fun requestFailed(type: String, sessionId: String?, requestId: String?, message: UiMessage?): SharedSessionAgentPresetTransition {
         if (sessionId != state.sessionId || sessionId == null) return result()
         if (type in setOf("message", "command-execute") && state.submitting) return query()
         if (type == "select-agent-preset" && requestId != null && requestId == selectionId) {
             selectionId = null
             state = state.copy(saving = false, known = false)
-            return query().copy(error = message ?: "模式切换未确认，请重试")
+            return query().copy(error = message ?: UiMessage("preset.selectUnconfirmed"))
         }
         if (type == "session-agent-preset" && requestId != null && requestId == queryId) {
             queryId = null
             state = state.copy(loading = false, known = false, submitting = false)
-            return result(error = message ?: "无法读取当前模式，请重试")
+            return result(error = message ?: UiMessage("preset.queryFailed"))
         }
         return result()
     }
@@ -181,7 +182,7 @@ class SharedSessionAgentPresetStore {
             }
             "error" -> {
                 val type = frame.requestType ?: return result()
-                if (type in setOf("message", "command-execute")) return requestFailed(type, id, null, frame.message)
+                if (type in setOf("message", "command-execute")) return requestFailed(type, id, null, frame.message?.let { UiMessage.raw(it) })
                 val matches = when (type) {
                     "session-agent-preset" -> frame.requestId != null && frame.requestId == queryId
                     "select-agent-preset" -> frame.requestId != null && frame.requestId == selectionId
@@ -191,7 +192,7 @@ class SharedSessionAgentPresetStore {
                 queryId = null
                 selectionId = null
                 state = state.copy(loading = false, saving = false, submitting = if (type == "session-agent-preset") false else state.submitting)
-                val error = frame.message ?: frame.code ?: "模式操作失败"
+                val error = (frame.message ?: frame.code)?.let { UiMessage.raw(it) } ?: UiMessage("preset.actionFailed")
                 return when (frame.code) {
                     "agent-preset/locked" -> {
                         lockedSessions.add(id)
@@ -228,6 +229,6 @@ class SharedSessionAgentPresetStore {
     private fun result(
         requests: List<GatewayRequest> = emptyList(),
         refreshCommands: Boolean = false,
-        error: String? = null
+        error: UiMessage? = null
     ) = SharedSessionAgentPresetTransition(state, requests, refreshCommands, error = error)
 }

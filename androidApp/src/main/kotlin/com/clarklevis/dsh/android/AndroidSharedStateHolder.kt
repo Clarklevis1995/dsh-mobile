@@ -31,6 +31,7 @@ import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.gateway.gatewayAttachmentCacheKey
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayDirectoryItem
@@ -447,15 +448,15 @@ class AndroidSharedStateHolder(
         appGraph.gatewayScope.launch {
             val sent = appGraph.gatewayRuntime.sendRequest(request)
             if (!sent) withContext(Dispatchers.Main.immediate) {
-                queueState = queueStore.failPending(appText("队列操作未发送，请重试"))
-                platformError = queueState.lastError
+                queueState = queueStore.failPending(UiMessage.raw(appText("队列操作未发送，请重试")))
+                platformError = queueState.lastError?.let { appText(it) }
             }
         }
     }
 
     private fun acceptQueueFrame(json: String) {
         queueState = queueStore.acceptFrame(json)
-        queueState.lastError?.let { platformError = it }
+        queueState.lastError?.let { platformError = appText(it) }
         restoreQueuedDraft()
     }
 
@@ -501,7 +502,7 @@ class AndroidSharedStateHolder(
                     }
                     handleWorkspaceFrame(frame)
                 }
-                .onFailure { error -> platformError = GatewayWireDecoder.failureSummary(payload, error) }
+                .onFailure { error -> platformError = appText(GatewayWireDecoder.failureSummary(payload, error)) }
             return
         }
         appGraph.gatewayScope.launch {
@@ -520,7 +521,7 @@ class AndroidSharedStateHolder(
                 }
                 .onFailure { error ->
                     withContext(Dispatchers.Main.immediate) {
-                        platformError = GatewayWireDecoder.failureSummary(payload, error)
+                        platformError = appText(GatewayWireDecoder.failureSummary(payload, error))
                     }
                 }
         }
@@ -1694,7 +1695,7 @@ class AndroidSharedStateHolder(
 
     private fun applySessionAgentPresetTransition(transition: SharedSessionAgentPresetTransition) {
         sessionAgentPreset = transition.snapshot
-        transition.error?.let { platformError = it }
+        transition.error?.let { platformError = appText(it) }
         if (transition.refreshCommands) transition.snapshot.sessionId?.let { sessionId ->
             applySlashCommandTransition(slashCommandStore.invalidateCatalog(
                 sessionId, "commands" in gatewayState.capabilities, Locale.getDefault().toLanguageTag()
@@ -1710,7 +1711,7 @@ class AndroidSharedStateHolder(
                 if (!appGraph.gatewayRuntime.sendRequest(request)) {
                     withContext(Dispatchers.Main.immediate) {
                         applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
-                            request.requestType, request.targetSessionId, request.correlationId, appText("请求发送失败，请重试")
+                            request.requestType, request.targetSessionId, request.correlationId, UiMessage.raw(appText("请求发送失败，请重试"))
                         ))
                     }
                 }
@@ -1914,8 +1915,9 @@ class AndroidSharedStateHolder(
                 if (result.isSuccess) {
                     if (pairingPayload == payload) pairingPayload = ""
                 } else {
-                    val message = if (result.exceptionOrNull() is GatewayPairingPayloadException) {
-                        result.exceptionOrNull()?.message ?: appText("配对信息无效")
+                    val failure = result.exceptionOrNull()
+                    val message = if (failure is GatewayPairingPayloadException) {
+                        appText(failure.uiMessage)
                     } else {
                         appText("无法提交配对信息，请稍后重试。")
                     }
@@ -3364,13 +3366,13 @@ class AndroidSharedStateHolder(
                                     }
                                     withContext(Dispatchers.Main.immediate) {
                                         applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
-                                            event.requestType, event.targetSessionId, event.correlationId, appText("请求未完成，请重试")
+                                            event.requestType, event.targetSessionId, event.correlationId, UiMessage.raw(appText("请求未完成，请重试"))
                                         ))
                                         handleSessionCancellationFailure(event.requestType, event.targetSessionId)
                                         if (event.requestType == "message") pendingMessageSubmission = null
                                         if (event.requestType == "queue-update") {
-                                            queueState = queueStore.failPending(appText("队列操作未完成，请检查最新状态后重试"))
-                                            platformError = queueState.lastError
+                                            queueState = queueStore.failPending(UiMessage.raw(appText("队列操作未完成，请检查最新状态后重试")))
+                                            platformError = queueState.lastError?.let { appText(it) }
                                         }
                                     }
                                     if (event.requestType == "command-execute") {
@@ -3436,13 +3438,13 @@ class AndroidSharedStateHolder(
                                     }
                                     withContext(Dispatchers.Main.immediate) {
                                         applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
-                                            event.requestType, event.targetSessionId, event.correlationId, appText("请求未完成，请重试")
+                                            event.requestType, event.targetSessionId, event.correlationId, UiMessage.raw(appText("请求未完成，请重试"))
                                         ))
                                         handleSessionCancellationFailure(event.requestType, event.targetSessionId)
                                         if (event.requestType == "message") pendingMessageSubmission = null
                                         if (event.requestType == "queue-update") {
-                                            queueState = queueStore.failPending(appText("队列操作未完成，请检查最新状态后重试"))
-                                            platformError = queueState.lastError
+                                            queueState = queueStore.failPending(UiMessage.raw(appText("队列操作未完成，请检查最新状态后重试")))
+                                            platformError = queueState.lastError?.let { appText(it) }
                                         }
                                     }
                                     if (event.requestType == "command-execute") {
@@ -3505,13 +3507,13 @@ class AndroidSharedStateHolder(
                                     }
                                     withContext(Dispatchers.Main.immediate) {
                                         applySessionAgentPresetTransition(sessionAgentPresetStore.requestFailed(
-                                            event.requestType, event.targetSessionId, event.correlationId, appText("请求未完成，请重试")
+                                            event.requestType, event.targetSessionId, event.correlationId, UiMessage.raw(appText("请求未完成，请重试"))
                                         ))
                                         handleSessionCancellationFailure(event.requestType, event.targetSessionId)
                                         if (event.requestType == "message") pendingMessageSubmission = null
                                         if (event.requestType == "queue-update") {
-                                            queueState = queueStore.failPending(appText("队列操作未完成，请检查最新状态后重试"))
-                                            platformError = queueState.lastError
+                                            queueState = queueStore.failPending(UiMessage.raw(appText("队列操作未完成，请检查最新状态后重试")))
+                                            platformError = queueState.lastError?.let { appText(it) }
                                         }
                                     }
                                     if (event.requestType == "command-execute") {

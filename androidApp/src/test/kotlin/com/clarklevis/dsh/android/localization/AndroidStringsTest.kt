@@ -6,8 +6,9 @@ import com.clarklevis.dsh.android.ui.InterfaceStyle
 import com.clarklevis.dsh.android.ui.ScheduledTaskStatusFilter
 import com.clarklevis.dsh.android.ui.agentPresetDisplayName
 import com.clarklevis.dsh.android.ui.appLocale
-import com.clarklevis.dsh.android.ui.localizedToolActivitySummary
 import com.clarklevis.dsh.android.ui.relativeTime
+import com.clarklevis.dsh.android.ui.toolActivityTitle
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.projection.ToolActivitySummaryFormatter
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import java.util.Locale
@@ -57,7 +58,7 @@ class AndroidStringsTest {
             assertFalse("Untranslated copy: $source", english.any { it in '\u4e00'..'\u9fff' })
             assertEquals(
                 "Translation arguments: $source",
-                argument.findAll(source).map { it.groupValues[1] }.toSet(),
+                argument.findAll(AndroidStrings.chinese[source] ?: source).map { it.groupValues[1] }.toSet(),
                 argument.findAll(english).map { it.groupValues[1] }.toSet()
             )
         }
@@ -118,11 +119,22 @@ class AndroidStringsTest {
 
     @Test
     fun toolSummaryTranslatesLabelsAndCountsWhilePreservingPaths() {
-        val summary = localizedToolActivitySummary(ToolActivitySummaryFormatter.summarize(
+        val summary = ToolActivitySummaryFormatter.summarize(
             "write_file", """{"path":"项目/中文.kt","content":"one\ntwo"}"""
-        ))
-        assertEquals("Write", summary.label)
-        assertEquals("2 lines", summary.annotation)
+        )
+        assertEquals("Write · 2 lines", toolActivityTitle(summary))
         assertEquals("项目/中文.kt", summary.detail)
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+        assertEquals("写入 · 2 行", toolActivityTitle(summary))
+    }
+
+    @Test
+    fun uiMessageResolvesSemanticKeysAndKeepsRawTextVerbatim() {
+        assertEquals("Unsupported pairing protocol version 3", appText(UiMessage("pairing.unsupportedVersion", listOf("3"))))
+        assertEquals("1 line", appText(UiMessage("tool.lines", listOf("1"))))
+        assertEquals("主机原文", appText(UiMessage.raw("主机原文")))
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+        assertEquals("不支持的配对协议版本 3", appText(UiMessage("pairing.unsupportedVersion", listOf("3"))))
+        assertEquals("voice.hint", appText(UiMessage.raw("voice.hint")))
     }
 }

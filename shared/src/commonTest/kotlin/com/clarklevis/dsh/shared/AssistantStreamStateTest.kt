@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.shared
 
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.facade.SharedMobileStore
 import com.clarklevis.dsh.shared.projection.ConversationProjector
 import com.clarklevis.dsh.shared.protocol.GatewayEvent
@@ -34,7 +35,7 @@ class AssistantStreamStateTest {
         assertFalse(state.acceptJson(failure.replace("\"sub\"", "\"old\"")).accepted)
         val result = state.acceptJson(failure)
         assertTrue(result.accepted)
-        assertEquals("Host refuses this format v0 Session", result.error)
+        assertEquals(UiMessage.raw("Host refuses this format v0 Session"), result.error)
         assertFalse(state.hasBaseline("s"))
         assertTrue(state.acceptJson(snapshot()).accepted)
         assertFalse(state.acceptJson(failure).accepted)
@@ -90,7 +91,7 @@ class AssistantStreamStateTest {
         assertTrue(state.acceptJson(chunk().replace("\"index\":1", "\"index\":9")).resubscribe)
         state.acceptJson(snapshot())
         val reset = state.acceptJson("""{"kind":"session-stream-reset","sessionId":"s","subscriptionId":"sub","streamId":"stream","retrying":false,"message":"Unsupported format"}""")
-        assertEquals("Unsupported format", reset.error)
+        assertEquals(UiMessage.raw("Unsupported format"), reset.error)
         assertFalse(reset.resubscribe)
     }
 

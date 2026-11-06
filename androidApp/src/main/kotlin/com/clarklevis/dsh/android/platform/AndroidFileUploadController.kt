@@ -7,9 +7,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.clarklevis.dsh.android.AndroidAppGraph
+import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.facade.SharedFileUploadStore
 import com.clarklevis.dsh.shared.facade.SharedUploadDraft
 import com.clarklevis.dsh.shared.facade.SharedUploadTransition
+import com.clarklevis.dsh.shared.i18n.UiMessage
+import com.clarklevis.dsh.shared.i18n.UiMessageException
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import java.io.File
 import java.io.RandomAccessFile
@@ -107,7 +110,9 @@ class AndroidFileUploadController(
                     graph?.application?.cacheDir?.let { File(it, "upload-drafts/$id").delete() }
                     localFiles.remove(id)
                     if (failure is kotlinx.coroutines.CancellationException) throw failure
-                    if (context == token) error(failure.message ?: "文件准备失败")
+                    if (context == token) {
+                        error(if (failure is UiMessageException) appText(failure.uiMessage) else failure.message ?: "文件准备失败")
+                    }
                 }
             }
         } finally {
@@ -141,7 +146,7 @@ class AndroidFileUploadController(
                 apply(shared.chunkReady(read.token, data, read.length))
             } catch (failure: Exception) {
                 if (failure is kotlinx.coroutines.CancellationException) throw failure
-                apply(shared.readFailed(read.token, failure.message ?: "文件读取失败"))
+                apply(shared.readFailed(read.token, failure.message?.let { UiMessage.raw(it) } ?: UiMessage("upload.readFailed")))
             }
         }
     }

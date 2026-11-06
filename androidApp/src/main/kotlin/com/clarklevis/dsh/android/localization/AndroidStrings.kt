@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.android.localization
 
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import java.util.Locale
 
 /**
@@ -19,12 +20,23 @@ internal fun appText(source: String, vararg arguments: Any?): String =
  */
 internal fun appTextKey(source: String): String = source
 
+/** Resolves a shared [UiMessage]: raw host text stays verbatim, semantic keys use the catalog. */
+internal fun appText(message: UiMessage): String = AndroidStrings.text(message, Locale.getDefault())
+
 internal object AndroidStrings {
     private val placeholder = Regex("%(\\d+)\\\$s")
 
+    fun text(message: UiMessage, locale: Locale): String =
+        if (message.key == UiMessage.RAW_KEY) {
+            message.args.firstOrNull().orEmpty()
+        } else {
+            text(message.key, locale, *message.args.toTypedArray())
+        }
+
     fun text(source: String, locale: Locale, vararg arguments: Any?): String {
         val template = when {
-            locale.language == "zh" -> source
+            // Semantic keys (e.g. `voice.hint`) carry their Chinese copy in [chinese].
+            locale.language == "zh" -> chinese[source] ?: source
             arguments.firstOrNull()?.toString() == "1" -> singularEnglish[source] ?: english[source] ?: source
             else -> english[source] ?: source
         }
@@ -58,7 +70,100 @@ internal object AndroidStrings {
         "%1\$s 秒" to "%1\$s second",
         "%1\$s 秒后执行一次" to "Run once after %1\$s second",
         "%1\$s 行" to "%1\$s line",
-        "每 %1\$s 秒" to "Every %1\$s second"
+        "每 %1\$s 秒" to "Every %1\$s second",
+        "tool.lines" to "%1\$s line"
+    )
+
+    /**
+     * Chinese copy for semantic (non-Chinese) keys such as shared [UiMessage] IDs.
+     * Chinese-source keys need no entry: on a zh locale they render as the key itself.
+     */
+    internal val chinese: Map<String, String> = mapOf(
+        "voice.hint" to "描述你想要构建的内容",
+        "voice.status.releaseToCancel" to "松手取消",
+        "voice.status.authorizing" to "正在获取麦克风权限",
+        "voice.status.starting" to "正在开启麦克风",
+        "voice.status.limitApproaching" to "即将达到录音上限 · 松手转文字",
+        "voice.status.recording" to "松手转文字 · 上滑取消",
+        "voice.status.preparing" to "正在准备语音模型",
+        "voice.unavailable.notConnected" to "请先连接网关，再使用语音输入。",
+        "voice.unavailable.unsupported" to "当前网关尚不支持语音输入。请在桌面端升级移动网关插件，并在「插件」模块启用官方「语音输入」插件，完成模型初始化准备。完成后重新连接网关。",
+        "voice.unavailable.preparing" to "桌面端正在准备语音模型，请等待下载和初始化完成后再试。",
+        "voice.unavailable.notReady" to "请在桌面端的「插件」模块启用官方「语音输入」插件，并完成模型下载和初始化准备。准备完成后再试。",
+        "voice.permissionDenied" to "请在系统设置中允许麦克风权限",
+        "voice.recordingInvalid" to "录音数据无效，请重试",
+        "voice.recordingLimitTooSmall" to "当前语音服务的录音限制过小",
+        "voice.limitReached" to "已达到录音上限，正在转文字",
+        "voice.timeout" to "语音处理超时，请重试",
+        "voice.serviceClosed" to "语音服务已关闭，请重试",
+        "voice.recognitionFailed" to "语音识别失败，请重试",
+        "voice.serviceUnavailable" to "语音服务暂不可用",
+        "voice.noSpeech" to "未识别到人声",
+        "voice.pluginDisabled" to "请在 DSH 插件管理中启用官方语音输入",
+        "upload.sessionChanged" to "连接或会话已变化，请重新上传",
+        "upload.invalidName" to "文件名无效",
+        "upload.tooLarge" to "文件不能超过 512 MiB",
+        "upload.invalidDigest" to "文件摘要无效",
+        "upload.receiptExpired" to "附件凭证已失效，请重新上传",
+        "upload.failed" to "上传失败",
+        "upload.responseMismatch" to "上传响应不匹配",
+        "upload.responseInvalid" to "上传响应无效",
+        "upload.offsetInvalid" to "上传确认偏移无效，请重试",
+        "upload.verifyFailed" to "上传校验失败，请重试",
+        "upload.readFailed" to "文件读取失败，请重新选择",
+        "upload.timeout" to "上传确认超时，请重试",
+        "queue.rejected" to "服务端未接受队列操作",
+        "queue.actionFailed" to "队列操作失败",
+        "queue.invalidState" to "队列状态格式无效",
+        "queue.attachmentMessage" to "附件消息",
+        "preset.selectUnconfirmed" to "模式切换未确认，请重试",
+        "preset.queryFailed" to "无法读取当前模式，请重试",
+        "preset.actionFailed" to "模式操作失败",
+        "team.loadFailed" to "团队数据加载失败",
+        "stream.decodeFailed" to "实时协议解析失败，正在重新订阅",
+        "stream.historyFormatChanged" to "历史格式已变化，正在重新加载会话",
+        "stream.snapshotMissingFormat" to "快照缺少历史格式版本",
+        "stream.snapshotMissingCursor" to "快照缺少持久流水位",
+        "stream.snapshotInvalid" to "会话快照格式无效",
+        "stream.stopped" to "会话实时流已停止",
+        "stream.frameMissingContent" to "流帧缺少内容",
+        "stream.frameMissingRevision" to "流帧缺少 revision",
+        "stream.revisionGap" to "实时流 revision 断档，正在重新订阅",
+        "stream.frameMissingAttempt" to "流帧缺少 attemptId",
+        "stream.unknownFrame" to "未知实时流帧",
+        "stream.attemptMismatch" to "实时流 attempt 不匹配",
+        "stream.frameMissingIndex" to "流帧缺少 index",
+        "stream.indexGap" to "实时流 index 断档，正在重新订阅",
+        "stream.endMissingOutcome" to "流结算缺少 outcome",
+        "stream.endMissingMessage" to "流结算缺少对应的持久消息，正在重新订阅",
+        "stream.frameMissingChunk" to "流帧缺少 chunk",
+        "wire.decodeFailed.missingFields" to "%1\$s: 缺少必填字段 %2\$s",
+        "wire.decodeFailed.typeMismatch" to "%1\$s: 类型不匹配：需要 %2\$s，收到 %3\$s",
+        "wire.decodeFailed.typeExpected" to "%1\$s: 类型不匹配：需要 %2\$s",
+        "wire.decodeFailed.invalidField" to "%1\$s: 字段格式不符合协议",
+        "gateway.identityInvalid" to "网关身份格式无效",
+        "gateway.identityMismatch" to "网关身份不一致或缺失，请确认主机后重新配对",
+        "gateway.tooManyEndpoints" to "候选地址超过 16 个",
+        "gateway.endpointHasQuery" to "地址无效，不能包含查询参数或片段",
+        "gateway.listenAddress" to "监听地址不能用于连接",
+        "gateway.wssRequired" to "公网连接必须使用 WSS",
+        "gateway.endpointUntrusted" to "地址未经此主机确认",
+        "pairing.notBase64Url" to "配对内容不是有效的 Base64URL 字符串",
+        "pairing.invalidJson" to "Base64URL 解码后的内容不是有效的配对 JSON",
+        "pairing.unsupportedVersion" to "不支持的配对协议版本 %1\$s",
+        "pairing.invalidCode" to "二维码中的一次性 pairingCode 无效",
+        "pairing.expired" to "二维码配对码已经过期",
+        "pairing.invalidPublicUrl" to "publicUrl 不是有效的 ws:// 或 wss:// 地址",
+        "tool.kind.write" to "写入",
+        "tool.kind.edit" to "修改",
+        "tool.kind.read" to "读取",
+        "tool.kind.exec" to "执行",
+        "tool.kind.search" to "搜索",
+        "tool.kind.list" to "列出",
+        "tool.kind.fetch" to "获取",
+        "tool.kind.other" to "工具",
+        "tool.lines" to "%1\$s 行",
+        "tool.replacedLines" to "替换 %1\$s → %2\$s 行"
     )
 
     internal val english: Map<String, String> = mapOf(
@@ -1065,6 +1170,91 @@ internal object AndroidStrings {
         "高" to "High",
         "默认权限" to "Default permission",
         "默认模型" to "Default model",
-        "（纯附件消息）" to "(Attachments only)"
+        "（纯附件消息）" to "(Attachments only)",
+        "voice.hint" to "Describe what you want to build",
+        "voice.status.releaseToCancel" to "Release to cancel",
+        "voice.status.authorizing" to "Requesting microphone access",
+        "voice.status.starting" to "Starting microphone",
+        "voice.status.limitApproaching" to "Recording limit approaching · Release to transcribe",
+        "voice.status.recording" to "Release to transcribe · Swipe up to cancel",
+        "voice.status.preparing" to "Preparing voice model",
+        "voice.unavailable.notConnected" to "Connect to the gateway before using voice input.",
+        "voice.unavailable.unsupported" to "This gateway does not support voice input yet. On your desktop, upgrade Mobile Gateway, enable the official Voice Input plugin in Plugins, and finish model setup. Then reconnect the gateway.",
+        "voice.unavailable.preparing" to "Your desktop is preparing the voice model. Wait for the download and setup to finish, then try again.",
+        "voice.unavailable.notReady" to "On your desktop, enable the official Voice Input plugin in Plugins and finish downloading and setting up the model. Then try again.",
+        "voice.permissionDenied" to "Allow microphone access in system settings",
+        "voice.recordingInvalid" to "Invalid recording data. Try again.",
+        "voice.recordingLimitTooSmall" to "The voice service recording limit is too short",
+        "voice.limitReached" to "Recording limit reached. Transcribing…",
+        "voice.timeout" to "Voice processing timed out. Try again.",
+        "voice.serviceClosed" to "Voice service stopped. Try again.",
+        "voice.recognitionFailed" to "Voice recognition failed. Try again.",
+        "voice.serviceUnavailable" to "Voice service unavailable",
+        "voice.noSpeech" to "No speech detected",
+        "voice.pluginDisabled" to "Enable the official Voice Input plugin in DSH plugin settings",
+        "upload.sessionChanged" to "The connection or session has changed. Upload the file again",
+        "upload.invalidName" to "Invalid file name",
+        "upload.tooLarge" to "Files must not exceed 512 MiB",
+        "upload.invalidDigest" to "Invalid file digest",
+        "upload.receiptExpired" to "The attachment receipt has expired. Upload the file again",
+        "upload.failed" to "Upload failed",
+        "upload.responseMismatch" to "The upload response did not match",
+        "upload.responseInvalid" to "Invalid upload response",
+        "upload.offsetInvalid" to "Invalid acknowledged upload offset. Please retry",
+        "upload.verifyFailed" to "Upload verification failed. Please retry",
+        "upload.readFailed" to "Unable to read the file. Select it again",
+        "upload.timeout" to "Upload confirmation timed out. Please retry",
+        "queue.rejected" to "The server did not accept the queue action",
+        "queue.actionFailed" to "Queue action failed",
+        "queue.invalidState" to "Invalid queue state format",
+        "queue.attachmentMessage" to "Attachment message",
+        "preset.selectUnconfirmed" to "Mode change was not confirmed. Try again.",
+        "preset.queryFailed" to "Unable to read the current mode. Try again.",
+        "preset.actionFailed" to "Mode action failed",
+        "team.loadFailed" to "Couldn’t load team data",
+        "stream.decodeFailed" to "Couldn’t parse the live stream. Resubscribing…",
+        "stream.historyFormatChanged" to "The history format changed. Reloading the conversation…",
+        "stream.snapshotMissingFormat" to "The snapshot is missing its history format version",
+        "stream.snapshotMissingCursor" to "The snapshot is missing its persistent cursor",
+        "stream.snapshotInvalid" to "Invalid conversation snapshot",
+        "stream.stopped" to "The live conversation stream stopped",
+        "stream.frameMissingContent" to "A stream frame is missing its content",
+        "stream.frameMissingRevision" to "A stream frame is missing its revision",
+        "stream.revisionGap" to "Live stream revision gap. Resubscribing…",
+        "stream.frameMissingAttempt" to "A stream frame is missing its attemptId",
+        "stream.unknownFrame" to "Unknown live stream frame",
+        "stream.attemptMismatch" to "Live stream attempt mismatch",
+        "stream.frameMissingIndex" to "A stream frame is missing its index",
+        "stream.indexGap" to "Live stream index gap. Resubscribing…",
+        "stream.endMissingOutcome" to "The stream end is missing its outcome",
+        "stream.endMissingMessage" to "The stream end has no matching saved message. Resubscribing…",
+        "stream.frameMissingChunk" to "A stream frame is missing its chunk",
+        "wire.decodeFailed.missingFields" to "%1\$s: missing required fields %2\$s",
+        "wire.decodeFailed.typeMismatch" to "%1\$s: type mismatch: expected %2\$s, got %3\$s",
+        "wire.decodeFailed.typeExpected" to "%1\$s: type mismatch: expected %2\$s",
+        "wire.decodeFailed.invalidField" to "%1\$s: a field doesn’t match the protocol",
+        "gateway.identityInvalid" to "Invalid gateway identity format",
+        "gateway.identityMismatch" to "Gateway identity does not match or is missing. Verify the host and pair again.",
+        "gateway.tooManyEndpoints" to "More than 16 candidate addresses",
+        "gateway.endpointHasQuery" to "Invalid address. Query parameters and fragments are not allowed.",
+        "gateway.listenAddress" to "A listen address cannot be used for connections",
+        "gateway.wssRequired" to "Public connections must use WSS",
+        "gateway.endpointUntrusted" to "This address has not been verified for the host",
+        "pairing.notBase64Url" to "Pairing data is not a valid Base64URL string",
+        "pairing.invalidJson" to "Decoded Base64URL data is not valid pairing JSON",
+        "pairing.unsupportedVersion" to "Unsupported pairing protocol version %1\$s",
+        "pairing.invalidCode" to "The QR code contains an invalid one-time pairing code",
+        "pairing.expired" to "The QR pairing code has expired",
+        "pairing.invalidPublicUrl" to "publicUrl is not a valid ws:// or wss:// address",
+        "tool.kind.write" to "Write",
+        "tool.kind.edit" to "Edit",
+        "tool.kind.read" to "Read",
+        "tool.kind.exec" to "Execution",
+        "tool.kind.search" to "Search",
+        "tool.kind.list" to "List",
+        "tool.kind.fetch" to "Fetch",
+        "tool.kind.other" to "Tool",
+        "tool.lines" to "%1\$s lines",
+        "tool.replacedLines" to "Replace %1\$s → %2\$s lines"
     )
 }

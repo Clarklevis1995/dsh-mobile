@@ -31,10 +31,12 @@ class AndroidSessionStatsProtocolTest {
         val failure = requireNotNull(runCatching { GatewayWireDecoder.decode(payload) }.exceptionOrNull())
         val summary = GatewayWireDecoder.failureSummary(payload, failure)
 
-        assertTrue(summary, summary.contains("\$.sessionStats.decodeTokens"))
-        assertTrue(summary, summary.contains("需要 number，收到 string"))
-        assertFalse(summary.contains("private-session"))
-        assertFalse(summary.contains("private-value"))
+        val rendered = summary.args.joinToString(" ")
+        assertEquals("wire.decodeFailed.typeMismatch", summary.key)
+        assertTrue(rendered, rendered.contains("\$.sessionStats.decodeTokens"))
+        assertEquals(listOf("number", "string"), summary.args.drop(1))
+        assertFalse(rendered.contains("private-session"))
+        assertFalse(rendered.contains("private-value"))
     }
 
     @Test
