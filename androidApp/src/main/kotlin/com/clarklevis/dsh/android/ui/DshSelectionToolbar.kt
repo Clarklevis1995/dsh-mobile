@@ -57,7 +57,7 @@ internal fun DshSelectionToolbar(anchor: DshSelectionToolbarAnchor, onCopy: () -
         Row(Modifier.testTag("markdown-selection-toolbar"), verticalAlignment = Alignment.CenterVertically) {
             DshMenuAction(appText("复制"), onCopy, Modifier.testTag("markdown-selection-copy"))
             Box(Modifier.width(0.5.dp).height(20.dp).background(Color.Black.copy(alpha = .10f)))
-            if (onQuote != null) DshMenuAction("引用", onQuote, Modifier.testTag("markdown-selection-quote"))
+            if (onQuote != null) DshMenuAction(appText("引用"), onQuote, Modifier.testTag("markdown-selection-quote"))
             DshMenuAction(appText("全选"), onSelectAll, Modifier.testTag("markdown-selection-all"))
         }
     }

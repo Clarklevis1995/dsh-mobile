@@ -12,10 +12,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import java.util.Locale
 
 internal enum class InterfaceStyle(private val sourceTitle: String) {
-    SYSTEM("跟随系统"), LIGHT("浅色"), DARK("深色");
+    SYSTEM(appTextKey("跟随系统")), LIGHT(appTextKey("浅色")), DARK(appTextKey("深色"));
 
     val title: String get() = appText(sourceTitle)
 
@@ -31,7 +32,7 @@ internal enum class AppLanguage {
 
     val title: String get() = when (this) {
         SYSTEM -> appText("跟随系统")
-        SIMPLIFIED_CHINESE -> "简体中文"
+        SIMPLIFIED_CHINESE -> "简体中文" // i18n-ignore: language endonym, shown in its own language
         ENGLISH -> "English"
     }
 }

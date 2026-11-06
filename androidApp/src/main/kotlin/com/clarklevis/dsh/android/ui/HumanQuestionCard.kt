@@ -841,7 +841,7 @@ private fun FooterIconButton(
 private data class OptionMetadata(val title: String, val isRecommended: Boolean)
 
 private fun optionMetadata(label: String): OptionMetadata {
-    val suffixes = listOf(" (recommended)", "（recommended）", " (推荐)", "（推荐）")
+    val suffixes = listOf(" (recommended)", "（recommended）", " (推荐)", "（推荐）") // i18n-ignore: matches recommendation suffixes sent by the host
     val suffix = suffixes.firstOrNull { label.lowercase().endsWith(it.lowercase()) }
     return OptionMetadata(
         title = suffix?.let { label.dropLast(it.length) } ?: label,

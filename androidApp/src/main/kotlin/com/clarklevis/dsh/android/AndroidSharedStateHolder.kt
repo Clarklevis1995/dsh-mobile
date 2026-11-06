@@ -85,7 +85,7 @@ class AndroidSharedStateHolder(
     private var persistedTeamAvatars = "[]"
     private var switchingTeamMember = false
     private val teamDrafts = mutableMapOf<String, Pair<String, List<AndroidPreparedImage>>>()
-    val teamSessionTitle get() = snapshot.sessions.firstOrNull { it.id == teamLeadSessionId }?.title ?: "Lead 会话"
+    val teamSessionTitle get() = snapshot.sessions.firstOrNull { it.id == teamLeadSessionId }?.title ?: appText("Lead 会话")
     val isViewingTeamMember get() = snapshot.selectedSessionId?.let(teamStore::isChild) == true
     val selectedMemberCanSend get() = snapshot.selectedSessionId?.let(teamStore::canSend) != false
     val selectedSessionIsRunning get() = teamSnapshot.members.firstOrNull { it.id == snapshot.selectedSessionId }?.running
@@ -814,7 +814,7 @@ class AndroidSharedStateHolder(
                 pluginUpdateRequestId = null
                 pluginPendingName = null
                 pluginUpdateStep = "unverified"
-                pluginNotice = "更新及恢复结果待核实，请刷新目录并检查 Host 日志"
+                pluginNotice = appText("更新及恢复结果待核实，请刷新目录并检查 Host 日志")
                 refreshPlugins()
             }
         }
@@ -853,9 +853,9 @@ class AndroidSharedStateHolder(
                     "plugin-update-result", "error" -> {
                         pluginUpdateResult = frame.result
                         pluginNotice = when {
-                            frame.result?.get("restore")?.get("application")?.stringValue == "failed" -> "更新失败，旧版本恢复失败。请刷新目录并检查 Host 日志。"
-                            frame.result?.get("result")?.get("application")?.stringValue == "restart-required" -> "请重启 DSH 后刷新目录确认实际版本"
-                            frame.result?.get("result")?.get("application")?.stringValue in setOf("failed", "cancelled", "overridden") -> "目标版本更新未生效，请检查更新及恢复结果"
+                            frame.result?.get("restore")?.get("application")?.stringValue == "failed" -> appText("更新失败，旧版本恢复失败。请刷新目录并检查 Host 日志。")
+                            frame.result?.get("result")?.get("application")?.stringValue == "restart-required" -> appText("请重启 DSH 后刷新目录确认实际版本")
+                            frame.result?.get("result")?.get("application")?.stringValue in setOf("failed", "cancelled", "overridden") -> appText("目标版本更新未生效，请检查更新及恢复结果")
                             else -> frame.message
                         }
                         pluginUpdateRequestId = null
@@ -910,15 +910,15 @@ class AndroidSharedStateHolder(
     fun createScheduledTask(title: String, prompt: String, timingJson: String, targetKind: String, sessionId: String?): String? {
         if ("schedule-management-v2" !in gatewayState.capabilities || scheduledTaskPendingId != null) return null
         val timing = runCatching { JsonValue.fromJsonElement(kotlinx.serialization.json.Json.parseToJsonElement(timingJson)) }.getOrNull()
-            ?: run { scheduledTaskMutationError = "执行规则 JSON 无效"; return null }
+            ?: run { scheduledTaskMutationError = appText("执行规则 JSON 无效"); return null }
         val target = mutableMapOf<String, JsonValue>("kind" to JsonValue.StringValue(targetKind))
         if (targetKind == "session") {
-            if (sessionId.isNullOrBlank()) { scheduledTaskMutationError = "请选择目标会话"; return null }
+            if (sessionId.isNullOrBlank()) { scheduledTaskMutationError = appText("请选择目标会话"); return null }
             target["sessionId"] = JsonValue.StringValue(sessionId)
         }
         val id = UUID.randomUUID().toString()
         val request = runCatching { GatewayRequests.scheduleCreate(id, title, prompt, timing, JsonValue.ObjectValue(target)) }
-            .getOrElse { scheduledTaskMutationError = "标题或任务内容无效"; return null }
+            .getOrElse { scheduledTaskMutationError = appText("标题或任务内容无效"); return null }
         scheduledTaskMutationRequestId = id
         scheduledTaskMutationKind = "schedule-create"
         scheduledTaskPendingId = "creating"
@@ -951,7 +951,7 @@ class AndroidSharedStateHolder(
         val appGraph = graph ?: return
         appGraph.gatewayScope.launch {
             if (!appGraph.gatewayRuntime.sendRequest(request)) withContext(Dispatchers.Main.immediate) {
-                if (request.correlationId == scheduledTaskMutationRequestId) finishScheduledTaskMutation("操作未发送，请重试")
+                if (request.correlationId == scheduledTaskMutationRequestId) finishScheduledTaskMutation(appText("操作未发送，请重试"))
             }
         }
     }
@@ -1997,7 +1997,7 @@ class AndroidSharedStateHolder(
     }
 
     fun sendMessage(mode: String = "queue") {
-        if (!selectedMemberCanSend) { platformError = "此子智能体会话为只读，无法继续对话"; return }
+        if (!selectedMemberCanSend) { platformError = appText("此子智能体会话为只读，无法继续对话"); return }
         if (localSearchIsFragment || localSearchIsOpening) {
             platformError = appText("当前为只读本地搜索片段，请先返回最新消息。")
             return
@@ -2009,7 +2009,7 @@ class AndroidSharedStateHolder(
         val submission = captureMessageSubmission(mode)
         val commandExecution = if (isViewingTeamMember) null else slashCommandStore.commandExecutionForInput(submission.draft)
         if (commandExecution != null && submission.fileIds.isNotEmpty()) {
-            platformError = "斜杠命令不支持文件，请使用普通消息发送"
+            platformError = appText("斜杠命令不支持文件，请使用普通消息发送")
             return
         }
         if (commandExecution == null || submission.images.isEmpty() || commandExecution.allowsImages) {
@@ -3170,7 +3170,7 @@ class AndroidSharedStateHolder(
                                     if (event.frame.kind == "error" && !event.isBackgroundHistory &&
                                         event.frame.requestType in setOf("message", "subscribe", "history", "session-cancel")) {
                                         withContext(Dispatchers.Main.immediate) {
-                                            platformError = event.frame.message ?: "子智能体请求失败"
+                                            platformError = event.frame.message ?: appText("子智能体请求失败")
                                             if (event.frame.requestType == "message") {
                                                 pendingMessageSubmission?.takeIf {
                                                     event.frame.requestId == it.requestId || (it.fileIds.isEmpty() && event.frame.requestId == null)
@@ -3233,7 +3233,7 @@ class AndroidSharedStateHolder(
                                             }
                                             "schedule-changed" -> refreshScheduledTasks()
                                             "error" -> if (event.frame.requestType == "schedule-history" && event.frame.requestId == scheduleHistoryRequestId) {
-                                                scheduleHistory = JsonValue.ObjectValue(mapOf("records" to JsonValue.StringValue(event.frame.message ?: "执行记录加载失败")))
+                                                scheduleHistory = JsonValue.ObjectValue(mapOf("records" to JsonValue.StringValue(event.frame.message ?: appText("执行记录加载失败"))))
                                             } else if (event.frame.requestType in setOf("schedule-catalog", "schedule-list") &&
                                                 (event.frame.requestId == null || event.frame.requestId == scheduleListRequestId)) {
                                                 scheduledTasksLoading = false
@@ -3629,7 +3629,7 @@ class AndroidSharedStateHolder(
         private const val MAXIMUM_STATUS_COUNT = 256L
         private const val DEFAULT_THUMBNAIL_TARGET_PIXELS = 720
         const val DEFAULT_WIRE_PAYLOAD =
-            """{"sessionId":"android-demo","seq":4,"time":1786937355,"event":{"type":"assistant/message","turn":1,"step":1,"text":"最终消息会替换流式临时消息。"}}"""
+            """{"sessionId":"android-demo","seq":4,"time":1786937355,"event":{"type":"assistant/message","turn":1,"step":1,"text":"The final message replaces the temporary streamed message."}}"""
     }
 }
 

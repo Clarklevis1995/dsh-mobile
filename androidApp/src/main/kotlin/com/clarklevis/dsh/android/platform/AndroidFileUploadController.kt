@@ -111,7 +111,7 @@ class AndroidFileUploadController(
                     localFiles.remove(id)
                     if (failure is kotlinx.coroutines.CancellationException) throw failure
                     if (context == token) {
-                        error(if (failure is UiMessageException) appText(failure.uiMessage) else failure.message ?: "文件准备失败")
+                        error(if (failure is UiMessageException) appText(failure.uiMessage) else failure.message ?: appText("文件准备失败"))
                     }
                 }
             }
@@ -166,7 +166,7 @@ class AndroidFileUploadController(
     private fun prepare(uri: Uri, id: String): Prepared {
         val app = requireNotNull(graph).application
         val resolver = app.contentResolver
-        var name = "附件"
+        var name = appText("附件")
         var declaredSize: Long? = null
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
@@ -176,15 +176,19 @@ class AndroidFileUploadController(
                 if (sizeColumn >= 0 && !cursor.isNull(sizeColumn)) declaredSize = cursor.getLong(sizeColumn)
             }
         }
-        require(name.isNotBlank() && name.length <= 255 && name !in setOf(".", "..") &&
-            name.none { it == '/' || it == '\\' || it.isISOControl() }) { "文件名无效" }
-        require((declaredSize ?: 0) <= SharedFileUploadStore.MAX_BYTES) { "文件不能超过 512 MiB" }
+        if (!(name.isNotBlank() && name.length <= 255 && name !in setOf(".", "..") &&
+            name.none { it == '/' || it == '\\' || it.isISOControl() })) {
+            throw UiMessageException(UiMessage("upload.invalidName"), "Invalid file name")
+        }
+        if ((declaredSize ?: 0) > SharedFileUploadStore.MAX_BYTES) {
+            throw UiMessageException(UiMessage("upload.tooLarge"), "File exceeds 512 MiB")
+        }
         val folder = File(app.cacheDir, "upload-drafts").apply { mkdirs() }
         val file = File(folder, id)
         try {
             val digest = MessageDigest.getInstance("SHA-256")
             var size = 0L
-            requireNotNull(resolver.openInputStream(uri)) { "无法读取所选文件" }.use { input ->
+            (resolver.openInputStream(uri) ?: throw IllegalArgumentException(appText("无法读取所选文件"))).use { input ->
                 file.outputStream().use { output ->
                     val buffer = ByteArray(256 * 1024)
                     while (true) {
@@ -192,7 +196,9 @@ class AndroidFileUploadController(
                         if (count < 0) break
                         if (count == 0) continue
                         size += count
-                        require(size <= SharedFileUploadStore.MAX_BYTES) { "文件不能超过 512 MiB" }
+                        if (size > SharedFileUploadStore.MAX_BYTES) {
+                            throw UiMessageException(UiMessage("upload.tooLarge"), "File exceeds 512 MiB")
+                        }
                         digest.update(buffer, 0, count)
                         output.write(buffer, 0, count)
                     }

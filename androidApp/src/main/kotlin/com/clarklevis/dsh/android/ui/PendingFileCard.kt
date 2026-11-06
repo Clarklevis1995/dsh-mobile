@@ -52,9 +52,9 @@ internal fun PendingFileCard(
     val status = when (file.status) {
         "waiting" -> appText("等待上传")
         "opening" -> appText("开始上传…")
-        "uploading" -> "${appText("上传中")} ${if (file.size > 0) file.confirmedBytes * 100 / file.size else 0}%"
+        "uploading" -> appText("上传中 %1\$s%", if (file.size > 0) file.confirmedBytes * 100 / file.size else 0)
         "committing" -> appText("处理中…")
-        "ready" -> "${appText("可发送")} · ${android.text.format.Formatter.formatShortFileSize(LocalContext.current, file.size)}"
+        "ready" -> appText("可发送 · %1\$s", android.text.format.Formatter.formatShortFileSize(LocalContext.current, file.size))
         else -> appText(file.error ?: UiMessage("upload.failed"))
     }
     Row(

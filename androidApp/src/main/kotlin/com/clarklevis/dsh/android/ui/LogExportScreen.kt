@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import com.clarklevis.dsh.android.platform.LocalAppLog
 import com.clarklevis.dsh.android.platform.LogExportSummary
 import java.text.DateFormat
@@ -79,10 +80,10 @@ internal fun logCardColor(): Color = if (isSystemInDarkTheme()) Color(0xFF1C1C1E
 internal fun logTextColor(): Color = if (isSystemInDarkTheme()) Color.White else Color.Black
 
 private enum class LogRange(val title: String, val hours: Int?) {
-    HOUR("1小时", 1),
-    TODAY("今天", null),
-    DAY("24小时", 24),
-    CUSTOM("自定义", null)
+    HOUR(appTextKey("1小时"), 1),
+    TODAY(appTextKey("今天"), null),
+    DAY(appTextKey("24小时"), 24),
+    CUSTOM(appTextKey("自定义"), null)
 }
 
 @Suppress("LongMethod", "CyclomaticComplexMethod")
@@ -189,10 +190,7 @@ internal fun LogExportScreen(onBack: () -> Unit) {
                                         TextButton(onClick = { select(LogRange.DAY) }) { Text(appText("选择最近24小时"), color = LogBlue) }
                                     }
                                     Text(
-                                        appText(
-                                            "日志按小时留存，仅导出所选时段\n" +
-                                                "旧日志会自动清理，可选日期以本机留存为准"
-                                        ),
+                                        appText("日志按小时留存，仅导出所选时段\n旧日志会自动清理，可选日期以本机留存为准"),
                                         modifier = Modifier.padding(top = 4.dp),
                                         style = SettingsTypography.description,
                                         lineHeight = 18.sp,
