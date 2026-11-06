@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.shared.protocol
 
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.MissingFieldException
 import kotlinx.serialization.json.JsonArray
@@ -9,14 +10,49 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.contentOrNull
 
 object GatewayWireDecoder {
-    /** Report schema metadata without copying message text or credentials from the wire frame. */
+    private data class DecodeFailure(
+        val header: String,
+        val missingFields: List<String>,
+        val expected: String?,
+        val actual: String?,
+    )
+
+    /**
+     * Report schema metadata without copying message text or credentials from the wire frame.
+     * args[0] is the technical header (`decode-failed [kind/event $.path] Exception`).
+     */
+    fun failureSummary(text: String, cause: Throwable): UiMessage {
+        val failure = analyze(text, cause)
+        return when {
+            failure.missingFields.isNotEmpty() ->
+                UiMessage("wire.decodeFailed.missingFields", listOf(failure.header, failure.missingFields.joinToString(", ")))
+            failure.expected != null && failure.actual != null ->
+                UiMessage("wire.decodeFailed.typeMismatch", listOf(failure.header, failure.expected, failure.actual))
+            failure.expected != null -> UiMessage("wire.decodeFailed.typeExpected", listOf(failure.header, failure.expected))
+            else -> UiMessage("wire.decodeFailed.invalidField", listOf(failure.header))
+        }
+    }
+
+    /** English single-line form of [failureSummary] for diagnostics logs. */
+    fun failureLogLine(text: String, cause: Throwable): String {
+        val failure = analyze(text, cause)
+        val detail = when {
+            failure.missingFields.isNotEmpty() -> "missing required fields ${failure.missingFields.joinToString(", ")}"
+            failure.expected != null && failure.actual != null ->
+                "type mismatch: expected ${failure.expected}, got ${failure.actual}"
+            failure.expected != null -> "type mismatch: expected ${failure.expected}"
+            else -> "field does not match the protocol"
+        }
+        return "${failure.header}: $detail"
+    }
+
     @OptIn(ExperimentalSerializationApi::class)
-    fun failureSummary(text: String, cause: Throwable): String {
+    private fun analyze(text: String, cause: Throwable): DecodeFailure {
         val root = runCatching { wireJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
         val kind = (root?.get("kind") as? JsonPrimitive)?.contentOrNull.safeLabel()
         val event = ((root?.get("event") as? JsonObject)?.get("type") as? JsonPrimitive)
             ?.contentOrNull.safeLabel()
-        val location = listOfNotNull(kind, event).joinToString("/").ifEmpty { "未知帧" }
+        val location = listOfNotNull(kind, event).joinToString("/").ifEmpty { "unknown-frame" }
         val rawPath = Regex("at path:?\\s*(\\$[A-Za-z0-9_.\\[\\]-]+)")
             .find(cause.message.orEmpty())?.groupValues?.get(1)?.safePath()
         val path = rawPath?.let { candidate ->
@@ -35,8 +71,8 @@ object GatewayWireDecoder {
                 listOfNotNull(Regex("Field '([A-Za-z][A-Za-z0-9_]{0,48})' is required")
                     .find(cause.message.orEmpty())?.groupValues?.get(1))
             }
-        val detail = if (missingFields.isNotEmpty()) "缺少必填字段 ${missingFields.joinToString("、")}" else {
-            val expected = Regex("Expected (?:an? )?(string|int|integer|boolean|number|array|object)", RegexOption.IGNORE_CASE)
+        val expected = if (missingFields.isNotEmpty()) null else {
+            Regex("Expected (?:an? )?(string|int|integer|boolean|number|array|object)", RegexOption.IGNORE_CASE)
                 .find(cause.message.orEmpty())?.groupValues?.get(1)?.lowercase()
                 ?.let { if (it == "int") "integer" else it }
                 ?: when (path?.substringAfterLast('.')) {
@@ -46,14 +82,10 @@ object GatewayWireDecoder {
                     "isError", "interrupted", "replay", "accepted", "applied" -> "boolean"
                     else -> null
                 }
-            val actual = path?.let { findJsonType(root, it) }
-            when {
-                expected != null && actual != null -> "类型不匹配：需要 $expected，收到 $actual"
-                expected != null -> "类型不匹配：需要 $expected"
-                else -> "字段格式不符合协议"
-            }
         }
-        return "decode-failed [$location${path?.let { " $it" } ?: ""}] ${cause::class.simpleName ?: "DecodeException"}: $detail"
+        val actual = if (expected == null) null else path?.let { findJsonType(root, it) }
+        val header = "decode-failed [$location${path?.let { " $it" } ?: ""}] ${cause::class.simpleName ?: "DecodeException"}"
+        return DecodeFailure(header, missingFields, expected, actual)
     }
 
     private fun String?.safeLabel(): String? = this?.takeIf {

@@ -1,16 +1,19 @@
 package com.clarklevis.dsh.shared
 
+import com.clarklevis.dsh.shared.projection.ToolActivityKind
 import com.clarklevis.dsh.shared.projection.ToolActivitySummaryFormatter
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class ToolActivitySummaryTest {
     @Test
     fun fileWriteShowsPathAndContentLineCountWithoutInventingDiff() {
         val summary = ToolActivitySummaryFormatter.summarize("write", """{"file_path":"app/src/Main.kt","content":"one\ntwo\n"}""")
-        assertEquals("写入", summary.label)
+        assertEquals(ToolActivityKind.WRITE, summary.kind)
         assertEquals("app/src/Main.kt", summary.detail)
-        assertEquals("2 行", summary.annotation)
+        assertEquals(2, summary.lineCount)
+        assertNull(summary.replacedLines)
     }
 
     @Test
@@ -47,8 +50,10 @@ class ToolActivitySummaryTest {
     @Test
     fun invalidOrUnknownToolArgumentsRemainSafe() {
         val summary = ToolActivitySummaryFormatter.summarize("custom_tool", "partial {")
-        assertEquals("custom_tool", summary.label)
+        assertEquals(ToolActivityKind.OTHER, summary.kind)
+        assertEquals("custom_tool", summary.toolName)
         assertEquals("", summary.detail)
-        assertEquals("", summary.annotation)
+        assertNull(summary.lineCount)
+        assertNull(ToolActivitySummaryFormatter.summarize("", "{}").toolName)
     }
 }

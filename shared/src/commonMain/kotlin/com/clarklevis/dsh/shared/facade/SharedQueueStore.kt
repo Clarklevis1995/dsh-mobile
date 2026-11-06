@@ -2,6 +2,7 @@ package com.clarklevis.dsh.shared.facade
 
 import com.clarklevis.dsh.shared.gateway.GatewayRequest
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.protocol.JsonValue
 import com.clarklevis.dsh.shared.protocol.wireJson
 
@@ -9,7 +10,8 @@ import com.clarklevis.dsh.shared.protocol.wireJson
 data class SharedQueueItem(
     val id: String,
     val text: String,
-    val preview: String,
+    /** 正文原文，纯附件消息为 `queue.attachmentMessage`。 */
+    val preview: UiMessage,
     val attachmentCount: Int,
     val editable: Boolean,
     val textParts: List<com.clarklevis.dsh.shared.protocol.GatewayTextPart>? = null
@@ -18,7 +20,7 @@ data class SharedQueueItem(
 data class SharedQueueSnapshot(
     val queues: Map<String, List<SharedQueueItem>> = emptyMap(),
     val pendingItemId: String? = null,
-    val lastError: String? = null
+    val lastError: UiMessage? = null
 )
 
 /** 两端在各自 UI 串行上下文调用。队列以 Host 全量快照替换，操作不做乐观删除。 */
@@ -52,7 +54,7 @@ class SharedQueueStore {
         return GatewayRequests.queueUpdate(sessionId, itemId, if (action == "edit") "remove" else action)
     }
 
-    fun failPending(message: String): SharedQueueSnapshot {
+    fun failPending(message: UiMessage): SharedQueueSnapshot {
         pending = null
         state = state.copy(pendingItemId = null, lastError = message)
         return state
@@ -78,7 +80,7 @@ class SharedQueueStore {
                         frame["itemId"]?.stringValue != operation.item.id ||
                         frame["action"]?.stringValue != (if (operation.action == "edit") "remove" else operation.action)
                     ) return state
-                    if (frame["accepted"]?.booleanValue != true) return failPending("服务端未接受队列操作")
+                    if (frame["accepted"]?.booleanValue != true) return failPending(UiMessage("queue.rejected"))
                     if (operation.action == "edit") {
                         drafts[operation.sessionId] = listOfNotNull(drafts[operation.sessionId], operation.item.text)
                             .joinToString("\n\n")
@@ -93,11 +95,11 @@ class SharedQueueStore {
                     if (frame["requestType"]?.stringValue == "queue-update" &&
                         frame["sessionId"]?.stringValue == operation.sessionId &&
                         (frame["itemId"] == null || frame["itemId"]?.stringValue == operation.item.id)
-                    ) return failPending(frame["message"]?.stringValue ?: "队列操作失败")
+                    ) return failPending(frame["message"]?.stringValue?.let { UiMessage.raw(it) } ?: UiMessage("queue.actionFailed"))
                 }
             }
         } catch (_: Exception) {
-            state = state.copy(lastError = "队列状态格式无效")
+            state = state.copy(lastError = UiMessage("queue.invalidState"))
         }
         return state
     }
@@ -110,7 +112,8 @@ class SharedQueueStore {
             val text = content.mapNotNull { if (it["type"]?.stringValue == "text") it["text"]?.stringValue else null }
                 .joinToString("\n")
             val attachments = content.count { it["type"]?.stringValue != "text" }
-            SharedQueueItem(id, text, text.ifBlank { "附件消息" }, attachments, attachments == 0 && text.isNotBlank(),
+            val preview = if (text.isBlank()) UiMessage("queue.attachmentMessage") else UiMessage.raw(text)
+            SharedQueueItem(id, text, preview, attachments, attachments == 0 && text.isNotBlank(),
                 com.clarklevis.dsh.shared.protocol.GatewayTextPart.from(row["message"]?.get("textParts")))
         }.distinctBy { it.id }
 }

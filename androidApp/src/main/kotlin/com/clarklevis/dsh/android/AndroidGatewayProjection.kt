@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.android
 
+import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.cache.ChatCacheDiagnostics
 import com.clarklevis.dsh.shared.cache.ChatCacheRestoreSkipReason
 import com.clarklevis.dsh.shared.facade.CachedHistoryWindow
@@ -432,7 +433,8 @@ internal class AndroidGatewayProjection(
             historyHasMore.remove(it)
         }
         if (update.clearTransient) update.sessionId?.let { conversationStore.clearAssistantChunks(it) }
-        update.error?.let { lastError = it }
+        val streamError = update.error?.let { appText(it) }
+        streamError?.let { lastError = it }
         if (update.resubscribe && id != null) {
             awaitSnapshot(id)
             onResubscribe(id)
@@ -442,7 +444,6 @@ internal class AndroidGatewayProjection(
         ) {
             cancelSnapshotWait()
         }
-        val streamError = update.error
         if (streamError != null && !update.resubscribe && id != null) {
             historyErrors[id] = streamError
             historyCancelled(id)

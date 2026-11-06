@@ -237,7 +237,7 @@ final class FileUploadController {
                     self.apply(self.shared.chunkReady(token: token, data: encoded.0, bytes: Int32(encoded.1)))
                 } catch {
                     guard let self else { return }
-                    self.apply(self.shared.readFailed(token: token, message: error.localizedDescription))
+                    self.apply(self.shared.readFailed(token: token, message: error.localizedDescription.rawUiMessage))
                 }
             }
         }

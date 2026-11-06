@@ -19,6 +19,8 @@ ANDROID_SOURCES = ROOT / "androidApp" / "src" / "main" / "kotlin"
 HAN = re.compile(r"[\u3400-\u9fff]")
 IOS_ARGUMENT = re.compile(r"%(?:\d+\$)?(?:@|lld|ld|zd|d|lu|u|f|g|s|c|i)")
 ANDROID_ARGUMENT = re.compile(r"%(?:\d+\$)?(?:s|d|f)")
+# 语义键：点分英文 ID（`voice.hint`、`wire.decodeFailed.missingFields`）；其余键是中文源文本。
+SEMANTIC_KEY = re.compile(r"^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+$")
 LOCALIZED_CALL = re.compile(r'String\s*\(\s*localized:\s*"((?:\\.|[^"\\])*)"')
 UI_CALL_NAMES = (
     "Text", "Button", "Label", "TextField", "SecureField", "Toggle", "Picker",
@@ -104,7 +106,18 @@ def kotlin_string(raw: str) -> str:
 
 def check_android_ui(errors: list[str]) -> int:
     path = ANDROID_SOURCES / "com/clarklevis/dsh/android/localization/AndroidStrings.kt"
-    source = path.read_text().split("internal val english:", 1)[1]
+    text = path.read_text()
+    # `chinese` 只收语义键（如共享 UiMessage 的 `voice.hint`）的中文文案；中文源键在 zh 下直接显示键本身。
+    chinese_source = text.split("internal val chinese:", 1)[1].split("internal val english:", 1)[0]
+    source = text.split("internal val english:", 1)[1]
+    chinese: dict[str, str] = {}
+    for match in KOTLIN_TRANSLATION.finditer(chinese_source):
+        key, value = (kotlin_string(raw) for raw in match.groups())
+        if key in chinese:
+            errors.append(f"Android UI: {key!r} 中文重复收录")
+        if not SEMANTIC_KEY.match(key):
+            errors.append(f"Android UI: {key!r} 不是语义键，不应写入 chinese 表")
+        chinese[key] = value
     catalog: dict[str, str] = {}
     for match in KOTLIN_TRANSLATION.finditer(source):
         key, english = (kotlin_string(raw) for raw in match.groups())
@@ -113,8 +126,14 @@ def check_android_ui(errors: list[str]) -> int:
         catalog[key] = english
         if not english.strip() or HAN.search(english):
             errors.append(f"Android UI: {key!r} 缺少完整英文译文")
-        if arguments(key, ANDROID_ARGUMENT) != arguments(english, ANDROID_ARGUMENT):
+        semantic = bool(SEMANTIC_KEY.match(key))
+        zh = chinese.get(key) if semantic else key
+        if semantic and (not zh or not zh.strip()):
+            errors.append(f"Android UI: 语义键 {key!r} 缺少中文译文（chinese 表）")
+        elif arguments(zh, ANDROID_ARGUMENT) != arguments(english, ANDROID_ARGUMENT):
             errors.append(f"Android UI: {key!r} 的中英文格式参数不一致")
+    for key in sorted(chinese.keys() - catalog.keys()):
+        errors.append(f"Android UI: 语义键 {key!r} 缺少英文译文（english 表）")
     for path in ANDROID_SOURCES.rglob("*.kt"):
         if path.name == "AndroidStrings.kt":
             continue

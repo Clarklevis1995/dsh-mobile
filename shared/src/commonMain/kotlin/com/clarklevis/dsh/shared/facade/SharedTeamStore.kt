@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.shared.facade
 
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -52,7 +53,7 @@ data class TeamTaskView(
 data class TeamSnapshot(
     val leadSessionId: String = "", val members: List<TeamMemberView> = emptyList(),
     val tasks: List<TeamTaskView> = emptyList(), val state: String = "loading",
-    val error: String? = null, val visible: Boolean = false, val isTeam: Boolean = false
+    val error: UiMessage? = null, val visible: Boolean = false, val isTeam: Boolean = false
 )
 
 @Serializable
@@ -70,7 +71,7 @@ class SharedTeamStore {
     private val confirmedProjections = mutableSetOf<Pair<String, String>>()
     private val profileAttempts = mutableSetOf<String>()
     private val profileRequests = mutableMapOf<String, ConversationTarget>()
-    private val errors = mutableMapOf<String, String>()
+    private val errors = mutableMapOf<String, UiMessage>()
     private var capabilities = emptySet<String>()
     private var controlKeys = emptySet<Pair<String, String>>()
     private var nextRequest = 0L
@@ -146,7 +147,7 @@ class SharedTeamStore {
         val hasSubagents = "subagent-conversations-v1" in capabilities && members.any { it.id != leadSessionId && it.role == "subagent" }
         return TeamSnapshot(leadSessionId, assignAvatars(leadSessionId, members), tasks,
             if ("agent-team-v1" !in capabilities) "unsupported" else team?.state ?: "loading",
-            errors[leadSessionId] ?: value?.text("failure"),
+            errors[leadSessionId] ?: value?.text("failure")?.let { UiMessage.raw(it) },
             hasTeamMembers || hasSubagents,
             members.any { it.role == "teammate" } || tasks.isNotEmpty())
     }
@@ -306,7 +307,7 @@ class SharedTeamStore {
                 val requestKind = frame.text("requestType")!!
                 if (frame.text("requestId") != queryIds[id to requestKind]) return false
                 queryIds.remove(id to requestKind)
-                errors[id] = frame.text("message") ?: "团队数据加载失败"; true
+                errors[id] = frame.text("message")?.let { UiMessage.raw(it) } ?: UiMessage("team.loadFailed"); true
             } else false
             else -> false
         }

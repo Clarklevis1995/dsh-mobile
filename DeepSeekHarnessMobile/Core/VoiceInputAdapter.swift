@@ -117,7 +117,7 @@ final class VoiceInputAdapter: ObservableObject {
                 releaseFeedback.impactOccurred(intensity: 0.6)
             case "showToast":
                 toastDismissal?.cancel()
-                toastMessage = effect.message
+                toastMessage = effect.message?.localized
                 toastDismissal = Task { [weak self] in
                     do { try await Task.sleep(for: .seconds(2)) } catch { return }
                     self?.toastMessage = nil
@@ -172,14 +172,14 @@ final class VoiceInputAdapter: ObservableObject {
                         }, failure: { [weak self] in
                             Task { @MainActor in
                                 guard let self else { return }
-                                self.apply(self.shared.captureFailed(id: token, message: "麦克风录音失败，请重试"))
+                                self.apply(self.shared.captureFailed(id: token, message: UiMessage(key: "voice.capture.recordFailed", args: [])))
                             }
                         })
                         traceVoiceInputLatency("capture-start-end", since: startedAt)
                     } catch {
                         Task { @MainActor in
                             guard let self else { return }
-                            self.apply(self.shared.captureFailed(id: token, message: "无法开启麦克风，请检查权限或通话状态"))
+                            self.apply(self.shared.captureFailed(id: token, message: UiMessage(key: "voice.capture.startFailed", args: [])))
                         }
                     }
                 }
@@ -201,7 +201,7 @@ final class VoiceInputAdapter: ObservableObject {
                         guard !discard else { return }
                         Task { @MainActor in
                             guard let self else { return }
-                            self.apply(self.shared.captureFailed(id: token, message: "无法完成录音数据转换，请重试"))
+                            self.apply(self.shared.captureFailed(id: token, message: UiMessage(key: "voice.capture.convertFailed", args: [])))
                         }
                     }
                 }

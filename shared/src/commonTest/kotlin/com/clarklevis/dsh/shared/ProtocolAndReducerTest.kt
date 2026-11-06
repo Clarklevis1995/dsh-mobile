@@ -158,7 +158,10 @@ class ProtocolAndReducerTest {
             """{"kind":"permission-options","sessionPermissions":{"options":[{"value":"ask"}]}}"""
         val failure = runCatching { GatewayWireDecoder.decode(payload) }.exceptionOrNull()
         assertTrue(failure != null)
-        assertTrue(GatewayWireDecoder.failureSummary(payload, failure).contains("缺少必填字段 name"))
+        val summary = GatewayWireDecoder.failureSummary(payload, failure)
+        assertEquals("wire.decodeFailed.missingFields", summary.key)
+        assertEquals("name", summary.args[1])
+        assertTrue(GatewayWireDecoder.failureLogLine(payload, failure).contains("missing required fields name"))
     }
 
     @Test
@@ -181,20 +184,21 @@ class ProtocolAndReducerTest {
         val payload = """{"kind":"event","sessionId":"private-session","event":{"type":"tool/result","turn":"wrong-type","preview":"private-message"}}"""
         val failure = runCatching { GatewayWireDecoder.decode(payload) }.exceptionOrNull()
         assertTrue(failure != null)
-        val detail = GatewayWireDecoder.failureSummary(payload, failure)
+        val detail = GatewayWireDecoder.failureLogLine(payload, failure)
         assertTrue(detail.contains("event/tool/result"))
         assertTrue(detail.contains("decode-failed"))
         assertTrue(detail.contains("\$.event.turn"), detail)
         assertTrue(!detail.contains("private-session"))
         assertTrue(!detail.contains("private-message"))
+        assertTrue(GatewayWireDecoder.failureSummary(payload, failure).args.none { it.contains("private-") })
 
-        val explicit = GatewayWireDecoder.failureSummary(
-            payload,
-            IllegalArgumentException("Expected an int at path: \$.event.turn; value=private-message")
-        )
-        assertTrue(explicit.contains("\$.event.turn"))
-        assertTrue(explicit.contains("需要 integer，收到 string"))
-        assertTrue(!explicit.contains("private-message"))
+        val explicitCause = IllegalArgumentException("Expected an int at path: \$.event.turn; value=private-message")
+        val explicit = GatewayWireDecoder.failureSummary(payload, explicitCause)
+        assertEquals("wire.decodeFailed.typeMismatch", explicit.key)
+        assertTrue(explicit.args[0].contains("\$.event.turn"))
+        assertEquals(listOf("integer", "string"), explicit.args.drop(1))
+        assertTrue(explicit.args.none { it.contains("private-message") })
+        assertTrue(GatewayWireDecoder.failureLogLine(payload, explicitCause).contains("expected integer, got string"))
     }
 
     @Test

@@ -172,7 +172,7 @@ struct VoiceComposerTextInput: View {
                 SlashCommandTextView(
                     text: $text,
                     presentation: presentation,
-                    placeholder: String(localized: String.LocalizationValue(state.hint)),
+                    placeholder: state.hint.localized,
                     isFocused: $isFocused,
                     onSelectionChange: onSelectionChange
                 )
@@ -801,7 +801,7 @@ struct ConversationView: View {
         }
         .overlay(alignment: .bottom) {
             if let voiceToast {
-                Text(LocalizedStringKey(voiceToast))
+                Text(voiceToast)
                     .appFont(.system(size: 14, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18).padding(.vertical, 11)
@@ -863,7 +863,7 @@ struct ConversationView: View {
         )) {
             Button("知道了", role: .cancel) { store.voiceInput.dismissAlert() }
         } message: {
-            Text(LocalizedStringKey(voiceState.alertMessage ?? ""))
+            Text(voiceState.alertMessage?.localized ?? "")
         }
         .onReceive(store.voiceInput.$state) { voiceSnapshot = $0 }
         .onReceive(store.voiceInput.$toastMessage) { voiceToast = $0 }
@@ -1570,7 +1570,7 @@ struct ConversationView: View {
                         Image(systemName: "text.bubble").foregroundStyle(.secondary)
                     }
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(item.preview).appFont(.subheadline).lineLimit(2)
+                        Text(item.preview.localized).appFont(.subheadline).lineLimit(2)
                         if item.attachmentCount > 0 {
                             Text("\(item.attachmentCount) 个附件").appFont(.caption).foregroundStyle(.secondary)
                         }
@@ -1637,7 +1637,7 @@ struct ConversationView: View {
         case "uploading": "\(String(localized: "上传中")) \(file.size > 0 ? file.confirmedBytes * 100 / file.size : 0)%"
         case "committing": String(localized: "处理中…")
         case "ready": "\(String(localized: "可发送")) · \(ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file))"
-        default: String(localized: String.LocalizationValue(file.error ?? "上传失败"))
+        default: file.error?.localized ?? String(localized: "upload.failed")
         }
     }
 
@@ -3760,7 +3760,7 @@ struct ConversationProcessTool: Identifiable {
 
     var activitySummary: ToolActivitySummary {
         ToolActivitySummaryFormatter.shared.summarize(
-            name: call?.title ?? result?.title ?? "工具",
+            name: call?.title ?? result?.title ?? "",
             arguments: call?.text ?? ""
         )
     }
@@ -4371,11 +4371,11 @@ private struct ConversationProcessToolHeaderRow: View {
                 .frame(width: 17)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 7) {
-                    Text(summary.label)
+                    Text(summary.labelMessage.localized)
                         .appFont(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
-                    if !summary.annotation.isEmpty {
-                        Text(summary.annotation)
+                    if let annotation = summary.annotationMessage?.localized {
+                        Text(annotation)
                             .appFont(.caption.monospacedDigit())
                             .foregroundStyle(.tertiary)
                     }
@@ -5933,7 +5933,7 @@ struct TeamContentSheet: View {
                             Text("当前会话使用普通子智能体").appFont(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    if let error = store.teamSnapshot.error { Text(error).foregroundStyle(.orange).appFont(.callout) }
+                    if let error = store.teamSnapshot.error { Text(error.localized).foregroundStyle(.orange).appFont(.callout) }
                     if store.teamSnapshot.state != "ready" {
                         HStack {
                             Text(store.teamSnapshot.state == "migration-required" ? String(localized: "团队数据待刷新，请在桌面端确认会话格式") : String(localized: "团队数据暂不可用"))

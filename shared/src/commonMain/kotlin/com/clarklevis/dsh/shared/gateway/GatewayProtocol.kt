@@ -1,5 +1,7 @@
 package com.clarklevis.dsh.shared.gateway
 
+import com.clarklevis.dsh.shared.i18n.UiMessage
+import com.clarklevis.dsh.shared.i18n.UiMessageException
 import com.clarklevis.dsh.shared.protocol.GatewayPairingPayload
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayGoalRef
@@ -17,21 +19,25 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-class GatewayPairingPayloadException(message: String) : IllegalArgumentException(message)
+/** 配对/地址校验失败；[uiMessage] 供界面本地化，`message` 为英文日志文本。 */
+class GatewayPairingPayloadException(uiMessage: UiMessage, logMessage: String) : UiMessageException(uiMessage, logMessage)
 
 /** 与 iOS PairingPayloadParser 相同的 version 2、严格 Base64URL 和过期语义。 */
 object GatewayPairingPayloadParser {
     fun parse(rawValue: String, nowEpochMilliseconds: Long): GatewayPairingPayload {
         val normalized = rawValue.trim()
         val decoded = decodeBase64Url(normalized)
-            ?: throw GatewayPairingPayloadException("配对内容不是有效的 Base64URL 字符串")
+            ?: throw GatewayPairingPayloadException(UiMessage("pairing.notBase64Url"), "Pairing content is not a valid Base64URL string")
         val payload = runCatching {
             wireJson.decodeFromString<GatewayPairingPayload>(decoded.decodeToString())
         }.getOrElse {
-            throw GatewayPairingPayloadException("Base64URL 解码后的内容不是有效的配对 JSON")
+            throw GatewayPairingPayloadException(UiMessage("pairing.invalidJson"), "Decoded Base64URL content is not valid pairing JSON")
         }
         if (payload.version != 2) {
-            throw GatewayPairingPayloadException("不支持的配对协议版本 ${payload.version}")
+            throw GatewayPairingPayloadException(
+                UiMessage("pairing.unsupportedVersion", listOf(payload.version.toString())),
+                "Unsupported pairing protocol version ${payload.version}"
+            )
         }
         requireWebSocketEndpoint(payload.publicUrl)
         if (
@@ -39,10 +45,10 @@ object GatewayPairingPayloadParser {
             ',' in payload.pairingCode ||
             payload.pairingCode.any { it.isWhitespace() || it.isISOControl() }
         ) {
-            throw GatewayPairingPayloadException("二维码中的一次性 pairingCode 无效")
+            throw GatewayPairingPayloadException(UiMessage("pairing.invalidCode"), "The QR code's one-time pairingCode is invalid")
         }
         if (payload.expiresAt <= nowEpochMilliseconds) {
-            throw GatewayPairingPayloadException("二维码配对码已经过期")
+            throw GatewayPairingPayloadException(UiMessage("pairing.expired"), "The QR pairing code has expired")
         }
         GatewayIdentity.validate(null, payload.gatewayId)
         GatewayIdentity.endpoints(payload)
@@ -451,7 +457,7 @@ object GatewayRequests {
         put("sessionId", sessionId)
         put("maxMessages", maxMessages)
         beforeSequence?.let {
-            require(it >= 0 && historyFormatVersion != null) { "历史游标必须携带读取时的格式版本" }
+            require(it >= 0 && historyFormatVersion != null) { "History cursor must carry the format version it was read with" }
             put("beforeSeq", it)
             put("historyFormatVersion", historyFormatVersion)
         }
@@ -723,18 +729,23 @@ object GatewayRequests {
 
 internal fun requireWebSocketEndpoint(endpoint: String) {
     if (endpoint.any { it.isWhitespace() || it.isISOControl() }) {
-        throw GatewayPairingPayloadException("publicUrl 不是有效的 ws:// 或 wss:// 地址")
+        throw invalidWebSocketEndpoint()
     }
     val separator = endpoint.indexOf("://")
     if (separator <= 0) {
-        throw GatewayPairingPayloadException("publicUrl 不是有效的 ws:// 或 wss:// 地址")
+        throw invalidWebSocketEndpoint()
     }
     val scheme = endpoint.take(separator).lowercase()
     val authority = endpoint.drop(separator + 3).substringBefore('/').substringBefore('?')
     if (scheme !in setOf("ws", "wss") || authority.isBlank() || '@' in authority) {
-        throw GatewayPairingPayloadException("publicUrl 不是有效的 ws:// 或 wss:// 地址")
+        throw invalidWebSocketEndpoint()
     }
 }
+
+private fun invalidWebSocketEndpoint() = GatewayPairingPayloadException(
+    UiMessage("pairing.invalidPublicUrl"),
+    "publicUrl is not a valid ws:// or wss:// address"
+)
 
 internal fun decodeBase64(value: String): ByteArray? = decodeBase64Alphabet(value, urlSafe = false)
 

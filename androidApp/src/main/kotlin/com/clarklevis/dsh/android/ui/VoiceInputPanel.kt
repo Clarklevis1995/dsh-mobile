@@ -130,7 +130,7 @@ fun VoiceInputPanel(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             val textColor = if (state.recordingLimitApproaching) MaterialTheme.colorScheme.error else ink.copy(alpha = 0.9f)
-            Text(appText(state.status), color = textColor, fontSize = 17.sp)
+            Text(state.status?.let { appText(it) }.orEmpty(), color = textColor, fontSize = 17.sp)
             if (state.phase == "recording") {
                 Text(state.recordingTimeLabel, color = textColor, fontSize = 15.sp, modifier = Modifier.padding(top = 8.dp))
             }
