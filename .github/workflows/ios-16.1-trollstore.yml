@@ -63,6 +63,9 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
           ls "$SDK/platforms" 2>/dev/null || true
 
+      - name: 校验本地化（中英文目录与未本地化的中文字面量）
+        run: python3 scripts/verify-localizations.py
+
       - name: 预构建 KMP framework（release/iosArm64）
         run: ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-daemon --stacktrace
 
