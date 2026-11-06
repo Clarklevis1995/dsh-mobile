@@ -14,6 +14,9 @@ private final class AgentNotificationAppDelegate: NSObject, UIApplicationDelegat
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // Repair the former single-language override for existing installations.
+        let language = AppLanguage.load()
+        if language != .system { language.apply() }
         ChatCacheDiagnostics.shared.localLogWriter = { LocalAppLog.shared.write($0) }
         LocalAppLog.shared.write("INFO App started")
         _ = AgentUserNotificationManager.shared
