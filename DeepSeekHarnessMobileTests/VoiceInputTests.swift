@@ -277,13 +277,13 @@ final class VoiceInputTests: XCTestCase {
         voice.release()
         XCTAssertTrue(voice.state.active)
         XCTAssertFalse(voice.state.overlayVisible)
-        XCTAssertEqual(voice.state.status, "")
+        XCTAssertNil(voice.state.status)
         await fulfillment(of: [disappeared], timeout: 0.7)
         _ = shared.captureFinished(id: token, pcmBase64: Data(repeating: 0, count: 16000).base64EncodedString(), nowMilliseconds: 1700)
         voice.draftChanged("原草稿")
         XCTAssertEqual(voice.state.phase, "transcribing")
         XCTAssertFalse(voice.state.overlayVisible)
-        XCTAssertEqual(voice.state.status, "")
+        XCTAssertNil(voice.state.status)
         voice.accept("""
         {"kind":"speech-transcript","requestId":"\(token)","text":"后台回填文字"}
         """)
