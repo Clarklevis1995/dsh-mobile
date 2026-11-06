@@ -1,0 +1,23 @@
+name: Localization checks
+
+# 每个 PR 都运行本地化守卫：中英文目录、Info.plist 权限说明，以及 iOS / 小组件 / Android / 共享代码中
+# 未本地化的中文字面量。只依赖 Python，不需要 Xcode 或 Gradle。
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 校验本地化
+        run: python3 scripts/verify-localizations.py
+
+      - name: 校验脚本自身的测试
+        run: python3 scripts/test_verify_localizations.py
