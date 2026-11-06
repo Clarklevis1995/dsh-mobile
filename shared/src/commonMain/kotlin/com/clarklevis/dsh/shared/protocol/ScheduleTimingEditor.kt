@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.shared.protocol
 
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import kotlinx.serialization.json.Json
 
 /** 两端共用的时间规则草稿。日期和时刻是所选 IANA 时区的墙上时间，不先转换为 UTC。 */
@@ -90,26 +91,26 @@ object ScheduleTimingEditor {
         return if (validationError(draft) == null) draft else fallback
     }
 
-    fun validationError(draft: ScheduleTimingDraft): String? {
+    fun validationError(draft: ScheduleTimingDraft): UiMessage? {
         if (draft.frequency == "advanced") {
-            if (draft.advanced.isBlank()) return "请输入 Cron 或 DTSTART/RRULE 规则。"
-            if (!draft.advanced.trimStart().startsWith("DTSTART") && draft.advanced.trim().split(Regex("\\s+")).size != 5) return "Cron 需要 5 个字段；RRULE 需要 DTSTART 和 RRULE 两行。"
+            if (draft.advanced.isBlank()) return UiMessage("schedule.timing.advancedEmpty")
+            if (!draft.advanced.trimStart().startsWith("DTSTART") && draft.advanced.trim().split(Regex("\\s+")).size != 5) return UiMessage("schedule.timing.advancedShape")
         } else {
-            if (draft.frequency !in listOf("once", "minutely", "hourly", "daily", "weekly", "monthly")) return "请选择重复类型。"
-            if (draft.frequency != "once" && (draft.interval.toIntOrNull()?.let { it in 1..10000 } != true)) return "重复间隔请输入 1 到 10000 的整数。"
-            if (!Regex("\\d{4}-\\d{2}-\\d{2}").matches(draft.date)) return "请选择有效日期。"
-            if (!Regex("(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{1,3})?").matches(draft.time)) return "时间格式为 HH:mm:ss，可保留最多 3 位毫秒。"
+            if (draft.frequency !in listOf("once", "minutely", "hourly", "daily", "weekly", "monthly")) return UiMessage("schedule.timing.frequencyMissing")
+            if (draft.frequency != "once" && (draft.interval.toIntOrNull()?.let { it in 1..10000 } != true)) return UiMessage("schedule.timing.intervalRange")
+            if (!Regex("\\d{4}-\\d{2}-\\d{2}").matches(draft.date)) return UiMessage("schedule.timing.invalidDate")
+            if (!Regex("(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{1,3})?").matches(draft.time)) return UiMessage("schedule.timing.timeFormat")
             val parts = draft.date.split('-').map { it.toInt() }
             val leap = parts[0] % 4 == 0 && (parts[0] % 100 != 0 || parts[0] % 400 == 0)
             val monthDays = listOf(31, if (leap) 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-            if (parts[0] !in 1..9999 || parts[1] !in 1..12 || parts[2] !in 1..monthDays[parts[1] - 1]) return "请选择有效日期。"
+            if (parts[0] !in 1..9999 || parts[1] !in 1..12 || parts[2] !in 1..monthDays[parts[1] - 1]) return UiMessage("schedule.timing.invalidDate")
             val usesRRule = draft.frequency in listOf("minutely", "hourly", "monthly") ||
                 (draft.frequency in listOf("daily", "weekly") && draft.interval.toInt() != 1)
-            if (usesRRule && draft.time.substringAfter('.', "0").any { it != '0' }) return "此重复规则仅支持整秒，请将毫秒设为 000。"
-            if (draft.frequency == "weekly" && (draft.weekdays.split(',').any { it.toIntOrNull()?.let { day -> day in 1..7 } != true } || draft.weekdays.split(',').distinct().size != draft.weekdays.split(',').size)) return "每周至少选择一天。"
-            if (draft.frequency == "monthly" && draft.monthDay.toIntOrNull()?.let { it in 1..31 } != true) return "每月日期请输入 1 到 31。"
+            if (usesRRule && draft.time.substringAfter('.', "0").any { it != '0' }) return UiMessage("schedule.timing.wholeSeconds")
+            if (draft.frequency == "weekly" && (draft.weekdays.split(',').any { it.toIntOrNull()?.let { day -> day in 1..7 } != true } || draft.weekdays.split(',').distinct().size != draft.weekdays.split(',').size)) return UiMessage("schedule.timing.weekdayMissing")
+            if (draft.frequency == "monthly" && draft.monthDay.toIntOrNull()?.let { it in 1..31 } != true) return UiMessage("schedule.timing.monthDayRange")
         }
-        if (!Regex("[A-Za-z0-9_+./-]+").matches(draft.timeZone) || (draft.timeZone != "UTC" && !draft.timeZone.contains('/'))) return "请选择有效的 IANA 时区。"
+        if (!Regex("[A-Za-z0-9_+./-]+").matches(draft.timeZone) || (draft.timeZone != "UTC" && !draft.timeZone.contains('/'))) return UiMessage("schedule.timing.invalidTimeZone")
         return null
     }
 

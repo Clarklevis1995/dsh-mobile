@@ -59,16 +59,17 @@ internal fun initialTimingDraft(task: MobileScheduledTask): ScheduleTimingDraft 
     return ScheduleTimingEditor.fromRecord(task.raw.displayText(), zone.id, start)
 }
 
+/** Localized text of the first validation failure, or null when the draft is valid. */
 internal fun timingValidationError(draft: ScheduleTimingDraft): String? {
-    ScheduleTimingEditor.validationError(draft)?.let { return it }
-    if (draft.timeZone !in TimeZone.getAvailableIDs() && draft.timeZone != "UTC") return "请选择有效的 IANA 时区。"
+    ScheduleTimingEditor.validationError(draft)?.let { return appText(it) }
+    if (draft.timeZone !in TimeZone.getAvailableIDs() && draft.timeZone != "UTC") return appText("请选择有效的 IANA 时区。")
     if (draft.frequency == "once") {
         val zone = TimeZone.getTimeZone(draft.timeZone)
         val value = "${draft.date}T${draft.time}"
         val instant = listOf("yyyy-MM-dd'T'HH:mm:ss.SSS", "yyyy-MM-dd'T'HH:mm:ss").firstNotNullOfOrNull { pattern ->
             runCatching { SimpleDateFormat(pattern, Locale.US).apply { timeZone = zone; isLenient = false }.parse(value) }.getOrNull()
-        } ?: return "请选择有效的日期和时间。"
-        if (instant.time <= System.currentTimeMillis()) return "请选择未来的日期和时间。"
+        } ?: return appText("请选择有效的日期和时间。")
+        if (instant.time <= System.currentTimeMillis()) return appText("请选择未来的日期和时间。")
     }
     return null
 }
