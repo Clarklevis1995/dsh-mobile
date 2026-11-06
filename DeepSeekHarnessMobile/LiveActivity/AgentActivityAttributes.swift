@@ -18,12 +18,47 @@ struct AgentActivityAttributes: ActivityAttributes {
         var toolName: String?
         var stepKind: AgentActivityStepKind?
         var updatedAt: Date
+        /// Widget chrome text built by the app in the app language. The widget keeps no
+        /// user-facing literals of its own. Optional so activities started by an older build
+        /// still decode; the widget then shows only `status`/`detail` and hides label-only chrome.
+        var labels: AgentActivityLabels? = nil
     }
 
     let gatewayID: String
     let sessionID: String
     let sessionTitle: String
     let startedAt: Date
+}
+
+/// Localized chrome strings the widget renders verbatim, filled by the app for the current phase.
+struct AgentActivityLabels: Codable, Hashable {
+    /// Header link, e.g. "Details".
+    var details: String
+    /// Failure action opening the session, e.g. "View details".
+    var viewDetails: String
+    /// Footer link opening the session, e.g. "View session".
+    var viewSession: String
+    /// Failure action that re-checks the result.
+    var checkResult: String
+    /// iOS 16.1 fallback shown instead of the approval buttons.
+    var handleInApp: String
+    var reject: String
+    var allowOnce: String
+    /// Shown when an approval has no command text.
+    var awaitingOperationDetail: String
+    /// Shown while an approval decision is being confirmed by the host.
+    var awaitingHostConfirmation: String
+    /// Expanded-island badge when the activity is stale.
+    var staleBadge: String
+    /// Step title when the activity is stale.
+    var staleTitle: String
+    /// Expanded-island badge for the current phase.
+    var badge: String
+    /// Compact trailing badge for the current phase (empty while running).
+    var compactBadge: String
+    /// Step title and detail used when `detail`/`secondaryDetail` are empty.
+    var defaultTitle: String
+    var defaultDetail: String
 }
 
 /// 当前显示在实时活动中的执行轨迹类型。
