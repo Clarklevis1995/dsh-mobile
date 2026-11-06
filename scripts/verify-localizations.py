@@ -217,21 +217,34 @@ def string_literals(source: str, kotlin: bool) -> list[tuple[int, int, str]]:
     return out
 
 
-def call_spans(source: str, openers: tuple[str, ...], literals: list[tuple[int, int, str]]) -> list[tuple[int, int]]:
-    """返回 opener 之后到配对右括号之间的区间（括号计数忽略字符串内容）。"""
-    in_string = bytearray(len(source))
+def string_mask(source: str, literals: list[tuple[int, int, str]]) -> bytearray:
+    mask = bytearray(len(source))
     for start, end, _ in literals:
-        in_string[start:end] = b"\x01" * (end - start)
+        mask[start:end] = b"\x01" * (end - start)
+    return mask
+
+
+def key_argument_spans(source: str, openers: tuple[str, ...], mask: bytearray) -> list[tuple[int, int]]:
+    """返回 opener 之后第一个参数的区间（到同层逗号或配对右括号为止），即本地化键表达式。
+    之后的格式化参数不会被查表，因此不享受豁免。"""
     spans = []
     for opener in openers:
         pattern = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(opener))
         for match in pattern.finditer(source):
-            if in_string[match.start()]:
+            if mask[match.start()]:
                 continue
             depth, j = 1, match.end()
-            while j < len(source) and depth:
-                if not in_string[j]:
-                    depth += (source[j] == "(") - (source[j] == ")")
+            while j < len(source):
+                if not mask[j]:
+                    char = source[j]
+                    if char in "([{":
+                        depth += 1
+                    elif char in ")]}":
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    elif char == "," and depth == 1:
+                        break
                 j += 1
             spans.append((match.end(), j))
     return spans
@@ -239,6 +252,17 @@ def call_spans(source: str, openers: tuple[str, ...], literals: list[tuple[int, 
 
 def inside(position: int, spans: list[tuple[int, int]]) -> bool:
     return any(start <= position < end for start, end in spans)
+
+
+IGNORE_COMMENT = re.compile(r"i18n-ignore:\s*\S")
+
+
+def has_ignore_comment(source: str, mask: bytearray, line_start: int, line_end: int) -> bool:
+    """同一行、位于字符串之外的 `//` 注释里写有 `i18n-ignore: <原因>`。"""
+    for j in range(line_start, line_end - 1):
+        if not mask[j] and source.startswith("//", j):
+            return bool(IGNORE_COMMENT.search(source, j, line_end))
+    return False
 
 
 def swift_key_known(raw: str, keys: set[str], key_patterns: list[str]) -> bool:
@@ -266,11 +290,12 @@ def check_untranslated_literals(ios_keys: set[str], android_keys: set[str], plat
             if not any(HAN.search(raw) for _, _, raw in literals):
                 continue
             scanned += 1
+            mask = string_mask(source, literals)
             if platform == "android":
-                localized = call_spans(source, ("appText(", "appTextKey("), literals)
+                localized = key_argument_spans(source, ("appText(", "appTextKey("), mask)
             elif platform == "ios":
-                localized = call_spans(source, SWIFT_LOCALIZING_CALLS, literals)
-                ui = call_spans(source, SWIFT_UI_CALLS, literals)
+                localized = key_argument_spans(source, SWIFT_LOCALIZING_CALLS, mask)
+                ui = key_argument_spans(source, SWIFT_UI_CALLS, mask)
             else:
                 localized = []
             for start, _, raw in literals:
@@ -278,8 +303,8 @@ def check_untranslated_literals(ios_keys: set[str], android_keys: set[str], plat
                     continue
                 line_start = source.rfind("\n", 0, start) + 1
                 line_end = source.find("\n", start)
-                line = source[line_start:line_end if line_end >= 0 else None]
-                if IGNORE_MARK in line:
+                line_end = len(source) if line_end < 0 else line_end
+                if has_ignore_comment(source, mask, line_start, line_end):
                     continue
                 number = source.count("\n", 0, start) + 1
                 location = f"{path.relative_to(ROOT)}:{number}"
