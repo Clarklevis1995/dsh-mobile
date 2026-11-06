@@ -45,11 +45,11 @@ flowchart LR
   P5 --> P6
 ```
 
-### Phase 0 — guard and baseline
-- Add `scripts/check-i18n.py`: lexes `.swift`/`.kt` under `DeepSeekHarnessMobile/`, `AgentLiveActivityWidget/`, `androidApp/src/main/`, `shared/src/commonMain/` (comments and tests skipped); flags any CJK string literal that is not (a) an iOS localized-API argument whose key has an `en` translation in `Localizable.xcstrings`, (b) an `appText(...)` argument present in `AndroidStrings.english`, or (c) listed in `scripts/i18n-allowlist.txt` (regex patterns, Chinese-only date formats under a `zh` branch, the `isChinese` branch of `mobileConversationLabels`, recommendation-suffix matchers, previews).
-- Seed `scripts/i18n-baseline.txt` with today's leaks; the script fails only on leaks not in the baseline and on baseline entries that no longer exist (forces the ratchet down).
-- Run it from `AndroidStringsTest` and `LocalizationCatalogTests` (or a Gradle task + Xcode build phase) so both existing test suites enforce it.
-- Exit: script runs in both suites; baseline committed.
+### Phase 0 — guard
+- Extend the existing `scripts/verify-localizations.py`: a comment-aware lexer scans `.swift`/`.kt` under `DeepSeekHarnessMobile/`, `AgentLiveActivityWidget/`, `androidApp/src/main/` and `shared/src/*Main/` and flags any Chinese string literal that is not (a) an argument of an iOS localizing API (`String(localized:)`, `Text(`, `Button(`, `.navigationTitle(` …) whose key has an `en` entry in `Localizable.xcstrings`, (b) inside `appText(...)` / `appTextKey(...)` with an entry in `AndroidStrings`, or (c) on a line marked `// i18n-ignore: <reason>` (regexes, legacy-data matchers, zh-only formats inside a zh branch). `--platform ios|widget|android|shared` scopes the scan.
+- `appTextKey("中文")` (Android) marks a key stored now and resolved later with `appText(value)`; the verifier checks it like `appText`.
+- Enforcement: Gradle `:androidApp:verifyLocalizations` runs before every Android unit-test task; the iOS CI workflow runs the script before building.
+- No baseline file: the scan stays red until the phases below are done.
 
 ### Phase 1 — shared `UiMessage`
 - Add `UiMessage` and convert, store by store: `SharedVoiceInputStore`, `SharedFileUploadStore`, `SharedQueueStore`, `SharedSessionAgentPresetStore`, `SharedTeamStore`, `VoiceInputProtocol`, `AssistantStreamState`, `GatewayWireDecoder`, `GatewayProfile`, `GatewayRuntime`, `GatewayProtocol` (`GatewayPairingPayloadException` carries a `UiMessage`).
@@ -83,7 +83,7 @@ flowchart LR
 ### Phase 6 — host messages and final sweep
 - Map known host error `code`s to local keys before falling back to `frame.message` (plugins, schedules, uploads, presets, history). Unknown codes pass through as `UiMessage.raw`.
 - File a host-side ticket: send `code` on every error frame, or honor a client `locale` on connect.
-- Remove `scripts/i18n-baseline.txt` (must be empty); scanner now fails on any leak.
+- Verifier clean across all platforms; it now fails on any new leak.
 - English walkthrough on both apps with screenshots: onboarding/pairing, session list, conversation (tools, thinking, queue, quote, images), voice input, file upload, scheduled tasks (list, create, history), plugins (list, update), settings (storage, logs, network diagnostics, Tailscale), Live Activity.
 
 ## Risks
