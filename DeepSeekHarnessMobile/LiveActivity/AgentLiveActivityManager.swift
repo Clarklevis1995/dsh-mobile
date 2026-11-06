@@ -61,6 +61,7 @@ final class AgentLiveActivityManager {
             ) {
                 return
             }
+            relocalizeIfNeeded(activityKey: activityKey, activity: newest)
         }
         for activity in restored where activity.id != activities.values.first?.id {
             dismissImmediately(activity)
@@ -512,6 +513,7 @@ final class AgentLiveActivityManager {
                 // 的唯一有效实例，让后续进度和 turn/end 能继续更新同一张卡片。
                 activities[activityKey] = activity
                 latestStates[activityKey] = activity.stateCompat
+                relocalizeIfNeeded(activityKey: activityKey, activity: activity)
             }
         }
     }
@@ -519,11 +521,56 @@ final class AgentLiveActivityManager {
     /// 后台保活脉冲不改变业务状态，只延长当前实时活动的有效期。
     func refreshActiveActivities() {
         for (activityKey, activity) in activities where !endingSessionKeys.contains(activityKey) {
-            var currentState = latestStates[activityKey] ?? activity.stateCompat
+            var currentState = relocalized(latestStates[activityKey] ?? activity.stateCompat)
             guard !currentState.phase.isTerminal else { continue }
             currentState.updatedAt = .now
             enqueueUpdate(activityKey: activityKey, activity: activity, state: currentState)
         }
+    }
+
+    /// An activity restored after the app language changed still carries text resolved in the
+    /// old language. Rebuild the phase-derived text and push it only when something changed.
+    private func relocalizeIfNeeded(activityKey: String, activity: Activity<AgentActivityAttributes>) {
+        guard !endingSessionKeys.contains(activityKey) else { return }
+        let current = latestStates[activityKey] ?? activity.stateCompat
+        guard !current.phase.isTerminal else { return }
+        var next = relocalized(current)
+        guard next != current else { return }
+        next.updatedAt = .now
+        enqueueUpdate(activityKey: activityKey, activity: activity, state: next)
+    }
+
+    /// Re-resolves labels and the status/detail text that depends only on the phase in the current
+    /// language. Event-provided content (session title, command, step/tool details, host reason,
+    /// question prompt) is preserved. The submitting phase's detail names the chosen outcome,
+    /// which the state does not record, so it keeps its text until the next event.
+    private func relocalized(_ state: AgentActivityAttributes.ContentState) -> AgentActivityAttributes.ContentState {
+        var next = state
+        next.labels = AgentActivityLabels.localized(phase: state.phase, executionFailed: false)
+        switch state.phase {
+        case .running:
+            next.status = String(localized: "正在执行")
+        case .awaitingChoice:
+            next.status = String(localized: "需要选择")
+            next.detail = String(localized: "请打开 App 完成选择")
+        case .awaitingApproval:
+            next.status = String(localized: "需要批准 · 仅限本次")
+            next.secondaryDetail = String(localized: "仅授权本次操作")
+        case .submittingApproval:
+            next.status = String(localized: "正在提交决定")
+            next.secondaryDetail = String(localized: "正在等待主机确认")
+        case .approved:
+            next.status = String(localized: "已允许本次操作")
+            next.detail = String(localized: "批准已送达")
+            next.secondaryDetail = String(localized: "等待 Agent 更新下一步")
+        case .rejected:
+            next.status = String(localized: "已拒绝本次操作")
+            next.detail = String(localized: "本次命令未执行")
+            next.secondaryDetail = String(localized: "决定已送达，等待 Agent 后续状态")
+        case .failed, .completed:
+            break
+        }
+        return next
     }
 
     private func upsert(
