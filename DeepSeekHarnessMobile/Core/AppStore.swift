@@ -4943,7 +4943,7 @@ final class AppStore: ObservableObject {
         messageSubmissionTimeout?.cancel()
         messageSubmissionPending = false
         queueActionTimeout?.cancel()
-        if queueState.pendingItemId != nil { queueState = queueStore.failPending(message: "连接已中断，请重新连接后确认队列状态") }
+        if queueState.pendingItemId != nil { queueState = queueStore.failPending(message: "连接已中断，请重新连接后确认队列状态".rawUiMessage) }
         assistantStreamState.disconnect()
         resetRemoteSearchForOffline()
         // Keep the prepared destination, but require a fresh activation after
