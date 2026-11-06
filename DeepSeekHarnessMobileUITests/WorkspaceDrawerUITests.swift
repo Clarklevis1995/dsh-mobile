@@ -18,6 +18,9 @@ final class ModelMenuLayoutUITests: XCTestCase {
             } ?? sessions.firstMatch
             try XCTSkipUnless(session.waitForExistence(timeout: 10), "需要一个已有普通会话")
             session.tap()
+            let input = app.textViews["composer-input"]
+            XCTAssertTrue(input.waitForExistence(timeout: 10))
+            input.tap()
             let toggle = app.buttons["conversation-model-menu-toggle"]
             XCTAssertTrue(toggle.waitForExistence(timeout: 10))
             try XCTSkipUnless(NSPredicate { _, _ in toggle.isEnabled }.evaluateAfterWaiting(timeout: 10),
@@ -47,6 +50,7 @@ final class ModelMenuLayoutUITests: XCTestCase {
             outside.tap()
             XCTAssertFalse(models.exists)
 
+            if !toggle.isHittable { input.tap() }
             toggle.tap()
             XCTAssertTrue(effortSubmenu.waitForExistence(timeout: 5))
             if effortSubmenu.isEnabled {
@@ -91,7 +95,121 @@ final class ModelMenuLayoutUITests: XCTestCase {
     }
 }
 
+final class CompactComposerUITests: XCTestCase {
+    func testAttachmentMenuDoesNotExpandCompactComposer() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        if app.alerts.firstMatch.waitForExistence(timeout: 2) { app.alerts.firstMatch.buttons.firstMatch.tap() }
+        let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-"))
+        try XCTSkipUnless(sessions.firstMatch.waitForExistence(timeout: 10), "需要一个已有会话验证附件菜单")
+        sessions.firstMatch.tap()
+        let input = app.textViews["composer-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 10))
+        let compact = input.frame
+        app.buttons["添加附件"].tap()
+        XCTAssertTrue(app.buttons["文件"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["图片"].exists)
+        XCTAssertEqual(input.frame.width, compact.width, accuracy: 1, "仅打开菜单不能展开输入框")
+        XCTAssertEqual(input.frame.height, compact.height, accuracy: 1)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        XCTAssertFalse(app.buttons["composer-action"].isHittable)
+        XCTAssertEqual(input.frame.width, compact.width, accuracy: 1)
+    }
+
+    func testFocusExpandsComposerAndTimelineTapRestoresCompactLayout() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: 2) { alert.buttons.firstMatch.tap() }
+        let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-"))
+        try XCTSkipUnless(sessions.firstMatch.waitForExistence(timeout: 10), "需要一个已有会话验证真实输入框")
+        sessions.firstMatch.tap()
+        let input = app.textViews["composer-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 10))
+        try XCTSkipUnless((input.value as? String ?? "").isEmpty, "保留已有草稿，仅在空草稿中验证输入")
+        let action = app.buttons["composer-action"]
+        XCTAssertFalse(action.isHittable)
+        let compactFrame = input.frame
+        attach(app, name: "会话输入框-收紧")
+        input.tap()
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        XCTAssertTrue(NSPredicate { _, _ in action.isHittable }.evaluateAfterWaiting(timeout: 5))
+        XCTAssertGreaterThan(input.frame.width, compactFrame.width + 30)
+        let draft = "Composer layout check"
+        input.typeText(draft)
+        defer {
+            if input.exists {
+                input.tap()
+                input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: draft.count))
+            }
+        }
+        attach(app, name: "会话输入框-展开")
+        let viewport = app.collectionViews["conversation-history-viewport"]
+        XCTAssertTrue(viewport.exists)
+        viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).tap()
+        XCTAssertTrue(NSPredicate { _, _ in !action.isHittable }.evaluateAfterWaiting(timeout: 5))
+        XCTAssertEqual(input.value as? String, draft)
+        XCTAssertEqual(input.frame.width, compactFrame.width, accuracy: 1)
+        attach(app, name: "会话输入框-收紧并保留草稿")
+    }
+
+    private func attach(_ app: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name; attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
 final class TrajectoryGestureUITests: XCTestCase {
+    func testComposerSelectionDragDoesNotSwipePage() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: 2) { alert.buttons.firstMatch.tap() }
+        let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-"))
+        try XCTSkipUnless(sessions.firstMatch.waitForExistence(timeout: 10), "需要一个已有会话检查输入框手势")
+        sessions.firstMatch.tap()
+        let input = app.textViews["composer-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 10))
+        let previousDraft = input.value as? String ?? ""
+        try XCTSkipUnless(previousDraft.isEmpty, "保留已有草稿，仅在空输入框中检查拖选")
+        input.tap()
+        input.typeText("你好哈哈哈 selection gesture")
+        let draft = input.value as? String
+        defer {
+            if input.exists, input.isHittable {
+                // 点击末行右侧空白，将光标移到末尾后清理测试草稿。
+                input.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.9)).tap()
+                input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (draft ?? "").count))
+            }
+        }
+        let title = app.staticTexts["conversation-page-title"]
+        let originalX = input.frame.minX
+        let left = input.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
+        let right = input.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        // 长按拖选、快速移动光标，以及选择手柄伸出输入卡片的触摸范围。
+        for duration in [1.0, 0.05] {
+            right.press(forDuration: duration, thenDragTo: left)
+            XCTAssertEqual(title.value as? String, "对话")
+            XCTAssertEqual(input.frame.minX, originalX, accuracy: 1)
+            left.press(forDuration: duration, thenDragTo: right)
+            XCTAssertEqual(title.value as? String, "对话")
+            XCTAssertEqual(input.frame.minX, originalX, accuracy: 1)
+            XCTAssertEqual(input.value as? String, draft)
+        }
+        let above = input.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0))
+            .withOffset(CGVector(dx: 0, dy: -20))
+        above.press(forDuration: 0.05, thenDragTo: left)
+        XCTAssertEqual(title.value as? String, "对话")
+        XCTAssertEqual(input.frame.minX, originalX, accuracy: 1)
+    }
+
     func testOverviewDragDoesNotSwipePageAndBodyStillCanSwipe() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -554,24 +672,44 @@ final class ScheduledTasksToolbarUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["定时任务"].waitForExistence(timeout: 5))
 
         let search = app.buttons["scheduled-tasks-search"]
-        let filter = app.buttons["scheduled-tasks-filter"]
+        let filter = app.segmentedControls["scheduled-tasks-status-tabs"]
+        let more = app.buttons["scheduled-tasks-more"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertTrue(search.isHittable)
         XCTAssertTrue(filter.isHittable)
+        XCTAssertFalse(app.buttons["scheduled-tasks-filter"].exists)
+        XCTAssertTrue(more.isHittable)
+        XCTAssertFalse(app.buttons["scheduled-tasks-create"].exists)
+        XCTAssertFalse(search.frame.intersects(more.frame))
+        XCTAssertGreaterThanOrEqual(filter.frame.minY, search.frame.maxY, "筛选入口必须位于导航栏下方")
         XCTAssertFalse(search.frame.intersects(filter.frame), "搜索和筛选不能互相重叠")
         let window = app.windows.firstMatch.frame
-        for button in [search, filter] {
+        for button in [search, filter, more] {
             XCTAssertGreaterThanOrEqual(button.frame.minX, window.minX)
             XCTAssertLessThanOrEqual(button.frame.maxX, window.maxX)
         }
         if #available(iOS 27.1, *), UIDevice.current.name.contains("Duo"), window.width > window.height {
-            XCTAssertEqual(search.frame.midX, filter.frame.midX, accuracy: 3)
-            XCTAssertGreaterThan(abs(search.frame.midY - filter.frame.midY), 35)
+            XCTAssertEqual(search.frame.midX, more.frame.midX, accuracy: 3)
+            XCTAssertGreaterThan(abs(search.frame.midY - more.frame.midY), 35)
         }
 
-        filter.tap()
-        XCTAssertTrue(app.buttons["全部"].waitForExistence(timeout: 5))
-        app.buttons["全部"].tap()
+        more.tap()
+        XCTAssertTrue(app.buttons["添加定时任务"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["删除已结束的定时任务"].exists)
+        XCTAssertLessThan(app.buttons["添加定时任务"].frame.minY,
+                          app.buttons["删除已结束的定时任务"].frame.minY)
+        let menuScreenshot = XCTAttachment(screenshot: app.screenshot())
+        menuScreenshot.name = "定时任务更多菜单"
+        menuScreenshot.lifetime = .keepAlways
+        add(menuScreenshot)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)).tap()
+
+        for title in ["已开启", "已暂停", "已结束", "全部"] {
+            let tab = filter.buttons[title]
+            XCTAssertTrue(tab.exists)
+            tab.tap()
+            XCTAssertTrue(tab.isSelected)
+        }
         search.tap()
         let field = app.textFields["搜索定时任务"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -581,6 +719,11 @@ final class ScheduledTasksToolbarUITests: XCTestCase {
         app.buttons["关闭搜索"].tap()
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertTrue(filter.isHittable)
+        XCTAssertTrue(more.isHittable)
+        let toolbarScreenshot = XCTAttachment(screenshot: app.screenshot())
+        toolbarScreenshot.name = "定时任务四项状态切换栏"
+        toolbarScreenshot.lifetime = .keepAlways
+        add(toolbarScreenshot)
     }
 }
 

@@ -1,39 +1,21 @@
 /* Taste Skill: DESIGN_VARIANCE 7, MOTION_INTENSITY 5, VISUAL_DENSITY 3.
    Native CSS on the existing static GitHub Pages site. One global theme,
-   cobalt accent, 20px surface radii, pill buttons, device-shaped screenshots. */
+   deep ocean palette, 20px surface radii, pill buttons, device-shaped screenshots. */
 :root {
-  color-scheme: light;
-  --bg: #f7f9fc;
-  --surface: #fff;
-  --surface-soft: #eef2f8;
-  --text: #132137;
-  --muted: #53627a;
-  --subtle: #5c6980;
-  --line: #d9e1ec;
-  --accent: #285cc4;
-  --accent-hover: #214da5;
-  --accent-soft: #e7eefb;
-  --logo-filter: none;
-  --shadow: 0 28px 70px rgb(38 62 107 / 15%);
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #101722; --surface: #182232; --surface-soft: #1c293c;
-    --text: #eef3fa; --muted: #b0bfd4; --subtle: #9eafc6;
-    --line: #334158; --accent: #87afff; --accent-hover: #a9c6ff;
-    --accent-soft: #203453; --logo-filter: invert(1);
-    --shadow: 0 28px 70px rgb(3 11 25 / 35%);
-  }
-}
-:root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #101722; --surface: #182232; --surface-soft: #1c293c;
-  --text: #eef3fa; --muted: #b0bfd4; --subtle: #9eafc6;
-  --line: #334158; --accent: #87afff; --accent-hover: #a9c6ff;
-  --accent-soft: #203453; --logo-filter: invert(1);
-  --shadow: 0 28px 70px rgb(3 11 25 / 35%);
+  --bg: #030d1c;
+  --surface: #081e32;
+  --surface-soft: #0b2941;
+  --text: #edf7ff;
+  --muted: #bad0e3;
+  --subtle: #adcadf;
+  --line: #25445d;
+  --accent: #a1ddff;
+  --accent-hover: #caedff;
+  --accent-soft: #123b56;
+  --logo-filter: invert(1);
+  --shadow: 0 28px 70px rgb(0 5 16 / 40%);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 90px; }
