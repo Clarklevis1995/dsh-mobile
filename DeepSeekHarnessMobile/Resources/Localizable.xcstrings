@@ -9415,7 +9415,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Command failed"
+            "value" : "Command execution failed"
           }
         }
       }
