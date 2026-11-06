@@ -13,8 +13,16 @@ import java.util.Locale
 internal fun appText(source: String, vararg arguments: Any?): String =
     AndroidStrings.text(source, Locale.getDefault(), *arguments)
 
+/**
+ * Marks a catalog key stored now and resolved later with [appText] (enum labels,
+ * option lists). Returns [source] unchanged; `scripts/verify-localizations.py`
+ * checks that the key exists in the catalog.
+ */
+internal fun appTextKey(source: String): String = source
+
 /** Resolves a shared [UiMessage]: raw host text stays verbatim, semantic keys use the catalog. */
 internal fun appText(message: UiMessage): String = AndroidStrings.text(message, Locale.getDefault())
+
 internal object AndroidStrings {
     private val placeholder = Regex("%(\\d+)\\\$s")
 
