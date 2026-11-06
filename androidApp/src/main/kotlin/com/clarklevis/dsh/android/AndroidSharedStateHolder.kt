@@ -391,12 +391,19 @@ class AndroidSharedStateHolder(
     var messageSelectionEnd: Int = Int.MAX_VALUE
     private var messageDraftState: String by mutableStateOf("")
     private var pendingCommandSubmission: MessageSubmission? = null
+    var composerText: String
+        get() = if ("message-quotes-v1" in gatewayState.capabilities)
+            com.clarklevis.dsh.shared.protocol.ComposerQuoteDraft.editableText(messageDraftState) else messageDraftState
+        set(value) {
+            messageDraft = if ("message-quotes-v1" in gatewayState.capabilities)
+                com.clarklevis.dsh.shared.protocol.ComposerQuoteDraft.replaceText(messageDraftState, value) else value
+        }
     var messageDraft: String
         get() = messageDraftState
         set(value) {
             if (messageDraftState != value) {
                 messageDraftState = value
-                voiceInput.draftChanged(value)
+                voiceInput.draftChanged(composerText)
                 inputGeneration += 1
                 applySlashCommandTransition(
                     slashCommandStore.updateInput(
@@ -649,13 +656,47 @@ class AndroidSharedStateHolder(
     var scheduleHistory: JsonValue? by mutableStateOf(null)
         private set
     private var scheduleHistoryRequestId: String? = null
+    private var scheduleHistoryTaskId: String? = null
+    private var scheduleHistoryAppending = false
+    var scheduleHistoryLoading by mutableStateOf(false)
+        private set
+    var scheduleHistoryError: String? by mutableStateOf(null)
+        private set
 
     fun loadScheduleHistory(task: MobileScheduledTask, before: String? = null) {
-        val appGraph = graph ?: return
+        if (scheduleHistoryLoading && scheduleHistoryTaskId == task.id) return
         val id = UUID.randomUUID().toString()
         scheduleHistoryRequestId = id
+        scheduleHistoryTaskId = task.id
+        scheduleHistoryAppending = before != null
         if (before == null) scheduleHistory = null
-        appGraph.gatewayScope.launch { appGraph.gatewayRuntime.sendRequest(GatewayRequests.hostScheduleHistory(id, task.id, before = before)) }
+        scheduleHistoryError = null
+        val appGraph = graph
+        if (appGraph == null || gatewayState.connection != GatewayConnectionState.CONNECTED) {
+            scheduleHistoryLoading = false
+            scheduleHistoryError = appText("请先连接 DeepSeek Harness")
+            return
+        }
+        scheduleHistoryLoading = true
+        appGraph.gatewayScope.launch {
+            if (!appGraph.gatewayRuntime.sendRequest(GatewayRequests.hostScheduleHistory(id, task.id, before = before))) {
+                withContext(Dispatchers.Main.immediate) {
+                    if (scheduleHistoryRequestId == id) {
+                        scheduleHistoryLoading = false
+                        scheduleHistoryError = appText("运行轨迹加载失败")
+                    }
+                }
+                return@launch
+            }
+            kotlinx.coroutines.delay(12_000)
+            withContext(Dispatchers.Main.immediate) {
+                if (scheduleHistoryRequestId == id && scheduleHistoryLoading) {
+                    scheduleHistoryRequestId = null
+                    scheduleHistoryLoading = false
+                    scheduleHistoryError = appText("运行轨迹加载超时，请重试")
+                }
+            }
+        }
     }
 
     fun filterScheduledTasks(active: Boolean?) {
@@ -960,8 +1001,13 @@ class AndroidSharedStateHolder(
         task: MobileScheduledTask,
         title: String,
         prompt: String,
-        change: JsonValue?
+        change: JsonValue?,
+        target: JsonValue? = null
     ): String? {
+        if (target != null && "schedule-management-v2" !in gatewayState.capabilities) {
+            scheduledTaskMutationError = appText("当前网关不支持修改执行位置，请升级网关")
+            return null
+        }
         val requestId = beginScheduledTaskMutation(task, if ("schedule-management-v2" in gatewayState.capabilities) "schedule-edit" else "schedule-update") ?: return null
         val appGraph = graph ?: return null
         appGraph.gatewayScope.launch {
@@ -969,6 +1015,7 @@ class AndroidSharedStateHolder(
                 val patch = mutableMapOf<String, JsonValue>("title" to JsonValue.StringValue(title.trim()),
                     "prompt" to JsonValue.StringValue(prompt.trim()))
                 change?.let { patch["timing"] = it }
+                target?.let { patch["target"] = it }
                 GatewayRequests.scheduleEdit(requestId, task.id, task.raw["updatedAt"], JsonValue.ObjectValue(patch))
             } else GatewayRequests.scheduleUpdate(task.sessionId, task.id, task.raw,
                 title = title.trim(), prompt = prompt.trim(), change = change, requestId = requestId)
@@ -1032,8 +1079,8 @@ class AndroidSharedStateHolder(
 
     private var preparingNewSession = false
 
-    suspend fun prepareNewSession(): Boolean {
-        if (selectedWorkspaceId == ALL_WORKSPACES_ID) {
+    suspend fun prepareNewSession(useDefaultWorkspace: Boolean = false): Boolean {
+        if (!useDefaultWorkspace && selectedWorkspaceId == ALL_WORKSPACES_ID) {
             platformError = appText("请先选择一个具体工作区，再创建新会话。")
             return false
         }
@@ -1052,7 +1099,7 @@ class AndroidSharedStateHolder(
         preparingNewSession = true
         try {
             val requestId = UUID.randomUUID().toString()
-            val workspaceId = activeWorkspace?.workspaceId
+            val workspaceId = if (useDefaultWorkspace) null else activeWorkspace?.workspaceId
             // 先登记再发送，快速返回的本地网关也不会丢失创建结果。
             val response = pendingSessionCreation.begin(requestId)
             val event = try {
@@ -1095,6 +1142,17 @@ class AndroidSharedStateHolder(
         } finally {
             preparingNewSession = false
         }
+    }
+
+    suspend fun prepareScheduledTaskConversation(): Boolean {
+        if (!prepareNewSession(useDefaultWorkspace = true)) return false
+        preparedImages = emptyList()
+        fileUploads.clear()
+        voiceInput.setVoiceMode(false)
+        messageDraft = appText("请根据需求创建一个自动化任务。")
+        messageSelectionStart = messageDraft.length
+        messageSelectionEnd = messageDraft.length
+        return true
     }
 
     val availableWorkspaces: List<GatewayWorkspace>
@@ -3220,7 +3278,13 @@ class AndroidSharedStateHolder(
                                         }
                                         when (event.frame.kind) {
                                             "schedule-history" -> if (event.frame.requestId == scheduleHistoryRequestId) {
-                                                scheduleHistory = JsonValue.fromJsonElement(kotlinx.serialization.json.Json.parseToJsonElement(event.rawJson))
+                                                val page = JsonValue.fromJsonElement(kotlinx.serialization.json.Json.parseToJsonElement(event.rawJson))
+                                                val previous = if (scheduleHistoryAppending) scheduleHistory?.get("records")?.arrayValue.orEmpty() else emptyList()
+                                                val fields = (page as? JsonValue.ObjectValue)?.value.orEmpty().toMutableMap()
+                                                fields["records"] = JsonValue.ArrayValue((previous + event.frame.records.orEmpty()).distinct())
+                                                scheduleHistory = JsonValue.ObjectValue(fields)
+                                                scheduleHistoryLoading = false
+                                                scheduleHistoryError = null
                                             }
                                             "schedule-list", "schedule-catalog" -> {
                                                 if (event.frame.kind == "schedule-list" && event.frame.requestId != scheduleListRequestId) return@withContext
@@ -3233,7 +3297,8 @@ class AndroidSharedStateHolder(
                                             }
                                             "schedule-changed" -> refreshScheduledTasks()
                                             "error" -> if (event.frame.requestType == "schedule-history" && event.frame.requestId == scheduleHistoryRequestId) {
-                                                scheduleHistory = JsonValue.ObjectValue(mapOf("records" to JsonValue.StringValue(event.frame.message ?: appText("执行记录加载失败"))))
+                                                scheduleHistoryLoading = false
+                                                scheduleHistoryError = event.frame.message ?: appText("运行轨迹加载失败")
                                             } else if (event.frame.requestType in setOf("schedule-catalog", "schedule-list") &&
                                                 (event.frame.requestId == null || event.frame.requestId == scheduleListRequestId)) {
                                                 scheduledTasksLoading = false

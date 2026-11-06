@@ -1363,11 +1363,11 @@ struct SessionSummary: Codable, Hashable, Sendable, Identifiable {
 }
 
 struct ScheduledTask: Identifiable, Hashable {
-    var everySeconds: Double? { raw["every_seconds"]?.doubleValue ?? raw["everySeconds"]?.doubleValue }
-    var expression: String? { raw["cron"]?["expression"]?.stringValue ?? raw["expression"]?.stringValue }
-    var clock: String? { raw[kind]?["time"]?.stringValue ?? raw["time"]?.stringValue }
-    var timeZone: String? { raw[kind]?["time_zone"]?.stringValue ?? raw["timeZone"]?.stringValue }
-    var weekdays: JSONValue? { raw["weekly"]?["weekdays"] ?? raw["weekdays"] }
+    var everySeconds: Double? { (raw["timing"] ?? raw)["every_seconds"]?.doubleValue ?? raw["everySeconds"]?.doubleValue }
+    var expression: String? { (raw["timing"] ?? raw)["cron"]?["expression"]?.stringValue ?? raw["expression"]?.stringValue }
+    var clock: String? { (raw["timing"] ?? raw)[kind]?["time"]?.stringValue ?? raw["time"]?.stringValue }
+    var timeZone: String? { (raw["timing"] ?? raw)[kind]?["time_zone"]?.stringValue ?? raw["timeZone"]?.stringValue }
+    var weekdays: JSONValue? { (raw["timing"] ?? raw)["weekly"]?["weekdays"] ?? raw["weekdays"] }
     let id: String
     let sessionID: String
     let title: String

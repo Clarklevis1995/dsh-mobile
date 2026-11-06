@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.android.ui
 
 import android.os.SystemClock
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -14,6 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -37,6 +40,7 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -76,12 +80,14 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -106,7 +112,7 @@ import kotlinx.coroutines.launch
 private val scheduleBlue = Color(0xFF0A84FF)
 
 internal enum class ScheduledTaskStatusFilter(private val sourceTitle: String) {
-    ALL(appTextKey("全部")), ACTIVE(appTextKey("已开启")), ENDED(appTextKey("已结束"));
+    ACTIVE("已开启"), PAUSED("已暂停"), ENDED("已结束"), ALL("全部");
 
     val title: String get() = appText(sourceTitle)
 }
@@ -121,7 +127,8 @@ internal fun filteredScheduledTasks(
         val matchesStatus = when (status) {
             ScheduledTaskStatusFilter.ALL -> true
             ScheduledTaskStatusFilter.ACTIVE -> task.status == "active"
-            ScheduledTaskStatusFilter.ENDED -> task.status != "active"
+            ScheduledTaskStatusFilter.PAUSED -> task.status == "paused"
+            ScheduledTaskStatusFilter.ENDED -> task.status != "active" && task.status != "paused"
         }
         matchesStatus && (search.isEmpty() || task.title.contains(search, ignoreCase = true) ||
             task.prompt.contains(search, ignoreCase = true))
@@ -132,16 +139,23 @@ internal fun filteredScheduledTasks(
 internal fun ScheduledTasksScreen(
     stateHolder: AndroidSharedStateHolder,
     onBack: () -> Unit,
-    onOpenSession: (String) -> Unit
+    onOpenSession: (String) -> Unit,
+    onCreateTask: () -> Unit = {}
 ) {
+    ScheduleTheme { ScheduledTasksContent(stateHolder, onBack, onOpenSession, onCreateTask) }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ScheduledTasksContent(stateHolder: AndroidSharedStateHolder, onBack: () -> Unit,
+    onOpenSession: (String) -> Unit, onCreateTask: () -> Unit) {
     val dark = isSystemInDarkTheme()
     var historyTask by remember { mutableStateOf<MobileScheduledTask?>(null) }
-    var creating by remember { mutableStateOf(false) }
-    var confirmClear by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<MobileScheduledTask?>(null) }
     var deletingTask by remember { mutableStateOf<MobileScheduledTask?>(null) }
     var revealedTaskId by remember { mutableStateOf<String?>(null) }
     var showsMutationError by remember { mutableStateOf(false) }
+    var confirmsDeleteEnded by remember { mutableStateOf(false) }
     var statusFilter by rememberSaveable { mutableStateOf(ScheduledTaskStatusFilter.ALL) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var isSearching by rememberSaveable { mutableStateOf(false) }
@@ -157,80 +171,78 @@ internal fun ScheduledTasksScreen(
             .statusBarsPadding().navigationBarsPadding().testTag("scheduled-tasks-screen")
     ) {
         BoxWithConstraints(Modifier.fillMaxWidth().height(66.dp).padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp)) {
-            TopBarCircleButton(R.drawable.ic_back_chevron, appText("返回"), onBack,
-                modifier = Modifier.align(Alignment.CenterStart).testTag("scheduled-back"))
-            if (!isSearching) {
-                Text(appText("定时任务"), fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
+            val controlsMaximumWidth = (maxWidth - 52.dp).coerceAtLeast(44.dp)
+            val titleMaximumWidth = (maxWidth - if (isSearching) 96.dp else 192.dp).coerceAtLeast(36.dp)
+            Box(Modifier.fillMaxSize()) {
+                TopBarCircleButton(R.drawable.ic_back_chevron, appText("返回"), onBack,
+                    modifier = Modifier.align(Alignment.CenterStart).testTag("scheduled-back"))
+                Text(appText("定时任务"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 104.dp),
+                    modifier = Modifier.align(Alignment.Center).widthIn(max = titleMaximumWidth),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (!isSearching) {
+                ScheduledTaskSearchAndActions(
+                    maximumWidth = controlsMaximumWidth,
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it; revealedTaskId = null },
+                    isSearching = isSearching,
+                    onSearchingChange = { isSearching = it },
+                    onCreateTask = onCreateTask,
+                    onDeleteEnded = { confirmsDeleteEnded = true },
+                    canDeleteEnded = "schedule-management-v2" in stateHolder.gatewayState.capabilities &&
+                        connection == GatewayConnectionState.CONNECTED && stateHolder.scheduledTaskPendingId == null,
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                )
+                }
             }
-            ScheduledTaskSearchAndFilter(
-                maximumWidth = (maxWidth - 58.dp).coerceAtLeast(92.dp),
-                query = searchQuery,
-                onQueryChange = { searchQuery = it; revealedTaskId = null },
-                isSearching = isSearching,
-                onSearchingChange = { isSearching = it },
-                status = statusFilter,
-                onStatusChange = {
-                    statusFilter = it
-                    revealedTaskId = null
-                    stateHolder.filterScheduledTasks(when (it) {
-                        ScheduledTaskStatusFilter.ALL -> null
-                        ScheduledTaskStatusFilter.ACTIVE -> true
-                        ScheduledTaskStatusFilter.ENDED -> false
-                    })
-                },
-                modifier = Modifier.align(Alignment.CenterEnd)
-            )
         }
-        if ("schedule-management-v2" in stateHolder.gatewayState.capabilities) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                TextButton(onClick = { creating = true }) { Text(appText("创建任务")) }
-                TextButton(onClick = { confirmClear = true }) { Text(appText("清理已结束任务")) }
+        if (isSearching) {
+            BoxWithConstraints(Modifier.adaptiveContentWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                ScheduledTaskSearchAndActions(maxWidth, searchQuery, { searchQuery = it; revealedTaskId = null }, true,
+                    { isSearching = it }, onCreateTask, { confirmsDeleteEnded = true }, false)
             }
-            stateHolder.scheduledTaskMutationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
-        if (stateHolder.scheduledTasks.size < stateHolder.scheduledTasksTotal) {
-            TextButton(onClick = stateHolder::loadMoreScheduledTasks, enabled = !stateHolder.scheduledTasksLoading) { Text(appText("加载更多任务")) }
-        }
+        ScheduledTaskStatusSwitchBar(statusFilter, onStatusChange = {
+            statusFilter = it
+            revealedTaskId = null
+            stateHolder.filterScheduledTasks(when (it) {
+                ScheduledTaskStatusFilter.ALL -> null
+                ScheduledTaskStatusFilter.ACTIVE -> true
+                ScheduledTaskStatusFilter.PAUSED, ScheduledTaskStatusFilter.ENDED -> false
+            })
+        })
+        androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+            isRefreshing = stateHolder.scheduledTasksLoading && stateHolder.scheduledTasks.isNotEmpty(),
+            onRefresh = stateHolder::refreshScheduledTasks, modifier = Modifier.weight(1f).fillMaxWidth()) {
         when {
             stateHolder.scheduledTasksLoading && stateHolder.scheduledTasks.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = scheduleBlue)
+                Column(Modifier.fillMaxWidth().padding(top = 72.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(color = scheduleBlue, modifier = Modifier.size(20.dp))
+                    Text(appText("正在加载定时任务…"), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             stateHolder.scheduledTasksError != null && stateHolder.scheduledTasks.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stateHolder.scheduledTasksError.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = stateHolder::refreshScheduledTasks, modifier = Modifier.padding(top = 12.dp)) {
-                            Text(appText("重试"))
-                        }
-                    }
-                }
+                ScheduleEmptyState(appText("无法显示定时任务"), stateHolder.scheduledTasksError.orEmpty(), R.drawable.ic_schedule_offline,
+                    onRetry = stateHolder::refreshScheduledTasks)
             }
             stateHolder.scheduledTasks.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(appText("暂无定时任务"), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                ScheduleEmptyState(appText("暂无定时任务"), appText("在会话中创建的定时任务会显示在这里"), R.drawable.ic_drawer_schedule)
             }
             visibleTasks.isEmpty() -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(appText("没有符合条件的定时任务"), fontWeight = FontWeight.SemiBold)
-                        Text(if (searchQuery.isBlank()) appText("试试其他任务状态") else appText("试试其他关键词或任务状态"),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                ScheduleEmptyState(appText("没有符合条件的定时任务"),
+                    if (searchQuery.isBlank()) appText("试试其他任务状态") else appText("试试其他关键词或任务状态"), R.drawable.ic_filter_list)
             }
             else -> LazyColumn(
                 modifier = Modifier.adaptiveContentWidth().fillMaxSize().testTag("scheduled-tasks-content"),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    start = 20.dp, end = 20.dp, top = 18.dp, bottom = 28.dp
+                    start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                if ("schedule-management-v2" in stateHolder.gatewayState.capabilities && stateHolder.scheduledTasks.size < stateHolder.scheduledTasksTotal) {
+                    item { TextButton(onClick = stateHolder::loadMoreScheduledTasks, enabled = !stateHolder.scheduledTasksLoading) { Text(appText("加载更多任务")) } }
+                }
                 items(visibleTasks, key = { it.id }) { task ->
                     Column {
                     ScheduledTaskCard(
@@ -254,37 +266,28 @@ internal fun ScheduledTasksScreen(
                             revealedTaskId = null
                             deletingTask = task
                         },
-                        busy = stateHolder.scheduledTaskPendingId == task.id
+                        onShowHistory = if ("schedule-management-v2" in stateHolder.gatewayState.capabilities) {
+                            { historyTask = task; stateHolder.loadScheduleHistory(task) }
+                        } else null,
+                        onRun = if ("schedule-management-v2" in stateHolder.gatewayState.capabilities) { { stateHolder.runScheduledTask(task) } } else null,
+                        onToggleActive = if ("schedule-management-v2" in stateHolder.gatewayState.capabilities && task.status != "ended") {
+                            { stateHolder.setScheduledTaskActive(task, task.status != "active") }
+                        } else null,
+                        busy = stateHolder.scheduledTaskPendingId != null
                     )
-                    if ("schedule-management-v2" in stateHolder.gatewayState.capabilities) {
-                        Row {
-                            if (task.status != "ended") TextButton(onClick = {
-                                stateHolder.setScheduledTaskActive(task, task.status != "active")
-                            }, enabled = stateHolder.scheduledTaskPendingId == null) { Text(appText(if (task.status == "active") "暂停" else "恢复")) }
-                            TextButton(onClick = { historyTask = task; stateHolder.loadScheduleHistory(task) }) { Text(appText("执行记录")) }
-                            TextButton(onClick = { stateHolder.runScheduledTask(task) },
-                                enabled = stateHolder.scheduledTaskPendingId == null) { Text(appText("立即执行")) }
-                        }
-                    }
+
                     }
                 }
             }
         }
+        }
     }
     historyTask?.let { task ->
-        AlertDialog(onDismissRequest = { historyTask = null }, title = { Text(appText("执行记录 · %1\$s", task.title)) },
-            text = { Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
-                Text(stateHolder.scheduleHistory?.get("records")?.toJsonElement()?.toString() ?: appText("正在加载…"))
-                stateHolder.scheduleHistory?.get("nextBefore")?.stringValue?.let { before ->
-                    TextButton(onClick = { stateHolder.loadScheduleHistory(task, before) }) { Text(appText("更早记录")) }
-                }
-            } }, confirmButton = { TextButton(onClick = { historyTask = null }) { Text(appText("关闭")) } })
+        ScheduledTaskHistorySheet(stateHolder, task, onDismiss = { historyTask = null }, onOpenSession = {
+            historyTask = null
+            onOpenSession(it)
+        })
     }
-    if (creating) ScheduleCreateDialog(stateHolder) { creating = false }
-    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
-        title = { Text(appText("清理已结束任务？")) }, text = { Text(appText("清理后无法恢复。")) },
-        confirmButton = { TextButton(onClick = { confirmClear = false; stateHolder.clearEndedScheduledTasks() }) { Text(appText("清理")) } },
-        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(appText("取消")) } })
     editingTask?.let { task ->
         ScheduledTaskEditSheet(task, stateHolder, onDismiss = { editingTask = null })
     }
@@ -305,6 +308,20 @@ internal fun ScheduledTasksScreen(
     LaunchedEffect(stateHolder.scheduledTaskMutationError) {
         if (stateHolder.scheduledTaskMutationError != null && editingTask == null) showsMutationError = true
     }
+    if (confirmsDeleteEnded) {
+        AlertDialog(
+            onDismissRequest = { confirmsDeleteEnded = false },
+            title = { Text(appText("删除已结束的定时任务？")) },
+            text = { DshMenuHost { Text(appText("已结束任务及其投递记录将被删除，无法恢复。")) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmsDeleteEnded = false
+                    stateHolder.clearEndedScheduledTasks()
+                }) { Text(appText("删除"), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmsDeleteEnded = false }) { Text(appText("取消")) } }
+        )
+    }
     if (showsMutationError) {
         AlertDialog(
             onDismissRequest = { showsMutationError = false },
@@ -316,40 +333,33 @@ internal fun ScheduledTasksScreen(
 }
 
 @Composable
-private fun ScheduledTaskSearchAndFilter(
+private fun ScheduledTaskSearchAndActions(
     maximumWidth: Dp,
     query: String,
     onQueryChange: (String) -> Unit,
     isSearching: Boolean,
     onSearchingChange: (Boolean) -> Unit,
-    status: ScheduledTaskStatusFilter,
-    onStatusChange: (ScheduledTaskStatusFilter) -> Unit,
+    onCreateTask: () -> Unit,
+    onDeleteEnded: () -> Unit,
+    canDeleteEnded: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val dark = isSystemInDarkTheme()
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    var filterExpanded by remember { mutableStateOf(false) }
-    val width by animateDpAsState(if (isSearching) minOf(238.dp, maximumWidth) else 92.dp, label = "schedule-search-width")
+    var moreExpanded by remember { mutableStateOf(false) }
+    val width by animateDpAsState(if (isSearching) maximumWidth else 96.dp, label = "schedule-search-width")
     LaunchedEffect(isSearching) {
         if (isSearching) focusRequester.requestFocus()
     }
 
-    Row(
-        modifier.width(width).height(46.dp).testTag("scheduled-search-controls")
-            .dropShadow(RoundedCornerShape(23.dp), Shadow(
-                radius = 12.dp,
-                color = Color.Black.copy(alpha = if (dark) 0.24f else 0.075f),
-                offset = DpOffset(0.dp, 4.dp)
-            ))
-            .clip(RoundedCornerShape(23.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.82f else 0.94f))
-            .border(0.7.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = if (dark) 0.13f else 0.055f),
-                RoundedCornerShape(23.dp)),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (isSearching) {
+    if (isSearching) {
+        Row(
+            modifier.width(width).height(46.dp).testTag("scheduled-search-controls")
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(23.dp))
+                .border(0.7.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), RoundedCornerShape(23.dp)),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(painterResource(R.drawable.ic_search), null,
                 Modifier.padding(start = 12.dp).size(19.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -382,39 +392,29 @@ private fun ScheduledTaskSearchAndFilter(
             ) {
                 Icon(painterResource(R.drawable.ic_close), null, Modifier.size(18.dp))
             }
-        } else {
-            Box(
-                Modifier.size(46.dp).clickable { onSearchingChange(true) }
-                    .semantics { contentDescription = appText("搜索定时任务") },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(painterResource(R.drawable.ic_search), null, Modifier.size(20.dp))
-            }
+        }
+    } else {
+        Row(modifier.testTag("scheduled-search-controls"), horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            TopBarCircleButton(R.drawable.ic_search, appText("搜索定时任务"), { onSearchingChange(true) },
+                Modifier.testTag("scheduled-tasks-search"))
             Box {
-                Box(
-                    Modifier.size(46.dp).clickable { filterExpanded = true }
-                        .semantics { contentDescription = appText("筛选定时任务，当前%1\$s", status.title) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(painterResource(R.drawable.ic_filter_list), null, Modifier.size(21.dp))
-                }
-                DshMenu(
-                    expanded = filterExpanded,
-                    onDismissRequest = { filterExpanded = false },
-                    modifier = Modifier.width(170.dp)) {
-                    ScheduledTaskStatusFilter.entries.forEach { option ->
-                        DshMenuItem(
-                            text = { Text(option.title) },
-                            onClick = {
-                                onStatusChange(option)
-                                filterExpanded = false
-                            },
-                            trailingIcon = {
-                                if (status == option) Icon(painterResource(R.drawable.ic_menu_check), null,
-                                    Modifier.size(18.dp))
-                            }
-                        )
-                    }
+                TopBarCircleButton(R.drawable.ic_more_horizontal, appText("更多"), { moreExpanded = true },
+                    Modifier.testTag("scheduled-tasks-more"))
+                DshMenu(expanded = moreExpanded, onDismissRequest = { moreExpanded = false }, modifier = Modifier.width(280.dp)) {
+                    DshMenuItem(
+                        text = { Text(appText("添加定时任务")) },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_schedule_create), null, Modifier.size(20.dp)) },
+                        modifier = Modifier.testTag("scheduled-tasks-create"),
+                        onClick = { moreExpanded = false; onCreateTask() }
+                    )
+                    DshMenuItem(
+                        text = { Text(appText("删除已结束的定时任务"), color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_trash), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error) },
+                        enabled = canDeleteEnded,
+                        modifier = Modifier.testTag("scheduled-tasks-delete-ended"),
+                        onClick = { moreExpanded = false; onDeleteEnded() }
+                    )
                 }
             }
         }
@@ -422,7 +422,35 @@ private fun ScheduledTaskSearchAndFilter(
 }
 
 @Composable
-private fun ScheduledTaskCard(
+private fun ScheduledTaskStatusSwitchBar(status: ScheduledTaskStatusFilter, onStatusChange: (ScheduledTaskStatusFilter) -> Unit) {
+    val hapticView = LocalView.current
+    Row(Modifier.adaptiveContentWidth().padding(horizontal = 20.dp, vertical = 8.dp)
+        .clip(CircleShape)
+        .background(if (isSystemInDarkTheme()) Color(0xFF1C1C1E) else Color(0xFFEEEEF0))
+        .padding(2.dp).selectableGroup().testTag("scheduled-tasks-status-tabs")) {
+        ScheduledTaskStatusFilter.entries.forEach { option ->
+            val selected = status == option
+            Box(Modifier.weight(1f).heightIn(min = 28.dp)
+                .clip(CircleShape)
+                .background(if (!selected) Color.Transparent else if (isSystemInDarkTheme()) Color(0xFF636366) else Color.White)
+                .selectable(selected = selected, role = Role.Tab, onClick = {
+                    if (!selected) {
+                        // 与 iOS 的选择触感一致：切换时轻振一次，并遵循系统触感开关。
+                        hapticView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        onStatusChange(option)
+                    }
+                })
+                .testTag("scheduled-status-${option.name.lowercase(Locale.ROOT)}")
+                .padding(horizontal = 4.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
+                Text(option.title, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ScheduledTaskCard(
     task: MobileScheduledTask,
     sessionTitle: String,
     revealedTaskId: String?,
@@ -430,7 +458,10 @@ private fun ScheduledTaskCard(
     onOpenSession: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    busy: Boolean
+    busy: Boolean,
+    onShowHistory: (() -> Unit)? = null,
+    onRun: (() -> Unit)? = null,
+    onToggleActive: (() -> Unit)? = null
 ) {
     val dark = isSystemInDarkTheme()
     var expanded by rememberSaveable(task.id) { mutableStateOf(false) }
@@ -440,7 +471,11 @@ private fun ScheduledTaskCard(
         label = "schedule-chevron"
     )
     val density = LocalDensity.current
-    val revealWidthPx = with(density) { 128.dp.toPx() }
+    val canEdit = com.clarklevis.dsh.shared.protocol.ScheduleTaskPresentation.canEdit(task.status)
+    val revealWidthPx = with(density) { (if (canEdit) 128.dp else 68.dp).toPx() }
+    val leadingWidth = if (onToggleActive != null) 188.dp else 128.dp
+    val leadingWidthPx = with(density) { leadingWidth.toPx() }
+    var openedLeading by remember(task.id) { mutableStateOf(false) }
     val flingThresholdPx = with(density) { 280.dp.toPx() }
     var offsetPx by remember(task.id) {
         mutableFloatStateOf(if (revealedTaskId == task.id) -revealWidthPx else 0f)
@@ -451,16 +486,17 @@ private fun ScheduledTaskCard(
     var suppressCardTapUntil by remember(task.id) { mutableLongStateOf(0L) }
     val scope = rememberCoroutineScope()
     val progress = (-offsetPx / revealWidthPx).coerceIn(0f, 1f)
+    val leadingProgress = (offsetPx / leadingWidthPx).coerceIn(0f, 1f)
 
     fun settle(open: Boolean, velocity: Float = 0f) {
         animationJob?.cancel()
         animationJob = scope.launch {
             animate(
                 initialValue = offsetPx,
-                targetValue = if (open) -revealWidthPx else 0f,
+                targetValue = if (!open) 0f else if (openedLeading) leadingWidthPx else -revealWidthPx,
                 initialVelocity = velocity,
                 animationSpec = spring(stiffness = 450f, dampingRatio = 0.86f)
-            ) { value, _ -> offsetPx = value.coerceIn(-revealWidthPx, 0f) }
+            ) { value, _ -> offsetPx = value.coerceIn(-revealWidthPx, if (onRun != null) leadingWidthPx else 0f) }
         }
     }
 
@@ -468,20 +504,38 @@ private fun ScheduledTaskCard(
         val shouldOpen = revealedTaskId == task.id
         if (localSettleTarget == shouldOpen) {
             localSettleTarget = null
-        } else if (!shouldOpen && offsetPx < 0f) {
+        } else if (!shouldOpen && offsetPx != 0f) {
             settle(open = false)
         }
     }
 
-    Box(Modifier.fillMaxWidth()) {
+    Box(Modifier.fillMaxWidth().testTag("scheduled-card-${task.id}")) {
         Box(Modifier.matchParentSize()) {
+            if (onRun != null) {
+                Row(Modifier.align(Alignment.CenterStart).width(leadingWidth)
+                    .graphicsLayer { alpha = leadingProgress }
+                    .then(if (leadingProgress < 0.95f) Modifier.clearAndSetSemantics {} else Modifier),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    listOfNotNull(
+                        onShowHistory?.let { Triple(R.drawable.ic_history_reload, appText("执行记录"), it) },
+                        Triple(R.drawable.ic_play_circle, appText("立即执行"), onRun),
+                        onToggleActive?.let { Triple(if (task.status == "active") R.drawable.ic_pause_circle else R.drawable.ic_play_circle,
+                            appText(if (task.status == "active") "暂停" else "恢复"), it) }
+                    ).forEach { (icon, label, action) ->
+                        IconButton(onClick = { suppressCardTapUntil = 0L; onRevealChange(null); action() }, enabled = leadingProgress > 0.95f && (icon == R.drawable.ic_history_reload || !busy),
+                            modifier = Modifier.size(50.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)) {
+                            Icon(painterResource(icon), label, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+            }
             Box(
                 Modifier.align(Alignment.CenterEnd).fillMaxHeight()
-                    .requiredWidth(with(density) { (-offsetPx).toDp() })
+                    .requiredWidth(with(density) { (-offsetPx).coerceAtLeast(0f).toDp() })
                     .clipToBounds()
             ) {
                 Row(
-                    Modifier.align(Alignment.CenterEnd).requiredWidth(119.dp)
+                    Modifier.align(Alignment.CenterEnd).requiredWidth(if (canEdit) 119.dp else 59.dp)
                         .offset(x = (18 * (1f - progress)).dp)
                         .graphicsLayer {
                             alpha = progress
@@ -492,13 +546,13 @@ private fun ScheduledTaskCard(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
+                    if (canEdit) IconButton(
                         onClick = onEdit,
-                        enabled = progress > 0.95f && task.status == "active" && !busy,
+                        enabled = progress > 0.95f && !busy,
                         modifier = Modifier.size(50.dp)
                             .clip(CircleShape)
                             .background(
-                                MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.82f else 0.94f),
+                                scheduleBlue,
                                 CircleShape
                             )
                             .border(
@@ -508,7 +562,7 @@ private fun ScheduledTaskCard(
                             )
                     ) {
                         Icon(painterResource(R.drawable.ic_pencil_line), contentDescription = appText("编辑%1\$s", task.title),
-                            modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface)
+                            modifier = Modifier.size(20.dp), tint = Color.White)
                     }
                     IconButton(
                         onClick = onDelete,
@@ -525,6 +579,7 @@ private fun ScheduledTaskCard(
         Column(
             Modifier.fillMaxWidth()
                 .offset { IntOffset(offsetPx.roundToInt(), 0) }
+                .testTag("scheduled-card-body-${task.id}")
                 .dropShadow(
                     shape = RoundedCornerShape(28.dp),
                     shadow = Shadow(
@@ -533,23 +588,24 @@ private fun ScheduledTaskCard(
                         offset = DpOffset(0.dp, 4.dp)
                     )
                 )
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(28.dp))
+                .background(if (dark) MaterialTheme.colorScheme.surfaceVariant else Color.White, RoundedCornerShape(28.dp))
                 .border(0.8.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), RoundedCornerShape(28.dp))
                 .draggable(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta ->
                         animationJob?.cancel()
-                        offsetPx = (offsetPx + delta).coerceIn(-revealWidthPx, 0f)
+                        offsetPx = (offsetPx + delta).coerceIn(-revealWidthPx, if (onRun != null) leadingWidthPx else 0f)
                     },
                     onDragStarted = {
                         startedOpen = revealedTaskId == task.id
                         suppressCardTapUntil = SystemClock.uptimeMillis() + 350L
                     },
                     onDragStopped = { velocity ->
+                        openedLeading = offsetPx > 0
                         val open = when {
-                            velocity < -flingThresholdPx -> true
-                            velocity > flingThresholdPx -> false
-                            else -> offsetPx <= -revealWidthPx * (if (startedOpen) 0.75f else 0.25f)
+                            velocity < -flingThresholdPx -> !openedLeading
+                            velocity > flingThresholdPx -> openedLeading
+                            else -> kotlin.math.abs(offsetPx) >= (if (openedLeading) leadingWidthPx else revealWidthPx) * (if (startedOpen) 0.75f else 0.25f)
                         }
                         suppressCardTapUntil = SystemClock.uptimeMillis() + 350L
                         localSettleTarget = open
@@ -571,7 +627,7 @@ private fun ScheduledTaskCard(
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 Text(
-                    task.prompt, fontSize = 16.sp, lineHeight = 22.sp,
+                    task.prompt, fontSize = 16.sp, lineHeight = 19.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 11.dp)
@@ -584,15 +640,15 @@ private fun ScheduledTaskCard(
                         if (revealedTaskId == task.id) onRevealChange(null)
                         else expanded = !expanded
                     }
-                }.padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                }.padding(start = 20.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    if (task.status == "active") formatScheduleDate(task.scheduledAt) else appText("已结束"),
+                    if (task.status == "active") formatScheduleDate(task.scheduledAt) else appText(com.clarklevis.dsh.shared.protocol.ScheduleTaskPresentation.statusSource(task.status)),
                     color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp,
                     modifier = Modifier.weight(1f)
                 )
-                Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(width = 36.dp, height = 34.dp), contentAlignment = Alignment.Center) {
                     Icon(
                         painter = painterResource(R.drawable.ic_chevron_up),
                         contentDescription = if (expanded) appText("收起任务详情") else appText("展开任务详情"),
@@ -614,8 +670,99 @@ private fun ScheduledTaskCard(
                     ScheduleDetail(appText("执行规则"), fullRule(task))
                     ScheduleDetail(appText("下次计划时间"), if (task.status == "active") formatScheduleDate(task.scheduledAt) else appText("无"))
                     ScheduleDetail(appText("所属会话"), sessionTitle)
-                    ScheduleDetail(appText("状态"), if (task.status == "active") appText("运行中") else appText("已结束"))
+                    ScheduleDetail(appText("状态"), appText(com.clarklevis.dsh.shared.protocol.ScheduleTaskPresentation.statusSource(task.status)))
                     ScheduleDetail(appText("最近投递"), task.lastDelivery?.get("deliveredAt")?.stringValue?.let { appText("已投递 · %1\$s", formatScheduleDate(it)) } ?: appText("暂无投递记录"))
+                    if (onShowHistory != null) {
+                        HorizontalDivider()
+                        TextButton(onClick = onShowHistory, modifier = Modifier.fillMaxWidth().testTag("scheduled-task-history")) {
+                            Icon(painterResource(R.drawable.ic_history_reload), null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(appText("查看运行轨迹"))
+                            Spacer(Modifier.weight(1f))
+                            Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ScheduledTaskHistorySheet(
+    stateHolder: AndroidSharedStateHolder,
+    task: MobileScheduledTask,
+    onDismiss: () -> Unit,
+    onOpenSession: (String) -> Unit
+) {
+    val history = stateHolder.scheduleHistory
+    val records = history?.get("records")?.arrayValue.orEmpty()
+    val before = history?.get("nextBefore")?.stringValue
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.adaptiveSheetBounds().testTag("scheduled-task-history-sheet"),
+        sheetMaxWidth = adaptiveSheetWidth(),
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        DshMenuColumnHost {
+            Column(Modifier.fillMaxWidth().heightIn(min = adaptiveWindowSize().height * 0.5f).navigationBarsPadding()) {
+                ScheduleSheetHeader(appText("运行轨迹"), onDismiss, dismissLabel = appText("关闭"))
+                LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    item { Text(task.title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+                    items(records.size) { index ->
+                        val record = records[index]
+                        var expanded by rememberSaveable(task.id, index) { mutableStateOf(false) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Icon(painterResource(R.drawable.ic_drawer_schedule), null, Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                val timestamp = record["scheduledAt"]?.stringValue ?: record["deliveredAt"]?.stringValue
+                                Text(timestamp?.let(::formatScheduleDate) ?: appText("时间未知"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                                Text(record["title"]?.stringValue ?: task.title, fontSize = 17.sp)
+                                Row(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Text(appText("详情"), color = MaterialTheme.colorScheme.primary, fontSize = 17.sp)
+                                    Spacer(Modifier.weight(1f))
+                                    Icon(painterResource(R.drawable.ic_chevron_up), appText(if (expanded) "收起" else "展开"), Modifier.size(14.dp).graphicsLayer { rotationZ = if (expanded) 0f else 180f }, tint = MaterialTheme.colorScheme.primary)
+                                }
+                                if (expanded) {
+                                    Text(record["prompt"]?.stringValue ?: task.prompt, fontSize = 15.sp)
+                                    record["deliveredAt"]?.stringValue?.let { Text(formatScheduleDate(it)) }
+                                    record["messageId"]?.stringValue?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    (record["targetSessionId"] ?: record["sessionId"])?.stringValue?.takeIf { it.isNotBlank() && it != task.sessionId }?.let { session ->
+                                        TextButton(onClick = { onOpenSession(session) }) { Text(appText("关联会话")) }
+                                    }
+                                }
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+                    item {
+                        when {
+                            stateHolder.scheduleHistoryLoading -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                            stateHolder.scheduleHistoryError != null -> Column {
+                                Text(stateHolder.scheduleHistoryError.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                TextButton(onClick = { stateHolder.loadScheduleHistory(task, before) }) { Text(appText("重试")) }
+                            }
+                            records.isEmpty() -> Text(appText("暂无运行轨迹"))
+                            before != null -> TextButton(onClick = { stateHolder.loadScheduleHistory(task, before) }) { Text(appText("加载更早轨迹")) }
+                        }
+                    }
+                    if (history?.get("retention")?.let { it != com.clarklevis.dsh.shared.protocol.JsonValue.NullValue } == true ||
+                        history?.get("earlierRecordsPruned")?.booleanValue == true || history?.get("earlierRecordsUnavailable")?.booleanValue == true) {
+                        item { Text(appText("仅显示宿主仍保留的运行记录"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                }
+                if (task.sessionId.isNotBlank()) {
+                    TextButton(onClick = { onOpenSession(task.sessionId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                        Icon(painterResource(R.drawable.ic_schedule_conversation), null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(appText("关联会话"), fontSize = 17.sp)
+                    }
                 }
             }
         }
@@ -624,9 +771,9 @@ private fun ScheduledTaskCard(
 
 @Composable
 private fun ScheduleDetail(label: String, value: String) {
-    Row(Modifier.fillMaxWidth()) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(width = 92.dp, height = 22.dp))
+            modifier = Modifier.width(92.dp))
         Text(value, fontSize = 14.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f))
     }
@@ -637,6 +784,15 @@ private fun shortRule(task: MobileScheduledTask): String = when (task.kind) {
     "weekly" -> appText("每周")
     "every" -> appText("每 %1\$s", duration(task.everySeconds?.toInt() ?: 0))
     "cron" -> "Cron"
+    "rrule" -> {
+        val draft = initialTimingDraft(task)
+        if (draft.frequency == "once") appText("一次")
+        else if (draft.frequency == "advanced") appText("自定义")
+        else if (draft.interval == "1") appText(scheduleFrequencyNames[draft.frequency] ?: "自定义")
+        else appText("每 %1\$s %2\$s执行", draft.interval, appText(when (draft.frequency) {
+            "minutely" -> "分钟"; "hourly" -> "小时"; "daily" -> "天"; "weekly" -> "周"; else -> "个月"
+        }))
+    }
     else -> appText("一次")
 }
 
@@ -644,14 +800,14 @@ private fun fullRule(task: MobileScheduledTask): String = when (task.kind) {
     "daily" -> appText("每天 %1\$s · %2\$s", task.time.orEmpty(), task.timeZone.orEmpty())
     "weekly" -> {
         val days = task.weekdays?.arrayValue.orEmpty().mapNotNull { it.doubleValue?.toInt() }
-        val dayNames = listOf(appText("一"), appText("二"), appText("三"), appText("四"), appText("五"), appText("六"), appText("日"))
-        appText("每周%1\$s · %2\$s · %3\$s", days.mapNotNull { dayNames.getOrNull(it - 1) }.joinToString(appText("、周")), task.time.orEmpty(), task.timeZone.orEmpty())
+        val dayNames = listOf(appText("周一"), appText("周二"), appText("周三"), appText("周四"), appText("周五"), appText("周六"), appText("周日"))
+        appText("每周 %1\$s · %2\$s · %3\$s", days.mapNotNull { dayNames.getOrNull(it - 1) }.joinToString(appText("、")), task.time.orEmpty(), task.timeZone.orEmpty())
     }
     "every" -> appText("每 %1\$s执行一次", duration(task.everySeconds?.toInt() ?: 0))
     "cron" -> "${task.expression.orEmpty()} · ${task.timeZone.orEmpty()}"
     "after" -> appText("%1\$s 秒后执行一次", task.raw["afterSeconds"]?.doubleValue?.toInt() ?: 0)
     "at" -> appText("指定时间执行一次")
-    "rrule" -> task.raw["rrule"]?.stringValue.orEmpty()
+    "rrule" -> (task.raw["timing"] ?: task.raw)["rrule"]?.stringValue.orEmpty()
     else -> task.raw.toJsonElement().toString()
 }
 

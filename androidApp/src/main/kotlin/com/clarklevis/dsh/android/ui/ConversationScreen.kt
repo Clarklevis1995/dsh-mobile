@@ -41,6 +41,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.scrollBy
@@ -103,6 +104,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -115,6 +117,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.dropShadow
@@ -139,6 +142,8 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -199,6 +204,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.clarklevis.dsh.shared.protocol.ComposerQuoteDraft
 
 @OptIn(ExperimentalMaterial3Api::class)
 internal val LocalMessageQuote = androidx.compose.runtime.staticCompositionLocalOf<((String) -> Unit)?> { null }
@@ -216,14 +222,12 @@ internal fun ConversationScreen(
     val quote: ((String) -> Unit)? = if ("message-quotes-v1" in stateHolder.gatewayState.capabilities) {
         { selected ->
             if (selected.isNotBlank()) {
-                val block = selected.replace("\r\n", "\n").split("\n").joinToString("\n") { "> $it" }
-                val draft = stateHolder.messageDraft
-                val start = minOf(stateHolder.messageSelectionStart, stateHolder.messageSelectionEnd).coerceIn(0, draft.length)
-                val end = maxOf(stateHolder.messageSelectionStart, stateHolder.messageSelectionEnd).coerceIn(start, draft.length)
-                val inserted = (if (start > 0) "\n\n" else "") + block + "\n\n"
-                stateHolder.messageDraft = draft.replaceRange(start, end, inserted)
-                stateHolder.messageSelectionStart = start + inserted.length
-                stateHolder.messageSelectionEnd = stateHolder.messageSelectionStart
+                val text = stateHolder.composerText
+                val start = minOf(stateHolder.messageSelectionStart, stateHolder.messageSelectionEnd).coerceIn(0, text.length)
+                val end = maxOf(stateHolder.messageSelectionStart, stateHolder.messageSelectionEnd).coerceIn(start, text.length)
+                stateHolder.messageDraft = ComposerQuoteDraft.insertQuote(stateHolder.messageDraft, selected, start, end)
+                stateHolder.messageSelectionStart = start
+                stateHolder.messageSelectionEnd = start
             }
         }
     } else null
@@ -541,7 +545,7 @@ private fun ConversationPage(
     val density = LocalDensity.current
     val sessionId = stateHolder.snapshot.selectedSessionId
     LaunchedEffect(sessionId) { stateHolder.fileUploads.select(sessionId, !stateHolder.isViewingTeamMember) }
-    var bottomContentHeight by remember { mutableStateOf(160.dp) }
+    val bottomContentHeight = remember { mutableStateOf(160.dp) }
     var imagePreview by remember(sessionId) { mutableStateOf<ConversationImagePreviewRequest?>(null) }
     var isPinnedToBottom by remember(sessionId) { mutableStateOf(true) }
     var scrollToBottomToken by remember(sessionId) { mutableIntStateOf(0) }
@@ -603,7 +607,7 @@ private fun ConversationPage(
             modifier = Modifier
                 .align(Alignment.Center)
                 .fillMaxSize()
-                .padding(top = topContentInset, bottom = bottomContentHeight)
+                .padding(remember(topContentInset) { ComposerViewportPadding(bottomContentHeight, topContentInset) })
                 .zIndex(1f),
             enter = fadeIn(tween(120)),
             exit = fadeOut(tween(120))
@@ -624,7 +628,7 @@ private fun ConversationPage(
                 .graphicsLayer { alpha = if (stateHolder.voiceInput.state.overlayVisible) 0f else 1f }
                 .imePadding()
                 .onSizeChanged { size ->
-                    bottomContentHeight = with(density) { size.height.toDp() }
+                    bottomContentHeight.value = with(density) { size.height.toDp() }
                 }
                 .navigationBarsPadding()
         ) {
@@ -780,14 +784,19 @@ internal fun HistoryLoadingOverlay(
 
 @Composable
 private fun ConversationBottomFade(
-    contentHeight: Dp,
+    contentHeight: State<Dp>,
     modifier: Modifier = Modifier
 ) {
     val background = MaterialTheme.colorScheme.background
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height((contentHeight - 44.dp).coerceAtLeast(0.dp))
+            .layout { measurable, constraints ->
+                val height = (contentHeight.value - 44.dp).coerceAtLeast(0.dp).roundToPx()
+                    .coerceIn(constraints.minHeight, constraints.maxHeight)
+                val child = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
+                layout(child.width, child.height) { child.placeRelative(0, 0) }
+            }
             .background(
                 Brush.verticalGradient(
                     colorStops = arrayOf(
@@ -803,7 +812,7 @@ private fun ConversationBottomFade(
 @Composable
 private fun ConversationTimeline(
     stateHolder: AndroidSharedStateHolder,
-    bottomContentHeight: Dp,
+    bottomContentHeight: State<Dp>,
     topContentInset: Dp,
     scrollToBottomToken: Int,
     onPinnedToBottomChanged: (Boolean) -> Unit,
@@ -868,7 +877,7 @@ private fun ConversationTimeline(
                 val batch = HistoryReadBatch(
                     originalIds = presentation.items.mapTo(mutableSetOf()) { it.id },
                     beforeSequence = before,
-                    viewportHeightDp = (viewport.height / readWindowDensity.density - bottomContentHeight.value - 32f).coerceAtLeast(160f),
+                    viewportHeightDp = (viewport.height / readWindowDensity.density - bottomContentHeight.value.value - 32f).coerceAtLeast(160f),
                     contentWidthDp = (viewport.width / readWindowDensity.density - 40f).coerceAtLeast(120f),
                     fontScale = readWindowDensity.fontScale,
                     startedAtMillis = android.os.SystemClock.elapsedRealtime()
@@ -1228,11 +1237,9 @@ private fun ConversationTimeline(
                 .imePadding()
                 .padding(horizontal = 20.dp)
                 .alpha(if (hasInitialContent && !initialPositionApplied) 0f else 1f),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                // 首行停在导航栏下方；加载状态变化不插入/删除列表行。
-                top = topContentInset + 8.dp,
-                bottom = bottomContentHeight + 22.dp
-            )
+            contentPadding = remember(topContentInset) {
+                ComposerViewportPadding(bottomContentHeight, topContentInset + 8.dp, 22.dp)
+            }
         ) {
             items(
                 items = timelineEntries,
@@ -1286,7 +1293,7 @@ private fun ConversationTimeline(
                                     }
                                 )
                             }
-                            if (entry.text.isNotEmpty()) CopyButton(entry.text, markdown = true)
+                            AssistantMessageActions(entry.text)
                         }
                     }
                 }
@@ -1574,7 +1581,7 @@ private fun Composer(
             }
             feedbackType?.let { hapticView.performHapticFeedback(it) }
         }
-        voice.onDraftUpdate = { stateHolder.messageDraft = it }
+        voice.onDraftUpdate = { stateHolder.composerText = it }
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) voice.suspendCapture()
             if (event == Lifecycle.Event.ON_RESUME) voice.resumeCapture()
@@ -1597,7 +1604,7 @@ private fun Composer(
     val imeVisible = WindowInsets.isImeVisible
     LaunchedEffect(imeVisible) { voice.keyboardChanged(imeVisible) }
     LaunchedEffect(stateHolder.snapshot.selectedSessionId) {
-        voice.open(stateHolder.snapshot.selectedSessionId ?: "new-session", stateHolder.messageDraft)
+        voice.open(stateHolder.snapshot.selectedSessionId ?: "new-session", stateHolder.composerText)
     }
     val shape = RoundedCornerShape(24.dp)
     val isDark = isSystemInDarkTheme()
@@ -1607,7 +1614,6 @@ private fun Composer(
         com.clarklevis.dsh.shared.protocol.GatewayQuoteTextParts.parse(stateHolder.messageDraft)
     }
     val composerHasContent = stateHolder.messageDraft.trim().isNotEmpty() || stateHolder.preparedImages.isNotEmpty() || stateHolder.fileUploads.drafts.isNotEmpty() || stateHolder.fileUploads.preparing
-    val voiceDividerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     LaunchedEffect(stateHolder.preparedImages.isNotEmpty()) {
         if (stateHolder.preparedImages.isNotEmpty()) voice.setVoiceMode(false)
     }
@@ -1620,6 +1626,33 @@ private fun Composer(
         }
     }
     var inputIsFocused by remember { mutableStateOf(false) }
+    val composerExpanded = inputIsFocused || voice.state.voiceMode || voice.state.inputBlocked || voice.state.pendingTranscript != null
+    val hasComposerAttachments = stateHolder.preparedImages.isNotEmpty() || stateHolder.fileUploads.preparing ||
+        stateHolder.fileUploads.drafts.isNotEmpty()
+    val quoteCount = draftQuotes.orEmpty().count { it.type == "quote" }
+    var previousQuoteCount by remember(stateHolder.snapshot.selectedSessionId) { mutableStateOf(quoteCount) }
+    LaunchedEffect(quoteCount) {
+        if (quoteCount > previousQuoteCount) { voice.setVoiceMode(false); requestTextFocus = true }
+        previousQuoteCount = quoteCount
+    }
+    val imageCount = stateHolder.preparedImages.size
+    val fileCount = stateHolder.fileUploads.drafts.size
+    var previousImageCount by remember(stateHolder) { mutableStateOf(imageCount) }
+    var previousFileCount by remember(stateHolder) { mutableStateOf(fileCount) }
+    LaunchedEffect(imageCount, fileCount) {
+        // 打开/取消选择器、初始已有附件或删除都不抢焦点；成功新增附件才展开。
+        if (imageCount > previousImageCount || fileCount > previousFileCount) {
+            voice.setVoiceMode(false); requestTextFocus = true
+        }
+        previousImageCount = imageCount
+        previousFileCount = fileCount
+    }
+    var previouslyVisibleIme by remember { mutableStateOf(false) }
+    LaunchedEffect(imeVisible) {
+        if (previouslyVisibleIme && !imeVisible && !voice.state.voiceMode) focusManager.clearFocus(force = true)
+        previouslyVisibleIme = imeVisible
+    }
+
     var observedSuccessfulSendCount by remember(stateHolder) {
         mutableStateOf(stateHolder.successfulMessageSendCount)
     }
@@ -1635,16 +1668,16 @@ private fun Composer(
     var inputValue by remember(stateHolder) {
         mutableStateOf(
             TextFieldValue(
-                text = stateHolder.messageDraft,
-                selection = TextRange(stateHolder.messageDraft.length)
+                text = stateHolder.composerText,
+                selection = TextRange(stateHolder.composerText.length)
             )
         )
     }
-    LaunchedEffect(stateHolder.messageDraft) {
-        if (inputValue.text != stateHolder.messageDraft) {
+    LaunchedEffect(stateHolder.composerText) {
+        if (inputValue.text != stateHolder.composerText) {
             inputValue = TextFieldValue(
-                text = stateHolder.messageDraft,
-                selection = TextRange(stateHolder.messageSelectionStart.coerceIn(0, stateHolder.messageDraft.length))
+                text = stateHolder.composerText,
+                selection = TextRange(stateHolder.messageSelectionStart.coerceIn(0, stateHolder.composerText.length))
             )
         }
     }
@@ -1675,102 +1708,239 @@ private fun Composer(
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
             border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge)
         ) {
-            Column(
-                Modifier.padding(horizontal = 14.dp).padding(top = 14.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (stateHolder.preparedImages.isNotEmpty()) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(stateHolder.preparedImages.size) { index ->
-                            val image = stateHolder.preparedImages[index]
-                            key(image.outgoing.base64Data) {
-                                PreparedImagePreview(image) { stateHolder.removePreparedImage(index) }
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                AnimatedVisibility(
+                    visible = composerExpanded && hasComposerAttachments,
+                    enter = expandVertically(tween(220, easing = LinearOutSlowInEasing), expandFrom = Alignment.Top) +
+                        fadeIn(tween(220, easing = LinearOutSlowInEasing)),
+                    exit = shrinkVertically(tween(220, easing = LinearOutSlowInEasing), shrinkTowards = Alignment.Top) +
+                        fadeOut(tween(220, easing = LinearOutSlowInEasing)),
+                    modifier = Modifier.testTag("composer-attachment-previews")
+                ) {
+                    Column(Modifier.padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (stateHolder.preparedImages.isNotEmpty()) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(stateHolder.preparedImages.size) { index ->
+                                    val image = stateHolder.preparedImages[index]
+                                    key(image.outgoing.base64Data) {
+                                        PreparedImagePreview(image) { stateHolder.removePreparedImage(index) }
+                                    }
+                                }
+                            }
+                        }
+                        if (stateHolder.fileUploads.preparing) Text(appText("正在准备文件…"), style = MaterialTheme.typography.labelSmall)
+                        if (stateHolder.fileUploads.drafts.isNotEmpty()) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(stateHolder.fileUploads.drafts.size) { index ->
+                                    val file = stateHolder.fileUploads.drafts[index]
+                                    PendingFileCard(
+                                        file = file,
+                                        enabled = !stateHolder.messageSubmissionPending,
+                                        onRetry = { stateHolder.fileUploads.retry(file.id) },
+                                        onRemove = { stateHolder.fileUploads.remove(file.id) }
+                                    )
+                                }
                             }
                         }
                     }
                 }
-                if (stateHolder.fileUploads.preparing) Text(appText("正在准备文件…"), style = MaterialTheme.typography.labelSmall)
-                if (stateHolder.fileUploads.drafts.isNotEmpty()) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(stateHolder.fileUploads.drafts.size) { index ->
-                            val file = stateHolder.fileUploads.drafts[index]
-                            PendingFileCard(
-                                file = file,
-                                enabled = !stateHolder.messageSubmissionPending,
-                                onRetry = { stateHolder.fileUploads.retry(file.id) },
-                                onRemove = { stateHolder.fileUploads.remove(file.id) }
-                            )
-                        }
-                    }
-                }
-                if ("message-quotes-v1" in stateHolder.gatewayState.capabilities) {
-                    draftQuotes.orEmpty().forEachIndexed { index, part ->
-                        if (part.type == "quote") Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(part.text, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            TextButton(onClick = { stateHolder.messageDraft = com.clarklevis.dsh.shared.protocol.GatewayQuoteTextParts.removeQuote(stateHolder.messageDraft, index) }) { Text(appText("移除引用")) }
-                        }
-                    }
-                }
-                val commandToken = stateHolder.slashCommands.commandToken
-                val commandHint = stateHolder.slashCommands.argumentHint
-                if (voice.state.voiceMode) {
-                    VoiceHoldInput(voice, Modifier.offset(y = (-4.5).dp))
-                } else {
-                BasicTextField(
-                    enabled = !voice.state.inputBlocked,
-                    value = inputValue,
-                    onValueChange = {
-                        inputValue = it
-                        stateHolder.messageDraft = it.text
-                        stateHolder.messageSelectionStart = it.selection.start
-                        stateHolder.messageSelectionEnd = it.selection.end
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 3.dp)
-                        .heightIn(min = 38.dp, max = 120.dp)
-                        .onFocusChanged { inputIsFocused = it.isFocused }
-                        .focusRequester(queueEditFocusRequester)
-                        .testTag("composer-input"),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(DshColors.Ocean),
-                    visualTransformation = slashCommandVisualTransformation(commandToken),
-                    decorationBox = { field ->
-                        Box {
-                            if (stateHolder.messageDraft.isEmpty()) {
-                                Text(
-                                    appText(voice.state.hint),
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
-                                )
-                            } else if (
-                                commandToken != null &&
-                                commandHint != null &&
-                                stateHolder.messageDraft.trimEnd() == commandToken
-                            ) {
-                                Text(
-                                    buildAnnotatedString {
-                                        withStyle(SpanStyle(color = Color.Transparent)) {
-                                            append(stateHolder.messageDraft)
-                                        }
-                                        if (!stateHolder.messageDraft.last().isWhitespace()) append(" ")
-                                        withStyle(
-                                            SpanStyle(
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
-                                            )
-                                        ) {
-                                            append(commandHint)
-                                        }
+                ComposerQuoteStack(
+                    parts = if ("message-quotes-v1" in stateHolder.gatewayState.capabilities) draftQuotes.orEmpty() else emptyList(),
+                    visible = composerExpanded,
+                    onRemove = { index -> stateHolder.messageDraft = ComposerQuoteDraft.removeQuote(stateHolder.messageDraft, index) }
+                ) {
+                    ComposerMorphLayout(
+                        expanded = composerExpanded,
+                        modifier = Modifier.testTag("composer-morph-layout"),
+                        leading = {
+                            Box {
+                                var attachmentMenu by remember { mutableStateOf(false) }
+                                ComposerIconButton(R.drawable.ic_composer_add, appText("添加附件"), { attachmentMenu = true })
+                                DshMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
+                                    DshMenuItem(text = { Text(appText("图片")) },
+                                        enabled = "images" in stateHolder.gatewayState.capabilities && stateHolder.preparedImages.size < 20,
+                                        onClick = { attachmentMenu = false; onPickImage() })
+                                    DshMenuItem(text = { Text(appText("文件")) },
+                                        enabled = !stateHolder.isViewingTeamMember &&
+                                            !stateHolder.fileUploads.preparing && stateHolder.fileUploads.drafts.size < 20 && !stateHolder.messageSubmissionPending,
+                                        onClick = {
+                                            attachmentMenu = false
+                                            if (stateHolder.fileUploads.supported) onPickFile()
+                                            else showsFileUploadUpgradeAlert = true
+                                        })
+                                }
+                            }
+                        },
+                        editor = {
+                            val commandToken = stateHolder.slashCommands.commandToken
+                            val commandHint = stateHolder.slashCommands.argumentHint
+                            if (voice.state.voiceMode) {
+                                VoiceHoldInput(voice, Modifier.offset(y = (-4.5).dp))
+                            } else {
+                                BasicTextField(
+                                    enabled = !voice.state.inputBlocked,
+                                    value = inputValue,
+                                    // 只限制显示行数，不切换 singleLine，避免聚焦时重启 IME 连接。
+                                    maxLines = if (composerExpanded) Int.MAX_VALUE else 1,
+                                    onValueChange = {
+                                        inputValue = it
+                                        stateHolder.composerText = it.text
+                                        stateHolder.messageSelectionStart = it.selection.start
+                                        stateHolder.messageSelectionEnd = it.selection.end
                                     },
-                                    style = MaterialTheme.typography.bodyLarge
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 3.dp)
+                                        .heightIn(min = 38.dp, max = 120.dp)
+                                        .onFocusChanged { inputIsFocused = it.isFocused }
+                                        .focusRequester(queueEditFocusRequester)
+                                        .testTag("composer-input"),
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                                    cursorBrush = SolidColor(DshColors.Ocean),
+                                    visualTransformation = slashCommandVisualTransformation(commandToken),
+                                    decorationBox = { field ->
+                                        Box(contentAlignment = Alignment.TopStart) {
+                                            if (stateHolder.composerText.isEmpty()) {
+                                                Text(
+                                                    appText(voice.state.hint),
+                                                    maxLines = if (composerExpanded) Int.MAX_VALUE else 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f),
+                                                    modifier = Modifier.testTag("composer-placeholder")
+                                                )
+                                            } else if (composerExpanded &&
+                                                commandToken != null &&
+                                                commandHint != null &&
+                                                stateHolder.composerText.trimEnd() == commandToken
+                                            ) {
+                                                Text(
+                                                    buildAnnotatedString {
+                                                        withStyle(SpanStyle(color = Color.Transparent)) {
+                                                            append(stateHolder.composerText)
+                                                        }
+                                                        if (!stateHolder.composerText.last().isWhitespace()) append(" ")
+                                                        withStyle(
+                                                            SpanStyle(
+                                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
+                                                            )
+                                                        ) {
+                                                            append(commandHint)
+                                                        }
+                                                    },
+                                                    style = MaterialTheme.typography.bodyLarge
+                                                )
+                                            }
+                                            val compactPreview = !composerExpanded && stateHolder.composerText.isNotEmpty()
+                                            // 保留同一个可聚焦编辑节点；收紧时只替换绘制，原始草稿不截断。
+                                            Box(Modifier.alpha(if (compactPreview) 0f else 1f)) { field() }
+                                            if (compactPreview) {
+                                                Text(stateHolder.composerText,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.fillMaxWidth().testTag("composer-compact-preview")
+                                                        .semantics { hideFromAccessibility() })
+                                            }
+                                        }
+                                    }
                                 )
                             }
-                            field()
+                        },
+                        tools = {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                if (!stateHolder.isViewingTeamMember) PermissionControl(stateHolder, Modifier.width(82.dp))
+                                Spacer(Modifier.width(2.dp))
+                                if (!stateHolder.isViewingTeamMember) {
+                                    ModelControl(
+                                        stateHolder = stateHolder,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                } else if (stateHolder.selectedMemberCanSend) {
+                                    Spacer(Modifier.weight(1f))
+                                } else {
+                                    Text(
+                                        appText("只读成员会话"),
+                                        Modifier.weight(1f),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                ContextUsageRing(stateHolder)
+                            }
+                        },
+                        action = {
+                            Box(
+                                Modifier.size(42.dp)
+                                    .alpha(
+                                        if (stateHolder.showsSessionStopButton) {
+                                            if (stateHolder.canCancelSelectedSession) 1f else 0.66f
+                                        } else 1f
+                                    )
+                                    .clip(CircleShape)
+                                    // 背景直接绘制圆形，避免半透明状态依赖图层裁剪后露出方形底色。
+                                    .background(DshColors.Ocean, CircleShape)
+                                    .clickable(
+                                        enabled = if (stateHolder.showsSessionStopButton) {
+                                            stateHolder.canCancelSelectedSession
+                                        } else {
+                                            !composerHasContent || stateHolder.canSend
+                                        },
+                                        onClick = if (stateHolder.showsSessionStopButton) {
+                                            stateHolder::cancelSelectedSession
+                                        } else if (composerHasContent) {
+                                            { stateHolder.sendMessage() }
+                                        } else {
+                                            {
+                                                modeSwitchFeedback.perform()
+                                                val enteringVoice = !voice.state.voiceMode
+                                                voice.setVoiceMode(enteringVoice)
+                                                if (enteringVoice) {
+                                                    focusManager.clearFocus(force = true)
+                                                    keyboardController?.hide()
+                                                } else {
+                                                    // 先让文字输入框重新挂载，再请求焦点。
+                                                    requestTextFocus = true
+                                                }
+                                            }
+                                        }
+                                    )
+                                    .semantics {
+                                        contentDescription = if (stateHolder.showsSessionStopButton) {
+                                            appText("停止生成")
+                                        } else if (composerHasContent) {
+                                            appText("发送")
+                                        } else if (voice.state.voiceMode) {
+                                            appText("切换到文字输入")
+                                        } else {
+                                            appText("切换到语音输入")
+                                        }
+                                    }.testTag("composer-action"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (stateHolder.showsSessionStopButton) {
+                                    Box(
+                                        Modifier.size(14.dp)
+                                            .background(Color.White, RoundedCornerShape(3.dp))
+                                    )
+                                } else {
+                                    Icon(
+                                        painter = painterResource(
+                                            if (composerHasContent) R.drawable.ic_arrow_up
+                                            else if (voice.state.voiceMode) R.drawable.ic_composer_keyboard
+                                            else R.drawable.ic_voice_waveform
+                                        ),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = Color.White
+                                    )
+                                }
+                            }
                         }
-                    }
-                )
+                    )
                 }
                 voice.state.pendingTranscript?.let { transcript ->
-                    Column {
+                    Column(Modifier.padding(top = 10.dp)) {
                         Text(transcript, style = MaterialTheme.typography.bodySmall, maxLines = 3)
                         Row {
                             Text(appText("草稿已更改，请确认插入识别文字"), style = MaterialTheme.typography.labelSmall)
@@ -1779,119 +1949,7 @@ private fun Composer(
                         }
                     }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().drawBehind {
-                        if (voice.state.voiceMode) {
-                            // 在原有 10dp 间隔中绘制，不参与高度测量。
-                            val y = -5.dp.toPx()
-                            drawLine(voiceDividerColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 0.5.dp.toPx())
-                        }
-                    },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    Box {
-                        var attachmentMenu by remember { mutableStateOf(false) }
-                        ComposerIconButton(R.drawable.ic_composer_add, appText("添加附件"), { attachmentMenu = true })
-                        DshMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
-                            DshMenuItem(text = { Text(appText("图片")) },
-                                enabled = "images" in stateHolder.gatewayState.capabilities && stateHolder.preparedImages.size < 20,
-                                onClick = { attachmentMenu = false; onPickImage() })
-                            DshMenuItem(text = { Text(appText("文件")) },
-                                enabled = !stateHolder.isViewingTeamMember &&
-                                    !stateHolder.fileUploads.preparing && stateHolder.fileUploads.drafts.size < 20 && !stateHolder.messageSubmissionPending,
-                                onClick = {
-                                    attachmentMenu = false
-                                    if (stateHolder.fileUploads.supported) onPickFile()
-                                    else showsFileUploadUpgradeAlert = true
-                                })
-                        }
-                    }
-                    if (!stateHolder.isViewingTeamMember) PermissionControl(stateHolder, Modifier.width(82.dp))
-                    Spacer(Modifier.width(2.dp))
-                    if (!stateHolder.isViewingTeamMember) {
-                        ModelControl(
-                            stateHolder = stateHolder,
-                            modifier = Modifier.weight(1f)
-                        )
-                    } else if (stateHolder.selectedMemberCanSend) {
-                        Spacer(Modifier.weight(1f))
-                    } else {
-                        Text(
-                            appText("只读成员会话"),
-                            Modifier.weight(1f),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    ContextUsageRing(stateHolder)
-                    Box(
-                        Modifier.size(42.dp)
-                            .alpha(
-                                if (stateHolder.showsSessionStopButton) {
-                                    if (stateHolder.canCancelSelectedSession) 1f else 0.66f
-                                } else 1f
-                            )
-                            .clip(CircleShape)
-                            // 背景直接绘制圆形，避免半透明状态依赖图层裁剪后露出方形底色。
-                            .background(DshColors.Ocean, CircleShape)
-                            .clickable(
-                                enabled = if (stateHolder.showsSessionStopButton) {
-                                    stateHolder.canCancelSelectedSession
-                                } else {
-                                    !composerHasContent || stateHolder.canSend
-                                },
-                                onClick = if (stateHolder.showsSessionStopButton) {
-                                    stateHolder::cancelSelectedSession
-                                } else if (composerHasContent) {
-                                    { stateHolder.sendMessage() }
-                                } else {
-                                    {
-                                        modeSwitchFeedback.perform()
-                                        val enteringVoice = !voice.state.voiceMode
-                                        voice.setVoiceMode(enteringVoice)
-                                        if (enteringVoice) {
-                                            focusManager.clearFocus(force = true)
-                                            keyboardController?.hide()
-                                        } else {
-                                            // 先让文字输入框重新挂载，再请求焦点。
-                                            requestTextFocus = true
-                                        }
-                                    }
-                                }
-                            )
-                            .semantics {
-                                contentDescription = if (stateHolder.showsSessionStopButton) {
-                                    appText("停止生成")
-                                } else if (composerHasContent) {
-                                    appText("发送")
-                                } else if (voice.state.voiceMode) {
-                                    appText("切换到文字输入")
-                                } else {
-                                    appText("切换到语音输入")
-                                }
-                            }.testTag("composer-action"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (stateHolder.showsSessionStopButton) {
-                            Box(
-                                Modifier.size(14.dp)
-                                    .background(Color.White, RoundedCornerShape(3.dp))
-                            )
-                        } else {
-                            Icon(
-                                painter = painterResource(
-                                    if (composerHasContent) R.drawable.ic_arrow_up
-                                    else if (voice.state.voiceMode) R.drawable.ic_composer_keyboard
-                                    else R.drawable.ic_voice_waveform
-                                ),
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = Color.White
-                            )
-                        }
-                    }
-                }
+
             }
         }
     }
@@ -1907,17 +1965,20 @@ private fun PreparedImagePreview(image: AndroidPreparedImage, onRemove: () -> Un
         value = bitmap?.let(PreparedImagePreviewState::Ready) ?: PreparedImagePreviewState.Unavailable
     }
     val shape = RoundedCornerShape(10.dp)
+    val scale = 72f / maxOf(image.width, image.height, 1)
+    val previewWidth = (image.width * scale).coerceAtLeast(1f).dp
+    val previewHeight = (image.height * scale).coerceAtLeast(1f).dp
     Box(
-        Modifier.size(width = 82.dp, height = 72.dp)
-            .clip(shape)
-            .background(DshColors.Ocean.copy(alpha = 0.11f)),
+        Modifier.padding(top = 5.dp, end = 5.dp)
+            .size(width = maxOf(20.dp, previewWidth), height = maxOf(20.dp, previewHeight))
+            .background(DshColors.Ocean.copy(alpha = 0.11f), shape),
         contentAlignment = Alignment.Center
     ) {
         when (val state = preview) {
             is PreparedImagePreviewState.Ready -> Image(
                 bitmap = state.bitmap,
                 contentDescription = image.outgoing.name ?: appText("待发送图片"),
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.align(Alignment.TopEnd).size(previewWidth, previewHeight).clip(shape),
                 contentScale = ContentScale.Fit
             )
             PreparedImagePreviewState.Loading -> Text(appText("正在加载图片…"), fontSize = 10.sp)
@@ -1926,7 +1987,7 @@ private fun PreparedImagePreview(image: AndroidPreparedImage, onRemove: () -> Un
         Text(
             "×",
             modifier = Modifier.align(Alignment.TopEnd)
-                .padding(4.dp)
+                .offset(x = 5.dp, y = (-5).dp)
                 .size(20.dp)
                 .background(Color.Black.copy(alpha = 0.65f), CircleShape)
                 .clickable(onClick = onRemove)
@@ -3055,18 +3116,9 @@ private fun UserMessage(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                if (!item.textParts.isNullOrEmpty()) {
-                    Column(Modifier.background(bubbleFill, RoundedCornerShape(15.dp)).padding(12.dp)) {
-                        item.textParts.orEmpty().forEach { part ->
-                            if (part.type == "quote") {
-                                var expanded by remember(item.id, part) { mutableStateOf(false) }
-                                Text(part.text, maxLines = if (expanded) Int.MAX_VALUE else 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }
-                                        .background(bubbleEdge, RoundedCornerShape(8.dp)).padding(8.dp))
-                            } else Text(part.text, fontSize = 16.sp)
-                        }
-                    }
+                val parts = item.textParts
+                if (parts?.any { it.type == "quote" } == true) {
+                    SentReplyBubble(parts)
                 } else Text(
                     text = item.text,
                     modifier = Modifier
@@ -3287,6 +3339,7 @@ internal fun ConversationImagePreviewDialog(
         if (granted && attachment != null) save(attachment)
         else Toast.makeText(context, appText("请允许存储权限后重试"), Toast.LENGTH_LONG).show()
     }
+    var zoomedPages by remember { mutableStateOf(emptySet<Int>()) }
     val pagerState = rememberPagerState(
         initialPage = imagePreviewInitialPage(request.attachments.size, request.initialIndex),
         pageCount = request.attachments::size
@@ -3307,12 +3360,15 @@ internal fun ConversationImagePreviewDialog(
             ) {
                 HorizontalPager(
                     state = pagerState,
+                    userScrollEnabled = pagerState.currentPage !in zoomedPages,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
                     val attachment = request.attachments[page]
                     ZoomablePreviewImage(
                         image = thumbnails[attachment.attachmentId],
                         contentDescription = attachment.name ?: appText("图片"),
+                        isActive = pagerState.currentPage == page,
+                        onZoomChanged = { zoomed -> zoomedPages = if (zoomed) zoomedPages + page else zoomedPages - page },
                         onLongPress = { position ->
                             saveTarget = attachment
                             saveMenuPosition = IntOffset(position.x.toInt(), position.y.toInt())
@@ -3358,43 +3414,82 @@ internal fun ConversationImagePreviewDialog(
     }
 }
 
+internal fun previewBoundedTranslation(
+    offset: Offset, scale: Float, viewportWidth: Float, viewportHeight: Float, imageWidth: Int, imageHeight: Int
+): Offset {
+    val fit = minOf(viewportWidth / imageWidth.coerceAtLeast(1), viewportHeight / imageHeight.coerceAtLeast(1))
+    val maximumX = ((imageWidth * fit * scale - viewportWidth) / 2f).coerceAtLeast(0f)
+    val maximumY = ((imageHeight * fit * scale - viewportHeight) / 2f).coerceAtLeast(0f)
+    return Offset(
+        if (maximumX == 0f) 0f else offset.x.coerceIn(-maximumX, maximumX),
+        if (maximumY == 0f) 0f else offset.y.coerceIn(-maximumY, maximumY)
+    )
+}
+
 @Composable
 internal fun ZoomablePreviewImage(
     image: ImageBitmap?,
     contentDescription: String,
-    onLongPress: ((Offset) -> Unit)? = null
+    onLongPress: ((Offset) -> Unit)? = null,
+    isActive: Boolean = true,
+    onZoomChanged: (Boolean) -> Unit = {}
 ) {
     var scale by remember(image) { mutableFloatStateOf(1f) }
     var translation by remember(image) { mutableStateOf(Offset.Zero) }
+    val currentLongPress by rememberUpdatedState(onLongPress)
+    val currentZoomChanged by rememberUpdatedState(onZoomChanged)
+    LaunchedEffect(isActive, image) {
+        scale = 1f
+        translation = Offset.Zero
+        currentZoomChanged(false)
+    }
+    LaunchedEffect(scale > 1f) { currentZoomChanged(scale > 1f) }
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(image, onLongPress) {
-                detectTapGestures(onLongPress = { onLongPress?.invoke(it) })
+            .clipToBounds()
+            .pointerInput(image) {
+                detectTapGestures(
+                    onLongPress = { currentLongPress?.invoke(it) },
+                    onDoubleTap = { point ->
+                        if (image != null) {
+                            val nextScale = if (scale > 1f) 1f else 3f
+                            val focal = point - Offset(size.width / 2f, size.height / 2f)
+                            translation = previewBoundedTranslation(
+                                (translation - focal) * (nextScale / scale) + focal,
+                                nextScale, size.width.toFloat(), size.height.toFloat(), image.width, image.height
+                            )
+                            scale = nextScale
+                        }
+                    }
+                )
             }
             .pointerInput(image) {
                 awaitEachGesture {
-                    var event = awaitPointerEvent()
-                    while (event.changes.any { it.pressed }) {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var accumulatedPan = Offset.Zero
+                    var transforming = false
+                    do {
+                        val event = awaitPointerEvent()
                         val pressedCount = event.changes.count { it.pressed }
-                        if (pressedCount >= 2 || scale > 1f) {
-                            val nextScale = (scale * event.calculateZoom()).coerceIn(1f, 5f)
-                            if (nextScale == 1f) {
-                                translation = Offset.Zero
-                            } else {
-                                val maximumX = size.width * (nextScale - 1f) / 2f
-                                val maximumY = size.height * (nextScale - 1f) / 2f
-                                val pan = event.calculatePan()
-                                translation = Offset(
-                                    x = (translation.x + pan.x).coerceIn(-maximumX, maximumX),
-                                    y = (translation.y + pan.y).coerceIn(-maximumY, maximumY)
-                                )
-                            }
-                            scale = nextScale
-                            event.changes.forEach { it.consume() }
+                        val pan = event.calculatePan()
+                        accumulatedPan += pan
+                        // 保留静止触摸给双击/长按，只在两指操作或拖动越过阈值后消费事件。
+                        if (pressedCount >= 2 || (scale > 1f && accumulatedPan.getDistance() > viewConfiguration.touchSlop)) {
+                            transforming = true
                         }
-                        event = awaitPointerEvent()
-                    }
+                        if (transforming && image != null) {
+                            val nextScale = (scale * event.calculateZoom()).coerceIn(1f, 5f)
+                            val centroid = event.calculateCentroid(useCurrent = false)
+                            val focal = if (centroid.x.isFinite() && centroid.y.isFinite()) centroid - Offset(size.width / 2f, size.height / 2f) else Offset.Zero
+                            translation = previewBoundedTranslation(
+                                (translation - focal) * (nextScale / scale) + focal + pan,
+                                nextScale, size.width.toFloat(), size.height.toFloat(), image.width, image.height
+                            )
+                            scale = nextScale
+                            event.changes.forEach { if (it.position != it.previousPosition) it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
                 }
             },
         contentAlignment = Alignment.Center
@@ -3440,7 +3535,7 @@ private fun AssistantMessage(
                 modifier = Modifier.fillMaxWidth()
             )
         }
-        CopyButton(item.text, markdown = true)
+        AssistantMessageActions(item.text)
     }
 }
 
@@ -3531,6 +3626,32 @@ private fun AttachmentGrid(
                     }
                 }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AssistantMessageActions(text: String) {
+    if (text.isEmpty()) return
+    val onReply = LocalMessageQuote.current
+    Row(
+        Modifier.testTag("assistant-message-actions"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CopyButton(text, markdown = true)
+        if (onReply != null) {
+            IconButton(
+                onClick = { onReply(markdownPlainText(text)) },
+                modifier = Modifier.size(44.dp).testTag("message-reply")
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_message_reply),
+                    contentDescription = appText("回复"),
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                )
             }
         }
     }

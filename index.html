@@ -1,25 +1,34 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-render-quality="static">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#f7f9fc">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#030d1c">
   <meta name="description" content="Whaleness 是 DeepSeek Harness 的第三方移动端应用。连接自己的电脑或服务器，在 iOS 和 Android 上继续会话、查看 Agent 轨迹、管理插件与定时任务。">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Whaleness | 把 Harness 带到手边">
   <meta property="og:description" content="DeepSeek Harness 的第三方移动端应用。你的工作区、会话与 Agent，随身同行。">
   <meta property="og:url" content="https://clarklevis1995.github.io/dsh-mobile/">
   <title>Whaleness | 把 Harness 带到手边</title>
-  <link rel="icon" href="website/assets/mark-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
-  <link rel="icon" href="website/assets/mark-light.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
-  <link rel="stylesheet" href="website/styles.css">
+  <link rel="icon" href="website/assets/mark-light.svg" type="image/svg+xml">
+  <script>
+    (() => {
+      const root = document.documentElement;
+      if (/AppleWebKit/.test(navigator.userAgent) && (!/Chrome\//.test(navigator.userAgent) || /iPhone|iPad|iPod/.test(navigator.userAgent) || navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent))) root.dataset.engine = 'webkit';
+    })();
+  </script>
+  <link rel="stylesheet" href="website/vendor/glasswork/glass.css">
+  <link rel="stylesheet" href="website/styles.css?v=20261106-ocean-photo-v1">
+  <link rel="stylesheet" href="website/liquid-glass.css?v=20261106-ocean-photo-v1">
   <link rel="preload" href="website/assets/mockups/home.webp" as="image">
-  <script src="website/main.js" defer></script>
+  <script src="website/main.js?v=20261106-ocean-photo-v1" defer></script>
+  <script src="website/liquid-glass.js?v=20261106-ocean-photo-v1" defer></script>
 </head>
 <body>
+  <div class="ambient-background" aria-hidden="true"></div>
   <a class="skip-link" href="#main">跳转到正文</a>
-  <header class="header">
+  <header class="header glass" data-kind="dark">
     <div class="header-inner wrap">
       <a class="brand" href="#" aria-label="Whaleness 首页">
         <img class="brand-mark" src="website/assets/mark-dark.svg" width="32" height="32" alt="">
@@ -76,7 +85,7 @@
         <h2 id="experience-title">从一条消息，<br>到每一步执行。</h2>
         <p>对话、轨迹和日常管理，都能在手机上查看与操作。</p>
       </div>
-      <div class="showcase reveal">
+      <div class="showcase reveal glass" data-kind="dark" data-glass-lens>
         <div class="showcase-tabs" role="tablist" aria-label="选择产品功能">
           <button id="tab-conversation" type="button" role="tab" aria-selected="true" aria-controls="panel-conversation" tabindex="0" data-feature="conversation">实时对话</button>
           <button id="tab-trajectory" type="button" role="tab" aria-selected="false" aria-controls="panel-trajectory" tabindex="-1" data-feature="trajectory">执行轨迹</button>
@@ -135,7 +144,7 @@
           <div><dt>工作区与文件</dt><dd>切换主机上的工作区，浏览、下载和预览工作文件。</dd></div>
         </dl>
       </div>
-      <div class="control-visual reveal">
+      <div class="control-visual reveal glass" data-kind="dark" data-glass-lens>
         <img src="website/assets/mockups/presets.webp" width="875" height="1784" loading="lazy" alt="iPhone 3D 渲染图，屏幕展示 Whaleness 的标准、极简和自定义 Agent 模式">
       </div>
     </section>
@@ -176,7 +185,7 @@
             <li><button type="button" data-setup-step="5" aria-controls="setup-panel-5"><span class="setup-number" aria-hidden="true">6</span><span><strong>扫码完成配对</strong><small>生成二维码后扫描</small></span></button></li>
           </ol>
         </nav>
-        <div class="setup-stage">
+        <div class="setup-stage glass" data-kind="dark" data-glass-lens>
           <div class="setup-content-shell">
             <div id="setup-content" class="setup-content">
               <div class="setup-panels" aria-live="polite">
@@ -202,8 +211,8 @@
     <section id="download" class="download wrap section" aria-labelledby="download-title">
       <div class="section-heading reveal"><h2 id="download-title">现在，把它带在身边。</h2><p>选择你的手机平台，连接你自己的工作区。</p></div>
       <div class="download-grid reveal">
-        <article class="download-ios"><div><p class="download-platform">iOS</p><h3>iOS 公测已开放。</h3><p>通过 TestFlight 安装 Whaleness，参与体验并反馈问题。</p></div><div class="download-action"><a class="button" href="https://testflight.apple.com/join/1Euwby6r" target="_blank" rel="noopener noreferrer">加入 iOS 公测 <span aria-hidden="true">↗</span></a><span>需要 iOS 17 或更高版本</span></div></article>
-        <article class="download-android"><div><p class="download-platform">Android</p><h3>Android 现已可下载。</h3><p>通过 GitHub Releases 下载 Whaleness，查看版本说明并反馈问题。</p></div><div class="download-action"><a class="button" href="https://github.com/Clarklevis1995/dsh-mobile/releases" target="_blank" rel="noopener noreferrer">下载 Android <span aria-hidden="true">↗</span></a><span>需要 Android 7.0 或更高版本</span></div></article>
+        <article class="download-ios glass" data-kind="dark" data-glass-lens><div><p class="download-platform">iOS</p><h3>iOS 公测已开放。</h3><p>通过 TestFlight 安装 Whaleness，参与体验并反馈问题。</p></div><div class="download-action"><a class="button" href="https://testflight.apple.com/join/1Euwby6r" target="_blank" rel="noopener noreferrer">加入 iOS 公测 <span aria-hidden="true">↗</span></a><span>需要 iOS 17 或更高版本</span></div></article>
+        <article class="download-android glass" data-kind="dark" data-glass-lens><div><p class="download-platform">Android</p><h3>Android 现已可下载。</h3><p>通过 GitHub Releases 下载 Whaleness，查看版本说明并反馈问题。</p></div><div class="download-action"><a class="button" href="https://github.com/Clarklevis1995/dsh-mobile/releases" target="_blank" rel="noopener noreferrer">下载 Android <span aria-hidden="true">↗</span></a><span>需要 Android 7.0 或更高版本</span></div></article>
       </div>
     </section>
 
@@ -219,10 +228,10 @@
 
   <footer class="footer wrap">
     <div><a class="brand" href="#"><img class="brand-mark" src="website/assets/mark-dark.svg" width="28" height="28" alt=""><span>whaleness</span></a><p>DeepSeek Harness 的第三方移动端应用。</p></div>
-    <div class="footer-links"><button class="support-link" type="button" data-support-dialog aria-haspopup="dialog" aria-controls="support-dialog">加群获取支持</button><a href="privacy/index.html">隐私政策</a><a href="https://github.com/Clarklevis1995/dsh-mobile" target="_blank" rel="noopener noreferrer">源代码 ↗</a><a href="mailto:clarklevis1995@gmail.com">联系与反馈</a><button id="theme-toggle" type="button">切换外观</button></div>
+    <div class="footer-links"><button class="support-link" type="button" data-support-dialog aria-haspopup="dialog" aria-controls="support-dialog">加群获取支持</button><a href="privacy/index.html">隐私政策</a><a href="https://github.com/Clarklevis1995/dsh-mobile" target="_blank" rel="noopener noreferrer">源代码 ↗</a><a href="mailto:clarklevis1995@gmail.com">联系与反馈</a></div>
   </footer>
 
-  <dialog id="support-dialog" class="support-dialog" aria-labelledby="support-title" aria-describedby="support-description">
+  <dialog id="support-dialog" class="support-dialog glass" data-kind="dark" aria-labelledby="support-title" aria-describedby="support-description">
     <form method="dialog" class="support-dialog-header">
       <h2 id="support-title">加群获取支持</h2>
       <button class="dialog-close" type="submit" aria-label="关闭加群二维码">关闭 <span aria-hidden="true">×</span></button>
@@ -232,7 +241,7 @@
     <a class="support-save" href="website/assets/support-wechat-2026-11-05.png" download="Whaleness-公测用户2群二维码.png">保存二维码图片</a>
   </dialog>
 
-  <dialog id="screenshot-dialog" class="screenshot-dialog" aria-label="截图大图">
+  <dialog id="screenshot-dialog" class="screenshot-dialog glass" data-kind="dark" aria-label="截图大图">
     <form method="dialog"><a id="dialog-original" href="website/assets/conversation.webp" target="_blank" rel="noopener noreferrer">打开原图 ↗</a><button class="dialog-close" aria-label="关闭截图">关闭 <span aria-hidden="true">×</span></button></form>
     <img id="dialog-image" src="website/assets/conversation.webp" width="804" height="1748" alt="Whaleness 实时对话完整截图">
   </dialog>
