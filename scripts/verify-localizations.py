@@ -156,7 +156,6 @@ SCAN_ROOTS = (
     (ROOT / "shared" / "src" / "androidMain", ".kt", "shared"),
     (ROOT / "shared" / "src" / "iosMain", ".kt", "shared"),
 )
-IGNORE_MARK = "i18n-ignore"
 SWIFT_LOCALIZING_CALLS = ("String(localized:", "LocalizedStringKey(", "String.LocalizationValue(",
                           "LocalizedStringResource(")
 SWIFT_UI_CALLS = tuple(f"{name}(" for name in UI_CALL_NAMES)
