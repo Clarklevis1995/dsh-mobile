@@ -65,6 +65,7 @@ internal fun DshMarkdownTableCard(table: DshTableData, textSizeSp: Float, onOpen
     copyMarkdown: String, sourceMarkdown: String, tableIndex: Int) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val onReply = LocalMessageQuote.current
     var messageAnchor by remember { mutableStateOf<androidx.compose.ui.unit.IntOffset?>(null) }
     var selection by remember { mutableStateOf<String?>(null) }
     var openingPreview by remember { mutableStateOf(false) }
@@ -100,6 +101,10 @@ internal fun DshMarkdownTableCard(table: DshTableData, textSizeSp: Float, onOpen
         DshMenuItem(text = { Text(appText("选择文字")) }, onClick = {
             messageAnchor = null
             selection = copyMarkdown
+        })
+        if (onReply != null) DshMenuItem(text = { Text(appText("回复")) }, onClick = {
+            messageAnchor = null
+            onReply(markdownPlainText(copyMarkdown))
         })
     }
     selection?.let { source -> DshMarkdownSelectionPage(source) { selection = null } }

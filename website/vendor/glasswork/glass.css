@@ -1,0 +1,200 @@
+/*
+ * Lumno's liquid glass, as on its New Tab page (lumno-extension:
+ * src/newtab/glass-style.css). A surface becomes glass with four
+ * declarations: background (the tint), backdrop-filter (blur and tone, then
+ * the rim lens from lens.js), box-shadow (rim light, bevel and shadow) and
+ * color (the ink).
+ *
+ * Two materials, chosen per surface by data-kind:
+ * - light: clear glass with dark ink. A thin white wash, the scene behind
+ *   lightly blurred and its colors deepened (saturate) and lifted
+ *   (brightness above 1, which screens toward white), so the glass takes
+ *   its color from behind instead of turning milky.
+ * - dark: smoky glass with light ink, for the dark theme and for dark
+ *   patches of wallpaper under the light theme. Brightness below 1 dims
+ *   the scene like a multiply with black instead of muddying it.
+ *
+ * The playground sets the materials' numbers on the stage (--l-* and
+ * --d-*); each surface sets what it read off the wallpaper under it:
+ * --density (0 thin, 1 dense), --keep (the share of the saturation boost
+ * to keep) and --floor (the least tint its text needs). Sizes are in --u,
+ * one Lumno pixel at the stage's scale.
+ */
+
+@property --m-tint { syntax: '<color>'; inherits: true; initial-value: #ffffff; }
+@property --m-k { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --m-thin { syntax: '<number>'; inherits: true; initial-value: 0.06; }
+@property --m-dense { syntax: '<number>'; inherits: true; initial-value: 0.22; }
+@property --m-blur { syntax: '<number>'; inherits: true; initial-value: 2; }
+@property --m-sat { syntax: '<number>'; inherits: true; initial-value: 1.8; }
+@property --m-bri { syntax: '<number>'; inherits: true; initial-value: 1.06; }
+@property --m-con { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --m-catch { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --m-bevel { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --m-shadow { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --density { syntax: '<number>'; inherits: true; initial-value: 0.35; }
+@property --keep { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --floor { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --ink { syntax: '<color>'; inherits: true; initial-value: rgba(0, 0, 0, 0.86); }
+@property --ink-2 { syntax: '<color>'; inherits: true; initial-value: rgba(60, 60, 67, 0.7); }
+@property --ink-solid { syntax: '<color>'; inherits: true; initial-value: #000000; }
+@property --ink-a { syntax: '<number>'; inherits: true; initial-value: 0.86; }
+@property --well { syntax: '<color>'; inherits: true; initial-value: rgba(0, 0, 0, 0.15); }
+@property --row-hover { syntax: '<color>'; inherits: true; initial-value: rgba(0, 0, 0, 0.045); }
+@property --row-active { syntax: '<color>'; inherits: true; initial-value: rgba(0, 0, 0, 0.09); }
+
+/* ---------- The two materials ---------- */
+
+.glass {
+  --m-tint: var(--l-tint, #ffffff);
+  --m-k: var(--l-k, 1);
+  --m-thin: var(--l-thin, 0.06);
+  --m-dense: var(--l-dense, 0.22);
+  --m-blur: var(--l-blur, 2);
+  --m-sat: var(--l-sat, 1.8);
+  --m-bri: var(--l-bri, 1.06);
+  --m-con: var(--l-con, 1);
+  --m-catch: var(--l-catch, 1);
+  --m-bevel: var(--l-bevel, 1);
+  --m-shadow: var(--l-shadow, 1);
+  /* Dark ink: one color in fixed steps, multiplied into the glass so it
+     picks up the glass's color and keeps its contrast. */
+  --ink: rgba(0, 0, 0, 0.86);
+  --ink-2: rgba(60, 60, 67, 0.7);
+  --ink-solid: #000000;
+  --ink-a: 0.86;
+  --well: rgba(0, 0, 0, 0.15);
+  --row-hover: rgba(0, 0, 0, 0.06);
+  --row-active: rgba(0, 0, 0, 0.1);
+  --blend: multiply;
+}
+
+/* A capsule (its radius at least half its height) keeps round ends: a
+   superellipse on a radius that is already half the box flattens them.
+   The page marks capsules as they are sized (data-pill). */
+.glass[data-pill] { corner-shape: round; }
+
+.glass[data-kind="dark"] {
+  --m-tint: var(--d-tint, #1e1e22);
+  --m-k: var(--d-k, 1);
+  --m-thin: var(--d-thin, 0.16);
+  --m-dense: var(--d-dense, 0.38);
+  --m-blur: var(--d-blur, 2);
+  --m-sat: var(--d-sat, 1.6);
+  --m-bri: var(--d-bri, 0.8);
+  --m-con: var(--d-con, 1);
+  --m-catch: var(--d-catch, 1);
+  --m-bevel: var(--d-bevel, 1);
+  --m-shadow: var(--d-shadow, 1);
+  /* Light ink adds light rather than covering. */
+  --ink: rgba(255, 255, 255, 0.94);
+  --ink-2: rgba(235, 235, 245, 0.64);
+  --ink-solid: #ffffff;
+  --ink-a: 0.94;
+  --well: rgba(255, 255, 255, 0.22);
+  --row-hover: rgba(255, 255, 255, 0.08);
+  --row-active: rgba(255, 255, 255, 0.14);
+  --blend: plus-lighter;
+}
+
+/* ---------- The four declarations ---------- */
+
+.glass {
+  /* The tint opacity setting (--m-k, 0-1.5) scales the tint. Below 1 the
+     tone in the filter and the bevel thin with it (--veil-k), so at 0 only
+     the blur, the rim and the shadow are left: clear glass. The tint never
+     goes below the least opacity the surface's text needs (--floor). */
+  --veil-k: min(1, var(--m-k));
+  --tint-a: min(0.95, max(var(--floor), calc((var(--m-thin) + (var(--m-dense) - var(--m-thin)) * var(--density)) * var(--m-k))));
+  --filter:
+    blur(calc(var(--m-blur) * var(--u, 1px)))
+    saturate(var(--m-sat))
+    contrast(calc(1 + (var(--m-con) - 1) * var(--veil-k)))
+    brightness(calc(1 + (var(--m-bri) - 1) * var(--veil-k)))
+    saturate(var(--keep));
+
+  /* Continuous corners, where the browser draws them (Chromium 139+);
+     elsewhere the plain border-radius stays. */
+  corner-shape: round;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--m-tint) calc(var(--tint-a) * 100%), transparent);
+  -webkit-backdrop-filter: var(--filter);
+  backdrop-filter: var(--filter) var(--glass-lens,);
+  isolation: isolate;
+  /* Toggled for a moment to make Safari redraw the glass (playground.js). */
+  will-change: var(--redraw, auto);
+}
+
+/* Light glass: light caught where the rim faces it, on the top left and
+   fainter on the bottom right, over a faint even line that keeps the
+   outline; a firmer hairline and a soft shadow; and the bevel, soft bands
+   just inside the edge, so the plate reads as a thick slab. The bands stay
+   within a few pixels of the edge: a box shadow only mixes plain white and
+   black, so a wide band washes the scene's color out. */
+.glass {
+  box-shadow:
+    inset calc(1.5 * var(--u)) calc(1.5 * var(--u)) var(--u) calc(-1 * var(--u)) rgb(255 255 255 / calc(1 * var(--m-catch))),
+    inset calc(-1.5 * var(--u)) calc(-1.5 * var(--u)) var(--u) calc(-1 * var(--u)) rgb(255 255 255 / calc(0.6 * var(--m-catch))),
+    inset 0 0 0 calc(0.5 * var(--u)) rgb(255 255 255 / calc(0.3 * var(--m-catch))),
+    0 0 0 calc(0.5 * var(--u)) rgb(0 0 0 / calc(0.12 * var(--m-shadow))),
+    0 calc(4 * var(--u)) calc(16 * var(--u)) rgb(0 0 0 / calc(0.1 * var(--m-shadow))),
+    inset 0 calc(6 * var(--u)) calc(8 * var(--u)) calc(-6 * var(--u)) rgb(255 255 255 / calc(0.5 * var(--veil-k) * var(--m-bevel))),
+    inset calc(4 * var(--u)) 0 calc(8 * var(--u)) calc(-6 * var(--u)) rgb(255 255 255 / calc(0.22 * var(--veil-k) * var(--m-bevel))),
+    inset calc(-4 * var(--u)) 0 calc(8 * var(--u)) calc(-6 * var(--u)) rgb(255 255 255 / calc(0.12 * var(--veil-k) * var(--m-bevel))),
+    inset 0 calc(-6 * var(--u)) calc(8 * var(--u)) calc(-6 * var(--u)) rgb(0 0 0 / calc(0.06 * var(--veil-k) * var(--m-bevel)));
+}
+
+/* Dark glass: the same light, dimmer, with a darker outline and shadow.
+   The bottom shade stays faint: over a light wallpaper dark glass is a mid
+   tone, which black only muddies. */
+.glass[data-kind="dark"] {
+  box-shadow:
+    inset var(--u) var(--u) calc(0.5 * var(--u)) calc(-0.5 * var(--u)) rgb(255 255 255 / calc(0.46 * var(--m-catch))),
+    inset calc(-1 * var(--u)) calc(-1 * var(--u)) calc(0.5 * var(--u)) calc(-0.5 * var(--u)) rgb(255 255 255 / calc(0.18 * var(--m-catch))),
+    inset 0 0 0 calc(0.5 * var(--u)) rgb(255 255 255 / calc(0.06 * var(--m-catch))),
+    0 0 0 calc(0.5 * var(--u)) rgb(0 0 0 / calc(0.28 * var(--m-shadow))),
+    0 calc(4 * var(--u)) calc(14 * var(--u)) rgb(0 0 0 / calc(0.22 * var(--m-shadow))),
+    inset 0 calc(6 * var(--u)) calc(8 * var(--u)) calc(-6 * var(--u)) rgb(255 255 255 / calc(0.18 * var(--veil-k) * var(--m-bevel))),
+    inset calc(4 * var(--u)) 0 calc(8 * var(--u)) calc(-6 * var(--u)) rgb(255 255 255 / calc(0.07 * var(--veil-k) * var(--m-bevel))),
+    inset calc(-4 * var(--u)) 0 calc(8 * var(--u)) calc(-6 * var(--u)) rgb(255 255 255 / calc(0.04 * var(--veil-k) * var(--m-bevel))),
+    inset 0 calc(-6 * var(--u)) calc(8 * var(--u)) calc(-6 * var(--u)) rgb(0 0 0 / calc(0.08 * var(--veil-k) * var(--m-bevel)));
+}
+
+/* Text and icons on the glass blend with it. Icons are drawn opaque and
+   faded whole: a translucent color darkens where strokes overlap. Only
+   plain text and icons blend: Safari on iOS can leave a whole surface
+   undrawn when its blurred element holds a blended element that also
+   clips (the progress bar), and the slider's thumb would lose its white. */
+.glass .ink,
+.glass .ink-2 {
+  mix-blend-mode: var(--blend);
+}
+
+.glass .ink-2 { color: var(--ink-2); }
+
+/* WebKit (Safari 27 and every browser on iOS) now draws corner-shape, but
+   on a phone it fails to draw a backdrop filter clipped to a superellipse:
+   the player, the one surface that isn't a capsule, stayed blank until it
+   was dragged and then painted in patches. There the glass keeps plain
+   round corners; what isn't glass (the album art) keeps its continuous
+   ones. */
+[data-engine="webkit"] .glass { corner-shape: round; }
+
+/* Where the backdrop is drawn in WebGL (refract.js), the surfaces only add
+   their tint, rim light and ink over it. */
+.glass svg.ink,
+.glass .ink svg { color: var(--ink-solid); opacity: var(--ink-a); }
+
+/* Without transparency, or with forced colors: a solid surface in the same
+   tint. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: color-mix(in srgb, var(--m-tint) 96%, transparent);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .glass { border: 1px solid CanvasText; background: Canvas; backdrop-filter: none; }
+}

@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,6 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -27,7 +31,8 @@ import com.clarklevis.dsh.android.R
 internal data class DshSelectionOption(
     val key: String,
     val label: String,
-    @param:DrawableRes val iconRes: Int? = null
+    @param:DrawableRes val iconRes: Int? = null,
+    val enabled: Boolean = true
 )
 
 /** 设置页共用的浮层选项卡；由调用方的 Box 提供锚点。 */
@@ -45,10 +50,12 @@ internal fun DshSelectionPopup(
     val positionProvider = remember(margin, overlap) { SelectionPopupPositionProvider(margin, overlap) }
     DshMenuPopup(expanded, onDismissRequest, positionProvider,
         Modifier.width(208.dp).testTag("dsh-selection-popup"), shadowPadding = 30.dp) {
-        Column(Modifier.padding(vertical = 4.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
             options.forEach { option ->
                 val selected = option.key == selectedKey
                 DshMenuItem(text = { Text(option.label, fontSize = 15.sp, maxLines = 1) },
+                    enabled = option.enabled,
+                    modifier = Modifier.semantics { this.selected = selected },
                     leadingIcon = {
                         val icon = if (selected) R.drawable.ic_menu_check else option.iconRes
                         if (icon != null) Icon(painterResource(icon), null, Modifier.size(18.dp))

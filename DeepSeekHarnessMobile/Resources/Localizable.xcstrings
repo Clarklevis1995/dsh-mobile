@@ -1,6 +1,119 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "schedule.date.pattern" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "MMM d, yyyy HH:mm"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "yyyy年M月d日 HH:mm"}}}},
+    "加载更多任务" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Load more tasks"}}}},
+    "状态未知" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Unknown status"}}}},
+    "定时任务状态" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Scheduled task status"}}}},
+    "删除已结束的定时任务" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Delete ended scheduled tasks"}}}},
+    "删除已结束的定时任务？" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Delete ended scheduled tasks?"}}}},
+    "已结束任务及其投递记录将被删除，无法恢复。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Ended tasks and their delivery records will be permanently deleted."}}}},
+    "添加定时任务" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Add scheduled task"}}}},
+    "执行位置" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Run in"}}}},
+    "当前关联会话" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Current linked conversation"}}}},
+    "新建会话并复用" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Create and reuse a conversation"}}}},
+    "每次新建会话" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Create a conversation for each run"}}}},
+    "首次运行时创建，之后沿用这个会话" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Create on the first run, then reuse this conversation"}}}},
+    "每次运行都创建独立会话" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Create a separate conversation for every run"}}}},
+    "关联工作区" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Workspace"}}}},
+    "使用默认工作区" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Use the default workspace"}}}},
+    "默认工作区" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Default workspace"}}}},
+    "搜索工作区" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Search workspaces"}}}},
+    "请选择执行位置。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose where to run the task."}}}},
+    "当前任务尚无可用的关联会话，请选择新建会话。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "This task has no available linked conversation. Choose a new conversation."}}}},
+    "当前网关不支持修改执行位置，请升级网关" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "This gateway cannot change task destinations. Upgrade the gateway."}}}},
+    "保留毫秒" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Keep milliseconds"}}}},
+    "schedule.repeat.interval" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Every %1$@ %2$@"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "每 %1$@ %2$@执行"}}}},
+    "重复" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Repeat"}}}},
+    "不重复" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Once"}}}},
+    "每分钟" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Every minute"}}}},
+    "每小时" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Every hour"}}}},
+    "每月" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Monthly"}}}},
+    "重复间隔" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Repeat interval"}}}},
+    "时间" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Time"}}}},
+    "时分秒" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Time with seconds"}}}},
+    "时间 HH:mm:ss" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Time HH:mm:ss"}}}},
+    "选择时间" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose time"}}}},
+    "每月几号" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Day of month"}}}},
+    "当月不足该日期时，在月末执行。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Runs on the last day if the month has fewer days."}}}},
+    "重复日期" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Repeat on"}}}},
+    "时区" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Time zone"}}}},
+    "搜索时区" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Search time zones"}}}},
+    "Cron / RRULE" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Cron / RRULE"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "Cron / RRULE"}}}},
+    "Cron 使用 5 个字段；RRULE 保留 DTSTART 中的时区。规则由宿主校验，出错后可继续编辑。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Cron uses five fields. RRULE uses the time zone in DTSTART. The host validates the rule; you can keep editing after an error."}}}},
+    "请选择有效的 IANA 时区。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose a valid IANA time zone."}}}},
+    "请选择有效的日期和时间。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose a valid date and time."}}}},
+    "请输入 Cron 或 DTSTART/RRULE 规则。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Enter a Cron or DTSTART/RRULE rule."}}}},
+    "Cron 需要 5 个字段；RRULE 需要 DTSTART 和 RRULE 两行。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Cron needs five fields; RRULE needs DTSTART and RRULE lines."}}}},
+    "请选择重复类型。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose a repeat frequency."}}}},
+    "重复间隔请输入 1 到 10000 的整数。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Enter an integer from 1 to 10000 for the repeat interval."}}}},
+    "请选择有效日期。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose a valid date."}}}},
+    "时间格式为 HH:mm:ss，可保留最多 3 位毫秒。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Use HH:mm:ss, with up to three fractional digits."}}}},
+    "每周至少选择一天。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Select at least one weekday."}}}},
+    "每月日期请输入 1 到 31。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Enter a day from 1 to 31."}}}},
+    "此重复规则仅支持整秒，请将毫秒设为 000。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "This recurrence supports whole seconds. Set milliseconds to 000."}}}},
+    "分钟" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "minutes"}}}},
+    "小时" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "hours"}}}},
+    "天" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "days"}}}},
+    "周" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "weeks"}}}},
+    "个月" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "months"}}}},
+    "1" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "1"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "1"}}}},
+    "HH:mm:ss" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "HH:mm:ss"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "HH:mm:ss"}}}},
+    "1–31" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "1–31"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "1–31"}}}},
+    "一" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Mon"}}}},
+    "二" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Tue"}}}},
+    "三" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Wed"}}}},
+    "四" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Thu"}}}},
+    "五" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Fri"}}}},
+    "六" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Sat"}}}},
+    "日" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Sun"}}}},
+    "查看运行轨迹" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "View run history"}}}},
+    "运行轨迹" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Run history"}}}},
+    "暂无运行轨迹" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "No runs yet"}}}},
+    "加载更早轨迹" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Load earlier runs"}}}},
+    "运行轨迹加载失败" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Unable to load run history"}}}},
+    "运行轨迹加载超时，请重试" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Run history timed out. Try again."}}}},
+    "仅显示宿主仍保留的运行记录" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Only records retained by the host are shown"}}}},
+    "时间未知" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Unknown time"}}}},
+    "已暂停" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Paused" } } } },
+    "请根据需求创建一个自动化任务。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Please create an automation task based on my requirements." }
+        }
+      }
+    },
+    "请更新并重启 Mobile Gateway，以支持发送消息前配置新会话" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Update and restart Mobile Gateway to configure a new session before sending messages." }
+        }
+      }
+    },
+    "回复" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reply"
+          }
+        }
+      }
+    },
+    "移除引用" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove reply"
+          }
+        }
+      }
+    },
     " 等工具" : {
       "extractionState" : "stale",
       "localizations" : {

@@ -1,4 +1,5 @@
 import XCTest
+import class DeepSeekHarnessShared.ScheduleTimingEditor
 import class DeepSeekHarnessShared.RtcSelectedPath
 import class DeepSeekHarnessShared.RtcPathInspector
 import UserNotifications
@@ -651,6 +652,654 @@ final class SlashCommandComposerPresentationTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(40))
         XCTAssertEqual(afterFirstCharacter.text, "/p")
         XCTAssertTrue(afterFirstCharacter.isFirstResponder)
+    }
+}
+
+@MainActor
+final class CompactComposerLayoutTests: XCTestCase {
+    func testMorphIntermediateFramesResizeOuterBoundsAndKeepPlusFullyVisible() async throws {
+        var heights: [CGFloat] = []
+        for progress in stride(from: 0.0, through: 1.0, by: 0.1) {
+            let host = UIHostingController(rootView: VStack {
+                ComposerMorphLayout(expansion: progress) {
+                ComposerFrameProbe(identifier: "plus-probe", height: 32)
+                ComposerFrameProbe(identifier: "editor-probe", height: 38)
+                Color.clear
+                Color.clear
+                }.padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(ComposerFrameProbe(identifier: "card-probe"))
+                Spacer()
+            })
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 360, height: 600)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            host.view.frame = window.bounds
+            try await Task.sleep(for: .milliseconds(50))
+            host.view.layoutIfNeeded()
+            func find(_ identifier: String, in view: UIView) -> UIView? {
+                if view.accessibilityIdentifier == identifier { return view }
+                return view.subviews.lazy.compactMap { find(identifier, in: $0) }.first
+            }
+            let plus = try XCTUnwrap(find("plus-probe", in: host.view))
+            let card = try XCTUnwrap(find("card-probe", in: host.view))
+            let frame = plus.convert(plus.bounds, to: card)
+            XCTAssertEqual(frame.height, 32, accuracy: 0.5)
+            XCTAssertGreaterThanOrEqual(frame.minY, 0)
+            XCTAssertLessThanOrEqual(frame.maxY, card.bounds.height + 0.5,
+                                     "加号在展开和收起路径的任意进度都不能被外框裁掉")
+            XCTAssertFalse(plus.isHidden)
+            XCTAssertEqual(plus.alpha, 1)
+            heights.append(card.bounds.height)
+        }
+        XCTAssertEqual(heights.first!, 58, accuracy: 0.5)
+        XCTAssertEqual(heights.last!, 118, accuracy: 0.5)
+        for (previous, next) in zip(heights, heights.dropFirst()) {
+            XCTAssertGreaterThan(next, previous, "外框必须经过中间高度，不能先跳到终点大小")
+            XCTAssertLessThan(next - previous, 8)
+        }
+    }
+
+    func testLongCompactDraftUsesEllipsisAndRestoresFullNativeTextAndSelection() {
+        let draft = String(repeating: "这是一段需要收紧预览的超长草稿。", count: 30) + "\n第二段也要保留。"
+        let input = CommandTextView(frame: CGRect(x: 0, y: 0, width: 220, height: 38))
+        input.font = .systemFont(ofSize: 17)
+        input.textContainerInset = .zero
+        input.textContainer.lineFragmentPadding = 0
+        input.isScrollEnabled = false
+        input.apply(text: draft, presentation: nil, placeholder: "消息")
+        input.selectedRange = NSRange(location: 8, length: 2)
+        input.setCompactPreview(true)
+        input.layoutManager.ensureLayout(for: input.textContainer)
+        XCTAssertNotEqual(input.layoutManager.truncatedGlyphRange(inLineFragmentForGlyphAt: 0).location, NSNotFound)
+        XCTAssertEqual(input.text, draft)
+        XCTAssertEqual(input.selectedRange, NSRange(location: 8, length: 2))
+        input.setCompactPreview(false)
+        input.frame.size.height = 200
+        input.layoutManager.ensureLayout(for: input.textContainer)
+        XCTAssertEqual(input.layoutManager.truncatedGlyphRange(inLineFragmentForGlyphAt: 0).location, NSNotFound)
+        XCTAssertEqual(input.text, draft)
+        XCTAssertEqual(input.selectedRange, NSRange(location: 8, length: 2))
+    }
+
+    func testFocusTransactionStartsBeforeKeyboardResponderWork() throws {
+        var focused = false
+        let input = SlashCommandTextView(text: .constant(""), presentation: nil, placeholder: "消息",
+            isFocused: Binding(get: { focused }, set: { focused = $0 }))
+        let coordinator = input.makeCoordinator()
+        let native = CommandTextView(frame: CGRect(x: 0, y: 0, width: 300, height: 38))
+        native.delegate = coordinator
+        native.onFocusWillChange = { next in
+            XCTAssertNotEqual(native.isFirstResponder, next, "先提交目标状态，再开始键盘 responder 切换")
+            coordinator.nativeFocusWillChange(next)
+        }
+        // 系统打开菜单时会查询能力，这类查询不能写入焦点 Binding。
+        XCTAssertTrue(native.canBecomeFirstResponder)
+        XCTAssertFalse(focused)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        let controller = UIViewController()
+        window.rootViewController = controller
+        controller.view.addSubview(native)
+        window.makeKeyAndVisible()
+        defer { native.onFocusWillChange = nil; native.delegate = nil; window.isHidden = true }
+        XCTAssertTrue(native.becomeFirstResponder())
+        XCTAssertTrue(focused)
+        _ = native.canResignFirstResponder
+        XCTAssertTrue(focused, "能否失焦的查询也不能提前收起输入框")
+        XCTAssertTrue(native.resignFirstResponder())
+        XCTAssertFalse(focused)
+    }
+
+    func testFocusMorphKeepsNativeEditorAndMultilineDraftInBothThemes() async throws {
+        for dark in [false, true] {
+            let controller = UIHostingController(rootView: CompactComposerHarness()
+                .environment(\.colorScheme, dark ? .dark : .light))
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 390, height: 420)
+            window.rootViewController = controller
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            controller.view.frame = window.bounds
+            controller.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(100))
+            let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: controller.view))
+            let compactFrame = editor.convert(editor.bounds, to: window)
+            attach(window, name: dark ? "输入框收紧-夜间" : "输入框收紧-日间")
+            XCTAssertTrue(editor.becomeFirstResponder())
+            try await Task.sleep(for: .milliseconds(350))
+            editor.insertText("第一行草稿\n第二行草稿")
+            try await Task.sleep(for: .milliseconds(100))
+            controller.view.layoutIfNeeded()
+            XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: controller.view))
+            XCTAssertTrue(editor.isFirstResponder)
+            let expandedFrame = editor.convert(editor.bounds, to: window)
+            XCTAssertGreaterThan(expandedFrame.width, compactFrame.width + 30)
+            XCTAssertLessThan(expandedFrame.minX, compactFrame.minX)
+            attach(window, name: dark ? "输入框展开-夜间" : "输入框展开-日间")
+            editor.resignFirstResponder()
+            try await Task.sleep(for: .milliseconds(350))
+            controller.view.layoutIfNeeded()
+            XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: controller.view))
+            XCTAssertEqual(editor.text, "第一行草稿\n第二行草稿")
+            XCTAssertEqual(editor.convert(editor.bounds, to: window).width, compactFrame.width, accuracy: 1)
+            XCTAssertFalse(editor.isFirstResponder)
+        }
+    }
+    private func attach(_ window: UIWindow, name: String) {
+        let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            window.rootViewController?.view.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = name; attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
+private struct ComposerFrameProbe: UIViewRepresentable {
+    let identifier: String
+    var height: CGFloat? = nil
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.accessibilityIdentifier = identifier
+        return view
+    }
+    func updateUIView(_ view: UIView, context: Context) {}
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIView, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 32, height: height ?? proposal.height ?? 0)
+    }
+}
+
+@MainActor
+final class ComposerHintAlignmentTests: XCTestCase {
+    func testFocusStateAloneDoesNotMoveHintOrDraftBeforeMorphProgress() async throws {
+        for text in ["", "保持原来的草稿"] {
+            let model = ComposerHintAlignmentModel()
+            let host = UIHostingController(rootView: ComposerHintAlignmentHarness(model: model, text: text))
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            try await Task.sleep(for: .milliseconds(80))
+            let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+            func origin() -> CGPoint { editor.convert(.zero, to: host.view) }
+            let compact = origin()
+            model.expanded = true
+            try await Task.sleep(for: .milliseconds(40))
+            XCTAssertEqual(origin().y, compact.y, accuracy: 0.5, "焦点已变化但进度仍为零，hint 不能提前跳到顶部")
+            let compactTop = max(0, (42 - ceil(UIFont.appPreferredFont(forTextStyle: .body).lineHeight)) / 2)
+            for step in 1...10 {
+                model.progress = CGFloat(step) / 10
+                try await Task.sleep(for: .milliseconds(25))
+                XCTAssertEqual(origin().y, compact.y + (6 - compactTop) * model.progress, accuracy: 0.75)
+                XCTAssertEqual(origin().x, compact.x - 44 * model.progress, accuracy: 0.75)
+            }
+            let expanded = origin()
+            model.expanded = false
+            try await Task.sleep(for: .milliseconds(40))
+            XCTAssertEqual(origin().y, expanded.y, accuracy: 0.5, "失焦但进度仍为一，hint 不能提前跳回居中")
+            for step in stride(from: 9, through: 0, by: -1) {
+                model.progress = CGFloat(step) / 10
+                try await Task.sleep(for: .milliseconds(25))
+                XCTAssertEqual(origin().y, compact.y + (6 - compactTop) * model.progress, accuracy: 0.75)
+                XCTAssertEqual(origin().x, compact.x - 44 * model.progress, accuracy: 0.75)
+            }
+            XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+            XCTAssertEqual(editor.text, text)
+        }
+    }
+}
+
+private final class ComposerHintAlignmentModel: ObservableObject {
+    @Published var progress: CGFloat = 0
+    @Published var expanded = false
+}
+
+private struct ComposerHintAlignmentHarness: View {
+    @ObservedObject var model: ComposerHintAlignmentModel
+    @State var text: String
+    @State private var focused = false
+    @StateObject private var voice = VoiceInputAdapter()
+    var body: some View {
+        VStack {
+            ComposerMorphLayout(expansion: model.progress) {
+                Image(systemName: "plus.circle").frame(width: 32, height: 32)
+                VoiceComposerTextInput(text: $text, isFocused: $focused, presentation: nil,
+                    state: voice.state, voice: voice, isCompact: !model.expanded)
+                Color.clear
+                Color.clear
+            }
+            Spacer()
+        }.padding(14).transaction { $0.animation = nil }
+    }
+}
+
+@MainActor
+final class ComposerAttachmentMotionTests: XCTestCase {
+    func testPreparedImageIsHiddenUntilExpansionAndThenMovesWithTheComposer() async throws {
+        let model = ComposerAttachmentMotionModel()
+        let host = UIHostingController(rootView: ComposerAttachmentMotionHarness(model: model))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        try await Task.sleep(for: .milliseconds(100))
+        func find(_ view: UIView) -> UIView? {
+            if view.accessibilityIdentifier == "attachment-card" { return view }
+            return view.subviews.lazy.compactMap { find($0) }.first
+        }
+        let card = try XCTUnwrap(find(host.view))
+        let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+        let compactHeight = card.bounds.height
+        let compactOrigin = editor.convert(CGPoint.zero, to: card)
+        model.hasImage = true
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(card.bounds.height, compactHeight, accuracy: 1, "准备好图片但未开始展开时，不能先占满预览高度")
+        XCTAssertEqual(editor.convert(CGPoint.zero, to: card).y, compactOrigin.y, accuracy: 1)
+        let format = UIGraphicsImageRendererFormat()
+        format.preferredRange = .standard
+        format.scale = 1
+        let snapshot = UIGraphicsImageRenderer(size: host.view.bounds.size, format: format).image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: snapshot)
+        attachment.name = "附件未展开首帧"; attachment.lifetime = .keepAlways; add(attachment)
+        let cgImage = try XCTUnwrap(snapshot.cgImage)
+        XCTAssertEqual(cgImage.bitsPerPixel, 32)
+        let bytes = try XCTUnwrap(cgImage.dataProvider?.data)
+        let pixels = try XCTUnwrap(CFDataGetBytePtr(bytes))
+        var magenta = 0
+        // 图片探针使用纯洋红色；收紧首帧不能有任何露出的缩略图区域。
+        for row in 0..<cgImage.height {
+            for column in 0..<cgImage.width {
+                let offset = row * cgImage.bytesPerRow + column * 4
+                if pixels[offset] > 180 && pixels[offset + 1] < 70 && pixels[offset + 2] > 180 { magenta += 1 }
+            }
+        }
+        XCTAssertEqual(magenta, 0)
+        var editorSamples: [(CGFloat, CGFloat)] = []
+        let recorder = ComposerQuoteFrameRecorder {
+            let origin = editor.convert(CGPoint.zero, to: card)
+            let progress = (compactOrigin.x - origin.x) / 44
+            editorSamples.append((origin.y - compactOrigin.y, progress))
+            return (card.bounds.height - compactHeight, progress)
+        }
+        recorder.start()
+        model.expanded = true
+        try await Task.sleep(for: .milliseconds(350))
+        recorder.stop()
+        XCTAssertTrue(recorder.samples.contains { $0.1 > 0.05 && $0.1 < 0.95 })
+        let compactTextTop = max(0, (42 - ceil(UIFont.appPreferredFont(forTextStyle: .body).lineHeight)) / 2)
+        for sample in recorder.samples { XCTAssertEqual(sample.0, 143 * sample.1, accuracy: 1.5) }
+        for sample in editorSamples { XCTAssertEqual(sample.0, (83 + 6 - compactTextTop) * sample.1, accuracy: 1.5) }
+        XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+        model.hasImage = false
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertEqual(card.bounds.height, compactHeight + 60, accuracy: 1, "附件移除和退出缓存释放不能留下空白占位")
+        XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+    }
+}
+
+private final class ComposerAttachmentMotionModel: ObservableObject {
+    @Published var hasImage = false
+    @Published var expanded = false
+}
+
+private struct ComposerAttachmentMotionHarness: View {
+    @ObservedObject var model: ComposerAttachmentMotionModel
+    @State private var text = ""
+    @State private var focused = false
+    @StateObject private var voice = VoiceInputAdapter()
+    var body: some View {
+        VStack {
+            ComposerAttachmentStack(shown: model.expanded, hasContent: model.hasImage) {
+                if model.hasImage { Color(red: 1, green: 0, blue: 1).frame(height: 77) }
+            } content: {
+                ComposerMorphLayout(expansion: model.expanded ? 1 : 0) {
+                    Image(systemName: "plus.circle").frame(width: 32, height: 32)
+                    VoiceComposerTextInput(text: $text, isFocused: $focused, presentation: nil,
+                        state: voice.state, voice: voice, isCompact: !model.expanded)
+                        .transaction { $0.animation = nil }
+                    Color.clear
+                    Color.clear
+                }
+                .animation(.easeOut(duration: 0.22), value: model.expanded)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(ComposerFrameProbe(identifier: "attachment-card"))
+            Spacer()
+        }.padding(14)
+    }
+}
+
+@MainActor
+final class ComposerQuoteMotionTests: XCTestCase {
+    func testShrinkingRowsKeepsNativeViewportAndBodyMotionSynchronized() async throws {
+        let model = ComposerQuoteMotionModel()
+        model.parts = (0..<4).map { GatewayTextPart(type: "quote", text: "引用\($0)") }
+        let host = UIHostingController(rootView: ComposerQuoteMotionHarness(model: model, text: "保留正文"))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        try await Task.sleep(for: .milliseconds(100))
+        let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+        func findScroll(_ view: UIView) -> UIScrollView? {
+            if let scroll = view as? UIScrollView, !(scroll is UITextView) { return scroll }
+            return view.subviews.lazy.compactMap { findScroll($0) }.first
+        }
+        let scroll = try XCTUnwrap(findScroll(host.view))
+        let initialHeight = scroll.bounds.height
+        let initialY = editor.convert(.zero, to: host.view).y
+        let recorder = ComposerQuoteFrameRecorder {
+            (scroll.bounds.height - initialHeight, editor.convert(.zero, to: host.view).y - initialY)
+        }
+        recorder.start()
+        model.parts.removeFirst()
+        try await Task.sleep(for: .milliseconds(350))
+        recorder.stop()
+        XCTAssertTrue(recorder.samples.contains { $0.0 < -2 && $0.0 > scroll.bounds.height - initialHeight + 2 })
+        for sample in recorder.samples {
+            XCTAssertEqual(sample.0, sample.1, accuracy: 1, "视口不能先缩到终点、裁掉仍在移动的 Cell")
+        }
+    }
+
+    func testQuoteRevealAndNativeEditorMoveInTheSameFrames() async throws {
+        for text in ["", "保留正在输入的正文"] {
+            let model = ComposerQuoteMotionModel()
+            let host = UIHostingController(rootView: ComposerQuoteMotionHarness(model: model, text: text))
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            try await Task.sleep(for: .milliseconds(100))
+            host.view.layoutIfNeeded()
+            let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+            func findCard(_ view: UIView) -> UIView? {
+                if view.accessibilityIdentifier == "quote-motion-card" { return view }
+                return view.subviews.lazy.compactMap { findCard($0) }.first
+            }
+            let card = try XCTUnwrap(findCard(host.view))
+            let baselineY = editor.convert(editor.bounds, to: card).minY
+            let baselineHeight = card.bounds.height
+            let recorder = ComposerQuoteFrameRecorder {
+                (editor.convert(editor.bounds, to: card).minY - baselineY, card.bounds.height - baselineHeight)
+            }
+            recorder.start()
+            model.parts = [GatewayTextPart(type: "quote", text: "这是被引用的内容")]
+            try await Task.sleep(for: .milliseconds(350))
+            recorder.stop()
+            let expandedHeight = card.bounds.height - baselineHeight
+            XCTAssertGreaterThan(expandedHeight, 80)
+            XCTAssertTrue(recorder.samples.contains { $0.1 > 2 && $0.1 < expandedHeight - 2 }, "必须采到展开中间帧")
+            for sample in recorder.samples { XCTAssertEqual(sample.0, sample.1, accuracy: 1, "引用高度和文字位移必须逐帧一致") }
+            recorder.samples = []
+            recorder.start()
+            model.parts = []
+            try await Task.sleep(for: .milliseconds(350))
+            recorder.stop()
+            XCTAssertTrue(recorder.samples.contains { $0.1 > 2 && $0.1 < expandedHeight - 2 }, "必须采到收起中间帧")
+            for sample in recorder.samples { XCTAssertEqual(sample.0, sample.1, accuracy: 1) }
+            XCTAssertEqual(card.bounds.height, baselineHeight, accuracy: 1)
+            XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+            XCTAssertEqual(editor.text, text)
+        }
+    }
+}
+
+@MainActor
+private final class ComposerQuoteFrameRecorder: NSObject {
+    var samples: [(CGFloat, CGFloat)] = []
+    let sample: () -> (CGFloat, CGFloat)
+    private var displayLink: CADisplayLink?
+    init(sample: @escaping () -> (CGFloat, CGFloat)) { self.sample = sample }
+    func start() {
+        displayLink = CADisplayLink(target: self, selector: #selector(tick))
+        displayLink?.add(to: .main, forMode: .common)
+    }
+    func stop() { displayLink?.invalidate(); displayLink = nil }
+    @objc private func tick() { samples.append(sample()) }
+}
+
+private final class ComposerQuoteMotionModel: ObservableObject {
+    @Published var parts: [GatewayTextPart] = []
+}
+
+private struct ComposerQuoteMotionHarness: View {
+    @ObservedObject var model: ComposerQuoteMotionModel
+    @State var text: String
+    @State private var focused = false
+    var body: some View {
+        VStack {
+            ComposerQuoteStack(parts: model.parts, visible: true, onRemove: { _ in model.parts = [] }) {
+                SlashCommandTextView(text: $text, presentation: nil, placeholder: "描述你想要构建的内容", isFocused: $focused)
+                    .frame(height: 38)
+                    .transaction { $0.animation = nil }
+            }
+            .background(ComposerFrameProbe(identifier: "quote-motion-card"))
+            Spacer()
+        }.padding(14)
+    }
+}
+
+@MainActor
+final class ComposerQuoteIdentityTests: XCTestCase {
+    func testDuplicateRemovalKeepsSurvivorIdentityAndUsesUpdatedProtocolIndex() throws {
+        let store = ComposerQuoteIdentityStore()
+        let initial = [GatewayTextPart(type: "text", text: "正文"), GatewayTextPart(type: "quote", text: "同一引用"),
+            GatewayTextPart(type: "text", text: "中间正文"), GatewayTextPart(type: "quote", text: "同一引用")]
+        let entries = store.update(initial)
+        XCTAssertNotEqual(entries[0].id, entries[1].id)
+        XCTAssertEqual(store.remove(entries[0].id, from: initial), 1)
+        let remaining = [GatewayTextPart(type: "text", text: "正文中间正文"), GatewayTextPart(type: "quote", text: "同一引用")]
+        let survivor = try XCTUnwrap(store.update(remaining).first)
+        XCTAssertEqual(survivor.id, entries[1].id)
+        XCTAssertEqual(survivor.partIndex, 1)
+        let reindexed = [GatewayTextPart(type: "quote", text: "同一引用"), GatewayTextPart(type: "text", text: "新正文")]
+        XCTAssertEqual(store.update(reindexed).first?.id, survivor.id)
+        XCTAssertEqual(store.remove(survivor.id, from: reindexed), 0)
+        XCTAssertTrue(store.update([]).isEmpty)
+        XCTAssertNotEqual(store.update([GatewayTextPart(type: "quote", text: "同一引用")]).first?.id, survivor.id)
+    }
+
+    func testDeletedCloseLeavesWithItsCellAndSurvivorCloseDoesNotMove() async throws {
+        let model = ComposerQuoteIdentityMotionModel()
+        let host = UIHostingController(rootView: ComposerQuoteIdentityMotionHarness(model: model))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        try await Task.sleep(for: .milliseconds(100))
+        let entries = model.identities.update(model.parts)
+        func find(_ id: String, in view: UIView) -> UIView? {
+            if view.accessibilityIdentifier == id { return view }
+            return view.subviews.lazy.compactMap { find(id, in: $0) }.first
+        }
+        let removed = try XCTUnwrap(find("identity-close-\(entries[0].id)", in: host.view) as? UIButton)
+        let close = try XCTUnwrap(find("identity-close-\(entries[1].id)", in: host.view) as? UIButton)
+        let cell = try XCTUnwrap(find("identity-cell-\(entries[1].id)", in: host.view))
+        let originalX = close.convert(close.bounds, to: host.view).maxX
+        let originalWidth = cell.bounds.width
+        let recorder = ComposerQuoteFrameRecorder { (close.convert(close.bounds, to: host.view).maxX, cell.bounds.width) }
+        recorder.start()
+        removed.sendActions(for: .touchUpInside)
+        try await Task.sleep(for: .milliseconds(350))
+        recorder.stop()
+        XCTAssertNil(find("identity-close-\(entries[0].id)", in: host.view))
+        XCTAssertTrue(close === find("identity-close-\(entries[1].id)", in: host.view))
+        XCTAssertTrue(cell === find("identity-cell-\(entries[1].id)", in: host.view))
+        XCTAssertTrue(recorder.samples.contains { $0.1 > originalWidth + 2 && $0.1 < cell.bounds.width - 2 })
+        for sample in recorder.samples { XCTAssertEqual(sample.0, originalX, accuracy: 1, "保留的叉号不能从另一 Cell 飞过来") }
+        XCTAssertGreaterThan(cell.bounds.width, originalWidth * 1.9)
+        XCTAssertEqual(close.alpha, 1)
+    }
+}
+
+private final class ComposerQuoteIdentityMotionModel: ObservableObject {
+    let identities = ComposerQuoteIdentityStore()
+    @Published var parts = [GatewayTextPart(type: "quote", text: "同一引用"), GatewayTextPart(type: "quote", text: "同一引用")]
+}
+
+private struct ComposerQuoteIdentityMotionHarness: View {
+    @ObservedObject var model: ComposerQuoteIdentityMotionModel
+    var body: some View {
+        let entries = model.identities.update(model.parts)
+        VStack {
+            GeometryReader { geometry in
+                let columns = max(1, entries.count)
+                let width = (geometry.size.width - CGFloat(columns - 1) * 8) / CGFloat(columns)
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { slot, entry in
+                        ZStack(alignment: .topTrailing) {
+                            ComposerFrameProbe(identifier: "identity-cell-\(entry.id)")
+                            ComposerQuoteCloseProbe(identifier: "identity-close-\(entry.id)") {
+                                if let index = model.identities.remove(entry.id, from: model.parts) { model.parts.remove(at: index) }
+                            }.frame(width: 44, height: 44)
+                        }
+                        .modifier(ComposerQuoteCellFrame(rect: CGRect(x: CGFloat(slot) * (width + 8), y: 0, width: width, height: 72)))
+                        .animation(.easeOut(duration: 0.22), value: width)
+                        .transition(.identity)
+                    }
+                }.frame(width: geometry.size.width, height: 72, alignment: .topLeading)
+            }.frame(height: 72)
+            Spacer()
+        }.padding(14)
+    }
+}
+
+private struct ComposerQuoteCloseProbe: UIViewRepresentable {
+    let identifier: String
+    let onTap: () -> Void
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .system)
+        button.accessibilityIdentifier = identifier
+        button.addTarget(context.coordinator, action: #selector(Coordinator.tap), for: .touchUpInside)
+        return button
+    }
+    func updateUIView(_ view: UIButton, context: Context) { context.coordinator.onTap = onTap }
+    final class Coordinator: NSObject {
+        var onTap: (() -> Void)?
+        @objc func tap() { onTap?() }
+    }
+}
+
+@MainActor
+final class ComposerQuoteGridLayoutTests: XCTestCase {
+    func testQuotesPackThreePerRowAndScrollWithinThreeRowsInBothThemes() async throws {
+        func parts(_ count: Int) -> [GatewayTextPart] {
+            [GatewayTextPart(type: "text", text: "正文仍然保留")] + (1...count).map {
+                GatewayTextPart(type: "quote", text: "引用\($0)：" + String(repeating: "这是一段需要预览的引用内容。", count: 6))
+            }
+        }
+        for dark in [false, true] {
+            func root(_ count: Int) -> some View {
+                ComposerQuoteGridHarness(parts: parts(count))
+                    .environment(\.colorScheme, dark ? .dark : .light)
+            }
+            let host = UIHostingController(rootView: root(1))
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            host.overrideUserInterfaceStyle = dark ? .dark : .light
+            host.view.backgroundColor = dark ? .black : .white
+            host.view.frame = window.bounds
+            var heights: [Int: CGFloat] = [:]
+            for count in [1, 2, 3, 4, 6, 7, 9, 10, 12] {
+                host.rootView = root(count)
+                try await Task.sleep(for: .milliseconds(300))
+                host.view.layoutIfNeeded()
+                heights[count] = host.sizeThatFits(in: CGSize(width: 390, height: 1000)).height
+                if count == 9 {
+                    let image = UIGraphicsImageRenderer(size: host.view.bounds.size).image { _ in
+                        host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+                    }
+                    let attachment = XCTAttachment(image: image)
+                    attachment.name = dark ? "引用三列三行-夜间" : "引用三列三行-日间"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
+                }
+            }
+            XCTAssertEqual(heights[1]!, heights[2]!, accuracy: 1)
+            XCTAssertEqual(heights[2]!, heights[3]!, accuracy: 1)
+            XCTAssertGreaterThan(heights[4]!, heights[3]!)
+            XCTAssertEqual(heights[4]!, heights[6]!, accuracy: 1)
+            XCTAssertGreaterThan(heights[7]!, heights[6]!)
+            XCTAssertEqual(heights[7]!, heights[9]!, accuracy: 1)
+            XCTAssertEqual(heights[9]!, heights[10]!, accuracy: 1)
+            XCTAssertEqual(heights[10]!, heights[12]!, accuracy: 1)
+            try await Task.sleep(for: .milliseconds(250))
+            host.view.layoutIfNeeded()
+            func findScroll(in view: UIView) -> UIScrollView? {
+                if let scroll = view as? UIScrollView, !(scroll is UITextView) { return scroll }
+                return view.subviews.lazy.compactMap { findScroll(in: $0) }.first
+            }
+            let scroll = try XCTUnwrap(findScroll(in: host.view))
+            let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+            XCTAssertTrue(editor.becomeFirstResponder())
+            XCTAssertTrue(scroll.isScrollEnabled)
+            XCTAssertGreaterThan(scroll.contentSize.height, scroll.bounds.height)
+            let originalHeight = scroll.bounds.height
+            scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentSize.height - scroll.bounds.height), animated: false)
+            XCTAssertGreaterThan(scroll.contentOffset.y, 0)
+            host.rootView = root(18)
+            try await Task.sleep(for: .milliseconds(300))
+            host.view.layoutIfNeeded()
+            // 聚焦会改变宿主的键盘安全区；引用上限应比较引用滚动区本身。
+            XCTAssertEqual(scroll.bounds.height, originalHeight, accuracy: 1)
+            XCTAssertTrue(scroll === findScroll(in: host.view))
+            XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+            XCTAssertTrue(editor.isFirstResponder)
+            XCTAssertEqual(editor.text, "正在编辑的正文")
+        }
+    }
+}
+
+private struct ComposerQuoteGridHarness: View {
+    let parts: [GatewayTextPart]
+    @State private var draft = "正在编辑的正文"
+    @State private var focused = false
+    var body: some View {
+        VStack(spacing: 12) {
+            ComposerReplyPreviews(parts: parts, onRemove: { _ in })
+            SlashCommandTextView(text: $draft, presentation: nil, placeholder: "消息", isFocused: $focused)
+                .frame(height: 38)
+        }
+    }
+}
+
+private struct CompactComposerHarness: View {
+    @State private var text = ""
+    @State private var focused = false
+    var body: some View {
+        VStack {
+            Spacer()
+            ComposerMorphLayout(expansion: focused ? 1 : 0) {
+                Image(systemName: "plus.circle").frame(width: 32, height: 32)
+                SlashCommandTextView(text: $text, presentation: nil, placeholder: "给 DSH 发消息…",
+                    isFocused: $focused, isCompact: !focused).frame(minHeight: 38)
+                Text("模型 · 权限 · 上下文").opacity(focused ? 1 : 0)
+                Image(systemName: "arrow.up.circle.fill").frame(width: 42, height: 42).opacity(focused ? 1 : 0)
+            }
+            .padding(14).background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24))
+            .animation(.easeOut(duration: 0.22), value: focused)
+        }.padding(14)
     }
 }
 
@@ -4875,6 +5524,12 @@ final class GatewayProtocolTests: XCTestCase {
         ))
         let tasks = try XCTUnwrap(catalog.items).compactMap(ScheduledTask.init)
 
+        let paused = try XCTUnwrap(ScheduledTask(.object([
+            "id": .string("paused-1"), "status": .string("paused"), "title": .string("暂停新闻"),
+            "prompt": .string("金融新闻"), "kind": .string("daily")
+        ])))
+        XCTAssertEqual(filteredScheduledTasks(tasks + [paused], status: .paused, query: "新闻").map(\.id), ["paused-1"])
+        XCTAssertEqual(filteredScheduledTasks(tasks + [paused], status: .ended, query: "").map(\.id), ["ended-1"])
         XCTAssertEqual(filteredScheduledTasks(tasks, status: .all, query: "新闻").map(\.id), ["active-1"])
         XCTAssertEqual(filteredScheduledTasks(tasks, status: .active, query: " 金融 ").map(\.id), ["active-1"])
         XCTAssertEqual(filteredScheduledTasks(tasks, status: .ended, query: "检查").map(\.id), ["ended-1"])
@@ -10314,6 +10969,27 @@ final class InterfaceStylePresentationTests: XCTestCase {
 
 @MainActor
 final class ScheduledTaskCardPresentationTests: XCTestCase {
+    func testPausedCardParityInLightAndDark() throws {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-catalog","items":[{"id":"p1","sessionId":"s1","status":"paused","kind":"daily","title":"每日新闻汇总","prompt":"汇总科技和金融新闻","time":"08:00:37.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-31T00:00:00Z"}]}"#.utf8))
+        let task = try XCTUnwrap(frame.items?.first.flatMap(ScheduledTask.init))
+        for dark in [false, true] {
+            let controller = UIHostingController(rootView: ScheduledTaskCard(task: task, sessionTitle: "新闻会话",
+                expanded: true, onOpen: {}, onExpand: {}, onShowHistory: {}).padding(20)
+                .environment(\.locale, Locale(identifier: "zh_Hans")).preferredColorScheme(dark ? .dark : .light))
+            controller.overrideUserInterfaceStyle = dark ? .dark : .light
+            controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 650)
+            controller.view.layoutIfNeeded()
+            XCTAssertLessThanOrEqual(controller.sizeThatFits(in: CGSize(width: 390, height: 650)).width, 391)
+            let image = UIGraphicsImageRenderer(bounds: controller.view.bounds).image { _ in
+                controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = dark ? "paused-card-parity-dark" : "paused-card-parity-light"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
     func testRepeatedExpansionKeepsSummaryAtTheSamePosition() async throws {
         let catalog = try GatewayWireDecoder.decode(Data(
             #"{"kind":"schedule-catalog","items":[{"id":"task-1","sessionId":"s1","status":"active","kind":"daily","title":"每日新闻汇总（科技/金融/民生/体育）","prompt":"每日新闻汇总任务。请完整执行以下步骤：","time":"08:00:00.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-01T00:00:00.000Z"}]}"#.utf8
@@ -15292,6 +15968,23 @@ final class GatewayRtcLoggingTests: XCTestCase {
 }
 
 final class GeneratedToolImageTests: XCTestCase {
+    func testZoomPersistsAndBoundsPanningThenDoubleTapRestoresFit() {
+        let viewport = CGSize(width: 400, height: 800)
+        let image = CGSize(width: 1000, height: 1000)
+        var transform = ImagePreviewTransform()
+        transform.zoom(to: 2, viewport: viewport, image: image)
+        XCTAssertEqual(transform.scale, 2)
+        XCTAssertEqual(transform.bounded(CGSize(width: 900, height: 900), viewport: viewport, image: image),
+                       CGSize(width: 200, height: 0))
+        transform.zoom(to: 3, viewport: viewport, image: image, anchor: CGPoint(x: 100, y: 300))
+        XCTAssertEqual(transform.scale, 3)
+        XCTAssertEqual(transform.offset, CGSize(width: 50, height: 50))
+        transform.zoom(to: 1, viewport: viewport, image: image)
+        XCTAssertEqual(transform, ImagePreviewTransform())
+        transform.zoom(to: 100, viewport: viewport, image: image)
+        XCTAssertEqual(transform.scale, 5)
+    }
+
     @MainActor
     func testGeneratedImageHasRoundedVisibleCornersAndLeadingAlignment() async throws {
         let source = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 400)).image { context in
@@ -15402,5 +16095,400 @@ final class Gateway022ProtocolTests: XCTestCase {
         let event = try XCTUnwrap(frame.events?.first).normalized(sessionId: "s").event
         XCTAssertEqual(event.textParts, [GatewayTextPart(type: "quote", text: "原文")])
         XCTAssertEqual(event.requestId, "send")
+    }
+}
+
+@MainActor
+final class ScheduledTaskHistoryTests: XCTestCase {
+    func testPagesAppendRetryAndIgnorePreviousTaskResponse() async throws {
+        let gateway = GatewayClient()
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+            selectedWorkspaceID: nil, sessions: []), gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.disconnect() }
+        var requests: [[String: Any]] = []
+        gateway.installConnectedTransportForTesting { text in
+            if let request = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+               request["type"] as? String == "schedule-history" { requests.append(request) }
+        }
+        let task = try XCTUnwrap(ScheduledTask(.object(["id": .string("task-a"), "sessionId": .string("session-a"),
+            "title": .string("每日新闻汇总"), "prompt": .string("汇总科技金融新闻"), "status": .string("active")])))
+        func deliver(_ payload: [String: Any]) async throws {
+            gateway.onFrame?(try GatewayWireDecoder.decode(JSONSerialization.data(withJSONObject: payload)))
+            await store.awaitPendingKMPEventDeliveriesForTesting()
+        }
+        store.loadScheduleHistory(task)
+        store.loadScheduleHistory(task)
+        XCTAssertEqual(requests.count, 1)
+        let firstID = try XCTUnwrap(requests.last?["requestId"] as? String)
+        let recent: [String: Any] = ["messageId": "m2", "scheduledAt": "2026-11-06T08:00:00Z"]
+        let older: [String: Any] = ["messageId": "m1", "scheduledAt": "2026-11-05T08:00:00Z"]
+        try await deliver(["kind": "schedule-history", "requestId": firstID, "records": [recent], "nextBefore": "m2"])
+        XCTAssertFalse(store.scheduleHistoryLoading)
+        store.loadScheduleHistory(task, before: "m2")
+        let secondID = try XCTUnwrap(requests.last?["requestId"] as? String)
+        try await deliver(["kind": "error", "requestType": "schedule-history", "requestId": secondID, "message": "暂时不可用"])
+        XCTAssertEqual(store.scheduleHistory?["records"]?.arrayValue?.count, 1)
+        XCTAssertNotNil(store.scheduleHistoryError)
+        store.loadScheduleHistory(task, before: "m2")
+        XCTAssertEqual(requests.last?["before"] as? String, "m2")
+        let retryID = try XCTUnwrap(requests.last?["requestId"] as? String)
+        try await deliver(["kind": "schedule-history", "requestId": retryID, "records": [recent, older]])
+        XCTAssertEqual(store.scheduleHistory?["records"]?.arrayValue?.count, 2)
+        XCTAssertNil(store.scheduleHistoryError)
+        let host = UIHostingController(rootView: ScheduledTaskHistorySheet(store: store, task: task, onOpenSession: { _ in })
+            .environment(\.locale, Locale(identifier: "zh_Hans")))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 650))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(200))
+        let screenshot = XCTAttachment(image: UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        })
+        screenshot.name = "任务运行轨迹列表"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        let other = try XCTUnwrap(ScheduledTask(.object(["id": .string("task-b"), "title": .string("其他任务"),
+            "prompt": .string("其他内容"), "status": .string("active")])))
+        store.loadScheduleHistory(other)
+        try await deliver(["kind": "schedule-history", "requestId": retryID, "records": [recent]])
+        XCTAssertNil(store.scheduleHistory)
+        let otherID = try XCTUnwrap(requests.last?["requestId"] as? String)
+        try await deliver(["kind": "schedule-history", "requestId": otherID, "records": []])
+        XCTAssertEqual(store.scheduleHistory?["records"]?.arrayValue?.count, 0)
+    }
+}
+
+@MainActor
+final class ScheduledTaskCreationTests: XCTestCase {
+    func testCreationUsesHostDefaultWorkspaceWithoutSendingAMessage() async throws {
+        let gateway = GatewayClient()
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+            selectedWorkspaceID: AppStore.allWorkspacesID, sessions: []), gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.disconnect() }
+        var requests: [[String: Any]] = []
+        gateway.installConnectedTransportForTesting { text in
+            guard let request = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else { return }
+            requests.append(request)
+            if request["type"] as? String == "session-create", let id = request["requestId"] as? String {
+                Task { @MainActor in
+                    _ = gateway.acceptSessionCreationFrame(GatewayFrame(kind: "session-created", sessionId: "automation-draft",
+                                                                         requestId: id))
+                }
+            }
+        }
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"hello","protocol":3,"capabilities":["session-create"]}"#.utf8)))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        store.selectAllWorkspaces()
+        let success = await store.prepareNewConversation(useDefaultWorkspace: true)
+        XCTAssertTrue(success)
+        XCTAssertEqual(store.selectedSessionId, "automation-draft")
+        let create = try XCTUnwrap(requests.first { $0["type"] as? String == "session-create" })
+        XCTAssertNil(create["workspaceId"], "创建任务不能带入当前工作区覆盖宿主默认工作区")
+        XCTAssertNil(create["cwd"])
+        let seed = "请根据需求创建一个自动化任务。"
+        let host = UIHostingController(rootView: ConversationView(activeView: .constant(0), initialDraft: seed)
+            .environmentObject(store).environment(\.locale, Locale(identifier: "zh_Hans")))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        func findInput(_ view: UIView) -> UITextView? {
+            if let input = view as? UITextView, input.accessibilityIdentifier == "composer-input" { return input }
+            return view.subviews.lazy.compactMap(findInput).first
+        }
+        XCTAssertEqual(try XCTUnwrap(findInput(host.view)).text, seed)
+        XCTAssertFalse(requests.contains { $0["type"] as? String == "send" })
+    }
+}
+
+@MainActor
+final class SentReplyBubbleLayoutTests: XCTestCase {
+    func testAssistantFooterPlacesReplyBesideCopyInBothThemes() async throws {
+        let text = "这里是需要引用的回复。"
+        let enabled = UIHostingController(rootView: AssistantMessageActions(text: text, onReply: { _ in }))
+        let disabled = UIHostingController(rootView: AssistantMessageActions(text: text, onReply: nil))
+        XCTAssertGreaterThan(enabled.sizeThatFits(in: CGSize(width: 390, height: 100)).width,
+                             disabled.sizeThatFits(in: CGSize(width: 390, height: 100)).width,
+                             "支持引用时，复制右侧必须显示回复入口")
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            let dark = style == .dark
+            let host = UIHostingController(rootView: VStack(alignment: .leading, spacing: 7) {
+                Text(text).appFont(.body)
+                AssistantMessageActions(text: text, onReply: { _ in })
+            }
+                .padding(16)
+                .frame(width: 390, height: 160, alignment: .topLeading)
+                .background(dark ? Color.black : Color.white)
+                .environment(\.colorScheme, dark ? .dark : .light))
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 160))
+            window.overrideUserInterfaceStyle = style
+            window.rootViewController = host
+            window.isHidden = false
+            defer { window.isHidden = true; window.rootViewController = nil }
+            host.view.frame = window.bounds
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(200))
+            let screenshot = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: screenshot)
+            attachment.name = dark ? "消息底部回复按钮-夜间" : "消息底部回复按钮-日间"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
+    func testCompiledNightColorsRemainOpaque() throws {
+        let traits = UITraitCollection(userInterfaceStyle: .dark)
+        for name in ["SentReplyBubbleBackground", "SentReplyQuoteBackground", "SentReplyBubbleBorder"] {
+            let color = try XCTUnwrap(UIColor(named: name, in: .main, compatibleWith: traits))
+                .resolvedColor(with: traits)
+            XCTAssertEqual(color.cgColor.alpha, 1, accuracy: 0.001,
+                           "\(name) 编译后的夜间颜色必须不透明，防止资源中的整数透明度被按 0–255 解析")
+        }
+    }
+
+    func testReplyRowRendersBothBackgroundsInLightAndDarkModes() async throws {
+        let parts = [GatewayTextPart(type: "quote", text: "希望你今天一切顺利！"),
+                     GatewayTextPart(type: "text", text: "你说啥")]
+        let item = ConversationItem(id: "night-reply", kind: .user, title: "", text: "你说啥",
+                                    isError: false, date: .now, textParts: parts)
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            let dark = style == .dark
+            let host = UIHostingController(rootView:
+                ConversationRow(item: item, showsCopyButton: true, imageData: { _ in nil })
+                    .padding(16)
+                    .frame(width: 390, height: 260, alignment: .top)
+                    .background(dark ? Color.black : Color.white)
+                    .environment(\.colorScheme, dark ? .dark : .light))
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 260))
+            window.overrideUserInterfaceStyle = style
+            window.rootViewController = host
+            window.isHidden = false
+            defer { window.isHidden = true; window.rootViewController = nil }
+            host.view.frame = window.bounds
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(200))
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let screenshot = UIGraphicsImageRenderer(size: window.bounds.size, format: format).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: screenshot)
+            attachment.name = dark ? "引用回复-夜间背景" : "引用回复-日间背景"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            let image = try XCTUnwrap(screenshot.cgImage)
+            var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+            let context = try XCTUnwrap(CGContext(data: &pixels, width: image.width, height: image.height,
+                bitsPerComponent: 8, bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            // 检查实际页面的像素，避免只有资源存在、但视图未绘制背景时仍然通过。
+            let backgrounds: [[Int]] = dark ? [[23, 42, 70], [36, 63, 99]] : [[232, 239, 252], [212, 222, 242]]
+            for rgb in backgrounds {
+                let count = stride(from: 0, to: pixels.count, by: 4).filter { i in
+                    (0..<3).allSatisfy { abs(Int(pixels[i + $0]) - rgb[$0]) <= 3 }
+                }.count
+                XCTAssertGreaterThan(count, 100, "\(dark ? "夜间" : "日间")的外层与引用背景都必须实际可见")
+            }
+        }
+    }
+
+    private func size(quote: String, reply: String, width: CGFloat = 300) -> CGSize {
+        let parts = [GatewayTextPart(type: "quote", text: quote), GatewayTextPart(type: "text", text: reply)]
+        let host = UIHostingController(rootView: SentReplyBubble(textParts: parts))
+        return host.sizeThatFits(in: CGSize(width: width, height: 10_000))
+    }
+
+    func testShortContentShrinksAndLongReplyDeterminesWidth() {
+        let short = size(quote: "引用", reply: "嗯")
+        let long = size(quote: "引用", reply: String(repeating: "这是一段较长的回复内容。", count: 10))
+        XCTAssertLessThan(short.width, long.width)
+        XCTAssertLessThanOrEqual(long.width, 300)
+    }
+
+    func testLongQuoteRespectsPhoneWidthAndGrowsOnTabletOnlyToMaximum() {
+        let quote = String(repeating: "这是需要显示两行省略的引用。", count: 12)
+        let phone = size(quote: quote, reply: "可以的", width: 280)
+        let tablet = size(quote: quote, reply: "可以的", width: 900)
+        XCTAssertLessThanOrEqual(phone.width, 280)
+        XCTAssertLessThanOrEqual(tablet.width, 360)
+        XCTAssertGreaterThan(phone.height, 40)
+    }
+}
+
+@MainActor
+final class ScheduleTimingEditorTests: XCTestCase {
+    func testIntervalWheelMapsRowsToValuesWithoutAllocatingAllOptions() {
+        var value = 1
+        let wheel = ScheduleIntervalWheel(selection: Binding(get: { value }, set: { value = $0 }), unit: "天")
+        let delegate = wheel.makeCoordinator()
+        let picker = UIPickerView()
+        XCTAssertEqual(delegate.pickerView(picker, numberOfRowsInComponent: 0), 10_000)
+        XCTAssertEqual(delegate.pickerView(picker, titleForRow: 0, forComponent: 0), "1 天")
+        delegate.pickerView(picker, didSelectRow: 2, inComponent: 0)
+        XCTAssertEqual(value, 3)
+        delegate.pickerView(picker, didSelectRow: 9999, inComponent: 0)
+        XCTAssertEqual(value, 10_000)
+    }
+
+    func testOutsideTapDismissalPreservesInputSubviewsAndDetachesRecognizer() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 800))
+        let controller = UIViewController()
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        let scope = UIView(frame: window.bounds)
+        controller.view.addSubview(scope)
+        let field = UITextField(frame: CGRect(x: 20, y: 20, width: 200, height: 44))
+        let text = UITextView(frame: CGRect(x: 20, y: 80, width: 200, height: 100))
+        scope.addSubview(field); scope.addSubview(text)
+        let child = UIView(); text.addSubview(child)
+        let coordinator = ScheduleKeyboardDismissProbe.Coordinator()
+        let previousCount = window.gestureRecognizers?.count ?? 0
+        coordinator.attach(to: scope)
+        XCTAssertEqual(window.gestureRecognizers?.count, previousCount + 1)
+        XCTAssertFalse(window.gestureRecognizers!.last!.cancelsTouchesInView)
+        XCTAssertFalse(coordinator.isOutsideEditor(field))
+        XCTAssertFalse(coordinator.isOutsideEditor(child))
+        XCTAssertTrue(coordinator.isOutsideEditor(UIButton()))
+        XCTAssertTrue(field.becomeFirstResponder())
+        coordinator.dismissKeyboard()
+        XCTAssertFalse(field.isFirstResponder)
+        coordinator.detach()
+        XCTAssertEqual(window.gestureRecognizers?.count, previousCount)
+    }
+
+    private func task() throws -> ScheduledTask {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-catalog","items":[{"id":"timing-test","sessionId":"s1","title":"新闻","prompt":"汇总新闻","kind":"daily","status":"active","time":"08:00:37.125","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-31T00:00:37.125Z","updatedAt":"2026-11-06T01:00:00.000Z"}]}"#.utf8))
+        return try XCTUnwrap(frame.items?.first.flatMap(ScheduledTask.init))
+    }
+    func testBridgeKeepsFractionalSecondsAndRejectsInvalidLocalDate() throws {
+        var form = ScheduleTimingForm(task: try task())
+        XCTAssertEqual(form.time, "08:00:37.125")
+        XCTAssertEqual(form.timeZone, "Asia/Shanghai")
+        XCTAssertNil(form.validationError)
+        form.frequency = "once"
+        form.date = "2099-02-29"
+        XCTAssertNotNil(form.validationError)
+        form.date = "2099-03-08"; form.time = "02:30:00"; form.timeZone = "America/New_York"
+        XCTAssertNotNil(form.validationError, "夏令时缺失的当地时刻不能静默顺延")
+    }
+    func testScheduleEditSendsTimingAndCASRevision() async throws {
+        let gateway = GatewayClient()
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+            selectedWorkspaceID: nil, sessions: []), gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.disconnect() }
+        var requests: [[String: Any]] = []
+        gateway.installConnectedTransportForTesting { text in
+            if let request = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] { requests.append(request) }
+        }
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(#"{"kind":"hello","protocol":3,"capabilities":["schedule-management-v2"]}"#.utf8)))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        let original = try task()
+        gateway.onFrame?(try GatewayWireDecoder.decode(JSONSerialization.data(withJSONObject:
+            ["kind": "schedule-catalog", "items": [original.raw.foundationValue]])))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        let originalForm = ScheduleTimingForm(task: original)
+        var form = originalForm
+        form.frequency = "monthly"; form.monthDay = "31"; form.time = "09:30:45"; form.timeZone = "Europe/Berlin"
+        let json = try XCTUnwrap(ScheduleTimingEditor.shared.changeJson(draft: form.shared, original: originalForm.shared))
+        let timing = try JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
+        XCTAssertNotNil(store.updateScheduledTask(original, title: original.title, prompt: original.prompt, change: timing))
+        let request = try XCTUnwrap(requests.last { $0["type"] as? String == "schedule-edit" })
+        XCTAssertEqual(request["expectedUpdatedAt"] as? String, "2026-11-06T01:00:00.000Z")
+        let patch = try XCTUnwrap(request["patch"] as? [String: Any])
+        let submitted = try XCTUnwrap(patch["timing"] as? [String: Any])
+        XCTAssertEqual(submitted["kind"] as? String, "rrule")
+        XCTAssertTrue((submitted["rrule"] as? String)?.contains("BYMONTHDAY=31,-1;BYSETPOS=1") == true)
+        XCTAssertTrue((submitted["rrule"] as? String)?.contains("TZID=Europe/Berlin") == true)
+    }
+    func testTimingControlsFitNarrowScreensInBothThemes() throws {
+        for dark in [false, true] {
+            var form = ScheduleTimingForm(task: try task())
+            form.frequency = "weekly"
+            let host = UIHostingController(rootView: ScrollView {
+                ScheduleTimingControls(form: .constant(form)).padding(20)
+            }.environment(\.locale, Locale(identifier: "zh_Hans")).preferredColorScheme(dark ? .dark : .light))
+            host.overrideUserInterfaceStyle = dark ? .dark : .light
+            host.view.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
+            host.view.layoutIfNeeded()
+            XCTAssertLessThanOrEqual(host.sizeThatFits(in: CGSize(width: 390, height: 800)).width, 391)
+            let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = dark ? "执行时间编辑-夜间" : "执行时间编辑-日间"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
+    func testNewConversationTargetsSaveWorkspaceAndRoundTripWithoutChangingTiming() async throws {
+        for kind in ["new_once", "new"] {
+            let gateway = GatewayClient()
+            let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+                selectedWorkspaceID: nil, sessions: []), gatewayClient: gateway, chatHistoryCache: nil)
+            defer { store.disconnect() }
+            var requests: [[String: Any]] = []
+            gateway.installConnectedTransportForTesting { text in
+                if let request = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] { requests.append(request) }
+            }
+            gateway.onFrame?(try GatewayWireDecoder.decode(Data(#"{"kind":"hello","protocol":3,"capabilities":["schedule-management-v2"]}"#.utf8)))
+            await store.awaitPendingKMPEventDeliveriesForTesting()
+            let original = try task()
+            gateway.onFrame?(try GatewayWireDecoder.decode(JSONSerialization.data(withJSONObject:
+                ["kind": "schedule-catalog", "items": [original.raw.foundationValue]])))
+            await store.awaitPendingKMPEventDeliveriesForTesting()
+            var form = ScheduleTargetForm(task: original)
+            XCTAssertNil(form.change(task: original))
+            form.kind = kind; form.cwd = "/projects/中文 space"
+            let target = try XCTUnwrap(form.change(task: original))
+            XCTAssertNotNil(store.updateScheduledTask(original, title: original.title, prompt: original.prompt, change: nil, target: target))
+            let request = try XCTUnwrap(requests.last { $0["type"] as? String == "schedule-edit" })
+            XCTAssertEqual(request["expectedUpdatedAt"] as? String, "2026-11-06T01:00:00.000Z")
+            let patch = try XCTUnwrap(request["patch"] as? [String: Any])
+            XCTAssertNil(patch["timing"])
+            let submitted = try XCTUnwrap(patch["target"] as? [String: Any])
+            XCTAssertEqual(submitted["kind"] as? String, kind)
+            XCTAssertNil(submitted["sessionId"])
+            XCTAssertEqual((submitted["create"] as? [String: Any])?["cwd"] as? String, "/projects/中文 space")
+            var updated = try XCTUnwrap(original.raw.objectValue)
+            updated["target"] = target
+            let restored = ScheduleTargetForm(task: try XCTUnwrap(ScheduledTask(.object(updated))))
+            XCTAssertEqual(restored, form)
+            XCTAssertNil(restored.change(task: try XCTUnwrap(ScheduledTask(.object(updated)))))
+        }
+    }
+
+    func testDestinationControlsFitBothThemesWithLongWorkspaceNames() throws {
+        let workspace = GatewayWorkspace(workspaceId: "project-b", path: "/projects/中文 space",
+            title: "测试工作区：用于执行自动化任务", sessionIds: [], createdAt: "", updatedAt: "")
+        for dark in [false, true] {
+            var form = ScheduleTargetForm(task: try task())
+            form.kind = "new_once"; form.cwd = workspace.path
+            let host = UIHostingController(rootView: ScheduleTargetControls(form: .constant(form), task: try task(),
+                workspaces: [workspace]).padding(20).environment(\.locale, Locale(identifier: "zh_Hans"))
+                .preferredColorScheme(dark ? .dark : .light))
+            host.overrideUserInterfaceStyle = dark ? .dark : .light
+            host.view.frame = CGRect(x: 0, y: 0, width: 390, height: 300)
+            host.view.layoutIfNeeded()
+            XCTAssertLessThanOrEqual(host.sizeThatFits(in: CGSize(width: 390, height: 300)).width, 391)
+            let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = dark ? "执行位置与工作区-夜间" : "执行位置与工作区-日间"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 }

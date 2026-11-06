@@ -58,6 +58,7 @@ internal fun DshMarkdownCodeCard(block: DshCodeBlockMarker, textSizeSp: Float, c
     val labelColor = colors.onSurface.copy(alpha = 0.55f)
     val background = if (isSystemInDarkTheme()) Color(0xFF2C2C2E) else Color(0xFFE9E9EB)
     var copied by remember(block.code) { mutableStateOf(false) }
+    val onReply = LocalMessageQuote.current
     var messageAnchor by remember { mutableStateOf<IntOffset?>(null) }
     var selection by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(copied) {
@@ -85,6 +86,10 @@ internal fun DshMarkdownCodeCard(block: DshCodeBlockMarker, textSizeSp: Float, c
         DshMenuItem(text = { Text(appText("选择文字")) }, onClick = {
             messageAnchor = null
             selection = copyMarkdown
+        })
+        if (onReply != null) DshMenuItem(text = { Text(appText("回复")) }, onClick = {
+            messageAnchor = null
+            onReply(markdownPlainText(copyMarkdown))
         })
     }
     selection?.let { source -> DshMarkdownSelectionPage(source) { selection = null } }

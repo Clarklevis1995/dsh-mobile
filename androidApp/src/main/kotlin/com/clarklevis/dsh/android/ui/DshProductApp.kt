@@ -258,6 +258,8 @@ internal fun DshProductApp(
                 )
             }
             composable(ROUTE_SCHEDULED_TASKS) {
+                val scheduleScope = rememberCoroutineScope()
+                var creatingConversation by remember { mutableStateOf(false) }
                 ScheduledTasksScreen(
                     stateHolder = stateHolder,
                     onBack = navController::popBackStack,
@@ -266,6 +268,20 @@ internal fun DshProductApp(
                         navController.navigate(ROUTE_CONVERSATION) {
                             popUpTo(ROUTE_WORKSPACE)
                             launchSingleTop = true
+                        }
+                    },
+                    onCreateTask = {
+                        if (!creatingConversation) {
+                            creatingConversation = true
+                            scheduleScope.launch {
+                                try {
+                                    if (stateHolder.prepareScheduledTaskConversation()) {
+                                        navController.navigate(ROUTE_CONVERSATION) {
+                                            popUpTo(ROUTE_WORKSPACE)
+                                        }
+                                    }
+                                } finally { creatingConversation = false }
+                            }
                         }
                     }
                 )

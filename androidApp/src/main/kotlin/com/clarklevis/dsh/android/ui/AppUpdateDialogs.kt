@@ -60,8 +60,13 @@ internal fun AppUpdateDialogs(model: AppUpdateViewModel, state: UpdateState) {
     }
     state.status?.let { status ->
         DshAlertDialog(
-            title = if (state.busy) appText("检查更新") else appText("更新提示"),
+            title = when {
+                state.downloading -> appText("下载更新")
+                state.busy -> appText("检查更新")
+                else -> appText("更新提示")
+            },
             message = status,
+            dismissLabel = if (state.busy) appText("取消") else null,
             confirmLabel = if (state.busy) null else appText("确定"),
             onDismissRequest = model::dismiss,
             onConfirm = model::dismiss

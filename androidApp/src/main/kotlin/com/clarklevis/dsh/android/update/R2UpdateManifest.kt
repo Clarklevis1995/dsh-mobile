@@ -10,6 +10,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
+internal fun supportsInPlaceUpdates(packageName: String): Boolean = packageName == "com.clarklevis.dsh.android"
+
 internal const val UPDATE_MANIFEST_URL = "https://download.whaleness.cc/latest.json"
 
 internal fun parseUpdateManifest(
