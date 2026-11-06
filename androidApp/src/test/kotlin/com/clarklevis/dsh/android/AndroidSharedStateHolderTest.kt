@@ -139,7 +139,7 @@ class AndroidSharedStateHolderTest {
 
         holder.submitWirePayload()
         assertEquals("event", holder.snapshot.lastFrameKind)
-        assertEquals("最终消息会替换流式临时消息。", holder.snapshot.conversation.last().text)
+        assertEquals("The final message replaces the temporary streamed message.", holder.snapshot.conversation.last().text)
         assertNotNull(holder.snapshot.selectedSessionId)
     }
 
