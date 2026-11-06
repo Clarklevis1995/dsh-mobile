@@ -8,6 +8,7 @@ import json
 import argparse
 import re
 import sys
+import plistlib
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -71,6 +72,15 @@ def check_catalog(name: str, errors: list[str]) -> set[str]:
             if arguments(source, IOS_ARGUMENT) != arguments(english, IOS_ARGUMENT):
                 errors.append(f"{name}: {key!r} 的中英文格式参数不一致")
     return set(strings)
+
+
+def check_info_plist(catalog_keys: set[str], errors: list[str]) -> None:
+    """Info.plist 中的中文字符串（权限说明等）由系统直接展示，必须收录到 InfoPlist.xcstrings。"""
+    with (IOS_RESOURCES / "Info.plist").open("rb") as handle:
+        plist = plistlib.load(handle)
+    for key, text in plist.items():
+        if isinstance(text, str) and HAN.search(text) and key not in catalog_keys:
+            errors.append(f"Info.plist: {key!r} 未收录到 InfoPlist.xcstrings")
 
 
 def check_swift_calls(keys: set[str], errors: list[str]) -> None:
@@ -341,7 +351,7 @@ def main() -> int:
     keys: set[str] = set()
     if not options.android_only:
         keys = check_catalog("Localizable", errors)
-        check_catalog("InfoPlist", errors)
+        check_info_plist(check_catalog("InfoPlist", errors), errors)
         check_swift_calls(keys, errors)
     android_count = check_android(errors)
     android_ui_count, android_keys = check_android_ui(errors)
