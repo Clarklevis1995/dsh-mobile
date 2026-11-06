@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.clarklevis.dsh.android.AndroidSharedStateHolder
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSnapshot
 import com.clarklevis.dsh.shared.transport.RtcSelectedPath
 import kotlinx.coroutines.flow.Flow
@@ -175,16 +176,16 @@ internal fun RtcConnectionPathDetails(
             val path = paths[channel]
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 if (path == null) {
-                    Text("$title：${appText("正在确认路径")}", style = SettingsTypography.description)
+                    Text(appText("%1\$s：%2\$s", title, appText("正在确认路径")), style = SettingsTypography.description)
                 } else {
                     val kind =
                         when (path.kind) {
-                            "local" -> "内网直连"
-                            "nat" -> "NAT 穿透直连"
-                            "relay" -> "TURN 中继"
-                            else -> "直连"
+                            "local" -> appTextKey("内网直连")
+                            "nat" -> appTextKey("NAT 穿透直连")
+                            "relay" -> appTextKey("TURN 中继")
+                            else -> appTextKey("直连")
                         }
-                    Text("$title：${appText(kind)} · ${path.protocol}", style = SettingsTypography.description)
+                    Text(appText("%1\$s：%2\$s · %3\$s", title, appText(kind), path.protocol), style = SettingsTypography.description)
                     Text("${path.localEndpoint} → ${path.remoteEndpoint}", style = SettingsTypography.description)
                 }
             }
@@ -257,7 +258,7 @@ private fun NetworkMetricSelector(
     selectedMetric: Int,
     onSelect: (Int) -> Unit,
 ) {
-    val titles = listOf("延迟", "丢包", "抖动", "流量")
+    val titles = listOf(appTextKey("延迟"), appTextKey("丢包"), appTextKey("抖动"), appTextKey("流量"))
     val track = if (isSystemInDarkTheme()) Color(0xFF38383A) else Color(0xFFEEEEF0)
     Row(
         Modifier

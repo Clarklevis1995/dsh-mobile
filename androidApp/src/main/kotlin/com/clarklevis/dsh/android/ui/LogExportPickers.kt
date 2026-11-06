@@ -147,7 +147,7 @@ private fun LogSheetAction(title: String, enabled: Boolean, action: () -> Unit) 
 }
 
 private fun logFullDate(value: Long): String {
-    val pattern = if (Locale.getDefault().language == "zh") "yyyy年M月d日 EEE" else "EEE, d MMM yyyy"
+    val pattern = if (Locale.getDefault().language == "zh") "yyyy年M月d日 EEE" else "EEE, d MMM yyyy" // i18n-ignore: zh-only date pattern inside a zh branch
     return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(value))
 }
 
@@ -251,7 +251,7 @@ private fun LogCalendar(value: Long, earliest: Long, latest: Long, select: (Long
                     if (Locale.getDefault().language ==
                         "zh"
                     ) {
-                        "yyyy年M月  ›"
+                        "yyyy年M月  ›" // i18n-ignore: zh-only date pattern inside a zh branch
                     } else {
                         "MMMM yyyy  ›"
                     },

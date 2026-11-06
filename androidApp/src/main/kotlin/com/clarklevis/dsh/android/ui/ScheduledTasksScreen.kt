@@ -92,6 +92,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.shadow.Shadow
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import com.clarklevis.dsh.android.AndroidSharedStateHolder
 import com.clarklevis.dsh.android.MobileScheduledTask
 import com.clarklevis.dsh.android.R
@@ -105,7 +106,7 @@ import kotlinx.coroutines.launch
 private val scheduleBlue = Color(0xFF0A84FF)
 
 internal enum class ScheduledTaskStatusFilter(private val sourceTitle: String) {
-    ALL("全部"), ACTIVE("已开启"), ENDED("已结束");
+    ALL(appTextKey("全部")), ACTIVE(appTextKey("已开启")), ENDED(appTextKey("已结束"));
 
     val title: String get() = appText(sourceTitle)
 }
@@ -185,13 +186,13 @@ internal fun ScheduledTasksScreen(
         }
         if ("schedule-management-v2" in stateHolder.gatewayState.capabilities) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                TextButton(onClick = { creating = true }) { Text("创建任务") }
-                TextButton(onClick = { confirmClear = true }) { Text("清理已结束任务") }
+                TextButton(onClick = { creating = true }) { Text(appText("创建任务")) }
+                TextButton(onClick = { confirmClear = true }) { Text(appText("清理已结束任务")) }
             }
             stateHolder.scheduledTaskMutationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
         if (stateHolder.scheduledTasks.size < stateHolder.scheduledTasksTotal) {
-            TextButton(onClick = stateHolder::loadMoreScheduledTasks, enabled = !stateHolder.scheduledTasksLoading) { Text("加载更多任务") }
+            TextButton(onClick = stateHolder::loadMoreScheduledTasks, enabled = !stateHolder.scheduledTasksLoading) { Text(appText("加载更多任务")) }
         }
         when {
             stateHolder.scheduledTasksLoading && stateHolder.scheduledTasks.isEmpty() -> {
@@ -259,10 +260,10 @@ internal fun ScheduledTasksScreen(
                         Row {
                             if (task.status != "ended") TextButton(onClick = {
                                 stateHolder.setScheduledTaskActive(task, task.status != "active")
-                            }, enabled = stateHolder.scheduledTaskPendingId == null) { Text(if (task.status == "active") "暂停" else "恢复") }
-                            TextButton(onClick = { historyTask = task; stateHolder.loadScheduleHistory(task) }) { Text("执行记录") }
+                            }, enabled = stateHolder.scheduledTaskPendingId == null) { Text(appText(if (task.status == "active") "暂停" else "恢复")) }
+                            TextButton(onClick = { historyTask = task; stateHolder.loadScheduleHistory(task) }) { Text(appText("执行记录")) }
                             TextButton(onClick = { stateHolder.runScheduledTask(task) },
-                                enabled = stateHolder.scheduledTaskPendingId == null) { Text("立即执行") }
+                                enabled = stateHolder.scheduledTaskPendingId == null) { Text(appText("立即执行")) }
                         }
                     }
                     }
@@ -271,19 +272,19 @@ internal fun ScheduledTasksScreen(
         }
     }
     historyTask?.let { task ->
-        AlertDialog(onDismissRequest = { historyTask = null }, title = { Text("执行记录 · ${task.title}") },
+        AlertDialog(onDismissRequest = { historyTask = null }, title = { Text(appText("执行记录 · %1\$s", task.title)) },
             text = { Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
-                Text(stateHolder.scheduleHistory?.get("records")?.toJsonElement()?.toString() ?: "正在加载…")
+                Text(stateHolder.scheduleHistory?.get("records")?.toJsonElement()?.toString() ?: appText("正在加载…"))
                 stateHolder.scheduleHistory?.get("nextBefore")?.stringValue?.let { before ->
-                    TextButton(onClick = { stateHolder.loadScheduleHistory(task, before) }) { Text("更早记录") }
+                    TextButton(onClick = { stateHolder.loadScheduleHistory(task, before) }) { Text(appText("更早记录")) }
                 }
-            } }, confirmButton = { TextButton(onClick = { historyTask = null }) { Text("关闭") } })
+            } }, confirmButton = { TextButton(onClick = { historyTask = null }) { Text(appText("关闭")) } })
     }
     if (creating) ScheduleCreateDialog(stateHolder) { creating = false }
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
-        title = { Text("清理已结束任务？") }, text = { Text("清理后无法恢复。") },
-        confirmButton = { TextButton(onClick = { confirmClear = false; stateHolder.clearEndedScheduledTasks() }) { Text("清理") } },
-        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
+        title = { Text(appText("清理已结束任务？")) }, text = { Text(appText("清理后无法恢复。")) },
+        confirmButton = { TextButton(onClick = { confirmClear = false; stateHolder.clearEndedScheduledTasks() }) { Text(appText("清理")) } },
+        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(appText("取消")) } })
     editingTask?.let { task ->
         ScheduledTaskEditSheet(task, stateHolder, onDismiss = { editingTask = null })
     }
@@ -680,37 +681,37 @@ private fun ScheduleCreateDialog(stateHolder: AndroidSharedStateHolder, onDismis
     LaunchedEffect(stateHolder.scheduledTaskCompletedRequestId) {
         if (requestId != null && requestId == stateHolder.scheduledTaskCompletedRequestId) onDismiss()
     }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("创建定时任务") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(appText("创建定时任务")) },
         text = {
             DshMenuHost {
                 Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    androidx.compose.material3.OutlinedTextField(title, { title = it }, label = { Text("标题") })
-                    androidx.compose.material3.OutlinedTextField(prompt, { prompt = it }, label = { Text("任务内容") })
-                    Text("执行规则使用 Host JSON，支持 after、at、every、daily、weekly、cron、rrule。时区使用 IANA 名称。")
-                    androidx.compose.material3.OutlinedTextField(timing, { timing = it }, label = { Text("执行规则 JSON") })
-                    listOf("new_once" to "首次新建并复用会话", "new" to "每次新建会话", "session" to "已有会话").forEach { (kind, label) ->
-                        TextButton(onClick = { target = kind }) { Text((if (target == kind) "✓ " else "") + label) }
+                    androidx.compose.material3.OutlinedTextField(title, { title = it }, label = { Text(appText("标题")) })
+                    androidx.compose.material3.OutlinedTextField(prompt, { prompt = it }, label = { Text(appText("任务内容")) })
+                    Text(appText("执行规则使用 Host JSON，支持 after、at、every、daily、weekly、cron、rrule。时区使用 IANA 名称。"))
+                    androidx.compose.material3.OutlinedTextField(timing, { timing = it }, label = { Text(appText("执行规则 JSON")) })
+                    listOf("new_once" to appTextKey("首次新建并复用会话"), "new" to appTextKey("每次新建会话"), "session" to appTextKey("已有会话")).forEach { (kind, label) ->
+                        TextButton(onClick = { target = kind }) { Text((if (target == kind) "✓ " else "") + appText(label)) }
                     }
-                    if (target == "session") androidx.compose.material3.OutlinedTextField(sessionId, { sessionId = it }, label = { Text("会话 ID") })
+                    if (target == "session") androidx.compose.material3.OutlinedTextField(sessionId, { sessionId = it }, label = { Text(appText("会话 ID")) })
                     val preview = remember(timing) {
                         runCatching { kotlinx.serialization.json.Json.parseToJsonElement(timing).toString() }.getOrNull()
                     }
-                    Text("规则预览 · ${preview ?: "执行规则 JSON 无效"}")
+                    Text(appText("规则预览 · %1\$s", preview ?: appText("执行规则 JSON 无效")))
                     Text(scheduleNextExecutionPreview(timing))
-                    Text("当前时区 · ${java.util.TimeZone.getDefault().id}")
+                    Text(appText("当前时区 · %1\$s", java.util.TimeZone.getDefault().id))
                     stateHolder.scheduledTaskMutationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             }
         },
         confirmButton = { TextButton(onClick = { requestId = stateHolder.createScheduledTask(title, prompt, timing, target, sessionId) },
-            enabled = stateHolder.scheduledTaskPendingId == null) { Text("创建") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+            enabled = stateHolder.scheduledTaskPendingId == null) { Text(appText("创建")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(appText("取消")) } })
 }
 
 private fun scheduleNextExecutionPreview(json: String): String {
     val rule = runCatching { com.clarklevis.dsh.shared.protocol.JsonValue.fromJsonElement(
-        kotlinx.serialization.json.Json.parseToJsonElement(json)) }.getOrNull() ?: return "请填写有效规则"
-    val kind = rule["kind"]?.stringValue ?: return "请填写规则类型"
+        kotlinx.serialization.json.Json.parseToJsonElement(json)) }.getOrNull() ?: return appText("请填写有效规则")
+    val kind = rule["kind"]?.stringValue ?: return appText("请填写规则类型")
     val spec = rule[kind]
     val zone = java.util.TimeZone.getTimeZone(spec?.get("time_zone")?.stringValue ?: java.util.TimeZone.getDefault().id)
     val now = java.util.Date()
@@ -743,7 +744,7 @@ private fun scheduleNextExecutionPreview(json: String): String {
         }
         else -> null
     }
-    if (next == null) return "下次执行时间由 Host 校验并计算"
+    if (next == null) return appText("下次执行时间由 Host 校验并计算")
     val display = SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.getDefault()).apply { timeZone = zone }
-    return "预计下次执行 · ${display.format(next)}\n最终以 Host 返回时间为准"
+    return appText("预计下次执行 · %1\$s\n最终以 Host 返回时间为准", display.format(next))
 }

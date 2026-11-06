@@ -382,7 +382,7 @@ private fun StatusSummary(state: TailscaleTunnelUiState) {
                 strokeWidth = 2.dp
             )
         } else if (state.peerCount > 0) {
-            Text("${appText("对端数量")} ${state.peerCount}", style = SettingsTypography.item, color = tunnelSecondaryColor())
+            Text(appText("对端数量 %1\$s", state.peerCount), style = SettingsTypography.item, color = tunnelSecondaryColor())
         }
     }
 }
