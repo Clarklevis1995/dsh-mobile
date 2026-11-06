@@ -2383,7 +2383,7 @@ private struct DeepSearchProgressRow: View {
 
     private enum Activity: Hashable { case thinking, gathering, exploring, reviewing, revisiting, composing, working }
     private static let phraseIntervalSeconds = 30
-    private static var phrases: [Activity: [String]] { [
+    private static let phrases: [Activity: [String]] = [
         .thinking: [String(localized: "梳理脉络中"), String(localized: "推敲细节中"), String(localized: "酝酿下一步中"), String(localized: "沿着思路前行中")],
         .gathering: [String(localized: "翻阅已有线索中"), String(localized: "收拢相关信息中"), String(localized: "寻找切入点中"), String(localized: "铺开问题脉络中")],
         .exploring: [String(localized: "向外寻找线索中"), String(localized: "打捞新线索中"), String(localized: "沿途探查中"), String(localized: "搜集更多拼图中")],
@@ -2391,7 +2391,7 @@ private struct DeepSearchProgressRow: View {
         .revisiting: [String(localized: "回看已有线索中"), String(localized: "重新校准方向中"), String(localized: "再推敲一遍中"), String(localized: "换个角度审视中")],
         .composing: [String(localized: "组织回应中"), String(localized: "整理表达中"), String(localized: "将思路落成文字中"), String(localized: "勾勒答案中")],
         .working: [String(localized: "继续推进中"), String(localized: "稳步探索中"), String(localized: "梳理当前进展中"), String(localized: "逐步展开中")]
-    ] }
+    ]
 
     private func phrase(for elapsed: Int) -> String {
         let bucket = elapsed / Self.phraseIntervalSeconds

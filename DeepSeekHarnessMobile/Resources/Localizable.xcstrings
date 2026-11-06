@@ -6386,23 +6386,6 @@
         }
       }
     },
-    "上传中" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Uploading"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上传中"
-          }
-        }
-      }
-    },
     "下一题" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -9525,23 +9508,6 @@
         }
       }
     },
-    "可发送" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ready to send"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可发送"
-          }
-        }
-      }
-    },
     "可领取" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10261,23 +10227,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Host info"
-          }
-        }
-      }
-    },
-    "对端数量" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Peers"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "对端数量"
           }
         }
       }
