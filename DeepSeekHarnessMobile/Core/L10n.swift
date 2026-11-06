@@ -116,6 +116,11 @@ enum L10n {
         }
     }
 
+    /// User-visible wrapper for bridge invariant failures; the English detail is for bug reports.
+    static func internalError(_ detail: String) -> String {
+        String(localized: "diagnostic.internal", defaultValue: "内部错误（\(detail)）")
+    }
+
     // MARK: Shared UI messages
 
     /// Key of a shared `UiMessage` whose single argument is host- or OS-provided text.

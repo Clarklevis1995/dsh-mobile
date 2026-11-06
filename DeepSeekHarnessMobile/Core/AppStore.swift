@@ -3384,11 +3384,6 @@ final class AppStore: ObservableObject {
         handle(route)
     }
 
-    /// User-visible wrapper for bridge invariant failures; the English detail is for bug reports.
-    private static func internalError(_ detail: String) -> String {
-        String(localized: "diagnostic.internal", defaultValue: "内部错误（\(detail)）")
-    }
-
     private func scheduledTaskFailureMessage(
         _ code: String?, _ message: String?, fallback: String = String(localized: "操作失败，请稍后重试")
     ) -> String {
@@ -5249,7 +5244,7 @@ final class AppStore: ObservableObject {
         case GatewayQuestionAction.cancel.rawValue:
             questionEffectExecutor.cancelQuestion(rpcId: effect.rpcId, sessionId: effect.sessionId)
         default:
-            lastError = Self.internalError("KMP Question returned unknown effect: \(effect.action)")
+            lastError = L10n.internalError("KMP Question returned unknown effect: \(effect.action)")
         }
     }
 
@@ -5415,7 +5410,7 @@ final class AppStore: ObservableObject {
 
         if let effect = change.effect {
             guard effect.action == "request-page" else {
-                lastError = Self.internalError("KMP History returned unknown effect: \(effect.action)")
+                lastError = L10n.internalError("KMP History returned unknown effect: \(effect.action)")
                 return
             }
             requestHistoryPage(for: effect.sessionId, beforeSeq: effect.beforeSequence)
@@ -5451,7 +5446,7 @@ final class AppStore: ObservableObject {
             case "REPEATED_CURSOR":
                 message = String(localized: "history.cursor.loop", defaultValue: "网关重复返回历史游标，已停止自动续页以避免循环。")
             default:
-                message = Self.internalError("KMP History pagination failed (\(change.failureCode ?? "unknown"))")
+                message = L10n.internalError("KMP History pagination failed (\(change.failureCode ?? "unknown"))")
             }
             lastError = message
             notice(
@@ -5478,7 +5473,7 @@ final class AppStore: ObservableObject {
                 sessionId: change.sessionID
             )
         default:
-            lastError = Self.internalError("KMP History returned unknown outcome: \(change.outcome)")
+            lastError = L10n.internalError("KMP History returned unknown outcome: \(change.outcome)")
         }
     }
     @discardableResult
@@ -5690,7 +5685,7 @@ final class AppStore: ObservableObject {
                 sessionControlEffectExecutor.setDefault(target: target, value: value)
             }
         default:
-            lastError = Self.internalError("KMP SessionControl returned unknown effect: \(effect.kind)")
+            lastError = L10n.internalError("KMP SessionControl returned unknown effect: \(effect.kind)")
         }
     }
     private func showOfflineHistoryBoundary() {
