@@ -112,7 +112,7 @@ import kotlinx.coroutines.launch
 private val scheduleBlue = Color(0xFF0A84FF)
 
 internal enum class ScheduledTaskStatusFilter(private val sourceTitle: String) {
-    ACTIVE("已开启"), PAUSED("已暂停"), ENDED("已结束"), ALL("全部");
+    ACTIVE(appTextKey("已开启")), PAUSED(appTextKey("已暂停")), ENDED(appTextKey("已结束")), ALL(appTextKey("全部"));
 
     val title: String get() = appText(sourceTitle)
 }

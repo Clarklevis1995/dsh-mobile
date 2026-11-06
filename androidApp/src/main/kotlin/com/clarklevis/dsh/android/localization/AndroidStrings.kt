@@ -183,7 +183,6 @@ internal object AndroidStrings {
     )
 
     internal val english: Map<String, String> = mapOf(
-        "%1\$s：%2\$s" to "%1\$s: %2\$s",
         "%1\$s：%2\$s · %3\$s" to "%1\$s: %2\$s · %3\$s",
         "Lead 会话" to "Lead session",
         "上传中 %1\$s%" to "Uploading %1\$s%",
@@ -192,7 +191,6 @@ internal object AndroidStrings {
         "会话 ID" to "Session ID",
         "创建任务" to "Create task",
         "创建定时任务" to "Create scheduled task",
-        "加载更多任务" to "Load more tasks",
         "历史记录加载超时，请重试" to "Loading history timed out. Try again.",
         "只读本地搜索片段" to "Read-only local search excerpt",
         "[图片 · %1\$s]" to "[Image · %1\$s]",
@@ -225,10 +223,13 @@ internal object AndroidStrings {
         "清理已结束任务" to "Clear finished tasks",
         "恢复" to "Resume",
         "首次新建并复用会话" to "Create a session on first run, then reuse it",
-        "每次新建会话" to "Create a new session every run",
+        "在会话中创建的定时任务会显示在这里" to "Scheduled tasks created in conversations appear here.",
+        "详情" to "Details",
+        "关联会话" to "Linked conversation",
         "已有会话" to "Existing session",
         "目标版本更新未生效，请检查更新及恢复结果" to "The target version was not applied. Check the update and restore results.",
-        "移除引用" to "Remove quote",
+        "收起引用" to "Collapse quote",
+        "展开引用" to "Expand quote",
         "立即执行" to "Run now",
         "规则预览 · %1\$s" to "Rule preview · %1\$s",
         "请填写有效规则" to "Enter a valid rule",

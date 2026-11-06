@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import com.clarklevis.dsh.shared.protocol.ScheduleTargetDraft
 
@@ -28,7 +29,7 @@ internal fun ScheduleTargetControls(
 ) {
     var targetMenu by remember { mutableStateOf(false) }
     var workspaceMenu by remember { mutableStateOf(false) }
-    val labels = mapOf("session" to "当前关联会话", "new_once" to "新建会话并复用", "new" to "每次新建会话")
+    val labels = mapOf("session" to appTextKey("当前关联会话"), "new_once" to appTextKey("新建会话并复用"), "new" to appTextKey("每次新建会话"))
     ScheduleSection {
         Box {
             ScheduleSettingRow(appText("执行位置"), appText(labels[draft.kind] ?: draft.kind), enabled,
