@@ -451,7 +451,10 @@ struct ConversationView: View {
         }
         .overlay(alignment: .top) {
             if store.isViewingTeamMember {
-                Text("团队 › \(store.selectedSession?.title ?? "成员")" + (store.selectedMemberCanSend ? "" : " · 只读"))
+                let memberName = store.selectedSession?.title ?? String(localized: "成员")
+                Text(store.selectedMemberCanSend
+                     ? String(localized: "team.header", defaultValue: "团队 › \(memberName)")
+                     : String(localized: "team.header.readOnly", defaultValue: "团队 › \(memberName) · 只读"))
                     .appFont(.caption).foregroundStyle(.secondary).lineLimit(1)
                     .padding(.bottom, 4)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { teamHeaderHeight = $0 }
@@ -618,7 +621,7 @@ struct ConversationView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
-                        Text(error).appFont(.footnote).lineLimit(2)
+                        Text(error.message).appFont(.footnote).lineLimit(2)
                         Spacer(minLength: 0)
                         Button("重新加载历史") {
                             if let id = store.selectedSessionId { store.loadHistory(for: id) }
@@ -934,17 +937,15 @@ struct ConversationView: View {
         .padding(.horizontal, 28)
     }
 
-    private var selectedHistoryError: String? {
+    private var selectedHistoryError: HistoryLoadError? {
         store.selectedSessionId.flatMap { store.historyLoadErrors[$0] }
     }
 
-    private func historyFailureState(_ error: String) -> some View {
+    private func historyFailureState(_ error: HistoryLoadError) -> some View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle").appFont(.largeTitle).foregroundStyle(.orange)
-            Text(error.contains("尚未缓存") ? "离线内容不可用" : "历史记录加载失败").appFont(.title3.weight(.semibold))
-            Text(error.contains("refuses this format")
-                 ? "Host 无法读取旧格式会话，请修复或升级 Host 后重试。原始记录未修改。"
-                 : error)
+            Text(error.title).appFont(.title3.weight(.semibold))
+            Text(error.message)
                 .appFont(.subheadline).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center).lineLimit(6)
             Button("重新加载历史") {
@@ -1299,7 +1300,7 @@ struct ConversationView: View {
 
             if !store.isViewingTeamMember { modelControl }
             else {
-                Text(store.selectedSession?.title ?? "成员会话").appFont(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(store.selectedSession?.title ?? String(localized: "成员会话")).appFont(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
 
             Button { showsContextUsage = true } label: {
@@ -1579,9 +1580,9 @@ struct ConversationView: View {
                     if store.queueState.pendingItemId == item.id {
                         ProgressView().frame(width: 36, height: 40)
                     } else {
-                        queueActionButton("pencil", label: "编辑排队消息", itemID: item.id, action: "edit", enabled: item.editable)
-                        queueActionButton("trash", label: "删除排队消息", itemID: item.id, action: "remove")
-                        queueActionButton("arrow.up", label: "立即插话", itemID: item.id, action: "steer", enabled: store.selectedSession?.isRunning == true)
+                        queueActionButton("pencil", label: String(localized: "编辑排队消息"), itemID: item.id, action: "edit", enabled: item.editable)
+                        queueActionButton("trash", label: String(localized: "删除排队消息"), itemID: item.id, action: "remove")
+                        queueActionButton("arrow.up", label: String(localized: "立即插话"), itemID: item.id, action: "steer", enabled: store.selectedSession?.isRunning == true)
                     }
                 }
                 .padding(.leading, 10)
@@ -1634,9 +1635,9 @@ struct ConversationView: View {
         switch file.status {
         case "waiting": String(localized: "等待上传")
         case "opening": String(localized: "开始上传…")
-        case "uploading": "\(String(localized: "上传中")) \(file.size > 0 ? file.confirmedBytes * 100 / file.size : 0)%"
+        case "uploading": String(localized: "upload.progress", defaultValue: "上传中 \(file.size > 0 ? file.confirmedBytes * 100 / file.size : 0)%")
         case "committing": String(localized: "处理中…")
-        case "ready": "\(String(localized: "可发送")) · \(ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file))"
+        case "ready": String(localized: "upload.ready", defaultValue: "可发送 · \(ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file))")
         default: file.error?.localized ?? String(localized: "upload.failed")
         }
     }
@@ -1780,8 +1781,8 @@ struct ConversationView: View {
                         .scaledToFit()
                         .frame(width: 16, height: 16)
                         .accessibilityHidden(true)
-                    Text(state.saving ? "切换中…" : current?.name ?? state.agentPreset.map(agentPresetTitle)
-                         ?? (state.loading ? "读取模式…" : "重试模式"))
+                    Text(state.saving ? String(localized: "切换中…") : current?.name ?? state.agentPreset.map(agentPresetTitle)
+                         ?? (state.loading ? String(localized: "读取模式…") : String(localized: "重试模式")))
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Image(systemName: "chevron.down")
@@ -1820,7 +1821,7 @@ struct ConversationView: View {
                             Text(preset.name ?? agentPresetTitle(preset.id))
                                 .appFont(.body.weight(.medium))
                             Text(preset.broken?.boolValue == true
-                                 ? preset.brokenReason ?? "模式不可用"
+                                 ? preset.brokenReason ?? String(localized: "模式不可用")
                                  : agentPresetCompactDescription(preset.id, description: preset.description_))
                                 .appFont(.caption)
                                 .foregroundStyle(.secondary)
@@ -1849,11 +1850,11 @@ struct ConversationView: View {
 
     private func agentPresetCompactDescription(_ id: String, description: String?) -> String {
         switch id {
-        case "standard": return "完整工具，适合日常开发"
-        case "code": return "用代码组合多步工具操作"
-        case "minimal": return "仅用 Shell，轻量直接"
-        case "cordis": return "创建和调试自定义 Agent"
-        default: return description ?? "自定义 Agent 模式"
+        case "standard": return String(localized: "完整工具，适合日常开发")
+        case "code": return String(localized: "用代码组合多步工具操作")
+        case "minimal": return String(localized: "仅用 Shell，轻量直接")
+        case "cordis": return String(localized: "创建和调试自定义 Agent")
+        default: return description ?? String(localized: "自定义 Agent 模式")
         }
     }
 
@@ -2383,13 +2384,13 @@ private struct DeepSearchProgressRow: View {
     private enum Activity: Hashable { case thinking, gathering, exploring, reviewing, revisiting, composing, working }
     private static let phraseIntervalSeconds = 30
     private static let phrases: [Activity: [String]] = [
-        .thinking: ["梳理脉络中", "推敲细节中", "酝酿下一步中", "沿着思路前行中"],
-        .gathering: ["翻阅已有线索中", "收拢相关信息中", "寻找切入点中", "铺开问题脉络中"],
-        .exploring: ["向外寻找线索中", "打捞新线索中", "沿途探查中", "搜集更多拼图中"],
-        .reviewing: ["对照新发现中", "拼合新线索中", "检视所得中", "把发现串起来中"],
-        .revisiting: ["回看已有线索中", "重新校准方向中", "再推敲一遍中", "换个角度审视中"],
-        .composing: ["组织回应中", "整理表达中", "将思路落成文字中", "勾勒答案中"],
-        .working: ["继续推进中", "稳步探索中", "梳理当前进展中", "逐步展开中"]
+        .thinking: [String(localized: "梳理脉络中"), String(localized: "推敲细节中"), String(localized: "酝酿下一步中"), String(localized: "沿着思路前行中")],
+        .gathering: [String(localized: "翻阅已有线索中"), String(localized: "收拢相关信息中"), String(localized: "寻找切入点中"), String(localized: "铺开问题脉络中")],
+        .exploring: [String(localized: "向外寻找线索中"), String(localized: "打捞新线索中"), String(localized: "沿途探查中"), String(localized: "搜集更多拼图中")],
+        .reviewing: [String(localized: "对照新发现中"), String(localized: "拼合新线索中"), String(localized: "检视所得中"), String(localized: "把发现串起来中")],
+        .revisiting: [String(localized: "回看已有线索中"), String(localized: "重新校准方向中"), String(localized: "再推敲一遍中"), String(localized: "换个角度审视中")],
+        .composing: [String(localized: "组织回应中"), String(localized: "整理表达中"), String(localized: "将思路落成文字中"), String(localized: "勾勒答案中")],
+        .working: [String(localized: "继续推进中"), String(localized: "稳步探索中"), String(localized: "梳理当前进展中"), String(localized: "逐步展开中")]
     ]
 
     private func phrase(for elapsed: Int) -> String {
@@ -2412,7 +2413,7 @@ private struct DeepSearchProgressRow: View {
             case .status: activity = .working
             }
         }
-        let options = Self.phrases[activity] ?? ["梳理脉络中"]
+        let options = Self.phrases[activity] ?? [String(localized: "梳理脉络中")]
         return options[(Int(startDate.timeIntervalSince1970) + bucket) % options.count]
     }
 
@@ -2594,11 +2595,11 @@ private struct TaskGoalPanels: View {
             } else {
                 goalActionButton(
                     active ? "pause.circle" : "play.circle",
-                    active ? "暂停目标" : "继续目标",
+                    active ? String(localized: "暂停目标") : String(localized: "继续目标"),
                     onPauseResume
                 )
-                goalActionButton("pencil", "编辑目标", onEdit)
-                goalActionButton("trash", "删除目标", onClear)
+                goalActionButton("pencil", String(localized: "编辑目标"), onEdit)
+                goalActionButton("trash", String(localized: "删除目标"), onClear)
             }
         }
         .padding(15)
@@ -2612,9 +2613,9 @@ private struct TaskGoalPanels: View {
 
     private var taskSummary: String {
         [
-            completedCount > 0 ? "\(completedCount) 已完成" : nil,
-            activeCount > 0 ? "\(activeCount) 进行中" : nil,
-            pendingCount > 0 ? "\(pendingCount) 待处理" : nil
+            completedCount > 0 ? String(localized: "\(completedCount) 已完成") : nil,
+            activeCount > 0 ? String(localized: "\(activeCount) 进行中") : nil,
+            pendingCount > 0 ? String(localized: "\(pendingCount) 待处理") : nil
         ]
         .compactMap { $0 }
         .joined(separator: " · ")
@@ -2661,10 +2662,10 @@ private struct TaskGoalPanels: View {
 
     private func goalPhaseLabel(_ phase: String) -> String {
         switch phase {
-        case "active": "进行中的目标"
-        case "paused": "已暂停的目标"
-        case "blocked": "受阻的目标"
-        default: "当前目标"
+        case "active": String(localized: "进行中的目标")
+        case "paused": String(localized: "已暂停的目标")
+        case "blocked": String(localized: "受阻的目标")
+        default: String(localized: "当前目标")
         }
     }
 }
@@ -3342,7 +3343,7 @@ private struct SessionStatsSheet: View {
                                 .foregroundStyle(.tertiary)
                         }
                     } else {
-                        DshEmptyState("正在读取会话统计", systemImage: "chart.bar.xaxis", description: Text("统计会在本轮结束后自动更新。"))
+                        DshEmptyState(String(localized: "正在读取会话统计"), systemImage: "chart.bar.xaxis", description: Text("统计会在本轮结束后自动更新。"))
                             .frame(maxWidth: .infinity, minHeight: 220)
                     }
                 }
@@ -5104,7 +5105,7 @@ struct MarkdownSelectionPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DocumentPageHeader(title: "选择文字", closeIdentifier: "markdown-selection-close", onClose: { dismiss() }) {
+            DocumentPageHeader(title: LocalizedStringKey("选择文字"), closeIdentifier: "markdown-selection-close", onClose: { dismiss() }) {
                 EmptyView()
             }
             let parsed = ParsedMarkdownCache.document(for: MarkdownMath.prepare(document.text, forSelection: true))
@@ -5283,7 +5284,7 @@ final class MarkdownSelectionTextView: UITextView, UITextViewDelegate, UIEditMen
             UIAction(title: String(localized: "全选")) { [weak self] _ in self?.selectAll(nil) }
         ]
         if onQuote != nil {
-            actions.append(UIAction(title: "引用", image: UIImage(systemName: "text.quote")) { [weak self] _ in
+            actions.append(UIAction(title: String(localized: "引用"), image: UIImage(systemName: "text.quote")) { [weak self] _ in
                 guard let self else { return }
                 self.onQuote?(self.selectedPlainText())
             })
@@ -5653,7 +5654,7 @@ private struct TeamCachedMenuButton: UIViewRepresentable {
         let button = UIButton(configuration: configuration)
         button.layer.cornerRadius = 22
         button.clipsToBounds = true
-        button.accessibilityLabel = "查看智能体团队"
+        button.accessibilityLabel = String(localized: "查看智能体团队")
         button.accessibilityIdentifier = "team-entry"
         button.addTarget(context.coordinator, action: #selector(Coordinator.open(_:)), for: .touchUpInside)
         updateUIView(button, context: context)
@@ -5691,7 +5692,7 @@ private struct TeamCachedMenuButton: UIViewRepresentable {
         var content: UIHostingController<TeamMemberPopover>?
 
         func prepareContent() {
-            let root = TeamMemberPopover(members: members, title: title ?? "Lead 会话", selectedID: selectedID,
+            let root = TeamMemberPopover(members: members, title: title ?? String(localized: "Lead 会话"), selectedID: selectedID,
                 select: { [weak self] member in
                     self?.content?.dismiss(animated: true) { [weak self] in
                         self?.clearSource()
@@ -6106,9 +6107,9 @@ private struct PendingFileCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if file.status == "error" {
-                action("arrow.clockwise", label: "重试上传", tint: .primary.opacity(0.6), onRetry)
+                action("arrow.clockwise", label: LocalizedStringKey("重试上传"), tint: .primary.opacity(0.6), onRetry)
             }
-            action("xmark.circle.fill", label: "移除文件", tint: .primary, onRemove)
+            action("xmark.circle.fill", label: LocalizedStringKey("移除文件"), tint: .primary, onRemove)
         }
         .padding(10)
         .frame(width: 240)

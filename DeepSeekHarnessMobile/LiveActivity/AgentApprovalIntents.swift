@@ -33,8 +33,8 @@ enum AgentLiveActivityIntentBridge {
 
 @available(iOS 17.0, *)
 struct AllowAgentActionIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "允许本次操作"
-    static let description = IntentDescription("允许 Agent 执行当前待审批操作。")
+    static let title: LocalizedStringResource = LocalizedStringResource("允许本次操作")
+    static let description = IntentDescription(LocalizedStringResource("允许 Agent 执行当前待审批操作。"))
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "Gateway ID") var gatewayID: String
@@ -66,8 +66,8 @@ struct AllowAgentActionIntent: LiveActivityIntent {
 
 @available(iOS 17.0, *)
 struct RejectAgentActionIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "拒绝操作"
-    static let description = IntentDescription("拒绝 Agent 执行当前待审批操作。")
+    static let title: LocalizedStringResource = LocalizedStringResource("拒绝操作")
+    static let description = IntentDescription(LocalizedStringResource("拒绝 Agent 执行当前待审批操作。"))
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(title: "Gateway ID") var gatewayID: String

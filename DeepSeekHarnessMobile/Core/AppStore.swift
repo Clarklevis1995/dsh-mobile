@@ -17,6 +17,8 @@ struct AgentLiveActivityProgress: Equatable {
     let detail: String?
     let kind: AgentActivityStepKind
     let toolName: String?
+    /// True when `detail` already is the localized "Step N" label, so the step prefix is not repeated.
+    var detailIsStepLabel: Bool = false
 }
 
 private struct AgentLiveActivityStreamBuffer {
@@ -36,20 +38,22 @@ enum AgentLiveActivityEventProjection {
         switch event.type {
         case "user/message" where event.source?.isEmpty == false && event.source != "user":
             return progress(
-                "上下文注入 · \(event.source!)",
+                L10n.contextInjectionTitle(event.source!),
                 detail: preview(event.text),
                 kind: .context
             )
         case "step/start":
             return progress(
-                "正在分析执行步骤",
-                detail: event.step.map { "第 \($0) 步" },
-                kind: .reasoning
+                String(localized: "正在分析执行步骤"),
+                detail: event.step.map { String(localized: "activity.step", defaultValue: "第 \($0) 步") },
+                kind: .reasoning,
+                detailIsStepLabel: event.step != nil
             )
         case "step/end":
             return progress(
-                event.step.map { "第 \($0) 步已完成" } ?? "当前步骤已完成",
-                detail: "正在准备下一步",
+                event.step.map { String(localized: "activity.step.completed", defaultValue: "第 \($0) 步已完成") }
+                    ?? String(localized: "当前步骤已完成"),
+                detail: String(localized: "正在准备下一步"),
                 kind: .result
             )
         case "request/context":
@@ -58,7 +62,7 @@ enum AgentLiveActivityEventProjection {
                 event.raw?["skill"], event.raw?["name"]
             )
             return progress(
-                source.map { "上下文注入 · \($0)" } ?? "上下文注入",
+                source.map { L10n.contextInjectionTitle($0) } ?? String(localized: "上下文注入"),
                 detail: preview(firstText(event.raw?["text"], event.raw?["content"])),
                 kind: .context
             )
@@ -66,31 +70,33 @@ enum AgentLiveActivityEventProjection {
             let provider = event.raw?["header"]?["config"]?["provider"]?.stringValue
             let model = event.raw?["header"]?["config"]?["model"]?.stringValue
             return progress(
-                "准备 Agent 上下文",
+                String(localized: "准备 Agent 上下文"),
                 detail: preview([provider, model].compactMap { $0 }.joined(separator: " · ")),
                 kind: .context
             )
         case "assistant/message":
             if let text = preview(event.text), !text.isEmpty {
-                return progress("Agent 回复", detail: text, kind: .message)
+                return progress(String(localized: "Agent 回复"), detail: text, kind: .message)
             }
             if let reasoning = preview(event.reasoning), !reasoning.isEmpty {
-                return progress("思考", detail: reasoning, kind: .reasoning)
+                return progress(String(localized: "思考"), detail: reasoning, kind: .reasoning)
             }
             if let call = event.toolCalls?.first {
                 return toolProgress(name: call.name, arguments: call.arguments)
             }
             return nil
         case "assistant/attempt":
-            return progress("正在重新生成回复", detail: "Agent 正在重试当前步骤", kind: .reasoning)
+            return progress(String(localized: "正在重新生成回复"), detail: String(localized: "Agent 正在重试当前步骤"), kind: .reasoning)
         case "tool/call", "tool/code-dispatch-start":
             return toolProgress(name: event.name, arguments: event.arguments)
         case "tool/result", "tool/code-dispatch":
             let failed = event.isError == true
             let label = completedToolLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
             let headline = label?.isEmpty == false
-                ? "\(label!)\(failed ? "失败" : "完成")"
-                : (failed ? "工具执行失败" : "工具执行完成")
+                ? (failed
+                    ? String(localized: "activity.tool.failed", defaultValue: "\(label!)失败")
+                    : String(localized: "activity.tool.completed", defaultValue: "\(label!)完成"))
+                : (failed ? String(localized: "工具执行失败") : String(localized: "工具执行完成"))
             return progress(
                 headline,
                 detail: preview(event.preview ?? event.error),
@@ -99,29 +105,29 @@ enum AgentLiveActivityEventProjection {
             )
         case "command/run":
             return progress(
-                "执行命令",
+                String(localized: "执行命令"),
                 detail: preview(event.args ?? firstText(event.raw?["command"], event.raw?["text"])),
                 kind: .command
             )
         case "command/done":
             return progress(
-                event.isError == true ? "命令执行失败" : "命令执行完成",
+                event.isError == true ? String(localized: "命令执行失败") : String(localized: "命令执行完成"),
                 detail: preview(event.error ?? event.outcome ?? event.text),
                 kind: event.isError == true ? .command : .result
             )
         case "compaction/start":
-            return progress("正在整理会话上下文", detail: "压缩历史记录以继续执行", kind: .context)
+            return progress(String(localized: "正在整理会话上下文"), detail: String(localized: "压缩历史记录以继续执行"), kind: .context)
         case "compaction/end":
-            return progress("会话上下文已整理", detail: "Agent 正在继续执行", kind: .result)
+            return progress(String(localized: "会话上下文已整理"), detail: String(localized: "Agent 正在继续执行"), kind: .result)
         case "artifact/delivered", "file/delivered", "delivery/file":
             return progress(
-                "交付文件",
+                String(localized: "交付文件"),
                 detail: preview(firstText(event.raw?["path"], event.raw?["file"]) ?? event.text),
                 kind: .delivery
             )
         case "permission/preset":
             return progress(
-                "应用权限配置",
+                String(localized: "应用权限配置"),
                 detail: preview(firstText(event.raw?["preset"], event.raw?["name"])),
                 kind: .preparing
             )
@@ -137,12 +143,14 @@ enum AgentLiveActivityEventProjection {
     ) -> AgentLiveActivityProgress? {
         switch chunkType {
         case "reasoning-delta":
-            return progress("思考", detail: preview(text), kind: .reasoning)
+            return progress(String(localized: "思考"), detail: preview(text), kind: .reasoning)
         case "text-delta":
-            return progress("正在生成回复", detail: preview(text), kind: .message)
+            return progress(String(localized: "正在生成回复"), detail: preview(text), kind: .message)
         case "tool-call-delta":
             return progress(
-                toolName?.isEmpty == false ? "准备调用 \(toolName!)" : "正在准备工具调用",
+                toolName?.isEmpty == false
+                    ? String(localized: "activity.tool.preparing", defaultValue: "准备调用 \(toolName!)")
+                    : String(localized: "正在准备工具调用"),
                 detail: nil,
                 kind: .tool,
                 toolName: toolName
@@ -182,13 +190,15 @@ enum AgentLiveActivityEventProjection {
         _ headline: String,
         detail: String?,
         kind: AgentActivityStepKind,
-        toolName: String? = nil
+        toolName: String? = nil,
+        detailIsStepLabel: Bool = false
     ) -> AgentLiveActivityProgress {
         AgentLiveActivityProgress(
             headline: headline,
             detail: detail?.isEmpty == false ? detail : nil,
             kind: kind,
-            toolName: toolName
+            toolName: toolName,
+            detailIsStepLabel: detailIsStepLabel
         )
     }
 
@@ -257,6 +267,42 @@ private extension GatewayQuestionRequestStatus {
     }
 }
 
+/// Why a session's history could not be shown. The producer picks the case, so
+/// views and logic never inspect display text.
+enum HistoryLoadError: Equatable {
+    case notCached
+    case beyondCacheBoundary
+    case cacheFormatChanged
+    case timedOut
+    /// The host refused to read a session stored in an older history format; carries the host text.
+    case hostRejectedFormat(String)
+    /// Host or shared-code text, already localized or verbatim.
+    case detail(String)
+
+    /// Classifies host-provided text; the host does not send a code for the format refusal.
+    init(hostText: String) {
+        self = hostText.contains("refuses this format") ? .hostRejectedFormat(hostText) : .detail(hostText)
+    }
+
+    var title: String {
+        switch self {
+        case .notCached, .beyondCacheBoundary: String(localized: "离线内容不可用")
+        default: String(localized: "历史记录加载失败")
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .notCached: String(localized: "此会话尚未缓存，连接后可加载聊天内容")
+        case .beyondCacheBoundary: String(localized: "已到达本地缓存边界，连接后可加载更早内容")
+        case .cacheFormatChanged: String(localized: "缓存格式与上次连接不一致，连接后可重新加载聊天内容")
+        case .timedOut: String(localized: "历史记录加载超时，请重试")
+        case .hostRejectedFormat: String(localized: "Host 无法读取旧格式会话，请修复或升级 Host 后重试。原始记录未修改。")
+        case .detail(let text): text
+        }
+    }
+}
+
 enum InterfaceStyle: String, CaseIterable, Identifiable {
     case system, light, dark
     var id: String { rawValue }
@@ -277,7 +323,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .system: String(localized: "跟随系统")
-        case .simplifiedChinese: "简体中文"
+        case .simplifiedChinese: "简体中文" // i18n-ignore: language endonym stays in its own language
         case .english: "English"
         }
     }
@@ -320,7 +366,7 @@ final class AppStore: ObservableObject {
     private var teamMemberProfileTimeouts: [String: Task<Void, Never>] = [:]
 
     var teamSessionTitle: String {
-        sessions.first { $0.id == teamLeadSessionID }?.title ?? "Lead 会话"
+        sessions.first { $0.id == teamLeadSessionID }?.title ?? String(localized: "Lead 会话")
     }
 
     var isViewingTeamMember: Bool { selectedSessionId.map { teamStore.isChild(sessionId: $0) } == true }
@@ -426,7 +472,7 @@ final class AppStore: ObservableObject {
     private(set) var renderedConversationItems: [String: [ConversationItem]] = [:]
     @Published private(set) var conversationContentSessionIds: Set<String> = []
     @Published private(set) var conversationPreparingSessionIDs: Set<String> = []
-    @Published private(set) var historyLoadErrors: [String: String] = [:]
+    @Published private(set) var historyLoadErrors: [String: HistoryLoadError] = [:]
     @Published private(set) var historyHasMore: [String: Bool] = [:]
     @Published private(set) var offlineHistoryBoundarySessionIds: Set<String> = []
     private var offlineHistoryLoadingOlderSessionIds: [String: UUID] = [:]
@@ -654,7 +700,7 @@ final class AppStore: ObservableObject {
         queueActionTimeout = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(20)) } catch { return }
             guard let self, self.queueState.pendingItemId == itemID else { return }
-            self.queueState = self.queueStore.failPending(message: "队列操作超时，请检查队列最新状态后重试".rawUiMessage)
+            self.queueState = self.queueStore.failPending(message: UiMessage(key: "queue.actionTimeout", args: []))
             self.lastError = self.queueState.lastError?.localized
         }
     }
@@ -1548,7 +1594,7 @@ final class AppStore: ObservableObject {
                 guard let window else {
                     if searchSequence != nil { self.invalidateSearchContext(sessionID: session.id) }
                     else if !self.gateway.state.isConnected, self.events[session.id, default: []].isEmpty {
-                        self.historyLoadErrors[session.id] = "此会话尚未缓存，连接后可加载聊天内容"
+                        self.historyLoadErrors[session.id] = .notCached
                         self.conversationPreparingSessionIDs.remove(session.id)
                     }
                     return
@@ -1574,7 +1620,7 @@ final class AppStore: ObservableObject {
                     ChatCacheDiagnostics.shared.restoreSkipped(reason: .formatChanged)
                     if self.gateway.state.isConnected { self.invalidateChatCache(sessionID: session.id) }
                     else if self.events[session.id, default: []].isEmpty {
-                        self.historyLoadErrors[session.id] = "缓存格式与上次连接不一致，连接后可重新加载聊天内容"
+                        self.historyLoadErrors[session.id] = .cacheFormatChanged
                         self.conversationPreparingSessionIDs.remove(session.id)
                     }
                 }
@@ -1598,7 +1644,7 @@ final class AppStore: ObservableObject {
         localSearchSequences[sessionID] = nil
         localSearchResults.removeAll { $0.sessionId == sessionID }
         searchResults.removeAll { $0.sessionId == sessionID }
-        notice("搜索结果已失效", "本地缓存或网关历史已不包含此内容，请重新搜索。", sessionId: sessionID)
+        notice(String(localized: "搜索结果已失效"), String(localized: "本地缓存或网关历史已不包含此内容，请重新搜索。"), sessionId: sessionID)
     }
 
     private func clearSearchContext() {
@@ -1688,7 +1734,7 @@ final class AppStore: ObservableObject {
     private func loadScheduledTasks(offset: Int) {
         guard gateway.state.isConnected else {
             scheduledTasksLoading = false
-            scheduledTasksError = "连接网关后可查看定时任务"
+            scheduledTasksError = String(localized: "连接网关后可查看定时任务")
             return
         }
         scheduledTasksLoading = true
@@ -1708,7 +1754,7 @@ final class AppStore: ObservableObject {
             guard let self, self.scheduledTasksRequestID == requestID,
                   self.scheduledTasksLoading else { return }
             self.scheduledTasksLoading = false
-            self.scheduledTasksError = "定时任务请求超时，请重试"
+            self.scheduledTasksError = String(localized: "定时任务请求超时，请重试")
         }
     }
 
@@ -1716,7 +1762,7 @@ final class AppStore: ObservableObject {
         pluginPageVisited = true
         guard gateway.state.isConnected else {
             pluginsLoading = false
-            pluginsError = "连接网关后可查看插件"
+            pluginsError = String(localized: "连接网关后可查看插件")
             return
         }
         let requestID = UUID().uuidString
@@ -1728,7 +1774,7 @@ final class AppStore: ObservableObject {
             try? await Task.sleep(for: .seconds(12))
             guard let self, self.pluginCatalogRequestID == requestID, self.pluginsLoading else { return }
             self.pluginsLoading = false
-            self.pluginsError = "插件目录请求超时，请重试"
+            self.pluginsError = String(localized: "插件目录请求超时，请重试")
         }
     }
 
@@ -1749,7 +1795,7 @@ final class AppStore: ObservableObject {
             guard let self, self.pluginToggleRequestID == requestID else { return }
             self.pluginToggleRequestID = nil
             self.pluginPendingName = nil
-            self.pluginNotice = "操作结果待确认，请刷新插件目录"
+            self.pluginNotice = String(localized: "操作结果待确认，请刷新插件目录")
             self.refreshPlugins()
         }
     }
@@ -1802,7 +1848,7 @@ final class AppStore: ObservableObject {
             self.pluginUpdateRequestID = nil
             self.pluginPendingName = nil
             self.pluginUpdateStep = "unverified"
-            self.pluginNotice = "更新及恢复结果待核实，请刷新实际版本并检查 Host 日志"
+            self.pluginNotice = String(localized: "更新及恢复结果待核实，请刷新实际版本并检查 Host 日志")
             self.refreshPlugins()
         }
         sendManagement(["type": "plugin-update", "requestId": id, "name": name, "version": version,
@@ -1829,11 +1875,11 @@ final class AppStore: ObservableObject {
             } else {
                 pluginUpdateResult = frame.result
                 if frame.result?["restore"]?["application"]?.stringValue == "failed" {
-                    pluginNotice = "更新失败，旧版本恢复失败。请刷新目录并检查 Host 日志。"
+                    pluginNotice = String(localized: "更新失败，旧版本恢复失败。请刷新目录并检查 Host 日志。")
                 } else if frame.result?["result"]?["application"]?.stringValue == "restart-required" {
-                    pluginNotice = "请重启 DSH 后刷新目录确认实际版本"
+                    pluginNotice = String(localized: "请重启 DSH 后刷新目录确认实际版本")
                 } else if ["failed", "cancelled", "overridden"].contains(frame.result?["result"]?["application"]?.stringValue ?? "") {
-                    pluginNotice = "目标版本更新未生效，请检查更新及恢复结果"
+                    pluginNotice = String(localized: "目标版本更新未生效，请检查更新及恢复结果")
                 }
                 pluginUpdateRequestID = nil
                 pluginPendingName = nil
@@ -1850,7 +1896,7 @@ final class AppStore: ObservableObject {
                 officialItems: (frame.officialItems ?? []).map(MobileOfficialPlugin.init)
             )
             pluginsLoading = false
-            pluginsError = frame.managementAvailable == true ? nil : "当前 Host 不支持插件管理"
+            pluginsError = frame.managementAvailable == true ? nil : String(localized: "当前 Host 不支持插件管理")
         case "plugins-changed":
             // The mutation response refreshes the catalog. Avoid a second fetch
             // for the same Host change while that response is still pending.
@@ -1860,20 +1906,20 @@ final class AppStore: ObservableObject {
             let application = frame.result?["application"]?.stringValue
             switch application {
             case "applied": pluginNotice = nil
-            case "restart-required": pluginNotice = "设置已保存，请重启 DSH Web 后刷新目录"
-            case "overridden": pluginNotice = "插件状态被其他配置覆盖，请检查 Host 配置"
-            default: pluginNotice = frame.result?["error"]?.stringValue ?? "插件操作未生效"
+            case "restart-required": pluginNotice = String(localized: "设置已保存，请重启 DSH Web 后刷新目录")
+            case "overridden": pluginNotice = String(localized: "插件状态被其他配置覆盖，请检查 Host 配置")
+            default: pluginNotice = frame.result?["error"]?.stringValue ?? String(localized: "插件操作未生效")
             }
             pluginToggleRequestID = nil
             pluginPendingName = nil
             refreshPlugins()
         case "error" where frame.requestType == "plugin-catalog" && frame.requestId == pluginCatalogRequestID:
             pluginsLoading = false
-            pluginsError = frame.message ?? "插件目录加载失败"
+            pluginsError = frame.message ?? String(localized: "插件目录加载失败")
         case "error" where ["plugin-bundle-set-enabled", "plugin-entry-set-enabled"].contains(frame.requestType ?? "") && frame.requestId == pluginToggleRequestID:
             pluginToggleRequestID = nil
             pluginPendingName = nil
-            pluginNotice = frame.message ?? "插件操作失败"
+            pluginNotice = frame.message ?? String(localized: "插件操作失败")
             refreshPlugins()
         default: break
         }
@@ -1883,7 +1929,7 @@ final class AppStore: ObservableObject {
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(15))
             guard let self, self.scheduledTaskMutationRequestID == id else { return }
-            self.finishScheduledTaskMutation(error: "操作结果待核实，请刷新后确认")
+            self.finishScheduledTaskMutation(error: String(localized: "操作结果待核实，请刷新后确认"))
         }
     }
 
@@ -1894,7 +1940,7 @@ final class AppStore: ObservableObject {
               !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.count <= 120,
               !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               targetKind != "session" || !sessionID.isEmpty else {
-            scheduledTaskMutationError = "请填写标题、任务内容、有效的执行规则和目标"
+            scheduledTaskMutationError = String(localized: "请填写标题、任务内容、有效的执行规则和目标")
             return nil
         }
         var target: [String: Any] = ["kind": targetKind]
@@ -1965,12 +2011,12 @@ final class AppStore: ObservableObject {
 
     private func beginScheduledTaskMutation(_ task: ScheduledTask, kind: String) -> Bool {
         guard gateway.state.isConnected else {
-            scheduledTaskMutationError = "连接网关后才能修改定时任务"
+            scheduledTaskMutationError = String(localized: "连接网关后才能修改定时任务")
             return false
         }
         guard scheduledTaskPendingID == nil else { return false }
         guard scheduledTasks.first(where: { $0.id == task.id && $0.sessionID == task.sessionID })?.raw == task.raw else {
-            scheduledTaskMutationError = "任务已变化，列表已刷新，请重新操作"
+            scheduledTaskMutationError = String(localized: "任务已变化，列表已刷新，请重新操作")
             refreshScheduledTasks()
             return false
         }
@@ -1982,7 +2028,7 @@ final class AppStore: ObservableObject {
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(15))
             guard let self, self.scheduledTaskMutationRequestID == requestID else { return }
-            self.finishScheduledTaskMutation(error: "操作超时，请刷新任务后重试")
+            self.finishScheduledTaskMutation(error: String(localized: "操作超时，请刷新任务后重试"))
         }
         return true
     }
@@ -2167,8 +2213,7 @@ final class AppStore: ObservableObject {
         }
         guard gateway.state.isConnected else {
             historyPresentationAdmission.cancel(sessionID: sessionId, outcome: .failed, operationID: presentationOperationID)
-            historyLoadErrors[sessionId] = events[sessionId, default: []].isEmpty
-                ? "此会话尚未缓存，连接后可加载聊天内容" : "已到达本地缓存边界，连接后可加载更早内容"
+            historyLoadErrors[sessionId] = events[sessionId, default: []].isEmpty ? .notCached : .beyondCacheBoundary
             return
         }
         if !older, sessionId == selectedSessionId, gateway.subscriptionRecoveryExhausted {
@@ -2248,9 +2293,8 @@ final class AppStore: ObservableObject {
                     sessionId: sessionId
                 )
             } else {
-                let message = String(localized: "历史记录加载超时，请重试")
-                self.historyLoadErrors[sessionId] = message
-                self.lastError = message
+                self.historyLoadErrors[sessionId] = .timedOut
+                self.lastError = HistoryLoadError.timedOut.message
             }
         }
     }
@@ -2704,7 +2748,7 @@ final class AppStore: ObservableObject {
                 guard let self else { return }
                 self.applySessionAgentPresetTransition(self.sessionAgentPresetStore.requestFailed(
                     type: request.requestType, sessionId: request.targetSessionId,
-                    requestId: request.correlationId, message: "模式请求超时，请重试".rawUiMessage
+                    requestId: request.correlationId, message: UiMessage(key: "preset.requestTimeout", args: [])
                 ))
             }
         }
@@ -2847,7 +2891,7 @@ final class AppStore: ObservableObject {
             lastError = String(localized: "请等待附件上传完成，失败的附件可重试或移除")
             return false
         }
-        guard selectedMemberCanSend else { lastError = "此子智能体会话为只读，无法继续对话"; return false }
+        guard selectedMemberCanSend else { lastError = String(localized: "此子智能体会话为只读，无法继续对话"); return false }
         guard gateway.state.isConnected else { lastError = String(localized: "请先在设置中连接 DeepSeek Harness"); return false }
         guard images.isEmpty || supportsImages else {
             lastError = String(localized: "当前 Mobile Gateway 不支持图片，请升级并重启 dsh web。")
@@ -2889,7 +2933,7 @@ final class AppStore: ObservableObject {
                 type: "message", sessionId: self.messageSubmissionSessionID, requestId: self.messageSubmissionRequestID, message: nil
             ))
             self.waitingForNewSession = false
-            self.lastError = "发送确认超时，请确认队列状态后重试"
+            self.lastError = String(localized: "queue.sendTimeout", defaultValue: "发送确认超时，请确认队列状态后重试")
         }
         waitingForNewSession = selectedSessionId == nil
         beginAgentBackgroundExecution(for: selectedSessionId, startsNewTurn: true)
@@ -3051,7 +3095,7 @@ final class AppStore: ObservableObject {
                 return
             }
             // 自动恢复耗尽后保留聊天内容，通过现有历史错误条提供手动重试。
-            recordHistoryFailure(frame.message ?? String(localized: "历史记录加载超时，请重试"), sessionID: sessionID)
+            recordHistoryFailure(frame.message.map(HistoryLoadError.init(hostText:)) ?? .timedOut, sessionID: sessionID)
             return
         }
         if frame.kind.hasPrefix("file-upload-") || frame.requestType?.hasPrefix("file-upload-") == true {
@@ -3124,7 +3168,8 @@ final class AppStore: ObservableObject {
             return
         }
         if frame.kind == "error", frame.requestType == "schedule-history", frame.requestId == scheduleHistoryRequestID {
-            scheduleHistory = .object(["records": .string(frame.message ?? "执行记录加载失败")])
+            scheduleHistory = .object(["records": .string(scheduledTaskFailureMessage(
+                frame.code, frame.message, fallback: String(localized: "执行记录加载失败")))])
             return
         }
         if frame.kind == "schedule-history", frame.requestId == scheduleHistoryRequestID {
@@ -3151,7 +3196,8 @@ final class AppStore: ObservableObject {
         }
         if frame.kind == "error" && ["schedule-catalog", "schedule-list"].contains(frame.requestType ?? "") {
             scheduledTasksLoading = false
-            scheduledTasksError = frame.message ?? "定时任务加载失败"
+            scheduledTasksError = scheduledTaskFailureMessage(
+                frame.code, frame.message, fallback: String(localized: "定时任务加载失败"))
             return
         }
         acceptSessionAgentPresetFrame(frame)
@@ -3212,7 +3258,7 @@ final class AppStore: ObservableObject {
                     let error = message.localized
                     lastError = error
                     if !update.resubscribe, let id = update.sessionId {
-                        recordHistoryFailure(error, sessionID: id)
+                        recordHistoryFailure(HistoryLoadError(hostText: error), sessionID: id)
                     }
                 }
                 if update.resubscribe, let id = update.sessionId { subscribeToSession(id) }
@@ -3338,12 +3384,14 @@ final class AppStore: ObservableObject {
         handle(route)
     }
 
-    private func scheduledTaskFailureMessage(_ code: String?, _ message: String?) -> String {
+    private func scheduledTaskFailureMessage(
+        _ code: String?, _ message: String?, fallback: String = String(localized: "操作失败，请稍后重试")
+    ) -> String {
         switch code {
-        case "schedule_conflict": "任务已被其他设备修改，列表已刷新，请重新打开编辑"
-        case "schedule_ended": "任务已结束，无法再编辑"
-        case "schedule_not_found": "任务已不存在，列表已刷新"
-        default: message ?? "操作失败，请稍后重试"
+        case "schedule_conflict": String(localized: "任务已被其他设备修改，列表已刷新，请重新打开编辑")
+        case "schedule_ended": String(localized: "任务已结束，无法再编辑")
+        case "schedule_not_found": String(localized: "任务已不存在，列表已刷新")
+        default: message ?? fallback
         }
     }
 
@@ -3681,7 +3729,7 @@ final class AppStore: ObservableObject {
 
     private func workspaceFileErrorMessage(_ code: String) -> String {
         switch code {
-        case "file-references-upgrade-required": "此文件需要新版网关解析，请升级 Mobile Gateway。"
+        case "file-references-upgrade-required": String(localized: "此文件需要新版网关解析，请升级 Mobile Gateway。")
         case "file-download-integrity-failed": String(localized: "文件完整性校验失败，请重新下载。")
         case "download-busy": String(localized: "已有文件正在下载，请稍后再试。")
         case "file-download-offset-mismatch": String(localized: "文件分块顺序异常，下载已取消。")
@@ -3793,12 +3841,12 @@ final class AppStore: ObservableObject {
             let tracksPresets = finishRequest == "agent-presets" &&
                 kmpSessionControlStore.snapshot.requestTokens["agent-presets"] != nil
             if tracksPresets {
-                notice("Agent 预设诊断", "收到响应，开始处理")
+                notice("Agent preset diagnostics", "Response received, processing")
             }
             let transition = dispatchSessionControlAction(action)
             if tracksPresets {
                 if transition.applied { agentPresetsLoadError = nil }
-                notice("Agent 预设诊断", "响应处理完成 applied=\(transition.applied)")
+                notice("Agent preset diagnostics", "Response processed applied=\(transition.applied)")
             }
             // KMP 响应事务已原子完成 active 并可能启动 queued；
             // 这里不能再按 kind finish，否则会误结束新 generation。
@@ -4164,8 +4212,8 @@ final class AppStore: ObservableObject {
         }
     }
 
-    private func recordHistoryFailure(_ message: String, sessionID: String) {
-        historyLoadErrors[sessionID] = message
+    private func recordHistoryFailure(_ error: HistoryLoadError, sessionID: String) {
+        historyLoadErrors[sessionID] = error
         conversationPreparingSessionIDs.remove(sessionID)
         if pendingSnapshotSessionID == sessionID { pendingSnapshotSessionID = nil }
         finishHistoryLoading(sessionID)
@@ -4190,7 +4238,7 @@ final class AppStore: ObservableObject {
         }
         if ["history", "subscribe"].contains(payload.requestType ?? ""),
            let sessionID = payload.sessionID ?? pendingSnapshotSessionID ?? kmpHistoryStore.pendingSessionID {
-            recordHistoryFailure([payload.code, payload.message].compactMap { $0 }.joined(separator: ": "), sessionID: sessionID)
+            recordHistoryFailure(HistoryLoadError(hostText: [payload.code, payload.message].compactMap { $0 }.joined(separator: ": ")), sessionID: sessionID)
         }
         let detail = [payload.code, payload.message].compactMap { $0 }.joined(separator: ": ")
         if payload.requestType == "attachment", let sessionID = payload.sessionID {
@@ -4241,7 +4289,7 @@ final class AppStore: ObservableObject {
         guard correlatedControlFailure != false else { return }
         if payload.requestType == "agent-presets" {
             agentPresetsLoadError = String(localized: "Agent 预设加载失败，请重试。")
-            notice("Agent 预设诊断", "网关返回错误 code=\(payload.code ?? "unknown")", isError: true)
+            notice("Agent preset diagnostics", "Gateway returned an error code=\(payload.code ?? "unknown")", isError: true)
             return
         }
         lastError = detail
@@ -4891,10 +4939,11 @@ final class AppStore: ObservableObject {
         step: Int?
     ) {
         let detail: String?
-        if let step, let progressDetail = progress.detail, !progressDetail.hasPrefix("第 \(step) 步") {
-            detail = "第 \(step) 步 · \(progressDetail)"
-        } else if let step, progress.detail == nil {
-            detail = "第 \(step) 步"
+        let stepLabel = step.map { String(localized: "activity.step", defaultValue: "第 \($0) 步") }
+        if let stepLabel, let progressDetail = progress.detail, !progress.detailIsStepLabel {
+            detail = String(localized: "activity.step.detail", defaultValue: "\(stepLabel) · \(progressDetail)")
+        } else if let stepLabel, progress.detail == nil {
+            detail = stepLabel
         } else {
             detail = progress.detail
         }
@@ -4931,19 +4980,19 @@ final class AppStore: ObservableObject {
             pluginUpdateRequestID = nil
             pluginPendingName = nil
             pluginUpdateStep = "unverified"
-            pluginNotice = "连接中断，更新及恢复结果待核实，请重连后检查实际版本"
+            pluginNotice = String(localized: "连接中断，更新及恢复结果待核实，请重连后检查实际版本")
         }
         if pluginToggleRequestID != nil {
             pluginNotice = pluginPendingName == "dsh-plugin-mobile-gateway"
-                ? "网关连接已断开，停用结果待重连确认。若已停用，请从 DSH Web 或 CLI 重新开启。"
-                : "连接已断开，操作结果待重连确认"
+                ? String(localized: "网关连接已断开，停用结果待重连确认。若已停用，请从 DSH Web 或 CLI 重新开启。")
+                : String(localized: "连接已断开，操作结果待重连确认")
             pluginToggleRequestID = nil
             pluginPendingName = nil
         }
         messageSubmissionTimeout?.cancel()
         messageSubmissionPending = false
         queueActionTimeout?.cancel()
-        if queueState.pendingItemId != nil { queueState = queueStore.failPending(message: "连接已中断，请重新连接后确认队列状态".rawUiMessage) }
+        if queueState.pendingItemId != nil { queueState = queueStore.failPending(message: UiMessage(key: "queue.connectionLost", args: [])) }
         assistantStreamState.disconnect()
         resetRemoteSearchForOffline()
         // Keep the prepared destination, but require a fresh activation after
@@ -5195,7 +5244,7 @@ final class AppStore: ObservableObject {
         case GatewayQuestionAction.cancel.rawValue:
             questionEffectExecutor.cancelQuestion(rpcId: effect.rpcId, sessionId: effect.sessionId)
         default:
-            lastError = "KMP Question 返回未知 effect：\(effect.action)"
+            lastError = L10n.internalError("KMP Question returned unknown effect: \(effect.action)")
         }
     }
 
@@ -5361,7 +5410,7 @@ final class AppStore: ObservableObject {
 
         if let effect = change.effect {
             guard effect.action == "request-page" else {
-                lastError = "KMP History 返回未知 effect：\(effect.action)"
+                lastError = L10n.internalError("KMP History returned unknown effect: \(effect.action)")
                 return
             }
             requestHistoryPage(for: effect.sessionId, beforeSeq: effect.beforeSequence)
@@ -5397,7 +5446,7 @@ final class AppStore: ObservableObject {
             case "REPEATED_CURSOR":
                 message = String(localized: "history.cursor.loop", defaultValue: "网关重复返回历史游标，已停止自动续页以避免循环。")
             default:
-                message = "KMP History 分页失败（\(change.failureCode ?? "unknown")）"
+                message = L10n.internalError("KMP History pagination failed (\(change.failureCode ?? "unknown"))")
             }
             lastError = message
             notice(
@@ -5424,7 +5473,7 @@ final class AppStore: ObservableObject {
                 sessionId: change.sessionID
             )
         default:
-            lastError = "KMP History 返回未知 outcome：\(change.outcome)"
+            lastError = L10n.internalError("KMP History returned unknown outcome: \(change.outcome)")
         }
     }
     @discardableResult
@@ -5575,7 +5624,7 @@ final class AppStore: ObservableObject {
         let startedAt = Date()
         if effect.requestKey == "agent-presets" {
             agentPresetsLoadError = nil
-            notice("Agent 预设诊断", "开始请求 token=\(effect.requestToken) connected=\(gateway.state.isConnected)")
+            notice("Agent preset diagnostics", "Request started token=\(effect.requestToken) connected=\(gateway.state.isConnected)")
         }
         tracker.begin(effect.requestKey, timeout: sessionControlRequestTimeout) { [weak self] in
             guard let self,
@@ -5589,7 +5638,7 @@ final class AppStore: ObservableObject {
             ))
             if effect.requestKey == "agent-presets" {
                 self.agentPresetsLoadError = String(localized: "Agent 预设加载超时，请重试。")
-                self.notice("Agent 预设诊断", "请求超时 token=\(effect.requestToken) elapsed=\(Date().timeIntervalSince(startedAt))s connected=\(self.gateway.state.isConnected)", isError: true)
+                self.notice("Agent preset diagnostics", "Request timed out token=\(effect.requestToken) elapsed=\(Date().timeIntervalSince(startedAt))s connected=\(self.gateway.state.isConnected)", isError: true)
                 return
             }
             if let sessionID = effect.sessionId, self.preparedConversationActivationKey != sessionID { return }
@@ -5636,14 +5685,14 @@ final class AppStore: ObservableObject {
                 sessionControlEffectExecutor.setDefault(target: target, value: value)
             }
         default:
-            lastError = "KMP SessionControl 返回未知 effect：\(effect.kind)"
+            lastError = L10n.internalError("KMP SessionControl returned unknown effect: \(effect.kind)")
         }
     }
     private func showOfflineHistoryBoundary() {
         guard let id = selectedSessionId, selectedConversationItems.isEmpty,
               events[id, default: []].isEmpty else { return }
         conversationPreparingSessionIDs.remove(id)
-        historyLoadErrors[id] = "此会话尚未缓存，连接后可加载聊天内容"
+        historyLoadErrors[id] = .notCached
     }
 
     private func resetRemoteSearchForOffline() {
