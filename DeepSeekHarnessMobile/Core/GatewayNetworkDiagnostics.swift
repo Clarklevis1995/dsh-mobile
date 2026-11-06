@@ -110,7 +110,7 @@ struct GatewayNetworkDiagnosticsView: View {
     @StateObject private var monitor = GatewayNetworkDiagnosticsMonitor()
     @State private var selectedMetric = 0
     @State private var pageVisible = false
-    private let titles = ["延迟", "丢包", "抖动", "流量"]
+    private let titles: [LocalizedStringKey] = [LocalizedStringKey("延迟"), LocalizedStringKey("丢包"), LocalizedStringKey("抖动"), LocalizedStringKey("流量")]
     private var snapshot: NetworkDiagnosticsSnapshot { monitor.snapshot }
 
     var body: some View {
@@ -129,15 +129,15 @@ struct GatewayNetworkDiagnosticsView: View {
                         GatewayConnectionPathView(paths: gateway.connectionPaths)
                     }
                     HStack {
-                        metric("往返延迟", number(snapshot.roundTripMs, unit: " ms"))
-                        metric("探测丢包率", number(snapshot.lossPercent, unit: "%"))
+                        metric(LocalizedStringKey("往返延迟"), number(snapshot.roundTripMs, unit: " ms"))
+                        metric(LocalizedStringKey("探测丢包率"), number(snapshot.lossPercent, unit: "%"))
                     }
                     HStack {
-                        metric("延迟抖动", number(snapshot.jitterMs, unit: " ms"))
-                        metric("接收速率", rate(snapshot.receivedBytesPerSecond))
+                        metric(LocalizedStringKey("延迟抖动"), number(snapshot.jitterMs, unit: " ms"))
+                        metric(LocalizedStringKey("接收速率"), rate(snapshot.receivedBytesPerSecond))
                     }
                     Picker("网络指标", selection: $selectedMetric) {
-                        ForEach(titles.indices, id: \.self) { index in Text(LocalizedStringKey(titles[index])).tag(index) }
+                        ForEach(titles.indices, id: \.self) { index in Text(titles[index]).tag(index) }
                     }
                     .pickerStyle(.segmented)
                     chart
@@ -193,15 +193,15 @@ struct GatewayNetworkDiagnosticsView: View {
             ForEach(Array(samples.enumerated()), id: \.offset) { _, sample in
                 let value = metricValue(sample)
                 if value >= 0 {
-                    LineMark(x: .value("秒", sample.elapsedSeconds), y: .value("值", value),
-                             series: .value("分段", selectedMetric == 1 || selectedMetric == 3 ? "rx" : "rx-\(sample.segment)"))
+                    LineMark(x: .value(LocalizedStringKey("秒"), sample.elapsedSeconds), y: .value(LocalizedStringKey("值"), value),
+                             series: .value(LocalizedStringKey("分段"), selectedMetric == 1 || selectedMetric == 3 ? "rx" : "rx-\(sample.segment)"))
                         .foregroundStyle(Color.accentColor)
-                    PointMark(x: .value("秒", sample.elapsedSeconds), y: .value("值", value))
+                    PointMark(x: .value(LocalizedStringKey("秒"), sample.elapsedSeconds), y: .value(LocalizedStringKey("值"), value))
                         .symbolSize(6).foregroundStyle(Color.accentColor)
                 }
                 if selectedMetric == 3 {
-                    LineMark(x: .value("秒", sample.elapsedSeconds), y: .value("值", sample.sentBytesPerSecond / 1024),
-                             series: .value("分段", "tx"))
+                    LineMark(x: .value(LocalizedStringKey("秒"), sample.elapsedSeconds), y: .value(LocalizedStringKey("值"), sample.sentBytesPerSecond / 1024),
+                             series: .value(LocalizedStringKey("分段"), "tx"))
                         .foregroundStyle(Color.orange)
                 }
             }

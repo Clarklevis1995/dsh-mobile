@@ -12,8 +12,17 @@ private enum LogExportHour {
 }
 
 struct LogExportView: View {
-    private enum Preset: String, CaseIterable {
-        case hour = "1小时", today = "今天", day = "24小时", custom = "自定义"
+    private enum Preset: CaseIterable {
+        case hour, today, day, custom
+
+        var title: String {
+            switch self {
+            case .hour: String(localized: "1小时")
+            case .today: String(localized: "今天")
+            case .day: String(localized: "24小时")
+            case .custom: String(localized: "自定义")
+            }
+        }
     }
     private struct RangeKey: Hashable { let start: Date; let end: Date; let retry: Int }
     private struct Editor: Identifiable {
@@ -22,7 +31,9 @@ struct LogExportView: View {
         let value: Date
         var id: String { "\(isStart)-\(isDate)" }
         var title: String {
-            isStart ? (isDate ? "开始日期" : "开始时间") : (isDate ? "结束日期" : "结束时间")
+            isStart
+                ? (isDate ? String(localized: "开始日期") : String(localized: "开始时间"))
+                : (isDate ? String(localized: "结束日期") : String(localized: "结束时间"))
         }
     }
     @State private var start = LogExportHour.start(of: Date())
@@ -47,11 +58,11 @@ struct LogExportView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                section("时间范围") {
+                section(LocalizedStringKey("时间范围")) {
                     VStack(spacing: 16) {
                         Picker("时间范围", selection: Binding(get: { preset }, set: select)) {
                             ForEach(Preset.allCases, id: \.self) { value in
-                                Text(LocalizedStringKey(value.rawValue)).tag(value)
+                                Text(value.title).tag(value)
                             }
                         }
                         .pickerStyle(.segmented)
@@ -59,8 +70,8 @@ struct LogExportView: View {
 
                         Divider()
                         VStack(spacing: 8) {
-                            timeRow("开始", value: start, isStart: true)
-                            timeRow("结束", value: end, isStart: false)
+                            timeRow(LocalizedStringKey("开始"), value: start, isStart: true)
+                            timeRow(LocalizedStringKey("结束"), value: end, isStart: false)
                         }
                         Divider()
                         ViewThatFits(in: .horizontal) {
@@ -80,7 +91,7 @@ struct LogExportView: View {
                     // 导出期间只拦截编辑，避免原生控件短暂禁用、恢复时产生置灰闪烁。
                     .allowsHitTesting(!busy)
                 }
-                section("导出内容") {
+                section(LocalizedStringKey("导出内容")) {
                     HStack(spacing: 12) {
                         Image(systemName: "doc.text")
                             .appFont(.system(size: 20))
@@ -108,7 +119,7 @@ struct LogExportView: View {
                         Button("选择最近24小时") { select(.day) }
                     }
                 }
-                Text("日志按小时留存，仅导出所选时段\n旧日志会自动清理，可选日期以本机留存为准")
+                Text("log.export.footer")
                     .appFont(SettingsTypography.description).foregroundStyle(.secondary)
             }
             .padding(24).frame(maxWidth: 600)
@@ -365,7 +376,7 @@ private struct LogDateTimePicker: View {
                 .padding(16)
             }
             .appFont(SettingsTypography.item)
-            .navigationTitle(LocalizedStringKey(title))
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

@@ -295,7 +295,7 @@ final class AgentBackgroundKeepAliveManager: NSObject, AgentLongRunningKeepAlive
         } catch {
             stopSilentAudio()
 #if DEBUG
-            appPrint("[AgentKeepAlive] 无法启动静音音频：\(error.localizedDescription)")
+            appPrint("[AgentKeepAlive] Failed to start silent audio: \(error.localizedDescription)")
 #endif
         }
     }
@@ -411,7 +411,7 @@ extension AgentBackgroundKeepAliveManager: @preconcurrency CLLocationManagerDele
 #if DEBUG
         let locationError = error as? CLError
         if locationError?.code != .locationUnknown {
-            appPrint("[AgentKeepAlive] 后台定位失败：\(error.localizedDescription)")
+            appPrint("[AgentKeepAlive] Background location failed: \(error.localizedDescription)")
         }
 #endif
     }

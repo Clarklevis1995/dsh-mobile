@@ -249,8 +249,7 @@ struct TailscaleTunnelSettingsView: View {
                             ProgressView().controlSize(.mini)
                                 .accessibilityIdentifier("tunnel-starting-progress")
                         } else if tunnel.state.peerCount > 0 {
-                            // 与 Android 同形：先用词条，再拼数字，不把插值当成一条本地化键。
-                            Text(verbatim: "\(String(localized: "对端数量")) \(tunnel.state.peerCount)")
+                            Text(verbatim: String(localized: "tunnel.peers.count", defaultValue: "对端数量 \(tunnel.state.peerCount)"))
                                 .appFont(SettingsTypography.item)
                                 .foregroundStyle(.secondary)
                         }
@@ -258,10 +257,10 @@ struct TailscaleTunnelSettingsView: View {
                     .accessibilityIdentifier("tunnel-status-row")
 
                     if let address = tunnel.state.nodeAddress {
-                        LabeledContent("本机地址", value: address)
+                        LabeledContent(LocalizedStringKey("本机地址"), value: address)
                     }
                     if let reason = tunnelFailureText(tunnel.state.failureKind) {
-                        LabeledContent("失败原因", value: reason)
+                        LabeledContent(LocalizedStringKey("失败原因"), value: reason)
                     }
                     if let authUrl = tunnel.state.authUrl, tunnel.accountAddition?.confirmed != false {
                         Button("打开登录链接") {
@@ -352,7 +351,7 @@ struct TailscaleTunnelSettingsView: View {
             if scenePhase == .active { await tunnel.refreshAfterReturningToApp() }
         }
         .sheet(item: $editingAccount) { account in
-            TailscaleAccountEditor(title: "重命名", name: account.name) { name in
+            TailscaleAccountEditor(title: LocalizedStringKey("重命名"), name: account.name) { name in
                 settings.renameAccount(account.id, name: name)
             }
         }
