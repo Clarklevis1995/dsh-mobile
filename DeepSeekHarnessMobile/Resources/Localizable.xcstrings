@@ -3,7 +3,6 @@
   "strings" : {
     "schedule.date.pattern" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "MMM d, yyyy HH:mm"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "yyyy年M月d日 HH:mm"}}}},
     "加载更多任务" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Load more tasks"}}}},
-    "状态未知" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Unknown status"}}}},
     "定时任务状态" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Scheduled task status"}}}},
     "删除已结束的定时任务" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Delete ended scheduled tasks"}}}},
     "删除已结束的定时任务？" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Delete ended scheduled tasks?"}}}},
@@ -19,8 +18,6 @@
     "使用默认工作区" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Use the default workspace"}}}},
     "默认工作区" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Default workspace"}}}},
     "搜索工作区" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Search workspaces"}}}},
-    "请选择执行位置。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose where to run the task."}}}},
-    "当前任务尚无可用的关联会话，请选择新建会话。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "This task has no available linked conversation. Choose a new conversation."}}}},
     "当前网关不支持修改执行位置，请升级网关" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "This gateway cannot change task destinations. Upgrade the gateway."}}}},
     "保留毫秒" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Keep milliseconds"}}}},
     "schedule.repeat.interval" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Every %1$@ %2$@"}}, "zh-Hans": {"stringUnit": {"state": "translated", "value": "每 %1$@ %2$@执行"}}}},
@@ -43,15 +40,6 @@
     "Cron 使用 5 个字段；RRULE 保留 DTSTART 中的时区。规则由宿主校验，出错后可继续编辑。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Cron uses five fields. RRULE uses the time zone in DTSTART. The host validates the rule; you can keep editing after an error."}}}},
     "请选择有效的 IANA 时区。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose a valid IANA time zone."}}}},
     "请选择有效的日期和时间。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose a valid date and time."}}}},
-    "请输入 Cron 或 DTSTART/RRULE 规则。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Enter a Cron or DTSTART/RRULE rule."}}}},
-    "Cron 需要 5 个字段；RRULE 需要 DTSTART 和 RRULE 两行。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Cron needs five fields; RRULE needs DTSTART and RRULE lines."}}}},
-    "请选择重复类型。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose a repeat frequency."}}}},
-    "重复间隔请输入 1 到 10000 的整数。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Enter an integer from 1 to 10000 for the repeat interval."}}}},
-    "请选择有效日期。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Choose a valid date."}}}},
-    "时间格式为 HH:mm:ss，可保留最多 3 位毫秒。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Use HH:mm:ss, with up to three fractional digits."}}}},
-    "每周至少选择一天。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Select at least one weekday."}}}},
-    "每月日期请输入 1 到 31。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "Enter a day from 1 to 31."}}}},
-    "此重复规则仅支持整秒，请将毫秒设为 000。" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "This recurrence supports whole seconds. Set milliseconds to 000."}}}},
     "分钟" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "minutes"}}}},
     "小时" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "hours"}}}},
     "天" : {"extractionState": "manual", "localizations": {"en": {"stringUnit": {"state": "translated", "value": "days"}}}},
@@ -734,6 +722,278 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "服务端未接受队列操作"
+          }
+        }
+      }
+    },
+    "schedule.status.active" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Running"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行中"
+          }
+        }
+      }
+    },
+    "schedule.status.ended" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ended"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已结束"
+          }
+        }
+      }
+    },
+    "schedule.status.paused" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暂停"
+          }
+        }
+      }
+    },
+    "schedule.status.unknown" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown status"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状态未知"
+          }
+        }
+      }
+    },
+    "schedule.target.missing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose where to run the task."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择执行位置。"
+          }
+        }
+      }
+    },
+    "schedule.target.noLinkedSession" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This task has no available linked conversation. Choose a new conversation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前任务尚无可用的关联会话，请选择新建会话。"
+          }
+        }
+      }
+    },
+    "schedule.timing.advancedEmpty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a Cron or DTSTART/RRULE rule."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入 Cron 或 DTSTART/RRULE 规则。"
+          }
+        }
+      }
+    },
+    "schedule.timing.advancedShape" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cron needs five fields; RRULE needs DTSTART and RRULE lines."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cron 需要 5 个字段；RRULE 需要 DTSTART 和 RRULE 两行。"
+          }
+        }
+      }
+    },
+    "schedule.timing.frequencyMissing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a repeat frequency."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择重复类型。"
+          }
+        }
+      }
+    },
+    "schedule.timing.intervalRange" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an integer from 1 to 10000 for the repeat interval."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重复间隔请输入 1 到 10000 的整数。"
+          }
+        }
+      }
+    },
+    "schedule.timing.invalidDate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a valid date."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择有效日期。"
+          }
+        }
+      }
+    },
+    "schedule.timing.invalidTimeZone" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a valid IANA time zone."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择有效的 IANA 时区。"
+          }
+        }
+      }
+    },
+    "schedule.timing.monthDayRange" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a day from 1 to 31."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每月日期请输入 1 到 31。"
+          }
+        }
+      }
+    },
+    "schedule.timing.timeFormat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use HH:mm:ss, with up to three fractional digits."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "时间格式为 HH:mm:ss，可保留最多 3 位毫秒。"
+          }
+        }
+      }
+    },
+    "schedule.timing.weekdayMissing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select at least one weekday."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每周至少选择一天。"
+          }
+        }
+      }
+    },
+    "schedule.timing.wholeSeconds" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This recurrence supports whole seconds. Set milliseconds to 000."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此重复规则仅支持整秒，请将毫秒设为 000。"
           }
         }
       }

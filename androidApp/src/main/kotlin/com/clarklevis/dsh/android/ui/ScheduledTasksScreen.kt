@@ -642,7 +642,7 @@ internal fun ScheduledTaskCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    if (task.status == "active") formatScheduleDate(task.scheduledAt) else appText(com.clarklevis.dsh.shared.protocol.ScheduleTaskPresentation.statusSource(task.status)),
+                    if (task.status == "active") formatScheduleDate(task.scheduledAt) else appText(com.clarklevis.dsh.shared.protocol.ScheduleTaskPresentation.statusLabel(task.status)),
                     color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp,
                     modifier = Modifier.weight(1f)
                 )
@@ -668,7 +668,7 @@ internal fun ScheduledTaskCard(
                     ScheduleDetail(appText("执行规则"), fullRule(task))
                     ScheduleDetail(appText("下次计划时间"), if (task.status == "active") formatScheduleDate(task.scheduledAt) else appText("无"))
                     ScheduleDetail(appText("所属会话"), sessionTitle)
-                    ScheduleDetail(appText("状态"), appText(com.clarklevis.dsh.shared.protocol.ScheduleTaskPresentation.statusSource(task.status)))
+                    ScheduleDetail(appText("状态"), appText(com.clarklevis.dsh.shared.protocol.ScheduleTaskPresentation.statusLabel(task.status)))
                     ScheduleDetail(appText("最近投递"), task.lastDelivery?.get("deliveredAt")?.stringValue?.let { appText("已投递 · %1\$s", formatScheduleDate(it)) } ?: appText("暂无投递记录"))
                     if (onShowHistory != null) {
                         HorizontalDivider()
