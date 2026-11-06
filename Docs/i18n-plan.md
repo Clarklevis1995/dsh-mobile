@@ -48,7 +48,7 @@ flowchart LR
 ### Phase 0 — guard
 - Extend the existing `scripts/verify-localizations.py`: a comment-aware lexer scans `.swift`/`.kt` under `DeepSeekHarnessMobile/`, `AgentLiveActivityWidget/`, `androidApp/src/main/` and `shared/src/*Main/` and flags any Chinese string literal that is not (a) an argument of an iOS localizing API (`String(localized:)`, `Text(`, `Button(`, `.navigationTitle(` …) whose key has an `en` entry in `Localizable.xcstrings`, (b) inside `appText(...)` / `appTextKey(...)` with an entry in `AndroidStrings`, or (c) on a line marked `// i18n-ignore: <reason>` (regexes, legacy-data matchers, zh-only formats inside a zh branch). `--platform ios|widget|android|shared` scopes the scan.
 - `appTextKey("中文")` (Android) marks a key stored now and resolved later with `appText(value)`; the verifier checks it like `appText`.
-- Enforcement: Gradle `:androidApp:verifyLocalizations` runs before every Android unit-test task; the iOS CI workflow runs the script before building. The Android PR scopes the Gradle task to `--android-only --platform android --platform shared` (the iOS catalogs and sources are not localized yet); the iOS PR widens it to all platforms and adds the CI step.
+- Enforcement: Gradle `:androidApp:verifyLocalizations` runs before every Android unit-test task; the iOS CI workflow runs the script before building.
 - No baseline file: the scan stays red until the phases below are done.
 
 ### Phase 1 — shared `UiMessage`
