@@ -352,6 +352,7 @@ private fun DshRenderedMarkdownText(
         DshMarkdownTextApplier.get(context, palette)
     }
     val knownFilePaths = remember(knownFiles) { knownFiles.map { it.path } }
+    val onReply = LocalMessageQuote.current
     var messageMenuAnchor by remember { mutableStateOf<androidx.compose.ui.unit.IntOffset?>(null) }
     var selectionText by remember { mutableStateOf<String?>(null) }
     selectionText?.let { source ->
@@ -443,6 +444,12 @@ private fun DshRenderedMarkdownText(
                 onClick = { messageMenuAnchor = null; context.copyMarkdownText(markdownPlainText(markwon.parse(copyMarkdown))) })
             DshMenuItem(text = { androidx.compose.material3.Text(com.clarklevis.dsh.android.localization.appText("选择文字")) },
                 onClick = { messageMenuAnchor = null; selectionText = copyMarkdown })
+            if (onReply != null) DshMenuItem(
+                text = { androidx.compose.material3.Text(com.clarklevis.dsh.android.localization.appText("回复")) },
+                onClick = {
+                    messageMenuAnchor = null
+                    onReply(markdownPlainText(markwon.parse(copyMarkdown)))
+                })
         }
     }
     }

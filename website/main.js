@@ -1,28 +1,6 @@
 (() => {
   const root = document.documentElement;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const colorScheme = window.matchMedia('(prefers-color-scheme: dark)');
-  try {
-    const savedTheme = localStorage.getItem('whaleness-site-theme');
-    if (savedTheme === 'light' || savedTheme === 'dark') root.dataset.theme = savedTheme;
-  } catch { /* The page also works when browser storage is unavailable. */ }
-
-  const themeButton = document.getElementById('theme-toggle');
-  const isDark = () => root.dataset.theme ? root.dataset.theme === 'dark' : colorScheme.matches;
-  const updateThemeButton = () => {
-    const next = isDark() ? '浅色' : '深色';
-    themeButton.textContent = `${next}外观`;
-    themeButton.setAttribute('aria-label', `切换至${next}外观`);
-    document.querySelector('meta[name="theme-color"]').content = isDark() ? '#101722' : '#f7f9fc';
-  };
-  themeButton.addEventListener('click', () => {
-    root.dataset.theme = isDark() ? 'light' : 'dark';
-    try { localStorage.setItem('whaleness-site-theme', root.dataset.theme); } catch {}
-    updateThemeButton();
-  });
-  colorScheme.addEventListener('change', updateThemeButton);
-  updateThemeButton();
-
   const header = document.querySelector('.header');
   const menuButton = document.querySelector('.menu-toggle');
   const closeMenu = () => {
@@ -180,10 +158,6 @@
     sizing.setAttribute('aria-hidden', 'true');
     sizing.textContent = caption;
     setupCaption.parentElement.appendChild(sizing);
-  });
-  new Set(setupSteps.flat().map(view => view.file)).forEach(file => {
-    const preload = new Image();
-    preload.src = `website/assets/setup/${file}.webp`;
   });
   const selectSetupImage = view => {
     setupImage.src = `website/assets/setup/${view.file}.webp`;

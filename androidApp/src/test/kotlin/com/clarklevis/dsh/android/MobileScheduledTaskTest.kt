@@ -36,6 +36,12 @@ class MobileScheduledTaskTest {
             ]}
         """.trimIndent())
         val tasks = frame.items.orEmpty().mapNotNull(MobileScheduledTask::from)
+        val paused = tasks.first().copy(id = "paused-news", status = "paused")
+        val withPaused = tasks + paused
+        assertEquals(listOf("paused-news"), filteredScheduledTasks(withPaused,
+            ScheduledTaskStatusFilter.PAUSED, "新闻").map { it.id })
+        assertEquals(listOf("ended-news"), filteredScheduledTasks(withPaused,
+            ScheduledTaskStatusFilter.ENDED, "新闻").map { it.id })
         assertEquals(listOf("active-news"), filteredScheduledTasks(tasks,
             ScheduledTaskStatusFilter.ACTIVE, " 科技 ").map { it.id })
         assertEquals(listOf("ended-news"), filteredScheduledTasks(tasks,

@@ -1508,8 +1508,12 @@ final class AppStore: ObservableObject {
         return await prepareNewConversation() && selectedSessionId != nil
     }
 
-    func prepareNewConversation() async -> Bool {
-        guard !isAllWorkspacesSelected else {
+    func prepareNewConversation(useDefaultWorkspace: Bool = false) async -> Bool {
+        guard !useDefaultWorkspace || supportsSessionCreation else {
+            lastError = String(localized: "请更新并重启 Mobile Gateway，以支持发送消息前配置新会话")
+            return false
+        }
+        guard useDefaultWorkspace || !isAllWorkspacesSelected else {
             lastError = WorkspaceSessionCopy.creationPrompt
             return false
         }
@@ -1525,7 +1529,7 @@ final class AppStore: ObservableObject {
         var sessionID: String?
         if supportsSessionCreation {
             do {
-                sessionID = try await gateway.createSession(workspaceId: activeWorkspace?.id)
+                sessionID = try await gateway.createSession(workspaceId: useDefaultWorkspace ? nil : activeWorkspace?.id)
             } catch {
                 if !Task.isCancelled { lastError = error.localizedDescription }
                 return false
@@ -1709,14 +1713,35 @@ final class AppStore: ObservableObject {
     @Published private(set) var scheduledTasksTotal = 0
     @Published private(set) var scheduleHistory: JSONValue?
     private var scheduleHistoryRequestID: String?
+    private var scheduleHistoryTaskID: String?
+    private var scheduleHistoryAppending = false
+    @Published private(set) var scheduleHistoryLoading = false
+    @Published private(set) var scheduleHistoryError: String?
 
     func loadScheduleHistory(_ task: ScheduledTask, before: String? = nil) {
+        if scheduleHistoryLoading && scheduleHistoryTaskID == task.id { return }
         let id = UUID().uuidString
         scheduleHistoryRequestID = id
+        scheduleHistoryTaskID = task.id
+        scheduleHistoryAppending = before != nil
         if before == nil { scheduleHistory = nil }
+        scheduleHistoryError = nil
+        guard gateway.state.isConnected else {
+            scheduleHistoryLoading = false
+            scheduleHistoryError = String(localized: "请连接网关后重试。")
+            return
+        }
+        scheduleHistoryLoading = true
         var payload: [String: Any] = ["type": "schedule-history", "requestId": id, "id": task.id, "limit": 100]
         if let before { payload["before"] = before }
         sendManagement(payload)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(12))
+            guard let self, self.scheduleHistoryRequestID == id, self.scheduleHistoryLoading else { return }
+            self.scheduleHistoryRequestID = nil
+            self.scheduleHistoryLoading = false
+            self.scheduleHistoryError = String(localized: "运行轨迹加载超时，请重试")
+        }
     }
 
     func filterScheduledTasks(active: Bool?) {
@@ -1978,12 +2003,17 @@ final class AppStore: ObservableObject {
     }
 
     @discardableResult
-    func updateScheduledTask(_ task: ScheduledTask, title: String, prompt: String, change: JSONValue?) -> String? {
+    func updateScheduledTask(_ task: ScheduledTask, title: String, prompt: String, change: JSONValue?, target: JSONValue? = nil) -> String? {
+        guard target == nil || supportsScheduleManagement else {
+            scheduledTaskMutationError = String(localized: "当前网关不支持修改执行位置，请升级网关")
+            return nil
+        }
         guard beginScheduledTaskMutation(task, kind: supportsScheduleManagement ? "schedule-edit" : "schedule-update") else { return nil }
         let requestID = scheduledTaskMutationRequestID!
         if supportsScheduleManagement {
-            var patch: [String: JSONValue] = ["title": .string(title.trimmingCharacters(in: .whitespacesAndNewlines)), "prompt": .string(prompt)]
+            var patch: [String: JSONValue] = ["title": .string(title.trimmingCharacters(in: .whitespacesAndNewlines)), "prompt": .string(prompt.trimmingCharacters(in: .whitespacesAndNewlines))]
             if let change { patch["timing"] = change }
+            if let target { patch["target"] = target }
             sendManagement(["type": "schedule-edit", "requestId": requestID, "id": task.id,
                 "action": "update", "expectedUpdatedAt": task.raw["updatedAt"]?.foundationValue ?? NSNull(),
                 "patch": JSONValue.object(patch).foundationValue])
@@ -3168,13 +3198,21 @@ final class AppStore: ObservableObject {
             return
         }
         if frame.kind == "error", frame.requestType == "schedule-history", frame.requestId == scheduleHistoryRequestID {
-            scheduleHistory = .object(["records": .string(scheduledTaskFailureMessage(
-                frame.code, frame.message, fallback: String(localized: "执行记录加载失败")))])
+            scheduleHistoryLoading = false
+            scheduleHistoryError = scheduledTaskFailureMessage(
+                frame.code, frame.message, fallback: String(localized: "运行轨迹加载失败"))
             return
         }
         if frame.kind == "schedule-history", frame.requestId == scheduleHistoryRequestID {
-            scheduleHistory = .object(["records": .array(frame.records ?? []), "nextBefore": frame.nextBefore.map(JSONValue.string) ?? .null,
-                "retention": frame.retention ?? .null])
+            let previous = scheduleHistoryAppending ? (scheduleHistory?["records"]?.arrayValue ?? []) : []
+            var seen = Set<JSONValue>()
+            let records = (previous + (frame.records ?? [])).filter { seen.insert($0).inserted }
+            scheduleHistory = .object(["records": .array(records), "nextBefore": frame.nextBefore.map(JSONValue.string) ?? .null,
+                "retention": frame.retention ?? .null,
+                "earlierRecordsUnavailable": .bool(frame.earlierRecordsUnavailable == true),
+                "earlierRecordsPruned": .bool(frame.earlierRecordsPruned == true)])
+            scheduleHistoryLoading = false
+            scheduleHistoryError = nil
             return
         }
         if frame.kind == "schedule-catalog" || frame.kind == "schedule-list" {

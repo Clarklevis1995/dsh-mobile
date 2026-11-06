@@ -4,6 +4,8 @@ import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalView
@@ -15,6 +17,7 @@ import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
@@ -46,9 +49,149 @@ class ConversationKeyboardDeviceTest {
     val compose = createComposeRule()
 
     @Test
+    fun compactComposerExpandsAndCollapsesWithoutReplacingEditorOrLosingDraft() {
+        val fixture = showConversation()
+        try {
+            val editor = compose.onNodeWithTag("composer-input")
+            val composer = compose.onNodeWithTag("composer-morph-layout")
+            val originalEditorID = editor.fetchSemanticsNode().id
+            val compactHeight = composer.fetchSemanticsNode().boundsInRoot.height
+            compose.onNodeWithTag("composer-action").assertIsNotDisplayed()
+            captureComposer("composer-compact.png")
+            editor.performTouchInput { click() }
+            editor.assertIsFocused()
+            captureComposer("composer-focused-before-ime.png")
+            waitForIme(fixture.view, true)
+            compose.onNodeWithTag("composer-action").assertIsDisplayed()
+            assertTrue(composer.fetchSemanticsNode().boundsInRoot.height > compactHeight + 60f)
+            assertTrue(editor.fetchSemanticsNode().id == originalEditorID)
+            val draft = "第一行草稿".repeat(40) + "\n第二行草稿"
+            editor.performTextInput(draft)
+            captureComposer("composer-expanded.png")
+            compose.onNodeWithTag("conversation-timeline").performTouchInput { click(Offset(center.x, 40f)) }
+            waitForIme(fixture.view, false)
+            editor.assertIsNotFocused().assertTextContains(draft)
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithTag("composer-compact-preview", useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertTrue(layouts.single().lineCount == 1 && layouts.single().isLineEllipsized(0))
+            compose.onNodeWithTag("composer-action").assertIsNotDisplayed()
+            assertTrue(kotlin.math.abs(composer.fetchSemanticsNode().boundsInRoot.height - compactHeight) < 2f)
+            assertTrue(editor.fetchSemanticsNode().id == originalEditorID)
+            editor.performTouchInput { click() }
+            editor.assertIsFocused().assertTextContains("第二行草稿", substring = true)
+            compose.onNodeWithTag("composer-compact-preview").assertDoesNotExist()
+        } finally { fixture.holder.close() }
+    }
+
+    @Test
+    fun hintDoesNotJumpWhenFocusChangesBeforeTheAnimationStarts() {
+        val fixture = showConversation()
+        try {
+            val editor = compose.onNodeWithTag("composer-input")
+            val hint = compose.onNodeWithTag("composer-placeholder", useUnmergedTree = true)
+            val card = compose.onNodeWithTag("conversation-composer-column")
+            fun hintPosition(): Offset {
+                val bounds = hint.fetchSemanticsNode().boundsInRoot
+                val container = card.fetchSemanticsNode().boundsInRoot
+                return Offset(bounds.left - container.left, bounds.top - container.top)
+            }
+            val compact = hintPosition()
+            compose.mainClock.autoAdvance = false
+            editor.performTouchInput { click() }
+            editor.assertIsFocused()
+            compose.mainClock.advanceTimeByFrame()
+            org.junit.Assert.assertEquals("聚焦不能先把 hint 跳到顶部", compact.y, hintPosition().y, 2f)
+            var previous = hintPosition()
+            repeat(16) {
+                compose.mainClock.advanceTimeByFrame()
+                val current = hintPosition()
+                assertTrue("展开过程 hint 不能反向跳动", current.y <= previous.y + 1f)
+                assertTrue(current.x <= previous.x + 1f)
+                previous = current
+            }
+            val expanded = hintPosition()
+            assertTrue(expanded.x < compact.x - 30f)
+            compose.mainClock.autoAdvance = true
+            waitForIme(fixture.view, true)
+            compose.waitForIdle()
+            compose.mainClock.autoAdvance = false
+            compose.onNodeWithTag("conversation-timeline").performTouchInput { click(Offset(center.x, 40f)) }
+            editor.assertIsNotFocused()
+            compose.mainClock.advanceTimeByFrame()
+            org.junit.Assert.assertEquals("失焦不能先把 hint 跳回居中", expanded.y, hintPosition().y, 2f)
+            previous = hintPosition()
+            repeat(16) {
+                compose.mainClock.advanceTimeByFrame()
+                val current = hintPosition()
+                assertTrue("收起过程 hint 不能反向跳动", current.y >= previous.y - 1f)
+                assertTrue(current.x >= previous.x - 1f)
+                previous = current
+            }
+            org.junit.Assert.assertEquals(compact.y, hintPosition().y, 1f)
+            org.junit.Assert.assertEquals(compact.x, hintPosition().x, 1f)
+        } finally {
+            compose.mainClock.autoAdvance = true
+            fixture.holder.close()
+        }
+    }
+
+    @Test
+    fun attachmentMenuStaysCompactUntilAnImageIsActuallyAdded() {
+        val fixture = showConversation()
+        try {
+            val editor = compose.onNodeWithTag("composer-input")
+            val card = compose.onNodeWithTag("conversation-composer-column")
+            val compactHeight = card.fetchSemanticsNode().boundsInRoot.height
+            val editorID = editor.fetchSemanticsNode().id
+            compose.onNodeWithContentDescription("添加附件").performTouchInput { click() }
+            compose.onNodeWithText("图片").assertIsDisplayed()
+            compose.onNodeWithText("文件").assertIsDisplayed()
+            editor.assertIsNotFocused()
+            org.junit.Assert.assertEquals(compactHeight, card.fetchSemanticsNode().boundsInRoot.height, 1f)
+            androidx.test.espresso.Espresso.pressBack()
+            editor.assertIsNotFocused()
+            org.junit.Assert.assertEquals(compactHeight, card.fetchSemanticsNode().boundsInRoot.height, 1f)
+            val image = com.clarklevis.dsh.android.platform.AndroidPreparedImage(
+                com.clarklevis.dsh.shared.gateway.GatewayOutgoingImage("image/png",
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+iD1cAAAAASUVORK5CYII="),
+                width = 1, height = 1, byteCount = 68)
+            compose.mainClock.autoAdvance = false
+            compose.runOnIdle { fixture.holder.setPreparedImagesForTest(listOf(image)) }
+            compose.mainClock.advanceTimeByFrame()
+            compose.mainClock.advanceTimeByFrame()
+            val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+            var intermediate = false
+            repeat(18) {
+                val morphHeight = compose.onNodeWithTag("composer-morph-layout").fetchSemanticsNode().boundsInRoot.height
+                val progress = ((morphHeight / density - 42f) / 60f).coerceIn(0f, 1f)
+                val growth = card.fetchSemanticsNode().boundsInRoot.height - compactHeight
+                org.junit.Assert.assertEquals("图片占位与输入框展开必须同一进度", 143f * density * progress, growth, 3f)
+                if (progress > 0.05f && progress < 0.95f) intermediate = true
+                compose.mainClock.advanceTimeByFrame()
+            }
+            assertTrue(intermediate)
+            compose.mainClock.autoAdvance = true
+            editor.assertIsFocused()
+            compose.onNodeWithTag("composer-action").assertIsDisplayed()
+            assertTrue(card.fetchSemanticsNode().boundsInRoot.height > compactHeight + 80f)
+            org.junit.Assert.assertEquals(editorID, editor.fetchSemanticsNode().id)
+        } finally { fixture.holder.close() }
+    }
+
+    private fun captureComposer(name: String) {
+        val image = compose.onNodeWithTag("conversation-composer-column").captureToImage().asAndroidBitmap()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.getExternalFilesDir(null)!!.resolve(name).outputStream().use {
+            image.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+    }
+
+    @Test
     fun emptyComposerSwitchesBetweenWaveformAndKeyboardAndDraftUsesSend() {
         val fixture = showConversation()
         try {
+            compose.onNodeWithTag("composer-input").performClick().assertIsFocused()
             val composer = compose.onNodeWithTag("conversation-composer-column")
             val defaultHeight = composer.fetchSemanticsNode().boundsInRoot.height
             val action = compose.onNodeWithTag("composer-action")
@@ -246,6 +389,7 @@ class ConversationKeyboardDeviceTest {
         val fixture = showConversation()
         try {
             // 现行入口为独立语音模式；文字输入框长按保持系统选择行为。
+            compose.onNodeWithTag("composer-input").performClick().assertIsFocused()
             compose.onNodeWithTag("composer-action").performClick()
             compose.runOnIdle {
                 fixture.holder.messageDraft = "保留草稿"

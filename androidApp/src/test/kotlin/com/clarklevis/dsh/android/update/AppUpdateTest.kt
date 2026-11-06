@@ -51,6 +51,24 @@ class AppUpdateTest {
         selectReleasePageApk("v1.8.0-beta", "")
     }
 
+    @Test fun independentTestBuildsCannotUpdateFromProductionManifest() {
+        assertTrue(supportsInPlaceUpdates("com.clarklevis.dsh.android"))
+        assertFalse(supportsInPlaceUpdates("com.clarklevis.dsh.android.reference"))
+        assertFalse(supportsInPlaceUpdates("com.clarklevis.dsh.android.dev"))
+    }
+
+    @Test fun githubFallbackPrefersNativeAbiAndRetainsUniversalForUnknownAbi() {
+        val json = """[{"tag_name":"v2.0.0","draft":false,"prerelease":false,"assets":[
+            {"name":"app.apk","size":100,"browser_download_url":"https://github.com/Clarklevis1995/dsh-mobile/releases/download/v2.0.0/app.apk"},
+            {"name":"app-arm64-v8a.apk","size":30,"browser_download_url":"https://github.com/Clarklevis1995/dsh-mobile/releases/download/v2.0.0/app-arm64-v8a.apk"}
+        ]}]"""
+        assertTrue(requireNotNull(selectAndroidRelease(json, "1.0.0", listOf("arm64-v8a"))).url.endsWith("app-arm64-v8a.apk"))
+        assertTrue(requireNotNull(selectAndroidRelease(json, "1.0.0", listOf("x86_64"))).url.endsWith("app.apk"))
+        val html = """<a href="/Clarklevis1995/dsh-mobile/releases/download/v2.0.0/app.apk">universal</a>
+            <a href="/Clarklevis1995/dsh-mobile/releases/download/v2.0.0/app-arm64-v8a.apk">native</a>"""
+        assertTrue(selectReleasePageApk("v2.0.0", html, listOf("arm64-v8a")).url.endsWith("app-arm64-v8a.apk"))
+    }
+
     private fun release(
         version: String,
         name: String,
