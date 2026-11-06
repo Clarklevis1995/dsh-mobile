@@ -202,7 +202,7 @@ private struct PluginDetailView: View {
                         if let result = store.pluginUpdateResult { Text(result.displayText).appFont(.footnote.monospaced()) }
                         if !store.pluginUpdateLogs.isEmpty { Text(store.pluginUpdateLogs.joined(separator: "\n")).appFont(.caption.monospaced()) }
                         if let markdown = store.pluginDetail?["markdown"]?.stringValue {
-                            MarkdownContent(markdown.replacingOccurrences(of: #"!\[([^]]*)]\([^)]*\)"#, with: "[图片 · $1]", options: .regularExpression))
+                            MarkdownContent(markdown.replacingOccurrences(of: #"!\[([^]]*)]\([^)]*\)"#, with: String(localized: "plugin.markdown.image", defaultValue: "[图片 · $1]"), options: .regularExpression))
                         }
                     }
                     let entries = bundle.rows.map { row -> MobilePluginRow in
@@ -296,10 +296,10 @@ private struct PluginComponentSheet: View {
                         Text(entry.description).frame(maxWidth: .infinity, alignment: .leading)
                     }
                     VStack(alignment: .leading, spacing: 12) {
-                        componentField("组件 ID", value: entry.id)
-                        if !entry.moduleName.isEmpty { componentField("模块", value: entry.moduleName) }
-                        if let entryID = entry.entryID { componentField("运行条目 ID", value: entryID) }
-                        if let reason = entry.readOnlyReason { componentField("不可修改原因", value: reason) }
+                        componentField(String(localized: "组件 ID"), value: entry.id)
+                        if !entry.moduleName.isEmpty { componentField(String(localized: "模块"), value: entry.moduleName) }
+                        if let entryID = entry.entryID { componentField(String(localized: "运行条目 ID"), value: entryID) }
+                        if let reason = entry.readOnlyReason { componentField(String(localized: "不可修改原因"), value: reason) }
                     }
                     .padding(.top, 8)
                 }

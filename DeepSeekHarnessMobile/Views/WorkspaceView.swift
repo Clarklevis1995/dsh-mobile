@@ -326,7 +326,7 @@ struct WorkspaceView: View {
                 .padding(.leading, 12)
                 .padding(.bottom, 16)
 
-            drawerItem("插件", icon: {
+            drawerItem(String(localized: "插件"), icon: {
                 Image("DshPluginPinwheel")
                     .renderingMode(.template)
                     .resizable()
@@ -334,7 +334,7 @@ struct WorkspaceView: View {
                     .frame(width: 22, height: 22)
                     .frame(width: 24)
             }, action: { selectDrawerItem(onPlugins) })
-            drawerItem("定时任务", icon: {
+            drawerItem(String(localized: "定时任务"), icon: {
                 Image(systemName: "clock")
                     .resizable()
                     .scaledToFit()

@@ -12,6 +12,17 @@
         }
       }
     },
+    "%@ 已下载，点击重新下载" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ downloaded. Tap to download again"
+          }
+        }
+      }
+    },
     "%lld 已完成" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -495,6 +506,23 @@
         }
       }
     },
+    "download.progress" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloading · %1$lld%%"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载 · %1$lld%%"
+          }
+        }
+      }
+    },
     "Host 无法读取旧格式会话，请修复或升级 Host 后重试。原始记录未修改。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -513,6 +541,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lead session"
+          }
+        }
+      }
+    },
+    "log.export.footer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Logs are kept by the hour, and only the selected period is exported.\nOld logs are cleaned up automatically; selectable dates depend on what this device has kept."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日志按小时留存，仅导出所选时段\n旧日志会自动清理，可选日期以本机留存为准"
+          }
+        }
+      }
+    },
+    "plugin.markdown.image" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "[Image · $1]"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "[图片 · $1]"
           }
         }
       }
@@ -651,6 +713,57 @@
         }
       }
     },
+    "schedule.keepRule.daily" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keeps the original daily rule and time zone %1$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留原有每日规则和时区 %1$@。"
+          }
+        }
+      }
+    },
+    "schedule.keepRule.weekly" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keeps the original weekly rule and time zone %1$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留原有每周规则和时区 %1$@。"
+          }
+        }
+      }
+    },
+    "schedule.next.estimate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimated next run · %1$@\nThe Host’s returned time is final"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预计下次执行 · %1$@\n最终以 Host 返回时间为准"
+          }
+        }
+      }
+    },
     "team.header" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -698,6 +811,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ 行"
+          }
+        }
+      }
+    },
+    "tunnel.peers.count" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peers %1$lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对端数量 %1$lld"
           }
         }
       }
@@ -6284,6 +6414,17 @@
         }
       }
     },
+    "下次执行时间由 Host 校验并计算" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The next run time is validated and calculated by the Host"
+          }
+        }
+      }
+    },
     "下次计划时间" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6291,6 +6432,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Next scheduled time"
+          }
+        }
+      }
+    },
+    "下载 %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download %@"
           }
         }
       }
@@ -6319,6 +6471,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Downloaded file failed local size validation"
+          }
+        }
+      }
+    },
+    "不可修改原因" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Why it can’t be changed"
           }
         }
       }
@@ -6702,6 +6865,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "任务筛选"
+          }
+        }
+      }
+    },
+    "会话" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session"
           }
         }
       }
@@ -7913,6 +8087,17 @@
         }
       }
     },
+    "已连接网关版本" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connected gateway version"
+          }
+        }
+      }
+    },
     "应用权限配置" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7942,6 +8127,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This Host does not support plugin management"
+          }
+        }
+      }
+    },
+    "当前时区 · %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current time zone · %@"
           }
         }
       }
@@ -8408,6 +8604,17 @@
         }
       }
     },
+    "文件超过 2 MB，请使用系统应用打开" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file is larger than 2 MB. Open it in a system app."
+          }
+        }
+      }
+    },
     "新主机" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8485,6 +8692,17 @@
         }
       }
     },
+    "更新到 %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update to %@"
+          }
+        }
+      }
+    },
     "更新及恢复结果待核实，请刷新实际版本并检查 Host 日志" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8503,6 +8721,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "The update failed and the previous version could not be restored. Refresh the catalog and check the Host log."
+          }
+        }
+      }
+    },
+    "更新进度 · %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update progress · %@"
           }
         }
       }
@@ -12937,6 +13166,28 @@
         }
       }
     },
+    "未提供" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not provided"
+          }
+        }
+      }
+    },
+    "未知" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown"
+          }
+        }
+      }
+    },
     "未知网关响应" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -13177,6 +13428,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "The command was not run"
+          }
+        }
+      }
+    },
+    "本版本发布说明暂未提供，请查看 GitHub 发布页。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Release notes for this version aren’t available yet. See the GitHub releases page."
           }
         }
       }
@@ -13428,6 +13690,17 @@
         }
       }
     },
+    "模块" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Module"
+          }
+        }
+      }
+    },
     "模型已切换" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -13623,6 +13896,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Creating folder…"
+          }
+        }
+      }
+    },
+    "正在加载…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading…"
           }
         }
       }
@@ -15116,6 +15400,17 @@
         }
       }
     },
+    "组件 ID" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Component ID"
+          }
+        }
+      }
+    },
     "组织回应中" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15244,6 +15539,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Custom agent mode"
+          }
+        }
+      }
+    },
+    "要求网关版本" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Required gateway version"
+          }
+        }
+      }
+    },
+    "规则预览 · %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rule preview · %@"
           }
         }
       }
@@ -16435,6 +16752,17 @@
         }
       }
     },
+    "请填写有效规则" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid schedule rule"
+          }
+        }
+      }
+    },
     "请填写标题、任务内容、有效的执行规则和目标" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16560,6 +16888,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Restart DSH, then refresh the catalog to confirm the installed version."
+          }
+        }
+      }
+    },
+    "读取中…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reading…"
+          }
+        }
+      }
+    },
+    "读取代码失败：%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t read the code: %@"
           }
         }
       }
@@ -16929,6 +17279,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行库加载失败"
+          }
+        }
+      }
+    },
+    "运行条目 ID" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runtime entry ID"
           }
         }
       }

@@ -73,7 +73,7 @@ struct SettingsView: View {
     private let releaseInfo = BundledAppReleaseInfo.load()
 
     private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? String(localized: "未知")
     }
 
     private var connectedGatewayVersion: String? {
@@ -99,7 +99,7 @@ struct SettingsView: View {
     private func releaseRow(_ title: String, value: String, repository: String, version: String?) -> some View {
         Button { openRelease(repository, version: version) } label: {
             HStack {
-                Text(LocalizedStringKey(title))
+                Text(title)
                 Spacer()
                 Text(verbatim: value).foregroundStyle(.secondary)
                 Image(systemName: "chevron.right").appFont(SettingsTypography.description).foregroundStyle(.tertiary)
@@ -186,7 +186,7 @@ struct SettingsView: View {
                 .disabled(!gatewayState.isConnected)
 
                 SettingsChoiceMenu(
-                    title: "权限", value: selectedPermissionName,
+                    title: LocalizedStringKey("权限"), value: selectedPermissionName,
                     identifier: "permission-settings-row", isLoading: defaultsAreLoading,
                     indicator: "chevron.right"
                 ) {
@@ -224,14 +224,14 @@ struct SettingsView: View {
                         Text("Port \(port)").foregroundStyle(.secondary)
                     }
                 }
-                LabeledContent("连接方式", value: gatewayState.isConnected
+                LabeledContent(LocalizedStringKey("连接方式"), value: gatewayState.isConnected
                     ? (observedConnectionMethod.isEmpty ? "WebSocket" : String(localized: String.LocalizationValue(observedConnectionMethod))) : String(localized: "未连接"))
                     .accessibilityIdentifier("gateway-connection-method")
                 if gatewayState.isConnected && observedConnectionMethod == "WebRTC" {
                     GatewayConnectionPathView(paths: observedConnectionPaths)
                 }
                 SettingsNavigationButton(.networkDiagnostics, open: open) {
-                    LabeledContent("网络检测", value: String(localized: "实时延迟与丢包"))
+                    LabeledContent(LocalizedStringKey("网络检测"), value: String(localized: "实时延迟与丢包"))
                 }
                 .accessibilityIdentifier("network-diagnostics-entry")
                 Button(gatewayState.isConnected ? String(localized: "断开连接") : String(localized: "连接")) {
@@ -255,9 +255,9 @@ struct SettingsView: View {
 
             if let host = store.hostSnapshot {
                 Section {
-                    LabeledContent("版本", value: [host.dshVersion, host.version].compactMap { $0 }
-                        .first { $0.range(of: "^v?[0-9]+\\.[0-9]+", options: .regularExpression) != nil } ?? "未提供")
-                    LabeledContent("已连接会话", value: "\(host.attachedSessions ?? 0)")
+                    LabeledContent(LocalizedStringKey("版本"), value: [host.dshVersion, host.version].compactMap { $0 }
+                        .first { $0.range(of: "^v?[0-9]+\\.[0-9]+", options: .regularExpression) != nil } ?? String(localized: "未提供"))
+                    LabeledContent(LocalizedStringKey("已连接会话"), value: "\(host.attachedSessions ?? 0)")
                     if let cwd = host.cwd {
                         LabeledContent {
                             Text(cwd)
@@ -277,7 +277,7 @@ struct SettingsView: View {
 
             Section {
                 SettingsChoiceMenu(
-                    title: "界面", value: store.interfaceStyle.title,
+                    title: LocalizedStringKey("界面"), value: store.interfaceStyle.title,
                     identifier: "interface-style-settings-row"
                 ) {
                     Picker("界面", selection: $store.interfaceStyle) {
@@ -288,7 +288,7 @@ struct SettingsView: View {
                     .pickerStyle(.inline)
                 }
                 SettingsChoiceMenu(
-                    title: "语言", value: store.appLanguage.title,
+                    title: LocalizedStringKey("语言"), value: store.appLanguage.title,
                     identifier: "language-settings-row"
                 ) {
                     Picker("语言", selection: $store.appLanguage) {
@@ -333,11 +333,11 @@ struct SettingsView: View {
             LogExportSection(open: open)
 
             Section {
-                releaseRow("当前版本（去给作者Star🌟）", value: appVersion, repository: "dsh-mobile", version: appVersion)
-                releaseRow("要求网关版本", value: releaseInfo.map { "≥ \($0.minimumGatewayVersion)" } ?? "未提供",
+                releaseRow(String(localized: "当前版本（去给作者Star🌟）"), value: appVersion, repository: "dsh-mobile", version: appVersion)
+                releaseRow(String(localized: "要求网关版本"), value: releaseInfo.map { "≥ \($0.minimumGatewayVersion)" } ?? String(localized: "未提供"),
                            repository: "dsh-plugin-mobile-gateway", version: releaseInfo?.minimumGatewayVersion)
-                releaseRow("已连接网关版本", value: !gatewayState.isConnected ? "未连接" :
-                    store.pluginsLoading ? "读取中…" : connectedGatewayVersion ?? "未提供",
+                releaseRow(String(localized: "已连接网关版本"), value: !gatewayState.isConnected ? String(localized: "未连接") :
+                    store.pluginsLoading ? String(localized: "读取中…") : connectedGatewayVersion ?? String(localized: "未提供"),
                     repository: "dsh-plugin-mobile-gateway", version: connectedGatewayVersion)
                 Button("本版本新功能") { showsReleaseNotes = true }
                 Button("隐私政策") { showsPrivacyPolicy = true }
@@ -376,7 +376,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showsReleaseNotes) {
             NavigationStack {
                 ScrollView {
-                    Markdown(releaseInfo?.version == appVersion ? releaseInfo!.notes : "本版本发布说明暂未提供，请查看 GitHub 发布页。")
+                    Markdown(releaseInfo?.version == appVersion ? releaseInfo!.notes : String(localized: "本版本发布说明暂未提供，请查看 GitHub 发布页。"))
                         .padding(20)
                 }
                 .appFont(SettingsTypography.item)
@@ -1239,7 +1239,7 @@ struct StorageSpaceView: View {
                             if #available(iOS 17.0, *) {
                                 Chart(CacheStorageCategory.allCases) { category in
                                     if usage.bytes(for: category) > 0 {
-                                        SectorMark(angle: .value("磁盘占用", usage.bytes(for: category)),
+                                        SectorMark(angle: .value(LocalizedStringKey("磁盘占用"), usage.bytes(for: category)),
                                             innerRadius: .ratio(0.72), angularInset: 1.5)
                                             .foregroundStyle(category.color)
                                             .cornerRadius(3)
@@ -1273,7 +1273,7 @@ struct StorageSpaceView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 22)
                     if usage.freeBytes != Int64.max {
-                        LabeledContent("设备可用空间", value: size(usage.freeBytes))
+                        LabeledContent(LocalizedStringKey("设备可用空间"), value: size(usage.freeBytes))
                             .appFont(SettingsTypography.item).foregroundStyle(.secondary)
                     }
                 } else {
@@ -1387,7 +1387,7 @@ private struct StorageCategoryDetailView: View {
                     }
                 }
                 .padding(.vertical, 12)
-                LabeledContent("占用空间", value: ByteCountFormatter.string(
+                LabeledContent(LocalizedStringKey("占用空间"), value: ByteCountFormatter.string(
                     fromByteCount: store.storageUsage?.bytes(for: category) ?? 0, countStyle: .file))
             }
             Section {

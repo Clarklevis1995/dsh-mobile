@@ -434,7 +434,7 @@ struct HumanQuestionView: View {
     }
 
     private func optionMetadata(_ label: String) -> (title: String, isRecommended: Bool) {
-        let suffixes = [" (recommended)", "（recommended）", " (推荐)", "（推荐）"]
+        let suffixes = [" (recommended)", "（recommended）", " (推荐)", "（推荐）"] // i18n-ignore: matches host option suffixes, never displayed
         if let suffix = suffixes.first(where: { label.lowercased().hasSuffix($0.lowercased()) }) {
             return (String(label.dropLast(suffix.count)), true)
         }
