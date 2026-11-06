@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import bisect
 import json
 import argparse
 import re
@@ -163,12 +164,16 @@ SWIFT_FORMAT = IOS_ARGUMENT.pattern
 INTERPOLATION = re.compile(r"\\\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)")
 
 
-def string_literals(source: str, kotlin: bool) -> list[tuple[int, int, str]]:
-    """返回 (起始偏移, 结束偏移, 原始内容)，跳过注释与 Kotlin 字符字面量。"""
+def string_literals(source: str, kotlin: bool,
+                    line_comments: list[int] | None = None) -> list[tuple[int, int, str]]:
+    """返回 (起始偏移, 结束偏移, 原始内容)，跳过注释与 Kotlin 字符字面量；
+    若传入 line_comments，记录每个真正的 `//` 行注释的起始偏移。"""
     out: list[tuple[int, int, str]] = []
     i, n = 0, len(source)
     while i < n:
         if source.startswith("//", i):
+            if line_comments is not None:
+                line_comments.append(i)
             end = source.find("\n", i)
             i = n if end < 0 else end
         elif source.startswith("/*", i):
@@ -256,11 +261,11 @@ def inside(position: int, spans: list[tuple[int, int]]) -> bool:
 IGNORE_COMMENT = re.compile(r"i18n-ignore:\s*\S")
 
 
-def has_ignore_comment(source: str, mask: bytearray, line_start: int, line_end: int) -> bool:
-    """同一行、位于字符串之外的 `//` 注释里写有 `i18n-ignore: <原因>`。"""
-    for j in range(line_start, line_end - 1):
-        if not mask[j] and source.startswith("//", j):
-            return bool(IGNORE_COMMENT.search(source, j, line_end))
+def has_ignore_comment(source: str, line_comments: list[int], line_start: int, line_end: int) -> bool:
+    """同一行有真正的 `//` 行注释（非字符串、非块注释内），且写有 `i18n-ignore: <原因>`。"""
+    index = bisect.bisect_left(line_comments, line_start)
+    if index < len(line_comments) and line_comments[index] < line_end:
+        return bool(IGNORE_COMMENT.search(source, line_comments[index], line_end))
     return False
 
 
@@ -285,7 +290,8 @@ def check_untranslated_literals(ios_keys: set[str], android_keys: set[str], plat
                 continue
             source = path.read_text()
             kotlin = suffix == ".kt"
-            literals = string_literals(source, kotlin)
+            line_comments: list[int] = []
+            literals = string_literals(source, kotlin, line_comments)
             if not any(HAN.search(raw) for _, _, raw in literals):
                 continue
             scanned += 1
@@ -303,7 +309,7 @@ def check_untranslated_literals(ios_keys: set[str], android_keys: set[str], plat
                 line_start = source.rfind("\n", 0, start) + 1
                 line_end = source.find("\n", start)
                 line_end = len(source) if line_end < 0 else line_end
-                if has_ignore_comment(source, mask, line_start, line_end):
+                if has_ignore_comment(source, line_comments, line_start, line_end):
                     continue
                 number = source.count("\n", 0, start) + 1
                 location = f"{path.relative_to(ROOT)}:{number}"
