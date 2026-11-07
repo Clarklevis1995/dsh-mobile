@@ -1446,9 +1446,17 @@ struct MobileTeamSnapshot: Codable, Equatable {
     var members: [MobileTeamMember] = []
     var tasks: [MobileTeamTask] = []
     var state = "loading"
-    var error: String?
+    var error: MobileUiMessage?
     var visible = false
     var isTeam = false
+}
+
+/// JSON mirror of the shared `UiMessage`; `args` is omitted when Kotlin encodes it as a default.
+struct MobileUiMessage: Codable, Equatable {
+    var key: String
+    var args: [String]?
+
+    var localized: String { L10n.message(key: key, args: args ?? []) }
 }
 
 struct MobileTeamMember: Codable, Equatable, Identifiable {

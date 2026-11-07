@@ -2067,7 +2067,7 @@ internal fun QueueDock(
                                 Icon(painterResource(R.drawable.ic_question_bubble), contentDescription = null, modifier = Modifier.padding(end = 6.dp).size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Column(Modifier.weight(1f)) {
-                                Text(item.preview, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                                Text(appText(item.preview), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
                                 if (item.attachmentCount > 0) Text(appText("%1\$s 个附件", item.attachmentCount), style = MaterialTheme.typography.labelSmall)
                             }
                             if (pendingItemId == item.id) {
@@ -2935,12 +2935,12 @@ private fun ProcessToolDisclosure(tool: ConversationProcessTool) {
     val failed = tool.result?.isError == true
     val summary = remember(tool.call?.title, tool.call?.text, tool.result?.title) {
         com.clarklevis.dsh.shared.projection.ToolActivitySummaryFormatter.summarize(
-            tool.call?.title ?: tool.result?.title ?: appText("工具"), tool.call?.text.orEmpty()
-        ).let(::localizedToolActivitySummary)
+            tool.call?.title ?: tool.result?.title.orEmpty(), tool.call?.text.orEmpty()
+        )
     }
     ProcessDisclosure(
         id = "tool-${tool.id}",
-        title = listOf(summary.label, summary.annotation).filter(String::isNotBlank).joinToString(" · "),
+        title = toolActivityTitle(summary),
         preview = listOf(
             summary.detail,
             if (failed) appText("失败") else if (tool.result == null) appText("等待结果") else ""

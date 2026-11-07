@@ -112,7 +112,7 @@ final class VoiceInputTests: XCTestCase {
         adapter.keyboardChanged(true)
         adapter.keyboardChanged(false)
         XCTAssertEqual(updates, 2)
-        XCTAssertEqual(adapter.state.hint, "描述你想要构建的内容")
+        XCTAssertEqual(adapter.state.hint.key, "voice.hint")
         withExtendedLifetime(observation) {}
     }
 
@@ -127,7 +127,7 @@ final class VoiceInputTests: XCTestCase {
         adapter.accept("""
         {"kind":"speech-transcript","requestId":"\(token)","text":""}
         """)
-        XCTAssertEqual(adapter.toastMessage, "未识别到人声")
+        XCTAssertEqual(adapter.toastMessage, UiMessage(key: "voice.noSpeech", args: []).localized)
         XCTAssertNil(adapter.state.alertMessage)
         XCTAssertNil(adapter.state.error)
         XCTAssertEqual(draftUpdates, 0)
@@ -169,7 +169,7 @@ final class VoiceInputTests: XCTestCase {
         XCTAssertLessThan(elapsed, 0.35, "蒙层与主线程不能等待耗时一秒的麦克风启动")
         XCTAssertEqual(voice.state.phase, "starting")
         XCTAssertTrue(voice.state.overlayVisible)
-        XCTAssertEqual(voice.state.status, "正在开启麦克风")
+        XCTAssertEqual(voice.state.status?.key, "voice.status.starting")
         XCTAssertFalse(recorder.startedOnMain)
         let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
@@ -277,13 +277,13 @@ final class VoiceInputTests: XCTestCase {
         voice.release()
         XCTAssertTrue(voice.state.active)
         XCTAssertFalse(voice.state.overlayVisible)
-        XCTAssertEqual(voice.state.status, "")
+        XCTAssertNil(voice.state.status)
         await fulfillment(of: [disappeared], timeout: 0.7)
         _ = shared.captureFinished(id: token, pcmBase64: Data(repeating: 0, count: 16000).base64EncodedString(), nowMilliseconds: 1700)
         voice.draftChanged("原草稿")
         XCTAssertEqual(voice.state.phase, "transcribing")
         XCTAssertFalse(voice.state.overlayVisible)
-        XCTAssertEqual(voice.state.status, "")
+        XCTAssertNil(voice.state.status)
         voice.accept("""
         {"kind":"speech-transcript","requestId":"\(token)","text":"后台回填文字"}
         """)

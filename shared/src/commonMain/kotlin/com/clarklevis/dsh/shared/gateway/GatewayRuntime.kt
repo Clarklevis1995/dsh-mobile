@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.shared.gateway
 
 
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSnapshot
 import com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsStore
 import com.clarklevis.dsh.shared.platform.GatewayAttachmentCache
@@ -236,7 +237,9 @@ class GatewayRuntime(
         upgradeAfterPairing = false
         (transport as? com.clarklevis.dsh.shared.platform.GatewayRtcTransport)?.resetRtcRecovery()
         requireWebSocketEndpoint(endpoint)
-        require(trustedEndpoints.isEmpty() || endpoint in trustedEndpoints) { "地址未经此主机确认" }
+        if (trustedEndpoints.isNotEmpty() && endpoint !in trustedEndpoints) {
+            throw GatewayPairingPayloadException(UiMessage("gateway.endpointUntrusted"), "Address not confirmed by this host")
+        }
         cancelForegroundResumeLocked()
         lastConnectedEndpoint = null
         val existing = preferences.load()
@@ -699,7 +702,7 @@ class GatewayRuntime(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Throwable) {
-                    val detail = GatewayWireDecoder.failureSummary(event.value.text, error)
+                    val detail = GatewayWireDecoder.failureLogLine(event.value.text, error)
                     serialized { rejectLocked("decode", detail) }
                     return
                 }

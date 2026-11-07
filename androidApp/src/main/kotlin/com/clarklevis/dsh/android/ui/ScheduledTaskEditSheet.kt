@@ -54,7 +54,7 @@ internal fun ScheduledTaskEditSheet(
     }
     val cleanTitle = title.trim()
     val cleanPrompt = prompt.trim()
-    val targetError = if (target != originalTarget) ScheduleTargetEditor.validationError(target, recordJson) else null
+    val targetError = if (target != originalTarget) ScheduleTargetEditor.validationError(target, recordJson)?.let { appText(it) } else null
     val targetChange = ScheduleTargetEditor.changeJson(target, recordJson)?.let {
         JsonValue.fromJsonElement(Json.parseToJsonElement(it))
     }
@@ -101,9 +101,9 @@ internal fun ScheduledTaskEditSheet(
                         ScheduleTargetControls(target, ScheduleTargetEditor.currentSessionId(recordJson) != null,
                             stateHolder.availableWorkspaces, enabled = pendingRequestId == null) { target = it }
                     }
-                    targetError?.let { Text(appText(it), color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                    targetError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
                     ScheduleTimingControls(timing, enabled = pendingRequestId == null) { timing = it }
-                    timingError?.let { Text(appText(it), color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                    timingError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
                     (localError ?: if (pendingRequestId != null) stateHolder.scheduledTaskMutationError else null)?.let {
                         Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
                     }

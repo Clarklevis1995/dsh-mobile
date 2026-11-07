@@ -21,6 +21,7 @@ import com.clarklevis.dsh.shared.facade.SharedVoiceInputTransition
 import com.clarklevis.dsh.shared.facade.VoiceAudioFormat
 import com.clarklevis.dsh.shared.facade.VoiceInputInteraction
 import com.clarklevis.dsh.shared.gateway.GatewayRequest
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -128,7 +129,7 @@ class AndroidVoiceInputAdapter(
         message: String,
     ) {
         if (requestId == null) return
-        apply(shared.requestFailed(requestId, message))
+        apply(shared.requestFailed(requestId, UiMessage.raw(message)))
     }
 
     private fun executePermission(token: String) {
@@ -145,7 +146,7 @@ class AndroidVoiceInputAdapter(
             }
 
             permissionId != null -> {
-                apply(shared.captureFailed(token, appText("请先完成麦克风授权")))
+                apply(shared.captureFailed(token, UiMessage.raw(appText("请先完成麦克风授权"))))
             }
 
             else -> {
@@ -170,7 +171,8 @@ class AndroidVoiceInputAdapter(
                 "showToast" -> {
                     toast?.cancel()
                     context?.applicationContext?.let { ctx ->
-                        toast = Toast.makeText(ctx, appText(effect.message), Toast.LENGTH_SHORT).also { it.show() }
+                        val message = effect.message?.let { appText(it) }.orEmpty()
+                        toast = Toast.makeText(ctx, message, Toast.LENGTH_SHORT).also { it.show() }
                     }
                 }
 
@@ -197,7 +199,7 @@ class AndroidVoiceInputAdapter(
                         },
                         level = { apply(shared.level(id = token, rms = it, nowMilliseconds = SystemClock.elapsedRealtime())) },
                         finished = { apply(shared.captureFinished(token, it, SystemClock.elapsedRealtime())) },
-                        failure = { apply(shared.captureFailed(token, appText("无法录音，请检查麦克风权限或通话状态"))) },
+                        failure = { apply(shared.captureFailed(token, UiMessage.raw(appText("无法录音，请检查麦克风权限或通话状态")))) },
                     )
                 }
 

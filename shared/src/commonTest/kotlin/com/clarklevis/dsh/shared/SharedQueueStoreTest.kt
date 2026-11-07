@@ -2,6 +2,7 @@ package com.clarklevis.dsh.shared
 
 import com.clarklevis.dsh.shared.facade.SharedQueueStore
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -44,7 +45,7 @@ class SharedQueueStoreTest {
     @Test fun rejectionNeverDeletesOrRestoresDraft() {
         val store = SharedQueueStore(); update(store)
         store.beginAction("a", "q1", "edit")
-        assertNotNull(ack(store, accepted = false).lastError)
+        assertEquals(UiMessage("queue.rejected"), ack(store, accepted = false).lastError)
         assertNull(store.takeDraft("a"))
         assertEquals(1, store.snapshot().queues["a"]?.size)
         store.beginAction("a", "q1", "edit")
@@ -77,7 +78,7 @@ class SharedQueueStoreTest {
     @Test fun resetAndTransportFailureReleasePendingWithoutInventingSuccess() {
         val store = SharedQueueStore(); update(store)
         store.beginAction("a", "q1", "edit")
-        store.failPending("timeout")
+        store.failPending(UiMessage.raw("timeout"))
         assertNull(store.takeDraft("a"))
         assertNull(store.snapshot().pendingItemId)
         store.reset()

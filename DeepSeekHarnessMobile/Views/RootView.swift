@@ -818,7 +818,7 @@ struct ScheduledTaskCard: View {
                 onExpand()
             } label: {
                 HStack {
-                    Text(task.status == "active" ? ScheduledTaskFormat.date(task.scheduledAt) : NSLocalizedString(ScheduleTaskPresentation.shared.statusSource(status: task.status), comment: ""))
+                    Text(task.status == "active" ? ScheduledTaskFormat.date(task.scheduledAt) : ScheduleTaskPresentation.shared.statusLabel(status: task.status).localized)
                         .appFont(.system(size: 15))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -845,7 +845,7 @@ struct ScheduledTaskCard: View {
             detail(String(localized: "执行规则"), ScheduledTaskFormat.fullRule(task))
             detail(String(localized: "下次计划时间"), task.status == "active" ? ScheduledTaskFormat.date(task.scheduledAt) : String(localized: "无"))
             detail(String(localized: "所属会话"), sessionTitle)
-            detail(String(localized: "状态"), NSLocalizedString(ScheduleTaskPresentation.shared.statusSource(status: task.status), comment: ""))
+            detail(String(localized: "状态"), ScheduleTaskPresentation.shared.statusLabel(status: task.status).localized)
             detail(String(localized: "最近投递"), task.lastDelivery?["deliveredAt"]?.stringValue.map {
                 String(localized: "schedule.last-delivery", defaultValue: "已投递 · \(ScheduledTaskFormat.date($0))")
             } ?? String(localized: "暂无投递记录"))
@@ -991,12 +991,12 @@ private struct ScheduledTaskEditSheet: View {
                             .disabled(pendingRequestID != nil)
                     }
                     if let targetError {
-                        Text(LocalizedStringKey(targetError)).appFont(.caption).foregroundStyle(.red)
+                        Text(targetError).appFont(.caption).foregroundStyle(.red)
                     }
                     ScheduleTimingControls(form: $timing)
                         .disabled(pendingRequestID != nil)
                     if let timingError {
-                        Text(LocalizedStringKey(timingError)).appFont(.caption).foregroundStyle(.red)
+                        Text(timingError).appFont(.caption).foregroundStyle(.red)
                     }
                     if let error = localError ?? (pendingRequestID != nil ? store.scheduledTaskMutationError : nil) {
                         Text(error).appFont(.subheadline).foregroundStyle(.red)
@@ -1051,8 +1051,9 @@ struct ScheduleTargetForm: Equatable {
         guard let json = ScheduleTargetEditor.shared.changeJson(draft: shared, recordJson: task.raw.displayText) else { return nil }
         return try? JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
     }
+    /// Localized text of the validation failure, or nil when the target is valid.
     func validationError(task: ScheduledTask) -> String? {
-        ScheduleTargetEditor.shared.validationError(draft: shared, recordJson: task.raw.displayText)
+        ScheduleTargetEditor.shared.validationError(draft: shared, recordJson: task.raw.displayText)?.localized
     }
 }
 
@@ -1196,13 +1197,14 @@ struct ScheduleTimingForm: Equatable {
         ScheduleTimingDraft(frequency: frequency, interval: interval, date: date, time: time,
             timeZone: timeZone, weekdays: weekdays, monthDay: monthDay, advanced: advanced)
     }
+    /// Localized text of the first validation failure, or nil when the draft is valid.
     var validationError: String? {
-        if let error = ScheduleTimingEditor.shared.validationError(draft: shared) { return error }
-        guard let zone = TimeZone(identifier: timeZone) else { return "请选择有效的 IANA 时区。" }
+        if let error = ScheduleTimingEditor.shared.validationError(draft: shared) { return error.localized }
+        guard let zone = TimeZone(identifier: timeZone) else { return String(localized: "请选择有效的 IANA 时区。") }
         if frequency == "once" {
             guard let instant = Self.formatter("yyyy-MM-dd'T'HH:mm:ss.SSS", zone: zone).date(from: "\(date)T\(time)")
-                ?? Self.formatter("yyyy-MM-dd'T'HH:mm:ss", zone: zone).date(from: "\(date)T\(time)") else { return "请选择有效的日期和时间。" }
-            if instant <= .now { return "请选择未来的日期和时间。" }
+                ?? Self.formatter("yyyy-MM-dd'T'HH:mm:ss", zone: zone).date(from: "\(date)T\(time)") else { return String(localized: "请选择有效的日期和时间。") }
+            if instant <= .now { return String(localized: "请选择未来的日期和时间。") }
         }
         return nil
     }

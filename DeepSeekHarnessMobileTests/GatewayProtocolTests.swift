@@ -485,8 +485,8 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
             ])
         )))
 
-        XCTAssertEqual(projected.headline, "写入")
-        XCTAssertEqual(projected.detail, "articles/北京中轴线.md · 2 行")
+        XCTAssertEqual(projected.headline, L10n.message(key: "tool.kind.write", args: []))
+        XCTAssertEqual(projected.detail, "articles/北京中轴线.md · \(L10n.message(key: "tool.lines", args: ["2"]))")
         XCTAssertEqual(projected.kind, .writing)
     }
 

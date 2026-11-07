@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.shared.protocol
 
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import kotlinx.serialization.json.Json
 
 /** cwd 为空表示使用宿主默认工作区；它与移动端当前浏览的工作区无关。 */
@@ -26,9 +27,9 @@ object ScheduleTargetEditor {
         return id?.takeIf { it.isNotBlank() }
     }
 
-    fun validationError(draft: ScheduleTargetDraft, recordJson: String): String? = when {
-        draft.kind !in listOf("session", "new_once", "new") -> "请选择执行位置。"
-        draft.kind == "session" && currentSessionId(recordJson) == null -> "当前任务尚无可用的关联会话，请选择新建会话。"
+    fun validationError(draft: ScheduleTargetDraft, recordJson: String): UiMessage? = when {
+        draft.kind !in listOf("session", "new_once", "new") -> UiMessage("schedule.target.missing")
+        draft.kind == "session" && currentSessionId(recordJson) == null -> UiMessage("schedule.target.noLinkedSession")
         else -> null
     }
 

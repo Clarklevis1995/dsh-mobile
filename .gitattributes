@@ -1,0 +1,2 @@
+# String catalogs are tool-maintained JSON; collapse them in GitHub diffs.
+*.xcstrings linguist-generated=true
