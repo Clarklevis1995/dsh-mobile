@@ -336,13 +336,18 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         return language
     }
 
-    func apply(to defaults: UserDefaults = .standard) {
+    func apply(
+        to defaults: UserDefaults = .standard,
+        systemLanguages: [String] = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String] ?? Locale.preferredLanguages
+    ) {
         defaults.set(rawValue, forKey: Self.preferenceKey)
         switch self {
         case .system:
             defaults.removeObject(forKey: Self.appleLanguagesKey)
         case .simplifiedChinese, .english:
-            defaults.set([rawValue], forKey: Self.appleLanguagesKey)
+            // Keep the UI language first without discarding the user's other languages.
+            // UIKit also consults AppleLanguages when configuring text input.
+            defaults.set([rawValue] + systemLanguages.filter { $0 != rawValue }, forKey: Self.appleLanguagesKey)
         }
     }
 }

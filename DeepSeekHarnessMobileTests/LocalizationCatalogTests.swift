@@ -119,13 +119,15 @@ final class LocalizationCatalogTests: XCTestCase {
 
         XCTAssertEqual(AppLanguage.load(from: defaults), .system)
 
-        AppLanguage.english.apply(to: defaults)
+        // Simulate the old override: system languages must be recovered, not read from it.
+        defaults.set(["en"], forKey: "AppleLanguages")
+        AppLanguage.english.apply(to: defaults, systemLanguages: ["ru", "en"])
         XCTAssertEqual(AppLanguage.load(from: defaults), .english)
-        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en"])
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en", "ru"])
 
-        AppLanguage.simplifiedChinese.apply(to: defaults)
+        AppLanguage.simplifiedChinese.apply(to: defaults, systemLanguages: ["ru", "en"])
         XCTAssertEqual(AppLanguage.load(from: defaults), .simplifiedChinese)
-        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["zh-Hans"])
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["zh-Hans", "ru", "en"])
 
         AppLanguage.system.apply(to: defaults)
         XCTAssertEqual(AppLanguage.load(from: defaults), .system)
