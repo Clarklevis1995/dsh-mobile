@@ -354,7 +354,7 @@ final class AgentLiveActivityLifecycleTests: XCTestCase {
         XCTAssertTrue(requestedDetails.isEmpty)
         appState = .active
         manager.applicationDidBecomeActive()
-        XCTAssertEqual(requestedDetails, ["正在执行 Bash"])
+        XCTAssertEqual(requestedDetails, [String(localized: "activity.tool.running", defaultValue: "正在执行 \("Bash")")])
         // 请求失败后，后续高频进度不能不断重试系统调用。
         manager.stepStarted(gatewayID: "gateway", sessionID: "session", title: "任务", step: 2)
         XCTAssertEqual(requestedDetails.count, 1)
@@ -497,7 +497,7 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
             toolName: nil
         ))
 
-        XCTAssertEqual(projected.headline, "思考")
+        XCTAssertEqual(projected.headline, String(localized: "思考"))
         XCTAssertEqual(projected.detail, "Now check character count")
         XCTAssertEqual(projected.kind, .reasoning)
     }
@@ -508,7 +508,10 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
             completedToolLabel: "写入"
         ))
 
-        XCTAssertEqual(projected.headline, "写入完成")
+        XCTAssertEqual(
+            projected.headline,
+            String(localized: "activity.tool.completed", defaultValue: "\("写入")完成")
+        )
         XCTAssertEqual(projected.detail, "saved")
         XCTAssertEqual(projected.kind, .result)
     }

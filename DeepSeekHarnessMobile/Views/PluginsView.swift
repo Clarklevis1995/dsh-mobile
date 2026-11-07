@@ -314,7 +314,7 @@ private struct PluginComponentSheet: View {
         .presentationDragIndicator(.visible)
     }
 
-    private func componentField(_ title: String, value: String) -> some View {
+    private func componentField(_ title: LocalizedStringKey, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).appFont(.caption).foregroundStyle(.secondary)
             Text(value).appFont(.subheadline.monospaced()).textSelection(.enabled)

@@ -137,6 +137,22 @@
           }
         }
       }
+    },
+    "NSPhotoLibraryAddUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Whaleness to save chat images to your photo library."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于将聊天中预览的图片保存到相册。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

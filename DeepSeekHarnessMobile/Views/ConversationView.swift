@@ -2746,7 +2746,7 @@ private struct TaskGoalPanels: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(tasksExpanded ? "收起任务" : "展开任务")
+            .accessibilityLabel(tasksExpanded ? String(localized: "收起任务") : String(localized: "展开任务"))
 
             if tasksExpanded {
                 ContentSizedCommandScrollView(maximumHeight: taskListMaximumHeight) {
