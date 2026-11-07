@@ -183,6 +183,8 @@ internal object AndroidStrings {
     )
 
     internal val english: Map<String, String> = mapOf(
+        "月" to "Month",
+        "年" to "Year",
         "%1\$s：%2\$s · %3\$s" to "%1\$s: %2\$s · %3\$s",
         "Lead 会话" to "Lead session",
         "上传中 %1\$s%" to "Uploading %1\$s%",

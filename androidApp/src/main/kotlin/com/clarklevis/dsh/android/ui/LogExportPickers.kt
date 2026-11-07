@@ -36,7 +36,7 @@ internal fun LogDateTimeSheet(field: String, value: Long, earliest: Long, onDism
         presentation = DshPickerPresentation.SYSTEM_SHEET) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(SimpleDateFormat(if (Locale.getDefault().language == "zh") "yyyy年M月d日 EEE" else "EEE, d MMM yyyy",
+            Text(SimpleDateFormat(if (Locale.getDefault().language == "zh") "yyyy年M月d日 EEE" else "EEE, d MMM yyyy", // i18n-ignore: 中文分支使用中文日期格式
                 Locale.getDefault()).format(Date(draft)), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (isDate) {
                 DshCalendar(draft, earliest, latest, tag = "log-calendar",

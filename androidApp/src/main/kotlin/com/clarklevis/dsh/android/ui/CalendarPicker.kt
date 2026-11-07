@@ -120,7 +120,7 @@ internal fun DshCalendar(
             Row(Modifier.weight(1f).clip(CircleShape).clickable(role = Role.Button) { choosingMonth = !choosingMonth }
                 .padding(horizontal = 8.dp, vertical = 8.dp).testTag("$tag-month-toggle"),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(SimpleDateFormat(if (Locale.getDefault().language == "zh") "yyyy年M月" else "MMMM yyyy", Locale.getDefault())
+                Text(SimpleDateFormat(if (Locale.getDefault().language == "zh") "yyyy年M月" else "MMMM yyyy", Locale.getDefault()) // i18n-ignore: 中文分支使用中文日期格式
                     .apply { this.timeZone = zone }.format(Date(month)), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = ink)
                 Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(16.dp).graphicsLayer {
                     rotationZ = if (choosingMonth) 90f else 0f
