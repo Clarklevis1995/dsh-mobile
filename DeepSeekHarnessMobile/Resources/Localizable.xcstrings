@@ -220,6 +220,39 @@
         }
       }
     },
+    "%lld 已完成": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld completed"
+          }
+        }
+      }
+    },
+    "%lld 待处理": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld pending"
+          }
+        }
+      }
+    },
+    "%lld 进行中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld in progress"
+          }
+        }
+      }
+    },
     "/%@": {
       "localizations": {
         "en": {
@@ -336,6 +369,61 @@
         }
       }
     },
+    "Agent 回复": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent reply"
+          }
+        }
+      }
+    },
+    "Agent 已完成本次任务": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent finished this task"
+          }
+        }
+      }
+    },
+    "Agent 正在处理": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent is working"
+          }
+        }
+      }
+    },
+    "Agent 正在处理当前步骤": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent is working on the current step"
+          }
+        }
+      }
+    },
+    "Agent 正在等待你的回答": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent is waiting for your answer"
+          }
+        }
+      }
+    },
     "Agent 正在等待回答": {
       "extractionState": "stale",
       "localizations": {
@@ -354,6 +442,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "The agent is awaiting approval"
+          }
+        }
+      }
+    },
+    "Agent 正在继续执行": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent is continuing"
+          }
+        }
+      }
+    },
+    "Agent 正在重试当前步骤": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent is retrying the current step"
+          }
+        }
+      }
+    },
+    "Agent 请求批准本次操作": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent is asking to approve this action"
           }
         }
       }
@@ -563,6 +684,17 @@
         }
       }
     },
+    "Host 无法读取旧格式会话，请修复或升级 Host 后重试。原始记录未修改。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Host can’t read this older-format session. Repair or upgrade the Host and try again. The original record is unchanged."
+          }
+        }
+      }
+    },
     "Input": {
       "localizations": {
         "en": {
@@ -575,6 +707,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "输入"
+          }
+        }
+      }
+    },
+    "Lead 会话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lead session"
           }
         }
       }
@@ -1153,6 +1296,329 @@
           "stringUnit": {
             "state": "translated",
             "value": "查看会话运行状态"
+          }
+        }
+      }
+    },
+    "activity.badge.allowed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allowed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已允许"
+          }
+        }
+      }
+    },
+    "activity.badge.approval": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approval"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待审批"
+          }
+        }
+      }
+    },
+    "activity.badge.choice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待选择"
+          }
+        }
+      }
+    },
+    "activity.badge.denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denied"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已拒绝"
+          }
+        }
+      }
+    },
+    "activity.badge.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已完成"
+          }
+        }
+      }
+    },
+    "activity.badge.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "失败"
+          }
+        }
+      }
+    },
+    "activity.badge.running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "执行中"
+          }
+        }
+      }
+    },
+    "activity.badge.stale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stale"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待同步"
+          }
+        }
+      }
+    },
+    "activity.badge.submitting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提交中"
+          }
+        }
+      }
+    },
+    "activity.badge.unconfirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verify"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待确认"
+          }
+        }
+      }
+    },
+    "activity.step": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step %1$lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %1$lld 步"
+          }
+        }
+      }
+    },
+    "activity.step.completed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step %1$lld completed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %1$lld 步已完成"
+          }
+        }
+      }
+    },
+    "activity.step.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "activity.step.processing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step %1$lld · The agent is working"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %1$lld 步 · Agent 正在处理"
+          }
+        }
+      }
+    },
+    "activity.tool.completed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ completed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@完成"
+          }
+        }
+      }
+    },
+    "activity.tool.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ failed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@失败"
+          }
+        }
+      }
+    },
+    "activity.tool.preparing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing to call %1$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "准备调用 %1$@"
+          }
+        }
+      }
+    },
+    "activity.tool.running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running %1$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在执行 %1$@"
+          }
+        }
+      }
+    },
+    "activity.turn.waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn %1$lld · Waiting for a step"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "第 %1$lld 轮 · 等待执行步骤"
           }
         }
       }
@@ -1866,6 +2332,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ · %@"
+          }
+        }
+      }
+    },
+    "diagnostic.internal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Internal error (%1$@)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内部错误（%1$@）"
           }
         }
       }
@@ -3094,6 +3577,23 @@
         }
       }
     },
+    "preset.requestTimeout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The mode request timed out. Try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模式请求超时，请重试"
+          }
+        }
+      }
+    },
     "preset.selectUnconfirmed": {
       "extractionState": "manual",
       "localizations": {
@@ -3349,6 +3849,23 @@
         }
       }
     },
+    "queue.actionTimeout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The queue action timed out. Check the latest queue state and try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "队列操作超时，请检查队列最新状态后重试"
+          }
+        }
+      }
+    },
     "queue.attachmentMessage": {
       "extractionState": "manual",
       "localizations": {
@@ -3362,6 +3879,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "附件消息"
+          }
+        }
+      }
+    },
+    "queue.connectionLost": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The connection was interrupted. Reconnect and confirm the queue state."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接已中断，请重新连接后确认队列状态"
           }
         }
       }
@@ -3396,6 +3930,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "服务端未接受队列操作"
+          }
+        }
+      }
+    },
+    "queue.sendTimeout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send confirmation timed out. Check the queue state and try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送确认超时，请确认队列状态后重试"
           }
         }
       }
@@ -4505,6 +5056,40 @@
         }
       }
     },
+    "team.header": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Team › %1$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "团队 › %1$@"
+          }
+        }
+      }
+    },
+    "team.header.readOnly": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Team › %1$@ · Read-only"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "团队 › %1$@ · 只读"
+          }
+        }
+      }
+    },
     "team.loadFailed": {
       "extractionState": "manual",
       "localizations": {
@@ -4862,6 +5447,23 @@
         }
       }
     },
+    "upload.progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uploading %1$lld%%"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上传中 %1$lld%%"
+          }
+        }
+      }
+    },
     "upload.readFailed": {
       "extractionState": "manual",
       "localizations": {
@@ -4875,6 +5477,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "文件读取失败，请重新选择"
+          }
+        }
+      }
+    },
+    "upload.ready": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready · %1$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可发送 · %1$@"
           }
         }
       }
@@ -5886,6 +6505,17 @@
         }
       }
     },
+    "上下文注入": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Context injection"
+          }
+        }
+      }
+    },
     "上下文窗口": {
       "extractionState": "stale",
       "localizations": {
@@ -6178,6 +6808,28 @@
         }
       }
     },
+    "交付文件": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delivering file"
+          }
+        }
+      }
+    },
+    "仅授权本次操作": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authorizes this action only"
+          }
+        }
+      }
+    },
     "仅显示宿主仍保留的运行记录": {
       "extractionState": "manual",
       "localizations": {
@@ -6218,6 +6870,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅此页可见时检测，离开页面或进入后台即停止。丢包率为 3 秒内未响应的探测占比；速率为应用层实际收发流量。"
+          }
+        }
+      }
+    },
+    "仅用 Shell，轻量直接": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shell only, light and direct"
           }
         }
       }
@@ -6286,6 +6949,61 @@
         }
       }
     },
+    "任务已不存在，列表已刷新": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This task no longer exists. The list was refreshed."
+          }
+        }
+      }
+    },
+    "任务已变化，列表已刷新，请重新操作": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The task changed and the list was refreshed. Try again."
+          }
+        }
+      }
+    },
+    "任务已完成": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Task completed"
+          }
+        }
+      }
+    },
+    "任务已结束，无法再编辑": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This task has ended and can no longer be edited"
+          }
+        }
+      }
+    },
+    "任务已被其他设备修改，列表已刷新，请重新打开编辑": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another device changed this task and the list was refreshed. Reopen it to edit."
+          }
+        }
+      }
+    },
     "任务标题": {
       "extractionState": "manual",
       "localizations": {
@@ -6327,6 +7045,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "任务：%@，%@"
+          }
+        }
+      }
+    },
+    "会话上下文已整理": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversation context compacted"
           }
         }
       }
@@ -6521,6 +7250,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save"
+          }
+        }
+      }
+    },
+    "保存到相册": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save to Photos"
+          }
+        }
+      }
+    },
+    "保存图片": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save image"
           }
         }
       }
@@ -7000,6 +7751,28 @@
         }
       }
     },
+    "再推敲一遍中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking it through again"
+          }
+        }
+      }
+    },
+    "写入下载文件失败：%@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t write the downloaded file: %@"
+          }
+        }
+      }
+    },
     "写入范围：%@": {
       "extractionState": "manual",
       "localizations": {
@@ -7013,6 +7786,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "写入范围：%@"
+          }
+        }
+      }
+    },
+    "决定已送达，Agent 已停止当前操作": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decision delivered. The agent stopped the current action."
+          }
+        }
+      }
+    },
+    "决定已送达，等待 Agent 后续状态": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decision delivered. Waiting for the agent’s next status."
+          }
+        }
+      }
+    },
+    "准备 Agent 上下文": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing agent context"
           }
         }
       }
@@ -7092,6 +7898,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "minutes"
+          }
+        }
+      }
+    },
+    "切换中…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switching…"
           }
         }
       }
@@ -7182,6 +7999,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Create"
+          }
+        }
+      }
+    },
+    "创建和调试自定义 Agent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create and debug custom agents"
           }
         }
       }
@@ -7332,6 +8160,28 @@
         }
       }
     },
+    "删除排队消息": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete queued message"
+          }
+        }
+      }
+    },
+    "删除目标": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete goal"
+          }
+        }
+      }
+    },
     "删除账号": {
       "extractionState": "stale",
       "localizations": {
@@ -7437,6 +8287,17 @@
         }
       }
     },
+    "勾勒答案中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sketching the answer"
+          }
+        }
+      }
+    },
     "包含的组件": {
       "localizations": {
         "en": {
@@ -7521,6 +8382,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Loading history timed out. Please try again."
+          }
+        }
+      }
+    },
+    "压缩历史记录以继续执行": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compressing history to continue"
           }
         }
       }
@@ -7678,6 +8550,17 @@
         }
       }
     },
+    "受阻的目标": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blocked goal"
+          }
+        }
+      }
+    },
     "只允许小写字母、数字和连字符，最长 63 个字符。": {
       "localizations": {
         "en": {
@@ -7813,6 +8696,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "名称"
+          }
+        }
+      }
+    },
+    "向外寻找线索中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching for new leads"
           }
         }
       }
@@ -7961,6 +8855,17 @@
         }
       }
     },
+    "命令执行完成": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command completed"
+          }
+        }
+      }
+    },
     "四": {
       "extractionState": "manual",
       "localizations": {
@@ -7979,6 +8884,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reply"
+          }
+        }
+      }
+    },
+    "回看已有线索中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revisiting earlier clues"
           }
         }
       }
@@ -8028,6 +8944,28 @@
         }
       }
     },
+    "图片加载超时，请重试": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading the image timed out. Try again."
+          }
+        }
+      }
+    },
+    "图片数据无效或尺寸超过限制": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The image data is invalid or exceeds the size limit"
+          }
+        }
+      }
+    },
     "图片附件": {
       "extractionState": "stale",
       "localizations": {
@@ -8035,6 +8973,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Image attachment"
+          }
+        }
+      }
+    },
+    "在 App 内处理审批": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Handle the approval in the app"
           }
         }
       }
@@ -8409,6 +9358,17 @@
         }
       }
     },
+    "完整工具，适合日常开发": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full toolset for everyday development"
+          }
+        }
+      }
+    },
     "官方": {
       "extractionState": "manual",
       "localizations": {
@@ -8431,6 +9391,17 @@
         }
       }
     },
+    "定时任务加载失败": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t load scheduled tasks"
+          }
+        }
+      }
+    },
     "定时任务操作失败": {
       "localizations": {
         "en": {
@@ -8448,6 +9419,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scheduled task status"
+          }
+        }
+      }
+    },
+    "定时任务请求超时，请重试": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The scheduled tasks request timed out. Try again."
           }
         }
       }
@@ -8545,6 +9527,17 @@
         }
       }
     },
+    "对照新发现中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comparing new findings"
+          }
+        }
+      }
+    },
     "对端数量": {
       "extractionState": "stale",
       "localizations": {
@@ -8579,6 +9572,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Conversation messages"
+          }
+        }
+      }
+    },
+    "寻找切入点中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looking for an entry point"
           }
         }
       }
@@ -8671,6 +9675,17 @@
         }
       }
     },
+    "将思路落成文字中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Putting thoughts into words"
+          }
+        }
+      }
+    },
     "小时": {
       "extractionState": "manual",
       "localizations": {
@@ -8710,6 +9725,17 @@
         }
       }
     },
+    "展开任务": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand tasks"
+          }
+        }
+      }
+    },
     "展开任务详情": {
       "extractionState": "manual",
       "localizations": {
@@ -8739,6 +9765,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Expand approval card"
+          }
+        }
+      }
+    },
+    "展开引用": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand quote"
           }
         }
       }
@@ -8797,6 +9834,17 @@
         }
       }
     },
+    "工作区文件请求失败：%@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace file request failed: %@"
+          }
+        }
+      }
+    },
     "工具失败": {
       "extractionState": "stale",
       "localizations": {
@@ -8810,6 +9858,28 @@
     },
     "工具完成": {
       "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool completed"
+          }
+        }
+      }
+    },
+    "工具执行失败": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool failed"
+          }
+        }
+      }
+    },
+    "工具执行完成": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8875,6 +9945,17 @@
         }
       }
     },
+    "已保存到相册": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved to Photos"
+          }
+        }
+      }
+    },
     "已保存登录状态": {
       "extractionState": "stale",
       "localizations": {
@@ -8903,6 +9984,17 @@
         }
       }
     },
+    "已允许本次操作": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action allowed this time"
+          }
+        }
+      }
+    },
     "已允许本次操作。": {
       "extractionState": "manual",
       "localizations": {
@@ -8910,6 +10002,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This action was allowed."
+          }
+        }
+      }
+    },
+    "已到达本地缓存边界，连接后可加载更早内容": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reached the edge of the local cache. Connect to load earlier content."
           }
         }
       }
@@ -9001,6 +10104,17 @@
         }
       }
     },
+    "已拒绝本次操作": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action denied this time"
+          }
+        }
+      }
+    },
     "已提交": {
       "extractionState": "stale",
       "localizations": {
@@ -9029,6 +10143,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Paused"
+          }
+        }
+      }
+    },
+    "已暂停的目标": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused goal"
           }
         }
       }
@@ -9146,6 +10271,17 @@
         }
       }
     },
+    "已跳过选择": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choice skipped"
+          }
+        }
+      }
+    },
     "已连接": {
       "extractionState": "stale",
       "localizations": {
@@ -9226,6 +10362,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "平均 %@ · P95 %@"
+          }
+        }
+      }
+    },
+    "应用权限配置": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applying permission preset"
           }
         }
       }
@@ -9344,6 +10491,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "开始时间"
+          }
+        }
+      }
+    },
+    "引用": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quote"
+          }
+        }
+      }
+    },
+    "当前 Host 不支持插件管理": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Host does not support plugin management"
           }
         }
       }
@@ -9537,6 +10706,17 @@
       }
     },
     "当前时区 · %@": {},
+    "当前步骤已完成": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current step completed"
+          }
+        }
+      }
+    },
     "当前版本（去给作者Star🌟）": {
       "extractionState": "manual",
       "localizations": {
@@ -9560,6 +10740,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Current directory"
+          }
+        }
+      }
+    },
+    "当前目标": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current goal"
           }
         }
       }
@@ -9798,6 +10989,17 @@
         }
       }
     },
+    "思考": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking"
+          }
+        }
+      }
+    },
     "思考等级": {
       "localizations": {
         "en": {
@@ -9836,6 +11038,17 @@
         }
       }
     },
+    "成员": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Member"
+          }
+        }
+      }
+    },
     "成员 %@": {
       "extractionState": "manual",
       "localizations": {
@@ -9849,6 +11062,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "成员 %@"
+          }
+        }
+      }
+    },
+    "成员会话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Member session"
           }
         }
       }
@@ -9933,6 +11157,28 @@
         }
       }
     },
+    "打开 App 查看详情": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the app for details"
+          }
+        }
+      }
+    },
+    "打开 App 获取最新进度": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the app for the latest progress"
+          }
+        }
+      }
+    },
     "打开侧边栏": {
       "extractionState": "manual",
       "localizations": {
@@ -9961,6 +11207,17 @@
         }
       }
     },
+    "打捞新线索中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fishing for fresh clues"
+          }
+        }
+      }
+    },
     "执行": {
       "extractionState": "stale",
       "localizations": {
@@ -9979,6 +11236,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Run in"
+          }
+        }
+      }
+    },
+    "执行命令": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running command"
+          }
+        }
+      }
+    },
+    "执行失败": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run failed"
+          }
+        }
+      }
+    },
+    "执行完成": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run completed"
           }
         }
       }
@@ -10027,6 +11317,17 @@
         }
       }
     },
+    "执行未完成": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run didn’t finish"
+          }
+        }
+      }
+    },
     "执行规则": {
       "extractionState": "manual",
       "localizations": {
@@ -10034,6 +11335,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schedule"
+          }
+        }
+      }
+    },
+    "执行记录加载失败": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t load run history"
           }
         }
       }
@@ -10055,6 +11367,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scan device pairing code"
+          }
+        }
+      }
+    },
+    "批准已送达": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approval delivered"
           }
         }
       }
@@ -10094,6 +11417,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "找不到此文件的本地副本，文件可能已被移动或删除。"
+          }
+        }
+      }
+    },
+    "把发现串起来中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting the findings"
           }
         }
       }
@@ -10144,6 +11478,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reject action"
+          }
+        }
+      }
+    },
+    "拼合新线索中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Piecing clues together"
           }
         }
       }
@@ -10217,6 +11562,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "按类别清理"
+          }
+        }
+      }
+    },
+    "换个角度审视中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looking from another angle"
           }
         }
       }
@@ -10381,6 +11737,17 @@
         }
       }
     },
+    "推敲细节中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weighing the details"
+          }
+        }
+      }
+    },
     "推理": {
       "extractionState": "stale",
       "localizations": {
@@ -10464,6 +11831,61 @@
         }
       }
     },
+    "插件操作失败": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugin action failed"
+          }
+        }
+      }
+    },
+    "插件操作未生效": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The plugin action did not take effect"
+          }
+        }
+      }
+    },
+    "插件状态被其他配置覆盖，请检查 Host 配置": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The plugin state was overridden by other configuration. Check the Host configuration."
+          }
+        }
+      }
+    },
+    "插件目录加载失败": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t load the plugin catalog"
+          }
+        }
+      }
+    },
+    "插件目录请求超时，请重试": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The plugin catalog request timed out. Try again."
+          }
+        }
+      }
+    },
     "插件详情": {
       "extractionState": "manual",
       "localizations": {
@@ -10535,6 +11957,28 @@
         }
       }
     },
+    "搜索结果已失效": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search result is no longer valid"
+          }
+        }
+      }
+    },
+    "搜集更多拼图中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collecting more pieces"
+          }
+        }
+      }
+    },
     "摘要": {
       "extractionState": "stale",
       "localizations": {
@@ -10542,6 +11986,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Summary"
+          }
+        }
+      }
+    },
+    "操作失败，请稍后重试": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action failed. Try again later."
           }
         }
       }
@@ -10568,6 +12023,39 @@
         }
       }
     },
+    "操作结果待核实，请刷新后确认": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The result needs verification. Refresh to confirm."
+          }
+        }
+      }
+    },
+    "操作结果待确认，请刷新插件目录": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The result is unconfirmed. Refresh the plugin catalog."
+          }
+        }
+      }
+    },
+    "操作超时，请刷新任务后重试": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The action timed out. Refresh the tasks and try again."
+          }
+        }
+      }
+    },
     "操作远端 DSH Agent": {
       "localizations": {
         "en": {
@@ -10579,6 +12067,17 @@
       }
     },
     "支持 after、at、every、daily、weekly、cron、rrule，时区使用 IANA 名称。": {},
+    "收拢相关信息中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gathering related information"
+          }
+        }
+      }
+    },
     "收起": {
       "extractionState": "manual",
       "localizations": {
@@ -10592,6 +12091,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "收起"
+          }
+        }
+      }
+    },
+    "收起任务": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapse tasks"
           }
         }
       }
@@ -10625,6 +12135,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Collapse approval card"
+          }
+        }
+      }
+    },
+    "收起引用": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapse quote"
           }
         }
       }
@@ -10679,6 +12200,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Data through event #%@"
+          }
+        }
+      }
+    },
+    "整理表达中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Polishing the wording"
           }
         }
       }
@@ -11067,6 +12599,17 @@
         }
       }
     },
+    "无法创建文件下载临时文件：%@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t create a temporary file for the download: %@"
+          }
+        }
+      }
+    },
     "无法在应用内预览": {
       "extractionState": "manual",
       "localizations": {
@@ -11393,6 +12936,17 @@
         }
       }
     },
+    "暂停目标": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause goal"
+          }
+        }
+      }
+    },
     "暂无会话": {
       "localizations": {
         "en": {
@@ -11480,6 +13034,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "更多"
+          }
+        }
+      }
+    },
+    "更新及恢复结果待核实，请刷新实际版本并检查 Host 日志": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The update and recovery result needs verification. Refresh the installed version and check the Host log."
+          }
+        }
+      }
+    },
+    "更新失败，旧版本恢复失败。请刷新目录并检查 Host 日志。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The update failed and the previous version could not be restored. Refresh the catalog and check the Host log."
           }
         }
       }
@@ -11761,6 +13337,17 @@
         }
       }
     },
+    "未能确认审批结果": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t confirm the approval result"
+          }
+        }
+      }
+    },
     "未能读取到模型列表，请检查网关连接后下拉重试。": {
       "localizations": {
         "en": {
@@ -11883,6 +13470,17 @@
         }
       }
     },
+    "本地缓存或网关历史已不包含此内容，请重新搜索。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The local cache or gateway history no longer contains this content. Search again."
+          }
+        }
+      }
+    },
     "本地缓存片段": {
       "extractionState": "manual",
       "localizations": {
@@ -11929,6 +13527,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "本机缓存"
+          }
+        }
+      }
+    },
+    "本次命令未执行": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The command was not run"
           }
         }
       }
@@ -11994,6 +13603,17 @@
         }
       }
     },
+    "查看会话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View session"
+          }
+        }
+      }
+    },
     "查看会话执行状态": {
       "extractionState": "manual",
       "localizations": {
@@ -12039,6 +13659,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "View full statistics"
+          }
+        }
+      }
+    },
+    "查看智能体团队": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View agent team"
+          }
+        }
+      }
+    },
+    "查看详情": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View details"
           }
         }
       }
@@ -12092,6 +13734,50 @@
         }
       }
     },
+    "梳理当前进展中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reviewing progress so far"
+          }
+        }
+      }
+    },
+    "梳理脉络中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untangling the thread"
+          }
+        }
+      }
+    },
+    "检查结果": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check result"
+          }
+        }
+      }
+    },
+    "检视所得中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspecting what we found"
+          }
+        }
+      }
+    },
     "模型已切换": {
       "extractionState": "stale",
       "localizations": {
@@ -12110,6 +13796,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Model output"
+          }
+        }
+      }
+    },
+    "模式不可用": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mode unavailable"
           }
         }
       }
@@ -12141,6 +13838,17 @@
         }
       }
     },
+    "正在准备下一步": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing the next step"
+          }
+        }
+      }
+    },
     "正在准备代码预览…": {
       "extractionState": "manual",
       "localizations": {
@@ -12165,6 +13873,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preparing session"
+          }
+        }
+      }
+    },
+    "正在准备工具调用": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing a tool call"
           }
         }
       }
@@ -12199,6 +13918,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在准备新账号的路由…"
+          }
+        }
+      }
+    },
+    "正在分析执行步骤": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyzing the next step"
           }
         }
       }
@@ -12347,6 +14077,61 @@
         }
       }
     },
+    "正在执行": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
+          }
+        }
+      }
+    },
+    "正在提交「允许一次」": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submitting “Allow once”"
+          }
+        }
+      }
+    },
+    "正在提交「拒绝」": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submitting “Reject”"
+          }
+        }
+      }
+    },
+    "正在提交决定": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submitting your decision"
+          }
+        }
+      }
+    },
+    "正在整理会话上下文": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compacting conversation context"
+          }
+        }
+      }
+    },
     "正在整理录音": {
       "extractionState": "manual",
       "localizations": {
@@ -12360,6 +14145,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在整理录音"
+          }
+        }
+      }
+    },
+    "正在生成回复": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generating reply"
           }
         }
       }
@@ -12405,6 +14201,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在确认路径"
+          }
+        }
+      }
+    },
+    "正在等待下一步": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the next step"
+          }
+        }
+      }
+    },
+    "正在等待主机确认": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the host to confirm"
+          }
+        }
+      }
+    },
+    "正在等待执行步骤": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for a step"
           }
         }
       }
@@ -12581,6 +14410,17 @@
         }
       }
     },
+    "正在调用工具": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calling a tool"
+          }
+        }
+      }
+    },
     "正在转成文字": {
       "extractionState": "manual",
       "localizations": {
@@ -12605,6 +14445,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connecting"
+          }
+        }
+      }
+    },
+    "正在重新生成回复": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regenerating the reply"
           }
         }
       }
@@ -12643,6 +14494,17 @@
         }
       }
     },
+    "此会话尚未缓存，连接后可加载聊天内容": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This session isn’t cached yet. Connect to load the conversation."
+          }
+        }
+      }
+    },
     "此命令不支持图片": {
       "extractionState": "manual",
       "localizations": {
@@ -12650,6 +14512,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "This command does not support images"
+          }
+        }
+      }
+    },
+    "此子智能体会话为只读，无法继续对话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This sub-agent session is read-only and can’t continue the conversation"
+          }
+        }
+      }
+    },
+    "此文件需要新版网关解析，请升级 Mobile Gateway。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file needs a newer gateway to resolve. Upgrade Mobile Gateway."
           }
         }
       }
@@ -12903,6 +14787,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "No model options were recorded"
+          }
+        }
+      }
+    },
+    "沿着思路前行中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Following the line of thought"
+          }
+        }
+      }
+    },
+    "沿途探查中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scouting along the way"
           }
         }
       }
@@ -13207,6 +15113,17 @@
         }
       }
     },
+    "用代码组合多步工具操作": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compose multi-step tool calls with code"
+          }
+        }
+      }
+    },
     "用量": {
       "extractionState": "stale",
       "localizations": {
@@ -13323,6 +15240,17 @@
         }
       }
     },
+    "目标版本更新未生效，请检查更新及恢复结果": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The target version did not take effect. Check the update and recovery result."
+          }
+        }
+      }
+    },
     "直连": {
       "extractionState": "manual",
       "localizations": {
@@ -13412,6 +15340,17 @@
         }
       }
     },
+    "确认结果后才能继续操作": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm the result before continuing"
+          }
+        }
+      }
+    },
     "磁盘占用": {
       "localizations": {
         "en": {
@@ -13424,6 +15363,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "磁盘占用"
+          }
+        }
+      }
+    },
+    "离线内容不可用": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline content unavailable"
           }
         }
       }
@@ -13484,6 +15434,17 @@
         }
       }
     },
+    "稳步探索中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exploring steadily"
+          }
+        }
+      }
+    },
     "立即应用到所有页面，并在下次启动时保留。": {
       "extractionState": "stale",
       "localizations": {
@@ -13497,6 +15458,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "立即应用到所有页面，并在下次启动时保留。"
+          }
+        }
+      }
+    },
+    "立即插话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interject now"
+          }
+        }
+      }
+    },
+    "等待 Agent 更新下一步": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the agent’s next step"
+          }
+        }
+      }
+    },
+    "等待 Agent 继续执行": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the agent to continue"
           }
         }
       }
@@ -13596,6 +15590,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "等待探测结果…"
+          }
+        }
+      }
+    },
+    "等待操作": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for action"
+          }
+        }
+      }
+    },
+    "等待操作详情": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for action details"
           }
         }
       }
@@ -13743,6 +15759,17 @@
         }
       }
     },
+    "组织回应中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Organizing a response"
+          }
+        }
+      }
+    },
     "结束": {
       "extractionState": "stale",
       "localizations": {
@@ -13843,6 +15870,28 @@
         }
       }
     },
+    "继续推进中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moving forward"
+          }
+        }
+      }
+    },
+    "继续目标": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume goal"
+          }
+        }
+      }
+    },
     "继续连接": {
       "extractionState": "stale",
       "localizations": {
@@ -13878,6 +15927,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cache hit"
+          }
+        }
+      }
+    },
+    "缓存格式与上次连接不一致，连接后可重新加载聊天内容": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The cache format differs from the last connection. Connect to reload the conversation."
           }
         }
       }
@@ -13932,6 +15992,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Edit scheduled task"
+          }
+        }
+      }
+    },
+    "编辑排队消息": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit queued message"
           }
         }
       }
@@ -14006,6 +16077,17 @@
         }
       }
     },
+    "网关连接已断开，停用结果待重连确认。若已停用，请从 DSH Web 或 CLI 重新开启。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The gateway connection dropped and the disable result is unconfirmed after reconnecting. If it was disabled, re-enable it from DSH Web or the CLI."
+          }
+        }
+      }
+    },
     "网关需更新": {
       "extractionState": "stale",
       "localizations": {
@@ -14074,6 +16156,17 @@
         }
       }
     },
+    "翻阅已有线索中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looking through what we have"
+          }
+        }
+      }
+    },
     "耗时": {
       "extractionState": "stale",
       "localizations": {
@@ -14132,6 +16225,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "自定义"
+          }
+        }
+      }
+    },
+    "自定义 Agent 模式": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom agent mode"
           }
         }
       }
@@ -14361,6 +16465,17 @@
         }
       }
     },
+    "设置已保存，请重启 DSH Web 后刷新目录": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setting saved. Restart DSH Web, then refresh the catalog."
+          }
+        }
+      }
+    },
     "试试其他任务状态": {
       "extractionState": "manual",
       "localizations": {
@@ -14390,6 +16505,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This preset has configuration errors and can’t be set as the default right now"
+          }
+        }
+      }
+    },
+    "详情": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Details"
           }
         }
       }
@@ -14561,6 +16687,28 @@
         }
       }
     },
+    "请填写标题、任务内容、有效的执行规则和目标": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a title, task content, a valid schedule rule, and a target"
+          }
+        }
+      }
+    },
+    "请打开 App 完成选择": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the app to choose"
+          }
+        }
+      }
+    },
     "请扫描 Harness WebUI 生成的二维码": {
       "localizations": {
         "en": {
@@ -14698,6 +16846,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose a future date and time."
+          }
+        }
+      }
+    },
+    "请重启 DSH 后刷新目录确认实际版本": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restart DSH, then refresh the catalog to confirm the installed version."
+          }
+        }
+      }
+    },
+    "读取模式…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading modes…"
           }
         }
       }
@@ -15116,6 +17286,17 @@
         }
       }
     },
+    "进行中的目标": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active goal"
+          }
+        }
+      }
+    },
     "远端会话": {
       "extractionState": "stale",
       "localizations": {
@@ -15149,6 +17330,17 @@
         }
       }
     },
+    "连接中断，更新及恢复结果待核实，请重连后检查实际版本": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The connection was interrupted. The update and recovery result needs verification. Reconnect and check the installed version."
+          }
+        }
+      }
+    },
     "连接失败": {
       "extractionState": "stale",
       "localizations": {
@@ -15177,6 +17369,17 @@
         }
       }
     },
+    "连接已断开，操作结果待重连确认": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The connection dropped. The result will be confirmed after reconnecting."
+          }
+        }
+      }
+    },
     "连接成功": {
       "extractionState": "stale",
       "localizations": {
@@ -15201,6 +17404,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "连接方式"
+          }
+        }
+      }
+    },
+    "连接网关后可查看定时任务": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to the gateway to view scheduled tasks"
+          }
+        }
+      }
+    },
+    "连接网关后可查看插件": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to the gateway to view plugins"
+          }
+        }
+      }
+    },
+    "连接网关后才能修改定时任务": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to the gateway to change scheduled tasks"
           }
         }
       }
@@ -15245,6 +17481,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose workspace directory"
+          }
+        }
+      }
+    },
+    "选择已提交": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choice submitted"
           }
         }
       }
@@ -15304,6 +17551,17 @@
         }
       }
     },
+    "逐步展开中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unfolding step by step"
+          }
+        }
+      }
+    },
     "通过 Mobile Gateway 连接": {
       "extractionState": "stale",
       "localizations": {
@@ -15343,6 +17601,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Configuration options"
+          }
+        }
+      }
+    },
+    "酝酿下一步中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mulling the next move"
           }
         }
       }
@@ -15419,6 +17688,17 @@
         }
       }
     },
+    "重新校准方向中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recalibrating direction"
+          }
+        }
+      }
+    },
     "重新配对并连接": {
       "extractionState": "stale",
       "localizations": {
@@ -15454,6 +17734,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "重试上传"
+          }
+        }
+      }
+    },
+    "重试模式": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry modes"
+          }
+        }
+      }
+    },
+    "铺开问题脉络中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laying out the problem"
           }
         }
       }
@@ -15562,6 +17864,28 @@
         }
       }
     },
+    "需要审批": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approval needed"
+          }
+        }
+      }
+    },
+    "需要批准 · 仅限本次": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approval needed · This time only"
+          }
+        }
+      }
+    },
     "需要登录": {
       "extractionState": "stale",
       "localizations": {
@@ -15575,6 +17899,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "需要登录"
+          }
+        }
+      }
+    },
+    "需要选择": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choice needed"
           }
         }
       }

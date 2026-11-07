@@ -3899,7 +3899,7 @@ final class GatewayProtocolTests: XCTestCase {
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"session-stream-reset","sessionId":"mask-session","subscriptionId":"sub","streamId":"opening","retrying":false,"message":"Host refuses this format v0 Session"}"#)
         XCTAssertFalse(store.isPreparingConversation(session.id))
-        XCTAssertEqual(store.historyLoadErrors[session.id], "Host refuses this format v0 Session")
+        XCTAssertEqual(store.historyLoadErrors[session.id], .hostRejectedFormat("Host refuses this format v0 Session"))
         _ = await store.prepareConversation(for: session)
         XCTAssertNil(store.historyLoadErrors[session.id])
         try await deliverHistoryLoadingFrame(store,
