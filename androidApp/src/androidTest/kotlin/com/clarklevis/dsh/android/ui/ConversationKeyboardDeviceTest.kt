@@ -63,6 +63,11 @@ class ConversationKeyboardDeviceTest {
             captureComposer("composer-focused-before-ime.png")
             waitForIme(fixture.view, true)
             compose.onNodeWithTag("composer-action").assertIsDisplayed()
+            val toolbarCenter = compose.onNodeWithContentDescription("添加附件").fetchSemanticsNode().boundsInRoot.center.y
+            org.junit.Assert.assertEquals(toolbarCenter,
+                compose.onNodeWithTag("context-usage-ring").fetchSemanticsNode().boundsInRoot.center.y, 1f)
+            org.junit.Assert.assertEquals(toolbarCenter,
+                compose.onNodeWithTag("composer-action").fetchSemanticsNode().boundsInRoot.center.y, 1f)
             assertTrue(composer.fetchSemanticsNode().boundsInRoot.height > compactHeight + 60f)
             assertTrue(editor.fetchSemanticsNode().id == originalEditorID)
             val draft = "第一行草稿".repeat(40) + "\n第二行草稿"

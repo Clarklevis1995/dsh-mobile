@@ -10969,6 +10969,68 @@ final class InterfaceStylePresentationTests: XCTestCase {
 
 @MainActor
 final class ScheduledTaskCardPresentationTests: XCTestCase {
+    @available(iOS 17.0, *)
+    func testFirstCardShadowBoundary() async throws {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-catalog","items":[{"id":"shadow","sessionId":"s1","status":"active","kind":"daily","title":"每日新闻汇总","prompt":"汇总科技和金融新闻","time":"08:00:00.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-01T00:00:00Z"}]}"#.utf8))
+        let task = try XCTUnwrap(frame.items?.first.flatMap(ScheduledTask.init))
+        func root(_ reserveShadow: Bool) -> some View {
+            List {
+                ScheduledTaskCard(task: task, sessionTitle: "新闻会话", expanded: false, onOpen: {}, onExpand: {})
+                    .background(ComposerFrameProbe(identifier: "shadow-card"))
+                    .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
+                    .listRowSeparator(.hidden).listRowBackground(Color.clear)
+            }
+            .listStyle(.plain).scrollContentBackground(.hidden)
+            .modifier(ScheduledTaskListShadowInset(enabled: reserveShadow))
+            .background(Color.white)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Color.white.frame(height: 48).background(ComposerFrameProbe(identifier: "shadow-header"))
+            }
+        }
+        let host = UIHostingController(rootView: root(false))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 650)
+        window.rootViewController = host; window.makeKeyAndVisible()
+        host.overrideUserInterfaceStyle = .light
+        defer { window.isHidden = true; window.rootViewController = nil }
+        func find(_ id: String, in view: UIView) -> UIView? {
+            if view.accessibilityIdentifier == id { return view }
+            return view.subviews.lazy.compactMap { find(id, in: $0) }.first
+        }
+        var edgeSteps: [Bool: Int] = [:]
+        for reserved in [false, true] {
+            host.rootView = root(reserved)
+            try await Task.sleep(for: .milliseconds(250))
+            let card = try XCTUnwrap(find("shadow-card", in: host.view))
+            let header = try XCTUnwrap(find("shadow-header", in: host.view))
+            let headerBottom = header.convert(header.bounds, to: window).maxY
+            if reserved {
+                XCTAssertGreaterThanOrEqual(card.convert(card.bounds, to: window).minY - headerBottom, 23)
+            }
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.preferredRange = .standard
+            let image = UIGraphicsImageRenderer(size: window.bounds.size, format: format).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            let cgImage = try XCTUnwrap(image.cgImage)
+            XCTAssertEqual(cgImage.bitsPerPixel, 32)
+            let data = try XCTUnwrap(cgImage.dataProvider?.data)
+            let pixels = try XCTUnwrap(CFDataGetBytePtr(data))
+            let boundary = Int(headerBottom.rounded())
+            func brightness(_ y: Int) -> Int {
+                let offset = y * cgImage.bytesPerRow + (cgImage.width / 2) * 4
+                return (Int(pixels[offset]) + Int(pixels[offset + 1]) + Int(pixels[offset + 2])) / 3
+            }
+            edgeSteps[reserved] = abs(brightness(boundary + 1) - brightness(boundary - 1))
+            let attachment = XCTAttachment(image: image)
+            attachment.name = reserved ? "首张卡片阴影-完整渐变" : "首张卡片阴影-原始截断"
+            attachment.lifetime = .keepAlways; add(attachment)
+        }
+        let fixed = try XCTUnwrap(edgeSteps[true])
+        XCTAssertLessThanOrEqual(fixed, 2, "筛选栏下沿不应出现阴影亮度的硬切线")
+        XCTAssertLessThan(fixed, try XCTUnwrap(edgeSteps[false]))
+    }
+
     func testPausedCardParityInLightAndDark() throws {
         let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-catalog","items":[{"id":"p1","sessionId":"s1","status":"paused","kind":"daily","title":"每日新闻汇总","prompt":"汇总科技和金融新闻","time":"08:00:37.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-31T00:00:00Z"}]}"#.utf8))
         let task = try XCTUnwrap(frame.items?.first.flatMap(ScheduledTask.init))

@@ -67,37 +67,52 @@ class ScheduledTaskParityDeviceTest {
         }
     }
 
-    @Test fun pausedCardSupportsEditingAndBothSwipeDirectionsWithoutExternalActionRows() {
+    @Test fun pausedCardOnlyRevealsEditAndDeleteAndKeepsHistoryInsideDetails() {
         val raw = GatewayWireDecoder.decode("""{"kind":"schedule-catalog","items":[{"id":"p1","sessionId":"s1","status":"paused","kind":"daily","title":"每日新闻汇总","prompt":"汇总科技和金融新闻","time":"08:00:37.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-31T00:00:00Z"}]}""").items!!.single()
         val task = MobileScheduledTask.from(raw)!!
         var revealed by mutableStateOf<String?>(null)
         var edits = 0
-        var resumes = 0
+        var historyOpens = 0
         compose.setContent {
             DshTheme {
                 ScheduleTheme {
                     Box(Modifier.width(390.dp).background(Color.White).padding(20.dp)) {
                         ScheduledTaskCard(task, "新闻会话", revealed, { revealed = it }, {}, { edits++ }, {}, false,
-                            onShowHistory = {}, onRun = {}, onToggleActive = { resumes++ })
+                            onShowHistory = { historyOpens++ })
                     }
                 }
             }
         }
         compose.onNodeWithText("已暂停").assertIsDisplayed()
+        compose.onNodeWithTag("scheduled-card-p1").performTouchInput { swipeRight() }
+        compose.waitForIdle()
         compose.onNodeWithContentDescription("恢复").assertDoesNotExist()
+        compose.onNodeWithContentDescription("暂停").assertDoesNotExist()
+        compose.onNodeWithContentDescription("立即执行").assertDoesNotExist()
+        compose.onNodeWithContentDescription("执行记录").assertDoesNotExist()
+        assertEquals(compose.onNodeWithTag("scheduled-card-p1").fetchSemanticsNode().boundsInRoot.left,
+            compose.onNodeWithTag("scheduled-card-body-p1").fetchSemanticsNode().boundsInRoot.left, 1f)
         compose.onNodeWithTag("scheduled-card-p1").performTouchInput { swipeLeft() }
         compose.waitForIdle()
+        compose.onRoot().captureToImage().let { image ->
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            File(context.getExternalFilesDir(null), "schedule-edit-pencil.png").outputStream().use {
+                image.asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
         compose.onNodeWithContentDescription("编辑每日新闻汇总").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, edits); revealed = null }
         compose.onNodeWithTag("scheduled-card-p1").performTouchInput { swipeRight() }
         compose.waitForIdle()
-        compose.onNodeWithContentDescription("恢复").assertIsDisplayed().performClick()
-        compose.runOnIdle { assertEquals(1, resumes) }
         compose.waitForIdle()
         assertEquals(compose.onNodeWithTag("scheduled-card-p1").fetchSemanticsNode().boundsInRoot.left,
             compose.onNodeWithTag("scheduled-card-body-p1").fetchSemanticsNode().boundsInRoot.left, 1f)
+        // 真实触摸在侧滑结束后有 350ms 防误触窗口。
+        val closedAt = android.os.SystemClock.uptimeMillis()
+        compose.waitUntil(1000) { android.os.SystemClock.uptimeMillis() - closedAt >= 350L }
         compose.onNodeWithContentDescription("展开任务详情").performClick()
-        compose.onNodeWithTag("scheduled-task-history").assertIsDisplayed()
+        compose.onNodeWithTag("scheduled-task-history").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(1, historyOpens) }
         compose.onRoot().captureToImage().let { image ->
             val context = InstrumentationRegistry.getInstrumentation().targetContext
             File(context.getExternalFilesDir(null), "schedule-paused-parity.png").outputStream().use {

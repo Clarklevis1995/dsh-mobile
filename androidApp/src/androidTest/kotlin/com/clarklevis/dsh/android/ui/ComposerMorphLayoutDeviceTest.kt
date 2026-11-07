@@ -71,6 +71,11 @@ class ComposerMorphLayoutDeviceTest {
         assertEquals(originalID, editor.fetchSemanticsNode().id)
         compose.onNodeWithTag("tools").assertIsDisplayed()
         compose.onNodeWithTag("send").assertIsDisplayed()
+        val centerY = compose.onNodeWithTag("add").fetchSemanticsNode().boundsInRoot.center.y
+        assertEquals("工具行与加号中轴对齐", centerY,
+            compose.onNodeWithTag("tools").fetchSemanticsNode().boundsInRoot.center.y, 1f)
+        assertEquals("发送与工具行中轴对齐", centerY,
+            compose.onNodeWithTag("send").fetchSemanticsNode().boundsInRoot.center.y, 1f)
         val plus = compose.onNodeWithTag("add")
         val plusID = plus.fetchSemanticsNode().id
         val plusSize = plus.fetchSemanticsNode().boundsInRoot.size

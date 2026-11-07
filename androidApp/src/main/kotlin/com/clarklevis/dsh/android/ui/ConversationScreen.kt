@@ -1983,18 +1983,19 @@ private fun PreparedImagePreview(image: AndroidPreparedImage, onRemove: () -> Un
             PreparedImagePreviewState.Loading -> Text(appText("正在加载图片…"), fontSize = 10.sp)
             PreparedImagePreviewState.Unavailable -> Text(appText("无法预览图片"), fontSize = 10.sp)
         }
-        Text(
-            "×",
+        Box(
             modifier = Modifier.align(Alignment.TopEnd)
                 .offset(x = 5.dp, y = (-5).dp)
                 .size(20.dp)
-                .background(Color.Black.copy(alpha = 0.65f), CircleShape)
-                .clickable(onClick = onRemove)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.68f))
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onRemove)
                 .semantics { contentDescription = appText("移除图片") },
-            color = Color.White,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Bold
-        )
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(painterResource(R.drawable.ic_close), contentDescription = null,
+                modifier = Modifier.size(16.dp), tint = Color.White)
+        }
     }
 }
 

@@ -3,6 +3,7 @@ package com.clarklevis.dsh.android.ui
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -98,15 +99,33 @@ internal fun ScheduleFilledField(value: String, onChange: (String) -> Unit, hint
         decorationBox = { field -> Box { if (value.isEmpty()) Text(hint, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); field() } })
 }
 
+/** 固定拖动锚点，同时让可见面板始终位于顶部安全区下方。 */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ScheduleSheetHeader(title: String, onDismiss: () -> Unit, action: String? = null,
-    enabled: Boolean = true, dismissEnabled: Boolean = true, dismissLabel: String = appText("取消"), onAction: () -> Unit = {}) {
-    Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 12.dp)) {
-        TextButton(onClick = onDismiss, enabled = dismissEnabled, modifier = Modifier.align(Alignment.CenterStart)) { Text(dismissLabel, fontSize = 17.sp) }
-        Text(title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.align(Alignment.Center))
-        if (action != null) TextButton(onClick = onAction, enabled = enabled, modifier = Modifier.align(Alignment.CenterEnd)) { Text(action, fontSize = 17.sp) }
-    }
+internal fun ScheduledTaskModalSheet(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentWindowInsets: @Composable () -> WindowInsets = {
+        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+    },
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val topGap = maxOf(adaptiveWindowSize().height * 0.06f,
+        WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() + 8.dp)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.adaptiveSheetBounds().fillMaxHeight().padding(top = topGap).then(modifier),
+        sheetMaxWidth = adaptiveSheetWidth(),
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+        contentWindowInsets = contentWindowInsets,
+        dragHandle = {
+            Box(Modifier.padding(top = 6.dp, bottom = 2.dp).size(width = 36.dp, height = 4.dp)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), androidx.compose.foundation.shape.CircleShape))
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        content = content
+    )
 }
 
 internal data class ScheduleChoice(val value: String, val title: String, val subtitle: String = "")
@@ -121,7 +140,7 @@ internal fun ScheduleChoiceSheet(title: String, searchHint: String, selected: St
         ScheduleKeyboardDismissHost {
             DshMenuColumnHost {
                 Column(Modifier.fillMaxWidth().fillMaxHeight(0.92f).navigationBarsPadding()) {
-                    ScheduleSheetHeader(title, onDismiss)
+                    DshPickerHeader(title, onDismiss)
                     ScheduleFilledField(query, { query = it }, searchHint, singleLine = true, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                     LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 20.dp)) {
                         items(choices.filter { it.value.isEmpty() || query.isEmpty() || it.title.contains(query, true) || it.subtitle.contains(query, true) || it.value.contains(query, true) }, key = { it.value }) { choice ->

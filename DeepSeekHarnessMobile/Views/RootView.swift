@@ -343,6 +343,20 @@ func filteredScheduledTasks(
     }
 }
 
+/// 将卡片的上方阴影留在滚动内容内，避开筛选栏不透明背景的绘制边界。
+struct ScheduledTaskListShadowInset: ViewModifier {
+    static let topClearance: CGFloat = 16
+    let enabled: Bool
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.contentMargins(.top, enabled ? Self.topClearance : 0, for: .scrollContent)
+        } else {
+            content
+        }
+    }
+}
+
 private struct ScheduledTasksView: View {
     private enum ActiveAlert: Identifiable {
         case delete(ScheduledTask)
@@ -433,6 +447,13 @@ private struct ScheduledTasksView: View {
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
             } else {
+                if #unavailable(iOS 17.0) {
+                    Color.clear.frame(height: ScheduledTaskListShadowInset.topClearance)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden).listRowBackground(Color.clear)
+                        .environment(\.defaultMinListRowHeight, 0)
+                        .accessibilityHidden(true)
+                }
                 ForEach(visibleTasks) { task in
                     taskRow(for: task)
                 }
@@ -443,6 +464,7 @@ private struct ScheduledTasksView: View {
     private var listContent: some View {
         taskList
         .listStyle(.plain)
+        .modifier(ScheduledTaskListShadowInset(enabled: !visibleTasks.isEmpty))
         .adaptiveListWidth()
         .scrollContentBackground(.hidden)
         .refreshable { store.refreshScheduledTasks() }
@@ -504,21 +526,10 @@ private struct ScheduledTasksView: View {
         .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
-        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            if store.supportsScheduleManagement {
-                Button("执行记录") { historyTask = task; store.loadScheduleHistory(task) }
-                Button("立即执行") { store.runScheduledTask(task) }.disabled(store.scheduledTaskPendingID != nil)
-                if task.status != "ended" {
-                    Button(task.status == "active" ? "暂停" : "恢复") {
-                        store.setScheduledTaskActive(task, active: task.status != "active")
-                    }
-                    .disabled(store.scheduledTaskPendingID != nil)
-                }
-            }
-        }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) { activeAlert = .delete(task) } label: {
-                Image(systemName: "trash")
+                Image("ScheduleTrash").renderingMode(.template)
+                    .resizable().scaledToFit().frame(width: 24, height: 24)
             }
             .accessibilityLabel("删除")
             .disabled(store.scheduledTaskPendingID != nil)
@@ -622,7 +633,11 @@ private struct ScheduledTasksView: View {
             }
             .accessibilityIdentifier("scheduled-tasks-create")
             Button(role: .destructive) { activeAlert = .deleteEnded } label: {
-                Label("删除已结束的定时任务", systemImage: "trash")
+                Label {
+                    Text("删除已结束的定时任务")
+                } icon: {
+                    Image("ScheduleTrash").renderingMode(.template)
+                }
             }
             .disabled(!store.supportsScheduleManagement || !store.gateway.state.isConnected || store.scheduledTaskPendingID != nil)
             .accessibilityIdentifier("scheduled-tasks-delete-ended")
@@ -837,13 +852,16 @@ struct ScheduledTaskCard: View {
             if let onShowHistory {
                 Divider()
                 Button(action: onShowHistory) {
-                    HStack {
-                        Label("查看运行轨迹", systemImage: "clock.arrow.circlepath")
-                        Spacer()
-                        Image(systemName: "chevron.right")
+                    HStack(spacing: 12) {
+                        Image("ScheduleHistory").renderingMode(.template)
+                            .resizable().scaledToFit().frame(width: 24, height: 24)
+                        Text("查看运行轨迹").frame(maxWidth: .infinity, alignment: .leading)
+                        Image("ScheduleChevronRight").renderingMode(.template)
+                            .resizable().scaledToFit().frame(width: 20, height: 20)
                     }
                     .appFont(.system(size: 15))
                     .padding(.vertical, 8)
+                    .frame(minHeight: 48)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

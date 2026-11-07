@@ -1840,10 +1840,12 @@ struct ConversationView: View {
                         Button {
                             pendingImages.removeAll { $0.id == preview.source.id }
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(.white, .black.opacity(0.68))
-                                .appFont(.system(size: 20))
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 20, height: 20, alignment: .center)
+                                .background(.black.opacity(0.68), in: Circle())
+                                .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
                         .offset(x: 5, y: -5)

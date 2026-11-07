@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.android.ui
 
+import android.os.Build
 import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
@@ -34,6 +35,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
@@ -79,6 +85,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalFocusManager
@@ -102,6 +110,8 @@ import com.clarklevis.dsh.android.AndroidSharedStateHolder
 import com.clarklevis.dsh.android.MobileScheduledTask
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -235,7 +245,7 @@ private fun ScheduledTasksContent(stateHolder: AndroidSharedStateHolder, onBack:
             else -> LazyColumn(
                 modifier = Modifier.adaptiveContentWidth().fillMaxSize().testTag("scheduled-tasks-content"),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp
+                    start = 20.dp, end = 20.dp, top = 24.dp, bottom = 20.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -267,10 +277,6 @@ private fun ScheduledTasksContent(stateHolder: AndroidSharedStateHolder, onBack:
                         },
                         onShowHistory = if ("schedule-management-v2" in stateHolder.gatewayState.capabilities) {
                             { historyTask = task; stateHolder.loadScheduleHistory(task) }
-                        } else null,
-                        onRun = if ("schedule-management-v2" in stateHolder.gatewayState.capabilities) { { stateHolder.runScheduledTask(task) } } else null,
-                        onToggleActive = if ("schedule-management-v2" in stateHolder.gatewayState.capabilities && task.status != "ended") {
-                            { stateHolder.setScheduledTaskActive(task, task.status != "active") }
                         } else null,
                         busy = stateHolder.scheduledTaskPendingId != null
                     )
@@ -408,7 +414,7 @@ private fun ScheduledTaskSearchAndActions(
                     )
                     DshMenuItem(
                         text = { Text(appText("删除已结束的定时任务"), color = MaterialTheme.colorScheme.error) },
-                        leadingIcon = { Icon(painterResource(R.drawable.ic_trash), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_schedule_trash), null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.error) },
                         enabled = canDeleteEnded,
                         modifier = Modifier.testTag("scheduled-tasks-delete-ended"),
                         onClick = { moreExpanded = false; onDeleteEnded() }
@@ -457,9 +463,7 @@ internal fun ScheduledTaskCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     busy: Boolean,
-    onShowHistory: (() -> Unit)? = null,
-    onRun: (() -> Unit)? = null,
-    onToggleActive: (() -> Unit)? = null
+    onShowHistory: (() -> Unit)? = null
 ) {
     val dark = isSystemInDarkTheme()
     var expanded by rememberSaveable(task.id) { mutableStateOf(false) }
@@ -471,9 +475,6 @@ internal fun ScheduledTaskCard(
     val density = LocalDensity.current
     val canEdit = com.clarklevis.dsh.shared.protocol.ScheduleTaskPresentation.canEdit(task.status)
     val revealWidthPx = with(density) { (if (canEdit) 128.dp else 68.dp).toPx() }
-    val leadingWidth = if (onToggleActive != null) 188.dp else 128.dp
-    val leadingWidthPx = with(density) { leadingWidth.toPx() }
-    var openedLeading by remember(task.id) { mutableStateOf(false) }
     val flingThresholdPx = with(density) { 280.dp.toPx() }
     var offsetPx by remember(task.id) {
         mutableFloatStateOf(if (revealedTaskId == task.id) -revealWidthPx else 0f)
@@ -484,17 +485,16 @@ internal fun ScheduledTaskCard(
     var suppressCardTapUntil by remember(task.id) { mutableLongStateOf(0L) }
     val scope = rememberCoroutineScope()
     val progress = (-offsetPx / revealWidthPx).coerceIn(0f, 1f)
-    val leadingProgress = (offsetPx / leadingWidthPx).coerceIn(0f, 1f)
 
     fun settle(open: Boolean, velocity: Float = 0f) {
         animationJob?.cancel()
         animationJob = scope.launch {
             animate(
                 initialValue = offsetPx,
-                targetValue = if (!open) 0f else if (openedLeading) leadingWidthPx else -revealWidthPx,
+                targetValue = if (open) -revealWidthPx else 0f,
                 initialVelocity = velocity,
                 animationSpec = spring(stiffness = 450f, dampingRatio = 0.86f)
-            ) { value, _ -> offsetPx = value.coerceIn(-revealWidthPx, if (onRun != null) leadingWidthPx else 0f) }
+            ) { value, _ -> offsetPx = value.coerceIn(-revealWidthPx, 0f) }
         }
     }
 
@@ -509,24 +509,6 @@ internal fun ScheduledTaskCard(
 
     Box(Modifier.fillMaxWidth().testTag("scheduled-card-${task.id}")) {
         Box(Modifier.matchParentSize()) {
-            if (onRun != null) {
-                Row(Modifier.align(Alignment.CenterStart).width(leadingWidth)
-                    .graphicsLayer { alpha = leadingProgress }
-                    .then(if (leadingProgress < 0.95f) Modifier.clearAndSetSemantics {} else Modifier),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    listOfNotNull(
-                        onShowHistory?.let { Triple(R.drawable.ic_history_reload, appText("执行记录"), it) },
-                        Triple(R.drawable.ic_play_circle, appText("立即执行"), onRun),
-                        onToggleActive?.let { Triple(if (task.status == "active") R.drawable.ic_pause_circle else R.drawable.ic_play_circle,
-                            appText(if (task.status == "active") "暂停" else "恢复"), it) }
-                    ).forEach { (icon, label, action) ->
-                        IconButton(onClick = { suppressCardTapUntil = 0L; onRevealChange(null); action() }, enabled = leadingProgress > 0.95f && (icon == R.drawable.ic_history_reload || !busy),
-                            modifier = Modifier.size(50.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)) {
-                            Icon(painterResource(icon), label, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                }
-            }
             Box(
                 Modifier.align(Alignment.CenterEnd).fillMaxHeight()
                     .requiredWidth(with(density) { (-offsetPx).coerceAtLeast(0f).toDp() })
@@ -559,16 +541,16 @@ internal fun ScheduledTaskCard(
                                 CircleShape
                             )
                     ) {
-                        Icon(painterResource(R.drawable.ic_pencil_line), contentDescription = appText("编辑%1\$s", task.title),
-                            modifier = Modifier.size(20.dp), tint = Color.White)
+                        Icon(painterResource(R.drawable.ic_schedule_edit), contentDescription = appText("编辑%1\$s", task.title),
+                            modifier = Modifier.size(14.dp), tint = Color.White)
                     }
                     IconButton(
                         onClick = onDelete,
                         enabled = progress > 0.95f && !busy,
                         modifier = Modifier.size(50.dp).background(Color(0xFFD65052), CircleShape)
                     ) {
-                        Icon(painterResource(R.drawable.ic_trash), contentDescription = appText("删除%1\$s", task.title),
-                            modifier = Modifier.size(20.dp), tint = Color.White)
+                        Icon(painterResource(R.drawable.ic_schedule_trash), contentDescription = appText("删除%1\$s", task.title),
+                            modifier = Modifier.size(24.dp), tint = Color.White)
                     }
                 }
             }
@@ -592,18 +574,17 @@ internal fun ScheduledTaskCard(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta ->
                         animationJob?.cancel()
-                        offsetPx = (offsetPx + delta).coerceIn(-revealWidthPx, if (onRun != null) leadingWidthPx else 0f)
+                        offsetPx = (offsetPx + delta).coerceIn(-revealWidthPx, 0f)
                     },
                     onDragStarted = {
                         startedOpen = revealedTaskId == task.id
                         suppressCardTapUntil = SystemClock.uptimeMillis() + 350L
                     },
                     onDragStopped = { velocity ->
-                        openedLeading = offsetPx > 0
                         val open = when {
-                            velocity < -flingThresholdPx -> !openedLeading
-                            velocity > flingThresholdPx -> openedLeading
-                            else -> kotlin.math.abs(offsetPx) >= (if (openedLeading) leadingWidthPx else revealWidthPx) * (if (startedOpen) 0.75f else 0.25f)
+                            velocity < -flingThresholdPx -> true
+                            velocity > flingThresholdPx -> false
+                            else -> -offsetPx >= revealWidthPx * (if (startedOpen) 0.75f else 0.25f)
                         }
                         suppressCardTapUntil = SystemClock.uptimeMillis() + 350L
                         localSettleTarget = open
@@ -672,12 +653,18 @@ internal fun ScheduledTaskCard(
                     ScheduleDetail(appText("最近投递"), task.lastDelivery?.get("deliveredAt")?.stringValue?.let { appText("已投递 · %1\$s", formatScheduleDate(it)) } ?: appText("暂无投递记录"))
                     if (onShowHistory != null) {
                         HorizontalDivider()
-                        TextButton(onClick = onShowHistory, modifier = Modifier.fillMaxWidth().testTag("scheduled-task-history")) {
-                            Icon(painterResource(R.drawable.ic_history_reload), null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(appText("查看运行轨迹"))
-                            Spacer(Modifier.weight(1f))
-                            Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp))
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .clickable(role = Role.Button, onClick = onShowHistory)
+                                .padding(vertical = 8.dp).testTag("scheduled-task-history"),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(painterResource(R.drawable.ic_schedule_history), null, Modifier.size(24.dp), tint = scheduleBlue)
+                            Text(appText("查看运行轨迹"), modifier = Modifier.weight(1f),
+                                fontSize = 15.sp, lineHeight = 20.sp,
+                                fontWeight = FontWeight.Normal, color = scheduleBlue)
+                            Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(20.dp), tint = scheduleBlue)
                         }
                     }
                 }
@@ -694,72 +681,128 @@ private fun ScheduledTaskHistorySheet(
     onDismiss: () -> Unit,
     onOpenSession: (String) -> Unit
 ) {
-    val history = stateHolder.scheduleHistory
+    ScheduledTaskHistorySheet(
+        task = task,
+        history = stateHolder.scheduleHistory,
+        loading = stateHolder.scheduleHistoryLoading,
+        error = stateHolder.scheduleHistoryError,
+        onLoadHistory = { before -> stateHolder.loadScheduleHistory(task, before) },
+        onDismiss = onDismiss,
+        onOpenSession = onOpenSession
+    )
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun ScheduledTaskHistorySheet(
+    task: MobileScheduledTask,
+    history: com.clarklevis.dsh.shared.protocol.JsonValue?,
+    loading: Boolean,
+    error: String?,
+    onLoadHistory: (String?) -> Unit,
+    onDismiss: () -> Unit,
+    onOpenSession: (String) -> Unit
+) {
     val records = history?.get("records")?.arrayValue.orEmpty()
     val before = history?.get("nextBefore")?.stringValue
-    androidx.compose.material3.ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        modifier = Modifier.adaptiveSheetBounds().testTag("scheduled-task-history-sheet"),
-        sheetMaxWidth = adaptiveSheetWidth(),
-        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface
+    ScheduledTaskModalSheet(
+        onDismiss = onDismiss,
+        modifier = Modifier.testTag("scheduled-task-history-sheet"),
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal) }
     ) {
         DshMenuColumnHost {
-            Column(Modifier.fillMaxWidth().heightIn(min = adaptiveWindowSize().height * 0.5f).navigationBarsPadding()) {
-                ScheduleSheetHeader(appText("运行轨迹"), onDismiss, dismissLabel = appText("关闭"))
-                LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                    item { Text(task.title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
-                    items(records.size) { index ->
-                        val record = records[index]
-                        var expanded by rememberSaveable(task.id, index) { mutableStateOf(false) }
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Icon(painterResource(R.drawable.ic_drawer_schedule), null, Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            val backdrop = rememberLayerBackdrop()
+            val density = LocalDensity.current
+            val bottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+            var footerHeight by remember { mutableStateOf(52.dp + bottomInset) }
+            val hasSession = task.sessionId.isNotBlank()
+            Column(Modifier.fillMaxSize()) {
+                DshPickerHeader(appText("运行轨迹"), onDismiss,
+                    dismissLabel = appText("关闭"), capsuleActions = true)
+                Box(Modifier.fillMaxWidth().weight(1f)) {
+                    LazyColumn(Modifier.fillMaxSize().layerBackdrop(backdrop).testTag("scheduled-task-history-records"),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            start = 20.dp, top = 20.dp, end = 20.dp,
+                            bottom = 20.dp + if (hasSession) footerHeight else bottomInset
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        item { Text(task.title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
+                        items(records.size) { index ->
+                            val record = records[index]
+                            var expanded by rememberSaveable(task.id, index) { mutableStateOf(false) }
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                val timestamp = record["scheduledAt"]?.stringValue ?: record["deliveredAt"]?.stringValue
-                                Text(timestamp?.let(::formatScheduleDate) ?: appText("时间未知"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                                Text(record["title"]?.stringValue ?: task.title, fontSize = 17.sp)
-                                Row(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    Text(appText("详情"), color = MaterialTheme.colorScheme.primary, fontSize = 17.sp)
-                                    Spacer(Modifier.weight(1f))
-                                    Icon(painterResource(R.drawable.ic_chevron_up), appText(if (expanded) "收起" else "展开"), Modifier.size(14.dp).graphicsLayer { rotationZ = if (expanded) 0f else 180f }, tint = MaterialTheme.colorScheme.primary)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(painterResource(R.drawable.ic_drawer_schedule), null, Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    val timestamp = record["scheduledAt"]?.stringValue ?: record["deliveredAt"]?.stringValue
+                                    Text(timestamp?.let(::formatScheduleDate) ?: appText("时间未知"),
+                                        fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold,
+                                        style = TextStyle(platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)))
                                 }
-                                if (expanded) {
-                                    Text(record["prompt"]?.stringValue ?: task.prompt, fontSize = 15.sp)
-                                    record["deliveredAt"]?.stringValue?.let { Text(formatScheduleDate(it)) }
-                                    record["messageId"]?.stringValue?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                    (record["targetSessionId"] ?: record["sessionId"])?.stringValue?.takeIf { it.isNotBlank() && it != task.sessionId }?.let { session ->
-                                        TextButton(onClick = { onOpenSession(session) }) { Text(appText("关联会话")) }
+                                Column(Modifier.padding(start = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(record["title"]?.stringValue ?: task.title, fontSize = 17.sp)
+                                    Row(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically) {
+                                        Text(appText("详情"), color = MaterialTheme.colorScheme.primary, fontSize = 17.sp)
+                                        Spacer(Modifier.weight(1f))
+                                        Icon(painterResource(R.drawable.ic_chevron_up), appText(if (expanded) "收起" else "展开"), Modifier.size(14.dp).graphicsLayer { rotationZ = if (expanded) 0f else 180f }, tint = MaterialTheme.colorScheme.primary)
                                     }
+                                    if (expanded) {
+                                        Text(record["prompt"]?.stringValue ?: task.prompt, fontSize = 15.sp)
+                                        record["deliveredAt"]?.stringValue?.let { Text(formatScheduleDate(it)) }
+                                        record["messageId"]?.stringValue?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                        (record["targetSessionId"] ?: record["sessionId"])?.stringValue?.takeIf { it.isNotBlank() && it != task.sessionId }?.let { session ->
+                                            TextButton(onClick = { onOpenSession(session) }) { Text(appText("关联会话")) }
+                                        }
+                                    }
+                                    HorizontalDivider()
                                 }
-                                HorizontalDivider()
                             }
                         }
-                    }
-                    item {
-                        when {
-                            stateHolder.scheduleHistoryLoading -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                            stateHolder.scheduleHistoryError != null -> Column {
-                                Text(stateHolder.scheduleHistoryError.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                TextButton(onClick = { stateHolder.loadScheduleHistory(task, before) }) { Text(appText("重试")) }
+                        item {
+                            when {
+                                loading -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                                error != null -> Column {
+                                    Text(error.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    TextButton(onClick = { onLoadHistory(before) }) { Text(appText("重试")) }
+                                }
+                                records.isEmpty() -> Text(appText("暂无运行轨迹"))
+                                before != null -> TextButton(onClick = { onLoadHistory(before) }) { Text(appText("加载更早轨迹")) }
                             }
-                            records.isEmpty() -> Text(appText("暂无运行轨迹"))
-                            before != null -> TextButton(onClick = { stateHolder.loadScheduleHistory(task, before) }) { Text(appText("加载更早轨迹")) }
+                        }
+                        if (history?.get("retention")?.let { it != com.clarklevis.dsh.shared.protocol.JsonValue.NullValue } == true ||
+                            history?.get("earlierRecordsPruned")?.booleanValue == true || history?.get("earlierRecordsUnavailable")?.booleanValue == true) {
+                            item { Text(appText("仅显示宿主仍保留的运行记录"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                     }
-                    if (history?.get("retention")?.let { it != com.clarklevis.dsh.shared.protocol.JsonValue.NullValue } == true ||
-                        history?.get("earlierRecordsPruned")?.booleanValue == true || history?.get("earlierRecordsUnavailable")?.booleanValue == true) {
-                        item { Text(appText("仅显示宿主仍保留的运行记录"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    }
-                }
-                if (task.sessionId.isNotBlank()) {
-                    TextButton(onClick = { onOpenSession(task.sessionId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                        Icon(painterResource(R.drawable.ic_schedule_conversation), null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(appText("关联会话"), fontSize = 17.sp)
+                    if (hasSession) {
+                        // Dialog 的系统 Configuration 可能与应用主题不同，以当前面板主题为准。
+                        val surface = MaterialTheme.colorScheme.surface
+                        val tint = if (surface.luminance() < 0.5f) Color(0xFF242424) else Color(0xFFF3F4F4)
+                        val material = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !LocalUiEffectsReduced.current) {
+                            Modifier.topBarGlassSurface(backdrop, tint, surfaceAlpha = 0.92f)
+                        } else Modifier.background(tint)
+                        // 材质覆盖到底部安全区，滚动正文在底栏下方模糊，不穿透按钮。
+                        Row(
+                            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                // 先遮住未模糊的原始正文，再叠加采样材质，防止清晰文字透底。
+                                .background(surface).clipToBounds()
+                                .then(material)
+                                .onSizeChanged { footerHeight = with(density) { it.height.toDp() } }
+                                .testTag("scheduled-task-history-session-footer")
+                                .clickable(role = Role.Button) { onOpenSession(task.sessionId) }
+                                .navigationBarsPadding().padding(horizontal = 20.dp, vertical = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(painterResource(R.drawable.ic_schedule_conversation), null,
+                                Modifier.size(width = 24.dp, height = 19.dp)
+                                    .testTag("scheduled-task-history-session-icon"), tint = scheduleBlue)
+                            Text(appText("关联会话"), fontSize = 17.sp, color = scheduleBlue)
+                        }
                     }
                 }
             }

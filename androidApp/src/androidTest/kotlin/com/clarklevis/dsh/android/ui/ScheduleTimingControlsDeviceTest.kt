@@ -105,6 +105,28 @@ class ScheduleTimingControlsDeviceTest {
         compose.onNodeWithTag("schedule-clock-23-小时").assertDoesNotExist()
         compose.onNodeWithTag("schedule-time-picker").performScrollTo().performClick()
         compose.onNodeWithTag("schedule-clock-23-小时").assertExists()
+        val clockBands = listOf("23-小时", "59-分钟", "59-秒").map {
+            compose.onNodeWithTag("schedule-clock-values-$it-selection").fetchSemanticsNode().boundsInRoot
+        }
+        clockBands.zipWithNext().forEach { (left, right) ->
+            assertTrue("时分秒选中胶囊之间必须留有间距", right.left - left.right > 10f)
+            assertEquals(left.center.y, right.center.y, 1f)
+        }
+        for ((maximum, label) in listOf(23 to "小时", 59 to "分钟", 59 to "秒")) {
+            val titleBounds = compose.onNodeWithText(label).fetchSemanticsNode().boundsInRoot
+            val wheelBounds = compose.onNodeWithTag("schedule-clock-values-$maximum-$label").fetchSemanticsNode().boundsInRoot
+            assertTrue("标题与数字滚轮之间必须留有间距", wheelBounds.top - titleBounds.bottom > 8f)
+        }
+        val wheelContext = InstrumentationRegistry.getInstrumentation().targetContext
+        File(wheelContext.getExternalFilesDir(null), "schedule-clock-parity.png").outputStream().use {
+            checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
+                .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+        compose.onNodeWithTag("schedule-clock-values-59-秒").performTouchInput { swipeUp(durationMillis = 600) }
+        compose.waitUntil(5000) {
+            compose.onNodeWithTag("schedule-clock-values-59-秒").fetchSemanticsNode()
+                .config[SemanticsProperties.StateDescription] != "37"
+        }
         compose.onNodeWithText("取消").performClick()
         compose.onNodeWithTag("schedule-clock-23-小时").assertDoesNotExist()
         compose.runOnIdle { assertEquals("08:00:37", draft.time) }

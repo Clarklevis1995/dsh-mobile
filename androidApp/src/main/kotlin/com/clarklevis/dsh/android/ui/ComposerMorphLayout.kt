@@ -13,6 +13,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -42,8 +43,11 @@ internal fun ComposerMorphLayout(
     Layout(modifier = modifier.fillMaxWidth(), content = {
         Box { leading() }
         Box { editor() }
-        Box(Modifier.graphicsLayer { alpha = animation.value }.then(hiddenSemantics)) { tools() }
-        Box(Modifier.graphicsLayer { alpha = animation.value }.then(hiddenSemantics)) { action() }
+        // 槽位高 42dp，内容按自身高度测量后居中，不能默认贴着槽位顶部。
+        Box(Modifier.graphicsLayer { alpha = animation.value }.then(hiddenSemantics),
+            contentAlignment = Alignment.Center) { tools() }
+        Box(Modifier.graphicsLayer { alpha = animation.value }.then(hiddenSemantics),
+            contentAlignment = Alignment.Center) { action() }
     }) { items, constraints ->
         // 动画值仅在测量/绘制阶段读取，不让每一帧重新组合输入区及工具菜单。
         val progress = animation.value

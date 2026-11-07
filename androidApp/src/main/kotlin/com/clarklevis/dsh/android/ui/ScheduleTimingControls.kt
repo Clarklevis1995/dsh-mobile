@@ -1,13 +1,9 @@
 package com.clarklevis.dsh.android.ui
 
-import android.app.DatePickerDialog
-import android.widget.NumberPicker
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
@@ -27,18 +23,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import com.clarklevis.dsh.android.MobileScheduledTask
 import com.clarklevis.dsh.android.localization.appText
@@ -75,7 +67,6 @@ internal fun timingValidationError(draft: ScheduleTimingDraft): String? {
 
 @Composable
 internal fun ScheduleTimingControls(draft: ScheduleTimingDraft, enabled: Boolean, onChange: (ScheduleTimingDraft) -> Unit) {
-    val context = LocalContext.current
     var frequencyMenu by remember { mutableStateOf(false) }
     var selectingTime by remember { mutableStateOf(false) }
     var selectingInterval by remember { mutableStateOf(false) }
@@ -84,7 +75,7 @@ internal fun ScheduleTimingControls(draft: ScheduleTimingDraft, enabled: Boolean
         onChange(draft.copy(interval = it)); selectingInterval = false
     }
     if (selectingTime) {
-        ScheduleClockPicker(draft.time, onDismiss = { selectingTime = false }) { time ->
+        DshClockPicker(draft.time, onDismiss = { selectingTime = false }) { time ->
             onChange(draft.copy(time = time)); selectingTime = false
         }
     }
@@ -108,12 +99,16 @@ internal fun ScheduleTimingControls(draft: ScheduleTimingDraft, enabled: Boolean
                     ScheduleSettingRow(appText("重复间隔"), "${draft.interval} $intervalUnit", enabled,
                         tag = "schedule-interval-picker", rowHeight = 52.dp) { selectingInterval = true }
                 }
-                ScheduleSettingRow(appText(if (draft.frequency == "once") "执行日期" else "开始日期"), draft.date, enabled,
-                    tag = "schedule-date-picker", icon = null, rowHeight = 52.dp) {
-                    val date = draft.date.split('-').map(String::toInt)
-                    DatePickerDialog(context, { _, year, month, day ->
-                        onChange(draft.copy(date = String.format(Locale.US, "%04d-%02d-%02d", year, month + 1, day)))
-                    }, date[0], date[1] - 1, date[2]).show()
+                val dateZone = TimeZone.getTimeZone(draft.timeZone)
+                val dateFormat = remember(dateZone.id) {
+                    SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = dateZone; isLenient = false }
+                }
+                val dateValue = remember(draft.date, dateZone.id) {
+                    runCatching { dateFormat.parse(draft.date)?.time }.getOrNull() ?: System.currentTimeMillis()
+                }
+                DshDatePickerField(appText(if (draft.frequency == "once") "执行日期" else "开始日期"),
+                    dateValue, enabled, "schedule-date-picker", timeZone = dateZone) {
+                    onChange(draft.copy(date = dateFormat.format(Date(it))))
                 }
                 ScheduleSettingRow(appText("时间"), draft.time, enabled, tag = "schedule-time-picker", icon = R.drawable.ic_drawer_schedule, rowHeight = 52.dp, divider = true) { selectingTime = true }
                 if (draft.frequency == "weekly") {
@@ -150,62 +145,6 @@ internal fun ScheduleTimingControls(draft: ScheduleTimingDraft, enabled: Boolean
     }
 }
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-@Composable
-private fun ScheduleClockPicker(time: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    val parts = remember(time) { time.take(8).split(':').map { it.toIntOrNull() ?: 0 } }
-    var hour by remember { mutableStateOf(parts.getOrElse(0) { 8 }) }
-    var minute by remember { mutableStateOf(parts.getOrElse(1) { 0 }) }
-    var second by remember { mutableStateOf(parts.getOrElse(2) { 0 }) }
-    var keepFraction by remember { mutableStateOf(true) }
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss,
-        modifier = Modifier.adaptiveSheetBounds(), sheetMaxWidth = adaptiveSheetWidth(),
-        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface) {
-        DshMenuColumnHost {
-                Column(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ScheduleSheetHeader(appText("时间"), onDismiss, appText("确定"), onAction = {
-                        onConfirm(String.format(Locale.US, "%02d:%02d:%02d", hour, minute, second) + if (keepFraction) time.drop(8) else "")
-                    })
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                        ClockWheel(appText("小时"), hour, 23, Modifier.weight(1f)) { hour = it }
-                        ClockWheel(appText("分钟"), minute, 59, Modifier.weight(1f)) { minute = it }
-                        ClockWheel(appText("秒"), second, 59, Modifier.weight(1f)) { second = it }
-                    }
-                    if (time.drop(9).any { it != '0' }) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Text(appText("保留毫秒"))
-                            Switch(checked = keepFraction, onCheckedChange = { keepFraction = it })
-                        }
-                    }
-                }
-        }
-    }
-}
-
-@Composable
-private fun ClockWheel(label: String, selected: Int, maximum: Int, modifier: Modifier, onChange: (Int) -> Unit) {
-    val dark = androidx.compose.foundation.isSystemInDarkTheme()
-    val ink = MaterialTheme.colorScheme.onSurface
-    Column(modifier.testTag("schedule-clock-$maximum-$label"), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelMedium)
-        AndroidView(factory = { context ->
-            NumberPicker(android.view.ContextThemeWrapper(context, if (dark) android.R.style.Theme_Material_NoActionBar else android.R.style.Theme_Material_Light_NoActionBar)).apply {
-                minValue = 0
-                maxValue = maximum
-                value = selected.coerceIn(0, maximum)
-                if (android.os.Build.VERSION.SDK_INT >= 29) textColor = ink.toArgb()
-                setFormatter { String.format(Locale.US, "%02d", it) }
-                descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
-                contentDescription = label
-                setOnValueChangedListener { _, _, value -> onChange(value) }
-            }
-        }, modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 220.dp),
-            update = { it.value = selected.coerceIn(0, maximum) })
-    }
-}
-
 private fun parseTimingDate(value: String): Date? = listOf("yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ssX").firstNotNullOfOrNull { pattern ->
     runCatching { SimpleDateFormat(pattern, Locale.US).apply { isLenient = false }.parse(value) }.getOrNull()
 }
@@ -221,32 +160,11 @@ private fun ScheduleTimeZoneField(zone: String, enabled: Boolean, onChange: (Str
     }
 }
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun ScheduleIntervalPicker(value: String, unit: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+internal fun ScheduleIntervalPicker(value: String, unit: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var selected by remember(value) { mutableStateOf(value.toIntOrNull()?.coerceIn(1, 10_000) ?: 1) }
-    val dark = androidx.compose.foundation.isSystemInDarkTheme()
-    val ink = MaterialTheme.colorScheme.onSurface
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss,
-        modifier = Modifier.adaptiveSheetBounds(), sheetMaxWidth = adaptiveSheetWidth(),
-        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface) {
-        DshMenuColumnHost {
-            Column(Modifier.fillMaxWidth().heightIn(min = 290.dp).padding(bottom = 20.dp)) {
-                ScheduleSheetHeader(appText("重复间隔"), onDismiss, appText("确定"), onAction = { onConfirm(selected.toString()) })
-                AndroidView(factory = { context ->
-                    NumberPicker(android.view.ContextThemeWrapper(context,
-                        if (dark) android.R.style.Theme_Material_NoActionBar else android.R.style.Theme_Material_Light_NoActionBar)).apply {
-                        minValue = 1; maxValue = 10_000; this.value = selected
-                        setFormatter { "$it $unit" }
-                        if (android.os.Build.VERSION.SDK_INT >= 29) textColor = ink.toArgb()
-                        descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
-                        contentDescription = appText("重复间隔")
-                        setOnValueChangedListener { _, _, picked -> selected = picked }
-                    }
-                }, modifier = Modifier.fillMaxWidth().height(220.dp).testTag("schedule-interval-wheel")
-                    .semantics { stateDescription = selected.toString() }, update = { it.value = selected })
-            }
-        }
+    DshPickerSheet(appText("重复间隔"), onDismiss, onConfirm = { onConfirm(selected.toString()) }, tag = "schedule-wheel-sheet") {
+        DshNumberWheel(selected, 1, 10_000, appText("重复间隔"), "schedule-interval-wheel",
+            format = { "$it $unit" }, onChange = { selected = it })
     }
 }
