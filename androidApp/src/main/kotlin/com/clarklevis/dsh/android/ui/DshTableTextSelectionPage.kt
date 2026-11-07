@@ -90,7 +90,7 @@ internal fun DshTableTextSelectionPage(markdown: String, onDismiss: () -> Unit) 
                                     }
                                 } else label to action
                             }
-                            val quoteActions = if (onQuote == null) emptyList() else listOf("引用" to {
+                            val quoteActions = if (onQuote == null) emptyList() else listOf(appText("引用") to {
                                 evaluateJavascript("window.dshSelectedText()") { result ->
                                     val text = JSONTokener(result).nextValue() as? String
                                     if (!text.isNullOrBlank()) onQuote(text)

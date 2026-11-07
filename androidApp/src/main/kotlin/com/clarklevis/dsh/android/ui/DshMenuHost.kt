@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.android.ui
 
+import com.clarklevis.dsh.android.localization.appTextKey
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -69,10 +70,10 @@ internal fun DshMenuHost(content: @Composable () -> Unit) {
                     val items = session.data.data().components.filterIsInstance<TextContextMenuItem>()
                     DshTextActions(bounds, session::close, items.map { item ->
                         val label = when (item.key) {
-                            TextContextMenuKeys.CopyKey -> "复制"
-                            TextContextMenuKeys.CutKey -> "剪切"
-                            TextContextMenuKeys.PasteKey -> "粘贴"
-                            TextContextMenuKeys.SelectAllKey -> "全选"
+                            TextContextMenuKeys.CopyKey -> appTextKey("复制")
+                            TextContextMenuKeys.CutKey -> appTextKey("剪切")
+                            TextContextMenuKeys.PasteKey -> appTextKey("粘贴")
+                            TextContextMenuKeys.SelectAllKey -> appTextKey("全选")
                             else -> item.label
                         }
                         com.clarklevis.dsh.android.localization.appText(label) to { item.onClick(session) }
@@ -115,8 +116,8 @@ private class DshLegacyTextToolbar : TextToolbar {
             fun action(label: String, callback: (() -> Unit)?) {
                 if (callback != null) add(com.clarklevis.dsh.android.localization.appText(label) to { callback(); hide() })
             }
-            action("剪切", onCutRequested); action("复制", onCopyRequested)
-            action("粘贴", onPasteRequested); action("全选", onSelectAllRequested)
+            action(appTextKey("剪切"), onCutRequested); action(appTextKey("复制"), onCopyRequested)
+            action(appTextKey("粘贴"), onPasteRequested); action(appTextKey("全选"), onSelectAllRequested)
         })
     }
 }

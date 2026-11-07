@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import bisect
 import json
 import argparse
 import re
@@ -142,25 +143,211 @@ def check_android_ui(errors: list[str]) -> int:
             key = kotlin_string(match.group(1))
             if key not in catalog:
                 errors.append(f"{path.relative_to(ROOT)}: {key!r} 未收录到 AndroidStrings")
-        for match in KOTLIN_UI_LITERAL.finditer(source):
-            if HAN.search(match.group(1)):
-                line = source.count("\n", 0, match.start()) + 1
-                errors.append(f"{path.relative_to(ROOT)}:{line} 界面文案仍为硬编码中文")
-    return len(catalog)
+    return len(catalog), set(catalog)
 
 
+# ---- 未本地化中文字面量扫描 ----
+# 规则：任何包含中文的字符串字面量都必须经过本地化入口，或在同一行写明
+# `// i18n-ignore: <原因>`（仅限正则、匹配旧数据、中文专属格式等非展示用途）。
+SCAN_ROOTS = (
+    (IOS_SOURCES, ".swift", "ios"),
+    (ROOT / "AgentLiveActivityWidget", ".swift", "widget"),
+    (ANDROID_SOURCES, ".kt", "android"),
+    (ROOT / "shared" / "src" / "commonMain", ".kt", "shared"),
+    (ROOT / "shared" / "src" / "androidMain", ".kt", "shared"),
+    (ROOT / "shared" / "src" / "iosMain", ".kt", "shared"),
+)
+SWIFT_LOCALIZING_CALLS = ("String(localized:", "LocalizedStringKey(", "String.LocalizationValue(",
+                          "LocalizedStringResource(")
+SWIFT_UI_CALLS = tuple(f"{name}(" for name in UI_CALL_NAMES)
+SWIFT_FORMAT = IOS_ARGUMENT.pattern
+INTERPOLATION = re.compile(r"\\\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)")
+
+
+def string_literals(source: str, kotlin: bool,
+                    line_comments: list[int] | None = None) -> list[tuple[int, int, str]]:
+    """返回 (起始偏移, 结束偏移, 原始内容)，跳过注释与 Kotlin 字符字面量；
+    若传入 line_comments，记录每个真正的 `//` 行注释的起始偏移。"""
+    out: list[tuple[int, int, str]] = []
+    i, n = 0, len(source)
+    while i < n:
+        if source.startswith("//", i):
+            if line_comments is not None:
+                line_comments.append(i)
+            end = source.find("\n", i)
+            i = n if end < 0 else end
+        elif source.startswith("/*", i):
+            end = source.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+        elif kotlin and source[i] == "'":
+            end = source.find("'", i + 2 if source[i + 1:i + 2] == "\\" else i + 1)
+            i = n if end < 0 else end + 1
+        elif source.startswith('"""', i) or source.startswith('#"""', i):
+            opener = '#"""' if source[i] == "#" else '"""'
+            closer = '"""#' if opener.startswith("#") else '"""'
+            end = source.find(closer, i + len(opener))
+            end = n if end < 0 else end
+            out.append((i, end + len(closer), source[i + len(opener):end]))
+            i = end + len(closer)
+        elif source.startswith('#"', i):
+            end = source.find('"#', i + 2)
+            end = n if end < 0 else end
+            out.append((i, end + 2, source[i + 2:end]))
+            i = end + 2
+        elif source[i] == '"':
+            j = i + 1
+            while j < n and source[j] not in '"\n':
+                if source.startswith("\\(", j) or source.startswith("${", j):
+                    opening, closing = ("(", ")") if source[j] == "\\" else ("{", "}")
+                    depth, j = 1, j + 2
+                    while j < n and depth:
+                        if source[j] == '"':
+                            # 插值内的嵌套字符串
+                            k = j + 1
+                            while k < n and source[k] not in '"\n':
+                                k += 2 if source[k] == "\\" else 1
+                            j = k + 1
+                            continue
+                        depth += (source[j] == opening) - (source[j] == closing)
+                        j += 1
+                elif source[j] == "\\":
+                    j += 2
+                else:
+                    j += 1
+            out.append((i, j + 1, source[i + 1:j]))
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
+def string_mask(source: str, literals: list[tuple[int, int, str]]) -> bytearray:
+    mask = bytearray(len(source))
+    for start, end, _ in literals:
+        mask[start:end] = b"\x01" * (end - start)
+    return mask
+
+
+def key_argument_spans(source: str, openers: tuple[str, ...], mask: bytearray) -> list[tuple[int, int]]:
+    """返回 opener 之后第一个参数的区间（到同层逗号或配对右括号为止），即本地化键表达式。
+    之后的格式化参数不会被查表，因此不享受豁免。"""
+    spans = []
+    for opener in openers:
+        pattern = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(opener))
+        for match in pattern.finditer(source):
+            if mask[match.start()]:
+                continue
+            depth, j = 1, match.end()
+            while j < len(source):
+                if not mask[j]:
+                    char = source[j]
+                    if char in "([{":
+                        depth += 1
+                    elif char in ")]}":
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    elif char == "," and depth == 1:
+                        break
+                j += 1
+            spans.append((match.end(), j))
+    return spans
+
+
+def inside(position: int, spans: list[tuple[int, int]]) -> bool:
+    return any(start <= position < end for start, end in spans)
+
+
+IGNORE_COMMENT = re.compile(r"i18n-ignore:\s*\S")
+
+
+def has_ignore_comment(source: str, line_comments: list[int], line_start: int, line_end: int) -> bool:
+    """同一行有真正的 `//` 行注释（非字符串、非块注释内），且写有 `i18n-ignore: <原因>`。"""
+    index = bisect.bisect_left(line_comments, line_start)
+    if index < len(line_comments) and line_comments[index] < line_end:
+        return bool(IGNORE_COMMENT.search(source, line_comments[index], line_end))
+    return False
+
+
+def swift_key_known(raw: str, keys: set[str], key_patterns: list[str]) -> bool:
+    text = raw.replace('\\"', '"').replace("\\n", "\n").replace("\\\\", "\\")
+    if not INTERPOLATION.search(raw):
+        return text in keys
+    parts = INTERPOLATION.split(text)
+    pattern = re.compile("^" + SWIFT_FORMAT.join(re.escape(part) for part in parts) + "$")
+    return any(pattern.match(key) for key in key_patterns)
+
+
+def check_untranslated_literals(ios_keys: set[str], android_keys: set[str], platforms: set[str],
+                                errors: list[str]) -> int:
+    key_patterns = [key for key in ios_keys if IOS_ARGUMENT.search(key)]
+    scanned = 0
+    for directory, suffix, platform in SCAN_ROOTS:
+        if platform not in platforms or not directory.exists():
+            continue
+        for path in sorted(directory.rglob(f"*{suffix}")):
+            if path.name == "AndroidStrings.kt":
+                continue
+            source = path.read_text()
+            kotlin = suffix == ".kt"
+            line_comments: list[int] = []
+            literals = string_literals(source, kotlin, line_comments)
+            if not any(HAN.search(raw) for _, _, raw in literals):
+                continue
+            scanned += 1
+            mask = string_mask(source, literals)
+            if platform == "android":
+                localized = key_argument_spans(source, ("appText(", "appTextKey("), mask)
+            elif platform == "ios":
+                localized = key_argument_spans(source, SWIFT_LOCALIZING_CALLS, mask)
+                ui = key_argument_spans(source, SWIFT_UI_CALLS, mask)
+            else:
+                localized = []
+            for start, _, raw in literals:
+                if not HAN.search(raw):
+                    continue
+                line_start = source.rfind("\n", 0, start) + 1
+                line_end = source.find("\n", start)
+                line_end = len(source) if line_end < 0 else line_end
+                if has_ignore_comment(source, line_comments, line_start, line_end):
+                    continue
+                number = source.count("\n", 0, start) + 1
+                location = f"{path.relative_to(ROOT)}:{number}"
+                preceding = source[max(0, start - 200):start]
+                if platform == "android" and inside(start, localized):
+                    # 模板插值中的中文必须改用 %1$s 占位符，否则无法查表
+                    if "${" in raw or "$" in raw.replace("\\$", ""):
+                        errors.append(f"{location} {raw[:40]!r} appText 参数含字符串模板，请改用 %1$s 占位符")
+                    elif kotlin_string(raw) not in android_keys:
+                        errors.append(f"{location} {raw[:40]!r} 未收录到 AndroidStrings")
+                    continue
+                if platform == "ios":
+                    if re.search(r'localized:\s*"[^"]*",\s*defaultValue:\s*$', preceding):
+                        continue  # 语义键的默认值，由键本身校验
+                    in_ui = inside(start, ui) and not re.search(r"\?\?\s*$", preceding)
+                    if inside(start, localized) or in_ui:
+                        if not swift_key_known(raw, ios_keys, key_patterns):
+                            errors.append(f"{location} {raw[:40]!r} 未收录到 Localizable.xcstrings（或缺英文）")
+                        continue
+                errors.append(f"{location} {raw[:40]!r} 未本地化的中文字面量")
+    return scanned
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--android-only", action="store_true", help="仅检查 Android 本地化")
+    parser.add_argument("--platform", action="append", choices=("ios", "widget", "android", "shared"),
+                        help="仅扫描指定平台的中文字面量（可重复）；默认全部")
     options = parser.parse_args()
     errors: list[str] = []
-    keys = set()
+    keys: set[str] = set()
     if not options.android_only:
         keys = check_catalog("Localizable", errors)
         check_catalog("InfoPlist", errors)
         check_swift_calls(keys, errors)
     android_count = check_android(errors)
-    android_ui_count = check_android_ui(errors)
+    android_ui_count, android_keys = check_android_ui(errors)
+    platforms = set(options.platform or (("android",) if options.android_only
+                                         else ("ios", "widget", "android", "shared")))
+    check_untranslated_literals(keys, android_keys, platforms, errors)
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1

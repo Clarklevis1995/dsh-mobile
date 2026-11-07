@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.clarklevis.dsh.android.MobileScheduledTask
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import com.clarklevis.dsh.shared.protocol.ScheduleTimingDraft
 import com.clarklevis.dsh.shared.protocol.ScheduleTimingEditor
 import java.text.SimpleDateFormat
@@ -41,8 +42,9 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-internal val scheduleFrequencyNames = linkedMapOf("once" to "不重复", "minutely" to "每分钟", "hourly" to "每小时",
-    "daily" to "每天", "weekly" to "每周", "monthly" to "每月", "advanced" to "自定义")
+internal val scheduleFrequencyNames = linkedMapOf("once" to appTextKey("不重复"), "minutely" to appTextKey("每分钟"),
+    "hourly" to appTextKey("每小时"), "daily" to appTextKey("每天"), "weekly" to appTextKey("每周"),
+    "monthly" to appTextKey("每月"), "advanced" to appTextKey("自定义"))
 
 internal fun initialTimingDraft(task: MobileScheduledTask): ScheduleTimingDraft {
     val zone = TimeZone.getTimeZone(task.timeZone ?: TimeZone.getDefault().id)

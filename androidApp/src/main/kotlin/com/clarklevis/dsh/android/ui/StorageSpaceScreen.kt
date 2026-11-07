@@ -59,23 +59,24 @@ import com.clarklevis.dsh.android.AndroidStorageUsage
 import com.clarklevis.dsh.android.CacheStorageCategory
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 
 private val CacheStorageCategory.title: String
     get() = when (this) {
-        CacheStorageCategory.CHATS -> "聊天记录"
-        CacheStorageCategory.IMAGES -> "图片"
-        CacheStorageCategory.PREVIEWS -> "文件预览"
-        CacheStorageCategory.TEMPORARY -> "临时文件"
-        CacheStorageCategory.UPDATES -> "安装包"
+        CacheStorageCategory.CHATS -> appTextKey("聊天记录")
+        CacheStorageCategory.IMAGES -> appTextKey("图片")
+        CacheStorageCategory.PREVIEWS -> appTextKey("文件预览")
+        CacheStorageCategory.TEMPORARY -> appTextKey("临时文件")
+        CacheStorageCategory.UPDATES -> appTextKey("安装包")
     }
 
 private val CacheStorageCategory.detail: String
     get() = when (this) {
-        CacheStorageCategory.CHATS -> "已缓存的聊天内容与搜索索引"
-        CacheStorageCategory.IMAGES -> "聊天中已下载的图片"
-        CacheStorageCategory.PREVIEWS -> "已打开的文档、音视频等附件"
-        CacheStorageCategory.TEMPORARY -> "预览、下载和分享产生的临时副本"
-        CacheStorageCategory.UPDATES -> "已下载的应用更新文件"
+        CacheStorageCategory.CHATS -> appTextKey("已缓存的聊天内容与搜索索引")
+        CacheStorageCategory.IMAGES -> appTextKey("聊天中已下载的图片")
+        CacheStorageCategory.PREVIEWS -> appTextKey("已打开的文档、音视频等附件")
+        CacheStorageCategory.TEMPORARY -> appTextKey("预览、下载和分享产生的临时副本")
+        CacheStorageCategory.UPDATES -> appTextKey("已下载的应用更新文件")
     }
 
 private val CacheStorageCategory.color: Color
