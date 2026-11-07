@@ -763,6 +763,19 @@ final class GatewayClient: ObservableObject {
     func setDefault(target: String, value: String) {
         send(["type": "set-default", "target": target, "value": value])
     }
+    /// 成员会话（subagent）的请求要带上上级地址，否则网关会把 sessionId 当成普通会话去查。
+    /// 只有 `conversationTarget` 返回了上级信息时才写这两个字段 —— 普通会话的请求保持原样。
+    private func applyConversationTarget(_ payload: inout [String: Any], sessionId: String?) {
+        guard let sessionId, !sessionId.isEmpty,
+              let target = conversationTarget?(sessionId) else { return }
+        if let parentSessionId = target.parentSessionId {
+            payload["parentSessionId"] = parentSessionId
+        }
+        if let subagentMode = target.subagentMode {
+            payload["subagentMode"] = subagentMode
+        }
+    }
+
     func requestHistory(
         sessionId: String,
         beforeSeq: Int? = nil,
@@ -779,6 +792,7 @@ final class GatewayClient: ObservableObject {
         }
         if let maxBytes { payload["maxBytes"] = maxBytes }
         if let view { payload["view"] = view }
+        applyConversationTarget(&payload, sessionId: sessionId)
         send(payload)
     }
 
@@ -799,7 +813,9 @@ final class GatewayClient: ObservableObject {
         startSubscriptionTimeout()
         gatewayApprovalTrace("transport subscribe hasSession=\(sessionId?.isEmpty == false)")
         if let sessionId, !sessionId.isEmpty {
-            send(["type": "subscribe", "sessionId": sessionId, "assistantStream": true])
+            var payload: [String: Any] = ["type": "subscribe", "sessionId": sessionId, "assistantStream": true]
+            applyConversationTarget(&payload, sessionId: sessionId)
+            send(payload)
         } else {
             send(["type": "unsubscribe"])
         }
@@ -843,7 +859,9 @@ final class GatewayClient: ObservableObject {
     }
 
     func cancelSession(sessionId: String) {
-        send(["type": "session-cancel", "sessionId": sessionId])
+        var payload: [String: Any] = ["type": "session-cancel", "sessionId": sessionId]
+        applyConversationTarget(&payload, sessionId: sessionId)
+        send(payload)
     }
 
     /// 在 UI 清空草稿前决定承载。给 JSON 转义和协议元数据保留上界，避免编码大型 Base64 阻塞主线程。
