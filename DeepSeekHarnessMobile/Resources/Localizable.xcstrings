@@ -102,6 +102,17 @@
         }
       }
     },
+    "%@ 已下载，点击重新下载": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ downloaded. Tap to download again"
+          }
+        }
+      }
+    },
     "%@ 行 · UTF-8": {
       "localizations": {
         "en": {
@@ -167,20 +178,34 @@
       }
     },
     "%@：%@": {
+      "extractionState": "manual",
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$@"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
-            "state": "new",
+            "state": "translated",
             "value": "%1$@：%2$@"
           }
         }
       }
     },
     "%@：%@ · %@": {
+      "extractionState": "manual",
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$@ · %3$@"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
-            "state": "new",
+            "state": "translated",
             "value": "%1$@：%2$@ · %3$@"
           }
         }
@@ -249,6 +274,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld in progress"
+          }
+        }
+      }
+    },
+    "%lld张": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld images"
           }
         }
       }
@@ -387,6 +423,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "The agent finished this task"
+          }
+        }
+      }
+    },
+    "Agent 循环": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent loop"
           }
         }
       }
@@ -872,6 +919,72 @@
           "stringUnit": {
             "state": "translated",
             "value": "预览"
+          }
+        }
+      }
+    },
+    "RTC 业务消息格式校验失败。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RTC message format validation failed."
+          }
+        }
+      }
+    },
+    "RTC 业务通道未响应，正在恢复连接。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The RTC channel isn’t responding. Recovering the connection."
+          }
+        }
+      }
+    },
+    "RTC 发送中断，请确认操作状态后重试。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RTC sending was interrupted. Check the action’s status and try again."
+          }
+        }
+      }
+    },
+    "RTC 恢复超时，正在使用 WebSocket 恢复连接。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RTC recovery timed out. Recovering over WebSocket."
+          }
+        }
+      }
+    },
+    "RTC 身份或传输校验失败，请重新连接。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RTC identity or transport verification failed. Reconnect."
+          }
+        }
+      }
+    },
+    "RTC 连接已中断，正在使用 WebSocket 重新连接。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The RTC connection was interrupted. Reconnecting over WebSocket."
           }
         }
       }
@@ -2370,6 +2483,23 @@
         }
       }
     },
+    "download.progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading · %1$lld%%"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载 · %1$lld%%"
+          }
+        }
+      }
+    },
     "duration.minutes-seconds": {
       "extractionState": "manual",
       "localizations": {
@@ -2859,6 +2989,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keychain 错误 %lld"
+          }
+        }
+      }
+    },
+    "log.export.footer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logs are kept by the hour, and only the selected period is exported.\nOld logs are cleaned up automatically; selectable dates depend on what this device has kept."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日志按小时留存，仅导出所选时段\n旧日志会自动清理，可选日期以本机留存为准"
           }
         }
       }
@@ -3454,6 +3601,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "权限状态 \"%@\" 无效；仅支持 read-only、workspace-write、danger-full-access。"
+          }
+        }
+      }
+    },
+    "plugin.markdown.image": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[Image · $1]"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[图片 · $1]"
           }
         }
       }
@@ -4104,6 +4268,40 @@
         }
       }
     },
+    "schedule.keepRule.daily": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keeps the original daily rule and time zone %1$@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留原有每日规则和时区 %1$@。"
+          }
+        }
+      }
+    },
+    "schedule.keepRule.weekly": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keeps the original weekly rule and time zone %1$@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留原有每周规则和时区 %1$@。"
+          }
+        }
+      }
+    },
     "schedule.last-delivery": {
       "extractionState": "manual",
       "localizations": {
@@ -4117,6 +4315,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "已投递 · %@"
+          }
+        }
+      }
+    },
+    "schedule.next.estimate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimated next run · %1$@\nThe Host’s returned time is final"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预计下次执行 · %1$@\n最终以 Host 返回时间为准"
           }
         }
       }
@@ -5260,6 +5475,23 @@
         }
       }
     },
+    "tool.lines.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ line"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 行"
+          }
+        }
+      }
+    },
     "tool.replacedLines": {
       "extractionState": "manual",
       "localizations": {
@@ -5375,6 +5607,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "工具"
+          }
+        }
+      }
+    },
+    "tunnel.peers.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peers %1$lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对端数量 %1$lld"
           }
         }
       }
@@ -6544,23 +6793,6 @@
         }
       }
     },
-    "上传中": {
-      "extractionState": "stale",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uploading"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上传中"
-          }
-        }
-      }
-    },
     "下一题": {
       "extractionState": "stale",
       "localizations": {
@@ -6572,6 +6804,17 @@
         }
       }
     },
+    "下次执行时间由 Host 校验并计算": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The next run time is validated and calculated by the Host"
+          }
+        }
+      }
+    },
     "下次计划时间": {
       "extractionState": "manual",
       "localizations": {
@@ -6579,6 +6822,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Next scheduled time"
+          }
+        }
+      }
+    },
+    "下载 %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download %@"
           }
         }
       }
@@ -6607,6 +6861,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Downloaded file failed local size validation"
+          }
+        }
+      }
+    },
+    "不可修改原因": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Why it can’t be changed"
           }
         }
       }
@@ -7049,6 +7314,28 @@
         }
       }
     },
+    "会话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session"
+          }
+        }
+      }
+    },
+    "会话 ID": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session ID"
+          }
+        }
+      }
+    },
     "会话上下文已整理": {
       "extractionState": "manual",
       "localizations": {
@@ -7092,6 +7379,17 @@
         }
       }
     },
+    "会话订阅超时，请重试": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribing to the session timed out. Try again."
+          }
+        }
+      }
+    },
     "会话通道": {
       "extractionState": "manual",
       "localizations": {
@@ -7105,6 +7403,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "会话通道"
+          }
+        }
+      }
+    },
+    "会话通道尚未就绪，请稍后重试。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The session channel isn’t ready yet. Try again shortly."
           }
         }
       }
@@ -7250,6 +7559,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save"
+          }
+        }
+      }
+    },
+    "保存主机资料失败：%@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t save host data: %@"
           }
         }
       }
@@ -7646,6 +7966,17 @@
         }
       }
     },
+    "关联会话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linked conversation"
+          }
+        }
+      }
+    },
     "关联工作区": {
       "extractionState": "manual",
       "localizations": {
@@ -8003,6 +8334,28 @@
         }
       }
     },
+    "创建任务": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create task"
+          }
+        }
+      }
+    },
+    "创建会话失败": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t create the session"
+          }
+        }
+      }
+    },
     "创建和调试自定义 Agent": {
       "extractionState": "manual",
       "localizations": {
@@ -8027,6 +8380,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "创建失败"
+          }
+        }
+      }
+    },
+    "创建定时任务": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create scheduled task"
           }
         }
       }
@@ -8254,6 +8618,17 @@
         }
       }
     },
+    "加载中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading"
+          }
+        }
+      }
+    },
     "加载更多任务": {
       "extractionState": "manual",
       "localizations": {
@@ -8353,6 +8728,17 @@
         }
       }
     },
+    "卸载中": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unloading"
+          }
+        }
+      }
+    },
     "历史记录刷新超时": {
       "extractionState": "stale",
       "localizations": {
@@ -8404,6 +8790,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Raw"
+          }
+        }
+      }
+    },
+    "原有主机": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Existing host"
           }
         }
       }
@@ -8629,23 +9026,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Multiple selections allowed"
-          }
-        }
-      }
-    },
-    "可发送": {
-      "extractionState": "stale",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ready to send"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "可发送"
           }
         }
       }
@@ -9042,6 +9422,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Online"
+          }
+        }
+      }
+    },
+    "地址未经此主机确认，请重新扫码添加地址。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This address hasn’t been verified for this host. Scan the QR code again to add it."
           }
         }
       }
@@ -9538,23 +9929,6 @@
         }
       }
     },
-    "对端数量": {
-      "extractionState": "stale",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Peers"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "对端数量"
-          }
-        }
-      }
-    },
     "对话": {
       "localizations": {
         "en": {
@@ -9845,6 +10219,17 @@
         }
       }
     },
+    "工作区根目录": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace root"
+          }
+        }
+      }
+    },
     "工具失败": {
       "extractionState": "stale",
       "localizations": {
@@ -9980,6 +10365,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kept local content; live events keep streaming"
+          }
+        }
+      }
+    },
+    "已停用": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disabled"
           }
         }
       }
@@ -10158,7 +10554,17 @@
         }
       }
     },
-    "已有会话": {},
+    "已有会话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Existing session"
+          }
+        }
+      }
+    },
     "已有文件正在下载，请稍后再试。": {
       "extractionState": "manual",
       "localizations": {
@@ -10311,6 +10717,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Attached sessions"
+          }
+        }
+      }
+    },
+    "已连接网关版本": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected gateway version"
           }
         }
       }
@@ -10705,7 +11122,28 @@
         }
       }
     },
-    "当前时区 · %@": {},
+    "当前时区 · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current time zone · %@"
+          }
+        }
+      }
+    },
+    "当前未连接 Gateway，请打开 App 后重试": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not connected to a gateway. Open the app and try again."
+          }
+        }
+      }
+    },
     "当前步骤已完成": {
       "extractionState": "manual",
       "localizations": {
@@ -10922,6 +11360,17 @@
         }
       }
     },
+    "待启动": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending start"
+          }
+        }
+      }
+    },
     "待回答问题已恢复": {
       "extractionState": "stale",
       "localizations": {
@@ -11021,6 +11470,17 @@
         }
       }
     },
+    "恢复": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume"
+          }
+        }
+      }
+    },
     "恢复默认": {
       "extractionState": "stale",
       "localizations": {
@@ -11073,6 +11533,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Member session"
+          }
+        }
+      }
+    },
+    "成员会话订阅超时，请重试或返回 Lead": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscribing to the member session timed out. Try again or go back to Lead."
           }
         }
       }
@@ -11339,6 +11810,28 @@
         }
       }
     },
+    "执行规则 JSON": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schedule rule JSON"
+          }
+        }
+      }
+    },
+    "执行记录": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run history"
+          }
+        }
+      }
+    },
     "执行记录加载失败": {
       "extractionState": "manual",
       "localizations": {
@@ -11428,6 +11921,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connecting the findings"
+          }
+        }
+      }
+    },
+    "投递目标": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delivery target"
           }
         }
       }
@@ -11705,6 +12209,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "接收速率"
+          }
+        }
+      }
+    },
+    "控制 Agent 派发工具调用的方式。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controls how the agent dispatches tool calls."
           }
         }
       }
@@ -12066,7 +12581,17 @@
         }
       }
     },
-    "支持 after、at、every、daily、weekly、cron、rrule，时区使用 IANA 名称。": {},
+    "支持 after、at、every、daily、weekly、cron、rrule，时区使用 IANA 名称。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supports after, at, every, daily, weekly, cron, and rrule. Time zones use IANA names."
+          }
+        }
+      }
+    },
     "收拢相关信息中": {
       "extractionState": "manual",
       "localizations": {
@@ -12417,6 +12942,17 @@
         }
       }
     },
+    "文件超过 2 MB，请使用系统应用打开": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file is larger than 2 MB. Open it in a system app."
+          }
+        }
+      }
+    },
     "文件预览": {
       "extractionState": "stale",
       "localizations": {
@@ -12469,6 +13005,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Disconnect"
+          }
+        }
+      }
+    },
+    "新主机": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New host"
           }
         }
       }
@@ -12675,6 +13222,17 @@
         }
       }
     },
+    "无法确定文件所属工作区，请重新打开会话后重试。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t determine the workspace this file belongs to. Reopen the session and try again."
+          }
+        }
+      }
+    },
     "无法获取登录链接，请取消后重试。": {
       "extractionState": "stale",
       "localizations": {
@@ -12830,6 +13388,17 @@
         }
       }
     },
+    "日期": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date"
+          }
+        }
+      }
+    },
     "旧隧道未能关闭，请重试或重启应用。": {
       "extractionState": "stale",
       "localizations": {
@@ -12936,6 +13505,17 @@
         }
       }
     },
+    "暂停": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        }
+      }
+    },
     "暂停目标": {
       "extractionState": "manual",
       "localizations": {
@@ -13038,6 +13618,17 @@
         }
       }
     },
+    "更新到 %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update to %@"
+          }
+        }
+      }
+    },
     "更新及恢复结果待核实，请刷新实际版本并检查 Host 日志": {
       "extractionState": "manual",
       "localizations": {
@@ -13060,7 +13651,28 @@
         }
       }
     },
-    "更新进度 · %@": {},
+    "更新进度 · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update progress · %@"
+          }
+        }
+      }
+    },
+    "更早记录": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier runs"
+          }
+        }
+      }
+    },
     "最多 120 个字": {
       "localizations": {
         "en": {
@@ -13294,6 +13906,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Untitled session"
+          }
+        }
+      }
+    },
+    "未提供": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not provided"
+          }
+        }
+      }
+    },
+    "未知": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown"
           }
         }
       }
@@ -13542,6 +14176,17 @@
         }
       }
     },
+    "本版本发布说明暂未提供，请查看 GitHub 发布页。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release notes for this version aren’t available yet. See the GitHub releases page."
+          }
+        }
+      }
+    },
     "本版本新功能": {
       "extractionState": "manual",
       "localizations": {
@@ -13599,6 +14244,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "View %@ details"
+          }
+        }
+      }
+    },
+    "查看%lld张图片": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View %lld images"
           }
         }
       }
@@ -13756,6 +14412,17 @@
         }
       }
     },
+    "检查更新": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check for updates"
+          }
+        }
+      }
+    },
     "检查结果": {
       "extractionState": "manual",
       "localizations": {
@@ -13774,6 +14441,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inspecting what we found"
+          }
+        }
+      }
+    },
+    "模块": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Module"
           }
         }
       }
@@ -13973,6 +14651,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Creating folder…"
+          }
+        }
+      }
+    },
+    "正在加载…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading…"
           }
         }
       }
@@ -14549,6 +15238,17 @@
         }
       }
     },
+    "此网关身份已属于另一条主机记录，请从主机列表选择原记录后重新配对。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This gateway identity already belongs to another host record. Select the original record in the host list and pair again."
+          }
+        }
+      }
+    },
     "此设备没有可用的相机。": {
       "extractionState": "manual",
       "localizations": {
@@ -14852,6 +15552,17 @@
         }
       }
     },
+    "消息超过 RTC 传输上限，请使用 WebSocket 连接后重新提交。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The message exceeds the RTC transfer limit. Connect over WebSocket and submit it again."
+          }
+        }
+      }
+    },
     "深色": {
       "extractionState": "stale",
       "localizations": {
@@ -14960,6 +15671,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "清理仅移除本机缓存，需要时可重新下载。不会删除主机上的聊天、用户保存的文件或待发内容。"
+          }
+        }
+      }
+    },
+    "清理后无法恢复。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This can’t be undone."
+          }
+        }
+      }
+    },
+    "清理已结束任务": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear finished tasks"
+          }
+        }
+      }
+    },
+    "清理已结束任务？": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear finished tasks?"
           }
         }
       }
@@ -15445,6 +16189,17 @@
         }
       }
     },
+    "空闲": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idle"
+          }
+        }
+      }
+    },
     "立即应用到所有页面，并在下次启动时保留。": {
       "extractionState": "stale",
       "localizations": {
@@ -15458,6 +16213,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "立即应用到所有页面，并在下次启动时保留。"
+          }
+        }
+      }
+    },
+    "立即执行": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run now"
           }
         }
       }
@@ -15748,6 +16514,17 @@
         }
       }
     },
+    "组件 ID": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Component ID"
+          }
+        }
+      }
+    },
     "组件详情": {
       "extractionState": "manual",
       "localizations": {
@@ -15766,6 +16543,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Organizing a response"
+          }
+        }
+      }
+    },
+    "终端": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal"
           }
         }
       }
@@ -16046,6 +16834,17 @@
         }
       }
     },
+    "网关地址无效或候选地址超过 16 个。公网连接必须使用 WSS，地址不能包含账号、查询参数或片段。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The gateway address is invalid or there are more than 16 candidate addresses. Public connections must use WSS, and addresses can’t contain credentials, query parameters, or fragments."
+          }
+        }
+      }
+    },
     "网关已断开，插件状态待重新连接确认": {
       "localizations": {
         "en": {
@@ -16073,6 +16872,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "No presets available from the gateway. Pull down to refresh."
+          }
+        }
+      }
+    },
+    "网关身份缺失、无效或与已保存的主机不一致。连接已停止，请确认主机后重新配对。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The gateway identity is missing, invalid, or doesn’t match the saved host. The connection was stopped. Verify the host and pair again."
           }
         }
       }
@@ -16152,6 +16962,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "网络检测"
+          }
+        }
+      }
+    },
+    "网页搜索": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web search"
           }
         }
       }
@@ -16339,7 +17160,28 @@
         }
       }
     },
-    "规则预览 · %@": {},
+    "要求网关版本": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Required gateway version"
+          }
+        }
+      }
+    },
+    "规则预览 · %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rule preview · %@"
+          }
+        }
+      }
+    },
     "视图": {
       "extractionState": "stale",
       "localizations": {
@@ -16465,6 +17307,28 @@
         }
       }
     },
+    "设置 DeepSeek 的搜索提供方。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sets the search provider for DeepSeek."
+          }
+        }
+      }
+    },
+    "设置子智能体的递归层级、数量和模型。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sets the recursion depth, count, and model of sub-agents."
+          }
+        }
+      }
+    },
     "设置已保存，请重启 DSH Web 后刷新目录": {
       "extractionState": "manual",
       "localizations": {
@@ -16494,6 +17358,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Try another keyword or task status"
+          }
+        }
+      }
+    },
+    "该审批已失效或已在其他设备处理": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This approval has expired or was handled on another device"
           }
         }
       }
@@ -16687,6 +17562,28 @@
         }
       }
     },
+    "请在系统设置中允许添加照片后重试": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow adding photos in Settings, then try again"
+          }
+        }
+      }
+    },
+    "请填写有效规则": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a valid schedule rule"
+          }
+        }
+      }
+    },
     "请填写标题、任务内容、有效的执行规则和目标": {
       "extractionState": "manual",
       "localizations": {
@@ -16857,6 +17754,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Restart DSH, then refresh the catalog to confirm the installed version."
+          }
+        }
+      }
+    },
+    "读取中…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading…"
+          }
+        }
+      }
+    },
+    "读取代码失败：%@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t read the code: %@"
+          }
+        }
+      }
+    },
+    "读取或迁移主机资料失败：%@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t read or migrate host data: %@"
           }
         }
       }
@@ -17191,6 +18121,17 @@
         }
       }
     },
+    "运行失败": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
+          }
+        }
+      }
+    },
     "运行库加载失败": {
       "extractionState": "stale",
       "localizations": {
@@ -17204,6 +18145,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "运行库加载失败"
+          }
+        }
+      }
+    },
+    "运行条目 ID": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runtime entry ID"
           }
         }
       }
@@ -17595,6 +18547,17 @@
         }
       }
     },
+    "配对未返回长期凭据，请重新生成二维码。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pairing didn’t return a long-lived credential. Generate a new QR code."
+          }
+        }
+      }
+    },
     "配置项": {
       "localizations": {
         "en": {
@@ -17804,6 +18767,17 @@
         }
       }
     },
+    "限制每条命令最多能跑多久、最多输出多少内容。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limits how long each command can run and how much output it can produce."
+          }
+        }
+      }
+    },
     "隐私政策": {
       "extractionState": "stale",
       "localizations": {
@@ -18005,7 +18979,17 @@
         }
       }
     },
-    "首次新建并复用会话": {},
+    "首次新建并复用会话": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a session on first run, then reuse it"
+          }
+        }
+      }
+    },
     "首次运行时创建，之后沿用这个会话": {
       "extractionState": "manual",
       "localizations": {
@@ -18103,7 +19087,23 @@
         }
       }
     },
-    "，": {}
+    "，": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", "
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "，"
+          }
+        }
+      }
+    }
   },
   "version": "1.0"
 }

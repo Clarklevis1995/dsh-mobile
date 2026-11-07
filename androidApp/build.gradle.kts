@@ -146,21 +146,14 @@ val buildTsnetAar = tasks.register<Exec>("buildTsnetAar") {
     }
 }
 
-// 本地化守卫：中英文目录、格式参数，以及 Android / shared 中未本地化的中文字面量。
+// 本地化守卫：中英文目录、格式参数，以及 iOS / widget / Android / shared 中未本地化的中文字面量。
 // 挂在单元测试前，任何新增的硬编码中文都会让 testDebugUnitTest 失败。
-// iOS 目录与 iOS / widget 源码仍未本地化，因此用 --android-only 跳过 iOS 目录检查，待 iOS 改动合入后再扩大范围。
 val verifyLocalizations = tasks.register<Exec>("verifyLocalizations") {
     group = "verification"
-    description = "python3 scripts/verify-localizations.py --android-only --platform android --platform shared"
-    // 无声明输出：每次都运行（约 2 秒），避免漏掉 shared 源文件的变化。
+    description = "python3 scripts/verify-localizations.py"
+    // 无声明输出：每次都运行（约 2 秒），避免漏掉 iOS / shared 源文件的变化。
     workingDir = rootProject.projectDir
-    commandLine(
-        "python3",
-        rootProject.file("scripts/verify-localizations.py").absolutePath,
-        "--android-only",
-        "--platform", "android",
-        "--platform", "shared",
-    )
+    commandLine("python3", rootProject.file("scripts/verify-localizations.py").absolutePath)
 }
 tasks.withType<Test>().configureEach { dependsOn(verifyLocalizations) }
 

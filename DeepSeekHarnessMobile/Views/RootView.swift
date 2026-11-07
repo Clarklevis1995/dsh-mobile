@@ -159,7 +159,7 @@ private struct RootNavigationHost: View, Equatable {
             ScheduledTasksView(store: store, onCreateTask: createScheduledTaskConversation) { sessionID in
                 let session = store.sessions.first(where: { $0.id == sessionID }) ?? SessionSummary(
                     id: sessionID,
-                    title: store.scheduledTasks.first(where: { $0.sessionID == sessionID })?.title ?? "会话",
+                    title: store.scheduledTasks.first(where: { $0.sessionID == sessionID })?.title ?? String(localized: "会话"),
                     lastActivity: .now,
                     isRunning: false,
                     hasUnread: false
@@ -431,13 +431,13 @@ private struct ScheduledTasksView: View {
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
             } else if store.scheduledTasks.isEmpty {
-                DshEmptyState("暂无定时任务", systemImage: "clock", description: Text("在会话中创建的定时任务会显示在这里"))
+                DshEmptyState(String(localized: "暂无定时任务"), systemImage: "clock", description: Text("在会话中创建的定时任务会显示在这里"))
                     .padding(.top, 40)
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
             } else if visibleTasks.isEmpty {
                 DshEmptyState(
-                    "没有符合条件的定时任务",
+                    String(localized: "没有符合条件的定时任务"),
                     systemImage: "line.3.horizontal.decrease.circle",
                     description: Text(searchQuery.isEmpty
                         ? String(localized: "试试其他任务状态")
@@ -728,7 +728,7 @@ struct ScheduledTaskHistorySheet: View {
                 Text(timestamp.map(ScheduledTaskFormat.date) ?? String(localized: "时间未知"))
                     .appFont(.headline)
                 Text(record["title"]?.stringValue ?? task.title).appFont(.body)
-                DisclosureGroup("详情") {
+                DisclosureGroup(String(localized: "详情")) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(record["prompt"]?.stringValue ?? task.prompt)
                         if let delivered = record["deliveredAt"]?.stringValue {
@@ -1165,7 +1165,7 @@ private struct ScheduleWorkspacePicker: View {
                 }
             }
             .foregroundStyle(.primary)
-            .searchable(text: $query, prompt: "搜索工作区")
+            .searchable(text: $query, prompt: Text("搜索工作区"))
             .navigationTitle("关联工作区").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
@@ -1229,8 +1229,10 @@ struct ScheduleTimingControls: View {
     @State private var selectingZone = false
     @State private var selectingTime = false
     @State private var selectingInterval = false
-    private let frequencies = [("once", "不重复"), ("minutely", "每分钟"), ("hourly", "每小时"),
-        ("daily", "每天"), ("weekly", "每周"), ("monthly", "每月"), ("advanced", "自定义")]
+    private let frequencies: [(String, LocalizedStringKey)] = [("once", LocalizedStringKey("不重复")),
+        ("minutely", LocalizedStringKey("每分钟")), ("hourly", LocalizedStringKey("每小时")),
+        ("daily", LocalizedStringKey("每天")), ("weekly", LocalizedStringKey("每周")),
+        ("monthly", LocalizedStringKey("每月")), ("advanced", LocalizedStringKey("自定义"))]
     private var zone: TimeZone { TimeZone(identifier: form.timeZone) ?? .current }
     private var dateBinding: Binding<Date> {
         Binding(get: { ScheduleTimingForm.formatter("yyyy-MM-dd", zone: zone).date(from: form.date) ?? .now },
@@ -1244,7 +1246,7 @@ struct ScheduleTimingControls: View {
                     Text("重复")
                     Spacer()
                     Picker("重复", selection: $form.frequency) {
-                        ForEach(frequencies, id: \.0) { value, label in Text(LocalizedStringKey(label)).tag(value) }
+                        ForEach(frequencies, id: \.0) { value, label in Text(label).tag(value) }
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
@@ -1274,7 +1276,7 @@ struct ScheduleTimingControls: View {
         }
         .sheet(isPresented: $selectingInterval) {
             ScheduleIntervalPicker(selection: $form.interval,
-                unit: NSLocalizedString(["minutely":"分钟", "hourly":"小时", "daily":"天", "weekly":"周", "monthly":"个月"][form.frequency] ?? "", comment: ""))
+                unit: ScheduledTaskFormat.intervalUnit(form.frequency))
                 .presentationDetents([.height(340)])
         }
     }
@@ -1377,9 +1379,9 @@ private struct ScheduleClockPicker: View {
         NavigationStack {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    wheel("小时", value: $hour, count: 24)
-                    wheel("分钟", value: $minute, count: 60)
-                    wheel("秒", value: $second, count: 60)
+                    wheel(LocalizedStringKey("小时"), value: $hour, count: 24)
+                    wheel(LocalizedStringKey("分钟"), value: $minute, count: 60)
+                    wheel(LocalizedStringKey("秒"), value: $second, count: 60)
                 }
                 .padding(.horizontal, 20)
                 if fraction.dropFirst().contains(where: { $0 != "0" }) {
@@ -1434,7 +1436,7 @@ private struct ScheduleTimeZonePicker: View {
                 }
                 .foregroundStyle(.primary)
             }
-            .searchable(text: $query, prompt: "搜索时区")
+            .searchable(text: $query, prompt: Text("搜索时区"))
             .navigationTitle("时区").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
@@ -1462,9 +1464,18 @@ private enum ScheduledTaskFormat {
             "daily": String(localized: "每天"), "weekly": String(localized: "每周"), "monthly": String(localized: "每月")]
         guard let label = labels[form.frequency] else { return String(localized: "自定义") }
         if form.interval == "1" { return label }
-        let units = ["minutely": String(localized: "分钟"), "hourly": String(localized: "小时"),
-            "daily": String(localized: "天"), "weekly": String(localized: "周"), "monthly": String(localized: "个月")]
-        return String(localized: "schedule.repeat.interval", defaultValue: "每 \(form.interval) \(units[form.frequency] ?? "")执行")
+        return String(localized: "schedule.repeat.interval", defaultValue: "每 \(form.interval) \(intervalUnit(form.frequency))执行")
+    }
+
+    static func intervalUnit(_ frequency: String) -> String {
+        switch frequency {
+        case "minutely": String(localized: "分钟")
+        case "hourly": String(localized: "小时")
+        case "daily": String(localized: "天")
+        case "weekly": String(localized: "周")
+        case "monthly": String(localized: "个月")
+        default: ""
+        }
     }
 
     static func fullRule(_ task: ScheduledTask) -> String {
@@ -1758,7 +1769,7 @@ private struct WorkspaceFilesSheet: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if store.workspaceFileEntries.isEmpty {
                     DshEmptyState(
-                        "此目录为空",
+                        String(localized: "此目录为空"),
                         systemImage: "folder",
                         description: Text(store.workspaceFilePath)
                     )
@@ -1798,7 +1809,7 @@ private struct WorkspaceFilesSheet: View {
                     VStack(spacing: 9) {
                         ProgressView(value: progress)
                         HStack {
-                            Text("正在下载 · \(Int(progress * 100))%")
+                            Text(String(localized: "download.progress", defaultValue: "正在下载 · \(Int(progress * 100))%"))
                                 .appFont(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -1850,7 +1861,7 @@ private struct WorkspaceFilesSheet: View {
     private var workspaceFilePathBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "folder")
-            Text(store.workspaceFilePath == "." ? "工作区根目录" : store.workspaceFilePath)
+            Text(store.workspaceFilePath == "." ? String(localized: "工作区根目录") : store.workspaceFilePath)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
@@ -1950,7 +1961,9 @@ private struct WorkspaceFileRow: View {
                 .buttonStyle(.plain)
                 .disabled(isDownloading)
                 .accessibilityLabel(
-                    isDownloaded ? "\(item.name) 已下载，点击重新下载" : "下载 \(item.name)"
+                    isDownloaded
+                        ? String(localized: "\(item.name) 已下载，点击重新下载")
+                        : String(localized: "下载 \(item.name)")
                 )
             }
             .listRowBackground(FileIconCatalog.shared.resolve(name: item.name, mediaType: item.mediaType).cardBackground)
@@ -1977,7 +1990,7 @@ private struct WorkspaceFileRow: View {
     private func workspaceFileDetail(_ item: GatewayDirectoryItem) -> String {
         let size = item.bytes.map {
             ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)
-        } ?? "文件"
+        } ?? String(localized: "文件")
         guard let modifiedAt = item.modifiedAt else { return size }
         let date = Date(timeIntervalSince1970: modifiedAt / 1_000)
         return "\(size) · \(date.formatted(date: .abbreviated, time: .shortened))"
@@ -2224,10 +2237,10 @@ struct WorkspaceCodePreview: View {
             guard !Task.isCancelled else { return }
             document = loaded.value
         } catch WorkspaceCodePreviewLoadError.fileTooLarge {
-            errorMessage = "文件超过 2 MB，请使用系统应用打开"
+            errorMessage = String(localized: "文件超过 2 MB，请使用系统应用打开")
         } catch {
             guard !Task.isCancelled else { return }
-            errorMessage = "读取代码失败：\(error.localizedDescription)"
+            errorMessage = String(localized: "读取代码失败：\(error.localizedDescription)")
         }
     }
 }
@@ -2741,7 +2754,7 @@ private struct ScheduleCreateForm: View {
     @State private var requestID: String?
     private var nextExecutionPreview: String {
         guard let rule = try? JSONDecoder().decode(JSONValue.self, from: Data(timing.utf8)),
-              let kind = rule["kind"]?.stringValue else { return "请填写有效规则" }
+              let kind = rule["kind"]?.stringValue else { return String(localized: "请填写有效规则") }
         let spec = rule[kind]
         let zone = TimeZone(identifier: spec?["time_zone"]?.stringValue ?? "") ?? .current
         var calendar = Calendar(identifier: .gregorian)
@@ -2770,11 +2783,11 @@ private struct ScheduleCreateForm: View {
                 }
             }
         }
-        guard let next else { return "下次执行时间由 Host 校验并计算" }
+        guard let next else { return String(localized: "下次执行时间由 Host 校验并计算") }
         let formatter = DateFormatter()
         formatter.timeZone = zone
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss z"
-        return "预计下次执行 · \(formatter.string(from: next))\n最终以 Host 返回时间为准"
+        return String(localized: "schedule.next.estimate", defaultValue: "预计下次执行 · \(formatter.string(from: next))\n最终以 Host 返回时间为准")
     }
 
     var body: some View {

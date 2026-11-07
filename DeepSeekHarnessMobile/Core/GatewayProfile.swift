@@ -80,9 +80,9 @@ enum GatewayProfileError: LocalizedError {
     case identity, address, conflict
     var errorDescription: String? {
         switch self {
-        case .identity: "网关身份缺失、无效或与已保存的主机不一致。连接已停止，请确认主机后重新配对。"
-        case .address: "网关地址无效或候选地址超过 16 个。公网连接必须使用 WSS，地址不能包含账号、查询参数或片段。"
-        case .conflict: "此网关身份已属于另一条主机记录，请从主机列表选择原记录后重新配对。"
+        case .identity: String(localized: "网关身份缺失、无效或与已保存的主机不一致。连接已停止，请确认主机后重新配对。")
+        case .address: String(localized: "网关地址无效或候选地址超过 16 个。公网连接必须使用 WSS，地址不能包含账号、查询参数或片段。")
+        case .conflict: String(localized: "此网关身份已属于另一条主机记录，请从主机列表选择原记录后重新配对。")
         }
     }
 }
