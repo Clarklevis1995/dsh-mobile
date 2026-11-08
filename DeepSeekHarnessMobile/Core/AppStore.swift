@@ -314,6 +314,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case system
     case simplifiedChinese = "zh-Hans"
     case english = "en"
+    case japanese = "ja"
 
     static let preferenceKey = "app.language"
     private static let appleLanguagesKey = "AppleLanguages"
@@ -325,6 +326,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .system: String(localized: "跟随系统")
         case .simplifiedChinese: "简体中文" // i18n-ignore: language endonym stays in its own language
         case .english: "English"
+        case .japanese: "日本語" // i18n-ignore: language endonym stays in its own language
         }
     }
 
@@ -344,7 +346,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         switch self {
         case .system:
             defaults.removeObject(forKey: Self.appleLanguagesKey)
-        case .simplifiedChinese, .english:
+        case .simplifiedChinese, .english, .japanese:
             // Keep the UI language first without discarding the user's other languages.
             // UIKit also consults AppleLanguages when configuring text input.
             defaults.set([rawValue] + systemLanguages.filter { $0 != rawValue }, forKey: Self.appleLanguagesKey)
