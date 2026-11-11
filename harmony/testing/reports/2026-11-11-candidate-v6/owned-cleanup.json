@@ -1,0 +1,15 @@
+{
+  "ownedHostPorts": [
+    18897,
+    18899
+  ],
+  "configurationBaselineRestored": true,
+  "observerStoppedAndDeviceRevoked": true,
+  "ownedProcessesStopped": true,
+  "sensitiveTemporaryHomeRemoved": true,
+  "ownedVisualFixturePort": 18786,
+  "ownedVisualFixtureRemoved": true,
+  "androidTestAppDataCleared": true,
+  "androidDisplayRestored": "1080x2424 /420dpi",
+  "formalApplicationsUntouched": true
+}
