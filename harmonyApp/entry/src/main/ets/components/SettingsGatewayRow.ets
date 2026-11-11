@@ -31,15 +31,16 @@ export struct SettingsGatewayRow {
     if (this.kind === 'agent') { return data.presets.find(row => row.id === data.agentPresetDefault)?.name ?? data.agentPresetDefault ?? this.a.t('未读取'); }
     if (this.kind === 'model') { return data.models?.groups.find(group => group.id === data.defaultModel?.provider)?.models.find(model => model.id === data.defaultModel?.model)?.name ?? data.defaultModel?.model ?? this.a.t('未读取'); }
     if (this.kind === 'permission') { return data.permissionDefaultOptions.find(row => row.value === data.permissionDefault)?.name ?? data.permissionDefault ?? this.a.t('未读取'); }
-    return this.kind === 'status' ? this.snapshot.hostName : '';
+    return '';
   }
   private canPress(): boolean { return !['agent', 'model', 'permission', 'ping'].includes(this.kind) || this.snapshot.connected; }
   build() {
     Button({ type: ButtonType.Normal }) {
-      Row({ space: 12 }) {
+      Row({ space: this.kind === 'status' ? 10 : 8 }) {
+        if (this.kind === 'status') { Circle().id('settings-status-dot').width(9).height(9).fill(this.snapshot.connected ? '#2EB85C' : this.a.muted).accessibilityLevel('no') }
         Text(this.title()).fontSize(this.a.font(16)).fontColor(['connection', 'ping'].includes(this.kind) ? this.a.accent : this.a.fg).layoutWeight(1).textAlign(TextAlign.Start)
-        if (this.detail()) { Text(this.detail()).fontSize(this.a.font(14)).fontColor(this.a.muted).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }
-        if (!['connection', 'ping', 'host-version', 'host-sessions', 'host-cwd'].includes(this.kind)) { Image($rawfile('icons/chevron_right.svg')).width(16).height(16).colorFilter(iconTint(this.a.muted)) }
+        if (this.detail()) { Text(this.detail()).fontSize(this.a.font(14)).fontColor(this.a.fg).opacity(.52).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }
+        if (!['status', 'connection', 'ping', 'host-version', 'host-sessions', 'host-cwd'].includes(this.kind)) { Image($rawfile('icons/chevron_right.svg')).width(12).height(12).colorFilter(iconTint(this.a.fg)).opacity(.3) }
       }.padding({ left: 16, right: 16, top: 15, bottom: 15 }).width('100%').constraintSize({ minHeight: 54 })
     }.padding(0).width('100%').backgroundColor(this.a.surface).borderRadius(0).id(this.controlId).opacity(this.canPress() ? 1 : .4).enabled(this.canPress()).onClick(this.onPress)
   }

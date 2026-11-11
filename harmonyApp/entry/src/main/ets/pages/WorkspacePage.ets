@@ -15,7 +15,17 @@ export struct WorkspacePage {
   @Prop hostName: string = '';
   @Prop status: string = '';
   @Prop wide: boolean = false;
-  @Prop active: boolean = true;
+  @Prop @Watch('clockChanged') active: boolean = true;
+  @State private now: number = Date.now();
+  private clockTick: number = -1;
+  aboutToAppear(): void { this.clockChanged(); }
+  aboutToDisappear(): void { clearInterval(this.clockTick); this.clockTick = -1; }
+  private clockChanged(): void { clearInterval(this.clockTick); this.clockTick = -1; if (this.active) { this.now = Date.now(); this.clockTick = setInterval(() => this.now = Date.now(), 60000); } }
+  private folderLabel(row: SessionView): string {
+    const workspace = this.state.workspaces.find(group => group.sessionIds.includes(row.id));
+    const label = workspace?.title || row.cwd.replace(/\/+$/, '').split('/').pop() || '';
+    return label === row.title ? '' : label;
+  }
   @Prop query: string = '';
   onInbox: () => void = () => {};
   onHosts: () => void = () => {};
@@ -83,10 +93,14 @@ export struct WorkspacePage {
           .fontSize(this.a.font(14)).fontColor('#80FFFFFF').lineHeight(this.a.font(23)).padding(18).width('100%')
           .margin({ top: 10 }).backgroundColor(Color.Transparent).backgroundEffect({ radius: 4, saturation: .72, brightness: 1.005, color: '#0AFFFFFF' }).borderRadius(15).border({ width: 0.8, color: '#1AFFFFFF', radius: 15 })
       }
-      ForEach(this.visible(), (row: SessionView) => {
-        SessionTile({ a: this.a, row: row, glass: true, connected: this.state.connected, selected: row.id === this.state.selectedSessionId,
-          onOpen: this.onSelect, onRename: this.onRename, onArchive: this.onArchive })
-      }, (row: SessionView) => this.scope + ':' + row.id)
+      if (this.visible().length) {
+        Column() {
+          ForEach(this.visible().slice(0,this.workspaceId === '__all__' ? 200 : 12), (row: SessionView) => {
+            SessionTile({ a: this.a, row: row, glass: true, folderLabel: this.folderLabel(row), now: this.now, connected: this.state.connected, selected: row.id === this.state.selectedSessionId,
+              onOpen: this.onSelect, onRename: this.onRename, onArchive: this.onArchive })
+          }, (row: SessionView) => this.scope + ':' + row.id)
+        }.width('100%').margin({ top: 10 })
+      }
     }.width('100%')
   }
   build() {

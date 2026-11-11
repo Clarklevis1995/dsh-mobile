@@ -32,3 +32,10 @@ test('失效交互对象缓存有界，不影响新的可见项',()=>{
  for(let n=0;n<160;n++){update({approvals:[approval('a-'+n)]});update({approvals:[]});}
  update({approvals:[approval('old',true)]});assert.notEqual(runtime.approvals[0],old);assert.equal(runtime.approvals[0].replay,true);assert.equal(runtime.approvals.length,1);
 });
+
+test('目录更新复用同一会话视图时，共享未读和已读清除均能到达观察对象',()=>{
+ const {runtime,update}=environment();const row={id:'s',title:'owned',running:false,cwd:'/owned',hasConversation:true,lastActivityEpochSeconds:100};
+ update({sessions:[{...row,unread:false}]});const view=runtime.sessions[0];
+ update({sessions:[{...row,unread:true}]});assert.equal(runtime.sessions[0],view);assert.equal(view.unread,true);
+ update({sessions:[{...row,unread:false,running:true}]});assert.equal(runtime.sessions[0],view);assert.equal(view.unread,false);assert.equal(view.running,true);
+});

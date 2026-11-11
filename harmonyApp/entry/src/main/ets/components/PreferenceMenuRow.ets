@@ -22,10 +22,10 @@ export struct PreferenceMenuRow {
   }
   build() {
     Button({ type: ButtonType.Normal }) {
-      Row({ space: 12 }) {
+      Row({ space: 8 }) {
         Text(this.a.t(this.kind === 'style' ? '界面' : '语言')).fontSize(this.a.font(16)).fontColor(this.a.fg).layoutWeight(1)
-        Text(this.label(this.current())).fontSize(this.a.font(14)).fontColor(this.a.muted).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        Image($rawfile('icons/chevron_right.svg')).width(16).height(16).colorFilter(iconTint(this.a.muted))
+        Text(this.label(this.current())).fontSize(this.a.font(14)).fontColor(this.a.fg).opacity(.52).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Image($rawfile('icons/chevron_right.svg')).width(12).height(12).colorFilter(iconTint(this.a.fg)).opacity(.3)
       }.padding(16).width('100%').constraintSize({ minHeight: 54 })
     }.padding(0).width('100%').borderRadius(0).backgroundColor(this.a.surface)
       .id(this.kind === 'style' ? 'settings-style' : 'settings-language').bindMenu(this.optionsMenu)

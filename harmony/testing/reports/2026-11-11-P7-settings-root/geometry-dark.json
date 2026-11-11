@@ -1,0 +1,119 @@
+{
+  "scope": "同一18786静态夹具与1316x2832/560dpi/376逻辑宽；只扣除返回按钮中心对应的系统安全区差，不缩放或移动原图；顶部15标签纵向与4值右边缘，不替代全页V",
+  "checks": [
+    {
+      "label": "新会话默认配置",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "label": "Agent 预设",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "label": "构建 Agent",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.2857,
+      "passed": true
+    },
+    {
+      "label": "构建 Agent",
+      "metric": "valueRightEdge",
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "label": "默认模型",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "label": "读取模型",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.2857,
+      "passed": true
+    },
+    {
+      "label": "读取模型",
+      "metric": "valueRightEdge",
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "label": "权限",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "label": "只读",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.2857,
+      "passed": true
+    },
+    {
+      "label": "只读",
+      "metric": "valueRightEdge",
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "label": "Mobile Gateway",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "label": "ws://127.0.0.1:18786/ws/mobile",
+      "metric": "centerYFromBack",
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "label": "已连接",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "label": "断开连接",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "label": "Ping 网关",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.4286,
+      "passed": true
+    },
+    {
+      "label": "DSH Host",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.4286,
+      "passed": true
+    },
+    {
+      "label": "版本",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.4286,
+      "passed": true
+    },
+    {
+      "label": "0.2.2-fixture",
+      "metric": "centerYFromBack",
+      "differenceVp": -0.5714,
+      "passed": true
+    },
+    {
+      "label": "0.2.2-fixture",
+      "metric": "valueRightEdge",
+      "differenceVp": 0.0,
+      "passed": true
+    }
+  ]
+}

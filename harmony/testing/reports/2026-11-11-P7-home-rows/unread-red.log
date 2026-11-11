@@ -1,0 +1,50 @@
+TAP version 13
+# Subtest: 审批经空快照和同rpc重放继续更新原Observed对象
+ok 1 - 审批经空快照和同rpc重放继续更新原Observed对象
+  ---
+  duration_ms: 140.995375
+  ...
+# Subtest: 问题经握手空快照重放仍更新原对象，移除项不留在可见列表
+ok 2 - 问题经握手空快照重放仍更新原对象，移除项不留在可见列表
+  ---
+  duration_ms: 57.690833
+  ...
+# Subtest: 失效交互对象缓存有界，不影响新的可见项
+ok 3 - 失效交互对象缓存有界，不影响新的可见项
+  ---
+  duration_ms: 56.62925
+  ...
+# Subtest: 目录更新复用同一会话视图时，共享未读和已读清除均能到达观察对象
+not ok 4 - 目录更新复用同一会话视图时，共享未读和已读清除均能到达观察对象
+  ---
+  duration_ms: 42.247583
+  location: '/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/host_runtime.test.cjs:36:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + undefined
+    - true
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/host_runtime.test.cjs:39:90)
+    Test.runInAsyncScope (node:async_hooks:203:9)
+    Test.run (node:internal/test_runner/test:631:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:374:18)
+    Test.postRun (node:internal/test_runner/test:715:19)
+    Test.run (node:internal/test_runner/test:673:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:374:7)
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 3
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 453.6645

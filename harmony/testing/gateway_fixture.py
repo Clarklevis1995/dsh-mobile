@@ -14,6 +14,7 @@ import uuid
 
 GATEWAY_ID = os.environ.get('HARMONY_FIXTURE_ID', 'a56a1098-8519-43a1-9dce-fb99863bf5bb')
 PORT = int(os.environ.get('HARMONY_FIXTURE_PORT', '18783'))
+CATALOG_EPOCH = float(os.environ.get('HARMONY_FIXTURE_CATALOG_EPOCH', '0'))
 LABEL = os.environ.get('HARMONY_FIXTURE_LABEL', '')
 ARCHIVED = set()
 WORKSPACES = []
@@ -122,8 +123,8 @@ def session(identifier, title):
 
 
 def catalog():
-    return [dict(sessionId=key, updatedAt=time.time(), blank=not value['events'], running=key in CANCELLED and not CANCELLED[key].is_set(),
-        origin='subagent' if key in ['harmony-child', 'harmony-once'] else None, parentSessionId='harmony-smoke' if key in ['harmony-child', 'harmony-once'] else None, cwd='/smoke/harmony', projections=dict(values=dict(title=value['title']))) for key, value in SESSIONS.items() if key not in ARCHIVED]
+    return [dict(sessionId=key, updatedAt=CATALOG_EPOCH+index if CATALOG_EPOCH else time.time(), blank=not value['events'], running=key in CANCELLED and not CANCELLED[key].is_set(),
+        origin='subagent' if key in ['harmony-child', 'harmony-once'] else None, parentSessionId='harmony-smoke' if key in ['harmony-child', 'harmony-once'] else None, cwd='/smoke/harmony', projections=dict(values=dict(title=value['title']))) for index, (key, value) in enumerate(SESSIONS.items()) if key not in ARCHIVED]
 
 
 def broadcast(value, channel='control'):

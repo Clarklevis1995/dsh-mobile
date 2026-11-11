@@ -1,0 +1,19 @@
+操作 home-settings
+操作 settings-ping
+操作 settings-connection
+操作 settings-connection
+操作 settings-manage-hosts
+操作 page-back
+操作 settings-style
+操作 appearance-light
+操作 page-back
+操作 home-settings
+操作 settings-style
+操作 appearance-dark
+操作 page-back
+操作 home-settings
+操作 settings-style
+操作 appearance-light
+操作 page-back
+操作 home-settings
+PASS P7-settings-connected-root-F 生产设置页浅深/状态点/真实偏好切换；Ping夹具响应、主动断开禁用远程操作、重连恢复与主机管理返回通过；G和完整V另验

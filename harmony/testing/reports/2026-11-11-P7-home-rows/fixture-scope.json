@@ -1,0 +1,7 @@
+{
+  "port": 18786,
+  "gatewayId": "68349a9d-24e4-4f27-b36b-4f38d1af6d01",
+  "catalogEpoch": 1794139444.107404,
+  "catalogTimingScope": "固定3天前且按目录顺序微增，双端V避免采样时差；非真实G",
+  "scope": "双端限定V的唯一静态协议夹具；不是真实网关G"
+}

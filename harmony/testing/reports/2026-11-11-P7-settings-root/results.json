@@ -1,0 +1,11 @@
+{
+  "ping": true,
+  "disconnect": true,
+  "reconnect": true,
+  "disabledActions": true,
+  "hostNavigation": true,
+  "themes": [
+    "light",
+    "dark"
+  ]
+}

@@ -82,12 +82,13 @@ export class SessionView {
   id: string;
   title: string = '';
   running: boolean = false;
+  unread: boolean = false;
   cwd: string = '';
   hasConversation: boolean = false;
   lastActivityEpochSeconds: number = 0;
   constructor(row: SessionRow) { this.id = row.id; this.update(row); }
   update(row: SessionRow): void {
-    this.title = row.title; this.running = row.running; this.cwd = row.cwd ?? '';
+    this.title = row.title; this.running = row.running; this.unread = row.unread ?? false; this.cwd = row.cwd ?? '';
     this.hasConversation = row.hasConversation ?? true; this.lastActivityEpochSeconds = row.lastActivityEpochSeconds ?? 0;
   }
 }

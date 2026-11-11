@@ -1,0 +1,30 @@
+TAP version 13
+# Subtest: 审批经空快照和同rpc重放继续更新原Observed对象
+ok 1 - 审批经空快照和同rpc重放继续更新原Observed对象
+  ---
+  duration_ms: 87.746875
+  ...
+# Subtest: 问题经握手空快照重放仍更新原对象，移除项不留在可见列表
+ok 2 - 问题经握手空快照重放仍更新原对象，移除项不留在可见列表
+  ---
+  duration_ms: 38.816291
+  ...
+# Subtest: 失效交互对象缓存有界，不影响新的可见项
+ok 3 - 失效交互对象缓存有界，不影响新的可见项
+  ---
+  duration_ms: 40.358917
+  ...
+# Subtest: 目录更新复用同一会话视图时，共享未读和已读清除均能到达观察对象
+ok 4 - 目录更新复用同一会话视图时，共享未读和已读清除均能到达观察对象
+  ---
+  duration_ms: 29.810875
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 292.593167

@@ -1,0 +1,86 @@
+{
+  "scope": "同376逻辑宽/100%字号，已连接同一静态夹具且选择全部会话；比较三条行标题/目录/固定相对日期纵向中心，背景相位未强制相同",
+  "checks": [
+    {
+      "sessionId": "harmony-rich",
+      "kind": "title",
+      "text": "富文本验收",
+      "androidCenterPx": 2159.5,
+      "harmonyCenterPx": 2154.0,
+      "differenceVp": -1.5714,
+      "passed": true
+    },
+    {
+      "sessionId": "harmony-rich",
+      "kind": "meta",
+      "text": "harmony · harmony-rich",
+      "androidCenterPx": 2225.5,
+      "harmonyCenterPx": 2223.0,
+      "differenceVp": -0.7143,
+      "passed": true
+    },
+    {
+      "sessionId": "harmony-rich",
+      "kind": "age",
+      "text": "3 天前",
+      "androidCenterPx": 2186.0,
+      "harmonyCenterPx": 2185.5,
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "sessionId": "harmony-other",
+      "kind": "title",
+      "text": "另一个会话",
+      "androidCenterPx": 2359.5,
+      "harmonyCenterPx": 2355.0,
+      "differenceVp": -1.2857,
+      "passed": true
+    },
+    {
+      "sessionId": "harmony-other",
+      "kind": "meta",
+      "text": "harmony · harmony-other",
+      "androidCenterPx": 2425.5,
+      "harmonyCenterPx": 2424.0,
+      "differenceVp": -0.4286,
+      "passed": true
+    },
+    {
+      "sessionId": "harmony-other",
+      "kind": "age",
+      "text": "3 天前",
+      "androidCenterPx": 2386.0,
+      "harmonyCenterPx": 2386.5,
+      "differenceVp": 0.1429,
+      "passed": true
+    },
+    {
+      "sessionId": "harmony-smoke",
+      "kind": "title",
+      "text": "鸿蒙原生会话验证",
+      "androidCenterPx": 2559.5,
+      "harmonyCenterPx": 2557.0,
+      "differenceVp": -0.7143,
+      "passed": true
+    },
+    {
+      "sessionId": "harmony-smoke",
+      "kind": "meta",
+      "text": "harmony · harmony-smoke",
+      "androidCenterPx": 2625.5,
+      "harmonyCenterPx": 2626.0,
+      "differenceVp": 0.1429,
+      "passed": true
+    },
+    {
+      "sessionId": "harmony-smoke",
+      "kind": "age",
+      "text": "3 天前",
+      "androidCenterPx": 2586.0,
+      "harmonyCenterPx": 2588.5,
+      "differenceVp": 0.7143,
+      "passed": true
+    }
+  ]
+}

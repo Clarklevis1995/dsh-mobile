@@ -35,7 +35,7 @@ export struct PageHeader {
   onBack: () => void = () => {};
   build() {
     Row() {
-      CircleIcon({ icon: 'back_chevron', diameter: 46, outlined: true, label: this.a.t('返回'), controlId: 'page-back', ink: this.a.fg, fill: this.a.surface, onPress: this.onBack })
+      CircleIcon({ icon: 'back_chevron', diameter: 46, outlined: true, lifted: true, label: this.a.t('返回'), controlId: 'page-back', ink: this.a.fg, fill: this.a.surface, onPress: this.onBack })
       Text(this.title).fontSize(this.a.font(17)).fontWeight(600).fontColor(this.a.fg).layoutWeight(1).textAlign(TextAlign.Center)
       Blank().width(46)
     }.width('100%').height(64).padding({ left: 12, right: 12 })

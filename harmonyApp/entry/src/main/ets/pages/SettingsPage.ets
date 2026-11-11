@@ -41,10 +41,10 @@ export struct SettingsPage {
     this.onChange(next);
   }
   @Builder private row(title: string, detail: string, id: string, action: () => void, enabled: boolean = true) {
-    Row({ space: 12 }) {
+    Row({ space: 8 }) {
       Text(this.a.t(title)).fontSize(this.a.font(16)).fontColor(this.a.fg).layoutWeight(1)
-      Text(detail).fontSize(this.a.font(14)).fontColor(this.a.muted).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      Image($rawfile('icons/chevron_right.svg')).width(16).height(16).colorFilter(iconTint(this.a.muted))
+      Text(detail).fontSize(this.a.font(14)).fontColor(this.a.fg).opacity(.52).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      Image($rawfile('icons/chevron_right.svg')).width(12).height(12).colorFilter(iconTint(this.a.fg)).opacity(.3)
     }.padding({ left: 16, right: 16, top: 15, bottom: 15 }).width('100%').constraintSize({ minHeight: 56 })
       .backgroundColor(this.a.surface).id(id).opacity(enabled ? 1 : .4).enabled(enabled).onClick(action)
   }
@@ -66,38 +66,38 @@ export struct SettingsPage {
           if (this.section === 'root') {
             SettingsSection({ a: this.a, title: '新会话默认配置', footer: '与 WebUI 使用同一份部署级设置。修改只影响之后新建的会话，运行中的会话保持启动时的配置。' }) {
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'agent', controlId: 'settings-agent-presets', onPress: this.onAgents })
-              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'model', controlId: 'settings-defaults', onPress: this.onDefaults })
-              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'permission', controlId: 'settings-default-permission', onPress: this.onDefaults })
             }
             SettingsSection({ a: this.a, title: 'Mobile Gateway' }) {
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'endpoint', controlId: 'settings-hosts', onPress: this.onHosts })
-              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'status', controlId: 'settings-manage-hosts', onPress: this.onHosts })
-              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'connection', controlId: 'settings-connection', onPress: this.onConnection })
-              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'ping', controlId: 'settings-ping', onPress: this.onPing })
             }
             if (this.snapshot.hostSnapshot) {
               SettingsSection({ a: this.a, title: 'DSH Host' }) {
                 SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'host-version', controlId: 'settings-host-version' })
-                Divider().color(this.a.line).margin({ left: 16, right: 16 })
+                Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
                 SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'host-sessions', controlId: 'settings-host-sessions' })
                 if (this.snapshot.hostSnapshot?.cwd) {
-                  Divider().color(this.a.line).margin({ left: 16, right: 16 })
+                  Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
                   SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'host-cwd', controlId: 'settings-host-cwd' })
                 }
               }
             }
             SettingsSection({ a: this.a, title: '外观' }) {
               PreferenceMenuRow({ a: this.a, kind: 'style', onChoose: value => this.set(value) })
-              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               PreferenceMenuRow({ a: this.a, kind: 'language', onChoose: value => this.set(undefined, value) })
-              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'font', controlId: 'settings-font', onPress: () => this.onOpenSection('font') })
-              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               Row() {
                 Text(this.a.t('减少动态效果')).fontSize(this.a.font(16)).fontColor(this.a.fg).layoutWeight(1)
                 Toggle({ type: ToggleType.Switch, isOn: this.a.data.reduceMotion }).id('settings-motion').onChange(value => this.set(undefined, undefined, undefined, undefined, value))
@@ -108,12 +108,12 @@ export struct SettingsPage {
             }
             SettingsSection({ a: this.a, title: '主机扩展' }) {
               this.row('插件', '', 'settings-plugins', this.onPlugins)
-              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               this.row('定时任务', '', 'settings-schedules', this.onSchedules)
             }
             SettingsSection({ a: this.a, title: '关于' }) {
               this.row('当前版本', this.version, 'settings-about', () => this.onOpenSection('about'))
-              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               this.row('隐私', '', 'settings-privacy', () => this.onOpenSection('privacy'))
             }
           } else if (this.section === 'privacy') {

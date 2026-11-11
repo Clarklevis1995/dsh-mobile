@@ -1,0 +1,11 @@
+{
+  "androidFrozenSource": "9e13dde3",
+  "androidVersion": "1.7.12 (33)",
+  "harmonyBase": "2ac29cbb+本轮会话行工作区",
+  "files": {
+    "components/ViewModels.ets": "e7294fe5c7d41c90c43b996991fa62fd6db068ef0901ccbe858c8a0113d526ff",
+    "components/SessionTile.ets": "06b70a1d47685324618ca3f3477d942e8b608a1599b24bc36b5c690e2ce1ef72",
+    "core/SessionPresentation.ets": "5abf5d8435933ed10ccdec1aa7bc248c967efee70ebca738a22406183786f181",
+    "pages/WorkspacePage.ets": "4436dea41992af8e0cd06dfc2fc926542bbbf04061f74b7d16a9c7de89e9fe83"
+  }
+}
