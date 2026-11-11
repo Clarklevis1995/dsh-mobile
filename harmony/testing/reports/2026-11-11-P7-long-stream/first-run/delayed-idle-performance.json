@@ -1,0 +1,40 @@
+{
+  "completedLong": [
+    {
+      "id": "harmony-smoke-1007",
+      "length": 55274,
+      "hash": "3682621544"
+    },
+    {
+      "id": "harmony-smoke-1009",
+      "length": 55274,
+      "hash": "3682621544"
+    }
+  ],
+  "operations": [
+    "disconnect:control:1",
+    "voice-sync:control:1",
+    "prepare:control:0",
+    "frame:control:7",
+    "frame:conversation:113",
+    "voice-suspend:control:1",
+    "select:control:2",
+    "cache-export:control:36",
+    "slash-input:control:1",
+    "send:control:0",
+    "resume:control:2"
+  ],
+  "messages": 1005,
+  "liveCards": 3,
+  "peakCards": 16,
+  "firstTailMs": 325,
+  "bridgeP95Ms": 1,
+  "bridgeMaxMs": 113,
+  "updateP95Ms": 2,
+  "draftP95Ms": 1,
+  "parseP95Ms": 29,
+  "drawCallbackIntervalP95Ms": 20,
+  "drawCallbackSamples": 203,
+  "pssKiB": "167742",
+  "rssKiB": "328416"
+}

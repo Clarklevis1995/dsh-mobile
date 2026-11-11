@@ -1,0 +1,197 @@
+{
+  "frozenSource": "9e13dde3",
+  "androidVersion": "1.7.12 (33)",
+  "physical": "1316x2832",
+  "density": 3.5,
+  "logicalWidth": 376,
+  "fontScale": 1,
+  "scope": "仅菜单内部5项几何；扣除各自菜单原点，不移动截图或比较不同连接内容",
+  "checks": [
+    {
+      "page": "appearance-light",
+      "metric": "panelWidth",
+      "androidDp": 208.0,
+      "harmonyVp": 208.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "appearance-light",
+      "metric": "panelHeight",
+      "androidDp": 152.0,
+      "harmonyVp": 152.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "appearance-light",
+      "metric": "rowHeight",
+      "androidDp": 48.0,
+      "harmonyVp": 48.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "appearance-light",
+      "metric": "firstRowCenterFromTop",
+      "androidDp": 28.0,
+      "harmonyVp": 28.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "appearance-light",
+      "metric": "labelLeftInset",
+      "androidDp": 48.0,
+      "harmonyVp": 48.285714285714285,
+      "differenceVp": 0.2857,
+      "passed": true
+    },
+    {
+      "page": "language-light",
+      "metric": "panelWidth",
+      "androidDp": 208.0,
+      "harmonyVp": 208.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "language-light",
+      "metric": "panelHeight",
+      "androidDp": 152.0,
+      "harmonyVp": 152.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "language-light",
+      "metric": "rowHeight",
+      "androidDp": 48.0,
+      "harmonyVp": 48.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "language-light",
+      "metric": "firstRowCenterFromTop",
+      "androidDp": 28.0,
+      "harmonyVp": 28.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "language-light",
+      "metric": "labelLeftInset",
+      "androidDp": 48.0,
+      "harmonyVp": 48.285714285714285,
+      "differenceVp": 0.2857,
+      "passed": true
+    },
+    {
+      "page": "appearance-dark",
+      "metric": "panelWidth",
+      "androidDp": 208.0,
+      "harmonyVp": 208.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "appearance-dark",
+      "metric": "panelHeight",
+      "androidDp": 152.0,
+      "harmonyVp": 152.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "appearance-dark",
+      "metric": "rowHeight",
+      "androidDp": 48.0,
+      "harmonyVp": 48.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "appearance-dark",
+      "metric": "firstRowCenterFromTop",
+      "androidDp": 28.0,
+      "harmonyVp": 28.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "appearance-dark",
+      "metric": "labelLeftInset",
+      "androidDp": 48.0,
+      "harmonyVp": 48.285714285714285,
+      "differenceVp": 0.2857,
+      "passed": true
+    },
+    {
+      "page": "language-dark",
+      "metric": "panelWidth",
+      "androidDp": 208.0,
+      "harmonyVp": 208.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "language-dark",
+      "metric": "panelHeight",
+      "androidDp": 152.0,
+      "harmonyVp": 152.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "language-dark",
+      "metric": "rowHeight",
+      "androidDp": 48.0,
+      "harmonyVp": 48.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "language-dark",
+      "metric": "firstRowCenterFromTop",
+      "androidDp": 28.0,
+      "harmonyVp": 28.0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "page": "language-dark",
+      "metric": "labelLeftInset",
+      "androidDp": 48.0,
+      "harmonyVp": 48.285714285714285,
+      "differenceVp": 0.2857,
+      "passed": true
+    }
+  ],
+  "remainingDifferences": [
+    {
+      "page": "appearance-light",
+      "nativeHitWidthVp": 200.0,
+      "androidHitWidthDp": 208.0,
+      "comment": "原生Menu左右各4vp内边距，命中宽度200vp对Android208dp；本限定V不关闭该差异及锚点/材质"
+    },
+    {
+      "page": "language-light",
+      "nativeHitWidthVp": 200.0,
+      "androidHitWidthDp": 208.0,
+      "comment": "原生Menu左右各4vp内边距，命中宽度200vp对Android208dp；本限定V不关闭该差异及锚点/材质"
+    },
+    {
+      "page": "appearance-dark",
+      "nativeHitWidthVp": 200.0,
+      "androidHitWidthDp": 208.0,
+      "comment": "原生Menu左右各4vp内边距，命中宽度200vp对Android208dp；本限定V不关闭该差异及锚点/材质"
+    },
+    {
+      "page": "language-dark",
+      "nativeHitWidthVp": 200.0,
+      "androidHitWidthDp": 208.0,
+      "comment": "原生Menu左右各4vp内边距，命中宽度200vp对Android208dp；本限定V不关闭该差异及锚点/材质"
+    }
+  ]
+}

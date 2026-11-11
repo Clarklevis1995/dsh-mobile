@@ -1,0 +1,18 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-1la2z3y3
+操作 home-settings
+操作 settings-style
+操作 appearance-light
+操作 settings-style
+操作 settings-language
+操作 settings-style
+操作 appearance-dark
+操作 settings-style
+操作 settings-language
+操作 settings-language
+操作 language-en
+操作 settings-language
+操作 language-system
+操作 settings-style
+操作 appearance-light
+PASS P2-preference-menu-F 原生外观/语言浅深菜单208vp、48vp行距和真实选中状态；英语切换后返回系统语言及浅色
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-1la2z3y3

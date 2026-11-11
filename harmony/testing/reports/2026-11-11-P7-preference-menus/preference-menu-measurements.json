@@ -1,0 +1,82 @@
+[
+  {
+    "name": "harmony-appearance-light",
+    "widthVp": 208.0,
+    "rowSpacingVp": [
+      48.0,
+      48.0
+    ],
+    "selected": "light",
+    "bounds": [
+      70,
+      1800,
+      798,
+      2332
+    ],
+    "source": "生产ArkUI Menu"
+  },
+  {
+    "name": "harmony-language-light",
+    "widthVp": 208.0,
+    "rowSpacingVp": [
+      48.0,
+      48.0
+    ],
+    "selected": "system",
+    "bounds": [
+      70,
+      1990,
+      798,
+      2522
+    ],
+    "source": "生产ArkUI Menu"
+  },
+  {
+    "name": "harmony-appearance-dark",
+    "widthVp": 208.0,
+    "rowSpacingVp": [
+      48.0,
+      48.0
+    ],
+    "selected": "dark",
+    "bounds": [
+      70,
+      1800,
+      798,
+      2332
+    ],
+    "source": "生产ArkUI Menu"
+  },
+  {
+    "name": "harmony-language-dark",
+    "widthVp": 208.0,
+    "rowSpacingVp": [
+      48.0,
+      48.0
+    ],
+    "selected": "system",
+    "bounds": [
+      70,
+      1990,
+      798,
+      2522
+    ],
+    "source": "生产ArkUI Menu"
+  },
+  {
+    "name": "harmony-language-selected-en",
+    "widthVp": 208.0,
+    "rowSpacingVp": [
+      48.0,
+      48.0
+    ],
+    "selected": "en",
+    "bounds": [
+      70,
+      2053,
+      798,
+      2585
+    ],
+    "source": "生产ArkUI Menu"
+  }
+]

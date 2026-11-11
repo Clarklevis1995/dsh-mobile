@@ -1,5 +1,7 @@
 """正式原生消息组件的隔离网关回归，不注入替代渲染器。"""
-import time
+import time,json,re
+from PIL import Image
+from collections import Counter
 
 
 def run(ui, m, folder, passed):
@@ -7,7 +9,7 @@ def run(ui, m, folder, passed):
     ui.navigate('conversation-back', 'home-settings')
     ui.click('富文本验收', 'text'); ui.wait('message-draft')
     time.sleep(1)
-    assert not any(row.get('text') == '内容解析失败' for row in ui.nodes()), 'TaskPool 解析器失败'
+    assert not any(row.get('text') == '内容解析失败' for row in ui.nodes()), 'Worker 解析器失败'
     table = 'message-body-harmony-rich-3'
     code = 'message-body-harmony-rich-2'
     expected_code = 'val whale = "鲸鱼🐳"\n\tprintln(whale)\n' + '\n'.join('// line ' + str(i) for i in range(1, 29)) + '\n// ' + 'horizontal_' * 18
@@ -33,18 +35,24 @@ def run(ui, m, folder, passed):
     ui.text('中文与 long_table_cell_that_wraps'); ui.screenshot('rich-table')
     ui.click(table + '-table-copy-0:table')
     paste('名称\t数量\t备注\n鲸鱼\t2\t中文与 long_table_cell_that_wraps\n海豚\t3\t粗体')
-    ui.click(table + '-table-preview-0:table'); ui.wait('table-preview-table-copy-0:table'); ui.screenshot('rich-table-preview')
+    ui.click(table + '-table-preview-0:table'); ui.wait('table-reader-copy'); ui.text('2 行'); ui.click('table-reader-copy'); ui.screenshot('rich-table-preview')
     ui.navigate('page-back', 'message-draft')
     passed('P3-table-F', '原生表格内容、中文长单元格、复制纯文本矩阵和原生预览返回通过')
 
     locate(code + '-code-copy-0:code')
+    header=ui.find(code+'-code-copy-0:code');viewport=ui.find('conversation-list');h=list(map(int,re.findall(r'-?\d+',header['bounds'])));v=list(map(int,re.findall(r'-?\d+',viewport['bounds'])))
+    if h[3]>v[3]-450:
+        x=(v[0]+v[2])//2;m.hdc('shell','uitest','uiInput','swipe',str(x),str(v[1]+(v[3]-v[1])*3//4),str(x),str(v[1]+(v[3]-v[1])//2),'800');time.sleep(.6)
+    ui.wait(code+'-code-0:code');time.sleep(.5);ui.screenshot('rich-code-worker-highlight')
+    bounds=tuple(map(int,re.findall(r'-?\d+',ui.find(code+'-code-0:code')['bounds'])));colors=Counter(Image.open(folder/'rich-code-worker-highlight.png').convert('RGB').crop(bounds).getdata())
+    assert colors[(130,80,223)]>=10 and colors[(10,122,61)]>=10, '真实Worker未显示Kotlin关键字/字符串高亮'
+    (folder/'worker-highlight-colors.json').write_text(json.dumps(dict(keywordPixels=colors[(130,80,223)],stringPixels=colors[(10,122,61)],keyword='#8250DF',string='#0A7A3D',scope='生产CodeSyntaxHighlighting → ThreadWorker NAPI → 原生Span实际像素'),ensure_ascii=False,indent=2))
     ui.click(code + '-code-copy-0:code'); paste(expected_code)
     passed('P3-code-copy-F', '代码原文复制与中文、emoji、TAB、长行一致，未混入装饰或行号')
     locate(code + '-code-expand-0:code', upward=False)
     ui.click(code + '-code-expand-0:code'); ui.screenshot('rich-code-expanded')
     locate(code + '-code-expand-0:code', upward=False)
     row, _, _ = ui.control(code + '-code-scroll-0:code')
-    import re
     left, top, right, bottom = map(int, re.findall(r'-?\d+', row['bounds']))
     m.hdc('shell', 'uitest', 'uiInput', 'swipe', str(right-30), str((top+bottom)//2), str(left+30), str((top+bottom)//2), '2000')
     time.sleep(.4)
@@ -75,6 +83,6 @@ def run(ui, m, folder, passed):
     node = next(row['id'] for row in ui.nodes() if row.get('id', '').startswith('trajectory-node-'))
     ui.click(node); ui.wait('content-selection'); ui.text('轨迹详情'); ui.screenshot('rich-trajectory-detail')
     ui.navigate('page-back', 'trajectory-all'); ui.click('trajectory-tools'); ui.text('暂无轨迹记录')
-    ui.click('trajectory-requests'); ui.click('conversation-tab-chat'); ui.wait('message-draft')
+    ui.click('trajectory-requests'); ui.navigate('page-back', 'message-draft')
     passed('P3-trajectory-F', '共享真实事件投影、对话/轨迹切换、模型/工具过滤与原生详情返回通过')
     passed('P3-native-stream-F', '正式 Native 协议到原生 Markdown Worker 的连续增量与终帧显示通过')

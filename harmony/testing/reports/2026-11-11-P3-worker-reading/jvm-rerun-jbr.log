@@ -1,0 +1,16 @@
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:jvmProcessResources NO-SOURCE
+> Task :shared:jvmTestProcessResources NO-SOURCE
+
+> Task :shared:compileKotlinJvm
+w: file:///Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/protocol/JsonValue.kt:105:5 This declaration needs opt-in. Its usage should be marked with '@kotlinx.serialization.ExperimentalSerializationApi' or '@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)'
+w: file:///Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/protocol/JsonValue.kt:111:5 This declaration needs opt-in. Its usage should be marked with '@kotlinx.serialization.ExperimentalSerializationApi' or '@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)'
+
+> Task :shared:jvmMainClasses
+> Task :shared:jvmJar
+> Task :shared:compileTestKotlinJvm
+> Task :shared:jvmTestClasses
+> Task :shared:jvmTest
+
+BUILD SUCCESSFUL in 15s
+4 actionable tasks: 4 executed

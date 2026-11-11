@@ -1,8 +1,7 @@
-import { taskpool } from '@kit.ArkTS';
 import { Appearance } from '../core/Appearance';
 import { MarkdownData } from '../core/MarkdownModel';
 import { MarkdownBlock } from '../core/MarkdownBlock';
-import { parseMarkdownInWorker } from '../core/MarkdownWorker';
+import { parseMarkdownAsync } from '../core/MarkdownParser';
 import { MarkdownText } from './MarkdownText';
 import { MarkdownCode } from './MarkdownCode';
 import { MarkdownTable } from './MarkdownTable';
@@ -35,12 +34,14 @@ export struct MarkdownBody {
   private changed(): void {
     if (this.parsed && this.source === this.text) { if (this.alive && this.active) { this.onRendered(); } return; }
     if (this.busy || this.timer >= 0 || !this.alive || !this.active) { return; }
-    this.timer = setTimeout(() => { this.timer = -1; this.parse(); }, 64);
+    // 长代码/表格合并相邻前缀，避免每个token都复制整段AST；结束后的最新正文仍会完整解析。
+    const delay = this.text.length > 16000 ? 400 : 64;
+    this.timer = setTimeout(() => { this.timer = -1; this.parse(); }, delay);
   }
   private async parse(): Promise<void> {
     const ticket = this.epoch; const source = this.text; this.busy = true;
     try {
-      const json = await taskpool.execute(new taskpool.Task(parseMarkdownInWorker, source)) as string;
+      const json = await parseMarkdownAsync(source) as string;
       if (!this.alive || !this.active || ticket !== this.epoch) { return; }
       const values = JSON.parse(json) as MarkdownData[];
       this.blocks = values.map(value => {
@@ -48,7 +49,7 @@ export struct MarkdownBody {
         if (old) { old.update(value); return old; } return new MarkdownBlock(value);
       });
       this.source = source; this.parsed = true; this.failed = false; this.onRendered();
-    } catch (_) { if (this.alive && ticket === this.epoch) { this.failed = true; this.source = source; this.onRendered(); } }
+    } catch (_) { if (this.alive && ticket === this.epoch) { this.failed = true; this.parsed = false; this.source = source; this.onRendered(); } }
     finally { this.busy = false; if (this.alive && this.source !== this.text) { this.changed(); } }
   }
   private codeExpanded(id: string): boolean { return (this.persistCodeExpansion ? this.expandedCodes : this.localExpandedCodes).includes(id); }

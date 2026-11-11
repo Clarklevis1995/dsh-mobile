@@ -168,14 +168,18 @@ def pending_approval(identifier, mode):
     broadcast(value)
 
 
-def stream_reply(client, identifier, slow):
+def stream_reply(client, identifier, slow, long_content=False):
     cancelled = threading.Event()
     CANCELLED[identifier] = cancelled
     attempt = 'attempt-' + str(next(IDS))
     turn = next(IDS)
     scope = dict(sessionId=identifier, subscriptionId=client.subscription, streamId='stream-' + RUN_ID + '-' + identifier)
     text = '流式回复验证完成：Kotlin 共享状态机与鸿蒙原生界面工作正常。'
-    chunks = [text[i:i + 3] for i in range(0, len(text), 3)]
+    if long_content:
+        from long_stream_fixture import content
+        text = content()
+    size = 256 if long_content else 3
+    chunks = [text[i:i + size] for i in range(0, len(text), size)]
     with LOCK:
         state = SESSIONS[identifier]
         state['revision'] += 1
@@ -184,7 +188,7 @@ def stream_reply(client, identifier, slow):
     emitted = ''
     delivered = 0
     for index, chunk in enumerate(chunks):
-        if cancelled.wait(float(os.environ.get('HARMONY_FIXTURE_STREAM_DELAY', '3.0')) if slow else 0.06):
+        if cancelled.wait(0.2 if long_content else (float(os.environ.get('HARMONY_FIXTURE_STREAM_DELAY', '3.0')) if slow else 0.06)):
             break
         with LOCK:
             state['revision'] += 1
@@ -340,6 +344,8 @@ class Handler(socketserver.StreamRequestHandler):
                         APPROVALS.pop(rpc)
                         broadcast(dict(kind='approval-resolved', rpcId=rpc, sessionId=identifier))
                 event(identifier, dict(type='assistant/message', text='过期审批已移除'))
+            elif mode == 'perf-stream' and os.environ.get('HARMONY_FIXTURE_PERF') == '1':
+                threading.Thread(target=stream_reply, args=(self, identifier, False, True), daemon=True).start()
             elif mode == 'notice-approval':
                 threading.Timer(12, pending_approval, args=(identifier, 'approval')).start()
             elif mode == 'notice-ended':

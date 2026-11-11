@@ -8,6 +8,11 @@
       "abiFilters": [
         "arm64-v8a"
       ]
+    },
+    "sourceOption": {
+      "workers": [
+        "./src/main/ets/workers/MarkdownParserWorker.ets"
+      ]
     }
   },
   "targets": [

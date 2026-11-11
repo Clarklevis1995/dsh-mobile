@@ -1,0 +1,503 @@
+{
+  "gates": {
+    "frozenBeforeFirstRun": "2026-10-30",
+    "scope": "API21 ARM64 emulator, isolated smoke bundle; UI callback and bridge timing, not GPU frame time",
+    "stableHistoryEventsMinimum": 1000,
+    "liveMessageCardsMaximum": 24,
+    "firstTailReadyMillisecondsMaximum": 3000,
+    "bridgeP95MillisecondsMaximum": 100,
+    "viewUpdateP95MillisecondsMaximum": 16,
+    "draftCallbackP95MillisecondsMaximum": 50,
+    "processPssMiBMaximum": 450,
+    "scrollIdlePssGrowthMiBMaximum": 48,
+    "note": "首次测量前固定。失败保留，不静默放宽。调试仪表仅进入临时测试包，P7完整帧／设备门禁仍另行验证。"
+  },
+  "expectedProjection": {
+    "length": 55274,
+    "hash": "3682621544"
+  },
+  "samples": [
+    {
+      "completedLong": [],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:0",
+        "select:control:2",
+        "cache-export:control:18"
+      ],
+      "messages": 1005,
+      "liveCards": 4,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 113,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": -1,
+      "parseP95Ms": 13,
+      "drawCallbackIntervalP95Ms": -1,
+      "drawCallbackSamples": 0,
+      "pssKiB": "190334",
+      "rssKiB": "349928",
+      "label": "1005-initial"
+    },
+    {
+      "completedLong": [],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:0",
+        "select:control:2",
+        "cache-export:control:18",
+        "slash-input:control:0",
+        "send:control:0"
+      ],
+      "messages": 1007,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 2,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 13,
+      "drawCallbackIntervalP95Ms": -1,
+      "drawCallbackSamples": 0,
+      "pssKiB": "158001",
+      "rssKiB": "318192",
+      "label": "stream-0-active"
+    },
+    {
+      "completedLong": [],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:0",
+        "select:control:2",
+        "cache-export:control:18",
+        "slash-input:control:1",
+        "send:control:0"
+      ],
+      "messages": 1007,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 10,
+      "drawCallbackIntervalP95Ms": -1,
+      "drawCallbackSamples": 0,
+      "pssKiB": "172053",
+      "rssKiB": "333080",
+      "label": "stream-edit-0-0"
+    },
+    {
+      "completedLong": [],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:0",
+        "select:control:2",
+        "cache-export:control:18",
+        "slash-input:control:1",
+        "send:control:0"
+      ],
+      "messages": 1007,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 9,
+      "drawCallbackIntervalP95Ms": -1,
+      "drawCallbackSamples": 0,
+      "pssKiB": "165634",
+      "rssKiB": "326660",
+      "label": "stream-edit-0-1"
+    },
+    {
+      "completedLong": [],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:0",
+        "select:control:2",
+        "cache-export:control:18",
+        "slash-input:control:1",
+        "send:control:0"
+      ],
+      "messages": 1007,
+      "liveCards": 6,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 10,
+      "drawCallbackIntervalP95Ms": 19,
+      "drawCallbackSamples": 43,
+      "pssKiB": "202521",
+      "rssKiB": "363616",
+      "label": "stream-reading-older-0"
+    },
+    {
+      "completedLong": [
+        {
+          "id": "harmony-smoke-1007",
+          "length": 55274,
+          "hash": "3682621544"
+        }
+      ],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:0",
+        "select:control:2",
+        "cache-export:control:25",
+        "slash-input:control:1",
+        "send:control:0"
+      ],
+      "messages": 1007,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 29,
+      "drawCallbackIntervalP95Ms": 19,
+      "drawCallbackSamples": 103,
+      "pssKiB": "344390",
+      "rssKiB": "505612",
+      "label": "stream-0-complete"
+    },
+    {
+      "completedLong": [
+        {
+          "id": "harmony-smoke-1007",
+          "length": 55274,
+          "hash": "3682621544"
+        }
+      ],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:1",
+        "select:control:2",
+        "cache-export:control:25",
+        "slash-input:control:1",
+        "send:control:0",
+        "resume:control:1"
+      ],
+      "messages": 1005,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 29,
+      "drawCallbackIntervalP95Ms": 19,
+      "drawCallbackSamples": 103,
+      "pssKiB": "294435",
+      "rssKiB": "455616",
+      "label": "after-background-0"
+    },
+    {
+      "completedLong": [
+        {
+          "id": "harmony-smoke-1007",
+          "length": 55274,
+          "hash": "3682621544"
+        }
+      ],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:1",
+        "select:control:2",
+        "cache-export:control:25",
+        "slash-input:control:1",
+        "send:control:0",
+        "resume:control:1"
+      ],
+      "messages": 1007,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 27,
+      "drawCallbackIntervalP95Ms": 19,
+      "drawCallbackSamples": 103,
+      "pssKiB": "279625",
+      "rssKiB": "440908",
+      "label": "stream-1-active"
+    },
+    {
+      "completedLong": [
+        {
+          "id": "harmony-smoke-1007",
+          "length": 55274,
+          "hash": "3682621544"
+        }
+      ],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:1",
+        "select:control:2",
+        "cache-export:control:25",
+        "slash-input:control:1",
+        "send:control:0",
+        "resume:control:1"
+      ],
+      "messages": 1007,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 26,
+      "drawCallbackIntervalP95Ms": 19,
+      "drawCallbackSamples": 103,
+      "pssKiB": "266701",
+      "rssKiB": "427984",
+      "label": "stream-edit-1-0"
+    },
+    {
+      "completedLong": [
+        {
+          "id": "harmony-smoke-1007",
+          "length": 55274,
+          "hash": "3682621544"
+        }
+      ],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:1",
+        "select:control:2",
+        "cache-export:control:25",
+        "slash-input:control:1",
+        "send:control:0",
+        "resume:control:1"
+      ],
+      "messages": 1007,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 26,
+      "drawCallbackIntervalP95Ms": 19,
+      "drawCallbackSamples": 103,
+      "pssKiB": "286293",
+      "rssKiB": "447576",
+      "label": "stream-edit-1-1"
+    },
+    {
+      "completedLong": [
+        {
+          "id": "harmony-smoke-1007",
+          "length": 55274,
+          "hash": "3682621544"
+        }
+      ],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:1",
+        "select:control:2",
+        "cache-export:control:25",
+        "slash-input:control:1",
+        "send:control:0",
+        "resume:control:1"
+      ],
+      "messages": 1007,
+      "liveCards": 5,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 23,
+      "drawCallbackIntervalP95Ms": 20,
+      "drawCallbackSamples": 192,
+      "pssKiB": "309169",
+      "rssKiB": "470452",
+      "label": "stream-reading-older-1"
+    },
+    {
+      "completedLong": [
+        {
+          "id": "harmony-smoke-1007",
+          "length": 55274,
+          "hash": "3682621544"
+        },
+        {
+          "id": "harmony-smoke-1009",
+          "length": 55274,
+          "hash": "3682621544"
+        }
+      ],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:0",
+        "frame:conversation:113",
+        "voice-suspend:control:1",
+        "select:control:2",
+        "cache-export:control:29",
+        "slash-input:control:1",
+        "send:control:0",
+        "resume:control:1"
+      ],
+      "messages": 1007,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 29,
+      "drawCallbackIntervalP95Ms": 20,
+      "drawCallbackSamples": 203,
+      "pssKiB": "381601",
+      "rssKiB": "542888",
+      "label": "stream-1-complete"
+    },
+    {
+      "completedLong": [
+        {
+          "id": "harmony-smoke-1007",
+          "length": 55274,
+          "hash": "3682621544"
+        },
+        {
+          "id": "harmony-smoke-1009",
+          "length": 55274,
+          "hash": "3682621544"
+        }
+      ],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:7",
+        "frame:conversation:113",
+        "voice-suspend:control:1",
+        "select:control:2",
+        "cache-export:control:36",
+        "slash-input:control:1",
+        "send:control:0",
+        "resume:control:2"
+      ],
+      "messages": 1005,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 29,
+      "drawCallbackIntervalP95Ms": 20,
+      "drawCallbackSamples": 203,
+      "pssKiB": "309481",
+      "rssKiB": "470768",
+      "label": "after-background-1"
+    },
+    {
+      "completedLong": [
+        {
+          "id": "harmony-smoke-1007",
+          "length": 55274,
+          "hash": "3682621544"
+        },
+        {
+          "id": "harmony-smoke-1009",
+          "length": 55274,
+          "hash": "3682621544"
+        }
+      ],
+      "operations": [
+        "disconnect:control:1",
+        "voice-sync:control:0",
+        "prepare:control:0",
+        "frame:control:7",
+        "frame:conversation:113",
+        "voice-suspend:control:1",
+        "select:control:2",
+        "cache-export:control:36",
+        "slash-input:control:1",
+        "send:control:0",
+        "resume:control:2"
+      ],
+      "messages": 1005,
+      "liveCards": 3,
+      "peakCards": 16,
+      "firstTailMs": 325,
+      "bridgeP95Ms": 1,
+      "bridgeMaxMs": 113,
+      "updateP95Ms": 2,
+      "draftP95Ms": 1,
+      "parseP95Ms": 29,
+      "drawCallbackIntervalP95Ms": 20,
+      "drawCallbackSamples": 203,
+      "pssKiB": "307081",
+      "rssKiB": "468368",
+      "label": "final-idle"
+    }
+  ],
+  "scope": "实际SDK PSS与JS桥/镜像/编辑/TaskPool回调，非GPU帧时间；F夹具千行代码+160行表格，未闭合语法逐段到达"
+}

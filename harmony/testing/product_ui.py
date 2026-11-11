@@ -243,7 +243,7 @@ def test_workspace_and_catalog():
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'photos', 'scan', 'real'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'photos', 'scan', 'real', 'menus'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
     print('REPORT_DIR', folder, flush=True)
     app = args.app_dir or folder / 'app'
     if not args.app_dir:
@@ -359,6 +359,9 @@ def main():
             run(ui, m, folder, passed)
         elif args.scenario == 'richtext':
             from richtext_scenarios import run
+            run(ui, m, folder, passed)
+        elif args.scenario == 'menus':
+            from preference_menu_scenarios import run
             run(ui, m, folder, passed)
         elif args.scenario == 'navigation': test_navigation()
         elif args.scenario == 'catalog':

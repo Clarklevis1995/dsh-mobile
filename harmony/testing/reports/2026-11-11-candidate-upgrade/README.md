@@ -1,6 +1,6 @@
 # 独立候选首次安装与原位升级F
 
-2026-11-11，Mate70Pro/API21 ARM64。本轮新包com.clarklevis.whaleness.harmony.preview202611110401，桌面名称“Whaleness 鸿蒙候选”，未覆盖正式包或先前候选。候选生产ArkTS/C++/头文件/Native库与当前源码逐字相等，manifest已记录；仅包名、名称与版本元数据不同，没有测试入口、夹具地址或固定设备适配器。
+2026-11-11，Mate70Pro/API21 ARM64。本轮新包com.clarklevis.whaleness.harmony.preview202611110401，桌面名称“Whaleness 鸿蒙候选”，未覆盖正式包或先前候选。候选生产ArkTS/C++/头文件/Native库与构建时的a718a024检查点逐字相等，manifest已记录；仅包名、名称与版本元数据不同，没有测试入口、夹具地址或固定设备适配器。
 
 首次安装vCode1→连接独立夹具→保存文字草稿/稳定历史、深色/150%偏好→实际force-stop→构建vCode2并hdc install -r原位更新→重开。实际自动认证成功、历史可读、草稿逐字保留、深色/150%仍在，F通过。此项只证明当前同一实现的包更新保留数据，不替代旧Native/schema兼容；RDBv1→v3专项另见E18。
 

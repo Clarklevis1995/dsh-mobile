@@ -13,5 +13,6 @@
   "assetIdentityRetained": true,
   "draftHistoryAndPreferencesRetained": true,
   "ownedTestHostRemoved": true,
-  "scope": "同一生产实现vCode1→2，验证系统包更新保留数据；不替代旧schema/旧Native兼容和真机签名"
+  "scope": "同一生产实现vCode1→2，验证系统包更新保留数据；不替代旧schema/旧Native兼容和真机签名",
+  "sourceCheckpoint": "a718a024"
 }

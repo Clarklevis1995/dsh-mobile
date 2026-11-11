@@ -24,6 +24,7 @@ const EN: Map<string, string> = new Map([
   ["已拒绝，等待网关确认…","Rejected. Waiting for gateway confirmation\u2026"],
   ["拒绝","Reject"],
   ["允许一次","Allow once"],
+  ['Agent 预设','Agent presets'],
   ['本地存储','Local storage'],['主机扩展','Host extensions'],['当前版本','Current version'],['新会话默认配置','New conversation defaults'],['未读取','Not loaded'],['默认模型','Default model'],['尚未配置主机','No host configured'],['Ping 网关','Ping gateway'],['网关已响应','Gateway responded'],['网关未响应，请检查连接','No gateway response. Check the connection.'],['与 WebUI 使用同一份部署级设置。修改只影响之后新建的会话，运行中的会话保持启动时的配置。','Shares deployment settings with WebUI. Changes apply to new conversations; running conversations keep their startup configuration.'],
   ['描述你想要构建的内容','Describe what you want to build'],['工作区写入','Workspace write'],['完全访问','Full access'],['默认权限','Default permissions'],['请先在桌面端启用语音输入','Enable voice input on the desktop first'],['探索未至之境','Into the Unknown'],['模型','Model'],['权限','Permissions'],['上下文','Context'],['停止生成','Stop generation'],
   ['键盘','Keyboard'],['语音','Voice'],['按住说话','Hold to speak'],['松手取消','Release to cancel'],['松手转文字','Release to transcribe'],

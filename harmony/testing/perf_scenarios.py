@@ -5,6 +5,12 @@ import os
 
 
 def run(ui, m, folder, passed):
+    if os.environ.get('HARMONY_PERF_SNAPSHOTS_ONLY') == '1':
+        from perf_snapshot_scenarios import run as snapshot_control
+        return snapshot_control(ui,m,folder,passed)
+    if os.environ.get('HARMONY_PERF_LONG_STREAM') == '1':
+        from perf_stream_scenarios import run as streaming
+        return streaming(ui,m,folder,passed)
     gates = json.loads((m.ROOT / 'harmony/testing/baseline/p7-performance-gates.json').read_text()); samples = []
     def capture(label):
         time.sleep(1.1); row = ui.wait('test-p7-stats'); value = json.loads(row['text']); value['label'] = label; samples.append(value)

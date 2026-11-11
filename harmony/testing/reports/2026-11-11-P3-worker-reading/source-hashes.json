@@ -1,0 +1,11 @@
+{
+  "core/MarkdownParser.ets": "0189c23ab1f335f2f854edc9dfee1ec96fea7f6b5d6b382cbdbd8858b0df6a57",
+  "core/MarkdownParserTypes.ets": "10cc9e28d06b08668f691919f460ac3f55af5077728e2756944e5fc8caf272b3",
+  "workers/MarkdownParserWorker.ets": "3c28082516cf8fc9c740b18217219edf86ff9b9f81e5d44e9f4d3799397d9d78",
+  "core/ContentWorker.ets": "4591416f8ad42bed654ae6da781a7f8a73bf493fd6a79464380dee646c62316f",
+  "components/MarkdownBody.ets": "fe711de73048d4a6c1d4004cff30d5a5219921c6e28d87e24f22e754a831ca4e",
+  "components/MarkdownCode.ets": "838e0a77dd9837e63526f035cdef33ad593bfe305e0e92817da2db93a5c253b6",
+  "components/MessageCard.ets": "8659acdb25435aa01402c61e3af8b41b3ada267b04fb970ac4a8ea7eeca863c2",
+  "components/TableReader.ets": "be233778d02adf4e3e6763a33cbb677ec4cd27690fadb7af497a7b1a49e8b0de",
+  "pages/ConversationPage.ets": "3e71881bcd4675046565de6947e41368e4fcc115737a6b10f62a5cd599098000"
+}

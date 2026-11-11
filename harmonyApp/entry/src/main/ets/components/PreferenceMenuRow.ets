@@ -16,9 +16,9 @@ export struct PreferenceMenuRow {
       ForEach(this.values(), (value: string) => {
         MenuItem({ content: this.label(value) }).id((this.kind === 'style' ? 'appearance-' : 'language-') + value)
           .selected(this.current() === value).selectIcon(true)
-          .contentFont({ size: this.a.font(16) }).contentFontColor(this.a.fg).onClick(() => this.onChoose(value))
+          .contentFont({ size: this.a.font(15) }).contentFontColor(this.a.fg).onClick(() => this.onChoose(value))
       }, (value: string) => value)
-    }.backgroundColor(this.a.surface).borderRadius(22)
+    }.width(208).backgroundColor(this.a.surface).borderRadius(26)
   }
   build() {
     Button({ type: ButtonType.Normal }) {

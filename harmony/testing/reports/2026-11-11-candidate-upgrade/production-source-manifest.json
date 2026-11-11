@@ -350,5 +350,6 @@
       "sha256": "a39f90a5fb74a3ad3e2c82ea021cbbc765f238d462cc2bbead65a9aa8d4fe25a"
     }
   ],
-  "scope": "entry生产ArkTS/C++/头文件/Native动态库与本轮候选逐字相等；仅AppScope bundle/label/version不同"
+  "scope": "entry生产ArkTS/C++/头文件/Native动态库与本轮候选逐字相等；仅AppScope bundle/label/version不同",
+  "sourceCheckpoint": "a718a024"
 }

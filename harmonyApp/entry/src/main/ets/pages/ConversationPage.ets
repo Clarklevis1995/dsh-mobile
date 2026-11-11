@@ -98,6 +98,11 @@ export struct ConversationPage {
   private restoreY: number = -1;
   private scopeChanged: boolean = false;
   private userScrolling: boolean = false;
+  private userScrollDirection: number = 0;
+  private readingId: string = '';
+  private readingInset: number = 0;
+  private readingOffset: number = -1;
+  private listHeight: number = 0;
   private tailTries: number = 0;
 
   private hasContent(): boolean { return !!this.draft.trim() || !!this.uploads.drafts.length || !!this.uploads.photos.length; }
@@ -127,7 +132,7 @@ export struct ConversationPage {
     const key = this.scope + ':' + (this.state.selectedSessionId ?? '');
     if (key !== this.conversationKey) {
       this.conversationKey = key; this.voiceRequested = false; clearTimeout(this.composerCooldownTimer); this.composerModeLocked = false; this.sendMode = 'queue'; this.renderedIds.clear(); this.unread = false; this.lastTail = '';
-      this.restoringPage = false; this.anchorPages = 0; this.anchorPageRevision = -1;
+      this.readingId = ''; this.readingOffset = -1; this.userScrollDirection = 0; this.restoringPage = false; this.anchorPages = 0; this.anchorPageRevision = -1;
       this.anchorTarget = this.searchTarget || this.savedAnchor; this.anchorInset = this.searchTarget ? 0 : this.savedInset; this.anchorTries = 0;
       this.followTail = !this.anchorTarget && this.savedScrollY < 0; this.atTail = this.followTail; this.restoreY = this.anchorTarget ? -1 : this.savedScrollY;
       this.scopeChanged = true;
@@ -192,19 +197,35 @@ export struct ConversationPage {
     else { const delta = rectangle.y - this.anchorInset; if (Math.abs(delta) > 0.5) { this.scroller.scrollBy(0, delta); } }
     this.anchorTries++;
     if (this.anchorTries >= 40 || this.anchorTries >= 2 && this.renderedIds.has(this.anchorTarget) && rectangle.height > 0 && Math.abs(rectangle.y - this.anchorInset) <= 1) {
-      this.anchorTarget = ''; this.scopeChanged = false; this.captureAnchor(); if (this.searchTarget) { this.onSearchHandled(); } return;
+      this.anchorTarget = ''; this.scopeChanged = false; this.captureAnchor(true); if (this.searchTarget) { this.onSearchHandled(); } return;
     }
     this.changed();
   }
-  private captureAnchor(): void {
-    if (!this.active || this.trajectoryOpen || this.scopeChanged || this.anchorTarget) { return; }
-    const index = Math.max(0, Math.min(this.messages.length - 1, this.visibleStart - 1)); const message = this.messages[index];
-    if (message) { const rectangle = this.scroller.getItemRect(index + 1); if (rectangle.height > 0) { this.onAnchor(this.scope, this.state.selectedSessionId ?? '', this.followTail ? '' : message.id, rectangle.y); } }
-    this.onOffset(this.scope, this.state.selectedSessionId ?? '', this.followTail ? -1 : this.scroller.currentOffset().yOffset);
+  private captureAnchor(force: boolean = false): void {
+    if (!this.active || this.trajectoryOpen || this.scopeChanged || this.anchorTarget || !this.messages.length) { return; }
+    if (!this.followTail && !this.userScrolling && !force && this.readingId) {
+      this.onAnchor(this.scope, this.state.selectedSessionId ?? '', this.readingId, this.readingInset);
+      this.onOffset(this.scope, this.state.selectedSessionId ?? '', this.readingOffset); return;
+    }
+    let index = Math.max(0, Math.min(this.messages.length - 1, this.visibleStart - 1));
+    let rectangle = this.scroller.getItemRect(index + 1);
+    // 首项只露出尾部时，优先固定下一条完整可见消息，避免上方卡片高度变化移动正在阅读的正文。
+    if (rectangle.y < 0 && index + 1 < this.messages.length && this.listHeight > 0) {
+      const next = this.scroller.getItemRect(index + 2);
+      if (next.height > 0 && next.y >= 0 && next.y + next.height <= this.listHeight) { index++; rectangle = next; }
+    }
+    const message = this.messages[index];
+    if (message && rectangle.height > 0) {
+      this.readingId = this.followTail ? '' : message.id; this.readingInset = rectangle.y;
+      this.readingOffset = this.followTail ? -1 : this.scroller.currentOffset().yOffset;
+      this.onAnchor(this.scope, this.state.selectedSessionId ?? '', this.readingId, this.readingInset);
+      this.onOffset(this.scope, this.state.selectedSessionId ?? '', this.readingOffset);
+    }
   }
-  private jumpToTail(): void { this.userScrolling = false; this.tailTries = 0; this.anchorTarget = ''; this.scopeChanged = false; this.restoreY = -1; this.unread = false; this.atTail = true; this.followTail = true; this.changed(); }
+  private jumpToTail(): void { this.readingId = ''; this.readingOffset = -1; this.userScrollDirection = 0; this.userScrolling = false; this.tailTries = 0; this.anchorTarget = ''; this.scopeChanged = false; this.restoreY = -1; this.unread = false; this.atTail = true; this.followTail = true; this.changed(); }
   private older(): void {
     this.followTail = false;
+    if (!this.anchorTarget && this.readingId) { this.anchorTarget = this.readingId; this.anchorInset = this.readingInset; this.anchorTries = 1; }
     if (!this.anchorTarget) {
       const index = Math.max(0, Math.min(this.messages.length - 1, this.visibleStart - 1)); const message = this.messages[index];
       if (message) {
@@ -216,6 +237,7 @@ export struct ConversationPage {
   }
   private rendered(scope: string, id: string): void {
     if (scope !== this.conversationKey) { return; }
+    if (!this.followTail && !this.userScrolling && !this.anchorTarget && this.readingId) { this.anchorTarget = this.readingId; this.anchorInset = this.readingInset; this.anchorTries = 1; }
     this.renderedIds.add(id); if (this.renderedIds.size > 64) { const oldest = this.renderedIds.keys().next().value as string; this.renderedIds.delete(oldest); } this.changed();
   }
   @Builder private attachmentMenu() {
@@ -279,19 +301,19 @@ export struct ConversationPage {
             ApprovalCard({ a: this.a, request: approval, connected: this.state.connected, onAction: this.onAction })
           }, (approval: ApprovalView) => this.scope + ':' + approval.rpcId)
         }.width('100%') }
-      }.id('conversation-list').cachedCount(2).maintainVisibleContentPosition(true).scrollBar(BarState.Off)
+      }.id('conversation-list').onSizeChange((_old, size) => { this.listHeight = Number(size.height); }).cachedCount(2).maintainVisibleContentPosition(true).scrollBar(BarState.Off)
         .contentStartOffset(16).contentEndOffset(16).padding({ left: 20, right: 20 })
         .width('100%').constraintSize({ maxWidth: 1040 }).height('100%').align(Alignment.Top).visibility(this.trajectoryOpen ? Visibility.None : Visibility.Visible)
         .onScrollIndex((start: number, _end: number, _center: number) => { this.visibleStart = start; this.captureAnchor(); })
         .onWillScroll((offset: number, _state: ScrollState, source: ScrollSource) => {
-          if (offset !== 0 && source !== ScrollSource.SCROLLER && source !== ScrollSource.SCROLLER_ANIMATION) { this.userScrolling = true; this.followTail = false; this.atTail = false; this.anchorTarget = ''; this.scopeChanged = false; }
+          if (offset !== 0 && [ScrollSource.DRAG, ScrollSource.FLING, ScrollSource.OTHER_USER_INPUT, ScrollSource.SCROLL_BAR, ScrollSource.SCROLL_BAR_FLING].includes(source)) { this.userScrollDirection = Math.sign(offset); this.userScrolling = true; this.followTail = false; this.atTail = false; this.anchorTarget = ''; this.scopeChanged = false; }
         })
         .onTouch((event: TouchEvent) => {
-          if (event.type === TouchType.Down) { this.userScrolling = true; this.followTail = false; this.anchorTarget = ''; this.scopeChanged = false; }
-          else if (event.type === TouchType.Up || event.type === TouchType.Cancel) { this.followTail = this.scroller.isAtEnd(); }
+          if (event.type === TouchType.Down) { this.userScrollDirection = 0; this.userScrolling = true; this.followTail = false; this.anchorTarget = ''; this.scopeChanged = false; }
+          else if (event.type === TouchType.Up || event.type === TouchType.Cancel) { this.followTail = this.userScrollDirection >= 0 && this.scroller.isAtEnd(); this.atTail = this.followTail; }
         })
-        .onScrollStop(() => { if (this.trajectoryOpen || this.anchorTarget) { return; } if (this.userScrolling) { this.followTail = this.scroller.isAtEnd(); this.userScrolling = false; } this.atTail = this.followTail; if (this.followTail) { this.unread = false; } this.captureAnchor(); })
-        .onReachEnd(() => { if (!this.trajectoryOpen && !this.anchorTarget) { this.followTail = true; this.atTail = true; this.unread = false; } })
+        .onScrollStop(() => { if (this.trajectoryOpen || this.anchorTarget) { return; } if (this.userScrolling) { this.followTail = this.userScrollDirection >= 0 && this.scroller.isAtEnd(); this.userScrolling = false; } this.atTail = this.followTail; if (this.followTail) { this.unread = false; } this.captureAnchor(); })
+        .onReachEnd(() => { if (!this.trajectoryOpen && !this.anchorTarget && (this.followTail || this.userScrolling && this.userScrollDirection > 0)) { this.followTail = true; this.atTail = true; this.unread = false; } })
         .onDidScroll(() => this.captureAnchor())
         if (this.trajectoryOpen) {
           TrajectoryPage({ a: this.a, state: this.state, data: this.trajectory, active: this.active, onAction: this.onAction })

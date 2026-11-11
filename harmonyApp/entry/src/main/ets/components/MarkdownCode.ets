@@ -1,6 +1,5 @@
-import { taskpool } from '@kit.ArkTS';
 import { ContentResponse } from '../core/ContentTypes';
-import { highlightCodeInWorker } from '../core/ContentWorker';
+import { highlightMarkdownCodeAsync } from '../core/MarkdownParser';
 import { Appearance } from '../core/Appearance';
 import { MarkdownRun, textRun } from '../core/MarkdownModel';
 import { MarkdownBlock } from '../core/MarkdownBlock';
@@ -35,7 +34,7 @@ export struct MarkdownCode {
     this.runs = [textRun(source)]; this.language = language || this.a.t('代码');
     if (source.length > 20000) { this.colorReady = true; return; }
     let response: ContentResponse;
-    try { response = JSON.parse(await taskpool.execute(new taskpool.Task(highlightCodeInWorker, source, language)) as string) as ContentResponse; }
+    try { response = JSON.parse(await highlightMarkdownCodeAsync(source, language) as string) as ContentResponse; }
     catch (_) { return; }
     if (!this.alive || ticket !== this.revision || !response.ok || !response.presentation) { return; }
     const value = response.presentation;

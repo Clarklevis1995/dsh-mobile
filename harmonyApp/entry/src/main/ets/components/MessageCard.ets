@@ -1,11 +1,10 @@
 import { MessageAttachments } from './MessageAttachments';
 import { GatewayImageData, ImageAssetData, PresentedFileData } from '../core/Models';
-import { taskpool } from '@kit.ArkTS';
 import { Appearance, iconTint } from '../core/Appearance';
 import { MessageView } from './ViewModels';
 import { MarkdownBody } from './MarkdownBody';
 import { copyContent } from '../core/ContentActions';
-import { markdownTextInWorker } from '../core/MarkdownWorker';
+import { markdownTextAsync } from '../core/MarkdownParser';
 
 @Component
 export struct MessageCard {
@@ -31,7 +30,7 @@ export struct MessageCard {
     try {
       // 固定点击时的文本；流式后续更新不重置选择页。
       const source = this.message.text;
-      const text = this.message.kind === 'USER' ? source : await taskpool.execute(new taskpool.Task(markdownTextInWorker, source)) as string;
+      const text = this.message.kind === 'USER' ? source : await markdownTextAsync(source) as string;
       if (!this.alive) { return; }
       if (select) { this.onPreview(text, false); } else { await copyContent(text); this.getUIContext().getPromptAction().showToast({ message: this.a.t('已复制') }); }
     } catch (_) { if (this.alive) { this.getUIContext().getPromptAction().showToast({ message: this.a.t('复制失败') }); } }

@@ -1,7 +1,6 @@
-import { taskpool } from '@kit.ArkTS';
 import { Appearance } from '../core/Appearance';
 import { MarkdownCell, MarkdownRow, MarkdownData } from '../core/MarkdownModel';
-import { parseMarkdownInWorker } from '../core/MarkdownWorker';
+import { parseMarkdownAsync } from '../core/MarkdownParser';
 import { contentAction, copyContent } from '../core/ContentActions';
 import { MarkdownText } from './MarkdownText';
 
@@ -63,7 +62,7 @@ export struct TableReader {
   private async load(): Promise<void> {
     const ticket = ++this.revision; this.count = 0; this.loading = true; this.error = '';
     try {
-      const blocks = JSON.parse(await taskpool.execute(new taskpool.Task(parseMarkdownInWorker, this.source)) as string) as MarkdownData[];
+      const blocks = JSON.parse(await parseMarkdownAsync(this.source) as string) as MarkdownData[];
       if (!this.alive || ticket !== this.revision) { return; }
       const table = blocks.find(block => block.kind === 'table'); if (!table) { throw new Error('没有可预览的表格'); }
       this.header = table.header; this.rows = table.rows; this.widths = tableWidths(table.header, table.rows); this.data.reset(table.rows); this.count = table.rows.length;
