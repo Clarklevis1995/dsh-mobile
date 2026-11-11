@@ -101,8 +101,8 @@ data class SharedHistoryEffect(
  * History 的唯一业务状态源。
  *
  * 平台只负责网络请求、超时定时器和 UI 发布；分页 cursor、加载状态、水位以及
- * history/live tail 的有序去重全部在这里完成。所有状态与 effect 先完成序列化，
- * 再原子提交并发布同一 MVI 事务。
+ * history/live tail 的有序去重全部在这里完成。跨平台状态与effect先序列化再原子提交；
+ * 同模块补丁以不可变对象交付，沿用同一事务队列和精确快照生命周期。
  */
 class SharedHistoryStore(
     private val configuration: HistorySyncConfiguration = HistorySyncConfiguration()
@@ -112,6 +112,12 @@ class SharedHistoryStore(
     private val projectionSnapshots = mutableMapOf<Long, SharedHistoryProjectionSnapshot>()
     private val events = SharedMviEventEmitter("history") { event -> projectionSnapshots.remove(event.sequence) }
     private var cachedSequences: Map<String, Set<Int>> = emptyMap()
+    private val patchObservers = SharedMviPatchObservers<SharedHistoryPatch>()
+
+    internal fun subscribePatches(observer: (SharedMviEvent, SharedHistoryPatch) -> Unit): SharedMviSubscription =
+        patchObservers.subscribe(events.currentSequence, observer)
+
+    private fun needsWirePayload(): Boolean = events.hasObservers || !patchObservers.hasObservers
 
     fun subscribe(observer: SharedMviEventObserver): SharedMviSubscription = try {
         events.subscribe(
@@ -532,7 +538,8 @@ class SharedHistoryStore(
                 completedHasMore = (transition.result as? HistoryResult.Completed)?.hasMore
             )
             val effect = transition.result.effect(sessionId)
-            val statePayload = wireJson.encodeToString(patch)
+            val needsWire = needsWirePayload()
+            val statePayload = if (needsWire) wireJson.encodeToString(patch) else null
             val effectsPayload = wireJson.encodeToString(effect?.let(::listOf).orEmpty())
             state = transition.state
             eventsBySession = transition.eventsBySession
@@ -546,7 +553,8 @@ class SharedHistoryStore(
             val event = events.emitTransition(
                 transactionId = "history-$operation:${events.currentSequence + 1}",
                 statePayloadJson = statePayload,
-                effectsJson = effectsPayload
+                effectsJson = effectsPayload,
+                onDelivery = if (patchObservers.hasObservers) { event -> patchObservers.deliver(event, patch) } else null,
             )
             SharedMviDispatchResult(true, event.transactionId, event.sequence)
         } catch (error: Throwable) {

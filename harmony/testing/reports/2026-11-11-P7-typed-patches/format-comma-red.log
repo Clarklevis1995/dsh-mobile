@@ -1,0 +1,23 @@
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:collectFacadeTests UP-TO-DATE
+> Task :shared:jvmProcessResources NO-SOURCE
+> Task :shared:jvmTestProcessResources NO-SOURCE
+
+> Task :shared:compileKotlinJvm FAILED
+e: file:///Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/SharedHistoryStore.kt:371:20 Syntax error: Unexpected tokens (use ';' to separate expressions on the same line).
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':shared:compileKotlinJvm'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 2s
+2 actionable tasks: 1 executed, 1 up-to-date

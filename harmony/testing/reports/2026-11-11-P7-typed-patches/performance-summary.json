@@ -1,0 +1,87 @@
+{
+  "stableAcceptance": false,
+  "runs": [
+    {
+      "run": "first",
+      "initialMiB": 176.934,
+      "idle3sMiB": 209.438,
+      "growth3sMiB": 32.505,
+      "idle30sMiB": 174.163,
+      "accepted": [
+        {
+          "label": "首屏",
+          "passed": true
+        },
+        {
+          "label": "挂载数量",
+          "passed": true
+        },
+        {
+          "label": "桥接P95",
+          "passed": true
+        },
+        {
+          "label": "镜像P95",
+          "passed": true
+        },
+        {
+          "label": "编辑P95",
+          "passed": true
+        },
+        {
+          "label": "1秒取样PSS峰值",
+          "passed": true
+        },
+        {
+          "label": "短时3秒空闲PSS增量",
+          "passed": true
+        },
+        {
+          "label": "空闲PSS增量",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "run": "repeat",
+      "initialMiB": 167.267,
+      "idle3sMiB": 260.322,
+      "growth3sMiB": 93.056,
+      "idle30sMiB": 230.76,
+      "accepted": [
+        {
+          "label": "首屏",
+          "passed": true
+        },
+        {
+          "label": "挂载数量",
+          "passed": true
+        },
+        {
+          "label": "桥接P95",
+          "passed": true
+        },
+        {
+          "label": "镜像P95",
+          "passed": true
+        },
+        {
+          "label": "编辑P95",
+          "passed": true
+        },
+        {
+          "label": "1秒取样PSS峰值",
+          "passed": true
+        },
+        {
+          "label": "短时3秒空闲PSS增量",
+          "passed": false
+        },
+        {
+          "label": "空闲PSS增量",
+          "passed": false
+        }
+      ]
+    }
+  ]
+}

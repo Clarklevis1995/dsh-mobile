@@ -45,6 +45,41 @@ data class SharedMviDispatchResult(
     val errorMessage: String? = null
 )
 
+/** 同一Kotlin模块内直接交付不可变补丁；不跨平台边界，不发送初始化快照。 */
+internal class SharedMviPatchObservers<T> {
+    private data class Observer<T>(
+        val afterSequence: Long,
+        val receive: (SharedMviEvent, T) -> Unit,
+    )
+
+    private var nextId = 0L
+    private val observers = linkedMapOf<Long, Observer<T>>()
+
+    val hasObservers: Boolean get() = observers.isNotEmpty()
+
+    fun subscribe(
+        afterSequence: Long,
+        observer: (SharedMviEvent, T) -> Unit,
+    ): SharedMviSubscription {
+        val id = ++nextId
+        observers[id] = Observer(afterSequence, observer)
+        return SharedMviSubscription { observers.remove(id) }
+    }
+
+    fun deliver(
+        event: SharedMviEvent,
+        patch: T,
+    ) {
+        observers.values.toList().forEach { observer ->
+            try {
+                if (event.sequence > observer.afterSequence) observer.receive(event, patch)
+            } catch (_: Throwable) {
+                // 与JSON订阅一致，观察者失败不能阻断同一事务的其他订阅。
+            }
+        }
+    }
+}
+
 /**
  * Store 内部使用的同步保序 emitter。
  *
@@ -56,20 +91,31 @@ internal class SharedMviEventEmitter(
     private val domain: String,
     private val onDeliveryFinished: ((SharedMviEvent) -> Unit)? = null
 ) {
+    private data class Observer(
+        val afterSequence: Long,
+        val receive: SharedMviEventObserver,
+    )
+
+    private data class Delivery(
+        val event: SharedMviEvent,
+        val onDelivery: ((SharedMviEvent) -> Unit)?,
+    )
+
     private var nextSequence = 0L
     private var nextObserverId = 0L
-    private val observers = linkedMapOf<Long, SharedMviEventObserver>()
-    private val pendingEvents = ArrayDeque<SharedMviEvent>()
+    private val observers = linkedMapOf<Long, Observer>()
+    private val pendingEvents = ArrayDeque<Delivery>()
     private var isDelivering = false
 
     val currentSequence: Long get() = nextSequence
+    val hasObservers: Boolean get() = observers.isNotEmpty()
 
     fun subscribe(
         observer: SharedMviEventObserver,
         snapshotPayloadJson: String
     ): SharedMviSubscription {
         val observerId = ++nextObserverId
-        observers[observerId] = observer
+        observers[observerId] = Observer(nextSequence, observer)
         deliverSafely(
             observer,
             SharedMviEvent(
@@ -89,7 +135,7 @@ internal class SharedMviEventEmitter(
         errorMessage: String?
     ): SharedMviSubscription {
         val observerId = ++nextObserverId
-        observers[observerId] = observer
+        observers[observerId] = Observer(nextSequence, observer)
         deliverSafely(
             observer,
             SharedMviEvent(
@@ -109,7 +155,8 @@ internal class SharedMviEventEmitter(
         transactionId: String,
         statePayloadJson: String?,
         effectsJson: String = "[]",
-        metadataJson: String? = null
+        metadataJson: String? = null,
+        onDelivery: ((SharedMviEvent) -> Unit)? = null,
     ): SharedMviEvent {
         require(transactionId.isNotBlank()) { "transactionId must not be blank" }
         val event = SharedMviEvent(
@@ -121,7 +168,7 @@ internal class SharedMviEventEmitter(
             effectsJson = effectsJson,
             metadataJson = metadataJson
         )
-        enqueue(event)
+        enqueue(event, onDelivery)
         return event
     }
 
@@ -145,15 +192,27 @@ internal class SharedMviEventEmitter(
         return event
     }
 
-    private fun enqueue(event: SharedMviEvent) {
-        pendingEvents.addLast(event)
+    private fun enqueue(
+        event: SharedMviEvent,
+        onDelivery: ((SharedMviEvent) -> Unit)? = null,
+    ) {
+        pendingEvents.addLast(Delivery(event, onDelivery))
         if (isDelivering) return
         isDelivering = true
         try {
             while (pendingEvents.isNotEmpty()) {
-                val next = pendingEvents.removeFirst()
+                val delivery = pendingEvents.removeFirst()
+                val next = delivery.event
                 try {
-                    observers.values.toList().forEach { deliverSafely(it, next) }
+                    try {
+                        delivery.onDelivery?.invoke(next)
+                    } catch (_: Throwable) {
+                        // 内部订阅与外部订阅遵循相同的异常隔离。
+                    }
+                    observers.values.toList().forEach { observer ->
+                        // 新订阅的快照已包含当前sequence，排队中的旧事务不能回退该基线。
+                        if (next.sequence > observer.afterSequence) deliverSafely(observer.receive, next)
+                    }
                 } finally {
                     onDeliveryFinished?.invoke(next)
                 }

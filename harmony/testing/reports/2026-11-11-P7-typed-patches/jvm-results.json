@@ -1,0 +1,90 @@
+{
+  "tests": 146,
+  "failures": 0,
+  "suites": [
+    {
+      "name": "com.clarklevis.dsh.shared.SharedConversationStoreTest",
+      "tests": 13
+    },
+    {
+      "name": "whaleness.RequestIdentityTest",
+      "tests": 1
+    },
+    {
+      "name": "whaleness.CacheSupportTest",
+      "tests": 6
+    },
+    {
+      "name": "whaleness.SessionFeaturesTest",
+      "tests": 6
+    },
+    {
+      "name": "whaleness.GoalSupportTest",
+      "tests": 6
+    },
+    {
+      "name": "whaleness.ScheduleSupportTest",
+      "tests": 6
+    },
+    {
+      "name": "whaleness.PluginSupportTest",
+      "tests": 5
+    },
+    {
+      "name": "whaleness.ControlSupportTest",
+      "tests": 6
+    },
+    {
+      "name": "whaleness.TeamSupportTest",
+      "tests": 6
+    },
+    {
+      "name": "whaleness.WorkspaceSupportTest",
+      "tests": 6
+    },
+    {
+      "name": "whaleness.TrajectorySupportTest",
+      "tests": 3
+    },
+    {
+      "name": "whaleness.VoiceSupportTest",
+      "tests": 5
+    },
+    {
+      "name": "com.clarklevis.dsh.shared.SharedMviEventsTest",
+      "tests": 4
+    },
+    {
+      "name": "whaleness.SlashSupportTest",
+      "tests": 5
+    },
+    {
+      "name": "whaleness.HarmonyEngineTest",
+      "tests": 27
+    },
+    {
+      "name": "whaleness.AgentNotificationTest",
+      "tests": 3
+    },
+    {
+      "name": "whaleness.PresentationSupportTest",
+      "tests": 3
+    },
+    {
+      "name": "com.clarklevis.dsh.shared.SharedHistoryStoreTest",
+      "tests": 15
+    },
+    {
+      "name": "whaleness.NativePatchDeliveryTest",
+      "tests": 8
+    },
+    {
+      "name": "whaleness.UploadSupportTest",
+      "tests": 6
+    },
+    {
+      "name": "whaleness.PhotoAndAttachmentTest",
+      "tests": 6
+    }
+  ]
+}

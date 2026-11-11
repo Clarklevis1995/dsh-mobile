@@ -58,7 +58,8 @@ class SharedConversationHistoryPreparation internal constructor(
             owner,
             projector,
             snapshot.records,
-            wireJson.encodeToString(patch)
+            wireJson.encodeToString(patch),
+            patch,
         )
     }
 }
@@ -71,7 +72,8 @@ class SharedPreparedConversationHistory internal constructor(
     internal val owner: Any,
     internal val projector: ConversationProjector,
     internal val records: List<SessionEvent>,
-    internal val payload: String
+    internal val payload: String,
+    internal val patch: SharedConversationPatch,
 )
 
 /** KMP 持有逐 session projector；平台只 dispatch 原始事件并订阅增量 UI patch。 */
@@ -82,8 +84,14 @@ class SharedConversationStore(
     private val projectionRecords = mutableMapOf<String, MutableList<SessionEvent>>()
     private val steeringRecords = mutableMapOf<String, List<SessionEvent>>()
     private val events = SharedMviEventEmitter("conversation")
+    private val patchObservers = SharedMviPatchObservers<SharedConversationPatch>()
     private val mutationRevisions = mutableMapOf<String, Long>()
     private val preparationOwner = Any()
+
+    internal fun subscribePatches(observer: (SharedMviEvent, SharedConversationPatch) -> Unit): SharedMviSubscription =
+        patchObservers.subscribe(events.currentSequence, observer)
+
+    private fun needsWirePayload(): Boolean = events.hasObservers || !patchObservers.hasObservers
 
     fun subscribe(observer: SharedMviEventObserver): SharedMviSubscription = try {
         events.subscribe(observer, wireJson.encodeToString(SharedConversationBootstrap()))
@@ -248,7 +256,8 @@ class SharedConversationStore(
         mutationRevisions[prepared.sessionId] = prepared.revision + 1
         val event = events.emitTransition(
             transactionId = "conversation-prepared:${events.currentSequence + 1}",
-            statePayloadJson = prepared.payload
+            statePayloadJson = if (needsWirePayload()) prepared.payload else null,
+            onDelivery = if (patchObservers.hasObservers) { event -> patchObservers.deliver(event, prepared.patch) } else null,
         )
         return SharedMviDispatchResult(true, event.transactionId, event.sequence)
     }
@@ -308,7 +317,8 @@ class SharedConversationStore(
             mutationRevisions[patch.sessionId] = (mutationRevisions[patch.sessionId] ?: 0L) + 1
             val event = events.emitTransition(
                 transactionId = "conversation-$operation:${events.currentSequence + 1}",
-                statePayloadJson = wireJson.encodeToString(patch)
+                statePayloadJson = if (needsWirePayload()) wireJson.encodeToString(patch) else null,
+                onDelivery = if (patchObservers.hasObservers) { event -> patchObservers.deliver(event, patch) } else null,
             )
             SharedMviDispatchResult(true, event.transactionId, event.sequence)
         }

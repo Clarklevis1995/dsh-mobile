@@ -1,0 +1,28 @@
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:compileKotlinJvm UP-TO-DATE
+> Task :shared:collectFacadeTests UP-TO-DATE
+> Task :shared:jvmProcessResources NO-SOURCE
+> Task :shared:jvmMainClasses UP-TO-DATE
+> Task :shared:jvmJar UP-TO-DATE
+> Task :shared:jvmTestProcessResources NO-SOURCE
+> Task :shared:compileTestKotlinJvm
+> Task :shared:jvmTestClasses
+
+> Task :shared:jvmTest FAILED
+
+NativePatchDeliveryTest[jvm] > lateWireSubscriberDoesNotReceiveQueuedTransactionsBeforeItsSnapshot[jvm] FAILED
+    java.lang.AssertionError at NativePatchDeliveryTest.kt:114
+
+143 tests completed, 1 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':shared:jvmTest'.
+> There were failing tests. See the report at: file:///Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/build/reports/tests/jvmTest/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+BUILD FAILED in 1s
+5 actionable tasks: 2 executed, 3 up-to-date

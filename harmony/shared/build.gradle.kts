@@ -35,3 +35,17 @@ val publishNative by tasks.registering(Sync::class) {
     include("libwhaleness.so", "libwhaleness_api.h")
     into(rootProject.layout.projectDirectory.dir("../harmonyApp/entry/src/main/cpp/generated/arm64-v8a"))
 }
+
+// 复用主项目的MVI/历史/对话回归，验证Native内部通路不改变公开线协议。
+val collectFacadeTests by tasks.registering(Sync::class) {
+    from(rootProject.layout.projectDirectory.dir("../shared/src/commonTest/kotlin")) {
+        include("com/clarklevis/dsh/shared/SharedMviEventsTest.kt")
+        include("com/clarklevis/dsh/shared/SharedHistoryStoreTest.kt")
+        include("com/clarklevis/dsh/shared/SharedConversationStoreTest.kt")
+    }
+    into(layout.buildDirectory.dir("generated/facadeTests"))
+}
+kotlin.sourceSets.named("jvmTest") {
+    kotlin.srcDir(collectFacadeTests.map { it.destinationDir })
+}
+tasks.named("compileTestKotlinJvm") { dependsOn(collectFacadeTests) }

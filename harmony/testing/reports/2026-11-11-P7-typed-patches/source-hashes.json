@@ -1,0 +1,10 @@
+{
+  "harmony/shared/build.gradle.kts": "19370e98372ee6fda51f6c977552f5668cdd8f786711bc9a35a6a6faea47eef4",
+  "harmony/shared/src/commonMain/kotlin/whaleness/HarmonyEngine.kt": "daebe1d67c86442025f7541043eefdef2c38832f6f57a610881a753e2747fa7b",
+  "harmony/shared/src/commonTest/kotlin/whaleness/NativePatchDeliveryTest.kt": "77a95e4fd58416a5098ad822ba3ef773b78d05daf2164571fd96f801219c4cb1",
+  "shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/SharedMviEvents.kt": "937dcc9b43f789f88e11606bfb478aecb24096c9633eddf2d6266666c7935b54",
+  "shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/SharedHistoryStore.kt": "b6e9842e26ba734158a96419233b1e06e98b7807d023e3f8ea19a0ab5f3e4162",
+  "shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/SharedConversationStore.kt": "658aa4b4ecd1a372f5dffff693896c64f35eabb304a224bb1bdf6f6516d2b020",
+  "harmonyApp/entry/src/main/cpp/generated/arm64-v8a/libwhaleness.so": "60c8744684e1e008248209de4fba853b15f48727f742dd4a9c5ea30ad579a494",
+  "harmonyApp/entry/src/main/ets/core/MarkdownParser.ets": "0189c23ab1f335f2f854edc9dfee1ec96fea7f6b5d6b382cbdbd8858b0df6a57"
+}

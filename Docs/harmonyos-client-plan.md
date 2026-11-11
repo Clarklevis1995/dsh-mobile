@@ -556,3 +556,7 @@ P4-03d通过G：真实0.12.0网关与DSH0.2.2-rc.1的Agent预设服务，默认s
 ### E78 · Kotlin/Native只读回收统计（2026-11-11，未关闭门禁）
 
 仅临时优化Native库读取已完成GC与目标堆/定时间隔，不触发或调节GC；生产库SHA三次核对不变，候选仍v6。第二轮3秒PSS235MiB/GC23/GC后堆58.7MiB，20秒174.7MiB/GC25/堆22MiB；定时间隔实际10000ms。原生正文/草稿/读位断言通过，诊断明确不具备验收资格，P7-06b保持未勾选。下一步定位共享层JSON往返与恢复投影临时分配。证据：[报告](../harmony/testing/reports/2026-11-11-P7-native-memory/README.md)。
+
+### E79 · Native内部补丁直传与性能复测（2026-11-11，未关闭门禁）
+
+内部补丁复用MVI事务，修复晚订阅旧队列倒退基线；146 JVM/72 Node、鸿蒙ktlint、实际Native/HAP通过。主项目Facade格式既有353→347项且无本次新增项，detekt仍235。正式长流第一次3秒增长32.5MiB通过，但同版复测增长93.1MiB/30秒也失败，正文/草稿/读位均正确；因此P7-06b仍未勾选，继续减少已解码历史/事件的内部JSON往返，未调整GC/Worker/门槛。证据：[报告](../harmony/testing/reports/2026-11-11-P7-typed-patches/README.md)。

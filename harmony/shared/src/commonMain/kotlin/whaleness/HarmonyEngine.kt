@@ -8,7 +8,6 @@ import com.clarklevis.dsh.shared.facade.SharedAgentNotification
 import com.clarklevis.dsh.shared.facade.SharedAgentNotificationStore
 import com.clarklevis.dsh.shared.facade.SharedConversationPatch
 import com.clarklevis.dsh.shared.facade.SharedConversationStore
-import com.clarklevis.dsh.shared.facade.SharedHistoryPatch
 import com.clarklevis.dsh.shared.facade.SharedHistoryStore
 import com.clarklevis.dsh.shared.gateway.GatewayIdentity
 import com.clarklevis.dsh.shared.gateway.GatewayPairingPayloadParser
@@ -282,22 +281,12 @@ class HarmonyEngine {
     private var sent = false
 
     init {
-        conversation.subscribe { event ->
-            if (event.kind == "transition") {
-                event.statePayloadJson?.let {
-                    patches += wireJson.decodeFromString<SharedConversationPatch>(it)
-                }
-            }
-        }
-        history.subscribe { event ->
-            if (event.kind != "transition") return@subscribe
-            val patch =
-                event.statePayloadJson?.let { wireJson.decodeFromString<SharedHistoryPatch>(it) }
-                    ?: return@subscribe
-            val change = patch.eventPatch ?: return@subscribe
+        conversation.subscribePatches { _, patch -> patches += patch }
+        history.subscribePatches { event, patch ->
+            val change = patch.eventPatch ?: return@subscribePatches
             val snapshot =
                 history.projectionSnapshotForEvent(patch.sessionId, event.sequence)
-                    ?: return@subscribe
+                    ?: return@subscribePatches
             trajectorySupport.received(snapshot)
             historyRevision++
             val result =
