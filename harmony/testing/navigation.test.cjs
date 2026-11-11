@@ -61,3 +61,8 @@ test('轨迹与内容详情逐级系统返回到原始聊天来源', () => {
   const { nav,R }=navigation();nav.push(R.OfflineSearch);nav.push(R.SearchConversation);nav.push(R.Trajectory);nav.push(R.Content);
   for (const expected of [R.Trajectory,R.SearchConversation,R.OfflineSearch]) { nav.paths.nativeBack(true);assert.equal(nav.current,expected); }
 });
+
+test('版本说明与更新检查各自压栈，返回仍是设置来源', () => {
+  const { nav,R }=navigation();nav.push(R.Settings);nav.push(R.ReleaseNotes);nav.paths.nativeBack(true);assert.equal(nav.current,R.Settings);
+  nav.push(R.Update);nav.paths.nativeBack(false);assert.equal(nav.current,R.Update);nav.paths.nativeBack(true);assert.equal(nav.current,R.Settings);
+});

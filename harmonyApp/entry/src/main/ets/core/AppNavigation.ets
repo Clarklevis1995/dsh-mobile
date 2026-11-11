@@ -26,6 +26,8 @@ export enum AppRoute {
   Font = 'settings/font',
   Privacy = 'settings/privacy',
   About = 'settings/about',
+  Update = 'settings/updates',
+  ReleaseNotes = 'settings/notes',
   Hosts = 'hosts',
   HostAdd = 'hosts/add',
   HostEdit = 'hosts/edit',

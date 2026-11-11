@@ -1,3 +1,4 @@
+import { ReleasePage } from './ReleasePage';
 import { SettingsData } from '../core/SettingsData';
 import { TrajectoryPage } from './TrajectoryPage';
 import { AgentNotifications } from '../core/AgentNotifications';
@@ -699,9 +700,12 @@ struct Index {
         AgentPresetsPage({ a: this.a, data: this.controlData, connected: this.shared.connected, onBack: () => this.back(), onAction: command => this.action(command), onChoose: id => this.defaultAgent(id) })
       } else if (name === AppRoute.Storage) {
         StoragePage({ a: this.a, hostName: this.hostName(), stats: this.storageStats, loading: this.storageLoading, status: this.storageStatus, onBack: () => this.back(), onRefresh: () => this.refreshStorage(), onClear: drafts => this.clearStorage(drafts), onSearch: () => this.openOfflineSearch() })
+      } else if (name === AppRoute.Update) {
+        ReleasePage({ a: this.a, version: this.version, active: this.active && this.nav.current === AppRoute.Update, onBack: () => this.back(), onLink: url => this.openLink(url) })
       } else if (name.startsWith('settings')) {
         SettingsPage({ notificationsEnabled: this.notificationsEnabled, notificationStatus: this.notificationStatus, onNotifications: (enabled: boolean) => this.notifications?.setEnabled(enabled), a: this.a, section: name === AppRoute.Settings ? 'root' : name.substring('settings/'.length),
-          version: this.version, buildCode: this.buildCode, snapshot: this.settingsData,
+          active: this.active && this.nav.current === name, version: this.version, buildCode: this.buildCode, snapshot: this.settingsData, gatewayVersion: this.shared.connected && this.pluginData.fresh ? this.pluginData.bundles.find(row => row.gateway)?.version || '' : '',
+          onLink: url => this.openLink(url), onNotes: () => this.nav.push(AppRoute.ReleaseNotes),
           onAction: command => this.action(command), onConnection: () => { if (this.shared.connected) { this.runtime?.client.disconnect(); } else if (this.activeId) { this.reconnect(); } else { this.showHosts(); } }, onPing: () => this.pingGateway(),
           onAgents: () => this.nav.push(AppRoute.AgentPresets), onSchedules: () => this.nav.push(AppRoute.Schedules), onPlugins: () => this.nav.push(AppRoute.Plugins), onDefaults: () => this.nav.push(AppRoute.Defaults), onBack: () => this.back(), onHosts: () => this.showHosts(),
           onOpenSection: section => this.nav.push(('settings/' + section) as AppRoute),

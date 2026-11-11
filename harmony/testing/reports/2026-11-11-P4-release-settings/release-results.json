@@ -1,0 +1,43 @@
+{
+  "scope": "原生生产页面/HTTP栈；仅测试副本的公开元数据URL指向本轮HTTP夹具；不提供真实HAP下载，不是公网G",
+  "outcomes": [
+    {
+      "mode": "apk",
+      "observed": "未提供鸿蒙安装包",
+      "officialReleaseButton": false
+    },
+    {
+      "mode": "available",
+      "observed": "发现鸿蒙安装包：v0.2.0",
+      "officialReleaseButton": true
+    },
+    {
+      "mode": "current",
+      "observed": "当前鸿蒙版本已是最新",
+      "officialReleaseButton": false
+    },
+    {
+      "mode": "quota",
+      "observed": "检查过于频繁",
+      "officialReleaseButton": false
+    },
+    {
+      "mode": "empty",
+      "observed": "尚未找到公开发布",
+      "officialReleaseButton": false
+    },
+    {
+      "mode": "invalid",
+      "observed": "检查更新失败",
+      "officialReleaseButton": false
+    },
+    {
+      "mode": "apk",
+      "observed": "未提供鸿蒙安装包",
+      "officialReleaseButton": false
+    }
+  ],
+  "systemGestureBack": true,
+  "lateResponseIgnored": true,
+  "coldStartAbout": true
+}

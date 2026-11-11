@@ -1,3 +1,5 @@
+import { MarkdownBody } from '../components/MarkdownBody';
+import { MINIMUM_GATEWAY_VERSION, GATEWAY_RELEASE_ROOT, harmonyReleaseNotes } from '../core/ReleaseInfo';
 import { SettingsSection } from '../components/SettingsSection';
 import { SettingsData } from '../core/SettingsData';
 import { SettingsGatewayRow } from '../components/SettingsGatewayRow';
@@ -15,13 +17,17 @@ export struct SettingsPage {
   @ObjectLink a: Appearance;
   @ObjectLink snapshot: SettingsData;
   @Prop section: string = 'root';
+  @Prop active: boolean = true;
   onOpenSection: (section: string) => void = () => {};
   @Prop version: string = '';
   @Prop buildCode: number = 0;
+  @Prop gatewayVersion: string = '';
+  onNotes: () => void = () => {};
+  onLink: (url: string) => void = () => {};
   onAction: (command: Command) => void = () => {};
   onConnection: () => void = () => {};
   onPing: () => void = () => {};
-  aboutToAppear(): void { if (this.section === 'root' && this.snapshot.connected) { this.onAction(new Command('controls-defaults')); } }
+  aboutToAppear(): void { if (this.section === 'root' && this.snapshot.connected) { this.onAction(new Command('controls-defaults')); this.onAction(new Command('plugins-open')); } }
   onBack: () => void = () => {};
   onSchedules: () => void = () => {};
   onPlugins: () => void = () => {};
@@ -49,6 +55,7 @@ export struct SettingsPage {
       .backgroundColor(this.a.surface).id(id).opacity(enabled ? 1 : .4).enabled(enabled).onClick(action)
   }
   private title(): string {
+    if (this.section === 'notes') { return this.a.english ? 'What’s new' : '本版本新功能'; }
     if (this.section === 'font') { return this.a.t('字体大小'); }
     if (this.section === 'privacy') { return this.a.t('隐私'); }
     if (this.section === 'about') { return this.a.t('关于'); }
@@ -57,7 +64,12 @@ export struct SettingsPage {
   build() {
     Column() {
       PageHeader({ a: this.a, title: this.title(), onBack: this.onBack })
-      if (this.section === 'font') {
+      if (this.section === 'notes') {
+        Scroll() {
+          MarkdownBody({ a: this.a, text: harmonyReleaseNotes(this.a.english, this.version), prefix: 'release-notes', active: this.active })
+            .id('release-notes-content').padding(20).width('100%').constraintSize({ maxWidth: 720 })
+        }.layoutWeight(1).width('100%').align(Alignment.Top)
+      } else if (this.section === 'font') {
         FontSizePanel({ a: this.a, onFollow: value => this.set(undefined, undefined, value),
           onScale: value => this.set(undefined, undefined, false, value) }).layoutWeight(1)
       } else {
@@ -113,6 +125,14 @@ export struct SettingsPage {
             }
             SettingsSection({ a: this.a, title: '关于' }) {
               this.row('当前版本', this.version, 'settings-about', () => this.onOpenSection('about'))
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
+              this.row(this.a.english ? 'Required gateway version' : '要求网关版本', '≥ ' + MINIMUM_GATEWAY_VERSION, 'settings-required-gateway', () => this.onLink(GATEWAY_RELEASE_ROOT + '/releases'))
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
+              this.row(this.a.english ? 'Connected gateway version' : '已连接网关版本', this.snapshot.connected ? this.gatewayVersion || this.a.t('未提供') : this.a.t('未连接'), 'settings-gateway-version', () => this.onLink(GATEWAY_RELEASE_ROOT + '/releases'))
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
+              this.row(this.a.english ? 'What’s new' : '本版本新功能', this.a.english ? 'Release notes' : '查看发布说明', 'settings-release-notes', this.onNotes)
+              Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
+              this.row(this.a.english ? 'Check for updates' : '检查更新', '', 'settings-updates', () => this.onOpenSection('updates'))
               Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               this.row('隐私', '', 'settings-privacy', () => this.onOpenSection('privacy'))
             }

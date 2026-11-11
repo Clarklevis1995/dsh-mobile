@@ -243,13 +243,16 @@ def test_workspace_and_catalog():
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'photos', 'scan', 'real', 'menus', 'host-reset', 'home-visual', 'brand', 'home-rows', 'settings-visual'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'photos', 'scan', 'real', 'menus', 'host-reset', 'home-visual', 'brand', 'home-rows', 'settings-visual', 'release'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
     print('REPORT_DIR', folder, flush=True)
     app = args.app_dir or folder / 'app'
     if not args.app_dir:
         shutil.copytree(ROOT / 'harmonyApp', app, ignore=shutil.ignore_patterns('build', '.hvigor', 'oh_modules', '.idea'))
         p = app / 'AppScope/app.json5'; value = json.loads(p.read_text()); value['app']['bundleName'] = m.BUNDLE; p.write_text(json.dumps(value, indent=2))
     assert json.loads((app / 'AppScope/app.json5').read_text())['app']['bundleName'] == m.BUNDLE
+    if args.scenario == 'release':
+        from release_scenarios import instrument
+        instrument(app)
     if args.scenario == 'brand':
         from brand_scenarios import instrument
         instrument(app, ROOT)
@@ -291,7 +294,15 @@ def main():
     servers = []; logs = []; forwards = []
     try:
         fixtures = [(18783, '', 'a56a1098-8519-43a1-9dce-fb99863bf5bb'), (18784, 'B ', 'b56a1098-8519-43a1-9dce-fb99863bf5bb')]
-        if args.scenario in ['menus','home-visual','brand']: fixtures = []
+        if args.scenario in ['menus','home-visual','brand','release']: fixtures = []
+        if args.scenario == 'release':
+            import socket
+            with socket.socket() as guard: guard.bind(('127.0.0.1',18787))
+            (folder/'release-mode').write_text('apk')
+            log=(folder/'release-http.log').open('w');logs.append(log)
+            process=subprocess.Popen([sys.executable,str(ROOT/'harmony/testing/release_fixture.py')],env=dict(os.environ,HARMONY_RELEASE_FIXTURE_STATE=str(folder/'release-mode')),stdout=log,stderr=log);servers.append(process)
+            route='tcp:18787'
+            if route+' '+route not in m.hdc('fport','ls'):m.hdc('rport',route,route);forwards.append(route)
         if args.scenario == 'real':
             fixtures = []; route = 'tcp:18897'
             if os.environ.get('HARMONY_REAL_SCOPE') in ['transport','generation-network','history','history-restore','cache']:
@@ -364,6 +375,9 @@ def main():
         elif args.scenario == 'richtext':
             from richtext_scenarios import run
             run(ui, m, folder, passed)
+        elif args.scenario == 'release':
+            from release_scenarios import run
+            run(ui,m,folder,passed)
         elif args.scenario == 'settings-visual':
             from settings_visual_scenarios import run
             m.connect(ui); ui.navigate('conversation-back', 'home-settings')

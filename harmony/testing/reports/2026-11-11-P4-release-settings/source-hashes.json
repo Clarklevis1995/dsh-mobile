@@ -1,0 +1,8 @@
+{
+  "core/ReleaseInfo.ets": "3f745a72beb11c93f5f93fc4417595bdfe073b02e12d5cc0d3e7dc7a4d4a5683",
+  "core/ReleaseChecker.ets": "10eb070a609886689f8081633449df229cb7a0f484f566fca05e9cf5347ecd66",
+  "pages/ReleasePage.ets": "c7b31430ba48df665dc5cb35f6a5391d9c982979d72219ee7e3b1c22820cf96c",
+  "pages/SettingsPage.ets": "d34ce6c4067e8afbd5cf963b239b6f7577534b0b6be50d18abc3072d9686c01f",
+  "pages/Index.ets": "4563a58d33cb1c21605858bdbe37cfa118ce22cac5d34b3ff21551be3d9ee8ae",
+  "core/AppNavigation.ets": "90e15b11ca3dd9e641d2a7db3f9a3065adcf86ce907adb544290893f918b68aa"
+}

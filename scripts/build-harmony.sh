@@ -14,7 +14,7 @@ case "$MODE" in
   test)
     python3 "$ROOT/harmony/testing/generate_ui_messages.py" --check
     "$ROOT/harmony/gradlew" -p "$ROOT/harmony" :shared:jvmTest --console=plain
-    node --test "$ROOT/harmony/testing/transport.test.cjs" "$ROOT/harmony/testing/host_repository.test.cjs" "$ROOT/harmony/testing/navigation.test.cjs" "$ROOT/harmony/testing/markdown_model.test.cjs" "$ROOT/harmony/testing/schedule_dates.test.cjs" "$ROOT/harmony/testing/cache_controller.test.cjs" "$ROOT/harmony/testing/notifications.test.cjs" "$ROOT/harmony/testing/ui_messages.test.cjs" "$ROOT/harmony/testing/workspace_controller.test.cjs" "$ROOT/harmony/testing/host_runtime.test.cjs" "$ROOT/harmony/testing/markdown_parser.test.cjs"
+    node --test "$ROOT/harmony/testing/transport.test.cjs" "$ROOT/harmony/testing/host_repository.test.cjs" "$ROOT/harmony/testing/navigation.test.cjs" "$ROOT/harmony/testing/markdown_model.test.cjs" "$ROOT/harmony/testing/schedule_dates.test.cjs" "$ROOT/harmony/testing/cache_controller.test.cjs" "$ROOT/harmony/testing/notifications.test.cjs" "$ROOT/harmony/testing/ui_messages.test.cjs" "$ROOT/harmony/testing/workspace_controller.test.cjs" "$ROOT/harmony/testing/host_runtime.test.cjs" "$ROOT/harmony/testing/markdown_parser.test.cjs" "$ROOT/harmony/testing/releases.test.cjs"
     exit 0 ;;
   smoke)
     "$ROOT/harmony/gradlew" -p "$ROOT/harmony" :shared:publishNative --console=plain
