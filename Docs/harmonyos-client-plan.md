@@ -552,3 +552,7 @@ P4-03d通过G：真实0.12.0网关与DSH0.2.2-rc.1的Agent预设服务，默认s
 ### E77 · 短时PSS系统分类诊断（2026-11-11，未关闭门禁）
 
 只读分类显示第二轮后台恢复后PSS约226.7MiB，较初始增长主要在匿名其他映射47.2→86.9MiB；30秒匿名其他降至22.2MiB，总PSS约174.3MiB。分类采样每组约4秒改变原3秒相位，原runner虽算术PASS也不作为验收通过；后续诊断模式明确acceptanceEligible=false/DIAGNOSTIC_ONLY，正常阈值与Worker/GC配置不变。P7-06b仍未勾选，继续定位Native分配/回收。证据：[诊断报告](../harmony/testing/reports/2026-11-11-P7-memory-categories/README.md)。
+
+### E78 · Kotlin/Native只读回收统计（2026-11-11，未关闭门禁）
+
+仅临时优化Native库读取已完成GC与目标堆/定时间隔，不触发或调节GC；生产库SHA三次核对不变，候选仍v6。第二轮3秒PSS235MiB/GC23/GC后堆58.7MiB，20秒174.7MiB/GC25/堆22MiB；定时间隔实际10000ms。原生正文/草稿/读位断言通过，诊断明确不具备验收资格，P7-06b保持未勾选。下一步定位共享层JSON往返与恢复投影临时分配。证据：[报告](../harmony/testing/reports/2026-11-11-P7-native-memory/README.md)。

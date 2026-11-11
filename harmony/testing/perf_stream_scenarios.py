@@ -7,7 +7,11 @@ def run(ui,m,folder,passed):
     gates=json.loads((m.ROOT/'harmony/testing/baseline/p7-performance-gates.json').read_text());samples=[];anchors=[];expected=digest(content());diagnostic=any(os.environ.get(key)=='1' for key in ['HARMONY_PERF_MEMORY_DETAIL','HARMONY_PERF_NATIVE_MEMORY'])
     def sample(label):
         assert not ui.find('内容解析失败','text'), '生产Markdown解析失败'
-        value=json.loads(ui.wait('test-p7-stats')['text']);value['label']=label;value['sampledAtMonotonicSeconds']=time.monotonic();samples.append(value);(folder/'long-stream-performance.json').write_text(json.dumps(dict(gates=gates,expectedProjection=expected,samples=samples,acceptanceEligible=not diagnostic,scope='实际SDK PSS与JS桥/镜像/编辑/后台解析回调，非GPU帧时间；F夹具千行代码+160行表格，未闭合语法逐段到达'),ensure_ascii=False,indent=2))
+        value=json.loads(ui.wait('test-p7-stats')['text'])
+        if os.environ.get('HARMONY_PERF_NATIVE_MEMORY')=='1':
+            native=json.loads(value['nativeMemory']);assert 'lastGcEpoch' in native and 'gcHeapAfterBytes' in native,'临时Native探针未生效'
+            value['nativeMemory']=native
+        value['label']=label;value['sampledAtMonotonicSeconds']=time.monotonic();samples.append(value);(folder/'long-stream-performance.json').write_text(json.dumps(dict(gates=gates,expectedProjection=expected,samples=samples,acceptanceEligible=not diagnostic,scope='实际SDK PSS与JS桥/镜像/编辑/后台解析回调，非GPU帧时间；F夹具千行代码+160行表格，未闭合语法逐段到达'),ensure_ascii=False,indent=2))
         if os.environ.get('HARMONY_PERF_MEMORY_DETAIL')=='1' and label in ['1005-initial','after-background-1','final-idle-3s','final-idle-30s']:
             from memory_detail_probe import record
             record(m,folder,label)

@@ -1,0 +1,19 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-v04z88rr
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+输入 message-draft
+操作 message-send
+输入 message-draft
+输入 message-draft
+操作 conversation-latest
+输入 message-draft
+操作 message-send
+输入 message-draft
+输入 message-draft
+操作 conversation-latest
+DIAGNOSTIC_ONLY: functional assertions completed; memory instrumentation timings are not acceptance evidence
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-v04z88rr

@@ -280,6 +280,9 @@ def main():
     if args.scenario == 'perf':
         from perf_probe import instrument
         instrument(app, ROOT)
+        if os.environ.get('HARMONY_PERF_NATIVE_MEMORY')=='1':
+            from native_memory_probe import instrument_app
+            instrument_app(app)
     if args.scenario in ['native-navigation','cache']:
         source = app / 'entry/src/main/ets/pages/Index.ets'
         text = source.read_text()

@@ -1,0 +1,175 @@
+{
+  "acceptanceEligible": false,
+  "samples": [
+    {
+      "label": "1005-initial",
+      "pssMiB": 183.06,
+      "gcEpoch": 7,
+      "heapBeforeMiB": 49.05,
+      "heapAfterMiB": 39.96,
+      "targetHeapMiB": 79.92,
+      "firstPauseMilliseconds": 0.5332,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "stream-0-active",
+      "pssMiB": 167.143,
+      "gcEpoch": 8,
+      "heapBeforeMiB": 52.401,
+      "heapAfterMiB": 24.395,
+      "targetHeapMiB": 48.791,
+      "firstPauseMilliseconds": 0.9757,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "stream-edit-0-0",
+      "pssMiB": 177.777,
+      "gcEpoch": 9,
+      "heapBeforeMiB": 24.52,
+      "heapAfterMiB": 20.02,
+      "targetHeapMiB": 40.041,
+      "firstPauseMilliseconds": 0.6464,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "stream-edit-0-1",
+      "pssMiB": 172.345,
+      "gcEpoch": 9,
+      "heapBeforeMiB": 24.52,
+      "heapAfterMiB": 20.02,
+      "targetHeapMiB": 40.041,
+      "firstPauseMilliseconds": 0.6464,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "stream-reading-older-0",
+      "pssMiB": 181.469,
+      "gcEpoch": 10,
+      "heapBeforeMiB": 22.02,
+      "heapAfterMiB": 21.395,
+      "targetHeapMiB": 42.791,
+      "firstPauseMilliseconds": 0.7663,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "stream-0-complete",
+      "pssMiB": 224.518,
+      "gcEpoch": 13,
+      "heapBeforeMiB": 47.604,
+      "heapAfterMiB": 44.279,
+      "targetHeapMiB": 88.558,
+      "firstPauseMilliseconds": 0.5717,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "after-background-0",
+      "pssMiB": 186.899,
+      "gcEpoch": 16,
+      "heapBeforeMiB": 60.813,
+      "heapAfterMiB": 55.112,
+      "targetHeapMiB": 110.223,
+      "firstPauseMilliseconds": 1.2429,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "stream-1-active",
+      "pssMiB": 177.849,
+      "gcEpoch": 17,
+      "heapBeforeMiB": 72.409,
+      "heapAfterMiB": 36.77,
+      "targetHeapMiB": 73.541,
+      "firstPauseMilliseconds": 1.1822,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "stream-edit-1-0",
+      "pssMiB": 173.445,
+      "gcEpoch": 18,
+      "heapBeforeMiB": 37.145,
+      "heapAfterMiB": 21.645,
+      "targetHeapMiB": 43.291,
+      "firstPauseMilliseconds": 1.0799,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "stream-edit-1-1",
+      "pssMiB": 181.348,
+      "gcEpoch": 18,
+      "heapBeforeMiB": 37.145,
+      "heapAfterMiB": 21.645,
+      "targetHeapMiB": 43.291,
+      "firstPauseMilliseconds": 1.0799,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "stream-reading-older-1",
+      "pssMiB": 205.085,
+      "gcEpoch": 20,
+      "heapBeforeMiB": 25.645,
+      "heapAfterMiB": 25.645,
+      "targetHeapMiB": 51.291,
+      "firstPauseMilliseconds": 1.4278,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "stream-1-complete",
+      "pssMiB": 236.343,
+      "gcEpoch": 22,
+      "heapBeforeMiB": 50.099,
+      "heapAfterMiB": 47.807,
+      "targetHeapMiB": 95.615,
+      "firstPauseMilliseconds": 0.6461,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "after-background-1",
+      "pssMiB": 232.996,
+      "gcEpoch": 23,
+      "heapBeforeMiB": 87.553,
+      "heapAfterMiB": 58.723,
+      "targetHeapMiB": 117.447,
+      "firstPauseMilliseconds": 1.276,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "final-idle-3s",
+      "pssMiB": 235.012,
+      "gcEpoch": 23,
+      "heapBeforeMiB": 87.553,
+      "heapAfterMiB": 58.723,
+      "targetHeapMiB": 117.447,
+      "firstPauseMilliseconds": 1.276,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "final-idle-10s",
+      "pssMiB": 202.995,
+      "gcEpoch": 24,
+      "heapBeforeMiB": 90.61,
+      "heapAfterMiB": 53.645,
+      "targetHeapMiB": 107.291,
+      "firstPauseMilliseconds": 1.2672,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "final-idle-20s",
+      "pssMiB": 174.682,
+      "gcEpoch": 25,
+      "heapBeforeMiB": 53.645,
+      "heapAfterMiB": 22.02,
+      "targetHeapMiB": 44.041,
+      "firstPauseMilliseconds": 1.5999,
+      "regularIntervalMilliseconds": 10000
+    },
+    {
+      "label": "final-idle-30s",
+      "pssMiB": 179.391,
+      "gcEpoch": 26,
+      "heapBeforeMiB": 22.02,
+      "heapAfterMiB": 22.02,
+      "targetHeapMiB": 44.041,
+      "firstPauseMilliseconds": 2.508,
+      "regularIntervalMilliseconds": 10000
+    }
+  ]
+}

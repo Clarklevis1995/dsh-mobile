@@ -1,0 +1,12 @@
+{
+  "root": "/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-native-memory-fsxkcysi",
+  "app": "/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-native-memory-fsxkcysi/harmonyApp",
+  "productionLibraryUnchanged": true,
+  "productionSha256": "64df29f0b507f8a8dd9200c1c3f5dc454bbe0ad0b5df8914cdbf7ddf4adc9753",
+  "probeSha256": "ff2a44f7558f1fcf567e5e5d3a81acd8e4f2da027083df4b260971bdf3b1523f",
+  "sourceCheckpoint": "2e20c8fb5088fdb4475bb93bc35338ed6c7b53ba",
+  "scope": "仅本轮临时Native库的已完成GC只读统计，无GC触发/调度参数修改，不进入候选",
+  "compiledProbeSourceSha256": "c997d5219ea9bd88d72d2cc0b0e067b65a01265dae2ee2551c9e4d85533ad364",
+  "compiledExportsSha256": "a9b3f54b5ff634e897a8aa100de0a622f959518d2efdbdcbc100dd8e101de9e0",
+  "acceptanceEligible": false
+}
