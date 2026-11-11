@@ -1,0 +1,13 @@
+{
+  "harmonyBase": "6278d7b0+本轮已验收工作区",
+  "androidFrozenSource": "9e13dde3",
+  "androidPackage": "com.clarklevis.dsh.android.harmonyv1111",
+  "androidVersion": "1.7.12 (33)",
+  "harmonyFiles": {
+    "components/BrandBackground.ets": "4329da253f21e68d95eb9b7f9f66ff67fdd330284469d95cabf1b25a2a2466d7",
+    "core/BrandPixels.ets": "f96c950f3580ced7ad2e4d8db67fb7faeed0b82c5ff77dc5dafc59a388d21949",
+    "core/BrandFlow.ets": "bdd87dc1f3153cdef1b251e31348799b72c6e65539faac0d0757b175807f100e",
+    "pages/WorkspacePage.ets": "261d0b02fbea6480bf134b6569888f605fde8d41b311af62223a551b3c8d77dd",
+    "components/DesignSystem.ets": "f847081f663ae11e88d3dda59d6be721f033961ea2c90bbe2398673a9ba9adef"
+  }
+}

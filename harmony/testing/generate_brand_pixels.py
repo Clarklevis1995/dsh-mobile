@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""将原始品牌 SVG 轮廓按 60×60 EVEN_ODD 采样为 Canvas 粒子，不依赖平台路径命中 API。"""
+"""将原始品牌 SVG 轮廓按冻结基准72/100网格与EVEN_ODD抗锯齿采样为Canvas粒子，不依赖平台路径命中 API。"""
 from pathlib import Path
 import json
+from bisect import bisect_right
 import re
 import xml.etree.ElementTree as ET
 
@@ -44,10 +45,38 @@ def inside(x, y, polygons):
             previous = current
     return hit
 
+def particles(size, polygons):
+    # 每个子像素扫描线一次求交点；4×4覆盖率近似原生Canvas边缘抗锯齿。
+    coverage = [[0 for _ in range(size)] for _ in range(size)]
+    for sy in range(size * 4):
+        y = (sy + .5) / (size * 4) * 24 - 3
+        crossings = []
+        for polygon in polygons:
+            previous = polygon[-1]
+            for current in polygon:
+                if (current[1] > y) != (previous[1] > y):
+                    crossings.append((previous[0]-current[0])*(y-current[1])/(previous[1]-current[1])+current[0])
+                previous = current
+        crossings.sort()
+        for sx in range(size * 4):
+            x = (sx + .5) / (size * 4) * 24
+            if bisect_right(crossings, x) % 2:
+                coverage[sy // 4][sx // 4] += 1
+    def contains(x, y):
+        return 0 <= x < size and 0 <= y < size and coverage[y][x] / 16 > .2
+    result = []
+    for y in range(size):
+        for x in range(size):
+            if not contains(x,y): continue
+            if not any(contains(x+dx,y+dy) for dy in range(-2,3) for dx in range(-2,3) if dx or dy): continue
+            missing = sum(not contains(x+dx,y+dy) for dy in range(-1,2) for dx in range(-1,2) if dx or dy)
+            result.append([round((x+.5)/size,6),round((y+.5)/size,6),coverage[y][x]/16,missing/8])
+    return result
+
 if __name__ == '__main__':
     polygons = [polygon for element in ET.parse(SOURCE).getroot() for polygon in contours(element.get('d', ''))]
-    pixels = [[round((x + .5) / 60, 6), round((y + .5) / 60, 6)] for y in range(60) for x in range(60)
-              if inside((x + .5) / 60 * 24, (y + .5) / 60 * 24 - 3, polygons)]
-    OUTPUT.write_text('// 来自原始 hero-whale.svg；由 harmony/testing/generate_brand_pixels.py 生成。\n'
-                      + 'export const BRAND_PIXELS: number[][] = ' + json.dumps(pixels, separators=(',', ':')) + ';\n')
-    print('品牌轮廓采样完成：', len(pixels), '个粒子')
+    phone, wide = particles(72,polygons), particles(100,polygons)
+    OUTPUT.write_text('// 来自原始hero-whale.svg，按冻结Android的72/100网格生成；字段x/y/亮度/边缘比例。\n'
+                      + 'export const BRAND_PIXELS: number[][] = ' + json.dumps(phone,separators=(',', ':')) + ';\n'
+                      + 'export const BRAND_WIDE_PIXELS: number[][] = ' + json.dumps(wide,separators=(',', ':')) + ';\n')
+    print('品牌轮廓采样完成：',len(phone),'手机粒子，',len(wide),'宽屏粒子')

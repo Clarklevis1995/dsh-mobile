@@ -1,0 +1,14 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-_zs7597p
+操作 probe-capture
+操作 probe-capture
+操作 probe-active
+操作 probe-capture
+操作 probe-capture
+操作 probe-active
+操作 probe-motion
+操作 probe-capture
+操作 probe-capture
+操作 probe-motion
+操作 probe-capture
+PASS P2-brand-dynamics-F 修正后的生产Canvas活动限频、停用和减少动态零持续绘制、前后台最多一个收尾提交与实际JS平均提交成本通过
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-_zs7597p

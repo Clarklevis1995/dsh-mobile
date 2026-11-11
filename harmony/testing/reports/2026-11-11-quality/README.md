@@ -1,6 +1,6 @@
 # 当前核心、格式与生产构建
 
-2026-11-11：文案生成一致性、106 JVM、58 Node和鸿蒙独立源码全量ktlint1.5.0通过。ktlint先报告14处条件换行和1处未使用导入，按规则修复后无输出/exit0；红绿日志保留。当前优化Native publish与ArkTS/HAP完整构建成功，生产源码无测试探针，未安装正式包。最新构建以post-format日志、production-artifact.json路径和校验值为准；早先构建日志仅保留当轮历史。
+2026-11-11：文案生成一致性、106 JVM、58 Node和鸿蒙独立源码全量ktlint1.5.0通过。ktlint先报告14处条件换行和1处未使用导入，按规则修复后无输出/exit0；红绿日志保留。当前优化Native publish与ArkTS/HAP完整构建成功，生产源码无测试探针，未安装正式包。此报告仅对应a718a024检查点，post-format日志及production-artifact.json校验值为当轮记录；常规build输出路径会被后续构建覆盖，不能将历史SHA当作当前文件校验值。后续构建/候选以规划书新增E编号为准。
 
 实际detekt1.23.8独立CLI默认规则仍exit2，235 weighted issues：83长行、72数值常量、25返回数量、17复杂条件、17圈复杂度、10长方法、7函数数量及其他结构规则。完整结果在detekt-default-findings.txt。input=harmony/shared/src/commonMain/kotlin，未启用type-resolution/classpath，无baseline/覆盖配置；此前135条缺少精确命令的历史报告保留，不能直接作增量比较。P8-01静态门禁继续待办。
 

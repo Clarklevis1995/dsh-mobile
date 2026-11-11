@@ -1,0 +1,6 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-hgjocu3n
+操作 home-settings
+操作 settings-motion
+操作 page-back
+PASS P2-empty-home-capture-F 生产未配对首页各入口与未连接状态可见；真实减少动态偏好冷启静态帧采集完成，V独立计算
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-hgjocu3n

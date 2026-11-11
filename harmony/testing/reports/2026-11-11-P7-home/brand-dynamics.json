@@ -1,0 +1,10 @@
+{
+  "activeDrawCallsPerSecond": 11.8,
+  "inactiveDrawDelta": 0,
+  "reduceMotionDrawDelta": 0,
+  "backgroundDrawDelta": 0,
+  "averageJsSubmitMs": 5.878306878306878,
+  "maximumJsSubmitMs": 23,
+  "draws": 189,
+  "scope": "实际API21生产Canvas组件，仅临时计数；JS提交耗时和频率，不是GPU帧时/真机功耗"
+}

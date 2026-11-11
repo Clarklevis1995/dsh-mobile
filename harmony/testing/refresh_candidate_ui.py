@@ -93,7 +93,9 @@ def main():
         ui.click('host-remove-' + profile); ui.wait('confirmation-accept'); ui.click('confirmation-accept')
         assert not ui.find('host-select-' + profile); profile = None
         assert {r['id'] for r in ui.nodes() if r.get('id', '').startswith('host-select-')} == existing
-        ui.navigate('page-back', 'home-settings'); ui.screenshot('candidate-refreshed-home')
+        ui.navigate('page-back', 'home-settings')
+        if not existing: assert ui.wait('session-refresh')['text'] == '未连接'
+        ui.screenshot('candidate-refreshed-home')
         destination = m.ROOT / 'harmonyApp/build/acceptance'
         destination.mkdir(parents=True, exist_ok=True)
         final = destination / (m.BUNDLE + '-v' + str(args.version_code) + '-unsigned.hap')

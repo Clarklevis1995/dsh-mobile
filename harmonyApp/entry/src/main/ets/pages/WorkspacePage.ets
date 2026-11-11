@@ -37,7 +37,7 @@ export struct WorkspacePage {
   @Builder private launcher() {
     Column({ space: 0 }) {
       Column({ space: 12 }) {
-        Text(this.a.t('探索未至之境')).fontSize(this.a.font(32)).lineHeight(this.a.font(44)).fontWeight(FontWeight.Bold).fontColor('#F1F4FA').width('100%')
+        Text(this.a.t('探索未至之境')).fontSize(this.a.font(32)).lineHeight(this.a.font(44)).fontWeight(FontWeight.Bold).fontColor('#FFFFFF').width('100%')
         Text(this.a.t('Deepseek Harness 预览版')).fontSize(this.a.font(14)).lineHeight(this.a.font(18)).fontColor('#A6FFFFFF').width('100%')
       }.padding({ top: 67, bottom: 16 }).margin({ bottom: 4 }).width('100%')
       Row({ space: 12 }) {
@@ -50,38 +50,38 @@ export struct WorkspacePage {
         Circle().width(8).height(8).fill(this.state.connected ? '#2EB85C' : '#FF0000')
         Image($rawfile('icons/question_chevron_down.svg')).width(16).height(16).colorFilter(iconTint('#91A6C1'))
       }.padding({ left: 14, right: 14, top: 15, bottom: 15 }).width('100%').borderRadius(15)
-        .backgroundColor('#651A365D').backgroundBlurStyle(BlurStyle.COMPONENT_THIN, { colorMode: ThemeColorMode.DARK }).border({ width: 0.8, color: '#4059779C', radius: 15 })
+        .backgroundColor(Color.Transparent).backgroundEffect({ radius: 5, saturation: .72, brightness: 1.005, color: '#01FFFFFF' }).border({ width: 0.8, color: '#33FFFFFF', radius: 15 })
         .id('workspace-picker').onClick(this.onWorkspace).margin({ bottom: 19 })
       Row({ space: 8 }) {
         Stack() { Image($rawfile('icons/add.svg')).width(18).height(18).colorFilter(iconTint('#FFFFFF')) }
           .width(26).height(26).borderRadius(13).backgroundColor('#1AFFFFFF')
-        Text(this.a.t('新建会话')).fontSize(this.a.font(17)).fontWeight(600).fontColor('#F1F4FA')
+        Text(this.a.t('新建会话')).fontSize(this.a.font(17)).fontWeight(600).fontColor('#FFFFFF')
       }.justifyContent(FlexAlign.Center).id('session-create').height(52).width('100%').borderRadius(18)
-        .backgroundColor('#604D6381').backgroundBlurStyle(BlurStyle.COMPONENT_THIN, { colorMode: ThemeColorMode.DARK }).border({ width: 0.8, color: '#5563758D', radius: 18 })
+        .backgroundColor(Color.Transparent).backgroundEffect({ radius: 5, saturation: .74, brightness: 1.005, color: '#122D425E' }).border({ width: 0.8, color: '#42FFFFFF', radius: 18 })
         .onClick(() => { if (this.state.connected) { this.onCreate(); } else { this.onHosts(); } })
     }.width('100%')
   }
   @Builder private recent() {
     Column({ space: 8 }) {
       Row() {
-        Text(this.a.t('最近会话')).fontSize(this.a.font(17)).fontWeight(FontWeight.Bold).fontColor('#EAF1FC').layoutWeight(1)
+        Text(this.a.t('最近会话')).fontSize(this.a.font(17)).fontWeight(600).fontColor('#FFFFFF').layoutWeight(1)
         if (this.state.searching || this.state.catalogLoading) { LoadingProgress().width(16).height(16).color('#BFD6FF') }
         Text(this.a.t(this.status === '尚未连接' ? '未连接' : this.status)).id('session-refresh').fontSize(this.a.font(12)).fontColor(this.state.connected ? '#2EB85C' : '#D9FF0000')
-          .height(44).constraintSize({ minWidth: 44 }).accessibilityText(this.a.t('刷新')+' · '+this.a.t(this.status)).onClick(this.onRefresh)
+          .height(44).constraintSize({ minWidth: 44 }).textAlign(TextAlign.End).accessibilityText(this.a.t('刷新')+' · '+this.a.t(this.status)).onClick(this.onRefresh)
       }.width('100%').height(44)
       Row({ space: 8 }) {
         Image($rawfile('icons/search.svg')).width(20).height(20).colorFilter(iconTint('#ADFFFFFF'))
         TextInput({ placeholder: this.a.t('搜索会话内容'), text: this.query }).id('session-search').height('100%').layoutWeight(1).padding(0)
           .fontSize(this.a.font(16)).backgroundColor(Color.Transparent).fontColor('#EBFFFFFF').placeholderColor('#94FFFFFF').onChange(this.onSearch)
-      }.height(42).width('100%').padding({ left: 12, right: 12 }).borderRadius(13).backgroundColor('#2EFFFFFF')
-        .backgroundBlurStyle(BlurStyle.COMPONENT_THIN, { colorMode: ThemeColorMode.DARK }).border({ width: 0.8, color: '#26FFFFFF', radius: 13 })
+      }.height(42).width('100%').padding({ left: 12, right: 12 }).borderRadius(13).backgroundColor(Color.Transparent)
+        .backgroundEffect({ radius: 5, saturation: .72, brightness: 1.005, color: '#0FFFFFFF' }).border({ width: 0.8, color: '#26FFFFFF', radius: 13 })
       if (this.state.catalogLoading && !this.visible().length) {
         LoadingProgress().width(32).height(32).color('#BFD6FF').margin(24)
       } else if (!this.visible().length) {
         Text(this.query.trim() ? this.a.t('搜索结果为空') : (this.a.english ?
           'No known sessions yet. Connect to a server and create your first task.' : '暂无已知会话。连接服务后创建第一个任务。'))
-          .fontSize(this.a.font(14)).fontColor('#8FA2BD').lineHeight(this.a.font(23)).padding(18).width('100%')
-          .backgroundColor('#1AFFFFFF').backgroundBlurStyle(BlurStyle.COMPONENT_THIN, { colorMode: ThemeColorMode.DARK }).borderRadius(15).border({ width: 0.8, color: '#1AFFFFFF', radius: 15 })
+          .fontSize(this.a.font(14)).fontColor('#80FFFFFF').lineHeight(this.a.font(23)).padding(18).width('100%')
+          .margin({ top: 10 }).backgroundColor(Color.Transparent).backgroundEffect({ radius: 4, saturation: .72, brightness: 1.005, color: '#0AFFFFFF' }).borderRadius(15).border({ width: 0.8, color: '#1AFFFFFF', radius: 15 })
       }
       ForEach(this.visible(), (row: SessionView) => {
         SessionTile({ a: this.a, row: row, glass: true, connected: this.state.connected, selected: row.id === this.state.selectedSessionId,
@@ -107,11 +107,11 @@ export struct WorkspacePage {
         Scroll() {
           Column({ space: 0 }) {
             Row({ space: 8 }) {
-              Image($rawfile('icons/gateway_pc.svg')).width(18).height(18).colorFilter(iconTint('#B8CAE3'))
-              Text(this.hostName || this.a.t('选择主机')).fontSize(this.a.font(12)).fontColor('#B8CAE3').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-              Circle().width(8).height(8).fill(this.state.connected ? '#2EB85C' : '#FF0000')
-              Image($rawfile('icons/question_chevron_down.svg')).width(14).height(14).colorFilter(iconTint('#B8CAE3'))
-            }.padding({ left: 14, right: 14 }).height(36).borderRadius(18).backgroundColor('#1AFFFFFF').backgroundBlurStyle(BlurStyle.COMPONENT_THIN, { colorMode: ThemeColorMode.DARK }).id('home-host-picker').onClick(this.onHosts).margin({ bottom: 14 })
+              Image($rawfile('icons/gateway_pc.svg')).width(15).height(15).colorFilter(iconTint('#FFFFFF'))
+              Text(this.hostName || this.a.t('选择主机')).fontSize(this.a.font(12)).fontColor('#FFFFFF').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              Circle().width(6).height(6).fill(this.state.connected ? '#2EB85C' : '#FF0000')
+              Image($rawfile('icons/question_chevron_down.svg')).width(14).height(14).colorFilter(iconTint('#FFFFFF'))
+            }.padding({ left: 11, right: 11 }).height(34).borderRadius(30).backgroundColor('#17FFFFFF').id('home-host-picker').onClick(this.onHosts).margin({ bottom: 14 })
             if (this.wide) {
               Row({ space: 32 }) {
                 Column() { this.launcher() }.width('38%').constraintSize({ minWidth: 440 })

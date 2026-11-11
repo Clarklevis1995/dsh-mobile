@@ -18,7 +18,7 @@ def click(label):
     rows=nodes();row=next(r for r in reversed(rows) if label in [r.get('text'),r.get('content-desc')] and r.get('center'))
     x,y=re.findall(r'-?\d+',row['center']);adb('shell','input','tap',x,y);print('CLICK',label,flush=True);time.sleep(.5)
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('action',choices=['click','back','pair-owned','layout','capture','scroll']);parser.add_argument('value',nargs='?');args=parser.parse_args();FOLDER.mkdir(exist_ok=True)
+    parser=argparse.ArgumentParser();parser.add_argument('action',choices=['click','back','pair-owned','layout','capture','scroll']);parser.add_argument('value',nargs='?');parser.add_argument('--ready-text');args=parser.parse_args();FOLDER.mkdir(exist_ok=True)
     if args.action=='click':click(args.value)
     elif args.action=='scroll':
         row=next(r for r in nodes() if 'SCROLLABLE' in r.get('interactions',[]));l,t,r,b=map(int,re.findall(r'-?\d+',row['bounds']));x=(l+r)//2;a=t+(b-t)//4;z=t+(b-t)*3//4
@@ -40,5 +40,10 @@ def main():
         labels=[r.get('text') for r in nodes()];click('重新配对并连接' if '重新配对并连接' in labels else '连接');print('OWNED_PAIR_SUBMITTED',flush=True)
     else:
         assert re.fullmatch(r'[a-zA-Z0-9_-]+',args.value or '')
+        if args.ready_text:
+            deadline=time.monotonic()+18
+            while not any(row.get('text')==args.ready_text for row in nodes()):
+                assert time.monotonic()<deadline, '截图前预期内容未就绪'
+                time.sleep(.3)
         nodes();shutil.copyfile(FOLDER/'reference-current.json',FOLDER/(args.value+'-layout.json'));subprocess.run([ANDROID,'screen','capture','--device='+DEVICE,'-o',str(FOLDER/(args.value+'.png'))],check=True)
 if __name__=='__main__':main()

@@ -22,9 +22,9 @@ export struct CircleIcon {
         Image($rawfile('icons/' + this.icon + '.svg')).width(23).height(23).colorFilter(iconTint(this.ink))
       }
     }.id(this.controlId).accessibilityText(this.label).width(this.diameter).height(this.diameter)
-      .backgroundColor(this.fill).backgroundBlurStyle(this.glass ? BlurStyle.COMPONENT_THIN : BlurStyle.NONE, { colorMode: ThemeColorMode.DARK })
+      .backgroundColor(this.glass ? Color.Transparent : this.fill).backgroundEffect({ radius: this.glass ? 4 : 0, saturation: this.glass ? .92 : 1, brightness: this.glass ? 1.005 : 1, color: this.glass ? '#0DFFFFFF' : Color.Transparent })
       .shadow({ radius: this.lifted ? 12 : 0, color: '#13000000', offsetY: 4 })
-      .border({ width: this.glass ? .8 : this.lifted || this.outlined ? .7 : 0, color: this.glass ? '#4059779C' : this.ink === '#F1F4FA' ? '#22F1F4FA' : '#0E0E131A', radius: this.diameter / 2 }).enabled(this.available).onClick(this.onPress)
+      .border({ width: this.glass ? .8 : this.lifted || this.outlined ? .7 : 0, color: this.glass ? '#40FFFFFF' : this.ink === '#F1F4FA' ? '#22F1F4FA' : '#0E0E131A', radius: this.diameter / 2 }).enabled(this.available).onClick(this.onPress)
   }
 }
 

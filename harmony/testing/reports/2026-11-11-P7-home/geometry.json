@@ -1,0 +1,68 @@
+{
+  "scope": "仅共有标签实际屏幕纵向中心；相同1316x2832/3.5 density/376逻辑宽，100%字号，均未配对，不调整原图",
+  "checks": [
+    {
+      "label": "探索未至之境",
+      "androidCenterPx": 929.0,
+      "harmonyCenterPx": 923.0,
+      "differenceVp": -1.7143,
+      "passed": true
+    },
+    {
+      "label": "Deepseek Harness 预览版",
+      "androidCenterPx": 1077.0,
+      "harmonyCenterPx": 1073.5,
+      "differenceVp": -1.0,
+      "passed": true
+    },
+    {
+      "label": "未分组",
+      "androidCenterPx": 1271.0,
+      "harmonyCenterPx": 1264.0,
+      "differenceVp": -2.0,
+      "passed": true
+    },
+    {
+      "label": "0 个未归属会话",
+      "androidCenterPx": 1337.5,
+      "harmonyCenterPx": 1330.5,
+      "differenceVp": -2.0,
+      "passed": true
+    },
+    {
+      "label": "新建会话",
+      "androidCenterPx": 1575.5,
+      "harmonyCenterPx": 1573.0,
+      "differenceVp": -0.7143,
+      "passed": true
+    },
+    {
+      "label": "最近会话",
+      "androidCenterPx": 1771.5,
+      "harmonyCenterPx": 1769.0,
+      "differenceVp": -0.7143,
+      "passed": true
+    },
+    {
+      "label": "未连接",
+      "androidCenterPx": 1771.5,
+      "harmonyCenterPx": 1769.0,
+      "differenceVp": -0.7143,
+      "passed": true
+    },
+    {
+      "label": "搜索会话内容",
+      "androidCenterPx": 1951.0,
+      "harmonyCenterPx": 1947.5,
+      "differenceVp": -1.0,
+      "passed": true
+    },
+    {
+      "label": "暂无已知会话。连接服务后创建第一个任务。",
+      "androidCenterPx": 2192.0,
+      "harmonyCenterPx": 2189.0,
+      "differenceVp": -0.8571,
+      "passed": true
+    }
+  ]
+}

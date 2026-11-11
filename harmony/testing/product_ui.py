@@ -243,13 +243,16 @@ def test_workspace_and_catalog():
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'photos', 'scan', 'real', 'menus', 'host-reset'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'photos', 'scan', 'real', 'menus', 'host-reset', 'home-visual', 'brand'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
     print('REPORT_DIR', folder, flush=True)
     app = args.app_dir or folder / 'app'
     if not args.app_dir:
         shutil.copytree(ROOT / 'harmonyApp', app, ignore=shutil.ignore_patterns('build', '.hvigor', 'oh_modules', '.idea'))
         p = app / 'AppScope/app.json5'; value = json.loads(p.read_text()); value['app']['bundleName'] = m.BUNDLE; p.write_text(json.dumps(value, indent=2))
     assert json.loads((app / 'AppScope/app.json5').read_text())['app']['bundleName'] == m.BUNDLE
+    if args.scenario == 'brand':
+        from brand_scenarios import instrument
+        instrument(app, ROOT)
     if args.scenario == 'real' and os.environ.get('HARMONY_REAL_SCOPE') in ['history','history-restore','cache']:
         from history_probe import instrument
         instrument(app)
@@ -288,6 +291,7 @@ def main():
     servers = []; logs = []; forwards = []
     try:
         fixtures = [(18783, '', 'a56a1098-8519-43a1-9dce-fb99863bf5bb'), (18784, 'B ', 'b56a1098-8519-43a1-9dce-fb99863bf5bb')]
+        if args.scenario in ['menus','home-visual','brand']: fixtures = []
         if args.scenario == 'real':
             fixtures = []; route = 'tcp:18897'
             if os.environ.get('HARMONY_REAL_SCOPE') in ['transport','generation-network','history','history-restore','cache']:
@@ -359,6 +363,12 @@ def main():
             run(ui, m, folder, passed)
         elif args.scenario == 'richtext':
             from richtext_scenarios import run
+            run(ui, m, folder, passed)
+        elif args.scenario == 'home-visual':
+            from home_visual_scenarios import run
+            run(ui, m, folder, passed)
+        elif args.scenario == 'brand':
+            from brand_scenarios import run
             run(ui, m, folder, passed)
         elif args.scenario == 'host-reset':
             from host_reset_scenarios import run
