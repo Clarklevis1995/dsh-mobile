@@ -34,18 +34,16 @@ class WorkspaceSessionSectionsDeviceTest {
     private var animatorScale: String? = null
 
     @Test
-    fun allWorkspaceNewSessionOnlyShowsChineseReminder() {
-        verifyCreationReminder(Locale.SIMPLIFIED_CHINESE, "请先选择工作区",
-            "请先选择一个具体工作区，再创建新会话。", "知道了")
+    fun allWorkspacesCanCreateWithoutWorkspaceReminderInChinese() {
+        verifyAllWorkspaceCreation(Locale.SIMPLIFIED_CHINESE)
     }
 
     @Test
-    fun allWorkspaceNewSessionOnlyShowsEnglishReminder() {
-        verifyCreationReminder(Locale.ENGLISH, "Select a workspace first",
-            "Select a specific workspace before creating a new session.", "Got it")
+    fun allWorkspacesCanCreateWithoutWorkspaceReminderInEnglish() {
+        verifyAllWorkspaceCreation(Locale.ENGLISH)
     }
 
-    private fun verifyCreationReminder(locale: Locale, title: String, message: String, confirm: String) {
+    private fun verifyAllWorkspaceCreation(locale: Locale) {
         Locale.setDefault(locale)
         val holder = AndroidSharedStateHolder()
         var creations = 0
@@ -57,23 +55,17 @@ class WorkspaceSessionSectionsDeviceTest {
             holder.selectWorkspace(AndroidSharedStateHolder.ALL_WORKSPACES_ID)
             compose.setContent {
                 DshTheme {
-                    AdaptiveWindowHost { WorkspaceScreen(holder, {}, { creations++ }, {}, {}, {}) }
+                    AdaptiveWindowHost { WorkspaceScreen(holder, {}, { creations++ }, {}, {}, {}, onConnectors = {}) }
                 }
             }
             compose.onNodeWithTag("workspace-new-session").performScrollTo().performClick()
-            compose.onNodeWithTag("workspace-required-alert").assertIsDisplayed()
-            compose.onNodeWithText(title).assertIsDisplayed()
-            compose.onNodeWithText(message).assertIsDisplayed()
-            compose.runOnIdle { assertEquals(0, creations) }
-            compose.onNodeWithText(confirm).performClick()
             compose.onNodeWithTag("workspace-required-alert").assertDoesNotExist()
             compose.runOnIdle {
-                assertEquals(0, creations)
+                assertEquals(1, creations)
                 holder.selectWorkspace("w1")
             }
             compose.onNodeWithTag("workspace-new-session").performScrollTo().performClick()
-            compose.onNodeWithTag("workspace-required-alert").assertDoesNotExist()
-            compose.runOnIdle { assertEquals(1, creations) }
+            compose.runOnIdle { assertEquals(2, creations) }
         } finally { compose.runOnIdle { holder.close() } }
     }
 
@@ -109,7 +101,7 @@ class WorkspaceSessionSectionsDeviceTest {
             holder.selectWorkspace("w1")
             compose.setContent {
                 DshTheme {
-                    AdaptiveWindowHost { WorkspaceScreen(holder, { opened = it }, {}, {}, {}, {}) }
+                    AdaptiveWindowHost { WorkspaceScreen(holder, { opened = it }, {}, {}, {}, {}, onConnectors = {}) }
                 }
             }
             val list = compose.onNodeWithTag("workspace-session-list")
@@ -152,7 +144,7 @@ class WorkspaceSessionSectionsDeviceTest {
             compose.setContent {
                 DshTheme {
                     AdaptiveWindowHost {
-                        WorkspaceScreen(holder, {}, {}, {}, {}, {})
+                        WorkspaceScreen(holder, {}, {}, {}, {}, {}, onConnectors = {})
                     }
                 }
             }

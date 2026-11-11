@@ -126,7 +126,13 @@ internal fun WorkspaceCodePreviewContent(
                     TextButton(onClick = onOpenExternal) { Text(appText("使用系统应用打开")) }
                 }
             }
-            is CodePreviewLoadState.Ready -> CodePreviewDocument(state.document)
+            is CodePreviewLoadState.Ready -> {
+                val images = LocalDshMarkdownImages.current
+                val relativeImages = remember(images, file.remotePath) { images?.relativeTo(file.remotePath) }
+                androidx.compose.runtime.CompositionLocalProvider(LocalDshMarkdownImages provides relativeImages) {
+                    CodePreviewDocument(state.document)
+                }
+            }
         }
     }
 }

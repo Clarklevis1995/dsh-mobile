@@ -16,8 +16,8 @@ android {
         applicationId = "com.clarklevis.dsh.android"
         minSdk = 24
         targetSdk = 36
-        versionCode = 39
-        versionName = "1.8.0"
+        versionCode = 40
+        versionName = "1.8.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -38,6 +38,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -158,6 +159,7 @@ val verifyLocalizations = tasks.register<Exec>("verifyLocalizations") {
 tasks.withType<Test>().configureEach { dependsOn(verifyLocalizations) }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation(project(":shared"))
     // 内嵌 tailscale 节点（Go）。生成的 Java 在包 `tsnetgo` 下，接口只有 string/int。
     implementation(files(tsnetAarFile).builtBy(buildTsnetAar))
@@ -183,6 +185,7 @@ dependencies {
     implementation("io.github.webrtc-sdk:android:144.7559.15")
     implementation(libs.backdrop)
     implementation(libs.markwon.core)
+    implementation("ru.noties:jlatexmath-android:0.2.0")
     implementation(libs.markwon.ext.strikethrough)
     implementation(libs.markwon.ext.tables)
     implementation(libs.markwon.ext.tasklist)

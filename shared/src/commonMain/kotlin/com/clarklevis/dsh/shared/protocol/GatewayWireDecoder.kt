@@ -146,6 +146,12 @@ object GatewayWireDecoder {
             normalized = JsonObject(normalized - "selection")
         }
         val kind = (normalized["kind"] as? JsonPrimitive)?.contentOrNull
+        // 设备工具的 version 为整数，通用管理响应的 version 为应用版本字符串。
+        // 此控制协议由原生连接器校验完整 rawJson，不能先按通用 DTO 解码而丢掉登记回包。
+        if (kind in setOf("device-tools-registered", "device-tools-status", "device-tools-permissions", "device-tool-invoke", "device-tool-cancel")) {
+            return GatewayFrame(kind = requireNotNull(kind),
+                requestId = (normalized["requestId"] as? JsonPrimitive)?.takeIf { it.isString }?.content)
+        }
         // 新管理响应平铺完整任务，target 为对象，与旧设置响应的字符串 target 不同。
         if (kind in setOf("schedule-view", "schedule-create", "schedule-edit", "schedule-run")) {
             normalized = JsonObject((normalized - "target") + ("schedule" to normalized))

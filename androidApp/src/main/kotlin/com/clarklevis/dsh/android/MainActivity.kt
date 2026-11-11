@@ -18,6 +18,7 @@ class MainActivity : ComponentActivity() {
         setTheme(R.style.Theme_DeepSeekHarness)
         super.onCreate(savedInstanceState)
         consumeNotificationIntent(intent)
+        if (savedInstanceState == null) (application as DshAndroidApplication).receiveShare(intent)
         enableEdgeToEdge()
         setContent {
             DeepSeekHarnessAndroidApp()
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        (application as DshAndroidApplication).receiveShare(intent)
         consumeNotificationIntent(intent)
     }
 

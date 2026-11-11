@@ -22,6 +22,12 @@ class DshAndroidApplication :
         super.attachBaseContext(AppearanceSettings.localizedContext(base))
     }
 
+    internal val shareInbox by lazy { IncomingShareInbox(this) }
+
+    internal fun receiveShare(intent: Intent) {
+        tunnelScope.launch { shareInbox.receive(this@DshAndroidApplication, intent) }
+    }
+
     lateinit var hosts: AndroidMultiGatewayStore
         private set
 
@@ -94,7 +100,11 @@ class DshAndroidApplication :
 
     override fun onCreate() {
         super<Application>.onCreate()
+        ru.noties.jlatexmath.JLatexMathAndroid.init(this)
         com.clarklevis.dsh.android.platform.LocalAppLog.start(this)
+        tunnelScope.launch(Dispatchers.IO) {
+            com.clarklevis.dsh.android.platform.devicetools.AndroidReminderReceiver.restore(this@DshAndroidApplication)
+        }
         hosts = AndroidMultiGatewayStore(this)
         maintainCacheStorage()
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)

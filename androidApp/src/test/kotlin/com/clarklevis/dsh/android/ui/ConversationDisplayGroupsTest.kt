@@ -20,17 +20,25 @@ class ConversationDisplayGroupsTest {
     @get:Rule val locale = LocaleTestRule()
 
     @Test
-    fun generatedImagesRemainVisibleOutsideCollapsedToolProcess() {
+    fun toolImageCardsAreHiddenWhileAssistantBodyAndUserUploadsRemain() {
         val image = com.clarklevis.dsh.shared.protocol.GatewayImageAttachment("image", "image/png", 10, 100, 80)
         val generated = item("result-images", ConversationItemKind.GENERATED_IMAGES, text = "").copy(images = listOf(image))
+        val body = "已生成。\n\n![风景](/workspace/image.png)"
+        val reply = item("reply", ConversationItemKind.ASSISTANT, text = body)
+        val user = item("user", ConversationItemKind.USER).copy(images = listOf(image))
         val entries = makeConversationDisplayEntries(listOf(
-            item("call", ConversationItemKind.TOOL), item("result", ConversationItemKind.TOOL_RESULT), generated
+            user, item("call", ConversationItemKind.TOOL), generated,
+            item("result", ConversationItemKind.TOOL_RESULT), reply
         ))
-        assertEquals(2, entries.size)
-        assertTrue(entries.first() is ConversationDisplayEntry.Process)
-        assertEquals(generated, (entries.last() as ConversationDisplayEntry.Message).item)
+        assertEquals(3, entries.size)
+        assertEquals(user, (entries.first() as ConversationDisplayEntry.Message).item)
+        assertEquals(2, (entries[1] as ConversationDisplayEntry.Process).group.items.size)
+        assertEquals(reply, (entries.last() as ConversationDisplayEntry.Message).item)
         val timeline = makeConversationTimelineEntries(entries)
-        assertEquals(listOf(image), timeline.last().images)
+        assertEquals(listOf(image), timeline.first().images)
+        assertEquals(body, timeline.filterIsInstance<ConversationTimelineEntry.AssistantMarkdown>().joinToString("") { it.markdown })
+        assertTrue(timeline.none { it.id == generated.id })
+        assertTrue(makeConversationDisplayEntries(listOf(generated)).isEmpty())
     }
 
     @Test

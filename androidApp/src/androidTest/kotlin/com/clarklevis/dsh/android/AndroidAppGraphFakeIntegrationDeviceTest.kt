@@ -56,6 +56,90 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
+    fun connectorStatusTraversesRuntimeAndMissingRegistrationIsNotReportedAsOffline() = runBlocking<Unit> {
+        val transport = FakeTransport()
+        val graph = AndroidAppGraph(
+            application = ApplicationProvider.getApplicationContext<Application>(),
+            transportOverride = transport, preferencesOverride = FakePreferences(),
+            credentialStoreOverride = FakeCredentials, attachmentCacheOverride = FakeCache(),
+            networkMonitorOverride = FakeNetwork, clockOverride = FakeClock,
+            gatewayLocalId = "connectors-${UUID.randomUUID()}"
+        )
+        val holder = graph.stateHolder
+        try {
+            waitUntil { transport.specs.isNotEmpty() }
+            transport.open()
+            transport.receive("""{"kind":"hello","authenticated":true,"protocol":3,"capabilities":["device-tools-v1"]}""")
+            waitUntil { transport.payloadsOfType("device-tools-register").isNotEmpty() }
+            val sent = org.json.JSONObject(transport.payloadsOfType("device-tools-register").last().toString())
+            assertEquals("android", sent.getString("platform"))
+            transport.receive(org.json.JSONObject().put("kind", "device-tools-registered").put("version", 1)
+                .put("requestId", sent.getString("requestId")).put("capabilityRevision", sent.getInt("capabilityRevision"))
+                .put("connectionLeaseId", "graph-lease").put("statusQuery", true).put("permissionSync", true)
+                .put("permissions", org.json.JSONObject()).put("modules", sent.getJSONArray("modules")).toString())
+            val connectors = requireNotNull(holder.deviceConnectors)
+            waitUntil { connectors.registrationState == com.clarklevis.dsh.android.platform.devicetools.ConnectorRegistrationState.REGISTERED }
+            onMain { connectors.visibility(true); connectors.refreshRegistrationStatus() }
+            waitUntil { transport.payloadsOfType("device-tools-status").isNotEmpty() }
+            val status = org.json.JSONObject(transport.payloadsOfType("device-tools-status").last().toString())
+            transport.receive(org.json.JSONObject().put("kind", "device-tools-status").put("version", 1)
+                .put("requestId", status.getString("requestId")).put("status", "not-registered").toString())
+            waitUntil { connectors.registrationState == com.clarklevis.dsh.android.platform.devicetools.ConnectorRegistrationState.NOT_REGISTERED }
+            assertTrue(connectors.connected)
+            assertEquals("CONNECTED", holder.gatewayState.connection.name)
+        } finally { onMain { holder.close() } }
+    }
+
+    @Test
+    fun assistantMarkdownImageDownloadsThroughRuntimeWithoutDuplicatingToolImage() = runBlocking<Unit> {
+        val transport = FakeTransport()
+        val graph = AndroidAppGraph(
+            application = ApplicationProvider.getApplicationContext<Application>(),
+            transportOverride = transport, preferencesOverride = FakePreferences(),
+            credentialStoreOverride = FakeCredentials, attachmentCacheOverride = FakeCache(),
+            networkMonitorOverride = FakeNetwork, clockOverride = FakeClock,
+            gatewayLocalId = "markdown-image-${UUID.randomUUID()}"
+        )
+        val holder = graph.stateHolder
+        val png = tinyPng()
+        try {
+            waitUntil { transport.specs.isNotEmpty() }
+            transport.open()
+            transport.receive("""{"kind":"hello","authenticated":true,"protocol":3,"historyFormatVersion":1,"capabilities":["file-downloads","file-references-v1"]}""")
+            waitUntil { holder.gatewayState.connection.name == "CONNECTED" }
+            transport.receive("""{"kind":"sessions","items":[{"sessionId":"markdown-body","title":"生成西湖风景图","updatedAt":1,"blank":false,"running":false}]}""")
+            waitUntil { holder.snapshot.sessions.any { it.id == "markdown-body" } }
+            onMain { holder.selectSession("markdown-body") }
+            waitUntil { transport.payloadsOfType("history").isNotEmpty() }
+            transport.receive("""{"kind":"history","sessionId":"markdown-body","historyFormatVersion":1,"events":[
+                {"type":"user/message","seq":1,"time":1,"data":{"content":[{"type":"text","text":"生成西湖风景图"}],"source":{"kind":"user"}}},
+                {"type":"tool/result","seq":2,"time":2,"data":{"turn":1,"step":1,"callId":"generate","meta":{"kind":"dsh-image-gen","savedTo":"images/lake.png","attachment":{"attachmentId":"generated-lake","mediaType":"image/png","bytes":${png.size},"width":2,"height":2}}}},
+                {"type":"assistant/message","seq":3,"time":3,"data":{"turn":1,"step":1,"message":{"content":[{"type":"text","text":"已为你画好。\n\n![瘦西湖春景](images/lake.png)"}]}}}
+            ],"hasMore":false,"bytes":1000}""")
+            waitUntil { holder.snapshot.markdownImages["images/lake.png"]?.width == 2 }
+            compose.setContent { DshTheme { ConversationScreen(holder, onPickImage = {}, onBack = {}) } }
+            waitUntil { transport.payloadsOfType("file-resolve").isNotEmpty() }
+            val imageNode = compose.onNodeWithTag("markdown-image:images/lake.png")
+            imageNode.assertIsDisplayed()
+            val bounds = imageNode.fetchSemanticsNode().boundsInRoot
+            val request = transport.payloadsOfType("file-resolve").last().getValue("requestId").jsonPrimitive.content
+            transport.receive("""{"kind":"file-resolved","requestId":"$request","sessionId":"markdown-body","path":"images/lake.png","name":"lake.png","mediaType":"image/png","size":${png.size},"modifiedAt":1}""")
+            waitUntil { transport.payloadsOfType("file-download-open").isNotEmpty() }
+            transport.receive("""{"kind":"file-download-opened","requestId":"$request-download","sessionId":"markdown-body","transferId":"markdown-transfer","path":"images/lake.png","name":"lake.png","mediaType":"image/png","size":${png.size},"chunkBytes":${png.size}}""")
+            waitUntil { transport.payloadsOfType("file-download-read").isNotEmpty() }
+            val hash = java.security.MessageDigest.getInstance("SHA-256").digest(png).joinToString("") { "%02x".format(it) }
+            transport.receive("""{"kind":"file-download-chunk","transferId":"markdown-transfer","offset":0,"data":"${Base64.encodeToString(png, Base64.NO_WRAP)}","eof":true,"sha256":"$hash"}""")
+            compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("瘦西湖春景").fetchSemanticsNodes().size == 1 }
+            assertEquals(bounds, imageNode.fetchSemanticsNode().boundsInRoot)
+            assertEquals(1, transport.payloadsOfType("file-download-open").size)
+            assertTrue(holder.workspaceFilePreviewRequest == null && holder.completedWorkspaceFile == null)
+            compose.onNodeWithTag("conversation-image:generated-lake").assertDoesNotExist()
+            imageNode.performClick()
+            compose.onNodeWithTag("conversation-image-preview").assertIsDisplayed()
+        } finally { onMain { holder.close() } }
+    }
+
+    @Test
     fun previewAppearsBeforeDownloadAndBecomesCodeWithoutReopeningSheet() = runBlocking {
         withFilePreview { holder, transport ->
             onMain { holder.openWorkspaceFile(fileEntry(), "preview") }
@@ -214,7 +298,7 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
     }
 
     @Test
-    fun runningComposerKeepsCircularBackgroundBeforeAndAfterStopRequest() = runBlocking {
+    fun runningComposerKeepsCircularBackgroundBeforeAndAfterStopRequest() = runBlocking<Unit> {
         val transport = FakeTransport()
         val graph = AndroidAppGraph(
             application = ApplicationProvider.getApplicationContext<Application>(),
@@ -243,6 +327,16 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
                 DshTheme { ConversationScreen(holder, onPickImage = {}, onBack = {}) }
             }
             val action = compose.onNodeWithTag("composer-action")
+            val input = compose.onNodeWithTag("composer-input")
+            input.assertIsNotFocused()
+            action.assertIsDisplayed()
+            assertTrue("收起时停止按钮不能覆盖文字输入区",
+                input.fetchSemanticsNode().boundsInRoot.right < action.fetchSemanticsNode().boundsInRoot.left)
+            val compactScreenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            graph.application.cacheDir.resolve("composer-compact-stop.png").outputStream().use {
+                compactScreenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+            compactScreenshot.recycle()
             for (pending in listOf(false, true)) {
                 if (pending) {
                     action.performClick()
@@ -266,6 +360,12 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
                     image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
                 }
             }
+            assertEquals(1, transport.payloadsOfType("session-cancel").size)
+            assertEquals("stop-button", transport.payloadsOfType("session-cancel").single().getValue("sessionId").jsonPrimitive.content)
+            transport.receive("""{"kind":"sessions","items":[{"sessionId":"stop-button","updatedAt":2,"running":false,"blank":false}]}""")
+            waitUntil { !holder.showsSessionStopButton }
+            action.assertIsNotDisplayed()
+            input.assertIsNotFocused()
         } finally {
             onMain { holder.close() }
         }

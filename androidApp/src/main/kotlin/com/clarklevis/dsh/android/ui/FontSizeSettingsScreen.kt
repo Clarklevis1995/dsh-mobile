@@ -24,7 +24,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -122,10 +121,9 @@ internal fun FontSizeControls(modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(appText("跟随系统"), style = SettingsTypography.item, modifier = Modifier.weight(1f))
-            Switch(
+            DshSwitch(
                 checked = appearance.fontFollowsSystem,
                 onCheckedChange = appearance::selectFontFollowsSystem,
-                colors = dshSwitchColors(),
                 modifier = Modifier.semantics { contentDescription = appText("跟随系统字体大小") }
             )
         }

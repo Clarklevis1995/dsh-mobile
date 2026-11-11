@@ -133,7 +133,8 @@ extension InlineNode {
     case .code:
       self = .code(unsafeNode.literal ?? "")
     case .html:
-      self = .html(unsafeNode.literal ?? "")
+      let html = unsafeNode.literal ?? ""
+      self = Self.htmlImage(html) ?? .html(html)
     case .emphasis:
       self = .emphasis(children: unsafeNode.children.compactMap(InlineNode.init(unsafeNode:)))
     case .strong:
@@ -154,6 +155,47 @@ extension InlineNode {
       assertionFailure("Unhandled node type '\(unsafeNode.nodeType)' in InlineNode.")
       return nil
     }
+  }
+}
+
+// 只将 img 的 src/alt 转为原生图片节点；不执行 HTML 样式、脚本或事件属性。
+extension InlineNode {
+  private static let imageTag = try! NSRegularExpression(pattern: #"^<img\s+([\s\S]*?)\s*/?>$"#, options: .caseInsensitive)
+  private static let imageAttribute = try! NSRegularExpression(
+    pattern: #"([^\s=<>/]+)\s*=\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^\s<>]+))"#)
+  private static let htmlEntity = try! NSRegularExpression(pattern: #"&(#x[0-9a-f]+|#[0-9]+|amp|lt|gt|quot|apos);"#, options: .caseInsensitive)
+
+  fileprivate static func htmlImage(_ html: String) -> InlineNode? {
+    guard let tag = imageTag.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+      let attributesRange = Range(tag.range(at: 1), in: html) else { return nil }
+    let attributes = String(html[attributesRange])
+    var values: [String: String] = [:]
+    for match in imageAttribute.matches(in: attributes, range: NSRange(attributes.startIndex..., in: attributes)) {
+      guard let nameRange = Range(match.range(at: 1), in: attributes),
+        let valueRange = (2...4).compactMap({ Range(match.range(at: $0), in: attributes) }).first else { continue }
+      let name = attributes[nameRange].lowercased()
+      if values[name] == nil { values[name] = decodeImageAttribute(String(attributes[valueRange])) }
+    }
+    guard let source = values["src"], !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+    return .image(source: source, children: [.text(values["alt"] ?? "")])
+  }
+
+  private static func decodeImageAttribute(_ value: String) -> String {
+    var result = value
+    for match in htmlEntity.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
+      guard let tokenRange = Range(match.range(at: 1), in: value),
+        let range = Range(match.range, in: result) else { continue }
+      let token = value[tokenRange].lowercased()
+      let named = ["amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'"]
+      let replacement: String?
+      if token.hasPrefix("#") {
+        let hex = token.hasPrefix("#x")
+        replacement = UInt32(token.dropFirst(hex ? 2 : 1), radix: hex ? 16 : 10)
+          .flatMap(UnicodeScalar.init).map(String.init)
+      } else { replacement = named[token] }
+      if let replacement { result.replaceSubrange(range, with: replacement) }
+    }
+    return result
   }
 }
 

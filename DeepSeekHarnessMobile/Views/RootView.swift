@@ -6,6 +6,7 @@ import DeepSeekHarnessShared
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var hosts: MultiGatewayStore
+    @ObservedObject private var shares = IncomingShareCoordinator.shared
 
     var body: some View {
         RootNavigationHost(store: store)
@@ -15,6 +16,22 @@ struct RootView: View {
             .alert("Whaleness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
                 Button(String(localized: "好"), role: .cancel) { store.lastError = nil }
             } message: { Text(store.lastError ?? "") }
+            .task {
+                publishShareCatalog()
+                shares.refresh()
+                ConversationShareSuggestions.shared.restoreRecentConversationsIfNeeded()
+            }
+            .onReceive(store.$sessions) { _ in Task { @MainActor in publishShareCatalog() } }
+            .onReceive(store.$workspaces) { _ in Task { @MainActor in publishShareCatalog() } }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                shares.refresh()
+                ConversationShareSuggestions.shared.restoreRecentConversationsIfNeeded()
+            }
+            .onReceive(shares.$pending) { draft in
+                guard let draft, !draft.target.gatewayID.isEmpty, draft.target.gatewayID != hosts.activeID,
+                      let profile = hosts.profiles.first(where: { $0.id == draft.target.gatewayID }) else { return }
+                hosts.select(profile)
+            }
             .modifier(AppConnectionLifecycleModifier(tunnel: .shared, phaseChanged: store.handleScenePhase))
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
                 store.handleMemoryWarning()
@@ -24,6 +41,16 @@ struct RootView: View {
                       let profile = hosts.profiles.first(where: { $0.id == route.gatewayID }) else { return }
                 hosts.select(profile)
             }
+    }
+    private func publishShareCatalog() {
+        ShareInbox.setActiveGateway(store.gatewayLocalID)
+        let entries = store.sessions.filter { $0.isVisibleInHistory && !store.isSubagentSession($0.id) }.map { session in
+            let workspace = store.workspaces.first { $0.sessionIds.contains(session.id) }
+            return SharedConversation(gatewayID: store.gatewayLocalID, sessionID: session.id,
+                title: session.title, workspace: workspace.map { $0.title.isEmpty ? $0.path : $0.title } ?? "未分组",
+                workspaceID: workspace?.id)
+        }
+        ShareInbox.updateCatalog(gatewayID: store.gatewayLocalID, conversations: entries)
     }
 }
 
@@ -59,6 +86,9 @@ private struct RootNavigationHost: View, Equatable {
     /// 只有编号仍是自己的才清空 newConversationTask，避免误清掉新任务的句柄。
     @State private var conversationOperationID = UUID()
     @State private var pendingLiveActivitySessionID: String?
+    @ObservedObject private var shares = IncomingShareCoordinator.shared
+    @State private var routedShareID: UUID?
+    @State private var preparingShareID: UUID?
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.store === rhs.store
@@ -101,7 +131,8 @@ private struct RootNavigationHost: View, Equatable {
                 },
                 onScheduledTasks: {
                     navigate(to: .scheduledTasks)
-                }
+                },
+                onConnectors: { navigate(to: .connectors) }
             )
                 .navigationDestination(for: AppRoute.self) { route in
                     destination(for: route)
@@ -111,7 +142,27 @@ private struct RootNavigationHost: View, Equatable {
         .onChangeCompat(of: navigationPath) { _, path in
             if path.isEmpty { store.resumeWorkspace() }
         }
-        .onOpenURL(perform: openLiveActivityURL)
+        .onOpenURL { url in
+            if url.scheme == "dshmobile", url.host == "share" {
+                let rawID = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                    .first(where: { $0.name == "id" })?.value
+                shares.refresh(preferredID: rawID.flatMap(UUID.init(uuidString:)))
+                openSharedConversation()
+            } else { openLiveActivityURL(url) }
+        }
+        .onReceive(shares.$pending) { _ in
+            Task { @MainActor in openSharedConversation() }
+        }
+        .onReceive(store.$sessions) { _ in
+            Task { @MainActor in openSharedConversation() }
+        }
+        .onReceive(store.gateway.$state) { _ in
+            Task { @MainActor in openSharedConversation() }
+        }
+        .onReceive(store.gateway.$isReadyForSessionCreation) { _ in
+            Task { @MainActor in openSharedConversation() }
+        }
+
         .onReceive(AgentUserNotificationManager.shared.$pendingSessionRoute) { route in
             guard let route, route.gatewayID == store.gatewayLocalID else { return }
             pendingLiveActivitySessionID = route.sessionID
@@ -127,6 +178,43 @@ private struct RootNavigationHost: View, Equatable {
                 AgentUserNotificationManager.shared.clearPendingSessionRoute(route)
             }
             openLiveActivitySession(session)
+        }
+    }
+
+    private func openSharedConversation() {
+        guard let draft = shares.pending,
+              draft.target.gatewayID.isEmpty || draft.target.gatewayID == store.gatewayLocalID,
+              routedShareID != draft.id, preparingShareID != draft.id else { return }
+        if draft.createsNewConversation != true {
+            guard let session = store.sessions.first(where: { $0.id == draft.target.sessionID }) else { return }
+            routedShareID = draft.id
+            switchToSession(session)
+            return
+        }
+        // 后台 connected 可能已失效；等前台探测或新连接握手完成再创建，避免恢复连接中断创建请求。
+        // 默认工作区由网关创建会话协议决定，不受当前工作区筛选影响。
+        guard store.gateway.isReadyForSessionCreation else { return }
+        preparingShareID = draft.id
+        newConversationTask?.cancel()
+        let operationID = UUID()
+        conversationOperationID = operationID
+        newConversationTask = Task { @MainActor in
+            defer {
+                if conversationOperationID == operationID { newConversationTask = nil }
+                preparingShareID = nil
+            }
+            guard await store.prepareNewConversation(useDefaultWorkspace: true), !Task.isCancelled,
+                  let sessionID = store.selectedSessionId else { return }
+            let target = SharedConversation(gatewayID: store.gatewayLocalID, sessionID: sessionID,
+                title: "新会话", workspace: "默认工作区")
+            do { try shares.resolveNewConversation(draft, to: target) }
+            catch { store.lastError = error.localizedDescription; return }
+            routedShareID = draft.id
+            let header = ConversationNavigationHeader(sessionID: sessionID,
+                title: String(localized: "session.new.fallback", defaultValue: "新建 DeepSeek Harness"),
+                agentPresetTitle: agentPresetDisplayName(for: store.agentPresetDefault))
+            navigationPath = [.conversation(header)]
+            await store.activatePreparedConversation(sessionID: sessionID)
         }
     }
 
@@ -153,6 +241,8 @@ private struct RootNavigationHost: View, Equatable {
                 guard navigationPath.last == .settingsDetail(route) else { return }
                 navigationPath.removeLast()
             })
+        case .connectors:
+            ConnectorsView(model: store.connectors)
         case .plugins:
             PluginsView(store: store)
         case .scheduledTasks:
@@ -250,6 +340,7 @@ private struct RootNavigationHost: View, Equatable {
             },
             openPlugins: { navigate(to: .plugins) },
             openScheduledTasks: { navigate(to: .scheduledTasks) },
+            openConnectors: { navigate(to: .connectors) },
             openSettings: {
                 newConversationTask?.cancel()
                 navigate(to: .settings)
@@ -296,6 +387,7 @@ private struct RootNavigationHost: View, Equatable {
         case settingsDetail(SettingsRoute)
         case plugins
         case scheduledTasks
+        case connectors
     }
 }
 
@@ -1560,6 +1652,7 @@ private struct ConversationNavigationShell<Content: View>: View {
     let onActivate: () async -> Void
     @ViewBuilder let content: (Binding<Int>, CGFloat) -> Content
     @State private var activeView = 0
+    @State private var showsSessionStats = false
     @State private var workspaceFilesPresentation: WorkspaceFilesPresentation?
     @State private var liveTitle: String?
     @State private var livePresetTitle: String?
@@ -1668,6 +1761,9 @@ private struct ConversationNavigationShell<Content: View>: View {
                       store.conversationDirectorySessionID == sessionID else { return }
                 workspaceFilesPresentation = WorkspaceFilesPresentation(sessionID: sessionID, initialPath: path)
             }
+            .sheet(isPresented: $showsSessionStats) {
+                SessionStatsPresentation(store: store)
+            }
             .sheet(item: $workspaceFilesPresentation, onDismiss: { store.conversationDirectoryPath = nil }) { request in
                 WorkspaceFilesSheet(store: store, sessionID: request.sessionID, initialPath: request.initialPath)
             }
@@ -1738,6 +1834,18 @@ private struct ConversationNavigationShell<Content: View>: View {
                 workspaceFilesPresentation = WorkspaceFilesPresentation(sessionID: sessionID, initialPath: nil)
             }
             .disabled(header.sessionID == nil)
+            Button {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                showsSessionStats = true
+            } label: {
+                Label {
+                    Text("会话状态")
+                } icon: {
+                    Image("DshSessionStats").renderingMode(.template)
+                }
+            }
+            .disabled(header.sessionID == nil)
+            .accessibilityIdentifier("conversation-session-stats")
         } label: {
             Image(systemName: "ellipsis")
                 .resizable()
@@ -2010,6 +2118,7 @@ struct WorkspaceFilePreviewLoadingSheet: View {
             if let file = store.completedWorkspaceFile,
                file.purpose == "preview", file.sessionID == request.sessionID {
                 WorkspaceFilePreview(file: file, gatewayID: store.gatewayLocalID, onSaved: onSaved)
+                    .environment(\.workspaceMarkdownImageContext, store.markdownImageContext(sessionID: file.sessionID))
             } else {
                 VStack(spacing: 0) {
                     WorkspaceFilePreviewHeader(fileName: request.name, onClose: close, onSave: nil)
@@ -2194,7 +2303,7 @@ struct WorkspaceCodePreview: View {
     var body: some View {
         Group {
             if let document {
-                WorkspaceCodeDocumentView(document: document)
+                WorkspaceCodeDocumentView(document: document, sourcePath: file.remotePath)
             } else if let errorMessage {
                 DshEmptyState {
                     Label("无法在应用内预览", systemImage: "doc.text.magnifyingglass")
@@ -2259,6 +2368,7 @@ private struct SendableWorkspaceCodeDocument: @unchecked Sendable {
 
 private struct WorkspaceCodeDocumentView: View {
     let document: WorkspaceCodeDocument
+    let sourcePath: String
     @Environment(\.colorScheme) private var colorScheme
     @State private var previewsMarkdown = false
     @State private var hasRenderedMarkdown = false
@@ -2301,7 +2411,7 @@ private struct WorkspaceCodeDocumentView: View {
                 // 首次切换时再解析 Markdown；保留两种视图以保存各自的滚动位置。
                 if previewsMarkdown || hasRenderedMarkdown {
                     ScrollView {
-                        MarkdownContent(document.text)
+                        WorkspaceMarkdownPreview(text: document.text, sourcePath: sourcePath)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(18)
@@ -2315,6 +2425,18 @@ private struct WorkspaceCodeDocumentView: View {
                 }
             }
         }
+    }
+}
+
+/// Markdown 文件使用远端文档路径定位图片，不能使用本机预览缓存的临时目录。
+struct WorkspaceMarkdownPreview: View {
+    let text: String
+    let sourcePath: String
+    @Environment(\.workspaceMarkdownImageContext) private var workspaceImages
+
+    var body: some View {
+        MarkdownContent(text)
+            .environment(\.workspaceMarkdownImageContext, workspaceImages?.relative(to: sourcePath))
     }
 }
 

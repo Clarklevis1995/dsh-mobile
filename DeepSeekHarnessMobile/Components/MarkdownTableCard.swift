@@ -7,11 +7,13 @@ struct MarkdownTableModel {
     let cells: [[MarkdownUI.MarkdownContent]]
     let plainRows: [[String]]
     let alignments: [TextTableColumnAlignment]
+    let imageColumns: [Bool]
 
     init(content: MarkdownUI.MarkdownContent) {
         cells = content.tableCells ?? []
         plainRows = content.tablePlainTextRows
         alignments = content.tableColumnAlignments
+        imageColumns = content.tableImageColumns
     }
 
     func widths(fontSize: CGFloat, viewportWidth: CGFloat = 0) -> [CGFloat] {
@@ -20,7 +22,8 @@ struct MarkdownTableModel {
             let natural = plainRows.flatMap { row in
                 (row.indices.contains(column) ? row[column] : "").components(separatedBy: .newlines)
             }.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
-            return min(260, max(96, ceil(natural) + 24))
+            let minimum: CGFloat = imageColumns.indices.contains(column) && imageColumns[column] ? 200 : 96
+            return min(260, max(minimum, ceil(natural) + 24))
         }
         let total = naturalWidths.reduce(0, +)
         // 少列表格按原列宽比例铺满容器；宽表保持原宽度，通过横向滚动浏览。

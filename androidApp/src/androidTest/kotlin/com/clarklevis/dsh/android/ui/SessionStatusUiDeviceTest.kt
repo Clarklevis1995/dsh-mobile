@@ -18,6 +18,14 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.asAndroidPath
@@ -41,6 +49,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import java.util.Locale
+import java.io.File
 
 class SessionStatusUiDeviceTest {
     @get:Rule
@@ -57,6 +66,82 @@ class SessionStatusUiDeviceTest {
     @After
     fun restoreLocale() {
         Locale.setDefault(previousLocale)
+    }
+
+    @Test
+    fun draggingSheetKeepsItsBackgroundEdgeAndHeaderTogether() {
+        showMotionTestSheet(GatewaySessionStatsSnapshot(stats = GatewaySessionStats(turns = 10, steps = 15)))
+        val sheet = compose.onNode(hasTestTag("session-stats-sheet"))
+        val title = compose.onNode(hasText("会话状态"))
+        for ((index, distance) in listOf(-180f, 100f).withIndex()) {
+            val beforeEdge = sheetTopOnScreen("stats-$index-before.png")
+            val beforeTitle = title.fetchSemanticsNode().boundsInRoot.top
+            sheet.performTouchInput {
+                down(center)
+                moveTo(Offset(center.x, center.y + distance), delayMillis = 500)
+            }
+            try {
+                compose.waitForIdle()
+                val edgeDelta = sheetTopOnScreen("stats-$index-dragging.png") - beforeEdge
+                val titleDelta = title.fetchSemanticsNode().boundsInRoot.top - beforeTitle
+                assertEquals("背景上边缘与标题必须同步位移，不能单独拉伸顶部留白", edgeDelta.toDouble(), titleDelta.toDouble(), 3.0)
+            } finally {
+                sheet.performTouchInput { advanceEventTime(500); up() }
+                compose.waitForIdle()
+            }
+        }
+    }
+
+    @Test
+    fun overflowingStatsScrollWithoutMovingHeaderOrSheetEdge() {
+        showMotionTestSheet(GatewaySessionStatsSnapshot(
+            asOfSeq = 146,
+            stats = GatewaySessionStats(turns = 10, steps = 15),
+            tokenUsage = GatewaySessionTokenUsage(GatewaySessionTokenUsageTotals(
+                inputTokens = 10_000, outputTokens = 2_000, cacheReadTokens = 3_000,
+                cacheWriteTokens = 500, reasoningTokens = 1_000)),
+            contextPressure = GatewayContextPressure(pressureTokens = 24_300, projectedTokens = 24_400, contextWindow = 272_000)
+        ))
+        val title = compose.onNode(hasText("会话状态"))
+        val beforeTitle = title.fetchSemanticsNode().boundsInRoot.top
+        val beforeEdge = sheetTopOnScreen("stats-scroll-before.png")
+        compose.onNode(hasTestTag("session-stats-sheet")).performTouchInput { swipeUp(durationMillis = 800) }
+        compose.onNode(hasText("数据截至事件 #146")).performScrollTo().assertIsDisplayed()
+        assertEquals(beforeTitle.toDouble(), title.fetchSemanticsNode().boundsInRoot.top.toDouble(), 2.0)
+        assertEquals(beforeEdge, sheetTopOnScreen("stats-scroll-after.png"))
+    }
+
+    private fun showMotionTestSheet(snapshot: GatewaySessionStatsSnapshot) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences("session-stats-motion-test", Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        val appearance = AppearanceSettings(preferences).apply { selectInterfaceStyle(InterfaceStyle.LIGHT) }
+        compose.setContent {
+            DshTheme(appearance) {
+                Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF113344)))
+                SessionStatsSheet(snapshot, onDismiss = {})
+            }
+        }
+        compose.onNode(hasText("会话状态")).assertIsDisplayed()
+    }
+
+    /** 直接读取屏幕上的圆角背景边缘，避免只测内部内容而漏掉背景单独移动。 */
+    private fun sheetTopOnScreen(name: String): Int {
+        compose.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val image = instrumentation.uiAutomation.takeScreenshot()
+        try {
+            File(instrumentation.targetContext.getExternalFilesDir(null), name).outputStream().use {
+                image.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+            val x = image.width * 2 / 5
+            return (0 until image.height).first { y ->
+                val color = image.getPixel(x, y)
+                kotlin.math.abs(Color.red(color) - 249) <= 2 &&
+                    kotlin.math.abs(Color.green(color) - 250) <= 2 &&
+                    kotlin.math.abs(Color.blue(color) - 252) <= 2
+            }
+        } finally { image.recycle() }
     }
 
     @Test

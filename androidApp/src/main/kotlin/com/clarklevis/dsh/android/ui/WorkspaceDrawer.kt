@@ -64,6 +64,7 @@ private val drawerPageCornerRadius = 48.dp
 internal fun WorkspaceDrawer(
     onPlugins: () -> Unit,
     onScheduledTasks: () -> Unit,
+    onConnectors: () -> Unit = {},
     content: @Composable (openDrawer: () -> Unit, canScrollVertically: Boolean) -> Unit
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -167,6 +168,9 @@ internal fun WorkspaceDrawer(
                 }
                 DrawerItem(appText("定时任务"), R.drawable.ic_drawer_schedule, "drawer-scheduled-tasks") {
                     onScheduledTasks()
+                }
+                DrawerItem(appText("连接器"), R.drawable.ic_drawer_connectors, "drawer-connectors") {
+                    onConnectors()
                 }
             }
 

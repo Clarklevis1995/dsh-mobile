@@ -36,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberCompositionContext
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -46,6 +47,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -74,13 +76,14 @@ internal fun DshMarkdownTableCard(table: DshTableData, textSizeSp: Float, onOpen
         result.data?.getStringExtra(DshMarkdownTablePreviewActivity.EXTRA_OPEN_FILE)?.let { currentOpenFile?.invoke(it) }
     }
     val colors = dshDocumentColors()
+    val images = LocalDshMarkdownImages.current
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(colors.toolbar).testTag("markdown-table-card")) {
         DshTableActions(table, onExpand = {
             if (!openingPreview) scope.launch {
                 openingPreview = true
                 try {
                     val intent = withContext(Dispatchers.IO) {
-                        DshMarkdownTablePreviewActivity.createIntent(context, sourceMarkdown, tableIndex, textSizeSp)
+                        DshMarkdownTablePreviewActivity.createIntent(context, sourceMarkdown, tableIndex, textSizeSp, images)
                     }
                     preview.launch(intent)
                 } catch (error: Exception) {
@@ -248,6 +251,9 @@ private fun DshTableGrid(table: DshTableData, sizeSp: Float, onOpenFile: ((Strin
     var savedScrollX by rememberSaveable { mutableStateOf(0) }
     val currentOpen by rememberUpdatedState(onOpenFile)
     val currentMenu by rememberUpdatedState(onMessageMenu)
+    val composition = rememberCompositionContext()
+    val currentImages by rememberUpdatedState(LocalDshMarkdownImages.current)
+    val palette = dshMarkdownPalette(compact = sizeSp <= 14f)
     val outline = RoundedCornerShape(
         topStart = if (roundTopCorners) 12.dp else 0.dp,
         topEnd = if (roundTopCorners) 12.dp else 0.dp,
@@ -272,13 +278,30 @@ private fun DshTableGrid(table: DshTableData, sizeSp: Float, onOpenFile: ((Strin
                     val natural = table.rows.maxOfOrNull { row ->
                         row.getOrNull(column)?.plainText?.lineSequence()?.maxOfOrNull(paint::measureText) ?: 0f
                     } ?: 0f
-                    (natural + 24 * key.density).coerceIn(96 * key.density, 260 * key.density).toInt()
+                    val minimum = if (table.rows.any { it.getOrNull(column)?.hasImages == true }) 200 else 96
+                    (natural + 24 * key.density).coerceIn(minimum * key.density, 260 * key.density).toInt()
                 }
                 scroll.naturalColumnWidths = widths
                 table.rows.forEachIndexed { rowIndex, cells ->
                     val row = TableRow(scroll.context)
                     repeat(table.columnCount) { column ->
                         val cell = cells.getOrNull(column)
+                        if (cell?.hasImages == true) {
+                            row.addView(ComposeView(scroll.context).apply {
+                                setParentCompositionContext(composition)
+                                background = GradientDrawable().apply {
+                                    setColor(if (rowIndex == 0) key.header else if (rowIndex % 2 == 0) key.odd else key.background)
+                                    setStroke((.5f * key.density).toInt().coerceAtLeast(1), key.border)
+                                }
+                                setContent {
+                                    androidx.compose.runtime.CompositionLocalProvider(LocalDshMarkdownImages provides currentImages) {
+                                        DshRenderedMarkdownText(cell.plainText, cell.text, palette, bodySize,
+                                            3 * key.density, Modifier.fillMaxWidth().padding(12.dp), onOpenFile = currentOpen)
+                                    }
+                                }
+                            }, TableRow.LayoutParams(widths[column], -1))
+                            return@repeat
+                        }
                         row.addView(DshMarkdownTextView(scroll.context).apply {
                             setTextIsSelectable(false)
                             if (onMessageMenu == null) setOnLongClickListener(null)

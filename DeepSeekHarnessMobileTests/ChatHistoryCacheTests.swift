@@ -52,6 +52,8 @@ final class ChatHistoryCacheTests: XCTestCase {
         await store.awaitPendingKMPEventDeliveriesForTesting()
         await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "后台缓存正文")
         XCTAssertEqual(store.renderedConversationItems[session.id]?.last?.text, "后台缓存正文")
+        XCTAssertTrue(store.historyLoadingSessionIds.contains(session.id), "本地正文显示后仍保留远端快照等待")
+        XCTAssertFalse(store.isPreparingConversation(session.id), "远端未返回也不能继续挡住缓存正文")
         XCTAssertNil(store.lastError)
         await cache.close()
     }

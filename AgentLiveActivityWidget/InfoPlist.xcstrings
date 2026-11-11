@@ -17,6 +17,18 @@
           }
         }
       }
+    },
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "AgentLiveActivityWidget"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

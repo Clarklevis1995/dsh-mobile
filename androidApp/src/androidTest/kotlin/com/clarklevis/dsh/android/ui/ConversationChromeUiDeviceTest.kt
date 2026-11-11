@@ -24,10 +24,16 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.dp
+import com.clarklevis.dsh.shared.protocol.GatewaySessionStatsSnapshot
+import com.clarklevis.dsh.shared.protocol.GatewaySessionStats
+import com.clarklevis.dsh.shared.protocol.GatewaySessionTokenUsage
+import com.clarklevis.dsh.shared.protocol.GatewaySessionTokenUsageTotals
+import com.clarklevis.dsh.shared.protocol.GatewayContextPressure
 import com.clarklevis.dsh.shared.protocol.GatewayImageAttachment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -42,14 +48,51 @@ class ConversationChromeUiDeviceTest {
     val compose = createComposeRule()
 
     @Test
-    fun moreButtonOnlyShowsWorkspaceFiles() {
+    fun newWorkspacePickerListsEveryWorkspaceAndAllowsReturningToUngrouped() {
+        val workspaces = (0..19).map {
+            com.clarklevis.dsh.shared.protocol.GatewayWorkspace("w$it", "/projects/workspace-$it", "工作区 $it", emptyList(), "", "")
+        }
+        var choice: String? = null
+        compose.setContent {
+            var selected by remember { mutableStateOf<String?>(null) }
+            DshTheme {
+                NewConversationWorkspaceControl(selected, workspaces, changing = false, enabled = true) {
+                    choice = it; selected = it
+                }
+            }
+        }
+        compose.onNodeWithText("未分组").assertIsDisplayed()
+        compose.onNode(hasTestTag("new-conversation-workspace-capsule")).performClick()
+        compose.onNode(hasTestTag("new-conversation-workspace-w19")).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("w19", choice) }
+        compose.onNodeWithText("工作区 19").assertIsDisplayed()
+        compose.onNode(hasTestTag("new-conversation-workspace-capsule")).performClick()
+        compose.onNode(hasTestTag("new-conversation-workspace-ungrouped")).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(null, choice) }
+        compose.onNodeWithText("未分组").assertIsDisplayed()
+    }
+
+    @Test
+    fun moreButtonOpensWorkspaceFilesAndCompleteSessionStatus() {
         var browseCount = 0
         compose.setContent {
+            var showStats by remember { mutableStateOf(false) }
             DshTheme {
                 ConversationMoreMenu(
                     canBrowseFiles = true,
-                    onBrowseFiles = { browseCount += 1 }
+                    onBrowseFiles = { browseCount += 1 },
+                    canShowStats = true,
+                    onShowStats = { showStats = true }
                 )
+                if (showStats) SessionStatsSheet(
+                    GatewaySessionStatsSnapshot(
+                        stats = GatewaySessionStats(turns = 10, steps = 15),
+                        tokenUsage = GatewaySessionTokenUsage(
+                            GatewaySessionTokenUsageTotals(inputTokens = 24_000)
+                        ),
+                        contextPressure = GatewayContextPressure(contextWindow = 272_000)
+                    )
+                ) { showStats = false }
             }
         }
 
@@ -59,6 +102,14 @@ class ConversationChromeUiDeviceTest {
         compose.onNodeWithText("发送 Ping").assertDoesNotExist()
         compose.onNodeWithText("工作区文件").performClick()
         assertEquals(1, browseCount)
+        compose.onNode(hasContentDescription("更多")).performClick()
+        compose.onNodeWithText("会话状态").performClick()
+        compose.onNode(hasTestTag("session-stats-sheet")).assertIsDisplayed()
+        compose.onNodeWithText("执行").assertIsDisplayed()
+        compose.onNodeWithText("Token 用量").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("上下文").performScrollTo().assertIsDisplayed()
+        compose.onNode(hasTestTag("session-stats-capsule")).assertDoesNotExist()
+        compose.onNode(hasTestTag("session-stats-popover")).assertDoesNotExist()
     }
 
     @Test

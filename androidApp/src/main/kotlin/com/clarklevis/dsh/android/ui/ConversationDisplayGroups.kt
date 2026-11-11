@@ -336,8 +336,10 @@ internal fun makeConversationDisplayEntries(
                 processItems += item
             }
 
+            // 会话只展示助手正文中的图片，不额外插入工具结果图片卡片。
+            ConversationItemKind.GENERATED_IMAGES -> Unit
+
             ConversationItemKind.USER,
-            ConversationItemKind.GENERATED_IMAGES,
             ConversationItemKind.ASSISTANT,
             ConversationItemKind.SYSTEM -> {
                 flushProcess()

@@ -1,4 +1,6 @@
 import XCTest
+import SQLite3
+import CoreLocation
 import class DeepSeekHarnessShared.ScheduleTimingEditor
 import class DeepSeekHarnessShared.RtcSelectedPath
 import class DeepSeekHarnessShared.RtcPathInspector
@@ -660,6 +662,53 @@ final class SlashCommandComposerPresentationTests: XCTestCase {
 
 @MainActor
 final class CompactComposerLayoutTests: XCTestCase {
+    func testCompactStopKeepsEditorIdentityReservesSpaceAndDisappearsWhenFinished() async throws {
+        for width: CGFloat in [320, 390] {
+            let model = CompactStopComposerModel()
+            let host = UIHostingController(rootView: CompactStopComposerHarness(model: model))
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: width, height: 600)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            try await Task.sleep(for: .milliseconds(100))
+            host.view.layoutIfNeeded()
+            let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+            func find(_ id: String, in view: UIView) -> UIView? {
+                if view.accessibilityIdentifier == id { return view }
+                return view.subviews.lazy.compactMap { find(id, in: $0) }.first
+            }
+            let card = try XCTUnwrap(find("compact-stop-card", in: host.view))
+            let compactHeight = card.bounds.height
+            let stop = try XCTUnwrap(find("compact-stop-probe", in: host.view))
+            let editorFrame = editor.convert(editor.bounds, to: card)
+            let stopFrame = stop.convert(stop.bounds, to: card)
+            XCTAssertGreaterThanOrEqual(stopFrame.width, 42)
+            XCTAssertLessThan(editorFrame.maxX, stopFrame.minX, "收起时必须为停止按钮预留宽度")
+            XCTAssertFalse(editor.isFirstResponder)
+            attach(window, name: "收起输入框保留停止按钮-\(Int(width))")
+            for progress in [CGFloat(1), 0.6, 0.3, 0] {
+                model.progress = progress
+                try await Task.sleep(for: .milliseconds(50))
+                host.view.layoutIfNeeded()
+                XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+                let frame = stop.convert(stop.bounds, to: card)
+                XCTAssertGreaterThanOrEqual(frame.minY, 0)
+                XCTAssertLessThanOrEqual(frame.maxY, card.bounds.height + 0.5)
+            }
+            XCTAssertEqual(card.bounds.height, compactHeight, accuracy: 0.5)
+            model.running = false
+            try await Task.sleep(for: .milliseconds(80))
+            host.view.layoutIfNeeded()
+            XCTAssertNil(find("compact-stop-probe", in: host.view))
+            XCTAssertEqual(editor.convert(editor.bounds, to: card).width, editorFrame.width + 48, accuracy: 0.5)
+            XCTAssertEqual(card.bounds.height, compactHeight, accuracy: 0.5)
+            XCTAssertEqual(editor.text, model.draft)
+            XCTAssertFalse(editor.isFirstResponder)
+        }
+    }
+
     func testMorphIntermediateFramesResizeOuterBoundsAndKeepPlusFullyVisible() async throws {
         var heights: [CGFloat] = []
         for progress in stride(from: 0.0, through: 1.0, by: 0.1) {
@@ -799,6 +848,38 @@ final class CompactComposerLayoutTests: XCTestCase {
         let attachment = XCTAttachment(image: image)
         attachment.name = name; attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+private final class CompactStopComposerModel: ObservableObject {
+    @Published var progress: CGFloat = 0
+    @Published var running = true
+    var draft = "保留未发送草稿，收起时文字不能被停止按钮遮挡。"
+}
+
+private struct CompactStopComposerHarness: View {
+    @ObservedObject var model: CompactStopComposerModel
+    @State private var focused = false
+    var body: some View {
+        VStack {
+            ComposerMorphLayout(expansion: model.progress, keepActionWhenCollapsed: model.running) {
+                Image(systemName: "plus.circle").frame(width: 32, height: 32)
+                SlashCommandTextView(text: .constant(model.draft), presentation: nil, placeholder: "消息",
+                    isFocused: $focused, isCompact: model.progress == 0).frame(minHeight: 38)
+                Color.clear
+                ZStack {
+                    if model.running {
+                        RoundedRectangle(cornerRadius: 3).fill(.white).frame(width: 14, height: 14)
+                            .frame(width: 42, height: 42).background(DSHColor.ocean, in: Circle())
+                            .background(ComposerFrameProbe(identifier: "compact-stop-probe"))
+                    }
+                }.frame(width: 42, height: 42)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24))
+            .background(ComposerFrameProbe(identifier: "compact-stop-card"))
+            Spacer()
+        }.padding(14).transaction { $0.animation = nil }
     }
 }
 
@@ -9091,11 +9172,13 @@ private final class LocalRecoveryGateway: @unchecked Sendable {
     private let pongDelay: TimeInterval
     private let respondsToStats: Bool
     private let respondsToControls: Bool
+    private let respondsToSessionCreation: Bool
     private let subscriptionAckStartingAt: Int?
 
     init(greeting: Greeting = .hello, repliesToPing: @escaping (String) -> Bool = { _ in false },
          handshakeReceived: (() -> Void)? = nil, pongDelay: TimeInterval = 0, respondsToStats: Bool = false,
-         respondsToControls: Bool = false, subscriptionAckStartingAt: Int? = nil) throws {
+         respondsToControls: Bool = false, subscriptionAckStartingAt: Int? = nil,
+         respondsToSessionCreation: Bool = false) throws {
         listener = try NWListener(using: .tcp, on: .any)
         self.greeting = greeting
         self.repliesToPing = repliesToPing
@@ -9103,6 +9186,7 @@ private final class LocalRecoveryGateway: @unchecked Sendable {
         self.pongDelay = pongDelay
         self.respondsToStats = respondsToStats
         self.respondsToControls = respondsToControls
+        self.respondsToSessionCreation = respondsToSessionCreation
         self.subscriptionAckStartingAt = subscriptionAckStartingAt
     }
 
@@ -9189,7 +9273,10 @@ private final class LocalRecoveryGateway: @unchecked Sendable {
                 "Sec-WebSocket-Accept: \(accept)\r\n\r\n").utf8)
             switch self.greeting {
             case .hello:
-                response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true}"#.utf8))
+                let hello = self.respondsToSessionCreation
+                    ? #"{"kind":"hello","protocol":3,"authenticated":true,"capabilities":["session-create","message-quotes-v1"]}"#
+                    : #"{"kind":"hello","protocol":3,"authenticated":true}"#
+                response += self.frame(Data(hello.utf8))
             case .pairedOnly:
                 response += self.frame(Data(#"{"kind":"paired","token":"recovery-test-token"}"#.utf8))
             case .pairedThenHello:
@@ -9253,6 +9340,12 @@ private final class LocalRecoveryGateway: @unchecked Sendable {
                    let request = try? JSONSerialization.jsonObject(with: Data(payload)) as? [String: Any],
                    let type = request["type"] as? String {
                     self.requestKinds.append(type)
+                    if type == "session-create", self.respondsToSessionCreation {
+                        let reply: [String: Any] = ["kind": "session-created", "sessionId": "shared-recovery-session",
+                                                   "requestId": request["requestId"] as? String ?? ""]
+                        let data = try! JSONSerialization.data(withJSONObject: reply)
+                        connection.send(content: self.frame(data), completion: .contentProcessed { _ in })
+                    }
                     if type == "subscribe", let first = self.subscriptionAckStartingAt,
                        self.requestKinds.filter({ $0 == "subscribe" }).count >= first {
                         let reply: [String: Any] = ["kind": "subscribed", "sessionId": request["sessionId"] ?? NSNull()]
@@ -9298,6 +9391,95 @@ private final class RecoveryTestCredentials: GatewayCredentialStoring {
 }
 
 final class GatewayControlRecoveryTests: XCTestCase {
+    @MainActor
+    func testShareWaitsForForegroundProbeBeforeCreatingDefaultSession() async throws {
+        try await exerciseSharedReturn(disconnectBeforeActive: false)
+    }
+
+    @MainActor
+    func testShareOnOldBackgroundConnectionSurvivesRecoveryWithoutErrorOrDuplicateSession() async throws {
+        try await exerciseSharedReturn(disconnectBeforeActive: true)
+    }
+
+    @MainActor
+    private func exerciseSharedReturn(disconnectBeforeActive: Bool) async throws {
+        let server = try LocalRecoveryGateway(repliesToPing: { _ in true }, pongDelay: 0.3,
+                                             respondsToControls: true, subscriptionAckStartingAt: 1,
+                                             respondsToSessionCreation: true)
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials(), probeTimeout: .seconds(1))
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: endpoint, selectedWorkspaceID: nil, sessions: []),
+                             gatewayClient: gateway, gatewayLocalID: "share-recovery-test", chatHistoryCache: nil)
+        defer { store.deactivateGateway() }
+        let connected = expectation(description: "真实 WebSocket 连接")
+        let observation = gateway.$state.sink { if $0.isConnected { connected.fulfill() } }
+        gateway.connect(to: endpoint)
+        await fulfillment(of: [connected], timeout: 3)
+        observation.cancel()
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+
+        let suite = "ShareReturnTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let hosts = MultiGatewayStore(defaults: defaults, credentials: RecoveryTestCredentials())
+        await hosts.waitUntilReady()
+        defer { hosts.activeStore.deactivateGateway() }
+        let previousDirectory = ShareInbox.testDirectory
+        ShareInbox.testDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let directory = ShareInbox.testDirectory!
+        let shares = IncomingShareCoordinator.shared
+        let previousPending = shares.pending
+        shares.pending = nil
+        defer {
+            shares.pending = previousPending
+            ShareInbox.testDirectory = previousDirectory
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let host = UIHostingController(rootView: RootView().environmentObject(store).environmentObject(hosts))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        try await Task.sleep(for: .milliseconds(150))
+        store.handleScenePhase(.background)
+        let draft = SharedIncomingDraft(id: UUID(), target: SharedConversation(gatewayID: store.gatewayLocalID,
+            sessionID: "", title: "新会话", workspace: "默认工作区"), text: "微信聊天记录分享", files: [],
+            createsNewConversation: true)
+        try ShareInbox.save(draft)
+        shares.refresh(preferredID: draft.id)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertFalse(gateway.isReadyForSessionCreation)
+        XCTAssertFalse(server.receivedRequestKinds.contains("session-create"), "深链先于 active 到达时不能使用后台旧连接")
+        XCTAssertEqual(ShareInbox.pending().first?.id, draft.id)
+
+        if disconnectBeforeActive {
+            let failed = expectation(description: "后台旧连接断开")
+            let failure = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
+            server.dropConnections(nextGreeting: .hello)
+            await fulfillment(of: [failed], timeout: 3)
+            failure.cancel()
+            XCTAssertNil(store.lastError, "连接恢复不能通过创建请求间接弹出 -1005")
+        }
+        store.handleScenePhase(.active)
+        if !disconnectBeforeActive {
+            try await Task.sleep(for: .milliseconds(100))
+            XCTAssertFalse(server.receivedRequestKinds.contains("session-create"), "必须等 300ms 的前台探测完成")
+        }
+        let deadline = CACurrentMediaTime() + 5
+        while store.selectedSessionId != "shared-recovery-session", CACurrentMediaTime() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(store.selectedSessionId, "shared-recovery-session")
+        XCTAssertEqual(server.receivedRequestKinds.filter { $0 == "session-create" }.count, 1)
+        XCTAssertNil(store.lastError)
+        XCTAssertFalse(server.receivedRequestKinds.contains("message"), "分享导入不能自动发送")
+    }
+
     @MainActor
     private func fixture(pongDelay: TimeInterval = 0, respondsToStats: Bool = false) async throws ->
         (LocalRecoveryGateway, GatewayClient, AppStore) {
@@ -10713,6 +10895,91 @@ private final class MalformedHistoryEventBridge:
     }
 }
 
+final class AgentContinuedProcessingTests: XCTestCase {
+    @MainActor
+    func testOnlyForegroundUserWorkRequestsContinuedProcessing() {
+        let continued = AgentContinuedProcessingSpy()
+        let controller = AgentBackgroundExecutionController(
+            application: BackgroundTaskApplicationSpy(), continuedProcessing: continued
+        )
+        controller.begin(sessionID: "remote", startsNewTurn: false)
+        controller.updateQueuedSessions(["remote"])
+        XCTAssertEqual(continued.beginCount, 0)
+        controller.begin(sessionID: "user", startsNewTurn: true)
+        XCTAssertEqual(continued.beginCount, 1)
+        controller.applicationDidEnterBackground()
+        controller.begin(sessionID: "background", startsNewTurn: true)
+        controller.beginQuestionAnswer(rpcID: "answer", sessionID: "background")
+        XCTAssertEqual(continued.beginCount, 1)
+    }
+
+    @MainActor
+    func testFiniteAllowanceExpiryKeepsRunningContinuedTask() async {
+        let application = BackgroundTaskApplicationSpy()
+        let continued = AgentContinuedProcessingSpy()
+        let controller = AgentBackgroundExecutionController(application: application, continuedProcessing: continued)
+        controller.begin(sessionID: "s", startsNewTurn: true)
+        continued.isRunning = true
+        controller.applicationDidEnterBackground()
+        application.expirationHandler?()
+        await Task.yield()
+        XCTAssertTrue(controller.isAgentWorkActive)
+        XCTAssertTrue(controller.keepsConnectionAlive)
+        XCTAssertEqual(application.endedIdentifiers.count, 1)
+        controller.turnEnded(sessionID: "s")
+        XCTAssertFalse(controller.keepsConnectionAlive)
+        XCTAssertEqual(continued.completions, [true])
+    }
+
+    @MainActor
+    func testSystemExpiryReleasesAllLocalAllowancesWithoutRestarting() {
+        let application = BackgroundTaskApplicationSpy()
+        let continued = AgentContinuedProcessingSpy()
+        let keepAlive = AgentLongRunningKeepAliveSpy()
+        let controller = AgentBackgroundExecutionController(
+            application: application, longRunningKeepAlive: keepAlive, continuedProcessing: continued
+        )
+        var expired = 0
+        controller.onBackgroundAllowanceExpired = { expired += 1 }
+        controller.begin(sessionID: "s", startsNewTurn: true)
+        continued.isRunning = true
+        controller.applicationDidEnterBackground()
+        continued.onExpired?()
+        XCTAssertFalse(controller.isAgentWorkActive)
+        XCTAssertFalse(keepAlive.agentWorkIsActive)
+        XCTAssertFalse(controller.keepsConnectionAlive)
+        XCTAssertEqual(expired, 1)
+        XCTAssertEqual(continued.beginCount, 1)
+        XCTAssertEqual(continued.completions, [false])
+    }
+
+    @MainActor
+    func testProgressRequiresActiveSessionAndSnapshotFinishesTask() {
+        let continued = AgentContinuedProcessingSpy()
+        let controller = AgentBackgroundExecutionController(
+            application: BackgroundTaskApplicationSpy(), continuedProcessing: continued
+        )
+        controller.begin(sessionID: "s", startsNewTurn: true)
+        controller.recordProgress(sessionID: "other")
+        controller.recordProgress(sessionID: "s")
+        XCTAssertEqual(continued.progressCount, 1)
+        controller.reconcileSessions(runningBySessionID: ["s": false])
+        XCTAssertEqual(continued.completions, [true])
+    }
+}
+
+@MainActor
+private final class AgentContinuedProcessingSpy: AgentContinuedProcessing {
+    var isRunning = false
+    var onExpired: (() -> Void)?
+    var beginCount = 0
+    var progressCount = 0
+    var completions: [Bool] = []
+    func beginUserInitiatedWork() { beginCount += 1 }
+    func recordProgress() { progressCount += 1 }
+    func finish(success: Bool) { completions.append(success); isRunning = false }
+}
+
 @MainActor
 private final class BackgroundTaskApplicationSpy: BackgroundTaskApplication {
     private(set) var beginCallCount = 0
@@ -10883,6 +11150,68 @@ final class MarkdownLargeMessageTests: XCTestCase {
 }
 
 final class SessionAgentPresetProtocolTests: XCTestCase {
+    @MainActor
+    func testCatalogBrokenReasonKeepsSessionControlOperational() throws {
+        let cases: [(fields: String, expectedReason: String?)] = [
+            (#""broken":true"#, nil),
+            (#""broken":true,"brokenReason":null"#, nil),
+            (#""broken":true,"brokenReason":"缺少插件""#, "缺少插件"),
+            (#""broken":"缺少插件""#, "缺少插件")
+        ]
+        for testCase in cases {
+            let adapter = KMPSessionControlStoreAdapter()
+            let started = adapter.reduce(.requestAgentPresets(isConnected: true))
+            XCTAssertNil(started.error)
+            // 将异常预设放在第六项，覆盖截图中的 $.agentPresets[5] 路径。
+            let frame = try GatewayWireDecoder.decode(Data("""
+                {"kind":"agent-presets","presets":[
+                  {"id":"standard","isDefault":true},{"id":"preset-2"},{"id":"preset-3"},
+                  {"id":"preset-4"},{"id":"preset-5"},{"id":"custom",\(testCase.fields)}]}
+                """.utf8))
+            let presets = try XCTUnwrap(frame.presets)
+            let accepted = adapter.reduce(.action(.agentPresetsReceived(
+                presets, authorable: true, hasDocument: true
+            )))
+            XCTAssertNil(accepted.error)
+            XCTAssertTrue(accepted.applied)
+            XCTAssertTrue(adapter.isOperational)
+            XCTAssertEqual(accepted.snapshot.agentPresets, presets)
+            XCTAssertEqual(accepted.snapshot.agentPresets.last?.broken, true)
+            XCTAssertEqual(accepted.snapshot.agentPresets.last?.brokenReason, testCase.expectedReason)
+            XCTAssertFalse(accepted.snapshot.defaultConfigurationLoadingKinds.contains("agent-presets"))
+            XCTAssertNil(accepted.snapshot.requestTokens["agent-presets"])
+
+            let models = adapter.reduce(.requestModels(sessionID: "session-1", isConnected: true))
+            XCTAssertNil(models.error)
+            XCTAssertEqual(models.effects.first?.kind, "models")
+            let selected = GatewayModelSelection(provider: "provider", model: "model")
+            let refreshed = adapter.reduce(.action(.modelsReceived(
+                sessionID: "session-1", current: selected, routable: true, groups: [], isGlobalRequest: false
+            )))
+            XCTAssertNil(refreshed.error)
+            XCTAssertEqual(refreshed.snapshot.modelCatalogs["session-1"]?.current, selected)
+        }
+    }
+
+    @MainActor
+    func testCatalogPatchStillRejectsUnknownPresetFields() throws {
+        let payload = #"{"schema":2,"agentPresetsChanged":true,"agentPresets":[{"id":"custom","broken":true,"brokenReason":"缺少插件","futureAuthority":true}]}"#
+        let adapter = KMPSessionControlStoreAdapter(bridge: RawPatchSessionControlBridge(payload: payload))
+        let original = adapter.snapshot
+        let transition = adapter.reduce(.projection(.contextReceived(
+            sessionID: "session-1", asOfSequence: 1, tokenUsage: nil, pressure: nil, breakdown: nil
+        )))
+        guard case .invalidPatch(let message) = transition.error else {
+            return XCTFail("预设增加已知 brokenReason 字段后，未知字段仍须拒绝")
+        }
+        XCTAssertTrue(message.contains("futureAuthority"))
+        XCTAssertFalse(message.contains("brokenReason"))
+        XCTAssertTrue(message.contains("agentPresets[0]"))
+        XCTAssertFalse(adapter.isOperational)
+        XCTAssertEqual(transition.snapshot, original)
+        XCTAssertTrue(transition.effects.isEmpty)
+    }
+
     func testCatalogDecodesBrokenReasonAndHostVisibilitySetting() throws {
         let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"agent-presets","modeSelectionEnabled":false,"presets":[{"id":"standard","isDefault":true},{"id":"custom","name":"自定义模式","broken":"缺少插件"}]}"#.utf8))
         XCTAssertEqual(frame.modeSelectionEnabled, false)
@@ -13226,9 +13555,113 @@ final class HistoryViewportControlledPresentationTests: XCTestCase {
         XCTAssertEqual(animation.keyPath, "opacity")
         XCTAssertEqual(animation.duration, 0.18, accuracy: 0.001)
         XCTAssertEqual(fixture.list.layer.opacity, 1)
-        let offset = fixture.list.contentOffset
-        await wait { fixture.list.layer.animation(forKey: "conversation-content-reveal") == nil }
-        XCTAssertEqual(fixture.list.contentOffset.y, offset.y, accuracy: 1)
+        let source = try XCTUnwrap(fixture.list.dataSource as? UICollectionViewDiffableDataSource<Int, String>)
+        func tailBottom() throws -> CGFloat {
+            let path = try XCTUnwrap(source.indexPath(for: "controlled-89"))
+            return try XCTUnwrap(fixture.list.layoutAttributesForItem(at: path)).frame.maxY - fixture.list.contentOffset.y
+        }
+        let before = try tailBottom()
+        await wait { fixture.list.layer.animation(forKey: "conversation-content-reveal") == nil
+            && fixture.list.numberOfItems(inSection: 0) == 20 && !fixture.controller.isHistoryPresentationScheduledForTesting }
+        XCTAssertEqual(try tailBottom(), before, accuracy: 1, "补齐屏幕外历史可以改变内容offset，但不能移动屏幕内正文")
+    }
+
+    func testCachedPrependPreservesReadingWindowBeforeCompletion() async throws {
+        try await verifySyncPositionBeforeCompletion(pinned: false, remote: false)
+    }
+
+    func testCachedPrependPreservesPinnedTailBeforeCompletion() async throws {
+        try await verifySyncPositionBeforeCompletion(pinned: true, remote: false)
+    }
+
+    func testRemotePrependPreservesPinnedTailBeforeCompletion() async throws {
+        try await verifySyncPositionBeforeCompletion(pinned: true, remote: true)
+    }
+
+    func testRemoteInPlaceHeightRefreshPreservesReadingWindowBeforeCompletion() async throws {
+        try await verifySyncPositionBeforeCompletion(pinned: false, remote: true, inPlace: true)
+    }
+
+    private func verifySyncPositionBeforeCompletion(pinned: Bool, remote: Bool, inPlace: Bool = false) async throws {
+        let fixture = try await fixture()
+        defer { fixture.controller.historyDiffableCompletionGateForTesting = nil; fixture.close() }
+        if inPlace {
+            fixture.controller.configure(sessionID: "controlled", timeline: fixture.timeline, supplementalEntries: [],
+                makeEntries: { items in items.map {
+                    .init(id: $0.id, revision: $0.text.count,
+                        content: AnyView(Text($0.text).frame(height: $0.text == "height refreshed" ? 220 : 60)))
+                } }, bottomInset: 0)
+        }
+        await wait { !fixture.controller.isHistoryPresentationScheduledForTesting }
+        if !pinned {
+            fixture.controller.scrollViewWillBeginDragging(fixture.list)
+            fixture.list.setContentOffset(CGPoint(x: 0, y: 180), animated: false)
+            fixture.controller.scrollViewDidEndDragging(fixture.list, willDecelerate: false)
+            await wait { !fixture.controller.isHistoryPresentationScheduledForTesting }
+        }
+        let source = try XCTUnwrap(fixture.list.dataSource as? UICollectionViewDiffableDataSource<Int, String>)
+        let anchorID = pinned ? "controlled-59" : "controlled-44"
+        func position() throws -> CGFloat {
+            let path = try XCTUnwrap(source.indexPath(for: anchorID))
+            return try XCTUnwrap(fixture.list.layoutAttributesForItem(at: path)).frame.minY - fixture.list.contentOffset.y
+        }
+        let before = try position()
+        let entered = expectation(description: "UIKit has committed; application finalization held")
+        var release: (() -> Void)?
+        fixture.controller.historyDiffableCompletionGateForTesting = { completion in
+            fixture.controller.historyDiffableCompletionGateForTesting = nil
+            release = completion; entered.fulfill()
+        }
+        let target = inPlace ? items(40..<60).map { item in
+            item.id == "controlled-40" ? ConversationItem(id: item.id, kind: .assistant, title: "",
+                text: "height refreshed", isError: false, date: item.date) : item
+        } : items(39..<60)
+        fixture.timeline.publish(target, historyPresentationStamp: remote
+            ? .init(operationID: UUID(), projectionEpoch: 1) : nil)
+        await fulfillment(of: [entered], timeout: 5)
+        for _ in 0..<4 {
+            XCTAssertEqual(try position(), before, accuracy: 1,
+                "缓存/远端同步的每个可见帧必须保位，不能等completion再拉回")
+            await InlineImageActualTick().next()
+        }
+        try XCTUnwrap(release)()
+        await wait { !fixture.controller.isHistoryPresentationScheduledForTesting }
+        XCTAssertEqual(try position(), before, accuracy: 1)
+    }
+
+    func testContinuousRemoteEpochsKeepEveryVisibleFrameStable() async throws {
+        let fixture = try await fixture()
+        defer { fixture.close() }
+        await wait { !fixture.controller.isHistoryPresentationScheduledForTesting }
+        let source = try XCTUnwrap(fixture.list.dataSource as? UICollectionViewDiffableDataSource<Int, String>)
+        let anchorID = "controlled-59"
+        func position() throws -> CGFloat {
+            let path = try XCTUnwrap(source.indexPath(for: anchorID))
+            return try XCTUnwrap(fixture.list.layoutAttributesForItem(at: path)).frame.minY - fixture.list.contentOffset.y
+        }
+        let before = try position()
+        let operation = UUID()
+        var epoch = 0
+        var acknowledgements = [Int]()
+        fixture.controller.onHistoryPresented = { _, _, stamp in acknowledgements.append(stamp.projectionEpoch) }
+        var maximumDisplacement: CGFloat = 0
+        // 在前一批尚未补齐时连续到达更早历史和新的投影版本，不给布局“最终稳定后”才采样的机会。
+        for start in stride(from: 36, through: 0, by: -4) {
+            epoch += 1
+            fixture.timeline.publish(items(start..<60), historyPresentationStamp: .init(operationID: operation, projectionEpoch: epoch))
+            for _ in 0..<3 {
+                await InlineImageActualTick().next()
+                maximumDisplacement = max(maximumDisplacement, abs(try position() - before))
+            }
+        }
+        let deadline = CACurrentMediaTime() + 10
+        while fixture.controller.isHistoryPresentationScheduledForTesting, CACurrentMediaTime() < deadline {
+            await InlineImageActualTick().next()
+            maximumDisplacement = max(maximumDisplacement, abs(try position() - before))
+        }
+        XCTAssertEqual(fixture.list.numberOfItems(inSection: 0), 60)
+        XCTAssertEqual(acknowledgements.last, epoch)
+        XCTAssertLessThanOrEqual(maximumDisplacement, 1, "连续同步期间不能有任何一帧先跳走再恢复")
     }
 
     func testHistoryRevealsOnlyInsertedBodyAfterOperationAndStableLayout() async throws {
@@ -15082,6 +15515,155 @@ final class MarkdownCopyInteractionTests: XCTestCase {
 
 @MainActor
 final class NativeFileUploadIntegrationTests: XCTestCase {
+    func testReadyDraftReconnectUsesSameReceiptAndSubmissionWithoutUploadingAgain() async throws {
+        let controller = FileUploadController(gatewayID: "reconnect-ready-\(UUID())")
+        defer { controller.clear() }
+        let (file, bytes) = try await finishUpload(controller, sessionID: "same-session", accepted: false)
+        let draftID = try XCTUnwrap(controller.drafts.first?.id)
+        let submission = controller.submission(text: "分析这个文件", imageKey: "")
+        var requests: [String] = []
+        controller.send = { requests.append($0) }
+        controller.disconnected()
+        controller.disconnected()
+        XCTAssertFalse(controller.canSend)
+        XCTAssertEqual(controller.drafts.first?.status, "ready")
+        XCTAssertNil(controller.drafts.first?.error)
+        controller.connected(sessionID: "same-session", supported: false)
+        XCTAssertFalse(controller.canSend)
+        controller.connected(sessionID: "same-session", supported: true)
+        XCTAssertTrue(controller.canSend)
+        XCTAssertEqual(controller.receipts, ["preview-receipt"])
+        XCTAssertEqual(controller.drafts.first?.id, draftID)
+        XCTAssertEqual(controller.submission(text: "分析这个文件", imageKey: ""), submission)
+        XCTAssertTrue(requests.isEmpty, "已完成的文件不应因重连再次上传，也不能自动发送消息")
+        let preview = await controller.previewURL(for: file, sessionID: "same-session")
+        XCTAssertEqual(try Data(contentsOf: XCTUnwrap(preview)), bytes)
+    }
+
+    func testInterruptedUploadRestartsFromPrivateCopyAndIgnoresOldOpenResponse() async throws {
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent("resume-\(UUID()).zip")
+        let bytes = Data([0, 1, 2, 0, 255, 42, 128])
+        try bytes.write(to: source)
+        defer { try? FileManager.default.removeItem(at: source) }
+        let controller = FileUploadController(gatewayID: "resume-upload-\(UUID())")
+        defer { controller.clear() }
+        controller.connected(sessionID: "s1", supported: true)
+        var requests: [[String: Any]] = []
+        var oldOpenID: String?
+        var received = Data()
+        var digest = ""
+        controller.send = { payload in
+            let request = try! JSONSerialization.jsonObject(with: Data(payload.utf8)) as! [String: Any]
+            requests.append(request)
+            let id = request["requestId"] as! String
+            switch request["type"] as? String {
+            case "file-upload-open":
+                if oldOpenID == nil { oldOpenID = id; return }
+                digest = request["sha256"] as! String
+                // 旧连接迟到的 opened 不能触发读取或覆盖新 uploadId。
+                controller.accept(GatewayFrame(kind: "file-upload-opened", sessionId: "s1", requestId: oldOpenID,
+                    uploadId: "old-upload", size: Int64(bytes.count), chunkBytes: 3))
+                controller.accept(GatewayFrame(kind: "file-upload-opened", sessionId: "s1", requestId: id,
+                    uploadId: "new-upload", size: Int64(bytes.count), chunkBytes: 3))
+            case "file-upload-chunk":
+                XCTAssertEqual(request["uploadId"] as? String, "new-upload")
+                XCTAssertEqual(request["offset"] as? Int, received.count)
+                received.append(Data(base64Encoded: request["data"] as! String)!)
+                controller.accept(GatewayFrame(kind: "file-upload-chunk-accepted", sessionId: "s1", requestId: id,
+                    uploadId: "new-upload", nextOffset: Int64(received.count)))
+            case "file-upload-finish":
+                controller.accept(GatewayFrame(kind: "file-upload-completed", sessionId: "s1", requestId: id,
+                    uploadId: "new-upload", receiptId: "resumed-receipt",
+                    file: PresentedFile(attachmentId: "resumed-file", name: "聊天记录.zip", bytes: Int64(bytes.count)), sha256: digest))
+            default: break
+            }
+        }
+        await controller.importFiles([source])
+        let draftID = try XCTUnwrap(controller.drafts.first?.id)
+        try FileManager.default.removeItem(at: source)
+        controller.disconnected()
+        XCTAssertEqual(controller.drafts.first?.status, "waiting")
+        controller.connected(sessionID: "s1", supported: true)
+        for _ in 0..<100 where !controller.canSend { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertTrue(controller.canSend)
+        XCTAssertEqual(controller.receipts, ["resumed-receipt"])
+        XCTAssertEqual(controller.drafts.first?.id, draftID)
+        XCTAssertEqual(received, bytes)
+        XCTAssertEqual(requests.filter { $0["type"] as? String == "file-upload-open" }.count, 2)
+        XCTAssertTrue(requests.allSatisfy { ($0["type"] as? String)?.hasPrefix("file-upload-") == true })
+    }
+
+    func testExpiredReceiptAutomaticallyReuploadsAndPreservesNewAttachmentLocalReference() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("renew-receipt-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controller = FileUploadController(gatewayID: "renew-host", localFilesRoot: root)
+        defer { controller.clear() }
+        let (_, bytes) = try await finishUpload(controller, sessionID: "s1", accepted: false)
+        let draft = try XCTUnwrap(controller.drafts.first)
+        let renewed = PresentedFile(attachmentId: "renewed-attachment", name: draft.name, bytes: Int64(bytes.count))
+        var types: [String] = []
+        controller.send = { payload in
+            let request = try! JSONSerialization.jsonObject(with: Data(payload.utf8)) as! [String: Any]
+            let id = request["requestId"] as! String
+            let type = request["type"] as! String
+            types.append(type)
+            switch type {
+            case "file-upload-open":
+                controller.accept(GatewayFrame(kind: "file-upload-opened", sessionId: "s1", requestId: id,
+                    uploadId: "renewed-upload", size: Int64(bytes.count), chunkBytes: 1024))
+            case "file-upload-chunk":
+                XCTAssertEqual(Data(base64Encoded: request["data"] as! String), bytes)
+                controller.accept(GatewayFrame(kind: "file-upload-chunk-accepted", sessionId: "s1", requestId: id,
+                    uploadId: "renewed-upload", nextOffset: Int64(bytes.count)))
+            case "file-upload-finish":
+                controller.accept(GatewayFrame(kind: "file-upload-completed", sessionId: "s1", requestId: id,
+                    uploadId: "renewed-upload", receiptId: "renewed-receipt", file: renewed, sha256: draft.sha256))
+            default: break
+            }
+        }
+        controller.invalidReceipts()
+        for _ in 0..<100 where !controller.canSend { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertTrue(controller.canSend)
+        XCTAssertEqual(controller.receipts, ["renewed-receipt"])
+        XCTAssertEqual(types, ["file-upload-open", "file-upload-chunk", "file-upload-finish"])
+        controller.accepted([draft.id])
+        let reopened = FileUploadController(gatewayID: "renew-host", localFilesRoot: root)
+        let preview = await reopened.previewURL(for: renewed, sessionID: "s1")
+        XCTAssertEqual(try Data(contentsOf: XCTUnwrap(preview)), bytes, "新附件 ID 必须有持久本地引用")
+    }
+
+    func testWorkspaceReplacementRetainsLocalFileAndUploadsNewSessionReceipt() async throws {
+        let controller = FileUploadController(gatewayID: "workspace-draft-test")
+        let (_, bytes) = try await finishUpload(controller, sessionID: "old", accepted: false)
+        defer { controller.clear() }
+        let draft = try XCTUnwrap(controller.drafts.first)
+        var uploadTargets = [String]()
+        controller.send = { payload in
+            let request = try! JSONSerialization.jsonObject(with: Data(payload.utf8)) as! [String: Any]
+            let id = request["requestId"] as! String
+            switch request["type"] as? String {
+            case "file-upload-open":
+                uploadTargets.append(request["sessionId"] as! String)
+                controller.accept(GatewayFrame(kind: "file-upload-opened", sessionId: "new", requestId: id,
+                    uploadId: "new-upload", size: Int64(bytes.count), chunkBytes: 1024))
+            case "file-upload-chunk":
+                XCTAssertEqual(Data(base64Encoded: request["data"] as! String), bytes)
+                controller.accept(GatewayFrame(kind: "file-upload-chunk-accepted", sessionId: "new", requestId: id,
+                    uploadId: "new-upload", nextOffset: Int64(bytes.count)))
+            case "file-upload-finish":
+                controller.accept(GatewayFrame(kind: "file-upload-completed", sessionId: "new", requestId: id,
+                    uploadId: "new-upload", receiptId: "new-receipt",
+                    file: PresentedFile(attachmentId: "new-file", name: draft.name, bytes: Int64(bytes.count)), sha256: draft.sha256))
+            default: break
+            }
+        }
+        controller.retargetDraft(sessionID: "new")
+        for _ in 0..<100 where !controller.canSend { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertTrue(controller.canSend)
+        XCTAssertEqual(uploadTargets, ["new"])
+        XCTAssertEqual(controller.receipts, ["new-receipt"])
+        XCTAssertEqual(controller.drafts.first?.id, draft.id)
+    }
     private func finishUpload(_ controller: FileUploadController, sessionID: String, accepted: Bool = true) async throws -> (PresentedFile, Data) {
         let bytes = Data("本机已发送附件预览".utf8)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("upload-source-\(UUID())")
@@ -15255,7 +15837,8 @@ final class NativeFileUploadIntegrationTests: XCTestCase {
         connectTransport()
         hello(["images", "file-upload-v1"])
         XCTAssertTrue(store.fileUploads.supported, "重连后必须恢复网关声明的上传能力")
-        XCTAssertEqual(store.fileUploads.drafts.first?.status, "error", "旧传输必须保持失效，不能跨连接继续")
+        XCTAssertEqual(store.fileUploads.drafts.first?.status, "opening", "旧传输失效后应自动重新打开上传")
+        XCTAssertEqual(requests.filter { $0["type"] as? String == "file-upload-open" }.count, 2)
 
         hello(["images"])
         XCTAssertFalse(store.fileUploads.supported, "未公布上传能力的网关仍应禁用文件入口")
@@ -15487,6 +16070,250 @@ final class MarkdownTableRenderingTests: XCTestCase {
     private let source = "| 编号 | 任务名称 | 负责人 | 部门 | 优先级 | 开始日期 | 截止日期 | 状态 | 交付物 | 备注 |\n"
         + "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
         + "| 001 | **新版官网首页改版** | 王晓明 | 设计部 | 高 | 2026-10-21 | 2026-11-05 | 进行中 | `design.pdf` | 需确认动效成本、支持深色模式 |"
+
+    func testMarkdownFileImagePathsResolveRelativeToDocumentDirectory() async throws {
+        var paths: [String] = []
+        let context = WorkspaceMarkdownImageContext(id: "gateway:session") { path in
+            paths.append(path)
+            return Data()
+        }
+        for (document, source, expected) in [
+            ("habitflow/README.md", "screenshots/en/01-today.png", "habitflow/screenshots/en/01-today.png"),
+            ("habitflow/docs/README.md", "../screenshots/en/01-today.png", "habitflow/screenshots/en/01-today.png"),
+            ("README.md", "./screenshots/today.png", "screenshots/today.png"),
+            ("/workspace/habitflow/README.md", "screenshots/today.png", "/workspace/habitflow/screenshots/today.png"),
+            ("habitflow/README.md", "/workspace/shared/today.png", "/workspace/shared/today.png")
+        ] {
+            _ = try await context.relative(to: document).load(source)
+            XCTAssertEqual(paths.last, expected)
+        }
+        let count = paths.count
+        do {
+            _ = try await context.relative(to: "README.md").load("../outside.png")
+            XCTFail("越出工作区的相对路径不能发送给加载器")
+        } catch let error as URLError { XCTAssertEqual(error.code, .badURL) }
+        XCTAssertEqual(paths.count, count)
+        XCTAssertNotEqual(context.relative(to: "a/README.md").id, context.relative(to: "b/README.md").id)
+    }
+
+    func testMarkdownFilePreviewLoadsParagraphAndTableImagesFromRemoteDocumentDirectory() async throws {
+        let png = try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: 40, height: 80)).image { context in
+            UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 40, height: 80))
+        }.pngData())
+        var loaded: [String] = []
+        let context = WorkspaceMarkdownImageContext(id: "gateway:session") { path in
+            loaded.append(path)
+            try await Task.sleep(for: .milliseconds(50))
+            return png
+        }
+        let source = "![Today](screenshots/en/01-today.png)\n\n| Focus |\n| --- |\n| ![Focus](screenshots/en/02-focus.png) |"
+        let host = UIHostingController(rootView: WorkspaceMarkdownPreview(text: source, sourcePath: "habitflow/README.md")
+            .environment(\.workspaceMarkdownImageContext, context).frame(width: 360))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        try await Task.sleep(for: .milliseconds(400))
+        host.view.layoutIfNeeded()
+        XCTAssertEqual(Set(loaded), ["habitflow/screenshots/en/01-today.png", "habitflow/screenshots/en/02-focus.png"])
+        XCTAssertGreaterThan(host.sizeThatFits(in: CGSize(width: 360, height: 2000)).height, 700,
+                             "正文和表格中的图片加载后都应占据实际高度")
+    }
+
+    func testTableImagePreviewAssetPreservesOriginalPNGAndJPEGForDownload() async throws {
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 80)).image { context in
+            UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 40, height: 80))
+        }
+        let png = try XCTUnwrap(image.pngData())
+        let jpeg = try XCTUnwrap(image.jpegData(compressionQuality: 0.8))
+        for (data, expectedType, name) in [(png, UTType.png, "01-today.png"), (jpeg, UTType.jpeg, "01-today.jpeg")] {
+            let asset = try MarkdownImageAsset(data: data, url: URL(string: "habitflow/screenshots/en/01-today.png")!)
+            XCTAssertEqual(asset.data, data, "下载应保留原图字节")
+            XCTAssertEqual(asset.contentType, expectedType, "以真实图像格式为准")
+            XCTAssertEqual(asset.name, name)
+            XCTAssertEqual(asset.attachment.width, Int(image.size.width * image.scale))
+            XCTAssertEqual(asset.attachment.height, Int(image.size.height * image.scale))
+            XCTAssertEqual(asset.attachment.bytes, data.count)
+            XCTAssertEqual(asset.attachment.mediaType, expectedType.preferredMIMEType)
+        }
+        let context = WorkspaceMarkdownImageContext(id: "gateway:session") { path in
+            XCTAssertEqual(path, "habitflow/screenshots/en/01-today.png")
+            return png
+        }
+        let asset = try await MarkdownImageAsset.load(url: URL(string: "habitflow/screenshots/en/01-today.png")!, workspace: context)
+        XCTAssertEqual(asset.data, png)
+        XCTAssertThrowsError(try MarkdownImageAsset(data: Data("not an image".utf8), url: URL(string: "bad.png")!))
+        do {
+            _ = try await MarkdownImageAsset.load(url: URL(string: "ftp://example.com/image.png")!, workspace: nil)
+            XCTFail("不支持的协议不能交给网络加载器")
+        } catch let error as URLError { XCTAssertEqual(error.code, .unsupportedURL) }
+    }
+
+    func testRelativeScreenshotLoadsThroughWorkspaceProtocolAndKeepsSessionIsolation() async throws {
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 80)).image { context in
+            UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 40, height: 80))
+        }
+        let png = try XCTUnwrap(image.pngData())
+        let digest = SHA256.hash(data: png).map { String(format: "%02x", $0) }.joined()
+        let loader = WorkspaceMarkdownImageLoader()
+        defer { loader.send = nil; loader.cancelAll() }
+        var requests: [[String: Any]] = []
+        var sessions: [String: String] = [:]
+        var paths: [String: String] = [:]
+        loader.send = { payload in
+            let request = try! JSONSerialization.jsonObject(with: Data(payload.utf8)) as! [String: Any]
+            requests.append(request)
+            Task { @MainActor in
+                await Task.yield()
+                let type = request["type"] as? String ?? ""
+                var response: [String: Any] = [:]
+                switch type {
+                case "file-resolve":
+                    response = ["kind": "file-resolved", "requestId": request["requestId"]!,
+                        "sessionId": request["sessionId"]!, "path": request["path"]!,
+                        "name": "01-today.png", "size": png.count, "mediaType": "image/png"]
+                case "file-download-open":
+                    let transfer = UUID().uuidString
+                    sessions[transfer] = request["sessionId"] as? String
+                    paths[transfer] = request["path"] as? String
+                    response = ["kind": "file-download-opened", "requestId": request["requestId"]!,
+                        "sessionId": request["sessionId"]!, "path": request["path"]!,
+                        "transferId": transfer, "name": "01-today.png", "size": png.count,
+                        "mediaType": "image/png", "chunkBytes": 65536]
+                case "file-download-read":
+                    response = ["kind": "file-download-chunk", "transferId": request["transferId"]!,
+                        "offset": 0, "data": png.base64EncodedString(), "eof": true, "sha256": digest]
+                default: return
+                }
+                let data = try! JSONSerialization.data(withJSONObject: response)
+                XCTAssertTrue(loader.accept(try! GatewayWireDecoder.decode(data)))
+            }
+        }
+        let path = "habitflow/screenshots/en/01-today.png"
+        async let first = loader.load(sessionID: "child", workspaceSessionID: "lead", path: path, supportsResolve: true)
+        async let duplicate = loader.load(sessionID: "child", workspaceSessionID: "lead", path: path, supportsResolve: true)
+        let (one, two) = try await (first, duplicate)
+        XCTAssertEqual(one, png)
+        XCTAssertEqual(two, png)
+        XCTAssertEqual(requests.filter { $0["type"] as? String == "file-download-open" }.count, 1)
+        XCTAssertEqual(Set(sessions.values), ["lead"], "子会话图片应从团队工作区读取")
+        XCTAssertEqual(Set(paths.values), [path])
+        let count = requests.count
+        let cached = try await loader.load(sessionID: "child", workspaceSessionID: "lead", path: path, supportsResolve: true)
+        XCTAssertEqual(cached, png)
+        XCTAssertEqual(requests.count, count)
+        _ = try await loader.load(sessionID: "other", workspaceSessionID: "other", path: path, supportsResolve: true)
+        XCTAssertEqual(Set(sessions.values), ["lead", "other"], "同路径不能跨会话复用缓存")
+    }
+
+    func testWorkspaceScreenshotFailureCanRetryAndIgnoresUnrelatedFileResponses() async throws {
+        let loader = WorkspaceMarkdownImageLoader()
+        var requests: [[String: Any]] = []
+        loader.send = { payload in
+            requests.append(try! JSONSerialization.jsonObject(with: Data(payload.utf8)) as! [String: Any])
+        }
+        defer { loader.cancelAll() }
+        let first = Task { try await loader.load(sessionID: "s", workspaceSessionID: "s", path: "missing.png", supportsResolve: true) }
+        while requests.isEmpty { await Task.yield() }
+        let id = try XCTUnwrap(requests.first?["requestId"] as? String)
+        XCTAssertFalse(loader.accept(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"error","requestType":"file-resolve","requestId":"unrelated","message":"missing"}"#.utf8))))
+        let error = ["kind": "error", "requestType": "file-resolve", "requestId": id, "message": "missing"]
+        XCTAssertTrue(loader.accept(try GatewayWireDecoder.decode(JSONSerialization.data(withJSONObject: error))))
+        do { _ = try await first.value; XCTFail("找不到文件时必须返回错误") } catch { }
+        let retry = Task { try await loader.load(sessionID: "s", workspaceSessionID: "s", path: "missing.png", supportsResolve: true) }
+        while requests.count < 2 { await Task.yield() }
+        loader.cancelAll()
+        do { _ = try await retry.value; XCTFail("断开连接必须结束等待") } catch is CancellationError { }
+    }
+
+    func testOriginalRelativeScreenshotTableRendersAfterAsynchronousLoad() async throws {
+        let source = "| Today (en) | Stats (en) | Focus (en) |\n| :---: | :---: | :---: |\n"
+            + "| ![Today](habitflow/screenshots/en/01-today.png) | ![Stats](habitflow/screenshots/en/03-stats.png) | ![Focus](habitflow/screenshots/en/02-focus.png) |"
+        let png = try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: 40, height: 80)).image { context in
+            UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 40, height: 80))
+        }.pngData())
+        var loaded: [String] = []
+        let context = WorkspaceMarkdownImageContext(id: "gateway:session") { path in
+            loaded.append(path)
+            try await Task.sleep(for: .milliseconds(100))
+            return png
+        }
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        for fullscreen in [false, true] {
+            let view = Group {
+                if fullscreen { MarkdownTablePage(model: MarkdownTableModel(content: MarkdownUI.MarkdownContent(source)), fontSize: 17) }
+                else { MarkdownTableCard(content: MarkdownUI.MarkdownContent(source), fontSize: 17) }
+            }.markdownImageProvider(MathMarkdownImageProvider(fontSize: 17, workspace: context)).frame(width: 360)
+            let host = UIHostingController(rootView: view)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            try await Task.sleep(for: .milliseconds(400))
+            host.view.layoutIfNeeded()
+            func scrolls(_ view: UIView) -> [UIScrollView] {
+                ((view as? UIScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrolls)
+            }
+            let horizontal = try XCTUnwrap(scrolls(host.view).first { $0.contentSize.width >= 599 })
+            XCTAssertGreaterThan(horizontal.contentSize.height, 350, "异步加载后，图片行高度必须更新")
+        }
+        XCTAssertEqual(Set(loaded), ["habitflow/screenshots/en/01-today.png", "habitflow/screenshots/en/03-stats.png", "habitflow/screenshots/en/02-focus.png"])
+        XCTAssertNil(WorkspaceMarkdownImageContext.path(for: URL(string: "https://example.com/image.png")!))
+    }
+
+    func testHTMLAndMarkdownScreenshotsArePreservedInTableCells() throws {
+        let source = """
+            | Today (en) | Stats (en) | Focus (en) |
+            | --- | --- | --- |
+            | <img width="240" src="https://example.com/today.png?a=1&amp;b=2" alt="今日&#x622a;图"> | <IMG ALT='统计' SRC='https://example.com/stats.png' /> | ![专注](https://example.com/focus.png) |
+            """
+        let content = PreparedMarkdownCache.document(for: source, filePaths: [])
+        let cells = try XCTUnwrap(content.tableCells)
+        XCTAssertTrue(cells[1][0].renderHTML().contains("<img src=\"https://example.com/today.png?a=1&amp;b=2\""))
+        XCTAssertTrue(cells[1][1].renderHTML().contains("<img src=\"https://example.com/stats.png\""))
+        XCTAssertTrue(cells[1][2].renderHTML().contains("<img src=\"https://example.com/focus.png\""))
+        XCTAssertEqual(content.tablePlainTextRows[1], ["今日截图", "统计", "专注"])
+        XCTAssertEqual(content.tableImageColumns, [true, true, true])
+        XCTAssertTrue(MarkdownTableModel(content: content).widths(fontSize: 17).allSatisfy { $0 >= 200 })
+        let escaped = MarkdownUI.MarkdownContent("| 示例 |\n| --- |\n| `<img src=\"code.png\">` |")
+        XCTAssertEqual(escaped.tableImageColumns, [false], "代码里的 HTML 必须保持字面文本")
+        XCTAssertEqual(MarkdownUI.MarkdownContent("| 公式 |\n| --- |\n| ![](dsh-math://inline/eA) |")
+            .tableImageColumns, [false])
+    }
+
+    private struct ScreenshotImageProvider: ImageProvider {
+        func makeImage(url: URL?) -> some View {
+            Rectangle().fill(Color.red).aspectRatio(0.5, contentMode: .fit)
+                .accessibilityIdentifier("table-screenshot")
+        }
+    }
+
+    func testScreenshotTableReservesVisibleImageHeightInCardAndFullscreen() async throws {
+        let content = MarkdownUI.MarkdownContent("| Today | Stats | Focus |\n| --- | --- | --- |\n"
+            + "| <img src='https://example.com/today.png' width='240'> | ![](https://example.com/stats.png) | <img src='https://example.com/focus.png'> |")
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        defer { window.isHidden = true; window.rootViewController = nil }
+        for fullscreen in [false, true] {
+            let view = Group {
+                if fullscreen { MarkdownTablePage(model: MarkdownTableModel(content: content), fontSize: 17) }
+                else { MarkdownTableCard(content: content, fontSize: 17) }
+            }.markdownImageProvider(ScreenshotImageProvider()).frame(width: 360)
+            let host = UIHostingController(rootView: view)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            try await Task.sleep(for: .milliseconds(200))
+            host.view.layoutIfNeeded()
+            func scrolls(_ view: UIView) -> [UIScrollView] {
+                ((view as? UIScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrolls)
+            }
+            let horizontal = try XCTUnwrap(scrolls(host.view).first { $0.contentSize.width >= 599 })
+            XCTAssertGreaterThan(horizontal.contentSize.height, 350, "截图行必须有实际图片高度")
+            XCTAssertLessThanOrEqual(horizontal.bounds.width, 360)
+        }
+    }
 
     func testParsedTableExportsOnlyCellTextAndUsesReadableColumnWidths() throws {
         let content = MarkdownUI.MarkdownContent(source)
@@ -16033,21 +16860,121 @@ final class GatewayRtcLoggingTests: XCTestCase {
 }
 
 final class GeneratedToolImageTests: XCTestCase {
-    func testZoomPersistsAndBoundsPanningThenDoubleTapRestoresFit() {
-        let viewport = CGSize(width: 400, height: 800)
-        let image = CGSize(width: 1000, height: 1000)
-        var transform = ImagePreviewTransform()
-        transform.zoom(to: 2, viewport: viewport, image: image)
-        XCTAssertEqual(transform.scale, 2)
-        XCTAssertEqual(transform.bounded(CGSize(width: 900, height: 900), viewport: viewport, image: image),
-                       CGSize(width: 200, height: 0))
-        transform.zoom(to: 3, viewport: viewport, image: image, anchor: CGPoint(x: 100, y: 300))
-        XCTAssertEqual(transform.scale, 3)
-        XCTAssertEqual(transform.offset, CGSize(width: 50, height: 50))
-        transform.zoom(to: 1, viewport: viewport, image: image)
-        XCTAssertEqual(transform, ImagePreviewTransform())
-        transform.zoom(to: 100, viewport: viewport, image: image)
-        XCTAssertEqual(transform.scale, 5)
+    func testAttachmentPlaceholderDimensionsMatchAndroid() {
+        XCTAssertEqual(ConversationAttachmentLayout.size(sourceWidth: 1600, sourceHeight: 800, availableWidth: 390),
+                       CGSize(width: 320, height: 160))
+        XCTAssertEqual(ConversationAttachmentLayout.size(sourceWidth: 800, sourceHeight: 3200, availableWidth: 390),
+                       CGSize(width: 80, height: 320))
+        XCTAssertEqual(ConversationAttachmentLayout.size(sourceWidth: 1600, sourceHeight: 800, availableWidth: 120),
+                       CGSize(width: 120, height: 60))
+        XCTAssertEqual(ConversationAttachmentLayout.size(sourceWidth: 40, sourceHeight: 20, availableWidth: 390),
+                       CGSize(width: 40, height: 20))
+    }
+
+    @MainActor
+    func testMixedImageGridKeepsHeightAcrossLoadingAndFailure() async throws {
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 20)).image { _ in }.pngData()!
+        let images = [(1600, 800), (800, 3200), (800, 800)].enumerated().map { index, size in
+            GatewayImageAttachment(attachmentId: "stable-\(index)", mediaType: "image/png", bytes: data.count,
+                                   width: size.0, height: size.1)
+        }
+        let item = ConversationItem(id: "stable-grid", kind: .generatedImages, title: "", text: "", images: images,
+                                    isError: false, date: .now)
+        func content(loaded: Bool, failed: Bool) -> ConversationRow {
+            ConversationRow(item: item, showsCopyButton: false, imageData: { _ in loaded ? data : nil },
+                            imageError: { _ in failed ? "加载失败" : nil })
+        }
+        let host = UIHostingController(rootView: content(loaded: false, failed: false))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 300, height: 800))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil }
+        let proposal = CGSize(width: 300, height: CGFloat.greatestFiniteMagnitude)
+        let initial = host.sizeThatFits(in: proposal)
+        XCTAssertGreaterThan(initial.height, 320)
+        for (loaded, failed) in [(true, false), (false, true), (false, false)] {
+            host.rootView = content(loaded: loaded, failed: failed)
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(100))
+            XCTAssertEqual(host.sizeThatFits(in: proposal).height, initial.height, accuracy: 0.5)
+        }
+    }
+
+    @MainActor
+    func testMarkdownBodyImageClipsVisibleCorners() async throws {
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 200, height: 200)).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 200, height: 200))
+        }
+        let data = try XCTUnwrap(image.pngData())
+        let context = WorkspaceMarkdownImageContext(id: "rounded-body") { _ in data }
+        let host = UIHostingController(rootView: MathMarkdownImageProvider(fontSize: 16, workspace: context)
+            .makeImage(url: URL(string: "/workspace/rounded.png"))
+            .frame(width: 200, height: 200).background(Color.white))
+        host.safeAreaRegions = []
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 200, height: 200))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil }
+        host.view.frame = window.bounds
+        try await Task.sleep(for: .milliseconds(300))
+        host.view.layoutIfNeeded()
+        let rendered = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            host.view.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let cgImage = try XCTUnwrap(rendered.cgImage)
+        var pixels = [UInt8](repeating: 0, count: cgImage.width * cgImage.height * 4)
+        let canvas = try XCTUnwrap(CGContext(data: &pixels, width: cgImage.width, height: cgImage.height,
+            bitsPerComponent: 8, bytesPerRow: cgImage.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        canvas.draw(cgImage, in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
+        func red(_ x: Int, _ y: Int) -> Bool {
+            let offset = (y * cgImage.width + x) * 4
+            return pixels[offset] > 200 && pixels[offset + 1] < 50 && pixels[offset + 2] < 50
+        }
+        XCTAssertTrue(red(cgImage.width / 2, cgImage.height / 2), "必须确认正文图片已加载")
+        XCTAssertFalse(red(1, 1), "应裁切图片本身左上角")
+        XCTAssertFalse(red(cgImage.width - 2, cgImage.height - 2), "应裁切图片本身右下角")
+    }
+
+    @MainActor
+    func testNativePreviewFitsImageAndPansImmediatelyWhileZoomed() throws {
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 400)).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 200, height: 400))
+            UIColor.blue.setFill()
+            context.fill(CGRect(x: 200, y: 0, width: 200, height: 400))
+        }
+        let preview = AttachmentZoomScrollView()
+        preview.frame = CGRect(x: 0, y: 0, width: 300, height: 600)
+        let container = UIView(frame: preview.frame)
+        container.addSubview(preview)
+        preview.display(image)
+        preview.layoutIfNeeded()
+        XCTAssertEqual(preview.previewImageView.bounds.size, CGSize(width: 300, height: 300))
+        XCTAssertEqual(preview.contentInset.top, 150)
+        XCTAssertFalse(preview.panGestureRecognizer.isEnabled, "原始比例下应允许外层翻页")
+        XCTAssertTrue(preview.previewImageView.clipsToBounds)
+        XCTAssertEqual(preview.previewImageView.layer.cornerRadius, 12)
+
+        preview.toggleZoom(at: CGPoint(x: 150, y: 150), animated: false)
+        preview.layoutIfNeeded()
+        XCTAssertEqual(preview.zoomScale, 3, accuracy: 0.01)
+        XCTAssertTrue(preview.panGestureRecognizer.isEnabled, "双击放大后由原生 pan 接管拖动")
+        let before = preview.previewImageView.convert(CGPoint.zero, to: container)
+        let oldOffset = preview.contentOffset
+        preview.setContentOffset(CGPoint(x: oldOffset.x + 40, y: oldOffset.y + 30), animated: false)
+        let after = preview.previewImageView.convert(CGPoint.zero, to: container)
+        XCTAssertEqual(after.x - before.x, -40, accuracy: 0.5, "位移应立即反映到图像坐标，不等待抬手")
+        XCTAssertEqual(after.y - before.y, -30, accuracy: 0.5)
+        preview.resetZoom()
+        preview.layoutIfNeeded()
+        XCTAssertEqual(preview.zoomScale, 1)
+        XCTAssertFalse(preview.panGestureRecognizer.isEnabled)
+        preview.frame.size = CGSize(width: 600, height: 300)
+        preview.layoutIfNeeded()
+        XCTAssertEqual(preview.previewImageView.bounds.size, CGSize(width: 300, height: 300))
+        XCTAssertEqual(preview.contentInset.left, 150)
     }
 
     @MainActor
@@ -16099,16 +17026,26 @@ final class GeneratedToolImageTests: XCTestCase {
         XCTAssertFalse(isRed(maxX, maxY))
     }
 
-    func testGeneratedImagesRemainOutsideToolProcess() {
+    func testOnlyAssistantBodyImagesRemainWhileUserUploadsAndToolDetailsArePreserved() {
         let image = GatewayImageAttachment(attachmentId: "generated", mediaType: "image/png", bytes: 100, width: 1536, height: 1024)
+        let body = "已生成。\n\n![风景](/workspace/image.png)"
         let items = [
+            ConversationItem(id: "user", kind: .user, title: "", text: "", images: [image], isError: false, date: .now),
             ConversationItem(id: "tool", kind: .tool, title: "generate", text: "", isError: false, date: .now),
-            ConversationItem(id: "image", kind: .generatedImages, title: "", text: "", images: [image], isError: false, date: .now)
+            ConversationItem(id: "image", kind: .generatedImages, title: "", text: "", images: [image], isError: false, date: .now),
+            ConversationItem(id: "result", kind: .toolResult, title: "", text: "done", isError: false, date: .now),
+            ConversationItem(id: "reply", kind: .assistant, title: "", text: body, isError: false, date: .now)
         ]
         let entries = ConversationDisplayEntry.make(from: items)
-        XCTAssertEqual(entries.count, 2)
-        guard case .message(let item) = entries.last?.content else { return XCTFail("图片被折叠") }
-        XCTAssertEqual(item.images, [image])
+        XCTAssertEqual(entries.count, 3)
+        guard case .message(let user) = entries.first?.content,
+              case .process(let process) = entries[1].content,
+              case .message(let reply) = entries.last?.content else { return XCTFail("消息分组错误") }
+        XCTAssertEqual(user.images, [image])
+        XCTAssertEqual(process.items.map(\.id), ["tool", "result"])
+        XCTAssertEqual(reply.text, body)
+        XCTAssertEqual(reply.kind, .assistant)
+        XCTAssertTrue(ConversationDisplayEntry.make(from: [items[2]]).isEmpty)
     }
 
     private let imageJSON = #"{"attachmentId":"generated","mediaType":"image/png","bytes":100,"width":1536,"height":1024}"#
@@ -16555,5 +17492,1387 @@ final class ScheduleTimingEditorTests: XCTestCase {
             attachment.lifetime = .keepAlways
             add(attachment)
         }
+    }
+}
+
+@MainActor
+final class MarkdownImageLoadingTests: XCTestCase {
+    func testKnownImageDimensionsReserveFinalHeightBeforeLoadingAndAfterRemount() async throws {
+        for size in [CGSize(width: 400, height: 200), CGSize(width: 200, height: 400)] {
+            let data = try XCTUnwrap(UIGraphicsImageRenderer(size: size).image { _ in }.pngData())
+            var loads = 0
+            let dimensions = GatewayImageDimensions(width: Int(size.width), height: Int(size.height))
+            let context = WorkspaceMarkdownImageContext(id: UUID().uuidString, dimensions: { _ in dimensions }) { _ in
+                loads += 1
+                try await Task.sleep(for: .milliseconds(80))
+                return data
+            }
+            let url = try XCTUnwrap(URL(string: "/workspace/image.png"))
+            let key = MarkdownImageRenderCache.key(url: url, context: context)
+            func host() -> UIHostingController<some View> {
+                let host = UIHostingController(rootView: MathMarkdownImageProvider(fontSize: 16, workspace: context)
+                    .makeImage(url: url).frame(width: 160))
+                // 与会话单元格的真实 hosting 环境一致，不把窗口安全区算进图片高度。
+                host.safeAreaRegions = []
+                return host
+            }
+            let first = host()
+            let proposal = CGSize(width: 160, height: CGFloat.greatestFiniteMagnitude)
+            let expected = 160 * size.height / size.width
+            XCTAssertEqual(first.sizeThatFits(in: proposal).height, expected, accuracy: 0.5,
+                           "未下载前的首轮测量就应使用最终比例")
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 160, height: 800))
+            window.rootViewController = first
+            window.isHidden = false
+            defer { window.isHidden = true; window.rootViewController = nil }
+            let deadline = ProcessInfo.processInfo.systemUptime + 2
+            while MarkdownImageRenderCache.shared.cached(key) == nil && ProcessInfo.processInfo.systemUptime < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertNotNil(MarkdownImageRenderCache.shared.cached(key))
+            first.view.layoutIfNeeded()
+            XCTAssertEqual(first.sizeThatFits(in: proposal).height, expected, accuracy: 0.5)
+            let second = host()
+            XCTAssertEqual(second.sizeThatFits(in: proposal).height, expected, accuracy: 0.5)
+            window.rootViewController = second
+            try await Task.sleep(for: .milliseconds(150))
+            XCTAssertEqual(loads, 1, "重新进入视口不能再次加载和解码")
+        }
+    }
+
+    func testConcurrentLoadsCoalesceAndThumbnailIsBoundedWithoutChangingExportBytes() async throws {
+        let data = try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: 2000, height: 1000)).image { _ in }.pngData())
+        let cache = MarkdownImageRenderCache()
+        var loads = 0
+        let context = WorkspaceMarkdownImageContext(id: UUID().uuidString) { _ in
+            loads += 1
+            try await Task.sleep(for: .milliseconds(80))
+            return data
+        }
+        let url = try XCTUnwrap(URL(string: "/workspace/large.png"))
+        async let first = cache.load(url: url, context: context)
+        async let second = cache.load(url: url, context: context)
+        let (a, b) = try await (first, second)
+        XCTAssertTrue(a === b)
+        XCTAssertEqual(loads, 1)
+        XCTAssertEqual(a.asset.data, data, "导出和全屏预览仍保留原始字节")
+        XCTAssertLessThanOrEqual(max(a.image.size.width, a.image.size.height), 1200)
+        XCTAssertEqual(cache.dimensions(MarkdownImageRenderCache.key(url: url, context: context)),
+                       GatewayImageDimensions(width: a.asset.attachment.width, height: a.asset.attachment.height))
+    }
+
+    func testGeneratedImageMetadataMapsExactPathsAndRelativeDocumentDimensions() throws {
+        let json = #"{"type":"tool/result","seq":1,"time":1,"data":{"meta":{"kind":"dsh-image-gen-batch","images":[{"kind":"dsh-image-gen","savedTo":"/workspace/output/image.png","attachment":{"attachmentId":"one","mediaType":"image/png","bytes":100,"width":1600,"height":900}}]}}}"#
+        let raw = try JSONDecoder().decode(RawSessionEvent.self, from: Data(json.utf8))
+        let refs = markdownGeneratedImageReferences(in: [raw.normalized(sessionId: "s")])
+        XCTAssertEqual(refs["/workspace/output/image.png"]?.width, 1600)
+        XCTAssertNil(refs["/other/image.png"], "不能通过同名文件猜测路径")
+        let context = WorkspaceMarkdownImageContext(id: "g:s", dimensions: { path in
+            refs[path].map { GatewayImageDimensions(width: $0.width, height: $0.height) }
+        }) { _ in Data() }
+        XCTAssertEqual(context.relative(to: "/workspace/README.md").dimensions("output/image.png"),
+                       GatewayImageDimensions(width: 1600, height: 900))
+    }
+}
+
+@MainActor
+final class ConversationInitialPresentationTests: XCTestCase {
+    func testVisibleTailStaysPinnedDuringNavigationGeometryChangesBeforeNextFrame() async throws {
+        ConversationViewportController.clearReusableHeights()
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in }, onBottomAlignmentCompleted: {}, onApproachingTop: {})
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = controller; window.makeKeyAndVisible()
+        defer {
+            controller.detachHistoryPresentationConsumer()
+            window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible()
+            ConversationViewportController.clearReusableHeights()
+        }
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 760)
+        controller.view.layoutIfNeeded()
+        func findList(_ view: UIView) -> UICollectionView? {
+            if let list = view as? UICollectionView { return list }
+            return view.subviews.lazy.compactMap { findList($0) }.first
+        }
+        let list = try XCTUnwrap(findList(controller.view))
+        controller.configure(sessionID: "navigation-geometry", timeline: timeline, supplementalEntries: [],
+            makeEntries: { items in items.map { item in
+                .init(id: item.id, revision: 1, content: AnyView(Text(item.text).frame(height: 140)))
+            } }, bottomInset: 100)
+        timeline.publish((0..<30).map { .init(id: "navigation-\($0)", kind: .assistant, title: "",
+            text: "正文 \($0)", isError: false, date: .now) })
+        let deadline = CACurrentMediaTime() + 5
+        while (controller.isInitialContentRevealPendingForTesting || controller.isHistoryPresentationScheduledForTesting)
+            && CACurrentMediaTime() < deadline { await InlineImageActualTick().next() }
+        XCTAssertFalse(controller.isInitialContentRevealPendingForTesting)
+        func bottomError() -> CGFloat {
+            let target = max(-list.adjustedContentInset.top,
+                list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)
+            return abs(list.contentOffset.y - target)
+        }
+        for height: CGFloat in [680, 720, 760, 700, 760] {
+            controller.view.frame.size.height = height
+            controller.view.setNeedsLayout(); controller.view.layoutIfNeeded()
+            XCTAssertLessThanOrEqual(bottomError(), 0.5, "布局完成时就必须贴底，不能下一帧再拉回")
+            await InlineImageActualTick().next()
+            XCTAssertLessThanOrEqual(bottomError(), 0.5, "导航尺寸变化的每一帧都必须贴底")
+        }
+        // 模拟 UIKit 在快照/安全区协调期间写入旧 offset，不应被误判成阅读手势。
+        list.contentOffset.y -= 600
+        controller.scrollViewDidScroll(list)
+        list.setNeedsLayout(); list.layoutIfNeeded()
+        XCTAssertLessThanOrEqual(bottomError(), 0.5, "系统临时偏移不能取消贴底意图")
+        list.contentInset.bottom += 30
+        list.setNeedsLayout(); list.layoutIfNeeded()
+        XCTAssertLessThanOrEqual(bottomError(), 0.5, "仅 inset 改变也应在绘制前贴底")
+        controller.scrollViewWillBeginDragging(list)
+        list.contentOffset.y -= 90
+        controller.scrollViewDidScroll(list)
+        let readingOffset = list.contentOffset.y
+        list.setNeedsLayout(); list.layoutIfNeeded()
+        XCTAssertEqual(list.contentOffset.y, readingOffset, accuracy: 0.5, "手势开始后不能继续抢回底部")
+        controller.scrollViewDidEndDragging(list, willDecelerate: false)
+    }
+
+    func testShortCachedConversationArrivingBeforeWidthBecomesReadable() async throws {
+        try await verifyShortConversationBeforeWidth(remote: false)
+    }
+
+    func testShortRemoteConversationArrivingBeforeWidthBecomesReadable() async throws {
+        try await verifyShortConversationBeforeWidth(remote: true)
+    }
+
+    private func verifyShortConversationBeforeWidth(remote: Bool) async throws {
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in }, onBottomAlignmentCompleted: {}, onApproachingTop: {})
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = controller; window.makeKeyAndVisible()
+        defer {
+            controller.detachHistoryPresentationConsumer()
+            window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible()
+        }
+        controller.view.frame = .zero; controller.view.layoutIfNeeded()
+        let ready = expectation(description: "short history must leave the preparation queue")
+        var didBecomeReadable = false
+        controller.onContentAvailabilityChanged = { _, content in
+            guard content, !didBecomeReadable else { return }
+            didBecomeReadable = true; ready.fulfill()
+        }
+        let stamp = HistoryPresentationStamp(operationID: UUID(), projectionEpoch: 1)
+        var acknowledged = false
+        controller.onHistoryPresented = { _, _, actual in
+            XCTAssertEqual(actual, stamp)
+            XCTAssertTrue(didBecomeReadable)
+            acknowledged = true
+        }
+        controller.configure(sessionID: "short-before-width", timeline: timeline, supplementalEntries: [],
+            makeEntries: { items in items.map {
+                .init(id: $0.id, revision: 1, content: AnyView(Text($0.text).frame(height: 60)))
+            } }, bottomInset: 100)
+        timeline.publish((0..<2).map { .init(id: "short-\($0)", kind: .assistant, title: "",
+            text: "正文 \($0)", isError: false, date: .now) }, historyPresentationStamp: remote ? stamp : nil)
+        controller.view.frame = window.bounds; controller.view.layoutIfNeeded()
+        await fulfillment(of: [ready], timeout: 2)
+        XCTAssertFalse(controller.isInitialContentRevealPendingForTesting)
+        let deadline = CACurrentMediaTime() + 2
+        while controller.isHistoryPresentationScheduledForTesting, CACurrentMediaTime() < deadline {
+            await InlineImageActualTick().next()
+        }
+        XCTAssertFalse(controller.isHistoryPresentationScheduledForTesting, "不能在首屏入口和等待队列之间永久循环")
+        XCTAssertEqual(acknowledged, remote)
+    }
+
+    final class Measurements { var ids = Set<Int>() }
+    struct MeasuredBody: Layout {
+        let id: Int
+        let measurements: Measurements
+        func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+            measurements.ids.insert(id)
+            return subviews.first?.sizeThatFits(proposal) ?? .zero
+        }
+        func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+            subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
+        }
+    }
+    func testColdCacheShowsBoundedFirstScreenThenFillsHistoryWithoutMovingVisibleTail() async throws {
+        try await verifyFirstScreen(delayedWidth: false, remote: false)
+    }
+    func testCacheArrivingBeforeViewportWidthStillUsesBoundedFirstScreen() async throws {
+        try await verifyFirstScreen(delayedWidth: true, remote: true)
+    }
+    func testInitialBackfillResumesAtNewReadingPositionAfterDrag() async throws {
+        try await verifyFirstScreen(delayedWidth: false, remote: false, interruptWithDrag: true)
+    }
+    func testImmediateDragBuffersRemoteUpdatesThroughDecelerationThenKeepsNewReadingPosition() async throws {
+        try await verifyFirstScreen(delayedWidth: false, remote: true, interruptWithDrag: true,
+                                    remoteUpdatesDuringGesture: true)
+    }
+    private func verifyFirstScreen(delayedWidth: Bool, remote: Bool, interruptWithDrag: Bool = false,
+                                   remoteUpdatesDuringGesture: Bool = false) async throws {
+        ConversationViewportController.clearReusableHeights()
+        defer { ConversationViewportController.clearReusableHeights() }
+        let measurements = Measurements()
+        let items = (0..<80).map { index in
+            ConversationItem(id: "first-screen-\(index)", kind: .assistant, title: "", text: "正文 \(index)", isError: false, date: .now)
+        }
+        let rows = items.enumerated().map { index, item in
+            ConversationViewportEntry(id: item.id, revision: 1, content: AnyView(
+                MeasuredBody(id: index, measurements: measurements) { Text(item.text).frame(height: 140) }))
+        }
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in }, onBottomAlignmentCompleted: {}, onApproachingTop: {})
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 760)
+        window.rootViewController = controller; window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        controller.view.frame = window.bounds; controller.view.layoutIfNeeded()
+        func list(_ view: UIView) -> UICollectionView? {
+            if let view = view as? UICollectionView { return view }
+            return view.subviews.lazy.compactMap { list($0) }.first
+        }
+        let collection = try XCTUnwrap(list(controller.view))
+        let ready = expectation(description: "local first screen readable")
+        var measuredAtReveal = 0
+        var tailY: CGFloat?
+        var backfillCommits = 0
+        let stamp = HistoryPresentationStamp(operationID: UUID(), projectionEpoch: 1)
+        var expectedStamp = stamp
+        var acknowledged = false
+        controller.onHistoryPresented = { _, _, received in
+            XCTAssertEqual(received, expectedStamp)
+            XCTAssertEqual(collection.numberOfItems(inSection: 0), 80, "尾部首屏不能提前确认整段历史完成")
+            acknowledged = true
+        }
+        controller.onContentAvailabilityChanged = { _, content in
+            guard content, tailY == nil else { return }
+            XCTAssertFalse(acknowledged)
+            measuredAtReveal = measurements.ids.count
+            let path = IndexPath(item: collection.numberOfItems(inSection: 0) - 1, section: 0)
+            tailY = collection.layoutAttributesForItem(at: path).map { $0.frame.maxY - collection.contentOffset.y }
+            controller.historyDiffableCompletionGateForTesting = { completion in
+                backfillCommits += 1
+                completion()
+            }
+            ready.fulfill()
+        }
+        if delayedWidth {
+            controller.view.frame = .zero
+            controller.view.layoutIfNeeded()
+        }
+        controller.configure(sessionID: "cold-local", timeline: timeline, supplementalEntries: [],
+            makeEntries: { $0.isEmpty ? [] : rows }, bottomInset: 100)
+        // 模拟导航先于磁盘缓存到达；不提供任何远端同步响应。
+        timeline.publish(items, historyPresentationStamp: remote ? stamp : nil)
+        if delayedWidth {
+            controller.view.frame = window.bounds
+            controller.view.layoutIfNeeded()
+        }
+        await fulfillment(of: [ready], timeout: 3)
+        XCTAssertGreaterThan(measuredAtReveal, 0)
+        XCTAssertLessThanOrEqual(measuredAtReveal, 12, "首屏前不能测量整段80行历史")
+        XCTAssertFalse(collection.isHidden)
+        if interruptWithDrag {
+            let initialRows = collection.numberOfItems(inSection: 0)
+            controller.scrollViewWillBeginDragging(collection)
+            let measuredBeforeGesture = measurements.ids
+            collection.setContentOffset(CGPoint(x: 0, y: collection.contentOffset.y - 60), animated: false)
+            controller.scrollViewDidScroll(collection)
+            if remoteUpdatesDuringGesture {
+                // 手指移动以及抬手后的减速阶段都有新远端版本到达。
+                // 每帧只允许用户的位移，不得后台测量/提交后抢回位置。
+                for epoch in 2...7 {
+                    if epoch == 5 { controller.scrollViewDidEndDragging(collection, willDecelerate: true) }
+                    expectedStamp = .init(operationID: stamp.operationID, projectionEpoch: epoch)
+                    timeline.publish(items, historyPresentationStamp: expectedStamp)
+                    collection.setContentOffset(CGPoint(x: 0, y: collection.contentOffset.y - 10), animated: false)
+                    controller.scrollViewDidScroll(collection)
+                    let userOffset = collection.contentOffset.y
+                    await InlineImageActualTick().next()
+                    XCTAssertEqual(collection.contentOffset.y, userOffset, accuracy: 0.5)
+                    XCTAssertEqual(measurements.ids, measuredBeforeGesture, "拖动和减速期间不能进行屏幕外预测量")
+                    XCTAssertEqual(collection.numberOfItems(inSection: 0), initialRows)
+                    XCTAssertFalse(acknowledged, "缓冲远端版本不能提前确认已展示")
+                }
+            } else {
+                await InlineImageActualTick().next(); await InlineImageActualTick().next()
+            }
+            XCTAssertEqual(collection.numberOfItems(inSection: 0), initialRows, "手势期间不提交补齐目标")
+            let path = IndexPath(item: initialRows - 1, section: 0)
+            tailY = collection.layoutAttributesForItem(at: path).map { $0.frame.maxY - collection.contentOffset.y }
+            if remoteUpdatesDuringGesture { controller.scrollViewDidEndDecelerating(collection) }
+            else { controller.scrollViewDidEndDragging(collection, willDecelerate: false) }
+        }
+        let deadline = CACurrentMediaTime() + 10
+        var maximumTailDisplacement: CGFloat = 0
+        var sampledFrames = 0
+        while (collection.numberOfItems(inSection: 0) != 80 || controller.isHistoryPresentationScheduledForTesting)
+            && CACurrentMediaTime() < deadline {
+            await InlineImageActualTick().next()
+            let path = IndexPath(item: collection.numberOfItems(inSection: 0) - 1, section: 0)
+            if let frame = collection.layoutAttributesForItem(at: path)?.frame, let tailY {
+                maximumTailDisplacement = max(maximumTailDisplacement, abs(frame.maxY - collection.contentOffset.y - tailY))
+                sampledFrames += 1
+            }
+        }
+        XCTAssertGreaterThan(sampledFrames, 0)
+        XCTAssertLessThanOrEqual(maximumTailDisplacement, 1, "整个增量加载过程中每帧都必须保位，而非最终拉回原位")
+        XCTAssertEqual(collection.numberOfItems(inSection: 0), 80)
+        XCTAssertEqual(backfillCommits, 1, "初始尾窗外的历史只提交一次，不能每测量一行就重布局整个列表")
+        XCTAssertEqual(acknowledged, remote)
+        let finalPath = IndexPath(item: 79, section: 0)
+        let finalY = try XCTUnwrap(collection.layoutAttributesForItem(at: finalPath)).frame.maxY - collection.contentOffset.y
+        XCTAssertEqual(finalY, try XCTUnwrap(tailY), accuracy: 1)
+        XCTAssertTrue(measurements.ids.contains(0), "屏幕外历史最终必须补齐")
+    }
+}
+
+@MainActor
+final class NewConversationWorkspaceTests: XCTestCase {
+    final class Requests {
+        var payloads: [[String: Any]] = []
+        var creates = 0
+        var holdCreation = false
+        var failCreation = false
+        var release: (() -> Void)?
+    }
+
+    private func fixture(selection: String) async throws -> (AppStore, GatewayClient, Requests) {
+        let gateway = GatewayClient()
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+            selectedWorkspaceID: selection, sessions: []), gatewayClient: gateway, chatHistoryCache: nil)
+        let requests = Requests()
+        gateway.installConnectedTransportForTesting { text in
+            guard let payload = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else { return }
+            requests.payloads.append(payload)
+            if payload["type"] as? String == "session-create", let requestID = payload["requestId"] as? String {
+                requests.creates += 1
+                let sessionID = "draft-\(requests.creates)"
+                let reply = {
+                    if requests.failCreation {
+                        let data = try! JSONSerialization.data(withJSONObject: ["kind": "error", "requestType": "session-create",
+                            "requestId": requestID, "message": "创建失败"])
+                        _ = gateway.acceptSessionCreationFrame(try! GatewayWireDecoder.decode(data))
+                        return
+                    }
+                    _ = gateway.acceptSessionCreationFrame(GatewayFrame(kind: "session-created", sessionId: sessionID, requestId: requestID))
+                }
+                if requests.holdCreation { requests.release = reply }
+                else { Task { @MainActor in reply() } }
+            }
+        }
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"hello","protocol":3,"capabilities":["session-create"]}"#.utf8)))
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"workspaces","items":[{"workspaceId":"a","title":"工作区 A","path":"/a","sessionIds":[],"createdAt":"","updatedAt":""},{"workspaceId":"b","title":"工作区 B","path":"/b","sessionIds":[],"createdAt":"","updatedAt":""}]}"#.utf8)))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        if selection == AppStore.allWorkspacesID { store.selectAllWorkspaces() }
+        else if selection == AppStore.ungroupedWorkspaceID { store.selectUngroupedWorkspace() }
+        else { store.selectWorkspace(try XCTUnwrap(store.workspaces.first { $0.id == selection })) }
+        return (store, gateway, requests)
+    }
+
+    func testInitialWorkspaceFollowsSpecificScopeAndAllSessionsStartsUngrouped() async throws {
+        for selection in ["a", AppStore.allWorkspacesID, AppStore.ungroupedWorkspaceID] {
+            let (store, _, requests) = try await fixture(selection: selection)
+            defer { store.disconnect() }
+            let prepared = await store.prepareNewConversation()
+            XCTAssertTrue(prepared)
+            XCTAssertTrue(store.showsNewConversationWorkspace)
+            XCTAssertEqual(store.newConversationWorkspace.workspaceId, selection == "a" ? "a" : nil)
+            XCTAssertEqual(requests.payloads.first { $0["type"] as? String == "session-create" }?["workspaceId"] as? String,
+                           selection == "a" ? "a" : nil)
+        }
+    }
+
+    func testFinalWorkspaceOwnsFirstMessageAndSelectionDoesNotChangeHomeScope() async throws {
+        let (store, _, requests) = try await fixture(selection: AppStore.allWorkspacesID)
+        defer { store.disconnect() }
+        let prepared = await store.prepareNewConversation()
+            XCTAssertTrue(prepared)
+        await store.selectNewConversationWorkspace("b")
+        XCTAssertEqual(store.selectedSessionId, "draft-2")
+        XCTAssertEqual(store.newConversationWorkspace.workspaceId, "b")
+        XCTAssertTrue(store.isDraftWorkspaceReplacement(from: "draft-1", to: "draft-2"))
+        XCTAssertTrue(store.isAllWorkspacesSelected)
+        XCTAssertEqual(requests.payloads.filter { $0["type"] as? String == "session-create" }.last?["workspaceId"] as? String, "b")
+        XCTAssertTrue(store.send("第一条指令"))
+        let deadline = CACurrentMediaTime() + 2
+        while !requests.payloads.contains(where: { $0["type"] as? String == "message" }), CACurrentMediaTime() < deadline {
+            await Task.yield()
+        }
+        XCTAssertEqual(requests.payloads.first { $0["type"] as? String == "message" }?["sessionId"] as? String, "draft-2")
+        XCTAssertFalse(store.showsNewConversationWorkspace)
+        await store.selectNewConversationWorkspace("a")
+        XCTAssertEqual(requests.creates, 2, "首次指令发送后不能再改会话归属")
+    }
+
+    func testWorkspaceSwitchPreservesVisibleComposerDraft() async throws {
+        let (store, _, _) = try await fixture(selection: AppStore.allWorkspacesID)
+        defer { store.disconnect() }
+        let prepared = await store.prepareNewConversation()
+        XCTAssertTrue(prepared)
+        let host = UIHostingController(rootView: ConversationView(activeView: .constant(0), initialDraft: "保留这份待发送草稿")
+            .environmentObject(store).environment(\.locale, Locale(identifier: "zh_Hans")))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = host; window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        host.view.frame = window.bounds; host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(100))
+        func input(_ view: UIView) -> UITextView? {
+            if let field = view as? UITextView, field.accessibilityIdentifier == "composer-input" { return field }
+            return view.subviews.lazy.compactMap(input).first
+        }
+        XCTAssertEqual(try XCTUnwrap(input(host.view)).text, "保留这份待发送草稿")
+        await store.selectNewConversationWorkspace("b")
+        try await Task.sleep(for: .milliseconds(100))
+        host.view.layoutIfNeeded()
+        XCTAssertEqual(try XCTUnwrap(input(host.view)).text, "保留这份待发送草稿")
+        let screenshot = XCTAttachment(image: UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        })
+        screenshot.name = "新建会话工作区选择与草稿保留"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testSendWaitsForWorkspaceSwitchAndFailurePreservesOriginalChoice() async throws {
+        let (store, _, requests) = try await fixture(selection: "a")
+        defer { store.disconnect() }
+        let prepared = await store.prepareNewConversation()
+            XCTAssertTrue(prepared)
+        requests.holdCreation = true
+        let switching = Task { await store.selectNewConversationWorkspace("b") }
+        let deadline = CACurrentMediaTime() + 2
+        while requests.release == nil, CACurrentMediaTime() < deadline { await Task.yield() }
+        XCTAssertTrue(store.isChangingNewConversationWorkspace)
+        XCTAssertFalse(store.send("不能发送到旧工作区"))
+        XCTAssertEqual(store.newConversationWorkspace.workspaceId, "a")
+        try XCTUnwrap(requests.release)()
+        await switching.value
+        XCTAssertFalse(store.isChangingNewConversationWorkspace)
+        XCTAssertEqual(store.newConversationWorkspace.workspaceId, "b")
+        requests.holdCreation = false
+        requests.failCreation = true
+        await store.selectNewConversationWorkspace(nil)
+        XCTAssertEqual(store.newConversationWorkspace.workspaceId, "b")
+        XCTAssertEqual(store.selectedSessionId, "draft-2")
+    }
+}
+
+@MainActor
+final class PhoneConnectorRegistrationTests: XCTestCase {
+    @MainActor
+    private final class Fixture {
+        let host = "registration-snapshot-\(UUID().uuidString)"
+        let statusWait: Duration
+        var frames: [[String: Any]] = []
+        lazy var model = IOSDeviceConnectors(hostID: host, registrationWait: .seconds(1), statusWait: statusWait) { [weak self] raw in
+            if let frame = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] { self?.frames.append(frame) }
+        }
+        init(statusWait: Duration = .milliseconds(30)) {
+            self.statusWait = statusWait
+            UserDefaults.standard.set(["music": true], forKey: "phone-connectors.v1.\(host)")
+        }
+        func close() { model.disconnected(); UserDefaults.standard.removeObject(forKey: "phone-connectors.v1.\(host)") }
+        func receive(_ frame: [String: Any]) throws {
+            model.receive(String(decoding: try JSONSerialization.data(withJSONObject: frame), as: UTF8.self))
+        }
+        func acknowledge(modules: [[String: Any]]? = nil, legacy: Bool = false) throws {
+            let request = try XCTUnwrap(frames.last { $0["type"] as? String == "device-tools-register" })
+            var ack: [String: Any] = ["kind": "device-tools-registered", "version": 1, "requestId": request["requestId"]!, "capabilityRevision": request["capabilityRevision"]!, "connectionLeaseId": "lease", "permissionSync": true, "permissions": ["music": true]]
+            if !legacy {
+                ack["statusQuery"] = true
+                ack["modules"] = modules ?? [["id": "music", "enabled": true, "available": true, "tools": ["music.state", "music.library"]]]
+            }
+            try receive(ack)
+        }
+        func status(_ status: String = "registered", lease: String = "lease") throws {
+            let request = try XCTUnwrap(frames.last { $0["type"] as? String == "device-tools-status" })
+            let registration = try XCTUnwrap(frames.last { $0["type"] as? String == "device-tools-register" })
+            try receive(["kind": "device-tools-status", "version": 1, "requestId": request["requestId"]!, "status": status,
+                         "connectionLeaseId": lease, "capabilityRevision": registration["capabilityRevision"]!, "permissions": ["music": true],
+                         "modules": [["id": "music", "enabled": true, "available": true, "tools": ["music.library"]]]])
+        }
+    }
+    func testOnlyGatewayAcceptedToolsAreShownAndPermissionsStaySeparate() throws {
+        let f = Fixture(); defer { f.close() }
+        XCTAssertEqual(f.model.registrationState, .disconnected)
+        f.model.connected(["device-tools-v1"])
+        XCTAssertEqual(f.model.registrationState, .registering)
+        XCTAssertTrue(f.model.registeredModules.isEmpty)
+        try f.acknowledge()
+        XCTAssertEqual(f.model.registrationState, .registered)
+        XCTAssertEqual(f.model.registeredModules.first?.tools, ["music.state", "music.library"])
+        XCTAssertEqual(f.model.registeredToolCount, 2, "不可把手机声明的所有工具当作网关已接受的能力")
+        XCTAssertNotNil(f.model.registrationConfirmedAt)
+        XCTAssertTrue(f.model.isRegisteredModuleAllowed(try XCTUnwrap(f.model.registeredModules.first)))
+        try f.receive(["kind": "device-tools-permissions", "version": 1, "connectionLeaseId": "lease", "permissions": ["music": false]])
+        XCTAssertFalse(f.model.isRegisteredModuleAllowed(try XCTUnwrap(f.model.registeredModules.first)))
+        XCTAssertEqual(f.model.registeredToolCount, 2, "撤销授权不等于移除登记")
+        f.model.disconnected()
+        XCTAssertEqual(f.model.registrationState, .disconnected)
+        XCTAssertTrue(f.model.registeredModules.isEmpty)
+        XCTAssertNil(f.model.registrationConfirmedAt)
+    }
+    func testStatusRefreshIsReadOnlyAndRejectsStaleLeaseReplies() throws {
+        let f = Fixture(); defer { f.close() }
+        f.model.connected(["device-tools-v1"]); try f.acknowledge()
+        let previous = f.frames.count
+        f.model.refreshRegistrationStatus(); f.model.refreshRegistrationStatus()
+        XCTAssertEqual(f.frames.count, previous + 1)
+        XCTAssertEqual(f.frames.last?["type"] as? String, "device-tools-status")
+        XCTAssertNil(f.frames.last?["permissionChanges"])
+        XCTAssertTrue(f.model.checkingRegistration)
+        try f.status(lease: "old-lease")
+        XCTAssertTrue(f.model.checkingRegistration)
+        XCTAssertEqual(f.model.registeredToolCount, 2)
+        try f.status()
+        XCTAssertFalse(f.model.checkingRegistration)
+        XCTAssertEqual(f.model.registrationState, .registered)
+        XCTAssertEqual(f.model.registeredToolCount, 1)
+        f.model.refreshRegistrationStatus(); try f.status("not-registered")
+        XCTAssertEqual(f.model.registrationState, .notRegistered)
+        XCTAssertTrue(f.model.registeredModules.isEmpty)
+        XCTAssertEqual(f.model.permissions["music"], true)
+        f.model.retryRegistration()
+        XCTAssertEqual(f.model.registrationState, .registering)
+        XCTAssertNil(f.frames.last?["permissionChanges"], "重新登记不恢复被撤销的授权")
+        try f.status()
+        XCTAssertEqual(f.model.registrationState, .registering, "旧状态查询不能覆盖新一轮注册")
+    }
+    func testLegacyGatewayAndInvalidSnapshotsNeverShowFalseRegistrationSuccess() throws {
+        let f = Fixture(); defer { f.close() }
+        f.model.connected(["device-tools-v1"]); try f.acknowledge(legacy: true)
+        XCTAssertEqual(f.model.registrationState, .unverified)
+        XCTAssertFalse(f.model.canCheckRegistration)
+        let count = f.frames.count; f.model.refreshRegistrationStatus()
+        XCTAssertEqual(f.frames.count, count)
+        XCTAssertTrue(f.model.registeredModules.isEmpty)
+        f.model.connected(["device-tools-v1"])
+        try f.acknowledge(modules: [["id": "music", "enabled": true, "available": true, "tools": ["contacts.read"]]])
+        XCTAssertEqual(f.model.registrationState, .unverified)
+        XCTAssertTrue(f.model.registeredModules.isEmpty)
+        f.model.connected([])
+        XCTAssertEqual(f.model.registrationState, .unsupported)
+    }
+    func testTimeoutsAreVisibleAndRefreshCanRecover() async throws {
+        let f = Fixture(); defer { f.close() }
+        f.model.connected(["device-tools-v1"]); try f.acknowledge()
+        f.model.refreshRegistrationStatus()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(f.model.registrationState, .unverified)
+        XCTAssertTrue(f.model.registeredModules.isEmpty)
+        f.model.refreshRegistrationStatus(); try f.status()
+        XCTAssertEqual(f.model.registrationState, .registered)
+        var frames: [[String: Any]] = []
+        let timeout = IOSDeviceConnectors(hostID: "timeout-\(UUID())", registrationWait: .milliseconds(20)) { raw in
+            if let frame = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] { frames.append(frame) }
+        }
+        defer { timeout.disconnected() }
+        timeout.connected(["device-tools-v1"])
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(timeout.registrationState, .timedOut)
+        XCTAssertEqual(frames.count, 1)
+    }
+    func testRegistrationScreenSnapshots() async throws {
+        let f = Fixture(statusWait: .seconds(10)); defer { f.close() }
+        f.model.connected(["device-tools-v1"]); try f.acknowledge()
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        let controller = UIHostingController(rootView: NavigationStack { ConnectorRegistrationStatusView(model: f.model) }
+            .environment(\.locale, Locale(identifier: "zh_Hans")))
+        window.rootViewController = controller; window.overrideUserInterfaceStyle = .light
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        for confirmed in [true, false] {
+            if !confirmed { f.model.refreshRegistrationStatus(); try f.status("not-registered") }
+            try await Task.sleep(for: .milliseconds(200))
+            controller.view.layoutIfNeeded()
+            let attachment = XCTAttachment(image: UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            })
+            attachment.name = confirmed ? "网关已注册能力" : "在线但连接器未注册"
+            attachment.lifetime = .keepAlways; add(attachment)
+        }
+    }
+}
+
+@MainActor
+final class PhoneConnectorsTests: XCTestCase {
+    func testRejectedRegistrationExplainsGatewayCompatibilityAndDoesNotLoop() throws {
+        var frames: [[String: Any]] = []
+        let model = IOSDeviceConnectors(hostID: "registration-test-\(UUID().uuidString)") { raw in
+            if let frame = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] { frames.append(frame) }
+        }
+        defer { model.disconnected() }
+        model.connected(["device-tools-v1"])
+        let registration = try XCTUnwrap(frames.last)
+        let error: [String: Any] = ["kind": "error", "requestType": "device-tools-register", "requestId": registration["requestId"]!, "code": "invalid_request"]
+        model.receive(String(decoding: try JSONSerialization.data(withJSONObject: error), as: UTF8.self))
+        XCTAssertTrue(model.notice?.contains("网关版本不兼容") == true)
+        XCTAssertEqual(frames.count, 1, "不向不兼容的网关循环发送相同注册")
+        model.connected(["device-tools-v1"])
+        XCTAssertEqual(frames.count, 2, "重连后必须重新登记能力")
+        let current = try XCTUnwrap(frames.last)
+        let ack: [String: Any] = ["kind": "device-tools-registered", "version": 1, "requestId": current["requestId"]!, "capabilityRevision": current["capabilityRevision"]!, "connectionLeaseId": "recovered", "permissions": [:]]
+        model.receive(String(decoding: try JSONSerialization.data(withJSONObject: ack), as: UTF8.self))
+        XCTAssertNil(model.notice, "重新注册成功后清除旧的版本不兼容提示")
+    }
+
+    func testConnectorsPersistForEachHostAndExcludeContacts() async throws {
+        let host = "connector-test-\(UUID().uuidString)"
+        defer { UserDefaults.standard.removeObject(forKey: "phone-connectors.v1.\(host)") }
+        var frames: [[String: Any]] = []
+        let model = IOSDeviceConnectors(hostID: host) { raw in
+            if let value = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] { frames.append(value) }
+        }
+        await model.setEnabled("photos", true)
+        XCTAssertTrue(frames.isEmpty)
+        XCTAssertTrue(IOSDeviceConnectors(hostID: host, send: { _ in }).enabled["photos"] == true)
+        XCTAssertFalse(IOSDeviceConnectors(hostID: host + "-other", send: { _ in }).enabled["photos"] == true)
+        model.connected(["device-tools-v1"])
+        let registration = try XCTUnwrap(frames.last)
+        let modules = try XCTUnwrap(registration["modules"] as? [[String: Any]])
+        XCTAssertEqual(Set(modules.compactMap { $0["id"] as? String }), Set(["calendar", "reminders", "location", "photos", "music", "health", "alarms"]))
+        XCTAssertEqual(modules.first { $0["id"] as? String == "calendar" }?["enabled"] as? Bool, false)
+        await model.setEnabled("photos", false)
+        XCTAssertFalse(IOSDeviceConnectors(hostID: host, send: { _ in }).enabled["photos"] == true)
+        model.disconnected()
+    }
+
+    func testPhoneToggleSyncsOnlyExplicitChangesAndReconnectPreservesRevocation() async throws {
+        let host = "connector-sync-\(UUID().uuidString)"
+        defer { UserDefaults.standard.removeObject(forKey: "phone-connectors.v1.\(host)") }
+        var frames: [[String: Any]] = []
+        let model = IOSDeviceConnectors(hostID: host) { raw in
+            if let value = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] { frames.append(value) }
+        }
+        defer { model.disconnected() }
+        func receive(_ value: [String: Any]) throws {
+            model.receive(String(decoding: try JSONSerialization.data(withJSONObject: value), as: UTF8.self))
+        }
+        func acknowledge(_ granted: Bool) throws -> String {
+            let request = try XCTUnwrap(frames.last)
+            let lease = "lease-\(request["capabilityRevision"]!)"
+            try receive(["kind": "device-tools-registered", "version": 1, "requestId": request["requestId"]!, "capabilityRevision": request["capabilityRevision"]!, "connectionLeaseId": lease, "permissionSync": true, "permissions": ["photos": granted]])
+            return lease
+        }
+        model.connected(["device-tools-v1"])
+        _ = try acknowledge(false)
+        await model.setEnabled("photos", true)
+        XCTAssertEqual(frames.last?["permissionChanges"] as? [String: Bool], ["photos": true])
+        XCTAssertTrue(model.syncing)
+        let lease = try acknowledge(true)
+        XCTAssertFalse(model.syncing)
+        XCTAssertTrue(model.isOn("photos"))
+        try receive(["kind": "device-tools-permissions", "version": 1, "connectionLeaseId": lease, "permissions": ["photos": false]])
+        XCTAssertFalse(model.isOn("photos"))
+        XCTAssertEqual(model.enabled["photos"], true)
+        model.disconnected()
+        model.connected(["device-tools-v1"])
+        XCTAssertNil(frames.last?["permissionChanges"])
+        _ = try acknowledge(false)
+        XCTAssertFalse(model.isOn("photos"))
+        await model.setEnabled("photos", true)
+        _ = try acknowledge(true)
+        await model.setEnabled("photos", false)
+        XCTAssertEqual(frames.last?["permissionChanges"] as? [String: Bool], ["photos": false])
+        _ = try acknowledge(false)
+        XCTAssertFalse(model.isOn("photos"))
+    }
+
+    func testSyncErrorIsDemultiplexedAndNeverReplaysTheGrant() async throws {
+        let host = "connector-sync-error-\(UUID().uuidString)"
+        defer { UserDefaults.standard.removeObject(forKey: "phone-connectors.v1.\(host)") }
+        var frames: [[String: Any]] = []
+        let model = IOSDeviceConnectors(hostID: host) { raw in
+            if let value = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] { frames.append(value) }
+        }
+        defer { model.disconnected() }
+        await model.setEnabled("photos", true)
+        model.connected(["device-tools-v1"])
+        let request = try XCTUnwrap(frames.last)
+        XCTAssertEqual(request["permissionChanges"] as? [String: Bool], ["photos": true])
+        let error: [String: Any] = ["kind": "error", "requestType": "device-tools-register", "requestId": request["requestId"]!, "code": "permission_save_failed"]
+        let data = try JSONSerialization.data(withJSONObject: error)
+        let decoded = try GatewayClient.decodeIncomingFrame(data)
+        XCTAssertNil(decoded.0)
+        model.receive(try XCTUnwrap(decoded.1))
+        XCTAssertFalse(model.syncing)
+        XCTAssertNotNil(model.notice)
+        XCTAssertNil(frames.last?["permissionChanges"])
+        XCTAssertNotEqual(frames.last?["requestId"] as? String, request["requestId"] as? String)
+        model.disconnected()
+        model.connected(["device-tools-v1"])
+        XCTAssertNil(frames.last?["permissionChanges"])
+    }
+
+    func testEnabledConnectorExecutesWithoutPerCallConfirmationAndRevocationStillBlocksIt() async throws {
+        let host = "connector-standing-grant-\(UUID().uuidString)"
+        let key = "phone-connectors.v1.\(host)"
+        UserDefaults.standard.set(["calendar": true], forKey: key)
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        let completed = expectation(description: "Granted query reaches argument validation without a consent dialog")
+        var frames: [[String: Any]] = []
+        let model = IOSDeviceConnectors(hostID: host) { raw in
+            if let frame = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] {
+                frames.append(frame)
+                if frame["invocationId"] as? String == "automatic-query" { completed.fulfill() }
+            }
+        }
+        defer { model.disconnected() }
+        func receive(_ frame: [String: Any]) throws {
+            model.receive(String(decoding: try JSONSerialization.data(withJSONObject: frame), as: UTF8.self))
+        }
+        model.connected(["device-tools-v1"])
+        let registration = try XCTUnwrap(frames.last)
+        try receive(["kind": "device-tools-registered", "version": 1, "requestId": registration["requestId"]!, "capabilityRevision": registration["capabilityRevision"]!, "connectionLeaseId": "current", "permissionSync": true, "permissions": ["calendar": true]])
+        // 空范围在原生查询前失败，不读取真实日历；若仍有确认弹窗，调用将无法自行完成。
+        try receive(["kind": "device-tool-invoke", "version": 1, "connectionLeaseId": "current", "invocationId": "automatic-query", "tool": "calendar.busy", "arguments": [:]])
+        await fulfillment(of: [completed], timeout: 2)
+        XCTAssertEqual((frames.last?["error"] as? [String: String])?["code"], "scope_rejected")
+        try receive(["kind": "device-tools-permissions", "version": 1, "connectionLeaseId": "current", "permissions": ["calendar": false]])
+        try receive(["kind": "device-tool-invoke", "version": 1, "connectionLeaseId": "current", "invocationId": "revoked-query", "tool": "calendar.busy", "arguments": [:]])
+        XCTAssertEqual((frames.last?["error"] as? [String: String])?["code"], "tool_disabled")
+    }
+
+    func testReplayCacheStaysBoundedWithoutDroppingTheConnection() throws {
+        var frames: [[String: Any]] = []
+        let model = IOSDeviceConnectors(hostID: "replay-cache-\(UUID().uuidString)") { raw in
+            if let value = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] { frames.append(value) }
+        }
+        func receive(_ value: [String: Any]) throws {
+            model.receive(String(decoding: try JSONSerialization.data(withJSONObject: value), as: UTF8.self))
+        }
+        model.connected(["device-tools-v1"])
+        let registration = try XCTUnwrap(frames.last)
+        try receive(["kind": "device-tools-registered", "version": 1, "requestId": registration["requestId"]!, "capabilityRevision": registration["capabilityRevision"]!, "connectionLeaseId": "current", "permissions": [:]])
+        for index in 0..<1100 {
+            try receive(["kind": "device-tool-invoke", "version": 1, "connectionLeaseId": "current", "invocationId": "call-\(index)", "tool": "contacts.list", "arguments": [:]])
+            XCTAssertEqual((frames.last?["error"] as? [String: String])?["code"], "tool_unsupported")
+        }
+        XCTAssertEqual(frames.count, 1101)
+        model.disconnected()
+    }
+
+    func testStaleRegistrationAndWrongLeaseCannotGrantPermission() async throws {
+        var frames: [[String: Any]] = []
+        let model = IOSDeviceConnectors(hostID: "lease-test-\(UUID().uuidString)") { raw in
+            if let value = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] { frames.append(value) }
+        }
+        func receive(_ frame: [String: Any]) throws {
+            model.receive(String(decoding: try JSONSerialization.data(withJSONObject: frame), as: UTF8.self))
+        }
+        model.connected(["device-tools-v1"])
+        let registration = try XCTUnwrap(frames.last)
+        let base: [String: Any] = ["kind": "device-tools-registered", "version": 1, "requestId": registration["requestId"]!, "capabilityRevision": registration["capabilityRevision"]!, "connectionLeaseId": "current", "permissions": ["photos": true]]
+        var stale = base; stale["requestId"] = "stale"
+        try receive(stale)
+        XCTAssertTrue(model.permissions.isEmpty)
+        try receive(base)
+        XCTAssertEqual(model.permissions["photos"], true)
+        try receive(["kind": "device-tools-permissions", "version": 1, "connectionLeaseId": "wrong", "permissions": ["photos": false]])
+        XCTAssertEqual(model.permissions["photos"], true)
+        try receive(["kind": "device-tool-invoke", "version": 1, "connectionLeaseId": "current", "invocationId": "forbidden-tool", "tool": "contacts.list", "arguments": [:]])
+        XCTAssertEqual((frames.last?["error"] as? [String: String])?["code"], "tool_unsupported")
+        model.disconnected()
+        XCTAssertTrue(model.permissions.isEmpty)
+    }
+}
+
+@MainActor
+final class PhoneConnectorWritesTests: XCTestCase {
+    private let operationID = "819e6e40-5008-4d8e-917e-31dbd0046a47"
+    private var reminder: [String: Any] { ["operationId": operationID, "title": "买牛奶", "timeZone": "Asia/Shanghai"] }
+    private func temporaryRoot() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        return root
+    }
+    func testWriteArgumentsValidateDatesBooleansAndExplicitNotification() throws {
+        XCTAssertNoThrow(try PhoneConnectorWriteInput.validate("reminders.create", reminder))
+        var dated = reminder; dated["dueDate"] = "2026-11-11T09:00:00+08:00"; dated["notify"] = true; dated["priority"] = 1
+        XCTAssertNoThrow(try PhoneConnectorWriteInput.validate("reminders.create", dated))
+        for patch: [String: Any] in [["notify": true], ["priority": true], ["priority": 3], ["dueDate": "tomorrow"], ["title": " "], ["unexpected": "value"]] {
+            XCTAssertThrowsError(try PhoneConnectorWriteInput.validate("reminders.create", reminder.merging(patch) { _, new in new }))
+        }
+        let event: [String: Any] = ["operationId": operationID, "title": "开会", "timeZone": "Asia/Shanghai", "start": "2026-11-11T09:00:00+08:00", "end": "2026-11-11T10:00:00+08:00", "alertMinutesBefore": 15]
+        XCTAssertNoThrow(try PhoneConnectorWriteInput.validate("calendar.create", event))
+        XCTAssertThrowsError(try PhoneConnectorWriteInput.validate("calendar.create", event.merging(["end": "2026-11-11T08:00:00+08:00"]) { _, new in new }))
+        XCTAssertThrowsError(try PhoneConnectorWriteInput.validate("calendar.create", event.merging(["allDay": true]) { _, new in new }))
+        XCTAssertThrowsError(try PhoneConnectorWriteInput.validate("calendar.create", event.merging(["alertMinutesBefore": true]) { _, new in new }))
+        XCTAssertNoThrow(try PhoneConnectorWriteInput.validate("calendar.create", event.merging(["allDay": true, "start": "2026-11-11T00:00:00+08:00", "end": "2026-11-12T00:00:00+08:00"]) { _, new in new }))
+        XCTAssertThrowsError(try PhoneConnectorWriteInput.validate("alarms.cancel", ["operationId": operationID, "alarmId": "someone-elses-id"]))
+    }
+    func testDurableReceiptAvoidsRepeatedCreationAcrossReconnectsAndNewInstances() async throws {
+        let root = try temporaryRoot(), ledger = PhoneConnectorWriteLedger(hostID: "host", root: root)
+        var creations = 0
+        let first = try await ledger.run(tool: "reminders.create", sessionID: "session", arguments: reminder) {
+            creations += 1; return ["id": "reminder-1", "status": "created"]
+        }
+        let reconnected = PhoneConnectorWriteLedger(hostID: "host", root: root)
+        let replay = try await reconnected.run(tool: "reminders.create", sessionID: "session", arguments: reminder) {
+            creations += 1; return ["id": "duplicate"]
+        }
+        XCTAssertEqual(creations, 1); XCTAssertEqual(first["id"] as? String, replay["id"] as? String)
+        do {
+            _ = try await reconnected.run(tool: "reminders.create", sessionID: "session", arguments: reminder.merging(["title": "different"]) { _, new in new }) { creations += 1; return [:] }
+            XCTFail("An operation ID cannot be reused for a different write")
+        } catch { XCTAssertEqual((error as? PhoneConnectorFailure)?.code, "operation_conflict") }
+        XCTAssertEqual(creations, 1)
+    }
+    func testUncertainWriteDoesNotRunAgainAndUnknownAlarmStillHasOwnershipReceipt() async throws {
+        let root = try temporaryRoot(), ledger = PhoneConnectorWriteLedger(hostID: "host", root: root)
+        let args: [String: Any] = ["operationId": operationID, "title": "起床", "fireDate": "2026-11-11T07:00:00+08:00", "timeZone": "Asia/Shanghai"]
+        var attempts = 0
+        do { _ = try await ledger.run(tool: "alarms.create", sessionID: "s", arguments: args) { attempts += 1; throw CancellationError() } }
+        catch { XCTAssertTrue(error is CancellationError) }
+        let restarted = PhoneConnectorWriteLedger(hostID: "host", root: root)
+        do {
+            _ = try await restarted.run(tool: "alarms.create", sessionID: "s", arguments: args) { attempts += 1; return [:] }
+            XCTFail("Uncertain execution cannot be repeated")
+        } catch { XCTAssertEqual((error as? PhoneConnectorFailure)?.code, "outcome_unknown") }
+        XCTAssertEqual(attempts, 1)
+        let id = ledger.alarmIdentifier(sessionID: "s", operationID: operationID)
+        XCTAssertNotNil(try restarted.alarmReceipts()[id.uuidString.lowercased()])
+        let otherHost = PhoneConnectorWriteLedger(hostID: "other", root: root)
+        XCTAssertTrue(try otherHost.alarmReceipts().isEmpty)
+        XCTAssertNotEqual(otherHost.alarmIdentifier(sessionID: "s", operationID: operationID), id)
+        XCTAssertNotEqual(ledger.alarmIdentifier(sessionID: "different-session", operationID: operationID), id)
+    }
+    func testHistorySaveFailurePreventsAnyNativeWrite() async throws {
+        let root = try temporaryRoot().appendingPathComponent("blocked")
+        try Data("file".utf8).write(to: root)
+        let ledger = PhoneConnectorWriteLedger(hostID: "host", root: root)
+        var attempts = 0
+        do {
+            _ = try await ledger.run(tool: "reminders.create", sessionID: "s", arguments: reminder) { attempts += 1; return [:] }
+            XCTFail("Cannot write without durable attempt history")
+        } catch { XCTAssertEqual((error as? PhoneConnectorFailure)?.code, "write_history_unavailable") }
+        XCTAssertEqual(attempts, 0)
+    }
+    func testCancellationAfterCommitStillPersistsTheCreatedReceipt() async throws {
+        let root = try temporaryRoot(), ledger = PhoneConnectorWriteLedger(hostID: "host", root: root), args = reminder
+        let task = Task { @MainActor in
+            try await ledger.run(tool: "reminders.create", sessionID: "s", arguments: args) {
+                withUnsafeCurrentTask { $0?.cancel() }
+                return ["id": "committed"]
+            }
+        }
+        _ = try await task.value
+        let restarted = PhoneConnectorWriteLedger(hostID: "host", root: root)
+        let receipt = try await restarted.run(tool: "reminders.create", sessionID: "s", arguments: reminder) {
+            XCTFail("Already committed write cannot run again"); return [:]
+        }
+        XCTAssertEqual(receipt["id"] as? String, "committed")
+    }
+}
+
+@MainActor
+final class AppleMusicAppCardTests: XCTestCase {
+    private func cardLink(_ metadata: [String: Any], url: String = "https://music.apple.com/cn/album/test/123?i=456") throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: metadata, options: [.sortedKeys])
+        let encoded = data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        return url + "#dsh-music-card=" + encoded
+    }
+    func testArtworkMetadataSurvivesHistoryAndNeverChangesPlaybackDestination() throws {
+        let artwork = "https://is1-ssl.mzstatic.com/image/thumb/Music/test/300x300bb.jpg"
+        let metadata: [String: Any] = ["v": 1, "title": "真实歌名", "artist": "歌手", "album": "专辑", "artworkURL": artwork, "durationSeconds": 245.5]
+        let link = try cardLink(metadata)
+        let parsed = try XCTUnwrap(AppleMusicCardDestination(link: link, title: "文字回退"))
+        XCTAssertEqual(parsed.name, "真实歌名")
+        XCTAssertEqual(parsed.artist, "歌手")
+        XCTAssertEqual(parsed.secondaryDetail, "专辑 · 4:05")
+        XCTAssertEqual(parsed.artworkURL?.absoluteString, artwork)
+        XCTAssertEqual(parsed.url.absoluteString, "https://music.apple.com/cn/album/test/123?i=456")
+        XCTAssertNil(parsed.url.fragment, "卡片展示数据不发送给 Apple Music")
+        let source = "[歌曲](\(link))"
+        let reloaded = try XCTUnwrap(PreparedMarkdownCache.document(for: source, filePaths: []).standaloneLink)
+        XCTAssertEqual(AppleMusicCardDestination(link: reloaded.destination, title: reloaded.title), parsed)
+        for invalid: [String: Any] in [metadata.merging(["artworkURL": "https://evil.test/cover.jpg"]) { _, value in value }, metadata.merging(["durationSeconds": true]) { _, value in value }, metadata.merging(["durationSeconds": -1]) { _, value in value }, metadata.merging(["v": 2]) { _, value in value }, metadata.merging(["title": String(repeating: "x", count: 201)]) { _, value in value }] {
+            XCTAssertNil(AppleMusicCardDestination(link: try cardLink(invalid), title: "歌曲"))
+        }
+        XCTAssertNil(AppleMusicCardDestination(link: "https://music.apple.com/song/123#dsh-music-card=bad", title: "歌曲"))
+        for invalid in ["https://mzstatic.com.evil.test/cover.jpg", "http://is1-ssl.mzstatic.com/cover.jpg", "https://user@is1-ssl.mzstatic.com/cover.jpg", "file:///cover.jpg"] {
+            XCTAssertNil(AppleMusicLink.artworkURL(invalid))
+        }
+    }
+    func testOfficialMusicLinksKeepSongSelectionAndRemoveTracking() throws {
+        let link = try XCTUnwrap(AppleMusicLink.url("https://music.apple.com/cn/album/test/123?i=456&at=tracking"))
+        XCTAssertEqual(link.absoluteString, "https://music.apple.com/cn/album/test/123?i=456")
+        XCTAssertNotNil(AppleMusicLink.url("https://music.apple.com/song/123"))
+        XCTAssertNotNil(AppleMusicLink.url("https://music.apple.com/us/playlist/test/pl.abc123"))
+        XCTAssertEqual(AppleMusicCardDestination(link: link.absoluteString, title: "歌曲 · 歌手")?.name, "歌曲 · 歌手")
+        for bad in ["https://music.apple.com.evil.test/song/123", "https://music.apple.com@evil.test/song/123", "http://music.apple.com/song/123", "https://user@music.apple.com/song/123", "javascript:alert(1)", "https://music.apple.com/song/library:i.test", "https://music.apple.com/library/songs/123", "https://music.apple.com/song/123?i=1&i=2", "https://music.apple.com/album/test/123?i=bad", "https://music.apple.com/login"] {
+            XCTAssertNil(AppleMusicLink.url(bad), bad)
+        }
+    }
+    func testCatalogOptionsHaveBoundedSearchAndNoPlaybackFields() throws {
+        XCTAssertEqual(try PhoneMusicCatalogOptions(["query": " 歌曲 "]).query, "歌曲")
+        XCTAssertEqual(try PhoneMusicCatalogOptions(["query": "歌曲"]).limit, 10)
+        XCTAssertNoThrow(try PhoneMusicCatalogOptions(["query": "歌曲", "limit": 20]))
+        for args: [String: Any] in [["query": " "], ["query": "歌曲", "limit": true], ["query": "歌曲", "limit": 21], ["query": "歌曲", "limit": 0], ["query": "歌曲", "play": true]] {
+            XCTAssertThrowsError(try PhoneMusicCatalogOptions(args))
+        }
+    }
+    func testCatalogMetadataSearchDoesNotRequirePlaybackAndErrorsAreNotEmptyResults() async throws {
+        var received: PhoneMusicCatalogOptions?
+        let item: [String: Any] = ["id": "catalog:123", "title": "歌曲", "artist": "歌手", "url": "https://music.apple.com/song/123"]
+        let connector = IOSMusicLibraryConnector(catalogLoader: { options in received = options; return [item] }, authorized: { true })
+        let result = try await connector.searchCatalog(["query": "歌曲", "limit": 5])
+        XCTAssertEqual(received?.limit, 5)
+        XCTAssertEqual(result["source"] as? String, "apple-music-catalog")
+        XCTAssertEqual((result["items"] as? [[String: Any]])?.first?["url"] as? String, item["url"] as? String)
+        let failed = IOSMusicLibraryConnector(catalogLoader: { _ in throw NSError(domain: "fixture", code: 1) }, authorized: { true })
+        do { _ = try await failed.searchCatalog(["query": "歌曲"]); XCTFail() }
+        catch { XCTAssertEqual((error as? PhoneConnectorFailure)?.code, "music_catalog_unavailable") }
+        var called = false
+        let denied = IOSMusicLibraryConnector(catalogLoader: { _ in called = true; return [] }, authorized: { false })
+        do { _ = try await denied.searchCatalog(["query": "歌曲"]); XCTFail() }
+        catch { XCTAssertEqual((error as? PhoneConnectorFailure)?.code, "permission_denied") }
+        XCTAssertFalse(called)
+        let cancelled = IOSMusicLibraryConnector(catalogLoader: { _ in throw CancellationError() }, authorized: { true })
+        do { _ = try await cancelled.searchCatalog(["query": "歌曲"]); XCTFail() }
+        catch { XCTAssertTrue(error is CancellationError) }
+    }
+    func testStandaloneMusicLinkRendersAsCardAndCodeStaysCode() throws {
+        let source = "[歌曲 · 歌手](https://music.apple.com/song/123)"
+        let link = try XCTUnwrap(PreparedMarkdownCache.document(for: source, filePaths: []).standaloneLink)
+        XCTAssertNotNil(AppleMusicCardDestination(link: link.destination, title: link.title))
+        XCTAssertNil(PreparedMarkdownCache.document(for: "`\(source)`", filePaths: []).standaloneLink)
+        let controller = UIHostingController(rootView: DeepSeekHarnessMobile.MarkdownContent(source).padding())
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 180)
+        controller.view.backgroundColor = .systemBackground
+        controller.view.layoutIfNeeded()
+        let height = controller.sizeThatFits(in: CGSize(width: 390, height: 1000)).height
+        XCTAssertGreaterThan(height, 85)
+        XCTAssertLessThan(height, 200)
+        let image = UIGraphicsImageRenderer(size: controller.view.bounds.size).image { _ in
+            controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image); attachment.name = "Apple Music 歌曲卡片"
+        attachment.lifetime = .keepAlways; add(attachment)
+    }
+    func testRichMusicCardRendersMetadataWithoutArtwork() throws {
+        let link = try cardLink(["v": 1, "title": "歌曲名称", "artist": "演唱者", "album": "专辑名称", "durationSeconds": 245])
+        let controller = UIHostingController(rootView: DeepSeekHarnessMobile.MarkdownContent("[歌曲](\(link))").padding())
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 210)
+        controller.view.backgroundColor = .systemBackground
+        controller.view.layoutIfNeeded()
+        let height = controller.sizeThatFits(in: CGSize(width: 390, height: 1000)).height
+        XCTAssertGreaterThan(height, 120)
+        XCTAssertLessThan(height, 210)
+        let image = UIGraphicsImageRenderer(size: controller.view.bounds.size).image { _ in
+            controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image); attachment.name = "音乐卡片歌手专辑时长与封面回退"
+        attachment.lifetime = .keepAlways; add(attachment)
+    }
+    /// 公开歌曲封面预览；网络不可用时跳过，核心协议和回退测试不依赖网络。
+    func testOfficialArtworkCardPreview() async throws {
+        let artwork = "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/08/8c/24/088c2405-2e33-801b-5c38-e967f2c01e69/191404113974.png/300x300bb.jpg"
+        let url = try XCTUnwrap(URL(string: artwork))
+        let config = URLSessionConfiguration.ephemeral; config.timeoutIntervalForRequest = 5
+        let session = URLSession(configuration: config); defer { session.invalidateAndCancel() }
+        let data: Data
+        do {
+            let fetched = try await session.data(from: url)
+            guard (fetched.1 as? HTTPURLResponse)?.statusCode == 200, fetched.0.count <= 1024 * 1024, UIImage(data: fetched.0) != nil else {
+                throw XCTSkip("公开封面预览夹具暂不可用")
+            }
+            data = fetched.0
+        } catch { throw XCTSkip("公开封面预览需要网络：\(error.localizedDescription)") }
+        let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Cache-Control": "max-age=86400", "Content-Type": "image/jpeg"]))
+        URLCache.shared.storeCachedResponse(CachedURLResponse(response: response, data: data), for: URLRequest(url: url))
+        defer { URLCache.shared.removeCachedResponse(for: URLRequest(url: url)) }
+        let link = try cardLink(["v": 1, "title": "Hello", "artist": "Adele", "album": "25", "durationSeconds": 295.502, "artworkURL": artwork], url: "https://music.apple.com/us/album/hello/1544494115?i=1544494392")
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 210)
+        let controller = UIHostingController(rootView: DeepSeekHarnessMobile.MarkdownContent("[Hello](\(link))").padding().frame(width: 390, height: 210))
+        window.rootViewController = controller; window.overrideUserInterfaceStyle = .light; window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        try await Task.sleep(for: .seconds(1))
+        window.layoutIfNeeded()
+        let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image); attachment.name = "Apple Music 真实封面卡片"
+        attachment.lifetime = .keepAlways; add(attachment)
+    }
+}
+
+@MainActor
+final class PhoneMusicLibraryTests: XCTestCase {
+    func testPersonalLibraryCanBeBrowsedWithoutGuessingASongName() async throws {
+        var requests: [PhoneMusicLibraryOptions] = []
+        let connector = IOSMusicLibraryConnector(authorized: { true }) { options in
+            requests.append(options)
+            return PhoneMusicLibraryPage(items: [["id": "library:i.test", "title": "Song", "artist": "Artist"]], hasMore: true)
+        }
+        let result = try await connector.browse([:])
+        XCTAssertEqual(requests.count, 1); XCTAssertEqual(requests[0].kind, "songs"); XCTAssertNil(requests[0].query)
+        XCTAssertEqual(result["source"] as? String, "apple-music-library")
+        XCTAssertEqual(result["downloadedOnly"] as? Bool, false)
+        XCTAssertEqual(result["nextOffset"] as? Int, 1)
+        let page = try await connector.browse(["kind": "playlists", "query": "Favorite", "offset": 5, "limit": 10])
+        XCTAssertEqual(requests[1].kind, "playlists"); XCTAssertEqual(requests[1].query, "Favorite")
+        XCTAssertEqual(page["nextOffset"] as? Int, 6)
+    }
+    func testInvalidPagingAndForeignPlaybackIDsAreRejected() throws {
+        for args: [String: Any] in [["limit": true], ["limit": 0], ["limit": 51], ["offset": -1], ["offset": 10001], ["query": " "], ["kind": "catalog"], ["unknown": true]] {
+            XCTAssertThrowsError(try PhoneMusicLibraryOptions(args))
+        }
+        XCTAssertNoThrow(try IOSMusicLibraryConnector.validatePlayback(["kind": "songs", "itemId": "library:i.test"]))
+        XCTAssertThrowsError(try IOSMusicLibraryConnector.validatePlayback(["kind": "artists", "itemId": "library:i.test"]))
+        XCTAssertThrowsError(try IOSMusicLibraryConnector.validatePlayback(["kind": "songs", "itemId": "123456"]))
+    }
+    func testPermissionDenialAndLoadFailureNeverBecomeAnEmptyLibrary() async throws {
+        var calls = 0
+        let denied = IOSMusicLibraryConnector(authorized: { false }) { _ in calls += 1; return PhoneMusicLibraryPage(items: [], hasMore: false) }
+        do { _ = try await denied.browse([:]); XCTFail("Permission must be enforced") }
+        catch { XCTAssertEqual((error as? PhoneConnectorFailure)?.code, "permission_denied") }
+        XCTAssertEqual(calls, 0)
+        let failed = IOSMusicLibraryConnector(authorized: { true }) { _ in throw NSError(domain: "Fixture", code: 1) }
+        do { _ = try await failed.browse([:]); XCTFail("Failure cannot look like an empty music library") }
+        catch { XCTAssertEqual((error as? PhoneConnectorFailure)?.code, "music_library_unavailable") }
+        var allowed = true
+        let revoked = IOSMusicLibraryConnector(authorized: { allowed }) { _ in allowed = false; return PhoneMusicLibraryPage(items: [], hasMore: false) }
+        do { _ = try await revoked.browse([:]); XCTFail("Revocation while reading must be respected") }
+        catch { XCTAssertEqual((error as? PhoneConnectorFailure)?.code, "permission_denied") }
+    }
+    func testEmptyQueryScopeAndPagingBoundaryAreReportedWithoutClaimingWholeLibraryIsEmpty() async throws {
+        let empty = IOSMusicLibraryConnector(authorized: { true }) { _ in PhoneMusicLibraryPage(items: [], hasMore: false) }
+        let result = try await empty.browse(["query": "No match"])
+        XCTAssertEqual(result["status"] as? String, "empty-in-requested-scope")
+        XCTAssertTrue(result["nextOffset"] is NSNull)
+        let capped = IOSMusicLibraryConnector(authorized: { true }) { _ in PhoneMusicLibraryPage(items: [["id": "library:i.test", "title": "Song"]], hasMore: true) }
+        let lastPage = try await capped.browse(["offset": 10000])
+        XCTAssertEqual(lastPage["hasMore"] as? Bool, true)
+        XCTAssertEqual(lastPage["pagingLimitReached"] as? Bool, true)
+        XCTAssertTrue(lastPage["nextOffset"] is NSNull)
+    }
+}
+
+@MainActor
+final class AppleMapsAppCardTests: XCTestCase {
+    func testPlaceAndRouteLinksPreserveCoordinatesAndNames() throws {
+        let place = try XCTUnwrap(AppleMapsCardDestination(link: "https://maps.apple.com/?ll=31.234567,121.456789&q=%E5%92%96%E5%95%A1%20%26%20Tea", title: "咖啡 & Tea"))
+        XCTAssertEqual(place.latitude, 31.234567)
+        XCTAssertEqual(place.longitude, 121.456789)
+        XCTAssertEqual(place.name, "咖啡 & Tea")
+        XCTAssertNil(place.transport)
+        let route = try XCTUnwrap(AppleMapsCardDestination(link: "https://maps.apple.com/?daddr=0,-180&dirflg=w", title: "步行路线"))
+        XCTAssertEqual(route.transport, "w")
+        XCTAssertEqual(route.latitude, 0)
+        XCTAssertEqual(route.longitude, -180)
+    }
+
+    func testOtherHostsMalformedCoordinatesAndAmbiguousURLsStayNormalLinks() {
+        for url in ["https://maps.apple.com.evil.test/?ll=1,2", "https://maps.apple.com@evil.test/?ll=1,2",
+                    "https://user@maps.apple.com/?ll=1,2", "javascript:alert(1)", "http://maps.apple.com/?ll=1,2",
+                    "https://maps.apple.com/?ll=91,0", "https://maps.apple.com/?ll=nan,0", "https://maps.apple.com/?ll=1",
+                    "https://maps.apple.com/?ll=1,2&ll=3,4", "https://maps.apple.com/?ll=1,2&url=https://evil.test",
+                    "https://maps.apple.com/?ll=1,2&daddr=3,4", "https://maps.apple.com/?ll=1,2&dirflg=d",
+                    "https://maps.apple.com/?daddr=1,2&dirflg=invalid"] {
+            XCTAssertNil(AppleMapsCardDestination(link: url, title: "地点"), url)
+        }
+    }
+
+    func testOnlyStandaloneMarkdownLinksBecomeCardsIncludingReferences() throws {
+        let url = "https://maps.apple.com/?ll=31,121&q=Cafe"
+        let link = try XCTUnwrap(PreparedMarkdownCache.document(for: "[**咖啡馆**](\(url))", filePaths: []).standaloneLink)
+        XCTAssertEqual(link.title, "咖啡馆")
+        XCTAssertNotNil(AppleMapsCardDestination(link: link.destination, title: link.title))
+        let reference = MarkdownUI.MarkdownContent("[咖啡馆][place]\n\n[place]: \(url)").standaloneLink
+        XCTAssertEqual(reference?.destination, url)
+        for markdown in ["打开 [咖啡馆](\(url)) 查看", "`[咖啡馆](\(url))`", "```\n[咖啡馆](\(url))\n```", "[一](\(url)) [二](\(url))"] {
+            XCTAssertNil(PreparedMarkdownCache.document(for: markdown, filePaths: []).standaloneLink)
+        }
+    }
+
+    func testCardRendersInNormalMarkdownAtPhoneWidth() throws {
+        let controller = UIHostingController(rootView: DeepSeekHarnessMobile.MarkdownContent("[上海博物馆](https://maps.apple.com/?ll=31.2304,121.4737&q=Museum)").padding())
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 180)
+        controller.view.backgroundColor = .systemBackground
+        controller.view.setNeedsLayout()
+        controller.view.layoutIfNeeded()
+        let size = controller.sizeThatFits(in: CGSize(width: 390, height: 1000))
+        XCTAssertGreaterThan(size.height, 85, "实际 Markdown 段落应渲染为应用卡片")
+        XCTAssertLessThan(size.height, 200)
+        let image = UIGraphicsImageRenderer(size: controller.view.bounds.size).image { _ in
+            controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "苹果地图应用卡片"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
+@MainActor
+final class PhoneMapConnectorTests: XCTestCase {
+    func testMapInputsValidateCoordinatesAndRequestScope() throws {
+        XCTAssertNoThrow(try IOSMapConnector.validate("maps.search", ["query": "咖啡", "latitude": 31.2, "longitude": 121.4, "radiusMeters": 1500, "limit": 10]))
+        XCTAssertNoThrow(try IOSMapConnector.validate("maps.search", ["query": "上海博物馆"]))
+        XCTAssertNoThrow(try IOSMapConnector.validate("maps.geocode", ["address": "上海南京西路", "limit": 3]))
+        for args: [String: Any] in [["query": ""], ["query": "咖啡", "latitude": 31], ["query": "咖啡", "radiusMeters": 1000], ["query": "咖啡", "latitude": true, "longitude": 121], ["query": "咖啡", "latitude": 91, "longitude": 121], ["query": "咖啡", "limit": 21]] {
+            XCTAssertThrowsError(try IOSMapConnector.validate("maps.search", args))
+        }
+        XCTAssertThrowsError(try IOSMapConnector.validate("location.precise", ["maxAgeSeconds": true]))
+        XCTAssertThrowsError(try IOSMapConnector.validate("maps.reverse-geocode", ["latitude": 31, "longitude": 181]))
+    }
+    func testDirectionsAndMapsHandoffAreDistinctAndDoNotClaimNavigationStarted() async throws {
+        let route: [String: Any] = ["startLatitude": 31.2, "startLongitude": 121.4, "endLatitude": 31.3, "endLongitude": 121.5, "transport": "walking"]
+        XCTAssertNoThrow(try IOSMapConnector.validate("maps.directions", route))
+        XCTAssertThrowsError(try IOSMapConnector.validate("maps.directions", route.merging(["transport": "transit"]) { _, new in new }))
+        let destination: [String: Any] = ["latitude": 31.2, "longitude": 121.4, "name": "目的地", "mode": "directions", "transport": "transit"]
+        let handoff = try await IOSMapConnector.execute("maps.open", destination)
+        // execute only prepares the receipt; the controller performs the later external-app handoff.
+        XCTAssertEqual(handoff["status"] as? String, "handoff-requested")
+        XCTAssertEqual(handoff["transport"] as? String, "transit")
+        XCTAssertNil(handoff["navigationStarted"])
+        XCTAssertThrowsError(try IOSMapConnector.validate("maps.open", ["latitude": 31, "longitude": 121, "transport": "walking"]))
+        let show = try IOSMapConnector.handoffReceipt(["latitude": 31, "longitude": 121])
+        XCTAssertEqual(show["mode"] as? String, "show"); XCTAssertNil(show["transport"])
+    }
+    func testPreciseCoordinatesRemainUnroundedAndCoarseCoordinatesRemainCompatible() throws {
+        let now = Date()
+        let sample = CLLocation(coordinate: CLLocationCoordinate2D(latitude: 31.234567, longitude: 121.456789), altitude: 0, horizontalAccuracy: 12, verticalAccuracy: -1, timestamp: now)
+        let precise = try IOSMapConnector.locationResult(sample, precise: true, now: now)
+        XCTAssertEqual(precise["latitude"] as? Double, 31.234567)
+        XCTAssertEqual(precise["horizontalAccuracyMeters"] as? Double, 12)
+        let coarse = try IOSMapConnector.locationResult(sample, precise: false, now: now)
+        XCTAssertEqual(coarse["latitude"] as? Double, 31.23)
+        XCTAssertEqual(coarse["horizontalAccuracyMeters"] as? Double, 1500)
+        XCTAssertThrowsError(try IOSMapConnector.locationResult(sample, precise: true, maxAge: 60, now: now.addingTimeInterval(301)))
+        let bad = CLLocation(coordinate: sample.coordinate, altitude: 0, horizontalAccuracy: -1, verticalAccuracy: -1, timestamp: now)
+        XCTAssertThrowsError(try IOSMapConnector.locationResult(bad, precise: true, now: now))
+    }
+}
+
+@MainActor
+final class PhoneMapMarkerStoreTests: XCTestCase {
+    private func root() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        return root
+    }
+    private func args(_ name: String = "停车位") -> [String: Any] {
+        ["operationId": UUID().uuidString, "name": name, "latitude": 31.234567, "longitude": 121.456789, "notes": "B2 停车区"]
+    }
+    func testMarkersAndReceiptsPersistAcrossInstancesAndStayIsolatedByHost() throws {
+        let root = try root(), store = PhoneMapMarkerStore(hostID: "host-a", root: root), input = args()
+        let created = try store.execute("maps.markers.create", input, sessionID: "s")
+        let marker = try XCTUnwrap(created["marker"] as? [String: Any])
+        let id = try XCTUnwrap(marker["id"] as? String)
+        XCTAssertEqual(marker["latitude"] as? Double, 31.234567)
+        let reopened = PhoneMapMarkerStore(hostID: "host-a", root: root)
+        let repeated = try reopened.execute("maps.markers.create", input, sessionID: "s")
+        XCTAssertEqual((repeated["marker"] as? [String: Any])?["id"] as? String, id)
+        XCTAssertEqual(repeated["replayed"] as? Bool, true)
+        XCTAssertEqual(try reopened.execute("maps.markers.list", [:])["total"] as? Int, 1)
+        let other = PhoneMapMarkerStore(hostID: "host-b", root: root)
+        XCTAssertEqual(try other.execute("maps.markers.list", [:])["total"] as? Int, 0)
+        XCTAssertThrowsError(try other.execute("maps.markers.update", ["operationId": UUID().uuidString, "markerId": id, "name": "Other"], sessionID: "s"))
+        XCTAssertThrowsError(try reopened.execute("maps.markers.create", input.merging(["name": "Different"]) { _, value in value }, sessionID: "s")) { error in
+            XCTAssertEqual((error as? PhoneConnectorFailure)?.code, "operation_conflict")
+        }
+    }
+    func testRevisionChecksPartialUpdatesAndDeletionDoNotReplayOldWrites() throws {
+        let store = PhoneMapMarkerStore(hostID: "host", root: try root()), created = try store.execute("maps.markers.create", args(), sessionID: "s")
+        let marker = try XCTUnwrap(created["marker"] as? [String: Any]), id = try XCTUnwrap(marker["id"] as? String)
+        let update: [String: Any] = ["operationId": UUID().uuidString, "markerId": id, "name": "新停车位", "expectedRevision": 1]
+        let changed = try store.execute("maps.markers.update", update, sessionID: "s")
+        XCTAssertEqual((changed["marker"] as? [String: Any])?["revision"] as? Int, 2)
+        XCTAssertEqual((changed["marker"] as? [String: Any])?["notes"] as? String, "B2 停车区")
+        XCTAssertEqual(try store.execute("maps.markers.update", update, sessionID: "s")["replayed"] as? Bool, true)
+        XCTAssertThrowsError(try store.execute("maps.markers.update", ["operationId": UUID().uuidString, "markerId": id, "name": "Stale", "expectedRevision": 1], sessionID: "s")) { error in
+            XCTAssertEqual((error as? PhoneConnectorFailure)?.code, "marker_revision_conflict")
+        }
+        let delete: [String: Any] = ["operationId": UUID().uuidString, "markerId": id, "expectedRevision": 2]
+        XCTAssertEqual(try store.execute("maps.markers.delete", delete, sessionID: "s")["existed"] as? Bool, true)
+        XCTAssertEqual(try store.execute("maps.markers.delete", delete, sessionID: "s")["replayed"] as? Bool, true)
+        XCTAssertEqual(try store.execute("maps.markers.list", [:])["total"] as? Int, 0)
+        _ = try store.execute("maps.markers.update", update, sessionID: "s")
+        XCTAssertEqual(try store.execute("maps.markers.list", [:])["total"] as? Int, 0, "A historical receipt cannot restore a deleted marker")
+    }
+    func testLiteralSearchPaginationAndDuplicateNames() throws {
+        let store = PhoneMapMarkerStore(hostID: "host", root: try root())
+        _ = try store.execute("maps.markers.create", args("100%安全"), sessionID: "s")
+        _ = try store.execute("maps.markers.create", args("停车位"), sessionID: "s")
+        _ = try store.execute("maps.markers.create", args("停车位"), sessionID: "s")
+        let percent = try store.execute("maps.markers.list", ["query": "%"])
+        XCTAssertEqual(percent["total"] as? Int, 1)
+        let page = try store.execute("maps.markers.list", ["query": "停车位", "limit": 1])
+        XCTAssertEqual(page["total"] as? Int, 2); XCTAssertEqual(page["nextOffset"] as? Int, 1)
+        let second = try store.execute("maps.markers.list", ["query": "停车位", "limit": 1, "offset": 1])
+        XCTAssertEqual(second["hasMore"] as? Bool, false)
+        XCTAssertTrue(second["nextOffset"] is NSNull)
+    }
+    func testInvalidMarkerInputIsRejectedBeforeStorage() throws {
+        for patch: [String: Any] in [["name": " "], ["name": "bad\0name"], ["latitude": true], ["longitude": 181], ["notes": String(repeating: "a", count: 1001)], ["extra": "not allowed"]] {
+            XCTAssertThrowsError(try PhoneMapMarkerStore.validate("maps.markers.create", args().merging(patch) { _, value in value }))
+        }
+        let id = UUID().uuidString
+        XCTAssertThrowsError(try PhoneMapMarkerStore.validate("maps.markers.update", ["operationId": id, "markerId": id, "latitude": 31]))
+        XCTAssertThrowsError(try PhoneMapMarkerStore.validate("maps.markers.update", ["operationId": id, "markerId": id]))
+        XCTAssertThrowsError(try PhoneMapMarkerStore.validate("maps.markers.list", ["limit": true]))
+    }
+    func testReceiptSaveFailureRollsBackMarkerAndAllowsRetryWithoutDuplicates() throws {
+        let root = try root(), store = PhoneMapMarkerStore(hostID: "host", root: root), input = args()
+        _ = try store.execute("maps.markers.list", [:])
+        let file = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).first { $0.pathExtension == "sqlite" })
+        var database: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(file.path, &database), SQLITE_OK)
+        defer { sqlite3_close(database) }
+        XCTAssertEqual(sqlite3_exec(database, "CREATE TRIGGER reject_receipt BEFORE INSERT ON receipts BEGIN SELECT RAISE(FAIL,'fixture'); END", nil, nil, nil), SQLITE_OK)
+        XCTAssertThrowsError(try store.execute("maps.markers.create", input, sessionID: "s"))
+        XCTAssertEqual(try store.execute("maps.markers.list", [:])["total"] as? Int, 0)
+        XCTAssertEqual(sqlite3_exec(database, "DROP TRIGGER reject_receipt", nil, nil, nil), SQLITE_OK)
+        XCTAssertEqual(try store.execute("maps.markers.create", input, sessionID: "s")["status"] as? String, "created")
+        XCTAssertEqual(try store.execute("maps.markers.list", [:])["total"] as? Int, 1)
+        XCTAssertEqual(try store.execute("maps.markers.create", input, sessionID: "s")["replayed"] as? Bool, true)
+    }
+    func testUnavailableStorageNeverReportsSuccessfulSaveOrEmptyList() throws {
+        let blocked = try root().appendingPathComponent("blocked")
+        try Data("file".utf8).write(to: blocked)
+        let store = PhoneMapMarkerStore(hostID: "host", root: blocked)
+        XCTAssertThrowsError(try store.execute("maps.markers.create", args(), sessionID: "s"))
+        XCTAssertThrowsError(try store.execute("maps.markers.list", [:]))
+    }
+}
+
+@MainActor
+final class ComposerAttachmentPasteTests: XCTestCase {
+    func testImageClipboardPasteRoutesToAttachmentsWithoutChangingText() {
+        let view = CommandTextView()
+        view.text = "保留草稿"
+        var received: [NSItemProvider] = []
+        view.onPasteAttachments = { received = $0 }
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
+            UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+        let clipboard = UIPasteboard.general
+        let old = clipboard.items
+        defer { clipboard.items = old }
+        clipboard.image = image
+        XCTAssertTrue(view.canPerformAction(#selector(UIResponderStandardEditActions.paste(_:)), withSender: nil))
+        view.paste(nil)
+        XCTAssertEqual(received.count, 1)
+        XCTAssertEqual(view.text, "保留草稿")
+        XCTAssertTrue(ComposerPasteLoader.isAttachment(received[0]))
+    }
+
+    func testFileProviderIsCopiedBeforeTemporaryRepresentationDisappears() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("paste-test-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("source.pdf")
+        let bytes = Data("copied file".utf8)
+        try bytes.write(to: source)
+        let provider = NSItemProvider()
+        provider.suggestedName = "报告.pdf"
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.pdf.identifier, fileOptions: [], visibility: .all) {
+            completion in completion(source, false, nil); return nil
+        }
+        let view = CommandTextView()
+        var attachments: [NSItemProvider] = []
+        view.onPasteAttachments = { attachments = $0 }
+        let clipboard = UIPasteboard.general
+        let old = clipboard.items
+        defer { clipboard.items = old }
+        clipboard.setItemProviders([provider], localOnly: true, expirationDate: nil)
+        XCTAssertTrue(view.canPaste([provider]))
+        XCTAssertTrue(view.canPerformAction(#selector(UIResponderStandardEditActions.paste(_:)), withSender: nil))
+        view.paste(nil)
+        XCTAssertEqual(attachments.count, 1)
+        let (copied, isImage) = try await ComposerPasteLoader.copy(provider, to: directory, index: 0)
+        try FileManager.default.removeItem(at: source)
+        XCTAssertFalse(isImage)
+        XCTAssertEqual(copied.lastPathComponent, "报告.pdf")
+        XCTAssertEqual(try Data(contentsOf: copied), bytes)
+    }
+
+    func testImageProviderMaterializesAnImageAndTextIsNotAnAttachment() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("paste-image-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 9, height: 7)).image { _ in }
+        let provider = NSItemProvider(object: image)
+        let (url, isImage) = try await ComposerPasteLoader.copy(provider, to: directory, index: 0)
+        XCTAssertTrue(isImage)
+        XCTAssertNotNil(UIImage(data: try Data(contentsOf: url)))
+        XCTAssertFalse(ComposerPasteLoader.isAttachment(NSItemProvider(object: "https://example.com" as NSString)))
+        XCTAssertFalse(CommandTextView().receivePastedProviders([provider]), "未接入附件的编辑器保留系统默认行为")
+    }
+}
+
+extension ComposerAttachmentPasteTests {
+    func testMixedPasteKeepsTextAtSelectionAndDoesNotEmbedAttachmentCharacters() async throws {
+        let view = CommandTextView()
+        view.text = "ab"
+        view.selectedRange = NSRange(location: 1, length: 0)
+        var attachments = 0
+        view.onPasteAttachments = { attachments += $0.count }
+        let image = NSItemProvider(object: UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in })
+        XCTAssertTrue(view.receivePastedProviders([image, NSItemProvider(object: "文字" as NSString), NSItemProvider(object: "第二段" as NSString)]))
+        for _ in 0..<100 where view.text == "ab" { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(attachments, 1)
+        XCTAssertEqual(view.text, "a文字\n第二段b")
+        XCTAssertFalse(view.text.contains("\u{fffc}"))
+    }
+}
+
+extension ComposerAttachmentPasteTests {
+    func testTextFilesKeepTheirFileIdentityInsteadOfPastingTheirContents() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("paste-text-files-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for (index, suffix) in ["log", "txt", "md", "csv", "json"].enumerated() {
+            let name = "report.\(suffix)"
+            let source = root.appendingPathComponent(name)
+            let bytes = Data("这些是文件内容，不应插入输入框".utf8)
+            try bytes.write(to: source)
+            let provider = NSItemProvider()
+            provider.suggestedName = name
+            provider.registerFileRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier,
+                fileOptions: [], visibility: .all) { completion in
+                completion(source, false, nil); return nil
+            }
+            provider.registerObject("这些是文件内容，不应插入输入框" as NSString, visibility: .all)
+            let view = CommandTextView()
+            view.text = "保留草稿"
+            var attachments = 0
+            view.onPasteAttachments = { attachments += $0.count }
+            XCTAssertTrue(view.canPaste([provider]))
+            XCTAssertTrue(view.receivePastedProviders([provider]), suffix)
+            XCTAssertEqual(attachments, 1, suffix)
+            let (copy, image) = try await ComposerPasteLoader.copy(provider, to: root, index: index)
+            XCTAssertFalse(image)
+            XCTAssertEqual(copy.lastPathComponent, name)
+            XCTAssertEqual(try Data(contentsOf: copy), bytes)
+            XCTAssertEqual(view.text, "保留草稿", suffix)
+        }
+        XCTAssertFalse(ComposerPasteLoader.isAttachment(NSItemProvider(object: "report.log" as NSString)),
+            "仅复制文件名文字时不能当成附件")
+    }
+
+    func testUnnamedOpenInPlaceTextFileIsAnAttachment() {
+        let provider = NSItemProvider()
+        provider.registerFileRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier,
+            fileOptions: .openInPlace, visibility: .all) { _ in nil }
+        XCTAssertTrue(ComposerPasteLoader.isAttachment(provider))
     }
 }

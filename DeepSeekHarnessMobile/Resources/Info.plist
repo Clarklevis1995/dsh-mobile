@@ -2,6 +2,22 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>按你的明确指令创建和管理 Whaleness 闹钟，由系统在指定时间响铃；可随时关闭闹钟连接器。</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>读取 Apple Music 个人资料库的歌曲、专辑、歌手和歌单，提供给你授权的主机，并按指令控制系统音乐播放。</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>读取提醒事项，并按你的明确指令新建待办及到点提醒。数据提供给已授权的主机和模型服务，可随时关闭连接器。</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>读取提醒事项，并按你的明确指令新建待办及到点提醒。数据提供给已授权的主机和模型服务，可随时关闭连接器。</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>读取日历忙闲，并按你的明确指令创建日程及提前提醒；不发送参与人和联系方式。</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>读取日历忙闲，并按你的明确指令创建日程。可随时关闭连接器。</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).agent.continued.*</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -17,7 +33,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.8.0</string>
+	<string>1.8.1</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -30,7 +46,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>39</string>
+	<string>40</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -43,9 +59,14 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>连接局域网中的 DeepSeek Harness Mobile Gateway。</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Agent 执行期间使用低精度后台定位维持任务连接；位置数据不会保存或上传。</string>
+	<string>执行任务时使用低精度后台定位维持连接；位置连接器按你的请求提供近似或已授权的精确位置，用于地图与路线服务。</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>MapsPrecision</key>
+		<string>按你的请求获取精确位置，用于查找附近地点、地址查询和路线规划，并提供给你授权的主机。</string>
+	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Agent 执行期间使用低精度定位维持任务连接；位置数据不会保存或上传。</string>
+	<string>开启位置连接器后，按你的请求提供当前位置、保存地点标记、查找地点和规划路线。精确位置需系统允许，并会提供给你授权的主机和模型服务。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>用于将聊天中预览的图片保存到相册。</string>
 	<key>NSMicrophoneUsageDescription</key>
@@ -54,6 +75,10 @@
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
 	<true/>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>INSendMessageIntent</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -79,5 +104,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>ShareAppGroup</key>
+	<string>$(DSH_SHARE_APP_GROUP)</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>读取步数与睡眠摘要，供你已授权的主机和模型服务回顾日常健康。可随时关闭连接器。</string>
 </dict>
 </plist>

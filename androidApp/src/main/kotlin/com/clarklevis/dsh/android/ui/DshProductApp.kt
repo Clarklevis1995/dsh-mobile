@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.android.ui
 
+import androidx.compose.ui.platform.LocalContext
 import android.app.Activity
 import android.net.Uri
 import androidx.compose.animation.AnimatedContentTransitionScope
@@ -113,6 +114,7 @@ private const val ROUTE_PLUGIN_BUNDLE = "plugins/bundle/{bundleName}"
 private const val ROUTE_PLUGIN_OFFICIAL = "plugins/official/{pluginId}"
 private const val ROUTE_SCHEDULED_TASKS = "scheduled-tasks"
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DshProductApp(
     stateHolder: AndroidSharedStateHolder,
@@ -121,6 +123,7 @@ internal fun DshProductApp(
     notificationRoute: AndroidNotificationSessionRoute?,
     onNotificationRouteOpened: (AndroidNotificationSessionRoute) -> Unit
 ) {
+    ConnectorRequestHost(stateHolder.deviceConnectors)
     val updateModel: com.clarklevis.dsh.android.update.AppUpdateViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val updateState by updateModel.state.collectAsStateWithLifecycle()
     AppUpdateDialogs(updateModel, updateState)
@@ -135,6 +138,61 @@ internal fun DshProductApp(
             launchSingleTop = true
         }
         onNotificationRouteOpened(route)
+    }
+    val application = LocalContext.current.applicationContext as com.clarklevis.dsh.android.DshAndroidApplication
+    val inbox = application.shareInbox
+    val incoming = inbox.pending
+    var shareTarget by rememberSaveable(incoming?.id) { mutableStateOf<String?>(null) }
+    var creatingShareConversation by remember(incoming?.id) { mutableStateOf(false) }
+    var shareCreationError by remember(incoming?.id) { mutableStateOf<String?>(null) }
+    val shareScope = rememberCoroutineScope()
+    val openShareConversation: (String) -> Unit = { sessionId ->
+        shareTarget = sessionId
+        stateHolder.selectSession(sessionId)
+        navController.navigate(ROUTE_CONVERSATION) { popUpTo(ROUTE_WORKSPACE); launchSingleTop = true }
+    }
+    if (incoming != null && shareTarget == null) {
+        val destinations = remember(stateHolder.snapshot.sessions, stateHolder.availableWorkspaces, stateHolder.childSessionIds) {
+            ShareDestinations(stateHolder.snapshot.sessions, stateHolder.availableWorkspaces, stateHolder.childSessionIds)
+        }
+        IncomingShareSheet(
+            share = incoming,
+            destinations = destinations,
+            initialWorkspace = stateHolder.selectedWorkspaceId,
+            creating = creatingShareConversation,
+            error = shareCreationError,
+            onDismiss = { inbox.pending = null },
+            onSelect = openShareConversation,
+            onCreate = { workspaceId ->
+                if (!creatingShareConversation) {
+                    creatingShareConversation = true
+                    shareCreationError = null
+                    shareScope.launch {
+                        try {
+                            val sessionId = stateHolder.prepareIncomingShareConversation(workspaceId)
+                            if (inbox.pending?.id == incoming.id) {
+                                if (sessionId != null) openShareConversation(sessionId)
+                                else shareCreationError = stateHolder.platformError ?: appText("创建会话失败，请检查连接后重试")
+                            }
+                        } finally {
+                            creatingShareConversation = false
+                        }
+                    }
+                }
+            }
+        )
+    }
+    LaunchedEffect(incoming?.id, shareTarget, stateHolder.snapshot.selectedSessionId, stateHolder.snapshot.selectedHistoryIsLoading) {
+        val share = incoming ?: return@LaunchedEffect
+        val target = shareTarget ?: return@LaunchedEffect
+        if (stateHolder.snapshot.selectedSessionId == target && !stateHolder.snapshot.selectedHistoryIsLoading) {
+            if (stateHolder.applyIncomingShare(share)) inbox.pending = null
+            shareTarget = null
+        }
+    }
+    inbox.error?.let { error ->
+        AlertDialog(onDismissRequest = { inbox.error = null }, title = { Text(appText("分享失败")) },
+            text = { Text(error) }, confirmButton = { TextButton(onClick = { inbox.error = null }) { Text(appText("好")) } })
     }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val isWorkspace = backStackEntry?.destination?.route == null ||
@@ -189,7 +247,8 @@ internal fun DshProductApp(
                     },
                     onSettings = { navController.navigate(ROUTE_SETTINGS) },
                     onPlugins = { navController.navigate(ROUTE_PLUGINS) },
-                    onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) }
+                    onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) },
+                    onConnectors = { navController.navigate(CONNECTORS_ROUTE) }
                 )
             }
             composable(ROUTE_CONVERSATION) {
@@ -235,6 +294,7 @@ internal fun DshProductApp(
             composable(ROUTE_SETTINGS_DEFAULT_MODEL) {
                 DefaultModelSelectionScreen(stateHolder, navController::popBackStack)
             }
+            connectorDestinations(stateHolder.deviceConnectors, navController)
             composable(ROUTE_PLUGINS) {
                 PluginsScreen(
                     stateHolder = stateHolder,
@@ -339,7 +399,8 @@ internal fun WorkspaceScreen(
     onNewSession: () -> Unit,
     onSettings: () -> Unit,
     onPlugins: () -> Unit,
-    onScheduledTasks: () -> Unit
+    onScheduledTasks: () -> Unit,
+    onConnectors: () -> Unit
 ) {
     val window = adaptiveWindowSize()
     val workspaceListState = rememberLazyListState()
@@ -348,7 +409,6 @@ internal fun WorkspaceScreen(
     var showQrScanner by rememberSaveable { mutableStateOf(false) }
     var showWorkspaceMenu by rememberSaveable { mutableStateOf(false) }
     var showDirectoryBrowser by rememberSaveable { mutableStateOf(false) }
-    var showWorkspaceRequiredAlert by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(stateHolder.gatewayState.connection) { stateHolder.refreshProductState() }
     LaunchedEffect(searchQuery) {
         if (searchQuery.isNotBlank()) delay(350)
@@ -420,7 +480,7 @@ internal fun WorkspaceScreen(
         }
     }
 
-    WorkspaceDrawer(onPlugins = onPlugins, onScheduledTasks = onScheduledTasks) { openDrawer, canScrollVertically ->
+    WorkspaceDrawer(onPlugins = onPlugins, onScheduledTasks = onScheduledTasks, onConnectors = onConnectors) { openDrawer, canScrollVertically ->
         val backgroundAnimationEnabled by remember(canScrollVertically, workspaceListState) {
             derivedStateOf { canScrollVertically && !workspaceListState.isScrollInProgress }
         }
@@ -495,7 +555,7 @@ internal fun WorkspaceScreen(
                                 )
                             }
                             GlassActionButton("＋", appText("新建会话")) {
-                                if (showingAllWorkspaces) showWorkspaceRequiredAlert = true else onNewSession()
+                                onNewSession()
                             }
                         },
                         recentSessions = {
@@ -536,16 +596,6 @@ internal fun WorkspaceScreen(
         }
     }
 
-    if (showWorkspaceRequiredAlert) {
-        DshAlertDialog(
-            onDismissRequest = { showWorkspaceRequiredAlert = false },
-            title = appText("请先选择工作区"),
-            message = appText("请先选择一个具体工作区，再创建新会话。"),
-            confirmLabel = appText("知道了"),
-            onConfirm = { showWorkspaceRequiredAlert = false },
-            modifier = Modifier.testTag("workspace-required-alert")
-        )
-    }
     if (showQrScanner) {
         GatewayQrScannerScreen(
             onCode = { payload ->

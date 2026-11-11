@@ -169,7 +169,7 @@ internal fun renderMarkdownSelectionText(source: String, fontSizePx: Float, dens
             else -> children(node, ::block)
         }
     }
-    block(markdownInteractionParser.parse(source))
+    block(markdownInteractionParser.parse(prepareMarkdownMath(source, forSelection = true)))
     if (output.endsWith("\n")) output.delete(output.length - 1, output.length)
     return output
 }

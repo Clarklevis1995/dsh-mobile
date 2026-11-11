@@ -63,11 +63,19 @@ struct SlashCommandTextView: UIViewRepresentable {
     @Binding var isFocused: Bool
     var isCompact = false
     var onSelectionChange: (NSRange) -> Void = { _ in }
+    var onPasteAttachments: (([NSItemProvider]) -> Void)? = nil
 
     func makeUIView(context: Context) -> CommandTextView {
         let textView = CommandTextView()
         textView.accessibilityIdentifier = "composer-input"
         textView.delegate = context.coordinator
+        textView.onPasteAttachments = onPasteAttachments
+        if onPasteAttachments != nil {
+            textView.pasteConfiguration = UIPasteConfiguration(acceptableTypeIdentifiers: [
+                UTType.image.identifier, UTType.fileURL.identifier, UTType.data.identifier,
+                UTType.text.identifier, UTType.url.identifier
+            ])
+        }
         textView.onFocusWillChange = { [weak coordinator = context.coordinator] focused in
             coordinator?.nativeFocusWillChange(focused)
         }
@@ -88,6 +96,7 @@ struct SlashCommandTextView: UIViewRepresentable {
         let font = UIFont.appPreferredFont(forTextStyle: .body)
         if textView.font != font { textView.font = font }
         context.coordinator.update(parent: self)
+        textView.onPasteAttachments = onPasteAttachments
         textView.setCompactPreview(isCompact)
         textView.apply(text: text, presentation: presentation, placeholder: placeholder)
         if isCompact && !textView.isFirstResponder && textView.contentOffset != .zero {
@@ -117,6 +126,7 @@ struct SlashCommandTextView: UIViewRepresentable {
     static func dismantleUIView(_ uiView: CommandTextView, coordinator: Coordinator) {
         uiView.delegate = nil
         uiView.onFocusWillChange = nil
+        uiView.onPasteAttachments = nil
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -173,13 +183,15 @@ struct SlashCommandTextView: UIViewRepresentable {
     }
 }
 
-/// 加号和原生输入节点始终保留；工具栏按焦点淡入淡出。
+/// 加号和原生输入节点始终保留；工具栏按焦点显隐，停止操作可在收起时保留。
 struct ComposerMorphLayout: Layout {
     var expansion: CGFloat
+    var keepActionWhenCollapsed: Bool
     private let targetExpanded: Bool
     private let textLineHeight: CGFloat
-    init(expansion: CGFloat) {
+    init(expansion: CGFloat, keepActionWhenCollapsed: Bool = false) {
         self.expansion = expansion
+        self.keepActionWhenCollapsed = keepActionWhenCollapsed
         targetExpanded = expansion > 0
         textLineHeight = ceil(UIFont.appPreferredFont(forTextStyle: .body).lineHeight)
     }
@@ -198,7 +210,8 @@ struct ComposerMorphLayout: Layout {
 
     private func metrics(width: CGFloat, subviews: Subviews, cache: inout Cache) -> (CGFloat, CGFloat, CGFloat) {
         let progress = min(1, max(0, expansion))
-        let editorWidth = max(1, width - 44 * (1 - progress))
+        let compactActionSpace: CGFloat = keepActionWhenCollapsed ? 48 : 0
+        let editorWidth = max(1, width - (44 + compactActionSpace) * (1 - progress))
         // 只在内容、宽度或展开目标变化时测量自然高度；收起时保留展开高度，
         // 防止原生编辑器切回单行后让外框在第一帧直接变小。
         if targetExpanded && (cache.width != width || !cache.targetExpanded || (cache.dirty && progress >= 1)) {
@@ -241,6 +254,7 @@ struct VoiceComposerTextInput: View {
     var isCompact = false
     var onHoldingChanged: (Bool) -> Void = { _ in }
     var onSelectionChange: (NSRange) -> Void = { _ in }
+    var onPasteAttachments: (([NSItemProvider]) -> Void)? = nil
 
     var body: some View {
         Group {
@@ -254,7 +268,8 @@ struct VoiceComposerTextInput: View {
                     placeholder: state.hint.localized,
                     isFocused: $isFocused,
                     isCompact: isCompact,
-                    onSelectionChange: onSelectionChange
+                    onSelectionChange: onSelectionChange,
+                    onPasteAttachments: onPasteAttachments
                 )
                 .padding(.horizontal, 3)
                 .frame(minHeight: 38, alignment: .top)
@@ -336,6 +351,62 @@ struct VoiceHoldInput: UIViewRepresentable {
 
 final class CommandTextView: UITextView {
     var onFocusWillChange: ((Bool) -> Void)?
+    var onPasteAttachments: (([NSItemProvider]) -> Void)?
+
+    override func canPaste(_ itemProviders: [NSItemProvider]) -> Bool {
+        if onPasteAttachments != nil && itemProviders.contains(where: ComposerPasteLoader.isAttachment) { return true }
+        return super.canPaste(itemProviders)
+    }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(paste(_:)), onPasteAttachments != nil {
+            let clipboard = UIPasteboard.general
+            let hasFile = clipboard.types.contains {
+                guard let type = UTType($0) else { return false }
+                return type.conforms(to: .data) && !type.conforms(to: .text) && !type.conforms(to: .url)
+            }
+            // 文本文件的类型与普通文字重叠；是否粘贴文件由 provider 的文件表示和名称判断。
+            if clipboard.hasImages || clipboard.hasURLs || hasFile || clipboard.hasStrings { return true }
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    override func paste(_ sender: Any?) {
+        // 只在用户执行粘贴时读取剪贴板，菜单查询不读取图片或文件内容。
+        if !receivePastedProviders(UIPasteboard.general.itemProviders) { super.paste(sender) }
+    }
+
+    override func paste(itemProviders: [NSItemProvider]) {
+        if !receivePastedProviders(itemProviders) { super.paste(itemProviders: itemProviders) }
+    }
+
+    @discardableResult
+    func receivePastedProviders(_ providers: [NSItemProvider]) -> Bool {
+        guard let onPasteAttachments else { return false }
+        let attachments = providers.filter(ComposerPasteLoader.isAttachment)
+        guard !attachments.isEmpty else { return false }
+        onPasteAttachments(attachments)
+        let textProviders = providers.filter { !ComposerPasteLoader.isAttachment($0) }
+        Task { @MainActor [weak self] in
+            var values: [String] = []
+            for provider in textProviders {
+                let text: String? = await withCheckedContinuation { continuation in
+                    if provider.canLoadObject(ofClass: NSString.self) {
+                        _ = provider.loadObject(ofClass: NSString.self) { item, _ in
+                            continuation.resume(returning: item as? String)
+                        }
+                    } else {
+                        _ = provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, _ in
+                            continuation.resume(returning: (item as? URL)?.absoluteString)
+                        }
+                    }
+                }
+                if let text { values.append(text) }
+            }
+            if !values.isEmpty { self?.insertText(values.joined(separator: "\n")) }
+        }
+        return true
+    }
 
     override func becomeFirstResponder() -> Bool {
         if !isFirstResponder { onFocusWillChange?(true) }
@@ -487,6 +558,8 @@ struct ConversationView: View {
     @Binding var activeView: Int
     var topContentInset: CGFloat = 0
     @State private var draft = ""
+    @ObservedObject private var incomingShares = IncomingShareCoordinator.shared
+    @State private var importingShareID: UUID?
     @State private var initialDraftFocusPending = false
     @State private var draftSelection = NSRange(location: NSNotFound, length: 0)
     @State private var memberDrafts: [String: String] = [:]
@@ -502,8 +575,6 @@ struct ConversationView: View {
     @State private var pendingImages: [GatewayOutgoingImage] = []
     @State private var isImportingImages = false
     @State private var showsContextUsage = false
-    @State private var showsSessionStats = false
-    @State private var showsSessionStatsPopover = false
     @State private var tasksExpanded = false
     @State private var showsGoalEditor = false
     @State private var goalObjectiveDraft = ""
@@ -528,6 +599,7 @@ struct ConversationView: View {
     // 普通 State 作为单向的显式聚焦/失焦请求，UITextView 自己持有第一响应者。
     @State private var composerIsFocused = false
     @State private var showsAgentPresetMenu = false
+    @State private var showsNewWorkspaceMenu = false
     @ScaledMetric(relativeTo: .caption) private var composerCapsuleHeight: CGFloat = 34
     private let conversationBottomClearance: CGFloat = 22
 
@@ -588,11 +660,9 @@ struct ConversationView: View {
         .foregroundStyle(.primary)
         .onChangeCompat(of: activeView) { _, view in
             if view != 0 { composerIsFocused = false }
-            showsSessionStatsPopover = false
             showsAgentPresetMenu = false
         }
         .onChangeCompat(of: store.selectedSessionId) { _, _ in
-            showsSessionStatsPopover = false
             showsAgentPresetMenu = false
         }
         .onDisappear {
@@ -600,12 +670,6 @@ struct ConversationView: View {
         }
         .sheet(item: conversationPreviewBinding) { request in
             WorkspaceFilePreviewLoadingSheet(store: store, request: request)
-        }
-        .sheet(isPresented: $showsSessionStats) {
-            SessionStatsSheet(
-                snapshot: store.selectedSessionStatsSnapshot,
-                sessionTitle: store.selectedSession?.title ?? String(localized: "session.new.fallback", defaultValue: "新建 DeepSeek Harness")
-            )
         }
     }
 
@@ -672,6 +736,7 @@ struct ConversationView: View {
                         guard sessionID == store.selectedSessionId else { return }
                         viewportContentSessionID = sessionID
                         viewportHasConversationContent = hasContent
+                        if hasContent, let sessionID { store.conversationContentBecameReadable(sessionID: sessionID) }
                     }
                 },
                 onPinnedToBottomChanged: { pinned in
@@ -794,11 +859,8 @@ struct ConversationView: View {
                         // goal panels cannot push an action card off screen.
                         HStack(spacing: 8) {
                             sessionAgentPresetControl
-                            if let snapshot = store.selectedSessionStatsSnapshot {
-                                sessionStatsBanner(snapshot)
-                            } else {
-                                Spacer(minLength: 0)
-                            }
+                            Spacer(minLength: 0)
+                            newConversationWorkspaceControl
                         }
                         .padding(.horizontal, 14)
                         .padding(.bottom, 6)
@@ -860,6 +922,7 @@ struct ConversationView: View {
                                 .padding(.horizontal, 14)
                             composer
                         }
+                        .disabled(store.isChangingNewConversationWorkspace)
                     }
                 }
                 .background {
@@ -887,24 +950,6 @@ struct ConversationView: View {
             .animation(voiceOverlayAnimation(active: voiceState.overlayVisible, reduceMotion: reduceMotion), value: voiceState.overlayVisible)
             .zIndex(3)
         }
-        .overlayPreferenceValue(SessionStatsPopoverAnchorKey.self) { anchor in
-            if let anchor,
-               let snapshot = store.selectedSessionStatsSnapshot {
-                GeometryReader { geometry in
-                    ComposerPopoverOverlay(
-                        sourceFrame: geometry[anchor],
-                        availableSize: geometry.size,
-                        isPresented: showsSessionStatsPopover,
-                        onDismiss: { showsSessionStatsPopover = false }
-                    ) {
-                        SessionStatsPopover(snapshot: snapshot) {
-                            showsSessionStatsPopover = false
-                            showsSessionStats = true
-                        }
-                    }
-                }
-            }
-        }
         .overlayPreferenceValue(SessionAgentPresetPopoverAnchorKey.self) { anchor in
             if let anchor {
                 GeometryReader { geometry in
@@ -918,6 +963,18 @@ struct ConversationView: View {
                         maximumContentHeight: 380
                     ) {
                         sessionAgentPresetMenuContent
+                    }
+                }
+            }
+        }
+        .overlayPreferenceValue(NewConversationWorkspaceAnchorKey.self) { anchor in
+            if let anchor {
+                GeometryReader { geometry in
+                    ComposerPopoverOverlay(sourceFrame: geometry[anchor], availableSize: geometry.size,
+                        isPresented: showsNewWorkspaceMenu && store.showsNewConversationWorkspace,
+                        onDismiss: { showsNewWorkspaceMenu = false }, preferredWidth: 292,
+                        alignsToTrailing: true, maximumContentHeight: 380) {
+                        newConversationWorkspaceMenu
                     }
                 }
             }
@@ -939,7 +996,6 @@ struct ConversationView: View {
             composerHeight = height
         }
         .onChangeCompat(of: composerIsFocused) { _, isFocused in
-            if isFocused { showsSessionStatsPopover = false }
             // 焦点布局先提交，语音状态同步和历史贴底不占用动画起步的同一轮主线程。
             DispatchQueue.main.async {
                 guard composerIsFocused == isFocused else { return }
@@ -1014,12 +1070,14 @@ struct ConversationView: View {
             store.leaveSessionAgentPreset()
         }
         .onChangeCompat(of: store.selectedSessionId) { previous, current in
-            if let previous {
-                memberDrafts[previous] = draft
-                memberImages[previous] = pendingImages
+            if !store.isDraftWorkspaceReplacement(from: previous, to: current) {
+                if let previous {
+                    memberDrafts[previous] = draft
+                    memberImages[previous] = pendingImages
+                }
+                draft = current.flatMap { memberDrafts[$0] } ?? ""
+                pendingImages = current.flatMap { memberImages[$0] } ?? []
             }
-            draft = current.flatMap { memberDrafts[$0] } ?? ""
-            pendingImages = current.flatMap { memberImages[$0] } ?? []
             selectedPhotoItems = []
             store.voiceInput.open(context: current ?? "new-session", draft: composerEditableText)
             if previous != nil && current == nil { dismissConversation() }
@@ -1299,6 +1357,7 @@ struct ConversationView: View {
     // 避免首次进入会话时解析整个输入卡片类型导致栈溢出。
     private var composerCard: some View {
         AnyView(composerCardSessionLifecycle)
+        .task(id: sharedDraftReadyKey) { await importSharedDraft() }
         .onChangeCompat(of: selectedPhotoItems) { _, items in
             guard !items.isEmpty else { return }
             store.voiceInput.setVoiceMode(false)
@@ -1321,6 +1380,72 @@ struct ConversationView: View {
             selectedPhotoItems = []
             composerIsFocused = false
         }
+    }
+
+    private var sharedDraftReadyKey: String {
+        guard let share = incomingShares.pending, share.target.gatewayID == store.gatewayLocalID,
+              share.target.sessionID == store.selectedSessionId,
+              !store.historyLoadingSessionIds.contains(share.target.sessionID),
+              !store.conversationPreparingSessionIDs.contains(share.target.sessionID),
+              !isPreparingHistoryPresentation else { return "" }
+        return "\(share.id.uuidString):\(store.fileUploads.supported):\(store.gateway.state.isConnected)"
+    }
+
+    @MainActor
+    private func importSharedDraft() async {
+        guard !sharedDraftReadyKey.isEmpty, let share = incomingShares.pending,
+              importingShareID != share.id else { return }
+        let urls = ShareInbox.fileURLs(share)
+        let files = urls.filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .image) != true }
+        guard files.isEmpty || (store.fileUploads.supported && store.gateway.state.isConnected) else {
+            store.lastError = "分享文件需要连接支持文件上传的网关，内容已保留，请连接后重新打开会话。"
+            return
+        }
+        guard store.fileUploads.drafts.count + files.count <= 20, !store.fileUploads.preparing else {
+            store.lastError = "请先处理已有附件后重新打开会话，分享内容已保留。"
+            return
+        }
+        importingShareID = share.id
+        defer { importingShareID = nil }
+        var images: [GatewayOutgoingImage] = []
+        do {
+            for url in urls where !files.contains(url) {
+                let image = try await Task.detached(priority: .userInitiated) {
+                    try GatewayImagePreprocessor.prepare(data: Data(contentsOf: url))
+                }.value
+                images.append(GatewayOutgoingImage(mediaType: image.mediaType, data: image.data))
+            }
+            guard store.selectedSessionId == share.target.sessionID, !Task.isCancelled else { return }
+            guard pendingImages.count + images.count <= 20,
+                  (pendingImages + images).reduce(0, { $0 + $1.data.count }) <= 100 * 1024 * 1024 else {
+                store.lastError = "分享图片超出单条消息附件限制，请先处理已有附件。"
+                return
+            }
+            if !files.isEmpty {
+                store.fileUploads.select(sessionID: share.target.sessionID, allowed: !store.isViewingTeamMember)
+                let previousIDs = Set(store.fileUploads.drafts.map(\.id))
+                await store.fileUploads.importFiles(files)
+                guard store.selectedSessionId == share.target.sessionID, !Task.isCancelled else {
+                    if store.selectedSessionId == share.target.sessionID {
+                        for item in store.fileUploads.drafts where !previousIDs.contains(item.id) { store.fileUploads.remove(item.id) }
+                    }
+                    return
+                }
+                guard store.fileUploads.drafts.count - previousIDs.count == files.count else {
+                    for item in store.fileUploads.drafts where !previousIDs.contains(item.id) { store.fileUploads.remove(item.id) }
+                    return
+                }
+            }
+            if !share.text.isEmpty {
+                draft = store.supportsMessageQuotes
+                    ? ComposerQuoteDraft.shared.insertQuote(draft: draft, quote: share.text, selectionStart: 0, selectionEnd: 0)
+                    : [draft, share.text].filter { !$0.isEmpty }.joined(separator: "\n\n")
+            }
+            pendingImages.append(contentsOf: images)
+            store.voiceInput.setVoiceMode(false)
+            composerIsFocused = true
+            incomingShares.complete(share)
+        } catch { store.lastError = error.localizedDescription }
     }
 
     private var composerCardSessionLifecycle: some View {
@@ -1427,7 +1552,8 @@ struct ConversationView: View {
                 }
             } content: {
                 VStack(alignment: .leading, spacing: 12) {
-                    ComposerMorphLayout(expansion: composerExpanded ? 1 : 0) {
+                    ComposerMorphLayout(expansion: composerExpanded ? 1 : 0,
+                                        keepActionWhenCollapsed: showsSessionStopButton) {
                         attachmentMenu
                         VoiceComposerTextInput(
                             text: composerTextBinding,
@@ -1437,7 +1563,11 @@ struct ConversationView: View {
                             voice: store.voiceInput,
                             isCompact: !composerExpanded,
                             onHoldingChanged: { voiceTouchActive = $0 },
-                            onSelectionChange: { draftSelection = $0 }
+                            onSelectionChange: { draftSelection = $0 },
+                            onPasteAttachments: { providers in
+                                let target = store.selectedSessionId
+                                Task { await importPastedAttachments(providers, targetSessionID: target) }
+                            }
                         )
                         .offset(y: voiceState.voiceMode ? -4 : 0)
                         // 原生文字位置直接跟随本帧布局，避免 UIKit 再补一段位移动画。
@@ -1447,7 +1577,7 @@ struct ConversationView: View {
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         ZStack {
-                            if composerExpanded { composerAction.transition(.opacity) }
+                            if composerExpanded || showsSessionStopButton { composerAction.transition(.opacity) }
                         }
                         .frame(width: 42, height: 42)
                     }
@@ -1567,7 +1697,7 @@ struct ConversationView: View {
         .disabled(
             !store.selectedMemberCanSend || (showsSessionStopButton
                 ? store.isCancellingSelectedSession
-                : (composerHasContent && (store.sessionAgentPreset.blocksSending || store.waitingForNewSession || isImportingImages || store.fileUploads.preparing || (!store.fileUploads.drafts.isEmpty && !store.fileUploads.canSend) || store.commandSubmissionPending || store.messageSubmissionPending)))
+                : (composerHasContent && (store.isChangingNewConversationWorkspace || store.sessionAgentPreset.blocksSending || store.waitingForNewSession || isImportingImages || store.fileUploads.preparing || (!store.fileUploads.drafts.isEmpty && !store.fileUploads.canSend) || store.commandSubmissionPending || store.messageSubmissionPending)))
         )
         .opacity(
             showsSessionStopButton
@@ -1873,6 +2003,59 @@ struct ConversationView: View {
     }
 
     @MainActor
+    private func importPastedAttachments(_ providers: [NSItemProvider], targetSessionID: String?) async {
+        guard store.selectedMemberCanSend else { return }
+        guard !isImportingImages, !store.fileUploads.preparing else {
+            store.lastError = "请等待已有附件准备完成后再粘贴"
+            return
+        }
+        guard providers.count + pendingImages.count + store.fileUploads.drafts.count <= 20 else {
+            store.lastError = "一次最多添加 20 个附件"
+            return
+        }
+        isImportingImages = true
+        defer { isImportingImages = false }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("composer-paste-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            var files: [URL] = []
+            var images: [GatewayOutgoingImage] = []
+            var bytes = 0
+            for (index, provider) in providers.enumerated() {
+                let (url, image) = try await ComposerPasteLoader.copy(provider, to: directory, index: index)
+                bytes += try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                guard bytes <= 100 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
+                if image {
+                    let prepared = try await Task.detached(priority: .userInitiated) {
+                        try GatewayImagePreprocessor.prepare(data: Data(contentsOf: url))
+                    }.value
+                    images.append(GatewayOutgoingImage(mediaType: prepared.mediaType, data: prepared.data))
+                } else { files.append(url) }
+            }
+            guard store.selectedSessionId == targetSessionID, !Task.isCancelled else { return }
+            guard images.isEmpty || store.supportsImages,
+                  files.isEmpty || store.fileUploads.supported && !store.isViewingTeamMember else {
+                store.lastError = "当前会话或网关不支持此类附件"
+                return
+            }
+            guard (pendingImages + images).reduce(0, { $0 + $1.data.count }) <= 100 * 1024 * 1024 else {
+                throw CocoaError(.fileReadTooLarge)
+            }
+            if !files.isEmpty {
+                guard await store.ensureFileUploadSession() else { return }
+                let destination = store.selectedSessionId
+                store.fileUploads.select(sessionID: store.selectedSessionId, allowed: !store.isViewingTeamMember)
+                await store.fileUploads.importFiles(files)
+                guard store.selectedSessionId == destination, !Task.isCancelled else { return }
+            }
+            pendingImages.append(contentsOf: images)
+            store.voiceInput.setVoiceMode(false)
+            composerIsFocused = true
+        } catch { store.lastError = "无法读取粘贴的附件：\(error.localizedDescription)" }
+    }
+
+    @MainActor
     private func importPhotos(_ items: [PhotosPickerItem], targetSessionID: String?) async {
         isImportingImages = true
         defer {
@@ -1951,6 +2134,68 @@ struct ConversationView: View {
     }
 
     @ViewBuilder
+    private var newConversationWorkspaceControl: some View {
+        if store.showsNewConversationWorkspace {
+            let selected = store.workspaces.first { $0.id == store.newConversationWorkspace.workspaceId }
+            Button {
+                viewportProxy.prepareForOverlayPresentation()
+                showsAgentPresetMenu = false
+                showsNewWorkspaceMenu = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image("DshWorkspace").renderingMode(.template).resizable().scaledToFit()
+                        .frame(width: 16, height: 16).accessibilityHidden(true)
+                    Text(store.isChangingNewConversationWorkspace ? String(localized: "切换中…")
+                         : selected?.title ?? String(localized: "未分组"))
+                        .lineLimit(1).truncationMode(.middle)
+                    Image(systemName: "chevron.down").appFont(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                }
+                .appFont(.subheadline.weight(.medium))
+                .padding(.horizontal, 12).frame(height: composerCapsuleHeight)
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .glassSurface(radius: 16, tint: glassTint.opacity(0.88))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(glassEdge.opacity(0.9), lineWidth: 0.6) }
+            .disabled(!store.gateway.state.isConnected || store.isChangingNewConversationWorkspace || isImportingImages || store.fileUploads.preparing)
+            .accessibilityLabel("选择工作区")
+            .accessibilityIdentifier("new-conversation-workspace-capsule")
+            .anchorPreference(key: NewConversationWorkspaceAnchorKey.self, value: .bounds) { $0 }
+        }
+    }
+
+    private var newConversationWorkspaceMenu: some View {
+        VStack(spacing: 0) {
+            newConversationWorkspaceItem(nil, title: String(localized: "未分组"), path: nil)
+            ForEach(store.workspaces) { workspace in
+                newConversationWorkspaceItem(workspace.id, title: workspace.title, path: workspace.path)
+            }
+        }
+    }
+
+    private func newConversationWorkspaceItem(_ id: String?, title: String, path: String?) -> some View {
+        Button {
+            showsNewWorkspaceMenu = false
+            Task { await store.selectNewConversationWorkspace(id) }
+        } label: {
+            HStack(spacing: 10) {
+                Image("DshWorkspace").renderingMode(.template).resizable().scaledToFit().frame(width: 18, height: 18)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).appFont(.body).lineLimit(1)
+                    if let path { Text(path).appFont(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
+                }
+                Spacer(minLength: 0)
+                if id == store.newConversationWorkspace.workspaceId { Image(systemName: "checkmark").foregroundStyle(DSHColor.ocean) }
+            }
+            .padding(.horizontal, 18).padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("new-conversation-workspace-\(id ?? "ungrouped")")
+    }
+
+    @ViewBuilder
     private var sessionAgentPresetControl: some View {
         let state = store.sessionAgentPreset
         if state.visible {
@@ -1960,7 +2205,7 @@ struct ConversationView: View {
                 if retry { store.refreshSessionAgentPreset() }
                 else {
                     viewportProxy.prepareForOverlayPresentation()
-                    showsSessionStatsPopover = false
+                    showsNewWorkspaceMenu = false
                     showsAgentPresetMenu = true
                 }
             } label: {
@@ -1991,7 +2236,7 @@ struct ConversationView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(glassEdge.opacity(0.9), lineWidth: 0.6)
             }
-            .disabled(!store.gateway.state.isConnected || !(state.canSelect || retry))
+            .disabled(!store.gateway.state.isConnected || store.isChangingNewConversationWorkspace || !(state.canSelect || retry))
             .accessibilityLabel("选择会话模式")
             .accessibilityIdentifier("session-agent-preset-capsule")
             .anchorPreference(key: SessionAgentPresetPopoverAnchorKey.self, value: .bounds) { $0 }
@@ -2046,42 +2291,6 @@ struct ConversationView: View {
         case "cordis": return String(localized: "创建和调试自定义 Agent")
         default: return description ?? String(localized: "自定义 Agent 模式")
         }
-    }
-
-    private func sessionStatsBanner(_ snapshot: GatewaySessionStatsSnapshot) -> some View {
-        HStack(spacing: 0) {
-            Spacer(minLength: 0)
-            Button {
-                viewportProxy.prepareForOverlayPresentation()
-                showsAgentPresetMenu = false
-                showsSessionStatsPopover.toggle()
-            } label: {
-                HStack(spacing: 7) {
-                    Text(SessionStatsFormatter.turnsStepsLine(snapshot.stats) ?? String(localized: "正在读取会话统计…"))
-                        .appFont(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Image(systemName: "chevron.up")
-                        .appFont(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .contentShape(Rectangle())
-                .padding(.horizontal, 16)
-                .frame(height: composerCapsuleHeight)
-            }
-            .buttonStyle(.plain)
-            .glassSurface(radius: 16, tint: glassTint.opacity(0.88))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(glassEdge.opacity(0.9), lineWidth: 0.6)
-            }
-            .accessibilityLabel("查看会话执行状态")
-            .accessibilityValue(SessionStatsFormatter.compactLine(snapshot))
-            .anchorPreference(key: SessionStatsPopoverAnchorKey.self, value: .bounds) { $0 }
-        }
-
     }
 
     @ViewBuilder
@@ -2362,11 +2571,13 @@ struct ConversationView: View {
                         onRetryImage: { store.retryImageAttachment($0, sessionID: sessionID) },
                         onOpenFile: conversationFileOpener(),
                         onOpenUploadedFile: uploadedFileOpener()
-                    ).environment(\.messageQuoteAction, composerQuoteAction)),
+                    ).environment(\.messageQuoteAction, composerQuoteAction)
+                        .environment(\.workspaceMarkdownImageContext, store.markdownImageContext(sessionID: sessionID))),
                     // Completed responses are immutable for this revision.
                     // The viewport measures their SwiftUI root directly before
                     // caching, including fenced-code horizontal scroll views.
-                    clipsContentToBounds: true
+                    clipsContentToBounds: true,
+                    layoutRevision: viewportEntryRevision(entry, includesImageState: false)
                 )]
             case .process(let group):
                 return processViewportEntries(for: group)
@@ -2512,7 +2723,7 @@ struct ConversationView: View {
         }
     }
 
-    private func viewportEntryRevision(_ entry: ConversationDisplayEntry) -> Int {
+    private func viewportEntryRevision(_ entry: ConversationDisplayEntry, includesImageState: Bool = true) -> Int {
         let sessionID = store.selectedSessionId ?? ""
         var hasher = Hasher()
         hasher.combine(store.supportsMessageQuotes)
@@ -2529,8 +2740,10 @@ struct ConversationView: View {
             hasher.combine(item.knownFiles)
             for image in item.images {
                 hasher.combine(image)
-                hasher.combine(store.imageData(for: image.id, sessionID: sessionID) != nil)
-                hasher.combine(store.imageLoadError(for: image.id, sessionID: sessionID))
+                if includesImageState {
+                    hasher.combine(store.imageData(for: image.id, sessionID: sessionID) != nil)
+                    hasher.combine(store.imageLoadError(for: image.id, sessionID: sessionID))
+                }
             }
         case .process(let group):
             for item in group.items {
@@ -3504,9 +3717,20 @@ private enum SessionStatsFormatter {
     }
 }
 
+/// 面板单独订阅统计更新，导航栏不需要随每条会话事件重建。
+struct SessionStatsPresentation: View {
+    @ObservedObject var store: AppStore
+
+    var body: some View {
+        SessionStatsSheet(snapshot: store.selectedSessionStatsSnapshot,
+            sessionTitle: store.selectedSession?.title ?? String(localized: "session.new.fallback", defaultValue: "新建 DeepSeek Harness"))
+    }
+}
+
 private struct SessionStatsSheet: View {
     let snapshot: GatewaySessionStatsSnapshot?
     let sessionTitle: String
+    @State private var selectedDetent: PresentationDetent = .large
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -3562,7 +3786,7 @@ private struct SessionStatsSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $selectedDetent)
         .background(.regularMaterial)
     }
 
@@ -3590,14 +3814,6 @@ private struct SessionStatsSheet: View {
     }
 }
 
-private struct SessionStatsPopoverAnchorKey: PreferenceKey {
-    static var defaultValue: Anchor<CGRect>? { nil }
-
-    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
-        value = nextValue() ?? value
-    }
-}
-
 private struct SessionAgentPresetPopoverAnchorKey: PreferenceKey {
     static var defaultValue: Anchor<CGRect>? { nil }
 
@@ -3606,7 +3822,12 @@ private struct SessionAgentPresetPopoverAnchorKey: PreferenceKey {
     }
 }
 
-/// 模式与统计共用液态玻璃和箭头，原生玻璃自行处理高光与投影。
+private struct NewConversationWorkspaceAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? { nil }
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) { value = nextValue() ?? value }
+}
+
+/// 模式菜单使用液态玻璃和箭头，原生玻璃自行处理高光与投影。
 private struct ComposerPopoverOverlay<Content: View>: View {
     let sourceFrame: CGRect
     let availableSize: CGSize
@@ -3760,64 +3981,6 @@ private struct ComposerPopoverShape: Shape {
     }
 }
 
-private struct SessionStatsPopover: View {
-    let snapshot: GatewaySessionStatsSnapshot
-    let onViewFullStats: () -> Void
-
-    private var stats: GatewaySessionStats? { snapshot.stats }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let turnsSteps = SessionStatsFormatter.turnsStepsLine(stats) {
-                row(String(localized: "轮次 · 步骤"), turnsSteps)
-            }
-            if let llm = stats?.llmMs {
-                row("LLM", SessionStatsFormatter.duration(llm))
-            }
-            if let tool = stats?.toolMs {
-                row(String(localized: "工具调用"), SessionStatsFormatter.duration(tool))
-            }
-            if let ttft = SessionStatsFormatter.averageTTFT(stats) {
-                row(String(localized: "首 token 平均"), SessionStatsFormatter.duration(ttft))
-            }
-            if let throughput = SessionStatsFormatter.throughput(stats) {
-                row(String(localized: "解码吞吐"), String(localized: "value.throughput", defaultValue: "\(SessionStatsFormatter.compactDecimal(throughput)) tok/s"))
-            }
-            if let cacheRate = SessionStatsFormatter.cacheHitRate(snapshot.tokenUsage?.totals) {
-                row(String(localized: "缓存命中"), String(localized: "value.percent", defaultValue: "\(Int((cacheRate * 100).rounded()))%"))
-            }
-            if let input = snapshot.tokenUsage?.totals?.inputTokens {
-                row(String(localized: "输入"), String(localized: "row.input.value", defaultValue: "\(SessionStatsFormatter.compact(input)) tok"))
-            }
-
-            Divider()
-
-            Button(action: onViewFullStats) {
-                HStack(spacing: 6) {
-                    Text("查看完整统计")
-                    Spacer()
-                }
-                .appFont(.subheadline.weight(.medium))
-                .foregroundStyle(.primary)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 16)
-        .frame(maxWidth: .infinity)
-    }
-
-    private func row(_ title: String, _ value: String) -> some View {
-        HStack {
-            Text(title).foregroundStyle(.secondary)
-            Spacer()
-            Text(value).monospacedDigit().fontWeight(.medium)
-        }
-        .appFont(.subheadline)
-    }
-}
-
 private struct ContextUsagePopover: View {
     let snapshot: GatewayContextSnapshot?
 
@@ -3930,7 +4093,10 @@ struct ConversationDisplayEntry: Identifiable {
             case .status:
                 flushProcess()
                 processItems.append(item)
-            case .user, .assistant, .generatedImages, .system:
+            case .generatedImages:
+                // 图片仅保留助手正文中的展示，不额外插入工具结果图片卡片。
+                continue
+            case .user, .assistant, .system:
                 flushProcess()
                 result.append(.init(id: "message-\(item.id)", content: .message(item), showsCopyButton: false))
             }
@@ -4702,6 +4868,69 @@ private struct ToolArgumentsView: View {
     }
 }
 
+/// 与 Android 使用相同上限；加载、失败和重试都不能改变占位区域。
+struct ConversationAttachmentLayout: Layout {
+    let sourceWidth: Int
+    let sourceHeight: Int
+    var maximumWidth: CGFloat = 320
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        Self.size(sourceWidth: sourceWidth, sourceHeight: sourceHeight,
+                  availableWidth: min(maximumWidth, proposal.width ?? maximumWidth))
+    }
+
+    static func size(sourceWidth: Int, sourceHeight: Int, availableWidth: CGFloat) -> CGSize {
+        let width = CGFloat(max(1, sourceWidth))
+        let height = CGFloat(max(1, sourceHeight))
+        let scale = min(1, max(0, min(320, availableWidth)) / width, 320 / height)
+        return CGSize(width: width * scale, height: height * scale)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for subview in subviews {
+            subview.place(at: bounds.origin, anchor: .topLeading,
+                          proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
+        }
+    }
+}
+
+/// 列宽和每行高度直接由附件元数据计算，不依赖图片子视图的理想尺寸。
+private struct ConversationAttachmentGridLayout: Layout {
+    let attachments: [GatewayImageAttachment]
+
+    private func sizes(width: CGFloat) -> [CGSize] {
+        let columnWidth = attachments.count == 1 ? width : max(0, (width - 6) / 2)
+        return attachments.map {
+            ConversationAttachmentLayout.size(sourceWidth: $0.width, sourceHeight: $0.height,
+                availableWidth: min(attachments.count == 1 ? 320 : 180, columnWidth))
+        }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? (attachments.count == 1 ? 320 : 366)
+        let sizes = sizes(width: width)
+        let height = stride(from: 0, to: sizes.count, by: 2).reduce(CGFloat.zero) { total, index in
+            total + max(sizes[index].height, index + 1 < sizes.count ? sizes[index + 1].height : 0)
+                + (index == 0 ? 0 : 6)
+        }
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = sizes(width: bounds.width)
+        let columnWidth = attachments.count == 1 ? bounds.width : max(0, (bounds.width - 6) / 2)
+        var y = bounds.minY
+        for index in stride(from: 0, to: min(sizes.count, subviews.count), by: 2) {
+            for column in 0..<min(2, subviews.count - index) {
+                let size = sizes[index + column]
+                subviews[index + column].place(at: CGPoint(x: bounds.minX + CGFloat(column) * (columnWidth + 6), y: y),
+                    anchor: .topLeading, proposal: ProposedViewSize(width: size.width, height: size.height))
+            }
+            y += max(sizes[index].height, index + 1 < sizes.count ? sizes[index + 1].height : 0) + 6
+        }
+    }
+}
+
 private struct AttachmentImageGrid: View {
     let attachments: [GatewayImageAttachment]
     let imageData: (String) -> Data?
@@ -4710,27 +4939,33 @@ private struct AttachmentImageGrid: View {
     @State private var preview: GatewayImageAttachment?
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6, alignment: .leading), count: attachments.count == 1 ? 1 : 2), spacing: 6) {
+        ConversationAttachmentGridLayout(attachments: attachments) {
             ForEach(attachments) { attachment in
-                VStack(alignment: .leading, spacing: 6) {
-                    let ratio = CGFloat(max(1, attachment.width)) / CGFloat(max(1, attachment.height))
-                    AttachmentBitmap(data: imageData(attachment.id), maximumSide: 900, fillsBounds: true)
-                        .aspectRatio(ratio, contentMode: .fit)
-                        .frame(maxWidth: min(attachments.count == 1 ? 320 : 180, 320 * ratio))
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .contentShape(Rectangle())
-                        .onTapGesture { preview = attachment }
+                ConversationAttachmentLayout(
+                    sourceWidth: attachment.width, sourceHeight: attachment.height,
+                    maximumWidth: attachments.count == 1 ? 320 : 180
+                ) {
+                    Color.secondary.opacity(0.12)
                         .overlay {
-                            if imageData(attachment.id) == nil && imageError(attachment.id) == nil {
+                            AttachmentBitmap(data: imageData(attachment.id), maximumSide: 900, fillsBounds: true)
+                        }
+                        .overlay {
+                            if let error = imageError(attachment.id) {
+                                Button { onRetry(attachment) } label: {
+                                    VStack(spacing: 4) {
+                                        Text(error).lineLimit(2)
+                                        Text("重试")
+                                    }.appFont(.caption).padding(8)
+                                }
+                            } else if imageData(attachment.id) == nil {
                                 ProgressView().controlSize(.small)
                             }
                         }
-                    if let error = imageError(attachment.id) {
-                        Text(error).appFont(.caption).foregroundStyle(.secondary).lineLimit(3)
-                        Button("重试") { onRetry(attachment) }.appFont(.caption)
-                    }
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .contentShape(Rectangle())
+                        .onTapGesture { preview = attachment }
+                        .accessibilityLabel(attachment.name ?? String(localized: "图片附件"))
                 }
-                .accessibilityLabel(attachment.name ?? String(localized: "图片附件"))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -4772,81 +5007,167 @@ private struct AttachmentBitmap: View {
     }
 }
 
-struct ImagePreviewTransform: Equatable {
-    var scale: CGFloat = 1
-    var offset: CGSize = .zero
-
-    mutating func zoom(to value: CGFloat, viewport: CGSize, image: CGSize, anchor: CGPoint? = nil) {
-        let next = min(5, max(1, value))
-        if let anchor {
-            let focal = CGSize(width: anchor.x - viewport.width / 2, height: anchor.y - viewport.height / 2)
-            offset = CGSize(width: (offset.width - focal.width) * next / scale + focal.width,
-                            height: (offset.height - focal.height) * next / scale + focal.height)
-        }
-        scale = next
-        offset = bounded(offset, viewport: viewport, image: image)
-    }
-
-    func bounded(_ value: CGSize, viewport: CGSize, image: CGSize) -> CGSize {
-        let fit = min(viewport.width / max(1, image.width), viewport.height / max(1, image.height))
-        let x = max(0, (image.width * fit * scale - viewport.width) / 2)
-        let y = max(0, (image.height * fit * scale - viewport.height) / 2)
-        return CGSize(width: min(x, max(-x, value.width)), height: min(y, max(-y, value.height)))
-    }
-}
-
-private struct ZoomableAttachmentImage: View {
+/// 原生滚动视图直接处理手指位移，不经过 SwiftUI 状态刷新或分页手势识别。
+private struct ZoomableAttachmentImage: UIViewRepresentable {
     let data: Data?
     let attachment: GatewayImageAttachment
     let isActive: Bool
-    @State private var transform = ImagePreviewTransform()
-    @State private var pinchStart: CGFloat?
-    @GestureState private var drag: CGSize = .zero
 
-    var body: some View {
-        GeometryReader { geometry in
-            let imageSize = CGSize(width: max(1, attachment.width), height: max(1, attachment.height))
-            let offset = transform.bounded(CGSize(width: transform.offset.width + drag.width,
-                                                  height: transform.offset.height + drag.height),
-                                           viewport: geometry.size, image: imageSize)
-            AttachmentBitmap(data: data, maximumSide: 2048)
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .scaleEffect(transform.scale)
-                .offset(offset)
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .contentShape(Rectangle())
-                .clipped()
-                .simultaneousGesture(MagnificationGesture()
-                    .onChanged { value in
-                        if pinchStart == nil { pinchStart = transform.scale }
-                        transform.zoom(to: (pinchStart ?? 1) * value, viewport: geometry.size, image: imageSize)
-                    }
-                    .onEnded { _ in pinchStart = nil })
-                .highPriorityGesture(SpatialTapGesture(count: 2).onEnded { tap in
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        transform.zoom(to: transform.scale > 1 ? 1 : 3, viewport: geometry.size,
-                                       image: imageSize, anchor: tap.location)
-                    }
-                })
-                .highPriorityGesture(DragGesture(minimumDistance: 10)
-                    .updating($drag) { value, state, _ in state = value.translation }
-                    .onEnded { value in
-                        transform.offset = transform.bounded(
-                            CGSize(width: transform.offset.width + value.translation.width,
-                                   height: transform.offset.height + value.translation.height),
-                            viewport: geometry.size, image: imageSize)
-                    }, including: transform.scale > 1 ? .all : .subviews)
-                .onChange(of: geometry.size) { _ in
-                    transform.offset = transform.bounded(transform.offset, viewport: geometry.size, image: imageSize)
-                }
-        }
-        .onChange(of: isActive) { active in
-            if !active { transform = ImagePreviewTransform(); pinchStart = nil }
-        }
+    func makeUIView(context: Context) -> AttachmentZoomScrollView {
+        AttachmentZoomScrollView()
+    }
+
+    func updateUIView(_ view: AttachmentZoomScrollView, context: Context) {
+        view.previewImageView.accessibilityLabel = attachment.name ?? String(localized: "图片")
+        view.load(data)
+        if !isActive { view.resetZoom() }
+    }
+
+    static func dismantleUIView(_ view: AttachmentZoomScrollView, coordinator: ()) {
+        view.cancelLoading()
     }
 }
 
-private struct AttachmentGallery: View {
+final class AttachmentZoomScrollView: UIScrollView, UIScrollViewDelegate {
+    let previewImageView = UIImageView()
+    private let placeholder = UIImageView(image: UIImage(systemName: "photo"))
+    private var sourceData: Data?
+    private var decodeTask: Task<Void, Never>?
+    private var viewportSize = CGSize.zero
+    private var fittedImageSize = CGSize.zero
+
+    init() {
+        super.init(frame: .zero)
+        delegate = self
+        minimumZoomScale = 1
+        maximumZoomScale = 5
+        bounces = false
+        bouncesZoom = false
+        showsHorizontalScrollIndicator = false
+        showsVerticalScrollIndicator = false
+        contentInsetAdjustmentBehavior = .never
+        backgroundColor = .clear
+        clipsToBounds = true
+        accessibilityIdentifier = "attachment-preview-scroll"
+        panGestureRecognizer.isEnabled = false
+        previewImageView.contentMode = .scaleAspectFit
+        previewImageView.layer.cornerRadius = 12
+        previewImageView.layer.cornerCurve = .continuous
+        previewImageView.clipsToBounds = true
+        previewImageView.isAccessibilityElement = true
+        previewImageView.accessibilityIdentifier = "attachment-preview-image"
+        addSubview(previewImageView)
+        placeholder.tintColor = .white.withAlphaComponent(0.42)
+        placeholder.contentMode = .scaleAspectFit
+        addSubview(placeholder)
+        let tap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
+        tap.numberOfTapsRequired = 2
+        addGestureRecognizer(tap)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // 放大时由图片接管拖动；原始比例下禁用内层 pan，翻页手势仍可正常识别。
+        var ancestor = superview
+        while let parent = ancestor {
+            if let pager = parent as? UIScrollView {
+                pager.panGestureRecognizer.require(toFail: panGestureRecognizer)
+            }
+            ancestor = parent.superview
+        }
+    }
+
+    func load(_ data: Data?) {
+        guard sourceData != data else { return }
+        sourceData = data
+        cancelLoading()
+        display(nil)
+        guard let data else { return }
+        decodeTask = Task { [weak self] in
+            let decoded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                guard let source = CGImageSourceCreateWithData(data as CFData,
+                    [kCGImageSourceShouldCache: false] as CFDictionary),
+                      let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceCreateThumbnailWithTransform: true,
+                        kCGImageSourceThumbnailMaxPixelSize: 2048,
+                        kCGImageSourceShouldCacheImmediately: true
+                      ] as CFDictionary) else { return nil }
+                return UIImage(cgImage: image)
+            }.value
+            guard !Task.isCancelled else { return }
+            self?.display(decoded)
+        }
+    }
+
+    func cancelLoading() {
+        decodeTask?.cancel()
+        decodeTask = nil
+    }
+
+    func display(_ image: UIImage?) {
+        resetZoom()
+        previewImageView.image = image
+        placeholder.isHidden = image != nil
+        pinchGestureRecognizer?.isEnabled = image != nil
+        viewportSize = .zero
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.size != viewportSize else { return }
+        viewportSize = bounds.size
+        resetZoom()
+        let imageSize = previewImageView.image?.size ?? CGSize(width: 1, height: 1)
+        let fit = min(bounds.width / max(1, imageSize.width), bounds.height / max(1, imageSize.height))
+        fittedImageSize = CGSize(width: imageSize.width * fit, height: imageSize.height * fit)
+        previewImageView.frame = CGRect(origin: .zero, size: fittedImageSize)
+        contentSize = fittedImageSize
+        centerImage()
+        contentOffset = CGPoint(x: -contentInset.left, y: -contentInset.top)
+        placeholder.frame = CGRect(x: bounds.midX - 27, y: bounds.midY - 27, width: 54, height: 54)
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { previewImageView }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        centerImage()
+        panGestureRecognizer.isEnabled = zoomScale > minimumZoomScale + 0.001
+    }
+
+    private func centerImage() {
+        let horizontal = max(0, (bounds.width - fittedImageSize.width * zoomScale) / 2)
+        let vertical = max(0, (bounds.height - fittedImageSize.height * zoomScale) / 2)
+        let inset = UIEdgeInsets(top: vertical, left: horizontal, bottom: vertical, right: horizontal)
+        if contentInset != inset { contentInset = inset }
+    }
+
+    func resetZoom() {
+        if zoomScale != minimumZoomScale { setZoomScale(minimumZoomScale, animated: false) }
+        panGestureRecognizer.isEnabled = false
+    }
+
+    func toggleZoom(at point: CGPoint, animated: Bool = true) {
+        guard previewImageView.image != nil else { return }
+        if zoomScale > minimumZoomScale {
+            setZoomScale(minimumZoomScale, animated: animated)
+        } else {
+            let target: CGFloat = 3
+            let size = CGSize(width: bounds.width / target, height: bounds.height / target)
+            zoom(to: CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2,
+                            width: size.width, height: size.height), animated: animated)
+        }
+    }
+
+    @objc private func doubleTapped(_ gesture: UITapGestureRecognizer) {
+        toggleZoom(at: gesture.location(in: previewImageView))
+    }
+}
+
+struct AttachmentGallery: View {
     let attachments: [GatewayImageAttachment]
     let initialID: String
     let imageData: (String) -> Data?
@@ -4856,6 +5177,8 @@ private struct AttachmentGallery: View {
     @State private var selectedID = ""
     @State private var saving = false
     @State private var saveMessage: String?
+    var exportDocument: MarkdownImageAsset? = nil
+    @State private var exporting = false
 
     private func save(_ attachment: GatewayImageAttachment) {
         guard !saving, let data = imageData(attachment.id) else { return }
@@ -4894,12 +5217,35 @@ private struct AttachmentGallery: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: attachments.count > 1 ? .always : .never))
-            Button { dismiss() } label: {
-                Image(systemName: "xmark.circle.fill").font(.system(size: 30)).foregroundStyle(.white)
-            }
-            .accessibilityLabel("关闭").padding(20)
+            HStack(spacing: 20) {
+                if exportDocument != nil {
+                    Menu {
+                        Button { exporting = true } label: {
+                            Label(String(localized: "markdown.image.save-file", defaultValue: "存储到文件"), systemImage: "folder")
+                        }
+                        if let attachment = attachments.first {
+                            Button { save(attachment) } label: { Label("保存到相册", systemImage: "photo") }
+                                .disabled(saving)
+                        }
+                    } label: {
+                        Image(systemName: "square.and.arrow.down").font(.system(size: 26)).foregroundStyle(.white)
+                    }
+                    .accessibilityLabel(Text(String(localized: "markdown.image.download", defaultValue: "下载图片")))
+                    .accessibilityIdentifier("markdown-image-download")
+                }
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 30)).foregroundStyle(.white)
+                }
+                .accessibilityLabel("关闭")
+                .accessibilityIdentifier("image-gallery-close")
+            }.padding(20)
         }
         .onAppear { selectedID = initialID }
+        .accessibilityIdentifier("image-gallery")
+        .fileExporter(isPresented: $exporting, document: exportDocument,
+                      contentType: exportDocument?.contentType ?? .image, defaultFilename: exportDocument?.name) { result in
+            if case .failure(let error) = result { saveMessage = error.localizedDescription }
+        }
         .alert("保存图片", isPresented: Binding(get: { saveMessage != nil }, set: { if !$0 { saveMessage = nil } })) {
             Button("好", role: .cancel) { saveMessage = nil }
         } message: {
@@ -5211,6 +5557,7 @@ private struct ToolOutputView: View {
 }
 
 struct MarkdownContent: View {
+    @Environment(\.workspaceMarkdownImageContext) private var workspaceImages
     @Environment(\.messageQuoteAction) private var onQuote
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage(AppFontScale.key) private var fontScale = 1.0
@@ -5259,8 +5606,8 @@ struct MarkdownContent: View {
 
     private var renderedMarkdown: some View {
         Markdown(PreparedMarkdownCache.document(for: text, filePaths: knownFiles.map(\.path)))
-            .markdownImageProvider(MathMarkdownImageProvider(fontSize: mathFontSize))
-            .markdownInlineImageProvider(MathMarkdownInlineImageProvider(fontSize: mathFontSize, dark: colorScheme == .dark))
+            .markdownImageProvider(MathMarkdownImageProvider(fontSize: mathFontSize, workspace: workspaceImages))
+            .markdownInlineImageProvider(MathMarkdownInlineImageProvider(fontSize: mathFontSize, dark: colorScheme == .dark, workspace: workspaceImages))
             .id("\(mathFontSize)-\(colorScheme)")
             .environment(\.openURL, OpenURLAction { url in
                 guard let onOpenFile else { return .systemAction }
@@ -6206,10 +6553,20 @@ private extension Theme {
                 BackgroundColor(inlineCodeFallback)
             }
             .paragraph { configuration in
-                configuration.label
-                    .fixedSize(horizontal: false, vertical: true)
-                    .relativeLineSpacing(.em(0.22))
-                    .markdownMargin(top: 0, bottom: compact ? 6 : 10)
+                if !compact, let link = configuration.content.standaloneLink,
+                   let destination = AppleMapsCardDestination(link: link.destination, title: link.title) {
+                    AppleMapsAppCard(destination: destination)
+                        .markdownMargin(top: 2, bottom: 10)
+                } else if !compact, let link = configuration.content.standaloneLink,
+                          let destination = AppleMusicCardDestination(link: link.destination, title: link.title) {
+                    AppleMusicAppCard(destination: destination)
+                        .markdownMargin(top: 2, bottom: 10)
+                } else {
+                    configuration.label
+                        .fixedSize(horizontal: false, vertical: true)
+                        .relativeLineSpacing(.em(0.22))
+                        .markdownMargin(top: 0, bottom: compact ? 6 : 10)
+                }
             }
             .listItem { configuration in
                 configuration.label.markdownMargin(top: .em(0.18))
@@ -6841,5 +7198,67 @@ private struct PendingFileCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(label))
+    }
+}
+
+/// 文件表示的临时 URL 仅在 provider 回调内有效，先复制到私有目录再交给草稿。
+enum ComposerPasteLoader {
+    static func isAttachment(_ provider: NSItemProvider) -> Bool {
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) ||
+            provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) { return true }
+        let dataTypes = provider.registeredTypeIdentifiers.filter {
+            guard let type = UTType($0) else { return false }
+            return type.conforms(to: .data) && !type.conforms(to: .url)
+        }
+        // .log/.txt 等文件可能只公布 public.text；不能仅因可读成文字就丢弃文件身份。
+        if dataTypes.contains(where: {
+            provider.hasRepresentationConforming(toTypeIdentifier: $0, fileOptions: .openInPlace)
+        }) { return true }
+        if let name = provider.suggestedName, !(name as NSString).pathExtension.isEmpty,
+           !dataTypes.isEmpty { return true }
+        return !provider.hasItemConformingToTypeIdentifier(UTType.text.identifier) && !dataTypes.isEmpty
+    }
+
+    static func copy(_ provider: NSItemProvider, to directory: URL, index: Int) async throws -> (URL, Bool) {
+        let imageType = provider.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .image) == true }
+        let type = imageType ?? provider.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .data) == true }
+            ?? UTType.data.identifier
+        return try await withCheckedThrowingContinuation { continuation in
+            func save(_ source: URL, isFileURL: Bool) {
+                do {
+                    guard source.isFileURL else { throw CocoaError(.fileReadUnsupportedScheme) }
+                    let access = source.startAccessingSecurityScopedResource()
+                    defer { if access { source.stopAccessingSecurityScopedResource() } }
+                    let size = try source.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+                    guard size.isRegularFile == true, (size.fileSize ?? 0) <= 100 * 1024 * 1024 else {
+                        throw CocoaError(.fileReadTooLarge)
+                    }
+                    var name = (provider.suggestedName as NSString?)?.lastPathComponent ?? source.lastPathComponent
+                    if name.isEmpty || name == "." || name == ".." { name = "attachment" }
+                    if (name as NSString).pathExtension.isEmpty, let suffix = UTType(type)?.preferredFilenameExtension {
+                        name += "." + suffix
+                    }
+                    let itemDirectory = directory.appendingPathComponent(String(index), isDirectory: true)
+                    try FileManager.default.createDirectory(at: itemDirectory, withIntermediateDirectories: true)
+                    let destination = itemDirectory.appendingPathComponent(name)
+                    try FileManager.default.copyItem(at: source, to: destination)
+                    let image = isFileURL ? UTType(filenameExtension: source.pathExtension)?.conforms(to: .image) == true : imageType != nil
+                    continuation.resume(returning: (destination, image))
+                } catch { continuation.resume(throwing: error) }
+            }
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+                    if let error { continuation.resume(throwing: error) }
+                    else if let url = item as? URL { save(url, isFileURL: true) }
+                    else { continuation.resume(throwing: CocoaError(.fileReadUnknown)) }
+                }
+            } else {
+                provider.loadFileRepresentation(forTypeIdentifier: type) { url, error in
+                    if let error { continuation.resume(throwing: error) }
+                    else if let url { save(url, isFileURL: false) }
+                    else { continuation.resume(throwing: CocoaError(.fileReadUnknown)) }
+                }
+            }
+        }
     }
 }

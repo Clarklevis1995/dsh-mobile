@@ -75,13 +75,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "While an Agent is running, Whaleness uses low-accuracy background location to keep the task connected. Location data is never stored or uploaded."
+            "value" : "Use low-accuracy background location to maintain active tasks. The location connector shares approximate or system-authorized precise location when you ask for maps and routes."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agent 执行期间使用低精度后台定位维持任务连接；位置数据不会保存或上传。"
+            "value" : "执行任务时使用低精度后台定位维持连接；位置连接器按你的请求提供近似或已授权的精确位置，用于地图与路线服务。"
           }
         }
       }
@@ -92,13 +92,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "While an Agent is running, Whaleness uses low-accuracy location to keep the task connected. Location data is never stored or uploaded."
+            "value" : "When you ask, provide your location, save named places, find places and plan routes for your authorized host and model service. Precise location requires system permission."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agent 执行期间使用低精度定位维持任务连接；位置数据不会保存或上传。"
+            "value" : "开启位置连接器后，按你的请求提供当前位置、保存地点标记、查找地点和规划路线。精确位置需系统允许，并会提供给你授权的主机和模型服务。"
           }
         }
       }
@@ -121,6 +121,7 @@
       }
     },
     "NSPhotoLibraryAddUsageDescription" : {
+      "comment" : "Privacy - Photo Library Additions Usage Description",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -132,6 +133,134 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用于将聊天中预览的图片保存到相册。"
+          }
+        }
+      }
+    },
+    "NSAppleMusicUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read songs, albums, artists and playlists in your personal Apple Music library for your authorized host, and control system music playback when you ask."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取 Apple Music 个人资料库的歌曲、专辑、歌手和歌单，提供给你授权的主机，并按指令控制系统音乐播放。"
+          }
+        }
+      }
+    },
+    "NSRemindersFullAccessUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read reminders and create tasks and due alerts when you ask. Data is shared with your authorized host and model service. You can disable this connector at any time."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取提醒事项，并按你的明确指令新建待办及到点提醒。数据提供给已授权的主机和模型服务，可随时关闭连接器。"
+          }
+        }
+      }
+    },
+    "NSRemindersUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read reminders and create tasks and due alerts when you ask. Data is shared with your authorized host and model service. You can disable this connector at any time."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取提醒事项，并按你的明确指令新建待办及到点提醒。数据提供给已授权的主机和模型服务，可随时关闭连接器。"
+          }
+        }
+      }
+    },
+    "NSCalendarsFullAccessUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read calendar availability and create events and alerts when you ask, without sharing attendees or contact details."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取日历忙闲，并按你的明确指令创建日程及提前提醒；不发送参与人和联系方式。"
+          }
+        }
+      }
+    },
+    "NSCalendarsUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read calendar availability and create events when you ask. You can disable this connector at any time."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取日历忙闲，并按你的明确指令创建日程。可随时关闭连接器。"
+          }
+        }
+      }
+    },
+    "NSHealthShareUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read step and sleep summaries for your authorized host and model service to review daily wellbeing. You can turn off the connector at any time."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取步数与睡眠摘要，供你已授权的主机和模型服务回顾日常健康。可随时关闭连接器。"
+          }
+        }
+      }
+    },
+    "NSAlarmKitUsageDescription" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按你的明确指令创建和管理 Whaleness 闹钟，由系统在指定时间响铃；可随时关闭闹钟连接器。"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create and manage Whaleness alarms only when you ask, with system alerts at the scheduled time. You can disable this connector at any time."
+          }
+        }
+      }
+    },
+    "MapsPrecision" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按你的请求获取精确位置，用于查找附近地点、地址查询和路线规划，并提供给你授权的主机。"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use precise location when you ask to find nearby places, look up addresses and plan routes for your authorized host."
           }
         }
       }

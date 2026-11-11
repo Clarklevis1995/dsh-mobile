@@ -61,6 +61,7 @@ extension Sequence where Element == InlineNode {
     baseURL: URL?,
     textStyles: InlineTextStyles,
     images: [String: Image],
+    imageBaselineOffsets: [String: CGFloat] = [:],
     softBreakMode: SoftBreak.Mode,
     attributes: AttributeContainer
   ) -> Text {
@@ -68,6 +69,7 @@ extension Sequence where Element == InlineNode {
       baseURL: baseURL,
       textStyles: textStyles,
       images: images,
+      imageBaselineOffsets: imageBaselineOffsets,
       softBreakMode: softBreakMode,
       attributes: attributes
     )
@@ -119,6 +121,7 @@ private struct TextInlineRenderer {
   private let baseURL: URL?
   private let textStyles: InlineTextStyles
   private let images: [String: Image]
+  private let imageBaselineOffsets: [String: CGFloat]
   private let softBreakMode: SoftBreak.Mode
   private var attributes: AttributeContainer
   private var shouldSkipNextWhitespace = false
@@ -127,12 +130,14 @@ private struct TextInlineRenderer {
     baseURL: URL?,
     textStyles: InlineTextStyles,
     images: [String: Image],
+    imageBaselineOffsets: [String: CGFloat] = [:],
     softBreakMode: SoftBreak.Mode,
     attributes: AttributeContainer
   ) {
     self.baseURL = baseURL
     self.textStyles = textStyles
     self.images = images
+    self.imageBaselineOffsets = imageBaselineOffsets
     self.softBreakMode = softBreakMode
     self.attributes = attributes
   }
@@ -153,7 +158,7 @@ private struct TextInlineRenderer {
       self.renderHTML(content)
     case .image(let source, let children):
       if let image = self.images[source] {
-        self.fragments.append(Text(image))
+        self.fragments.append(Text(image).baselineOffset(self.imageBaselineOffsets[source] ?? 0))
       } else if source.hasPrefix("dsh-math:") {
         self.renderText(children.renderPlainText())
       }

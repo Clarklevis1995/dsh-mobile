@@ -1,7 +1,9 @@
 package com.clarklevis.dsh.android.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
@@ -14,6 +16,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -22,6 +25,41 @@ import org.junit.Test
 
 class ComposerMorphLayoutDeviceTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun stopActionStaysVisibleAndClickableWithoutCoveringCompactDraft() {
+        var expanded by mutableStateOf(false)
+        var running by mutableStateOf(true)
+        var stops = 0
+        compose.setContent {
+            DshTheme {
+                ComposerMorphLayout(expanded, Modifier.testTag("layout"), keepActionWhenCollapsed = running,
+                    leading = { Text("+", Modifier.size(32.dp).testTag("add")) },
+                    editor = { Text("保留原始草稿和输入节点", Modifier.fillMaxWidth().height(38.dp).testTag("editor")) },
+                    tools = { Text("模型与权限", Modifier.testTag("tools")) },
+                    action = { Text("停止", Modifier.size(42.dp).clickable { stops++ }.testTag("stop")) })
+            }
+        }
+        val editor = compose.onNodeWithTag("editor")
+        val originalID = editor.fetchSemanticsNode().id
+        val compactHeight = compose.onNodeWithTag("layout").fetchSemanticsNode().boundsInRoot.height
+        val stop = compose.onNodeWithTag("stop")
+        stop.assertIsDisplayed().performClick()
+        assertEquals(1, stops)
+        assertTrue(editor.fetchSemanticsNode().boundsInRoot.right < stop.fetchSemanticsNode().boundsInRoot.left)
+        compose.onNodeWithTag("tools").assertIsNotDisplayed()
+        compose.runOnIdle { expanded = true }
+        stop.assertIsDisplayed()
+        compose.runOnIdle { expanded = false }
+        stop.assertIsDisplayed().performClick()
+        assertEquals(2, stops)
+        assertEquals(originalID, editor.fetchSemanticsNode().id)
+        assertEquals(compactHeight, compose.onNodeWithTag("layout").fetchSemanticsNode().boundsInRoot.height, 1f)
+        val runningWidth = editor.fetchSemanticsNode().boundsInRoot.width
+        compose.runOnIdle { running = false }
+        stop.assertIsNotDisplayed()
+        assertTrue(editor.fetchSemanticsNode().boundsInRoot.width > runningWidth)
+        assertEquals(compactHeight, compose.onNodeWithTag("layout").fetchSemanticsNode().boundsInRoot.height, 1f)
+    }
 
     @Test fun editorMovesThroughIntermediatePositionsAndToolsHideWhenCollapsed() {
         var expanded by mutableStateOf(false)

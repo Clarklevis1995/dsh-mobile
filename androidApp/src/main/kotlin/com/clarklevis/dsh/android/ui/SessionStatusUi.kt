@@ -9,15 +9,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -255,9 +257,10 @@ internal fun SessionStatsSheet(
 ) {
     val colors = MaterialTheme.colorScheme
     val (sheetColor, cardColor) = sessionStatsSheetColors()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
-    val expandedTopInset = adaptiveWindowSize().height * 0.12f
+    val dragHandleHeight = 24.dp
+    val sheetContentHeight = (adaptiveWindowSize().height * 0.88f - dragHandleHeight).coerceAtLeast(0.dp)
     val dismissWithAnimation = {
         coroutineScope.launch {
             sheetState.hide()
@@ -268,18 +271,18 @@ internal fun SessionStatsSheet(
     ModalBottomSheet(
         sheetMaxWidth = adaptiveSheetWidth(),
         onDismissRequest = dismissWithAnimation,
-        // Keep the modal root full-height so Material can calculate drag anchors
-        // against the whole window. The inner top padding limits the visible sheet
-        // to 88% while keeping its lower edge pinned to the navigation bar.
-        modifier = Modifier.adaptiveSheetBounds().fillMaxHeight().padding(top = expandedTopInset),
+        // 外层保留窗口约束，实际高度由内容决定，背景与内容共用同一组拖动锚点。
+        modifier = Modifier.adaptiveSheetBounds(),
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp),
         containerColor = sheetColor,
         contentColor = colors.onBackground,
         scrimColor = Color.Black.copy(alpha = 0.28f),
+        // 底部由内容的 navigationBarsPadding 处理，避免重复占用高度。
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal) },
         dragHandle = {
             Box(
-                modifier = Modifier.fillMaxWidth().height(24.dp),
+                modifier = Modifier.fillMaxWidth().height(dragHandleHeight),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
@@ -291,7 +294,7 @@ internal fun SessionStatsSheet(
     ) {
         DshMenuColumnHost {
             Column(
-                modifier = Modifier.fillMaxSize().testTag("session-stats-sheet")
+                modifier = Modifier.fillMaxWidth().height(sheetContentHeight).testTag("session-stats-sheet")
                     .navigationBarsPadding()
             ) {
                 Box(
@@ -313,7 +316,7 @@ internal fun SessionStatsSheet(
                     }
                 }
                 Column(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(22.dp)
                 ) {

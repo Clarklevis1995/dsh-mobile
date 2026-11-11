@@ -7,8 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.SwitchColors
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.darkColorScheme
@@ -141,30 +139,3 @@ internal class AppFontDensity(
 
 @Composable
 internal fun dshSwitchTrackColor(): Color = if (isSystemInDarkTheme()) Color(0xFF1D447F) else Color(0xFF245AC4)
-
-@Composable
-internal fun dshSwitchColors(preserveDisabledColors: Boolean = false): SwitchColors {
-    val blue = dshSwitchTrackColor()
-    if (!preserveDisabledColors) return SwitchDefaults.colors(
-        checkedTrackColor = blue,
-        checkedBorderColor = blue,
-        checkedThumbColor = Color.White
-    )
-    val uncheckedTrack = MaterialTheme.colorScheme.surfaceContainerHighest
-    val uncheckedBorder = MaterialTheme.colorScheme.outline
-    val uncheckedThumb = MaterialTheme.colorScheme.outline
-    return SwitchDefaults.colors(
-        checkedTrackColor = blue,
-        checkedBorderColor = blue,
-        checkedThumbColor = Color.White,
-        uncheckedTrackColor = uncheckedTrack,
-        uncheckedBorderColor = uncheckedBorder,
-        uncheckedThumbColor = uncheckedThumb,
-        disabledCheckedTrackColor = blue,
-        disabledCheckedBorderColor = blue,
-        disabledCheckedThumbColor = Color.White,
-        disabledUncheckedTrackColor = uncheckedTrack,
-        disabledUncheckedBorderColor = uncheckedBorder,
-        disabledUncheckedThumbColor = uncheckedThumb
-    )
-}

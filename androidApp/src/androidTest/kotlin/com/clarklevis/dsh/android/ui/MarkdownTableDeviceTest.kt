@@ -80,6 +80,7 @@ class MarkdownTableDeviceTest {
     }
 
     @Test fun tenColumnsKeepReadableWidthsAndCopyAndFullscreenWork() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
         var root: View? = null
         val header = listOf("编号", "任务名称", "负责人", "所属部门", "优先级", "开始日期", "截止日期", "进度状态", "主要交付物", "备注说明")
         val values = listOf("001", "**新版官网首页改版**", "王晓明", "设计部", "高", "2026-10-21", "2026-11-05", "进行中", "`design.pdf`", "需与前端确认动效成本，支持深色模式")
@@ -137,7 +138,7 @@ class MarkdownTableDeviceTest {
                 android.os.SystemClock.sleep(700)
             }
         }
-        assertEquals("选择器取消后应回到应用", "com.clarklevis.dsh.android", automation.rootInActiveWindow?.packageName?.toString())
+        assertEquals("选择器取消后应回到应用", context.packageName, automation.rootInActiveWindow?.packageName?.toString())
         compose.waitUntil(15_000) {
             runCatching { compose.onNodeWithTag("markdown-table-fullscreen").assertIsDisplayed(); true }.getOrDefault(false)
         }

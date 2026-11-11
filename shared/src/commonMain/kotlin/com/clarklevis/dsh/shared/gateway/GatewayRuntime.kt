@@ -392,6 +392,17 @@ class GatewayRuntime(
 
     suspend fun sendRequest(request: GatewayRequest): Boolean = serialized { sendRequestLocked(request) }
 
+    /** 设备工具控制帧不进入正向 RPC lane；只允许已协商的当前控制连接发送。 */
+    suspend fun sendDeviceToolFrame(json: String): Boolean = serialized {
+        if (mutableState.value.connection != GatewayConnectionState.CONNECTED ||
+            "device-tools-v1" !in mutableState.value.capabilities || json.length > 180_000) return@serialized false
+        val value = runCatching { wireJson.parseToJsonElement(json) as? kotlinx.serialization.json.JsonObject }.getOrNull()
+            ?: return@serialized false
+        val type = (value["type"] as? JsonPrimitive)?.content
+        if (type !in setOf("device-tools-register", "device-tools-status", "device-tool-state", "device-tool-result", "device-tool-cancelled")) return@serialized false
+        runCatching { transport.send(json) }.isSuccess
+    }
+
     suspend fun requestSessions(): Boolean = sendRequest(GatewayRequests.simple("sessions"))
 
     suspend fun requestHistory(

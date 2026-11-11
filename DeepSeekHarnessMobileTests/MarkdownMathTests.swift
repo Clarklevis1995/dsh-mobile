@@ -198,6 +198,103 @@ final class MarkdownMathTests: XCTestCase {
         }
     }
 
+    func testBoxedScreenshotExampleAndComparison() async throws {
+        let latex = #"\boxed{\lim_{n\to\infty}x_n=b}"#
+        let source = "因此，最终结论为：\n\n\\[" + latex + "\\]\n\n普通公式作为对照：\n\n\\[f(x_n)=\\left(\\frac{1}{b-a}\\int_a^b f(x)^n\\,dx\\right)^{1/n}\\]\n\n行内答案 \\(\\boxed{x=2}\\)。"
+        for scheme in [ColorScheme.light, .dark] {
+            let host = UIHostingController(rootView: DeepSeekHarnessMobile.MarkdownContent(source)
+                .environment(\.colorScheme, scheme).padding(20).frame(width: 390, alignment: .leading))
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 440))
+            window.rootViewController = host
+            window.isHidden = false
+            defer { window.isHidden = true }
+            host.view.frame = window.bounds
+            host.view.backgroundColor = scheme == .dark ? .black : .white
+            try await Task.sleep(for: .milliseconds(300))
+            host.view.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+                host.view.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            let name = "dsh-boxed-current-\(scheme)"
+            try image.pngData()?.write(to: URL(fileURLWithPath: "/tmp/\(name).png"))
+            let attachment = XCTAttachment(image: image)
+            attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        }
+        XCTAssertNotNil(MarkdownMathRenderer.image(for: .init(latex: latex, display: true), fontSize: 20, color: .black))
+    }
+
+    func testBoxedLayoutSupportsFractionsScriptsNestedBoxesAndColors() throws {
+        let examples = [#"\boxed{\lim_{n\to\infty}x_n=b}"#, #"a+\boxed{x=2}+b"#,
+                        #"\frac{\boxed{x+1}}{\boxed{y-1}}"#, #"\boxed{\frac{1}{2}}"#,
+                        #"\boxed{x}^{2}+a_{\boxed{n}}"#, #"\boxed{\boxed{x}+y}"#,
+                        #"\color{#FF0000}{\boxed{x}}"#, #"\boxed{\mathbf{x}}"#]
+        for latex in examples {
+            for display in [true, false] {
+                for color: UIColor in [.black, .white] {
+                    let image = try XCTUnwrap(MarkdownMathRenderer.image(for: .init(latex: latex, display: display),
+                        fontSize: 22, color: color), latex)
+                    XCTAssertGreaterThan(try paintedPixels(image), 20, latex)
+                }
+            }
+        }
+        let plain = try XCTUnwrap(MarkdownMathRenderer.image(for: .init(latex: "x=2", display: false), fontSize: 24, color: .black))
+        let boxed = try XCTUnwrap(MarkdownMathRenderer.image(for: .init(latex: #"\boxed{x=2}"#, display: false), fontSize: 24, color: .black))
+        XCTAssertGreaterThan(boxed.size.width, plain.size.width)
+        XCTAssertGreaterThan(boxed.size.height, plain.size.height)
+        let cg = try XCTUnwrap(boxed.cgImage)
+        var rgba = [UInt8](repeating: 0, count: cg.width * cg.height * 4)
+        let context = try XCTUnwrap(CGContext(data: &rgba, width: cg.width, height: cg.height,
+            bitsPerComponent: 8, bytesPerRow: cg.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+        let rows = (0..<cg.height).map { y in (0..<cg.width).filter { rgba[(y * cg.width + $0) * 4 + 3] > 100 }.count }
+        let columns = (0..<cg.width).map { x in (0..<cg.height).filter { rgba[($0 * cg.width + x) * 4 + 3] > 100 }.count }
+        XCTAssertGreaterThanOrEqual(rows.filter { $0 > cg.width * 4 / 5 }.count, 2, "必须绘制上下两条边")
+        XCTAssertGreaterThanOrEqual(columns.filter { $0 > cg.height * 4 / 5 }.count, 2, "必须绘制左右两条边")
+        let roundTrip = MTMathListBuilder.mathListToString(MTMathListBuilder.build(fromString: #"\boxed{\frac{1}{2}}"#))
+        XCTAssertTrue(roundTrip.contains(#"\boxed{"#))
+        XCTAssertTrue(roundTrip.contains(#"\frac{"#))
+        XCTAssertNil(MarkdownMathRenderer.image(for: .init(latex: #"\boxed{x"#, display: true), fontSize: 20, color: .black))
+        XCTAssertEqual(MarkdownMath.prepare(#"`\boxed{x}`"#), #"`\boxed{x}`"#)
+    }
+
+    func testInlineMathBaselineAlignsBoxWithSurroundingChinese() async throws {
+        let source = #"正文 \(\boxed{x=2}\) 正文"#
+        let host = UIHostingController(rootView: DeepSeekHarnessMobile.MarkdownContent(source)
+            .environment(\.colorScheme, .dark).padding(20).frame(width: 390, alignment: .leading))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 160))
+        window.rootViewController = host; window.isHidden = false
+        defer { window.isHidden = true }
+        host.view.frame = window.bounds; host.view.backgroundColor = .black
+        try await Task.sleep(for: .milliseconds(300))
+        host.view.layoutIfNeeded()
+        let rendered = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            host.view.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        try rendered.pngData()?.write(to: URL(fileURLWithPath: "/tmp/dsh-boxed-inline-aligned.png"))
+        let cg = try XCTUnwrap(rendered.cgImage)
+        let scale = rendered.scale
+        var rgba = [UInt8](repeating: 0, count: cg.width * cg.height * 4)
+        let context = try XCTUnwrap(CGContext(data: &rgba, width: cg.width, height: cg.height,
+            bitsPerComponent: 8, bytesPerRow: cg.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+        func centerY(_ left: CGFloat, _ right: CGFloat) throws -> CGFloat {
+            let rows = (0..<cg.height).filter { y in
+                (Int(left * scale)..<Int(right * scale)).contains { x in
+                    let i = (y * cg.width + x) * 4
+                    return rgba[i] > 190 && rgba[i + 1] > 190 && rgba[i + 2] > 190
+                }
+            }
+            return CGFloat(try XCTUnwrap(rows.first) + XCTUnwrap(rows.last)) / (2 * scale)
+        }
+        XCTAssertEqual(try centerY(20, 50), try centerY(57, 109), accuracy: 1,
+                       "行内方框与中文的可见中心应在 1pt 内；不能仅设置 UIImage 元数据")
+        let provider = MathMarkdownInlineImageProvider(fontSize: 17, dark: true)
+        let ordinaryImageOffset = await provider.baselineOffset(with: URL(string: "https://example.com/image.png")!, label: "")
+        XCTAssertEqual(ordinaryImageOffset, 0)
+    }
+
     private func paintedPixels(_ image: UIImage) throws -> Int {
         let cgImage = try XCTUnwrap(image.cgImage)
         var bytes = [UInt8](repeating: 0, count: cgImage.width * cgImage.height * 4)

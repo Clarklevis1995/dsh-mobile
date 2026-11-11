@@ -47,6 +47,7 @@ data class SharedMobileSnapshot(
     val searchResultSessionIds: List<String> = emptyList(),
     val selectedSessionId: String? = null,
     val conversation: List<ConversationItem> = emptyList(),
+    val markdownImages: Map<String, com.clarklevis.dsh.shared.protocol.GatewayImageAttachment> = emptyMap(),
     val activeTurnTiming: SharedTurnTimingSnapshot? = null,
     val pendingQuestions: List<GatewayPendingQuestionRequest> = emptyList(),
     val pendingQuestionCount: Int = 0,

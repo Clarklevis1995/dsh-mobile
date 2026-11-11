@@ -50,6 +50,8 @@ class AndroidFileUploadController(
     fun connected(sessionId: String?, supported: Boolean) {
         context = UUID.randomUUID()
         preparing = false
+        timeouts.values.forEach { it.cancel() }
+        timeouts.clear()
         connectionKey = UUID.randomUUID().toString()
         this.supported = supported
         this.sessionId = sessionId
@@ -73,6 +75,13 @@ class AndroidFileUploadController(
         apply(shared.bind(sessionId, connectionKey, supported && allowed))
     }
     fun retry(id: String) = apply(shared.retry(id))
+    fun retargetDraft(sessionId: String) {
+        context = UUID.randomUUID()
+        timeouts.values.forEach { it.cancel() }; timeouts.clear()
+        this.sessionId = sessionId
+        apply(shared.bind(sessionId, connectionKey, supported))
+        drafts.map { it.id }.forEach { apply(shared.retry(it)) }
+    }
     fun remove(id: String) {
         apply(shared.remove(id))
         localFiles.remove(id)?.delete()
@@ -166,7 +175,7 @@ class AndroidFileUploadController(
     private fun prepare(uri: Uri, id: String): Prepared {
         val app = requireNotNull(graph).application
         val resolver = app.contentResolver
-        var name = appText("附件")
+        var name = if (uri.scheme == "file") File(requireNotNull(uri.path)).name else appText("附件")
         var declaredSize: Long? = null
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {

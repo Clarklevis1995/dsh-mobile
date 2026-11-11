@@ -88,7 +88,19 @@ internal class AndroidGatewayProjection(
     private val historySubscription = historyStore.subscribe(::acceptHistoryMviEvent)
     private val conversationSubscription = conversationStore.subscribe(::acceptConversationMviEvent)
 
+    private val markdownImageReferences = mutableMapOf<String, Pair<List<SessionEvent>, Map<String, com.clarklevis.dsh.shared.protocol.GatewayImageAttachment>>>()
+
     fun snapshot(): SharedMobileSnapshot {
+        markdownImageReferences.keys.retainAll(historyEvents.keys)
+        val imageReferences = controlSnapshot.selectedSessionId?.let { id ->
+            val records = historyEvents[id].orEmpty()
+            val cached = markdownImageReferences[id]
+            if (cached?.first === records) cached.second else {
+                val images = com.clarklevis.dsh.shared.facade.MarkdownImageReferences.from(records)
+                markdownImageReferences[id] = records to images
+                images
+            }
+        }.orEmpty()
         val approvalDetails = controlSnapshot.pendingApprovals.mapNotNull { request ->
             approvalArguments(request)?.let { request.rpcId to it }
         }.toMap()
@@ -103,6 +115,7 @@ internal class AndroidGatewayProjection(
             activeTurnTiming = controlSnapshot.selectedSessionId?.let(turnTiming::snapshot),
             selectedHistoryError = controlSnapshot.selectedSessionId?.let(historyErrors::get),
             conversation = controlSnapshot.selectedSessionId?.let(conversationItems::get).orEmpty(),
+            markdownImages = imageReferences,
             approvalCommandPreviews = commandPreviews,
             approvalDetails = approvalDetails,
             selectedHistoryHasMore = controlSnapshot.selectedSessionId?.let(historyHasMore::get) == true,
@@ -123,6 +136,7 @@ internal class AndroidGatewayProjection(
         val fragment = searchFragment?.takeIf { it.sessionId == normal.selectedSessionId } ?: return normal
         return normal.copy(
             conversation = fragment.items,
+            markdownImages = com.clarklevis.dsh.shared.facade.MarkdownImageReferences.from(fragment.window.events),
             selectedHistoryError = null,
             selectedHistoryHasMore = false,
             selectedHistoryEarliestSequence = fragment.window.events.firstOrNull()?.seq,

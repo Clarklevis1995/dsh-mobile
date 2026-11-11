@@ -38,7 +38,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -258,11 +257,11 @@ private fun PluginBundleRow(
         PluginLine(bundle.icon, bundle.name, bundle.title, bundle.description,
             Modifier.weight(1f).clickable { onBundle(bundle.name) }, experimental = bundle.experimental)
         if (stateHolder.pluginPendingName == bundle.name) CircularProgressIndicator(Modifier.size(18.dp))
-        Switch(bundle.enabled, onCheckedChange = { enabled ->
+        DshSwitch(bundle.enabled, onCheckedChange = { enabled ->
             if (bundle.name == "dsh-plugin-mobile-gateway" && !enabled) onGatewayDisable()
             else stateHolder.setPluginEnabled(bundle.name, enabled)
-        }, colors = dshSwitchColors(stateHolder.pluginPendingName != null &&
-            stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED && bundle.readOnlyReason == null),
+        }, preserveDisabledColors = stateHolder.pluginPendingName != null &&
+            stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED && bundle.readOnlyReason == null,
             enabled = stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED &&
             bundle.readOnlyReason == null && stateHolder.pluginPendingName == null)
     }
@@ -285,11 +284,11 @@ private fun PluginBundleDetail(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PluginIcon(bundle.icon, bundle.name, Modifier.size(60.dp), artworkOffsetY = 4.dp)
                 Spacer(Modifier.weight(1f))
-                Switch(bundle.enabled, onCheckedChange = { enabled ->
+                DshSwitch(bundle.enabled, onCheckedChange = { enabled ->
                     if (bundle.name == "dsh-plugin-mobile-gateway" && !enabled) onGatewayDisable()
                     else stateHolder.setPluginEnabled(bundle.name, enabled)
-                }, colors = dshSwitchColors(stateHolder.pluginPendingName != null &&
-                    stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED && bundle.readOnlyReason == null),
+                }, preserveDisabledColors = stateHolder.pluginPendingName != null &&
+                    stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED && bundle.readOnlyReason == null,
                     enabled = stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED &&
                     bundle.readOnlyReason == null && stateHolder.pluginPendingName == null)
             }
@@ -353,10 +352,10 @@ private fun PluginBundleDetail(
                         })
                 }
                 entry.entryId?.let { entryId ->
-                    Switch(entry.enabled, onCheckedChange = {
+                    DshSwitch(entry.enabled, onCheckedChange = {
                         stateHolder.setPluginEnabled(bundle.name, it, entryId)
-                    }, colors = dshSwitchColors(stateHolder.pluginPendingName != null &&
-                        stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED && entry.readOnlyReason == null),
+                    }, preserveDisabledColors = stateHolder.pluginPendingName != null &&
+                        stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED && entry.readOnlyReason == null,
                         enabled = stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED &&
                         entry.readOnlyReason == null && stateHolder.pluginPendingName == null)
                 }

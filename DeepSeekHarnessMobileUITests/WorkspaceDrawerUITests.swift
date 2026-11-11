@@ -1089,3 +1089,47 @@ final class LogExportUITests: XCTestCase {
         add(attachment)
     }
 }
+
+final class PhoneConnectorsUITests: XCTestCase {
+    func testDrawerOpensLocalConnectors() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        if alert.exists { alert.buttons.firstMatch.tap() }
+        let settings = app.buttons["设置"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        let drawer = app.buttons["打开侧边栏"]
+        XCTAssertTrue(drawer.waitForExistence(timeout: 5))
+        drawer.tap()
+        let connectors = app.buttons["连接器"]
+        XCTAssertTrue(connectors.waitForExistence(timeout: 5))
+        let iconScreenshot = XCTAttachment(screenshot: app.screenshot())
+        iconScreenshot.name = "连接器应用互联图标"; iconScreenshot.lifetime = .keepAlways; add(iconScreenshot)
+        connectors.tap()
+        XCTAssertTrue(app.navigationBars["连接器"].waitForExistence(timeout: 5))
+        let status = app.buttons["connector-registration-link"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["connector-refresh-registration"].exists)
+        status.tap()
+        XCTAssertTrue(app.navigationBars["连接器状态"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["connector-refresh-registration"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["connector-retry-registration"].exists)
+        let statusScreenshot = XCTAttachment(screenshot: app.screenshot())
+        statusScreenshot.name = "连接器独立状态页"; statusScreenshot.lifetime = .keepAlways; add(statusScreenshot)
+        app.navigationBars["连接器状态"].buttons.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["连接器"].waitForExistence(timeout: 5))
+        XCTAssertTrue(status.exists)
+        let expected = Set(["calendar", "reminders", "location", "photos", "music", "health", "alarms"].map { "connector-toggle-\($0)" })
+        var actual = Set(app.switches.allElementsBoundByIndex.map(\.identifier).filter { $0.hasPrefix("connector-toggle-") })
+        for _ in 0..<3 where actual != expected {
+            app.swipeUp()
+            actual.formUnion(app.switches.allElementsBoundByIndex.map(\.identifier).filter { $0.hasPrefix("connector-toggle-") })
+        }
+        XCTAssertEqual(actual, expected)
+        XCTAssertEqual(app.switches.matching(NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@", "联系人", "通讯录")).count, 0)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "连接器本机能力"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+}

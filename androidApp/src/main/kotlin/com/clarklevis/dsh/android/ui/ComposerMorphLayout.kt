@@ -28,6 +28,7 @@ import kotlin.math.roundToInt
 internal fun ComposerMorphLayout(
     expanded: Boolean,
     modifier: Modifier = Modifier,
+    keepActionWhenCollapsed: Boolean = false,
     leading: @Composable () -> Unit,
     editor: @Composable () -> Unit,
     tools: @Composable () -> Unit,
@@ -46,7 +47,8 @@ internal fun ComposerMorphLayout(
         // 槽位高 42dp，内容按自身高度测量后居中，不能默认贴着槽位顶部。
         Box(Modifier.graphicsLayer { alpha = animation.value }.then(hiddenSemantics),
             contentAlignment = Alignment.Center) { tools() }
-        Box(Modifier.graphicsLayer { alpha = animation.value }.then(hiddenSemantics),
+        Box(Modifier.graphicsLayer { alpha = if (keepActionWhenCollapsed) 1f else animation.value }
+            .then(if (expanded || keepActionWhenCollapsed) Modifier else hiddenSemantics),
             contentAlignment = Alignment.Center) { action() }
     }) { items, constraints ->
         // 动画值仅在测量/绘制阶段读取，不让每一帧重新组合输入区及工具菜单。
@@ -57,7 +59,8 @@ internal fun ComposerMorphLayout(
         val leadingSpace = 44.dp.roundToPx()
         val toolsStart = 39.dp.roundToPx()
         val gap = 12.dp.roundToPx()
-        val editorWidth = (width - leadingSpace * (1f - progress)).roundToInt().coerceAtLeast(1)
+        val actionSpace = if (keepActionWhenCollapsed) rowHeight + 6.dp.roundToPx() else 0
+        val editorWidth = (width - (leadingSpace + actionSpace) * (1f - progress)).roundToInt().coerceAtLeast(1)
         val editorMaxHeight = if (expanded) 120.dp.roundToPx() else 38.dp.roundToPx()
         val editorItem = items[1].measure(Constraints(maxWidth = editorWidth, minWidth = editorWidth,
             maxHeight = editorMaxHeight))
@@ -76,9 +79,11 @@ internal fun ComposerMorphLayout(
             val compactTextTop = ((rowHeight - textLineHeight) / 2f).coerceAtLeast(0f)
             editorItem.placeRelative((leadingSpace * (1f - progress)).roundToInt(),
                 top + (compactTextTop * (1f - progress)).roundToInt())
-            // 收紧时不放置辅助控件：既不占空间，也不能被透明区域误触。
+            // 工具随展开收起；停止操作可独立保留在收起状态。
             if (expanded || progress > 0f) {
                 toolsItem.placeRelative(toolsStart, rowY)
+            }
+            if (expanded || keepActionWhenCollapsed || progress > 0f) {
                 actionItem.placeRelative(width - rowHeight, rowY)
             }
         }

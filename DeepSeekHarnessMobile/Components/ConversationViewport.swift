@@ -63,6 +63,7 @@ struct ConversationViewportEntry: Identifiable {
 
     let id: String
     let revision: Int
+    let layoutRevision: Int
     let content: AnyView
     let streamingAssistant: StreamingAssistant?
     let userMessage: UserMessage?
@@ -82,10 +83,12 @@ struct ConversationViewportEntry: Identifiable {
         content: AnyView,
         allowsHeightCaching: Bool = true,
         allowsScrollAnchoring: Bool = true,
-        clipsContentToBounds: Bool = false
+        clipsContentToBounds: Bool = false,
+        layoutRevision: Int? = nil
     ) {
         self.id = id
         self.revision = revision
+        self.layoutRevision = layoutRevision ?? revision
         self.content = content
         self.allowsHeightCaching = allowsHeightCaching
         self.allowsScrollAnchoring = allowsScrollAnchoring
@@ -97,6 +100,7 @@ struct ConversationViewportEntry: Identifiable {
     init(id: String, revision: Int, streamingAssistant: StreamingAssistant) {
         self.id = id
         self.revision = revision
+        layoutRevision = revision
         content = AnyView(EmptyView())
         self.streamingAssistant = streamingAssistant
         userMessage = nil
@@ -111,6 +115,7 @@ struct ConversationViewportEntry: Identifiable {
     init(id: String, revision: Int, userMessage: UserMessage) {
         self.id = id
         self.revision = revision
+        layoutRevision = revision
         content = AnyView(EmptyView())
         streamingAssistant = nil
         self.userMessage = userMessage
@@ -286,6 +291,16 @@ final class ConversationViewportProxy {
     }
 }
 
+/// UIKit 完成本次行高、bounds 与 inset 协调后，在该帧绘制前保位。
+private final class ConversationCollectionView: UICollectionView {
+    var didLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        didLayout?()
+    }
+}
+
 final class ConversationViewportController: UIViewController, UICollectionViewDelegate, ChatLayoutDelegate {
     weak var proxyOwner: ConversationViewportProxy?
     var onContentAvailabilityChanged: (String?, Bool) -> Void
@@ -312,7 +327,12 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         layout.keepContentOffsetAtBottomOnBatchUpdates = false
         return layout
     }()
-    private lazy var collectionView = UICollectionView(frame: .zero, collectionViewLayout: chatLayout)
+    private lazy var collectionView: ConversationCollectionView = {
+        let list = ConversationCollectionView(frame: .zero, collectionViewLayout: chatLayout)
+        list.didLayout = { [weak self] in self?.preservePinnedBottomAfterLayout() }
+        return list
+    }()
+    private var isPreservingLayoutBottom = false
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private var entriesByID: [String: ConversationViewportEntry] = [:]
     private var displayedSupplementalIDs: Set<String> = []
@@ -348,6 +368,13 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private var supplementalEntries: [ConversationViewportEntry] = []
     private var makeEntries: (([ConversationItem]) -> [ConversationViewportEntry])?
     private var bottomInset: CGFloat = 0
+    private typealias PendingPresentation = (
+        entries: [ConversationViewportEntry], revision: Int, bottomInset: CGFloat,
+        hasConversationContent: Bool, historyPresentationStamp: HistoryPresentationStamp?
+    )
+    private var initialFullPresentation: PendingPresentation?
+    private var isCompletingInitialWindow = false
+    private var initialRenderStartedAt: CFTimeInterval = CACurrentMediaTime()
     private var pendingApply: (
         entries: [ConversationViewportEntry],
         revision: Int,
@@ -551,12 +578,12 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             && (!historyPresentationOperationIsPending
                 || (historyPresentationOperationIsTerminal && pendingContentRevealAcknowledgement != nil))
         guard revealInitial || revealHistory else { return true }
+        preservePinnedBottomAfterLayout()
         let geometry = HistoryScrollIndicatorGeometry(contentSize: collectionView.contentSize,
             contentOffset: collectionView.contentOffset, viewportSize: collectionView.bounds.size,
             insets: collectionView.adjustedContentInset)
-        // 生成中的首屏只等待视口约束稳定，不能等整个流式回复停止增长。
-        let streamingInitial = revealInitial && entriesByID.values.contains { $0.streamingAssistant != nil }
-        let stable = contentRevealGeometry == geometry || (streamingInitial
+        // 首屏只等待视口约束和首次定位完成，不等待屏幕外历史或图片改变整段内容尺寸。
+        let stable = contentRevealGeometry == geometry || (revealInitial
             && contentRevealGeometry?.viewportSize == geometry.viewportSize
             && contentRevealGeometry?.insets == geometry.insets)
         guard stable else {
@@ -576,6 +603,21 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             os_log("conversation-content-reveal kind=initial rows=%{public}d reduced=%{public}d",
                 log: Self.scrollPerformanceLog, type: .debug, entriesByID.count, reducesContentMotion ? 1 : 0)
 #endif
+            appLog("conversation-first-content initial_rows=%ld retained_rows=%ld viewport_elapsed_ms=%.2f",
+                entriesByID.count, initialFullPresentation?.entries.count ?? entriesByID.count,
+                (CACurrentMediaTime() - initialRenderStartedAt) * 1000)
+            if let full = initialFullPresentation {
+                initialFullPresentation = nil
+                isCompletingInitialWindow = true
+                let generation = sessionGeneration
+                // 先提交已可读的首屏，剩余内容走分帧预热和保位，不能抢在揭开遮罩前执行。
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.sessionGeneration == generation,
+                          full.revision >= self.lastAppliedRevision else { return }
+                    if self.pendingApply == nil { self.pendingApply = full }
+                    self.schedulePendingPresentation()
+                }
+            }
             updateTopEdgeVisibility()
         }
         if revealHistory || revealInitial {
@@ -839,6 +881,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         previousRevisions = [:]
         lastAppliedRevision = -1
         pendingApply = nil
+        initialFullPresentation = nil
+        isCompletingInitialWindow = false
+        initialRenderStartedAt = CACurrentMediaTime()
         pendingDisclosureAnchor = nil
         disclosureAnchorGeneration &+= 1
         isStreamingRenderingPausedForUserScroll = false
@@ -859,6 +904,8 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         historyScrollMetrics?.historySchedulerEvent(.cancelled, generation: presentationTargetGeneration,
             entries: pendingApply?.entries.count ?? 0, batchEntries: 0, moving: isViewportMoving)
 #endif
+        initialFullPresentation = nil
+        isCompletingInitialWindow = false
         pendingContentRevealAcknowledgement = nil
         pendingContentRevealStamp = nil
         revealInsertedHistoryImmediately()
@@ -1139,7 +1186,6 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private func setBottomContentInset(_ inset: CGFloat) {
         guard collectionView.contentInset.bottom != inset else { return }
         let wasPinnedToBottom = isPinnedToBottom
-            && isAtBottom(collectionView)
             && !isViewportMoving
             && !isUserGestureAwaitingEnd
         collectionView.contentInset.bottom = inset
@@ -1171,7 +1217,24 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         }
         placeInitialPositionIfNeeded()
         alignBottomIfNeeded()
+        preservePinnedBottomAfterLayout()
         updateTopEdgeVisibility()
+    }
+
+    private func preservePinnedBottomAfterLayout() {
+        guard hasPlacedInitialPosition, isPinnedToBottom, !isPreservingLayoutBottom,
+              !isViewportMoving, !isUserGestureAwaitingEnd,
+              pendingDisclosureAnchor == nil, searchTargetID == nil,
+              collectionView.bounds.height > 0, hasAppliedSnapshot else { return }
+        let target = max(-collectionView.adjustedContentInset.top,
+            collectionView.contentSize.height - collectionView.bounds.height + collectionView.adjustedContentInset.bottom)
+        guard target.isFinite, abs(collectionView.contentOffset.y - target) > 0.25 else { return }
+        isPreservingLayoutBottom = true
+        let wasProgrammatic = isProgrammaticScroll
+        isProgrammaticScroll = true
+        collectionView.setContentOffset(CGPoint(x: collectionView.contentOffset.x, y: target), animated: false)
+        isProgrammaticScroll = wasProgrammatic
+        isPreservingLayoutBottom = false
     }
 
     func apply(
@@ -1191,14 +1254,42 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             pendingApply = (entries, revision, bottomInset, hasConversationContent, historyPresentationStamp)
             return
         }
+        if !hasAppliedSnapshot, entries.isEmpty, !hasConversationContent, historyPresentationStamp == nil {
+            // 空的首次订阅不创建 diffable 事务，让随后到达的本地缓存直接走首屏路径。
+            setBottomContentInset(bottomInset)
+            return
+        }
+        if initialContentRevealPending, initialFullPresentation != nil {
+            // 首屏提交期间只保留最新全量目标，避免远端刷新反复重启首屏准备。
+            let retainedStamp = historyPresentationStamp ?? initialFullPresentation?.historyPresentationStamp
+                ?? carriedHistoryPresentationStamp
+            initialFullPresentation = (entries, revision, bottomInset, hasConversationContent, retainedStamp)
+            return
+        }
+        if initialContentRevealPending, !initialContentHasConversation, !isApplyingSnapshot, hasConversationContent,
+           historyHeightPreparation == nil, preparedPresentation == nil,
+           searchTargetID == nil, reusableReadingAnchor == nil,
+           !entries.contains(where: { $0.streamingAssistant != nil }) {
+            let firstScreen = prepareInitialScreen(from: entries)
+            let isPartial = firstScreen.count < entries.count
+            if isPartial {
+                initialFullPresentation = (entries, revision, bottomInset, hasConversationContent, historyPresentationStamp)
+            }
+            // 短会话也必须从首屏入口直接提交。若退回下面的调度判断，现有
+            // display link 会把它再次入队，下一个 tick 又回到这里，永远无法展示。
+            applyPreparedPresentation(entries: firstScreen, revision: revision, bottomInset: bottomInset,
+                hasConversationContent: hasConversationContent,
+                historyPresentationStamp: isPartial ? nil : historyPresentationStamp)
+            return
+        }
         let currentIDs = dataSource.snapshot().itemIdentifiers
-        let isHistoryStructure = !currentIDs.isEmpty && currentIDs != entries.map(\.id)
+        let isHistoryStructure = hasAppliedSnapshot && !currentIDs.isEmpty && currentIDs != entries.map(\.id)
             && (historyPresentationStamp != nil || entries.contains { entriesByID[$0.id] != nil })
         if isViewportMoving || isStreamingRenderingPausedForUserScroll
             || !presentationSchedule.permitsWork(at: CACurrentMediaTime())
             || isApplyingSnapshot || historyHeightPreparation != nil
             || historyPreparationDisplayLink != nil || isHistoryStructure
-            || (historyPresentationStamp != nil && !currentIDs.isEmpty) {
+            || (historyPresentationStamp != nil && hasAppliedSnapshot && !currentIDs.isEmpty) {
             let retainedStamp = historyPresentationStamp ?? pendingApply?.historyPresentationStamp ?? carriedHistoryPresentationStamp
             pendingApply = (entries, revision, bottomInset, hasConversationContent, retainedStamp)
             presentationTargetGeneration &+= 1
@@ -1211,6 +1302,29 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         }
         applyPreparedPresentation(entries: entries, revision: revision, bottomInset: bottomInset,
                                   hasConversationContent: hasConversationContent, historyPresentationStamp: historyPresentationStamp)
+    }
+
+    /// 优先在十二行内准备约一屏正文；不足一屏时保留原目标，避免补齐时正文下移。
+    private func prepareInitialScreen(from entries: [ConversationViewportEntry]) -> [ConversationViewportEntry] {
+        let width = chatLayout.layoutFrame.width > 0 ? chatLayout.layoutFrame.width : collectionView.bounds.width
+        guard width > 0 else { return entries }
+        let visibleHeight = max(1, collectionView.bounds.height - collectionView.adjustedContentInset.top
+            - collectionView.adjustedContentInset.bottom)
+        let targetHeight = visibleHeight * 1.2
+        var height: CGFloat = 0
+        var count = 0
+        for entry in entries.reversed().prefix(12) {
+            let key = CellMeasurementKey(id: entry.id, revision: entry.revision, width: width)
+            let measured = cellHeightCache[key] ?? Self.measureHeight(for: entry, width: width)
+            if measured.isFinite, measured > 0 {
+                cellHeightCache[key] = ceil(measured)
+                height += ceil(measured)
+            }
+            count += 1
+            if height >= targetHeight { break }
+        }
+        if height < visibleHeight { return entries }
+        return Array(entries.suffix(count))
     }
 
     private var isViewportMoving: Bool {
@@ -1254,10 +1368,10 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 
         let oldIDs = dataSource.snapshot().itemIdentifiers
         let hasStructureChange = oldIDs != ids
-        let prependAnchor = hasStructureChange ? capturePrependAnchor(for: entries) : nil
+        let prependAnchor = hasStructureChange ? capturePrependAnchor(for: entries) : captureCurrentReadingAnchor()
         let oldEntriesByID = entriesByID
         let updatedEntriesByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
-        let preservesVisibleHistoryWindow = hasStructureChange && canPreserveVisibleHistoryWindow(
+        let preservesVisibleHistoryWindow = canPreserveVisibleHistoryWindow(
             oldIDs: oldIDs, newIDs: ids, updatedEntries: updatedEntriesByID)
         entriesByID = updatedEntriesByID
         displayedSupplementalIDs = Set(supplementalEntries.map(\.id)).intersection(entriesByID.keys)
@@ -1268,6 +1382,25 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         streamingHeightMeasurers = streamingHeightMeasurers.filter {
             activeStreamingIDs.contains($0.key)
         }
+        // 图片字节/错误状态只改变绘制内容。把旧宽度下的精确行高交给新内容版本，
+        // 避免预热阶段为每张图片重新创建 SwiftUI host 并测量整条消息。
+        var retainedHeights: [CellMeasurementKey: CGFloat] = [:]
+        for (key, height) in cellHeightCache {
+            guard let old = oldEntriesByID[key.id], let new = entriesByID[key.id],
+                  old.revision == key.revision, old.revision != new.revision,
+                  old.cellKind == new.cellKind, new.allowsHeightCaching else { continue }
+            let sameGeometry: Bool
+            if let lhs = old.userMessage, let rhs = new.userMessage {
+                sameGeometry = Self.hasSameUserMessageGeometry(lhs, rhs)
+            } else {
+                sameGeometry = old.layoutRevision == new.layoutRevision
+            }
+            if sameGeometry {
+                retainedHeights[CellMeasurementKey(id: key.id, revision: new.revision,
+                    width: CGFloat(key.widthInPixels) / UIScreen.main.scale)] = height
+            }
+        }
+        cellHeightCache.merge(retainedHeights) { _, new in new }
         if hasStructureChange || changed.contains(where: { entriesByID[$0]?.allowsHeightCaching == true }) {
             let cacheableRevisions = Dictionary(
                 uniqueKeysWithValues: entries.compactMap { entry in
@@ -1354,10 +1487,10 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         isApplyingSnapshot = true
         let applyingCommitID = UUID()
         activeSnapshotCommitID = applyingCommitID
-        // 历史合并可能替换屏幕外的分组，并非严格suffix前插。只要当前可见窗口
-        // 的条目、顺序与几何不变，也须在异步提交期间保位，不能等completion才拉回。
-        if batch?.projectionEpoch != nil, preservesVisibleHistoryWindow,
-           prependAnchor != nil, disclosureAnchor == nil, !keepTail, hasAppliedSnapshot,
+        // 缓存补齐与远端同步共用提交内的原生位置补偿，贴底时也必须启用。
+        // 仅在 completion 恢复位置会把每批插入的临时偏移绘制到屏幕上，再拉回。
+        if preservesVisibleHistoryWindow,
+           prependAnchor != nil, disclosureAnchor == nil, hasAppliedSnapshot,
            unchangedBottomInset, collectionView.contentSize.height > chatLayout.visibleBounds.height {
             nativeHistoryOffsetCommitID = applyingCommitID
             chatLayout.keepContentOffsetAtBottomOnBatchUpdates = true
@@ -1790,6 +1923,19 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         }
         if requiresFreshEntriesAfterDisclosure { return }
         guard collectionView.bounds.width > 0 else { return }
+        if initialContentRevealPending, initialFullPresentation != nil { return }
+        if initialContentRevealPending, !initialContentHasConversation,
+           historyHeightPreparation == nil, preparedPresentation == nil,
+           searchTargetID == nil, reusableReadingAnchor == nil,
+           let pending = pendingApply, pending.hasConversationContent,
+           !pending.entries.contains(where: { $0.streamingAssistant != nil }) {
+            // 导航初期宽度未就绪时也必须回到同一首屏入口，不能直接预热全量目标。
+            pendingApply = nil
+            apply(entries: pending.entries, revision: pending.revision, bottomInset: pending.bottomInset,
+                  hasConversationContent: pending.hasConversationContent,
+                  historyPresentationStamp: pending.historyPresentationStamp)
+            return
+        }
         if let candidate = preparedPresentation {
             let width = chatLayout.layoutFrame.width > 0 ? chatLayout.layoutFrame.width : collectionView.bounds.width
             let newest = pendingApply.map { Dictionary($0.entries.map { ($0.id, $0.cellKind) }, uniquingKeysWith: { _, new in new }) }
@@ -1859,7 +2005,10 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
             }
             let target = pending.entries.map { HistoryViewportPresentationSchedule.Row(id: $0.id,
                 revision: $0.revision, kind: Self.presentationKind($0), supplemental: targetSupplementalIDs.contains($0.id)) }
-            let plan = HistoryViewportPresentationSchedule.plan(current: old, target: target, maximumInsertedEntries: 1)
+            // 首屏尾窗已经可读，屏幕外缓存按帧测量，但合并成一次原子前插。
+            // 避免每准备一行就反复diff/布局整段历史；后续交互分页仍保持单行提交预算。
+            let insertionLimit = isCompletingInitialWindow ? max(1, target.count) : 1
+            let plan = HistoryViewportPresentationSchedule.plan(current: old, target: target, maximumInsertedEntries: insertionLimit)
             let entries = plan.indices.map { pending.entries[$0] }
             let existingIDs = Set(currentIDs)
             let insertedRows = entries.filter { !existingIDs.contains($0.id) }
@@ -1882,7 +2031,10 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         preparedPresentation = nil
         let batch = candidate.batch
         // 同epoch live可保留为唯一latest pending，不让不停生成使完整历史永远无法确认。
-        if batch.remaining == 0, presentationTargetGeneration == batch.generation { pendingApply = nil }
+        if batch.remaining == 0, presentationTargetGeneration == batch.generation {
+            pendingApply = nil
+            isCompletingInitialWindow = false
+        }
 #if DEBUG
         historyScrollMetrics?.historySchedulerEvent(.commitAdmitted, generation: batch.generation,
             entries: batch.entries, batchEntries: candidate.entries.count,
@@ -2024,16 +2176,21 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 #if DEBUG
         let heightFlushStartedAt = currentCommitDiagnostic?.startIfCollecting()
 #endif
+        let wasPinned = isPinnedToBottom
+        let readingAnchor = wasPinned ? nil : captureCurrentReadingAnchor()
         let context = ChatLayoutInvalidationContext()
         context.invalidateLayoutMetrics = true
         context.invalidateItems(at: indexPaths)
+        isProgrammaticScroll = true
         chatLayout.invalidateLayout(with: context)
         collectionView.layoutIfNeeded()
+        if let readingAnchor { restorePosition(readingAnchor) }
+        isProgrammaticScroll = false
 #if DEBUG
         currentCommitDiagnostic?.emit(.liveHeightFlush, since: heightFlushStartedAt)
 #endif
 
-        if isPinnedToBottom,
+        if wasPinned,
            !collectionView.isTracking,
            !collectionView.isDragging,
            !collectionView.isDecelerating {
@@ -2052,7 +2209,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         let host = UIHostingController(
             rootView: TopPinnedConversationContent(
                 id: entry.id,
-                revision: entry.revision,
+                revision: entry.layoutRevision,
                 content: entry.content,
                 onHeightChange: nil
             )
@@ -2308,8 +2465,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         // Native batch compensation can move bounds before UIKit publishes the
         // matching content size. That transient geometry is not a user request
         // to follow the tail. Actual touch/drag/deceleration always wins.
-        if nativeHistoryOffsetCommitID == nil || isUserGestureAwaitingEnd
-            || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating {
+        if isUserGestureAwaitingEnd || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating {
             setPinned(isAtBottom(scrollView))
         }
         if !isProgrammaticScroll,
@@ -2357,7 +2513,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 #if DEBUG
         historyScrollMetrics?.scrollEnded(rowCount: historyMetricsRowCount)
 #endif
-        updatePinnedState(for: scrollView)
+        updatePinnedState(for: scrollView, userFinished: true)
         resumeStreamingRenderingAfterUserScroll()
     }
 
@@ -2366,7 +2522,7 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 #if DEBUG
         historyScrollMetrics?.scrollEnded(rowCount: historyMetricsRowCount)
 #endif
-        updatePinnedState(for: scrollView)
+        updatePinnedState(for: scrollView, userFinished: true)
         resumeStreamingRenderingAfterUserScroll()
     }
 
@@ -2403,7 +2559,9 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         isStreamingRenderResumePending = false
     }
 
-    private func updatePinnedState(for scrollView: UIScrollView) {
+    private func updatePinnedState(for scrollView: UIScrollView, userFinished: Bool = false) {
+        // 布局尚在协调时的瞬时偏移不能取消贴底意图；只有真实阅读手势可以。
+        if isPinnedToBottom, !userFinished, !isUserGestureAwaitingEnd, !isViewportMoving { return }
         setPinned(isAtBottom(scrollView))
     }
 
@@ -2446,11 +2604,17 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
               let first = retainedVisibleIDs.first, let start = newIDs.firstIndex(of: first),
               start + retainedVisibleIDs.count <= newIDs.count,
               Array(newIDs[start..<(start + retainedVisibleIDs.count)]) == retainedVisibleIDs else { return false }
-        return retainedVisibleIDs.allSatisfy { id in
+        // 原生补偿按总高度差移动 offset。阅读锚点以下必须是同一段稳定后缀，
+        // 否则屏幕下方的新内容/高度变化会被误算成锚点上方的位移。
+        guard let first = retainedVisibleIDs.first,
+              let oldStart = oldIDs.firstIndex(of: first), let newStart = newIDs.firstIndex(of: first),
+              Array(oldIDs[oldStart...]) == Array(newIDs[newStart...]) else { return false }
+        return oldIDs[oldStart...].allSatisfy { id in
             guard let old = entriesByID[id], let new = updatedEntries[id],
                   previousRevisions[id] == old.revision, old.cellKind == new.cellKind,
                   new.allowsScrollAnchoring else { return false }
             if old.revision == new.revision { return true }
+            if old.layoutRevision == new.layoutRevision { return true }
             // 图片字节补齐不改变预留尺寸；不能因此撤掉整个窗口的位置补偿。
             guard let oldMessage = old.userMessage, let newMessage = new.userMessage else { return false }
             return Self.hasSameUserMessageGeometry(oldMessage, newMessage)
@@ -2493,6 +2657,11 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
 
     private func restore(_ anchor: VisibleAnchor) {
         guard let item = dataSource.snapshot().indexOfItem(anchor.id) else { return }
+        // 提交内已完成位置补偿时不再触发一次全列表测量；只对真实误差做校正。
+        if let attributes = collectionView.layoutAttributesForItem(at: IndexPath(item: item, section: 0)),
+           abs(attributes.frame.minY - collectionView.contentOffset.y - anchor.offsetFromViewportTop) < 0.5 {
+            return
+        }
 #if DEBUG
         os_signpost(.event, log: Self.scrollPerformanceLog, name: "HistoryAnchorBefore",
                     "offset_y=%{public}.2f", Double(collectionView.contentOffset.y))
@@ -2858,7 +3027,7 @@ final class HostedConversationCell: StableSelfSizingCollectionViewCell {
         let root = AnyView(
             TopPinnedConversationContent(
                 id: entry.id,
-                revision: entry.revision,
+                revision: entry.layoutRevision,
                 content: entry.content,
                 onHeightChange: { [weak self] height in
                     guard let self, self.representedIdentity == identity else { return }
@@ -3573,11 +3742,10 @@ private final class ConversationImagePreviewController: UIViewController,
     }
 }
 
-private final class ZoomingImageViewController: UIViewController, UIScrollViewDelegate {
+private final class ZoomingImageViewController: UIViewController {
     let index: Int
     private let item: ConversationImagePreviewItem
-    private let scrollView = UIScrollView()
-    private let imageView = UIImageView()
+    private let imagePreview = AttachmentZoomScrollView()
 
     init(item: ConversationImagePreviewItem, index: Int) {
         self.item = item
@@ -3590,90 +3758,15 @@ private final class ZoomingImageViewController: UIViewController, UIScrollViewDe
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-
-        scrollView.delegate = self
-        scrollView.minimumZoomScale = 1
-        scrollView.maximumZoomScale = 5
-        scrollView.bouncesZoom = true
-        scrollView.showsHorizontalScrollIndicator = false
-        scrollView.showsVerticalScrollIndicator = false
-        scrollView.contentInsetAdjustmentBehavior = .never
-        view.addSubview(scrollView)
-
-        imageView.image = item.image
-        imageView.contentMode = .scaleAspectFit
-        imageView.backgroundColor = .black
-        imageView.accessibilityLabel = item.name ?? String(localized: "图片")
-        scrollView.addSubview(imageView)
-
-        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
-        doubleTap.numberOfTapsRequired = 2
-        scrollView.addGestureRecognizer(doubleTap)
-
-        if item.image == nil {
-            let placeholder = UIImageView(image: UIImage(systemName: "photo"))
-            placeholder.tintColor = UIColor.white.withAlphaComponent(0.42)
-            placeholder.contentMode = .scaleAspectFit
-            placeholder.translatesAutoresizingMaskIntoConstraints = false
-            view.addSubview(placeholder)
-            NSLayoutConstraint.activate([
-                placeholder.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-                placeholder.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-                placeholder.widthAnchor.constraint(equalToConstant: 54),
-                placeholder.heightAnchor.constraint(equalToConstant: 54)
-            ])
-        }
+        // 用户附件与正文图片复用同一个原生缩放/拖动实现。
+        imagePreview.previewImageView.accessibilityLabel = item.name ?? String(localized: "图片")
+        imagePreview.display(item.image)
+        view.addSubview(imagePreview)
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        scrollView.frame = view.bounds
-        guard scrollView.zoomScale == scrollView.minimumZoomScale else {
-            centerImage()
-            return
-        }
-        imageView.frame = scrollView.bounds
-        scrollView.contentSize = imageView.bounds.size
-    }
-
-    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
-        imageView
-    }
-
-    func scrollViewDidZoom(_ scrollView: UIScrollView) {
-        centerImage()
-    }
-
-    private func centerImage() {
-        let boundsSize = scrollView.bounds.size
-        var frame = imageView.frame
-        frame.origin.x = frame.size.width < boundsSize.width
-            ? (boundsSize.width - frame.size.width) / 2
-            : 0
-        frame.origin.y = frame.size.height < boundsSize.height
-            ? (boundsSize.height - frame.size.height) / 2
-            : 0
-        imageView.frame = frame
-    }
-
-    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-        if scrollView.zoomScale > scrollView.minimumZoomScale {
-            scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
-            return
-        }
-        let targetScale = min(2.5, scrollView.maximumZoomScale)
-        let point = gesture.location(in: imageView)
-        let width = scrollView.bounds.width / targetScale
-        let height = scrollView.bounds.height / targetScale
-        scrollView.zoom(
-            to: CGRect(
-                x: point.x - width / 2,
-                y: point.y - height / 2,
-                width: width,
-                height: height
-            ),
-            animated: true
-        )
+        imagePreview.frame = view.bounds
     }
 }
 

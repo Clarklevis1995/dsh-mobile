@@ -193,6 +193,89 @@ final class WorkspaceSessionListTests: XCTestCase {
 
 @MainActor
 final class WorkspaceSessionListIntegrationTests: XCTestCase {
+    func testLargeScrollSettlingKeepsOffsetInRecentAndAllSessions() async throws {
+        guard #available(iOS 18.0, *) else { throw XCTSkip("需要原生滚动阶段通知") }
+        let fixture = Fixture(count: 3_000)
+        defer { fixture.cleanUp() }
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let oldKey = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        let destination = PassthroughSubject<String, Never>()
+        WorkspaceSessionFrameProbe.isEnabled = true
+        var rowFrames: [String: CGRect] = [:]
+        defer { WorkspaceSessionFrameProbe.isEnabled = false }
+        let view = ScrollViewReader { proxy in
+            WorkspaceView(onOpenSession: { _ in }, onNewSession: {}, onSettings: {},
+                onPlugins: {}, onScheduledTasks: {})
+                .environmentObject(fixture.store)
+                .environmentObject(fixture.hosts)
+                .modifier(AppFontScope())
+                .environment(\.locale, Locale(identifier: "zh_CN"))
+                .onPreferenceChange(WorkspaceSessionFrameProbe.self) { rowFrames = $0 }
+                .onReceive(destination) { id in
+                    withAnimation(.linear(duration: 0.35)) { proxy.scrollTo(id, anchor: .top) }
+                }
+        }
+        let host = UIHostingController(rootView: view)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            WorkspaceScrollPhaseObserver.didChangeForTesting = nil
+            window.isHidden = true
+            window.rootViewController = nil
+            oldKey?.makeKey()
+        }
+        func findScroll(_ view: UIView) -> UIScrollView? {
+            if let scroll = view as? UIScrollView { return scroll }
+            return view.subviews.lazy.compactMap { findScroll($0) }.first
+        }
+        func visibleRowFrames() -> [String: CGFloat] {
+            rowFrames.filter { $0.value.intersects(window.bounds) }.mapValues(\.minY)
+        }
+        for all in [true, false] {
+            if all { fixture.store.selectAllWorkspaces() }
+            else { fixture.store.selectWorkspace(fixture.store.workspaces[0]) }
+            try await Task.sleep(for: .milliseconds(500))
+            host.view.layoutIfNeeded()
+            let scroll = try XCTUnwrap(findScroll(host.view))
+            var wasActive = false
+            var idleOffset: CGFloat?
+            var idleHeight: CGFloat?
+            var idleFrames: [String: CGFloat] = [:]
+            WorkspaceScrollPhaseObserver.didChangeForTesting = { active in
+                if active { wasActive = true }
+                else if wasActive {
+                    idleOffset = scroll.contentOffset.y
+                    idleHeight = scroll.contentSize.height
+                    idleFrames = visibleRowFrames()
+                }
+            }
+            let targets = all ? ["toggle-w29", "session-s1500", "session-s2300", "session-s500", "workspace-header"]
+                : ["toggle-recent-w0", "workspace-header", "session-s10", "workspace-header"]
+            for id in targets {
+                wasActive = false
+                idleOffset = nil
+                destination.send(id)
+                try await waitFor { idleOffset != nil }
+                let stopped = try XCTUnwrap(idleOffset)
+                var maximumDrift: CGFloat = 0
+                for _ in 0..<18 {
+                    try await Task.sleep(for: .milliseconds(16))
+                    maximumDrift = max(maximumDrift, abs(scroll.contentOffset.y - stopped))
+                }
+                print("WORKSPACE_IDLE all=\(all) target=\(id) drift=\(maximumDrift) stopped=\(stopped) final=\(scroll.contentOffset.y) idleHeight=\(idleHeight ?? 0) finalHeight=\(scroll.contentSize.height)")
+                let finalFrames = visibleRowFrames()
+                let visibleDrift = idleFrames.compactMap { id, y in finalFrames[id].map { abs($0 - y) } }.max() ?? 0
+                print("WORKSPACE_ANCHORS count=\(idleFrames.count) common=\(Set(idleFrames.keys).intersection(finalFrames.keys).count) drift=\(visibleDrift)")
+                XCTAssertFalse(idleFrames.isEmpty, "必须采集到真实可见行，避免只比较不精确的内容偏移量")
+                XCTAssertFalse(Set(idleFrames.keys).intersection(finalFrames.keys).isEmpty,
+                    "停止后至少保留一个相同的可见会话，不能整页换位")
+                XCTAssertLessThanOrEqual(visibleDrift, 1,
+                    "没有数据变化时，滚动停止后的背景恢复不能让可见会话二次移动")
+            }
+        }
+    }
+
     func testAllScopeRejectsCreationBeforeChangingSelectionOrStartingNetworkWork() async throws {
         let fixture = Fixture(count: 30)
         defer { fixture.cleanUp() }
@@ -308,7 +391,7 @@ final class WorkspaceSessionListIntegrationTests: XCTestCase {
         fixture.store.selectWorkspace(fixture.store.workspaces[0])
         model.search("")
         try await waitFor { model.snapshot.matchingCount == 100 }
-        XCTAssertEqual(model.snapshot.entries.count, 12)
+        XCTAssertEqual(model.snapshot.entries.filter { if case .session = $0 { return true }; return false }.count, 12)
         fixture.store.selectAllWorkspaces()
         try await waitFor { model.snapshot.matchingCount == 3_000 }
         var publications = 0

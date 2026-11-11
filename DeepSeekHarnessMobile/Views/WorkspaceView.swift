@@ -12,6 +12,7 @@ struct WorkspaceView: View {
     let onSettings: () -> Void
     let onPlugins: () -> Void
     let onScheduledTasks: () -> Void
+    var onConnectors: () -> Void = {}
     @State private var searchQuery = ""
     @StateObject private var sessionList = WorkspaceSessionListModel()
     @State private var renamingSession: SessionSummary?
@@ -21,8 +22,7 @@ struct WorkspaceView: View {
     @State private var showsDirectoryBrowser = false
     @State private var showsQRScanner = false
     @State private var showsManualPairing = false
-    @State private var showsWorkspaceRequiredAlert = false
-    @State private var workspaceIsScrolling = false
+    @State private var scrollActivity = WorkspaceScrollActivity()
     @State private var drawerOffset: CGFloat = 0
     @State private var drawerDragStart: CGFloat?
     @State private var drawerFeedback = WorkspaceDrawerFeedback()
@@ -85,9 +85,8 @@ struct WorkspaceView: View {
                     .padding(.trailing, safeArea.trailing)
                     // 先扩展到窗口四边，再绘制和裁剪背景；正文仍留在安全区内。
                     .background {
-                        DeepOceanBackground(prefersOpenLightArcs: usesVerticalToolbar,
-                            animationPaused: workspaceIsScrolling || drawerOffset > 0 || drawerDragStart != nil
-                                || showsWorkspaceRequiredAlert)
+                        WorkspaceScrollBackground(activity: scrollActivity, prefersOpenLightArcs: usesVerticalToolbar,
+                            animationPaused: drawerOffset > 0 || drawerDragStart != nil)
                     }
                     .overlay {
                         Color.black.opacity(dimOpacity)
@@ -143,7 +142,7 @@ struct WorkspaceView: View {
         }
         .onDisappear {
             sessionList.unbind()
-            workspaceIsScrolling = false
+            scrollActivity.isScrolling = false
             drawerFeedback.endDrag(cancelled: true)
             drawerDragStart = nil
         }
@@ -171,11 +170,6 @@ struct WorkspaceView: View {
             }
         } message: {
             Text("会话将被归档并从列表隐藏，历史记录会保留。")
-        }
-        .alert(String(localized: "请先选择工作区"), isPresented: $showsWorkspaceRequiredAlert) {
-            Button(String(localized: "知道了"), role: .cancel) {}
-        } message: {
-            Text(WorkspaceSessionCopy.creationPrompt)
         }
         .onChangeCompat(of: searchQuery) { _, value in
             sessionList.search(value)
@@ -252,8 +246,8 @@ struct WorkspaceView: View {
         .scrollDisabled(drawerDragStart == nil && drawerOffset > 0)
         .accessibilityIdentifier("workspace-session-list")
         .modifier(WorkspaceScrollPhaseObserver { active in
-            guard workspaceIsScrolling != active else { return }
-            workspaceIsScrolling = active
+            guard scrollActivity.isScrolling != active else { return }
+            scrollActivity.isScrolling = active
             sessionList.setScrolling(active)
         })
         .onTapGesture { sessionSearchIsFocused = false }
@@ -296,6 +290,16 @@ struct WorkspaceView: View {
             recentSessions.padding(.bottom, 8)
             ForEach(sessionList.snapshot.entries) { entry in
                 sessionListEntry(entry)
+                    #if DEBUG
+                    .background {
+                        if WorkspaceSessionFrameProbe.isEnabled {
+                            GeometryReader { geometry in
+                                Color.clear.preference(key: WorkspaceSessionFrameProbe.self,
+                                    value: [entry.id: geometry.frame(in: .global)])
+                            }
+                        }
+                    }
+                    #endif
             }
         }
     }
@@ -335,13 +339,9 @@ struct WorkspaceView: View {
                     .frame(width: 24)
             }, action: { selectDrawerItem(onPlugins) })
             drawerItem(String(localized: "定时任务"), icon: {
-                Image(systemName: "clock")
-                    .resizable()
-                    .scaledToFit()
-                    .fontWeight(.medium)
-                    .frame(width: 22, height: 22)
-                    .frame(width: 24)
+                SidebarNavigationIcon(symbol: .clock).frame(width: 24)
             }, action: { selectDrawerItem(onScheduledTasks) })
+            drawerItem(String(localized: "连接器"), icon: { SidebarNavigationIcon(symbol: .connector).frame(width: 24) }, action: { selectDrawerItem(onConnectors) })
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 18)
@@ -711,11 +711,7 @@ struct WorkspaceView: View {
     }
 
     private func requestNewSession() {
-        if store.isAllWorkspacesSelected {
-            showsWorkspaceRequiredAlert = true
-        } else {
-            onNewSession()
-        }
+        onNewSession()
     }
 
     private var newSessionButtonLabel: some View {
@@ -730,14 +726,51 @@ struct WorkspaceView: View {
     }
 }
 
+#if DEBUG
+/// 仅回归测试启用，不在实际滚动中挂载逐行 GeometryReader。
+struct WorkspaceSessionFrameProbe: PreferenceKey {
+    static var isEnabled = false
+    static let defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { _, latest in latest }
+    }
+}
+#endif
+
+/// 只有背景订阅滚动状态，避免在停止滑动时重新求值整页懒加载列表。
+@MainActor
+private final class WorkspaceScrollActivity: ObservableObject {
+    @Published var isScrolling = false
+}
+
+private struct WorkspaceScrollBackground: View {
+    @ObservedObject var activity: WorkspaceScrollActivity
+    let prefersOpenLightArcs: Bool
+    let animationPaused: Bool
+
+    var body: some View {
+        DeepOceanBackground(prefersOpenLightArcs: prefersOpenLightArcs,
+            animationPaused: animationPaused || activity.isScrolling)
+    }
+}
+
 /// 原生滚动阶段覆盖拖动、惯性与程序动画；只在活动/空闲边界通知，不逐帧刷新 SwiftUI 状态。
 struct WorkspaceScrollPhaseObserver: ViewModifier {
     let onChange: (Bool) -> Void
+    #if DEBUG
+    static var didChangeForTesting: ((Bool) -> Void)?
+    #endif
 
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
-            content.onScrollPhaseChange { _, phase in onChange(phase != .idle) }
+            content.onScrollPhaseChange { _, phase in
+                let active = phase != .idle
+                onChange(active)
+                #if DEBUG
+                Self.didChangeForTesting?(active)
+                #endif
+            }
         } else {
             content
         }

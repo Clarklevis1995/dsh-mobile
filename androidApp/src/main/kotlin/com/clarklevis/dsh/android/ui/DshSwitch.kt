@@ -20,13 +20,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
-/** 沿用隧道页的 51×31 胶囊开关；回调为空时由外层设置行处理切换语义。 */
+/** 全应用统一的 iOS 风格 51×31 胶囊开关；回调为空时由外层设置行处理切换语义。 */
 @Composable
 internal fun DshSwitch(
     checked: Boolean,
     onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    preserveDisabledColors: Boolean = false
 ) {
     val secondary = if (isSystemInDarkTheme()) {
         Color(0xFFEBEBF5).copy(alpha = 0.6f)
@@ -35,7 +36,7 @@ internal fun DshSwitch(
     }
     val blue = dshSwitchTrackColor()
     val track by animateColorAsState(
-        if (checked) blue.copy(alpha = if (enabled) 1f else 0.5f) else secondary.copy(alpha = 0.3f),
+        if (checked) blue.copy(alpha = if (enabled || preserveDisabledColors) 1f else 0.5f) else secondary.copy(alpha = 0.3f),
         animationSpec = tween(180),
         label = "dsh-switch-track"
     )

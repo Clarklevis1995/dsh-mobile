@@ -9,7 +9,7 @@ import org.junit.Test
 
 class ConversationQueueDeviceTest {
     @get:Rule val compose = createComposeRule()
-    private fun item(id: String) = SharedQueueItem(id, id, "消息 $id", 0, true)
+    private fun item(id: String) = SharedQueueItem(id, id, com.clarklevis.dsh.shared.i18n.UiMessage.raw("消息 $id"), 0, true)
 
     @Test fun singleRowExposesEditRemoveAndSteerWithCorrectIdentity() {
         val actions = mutableListOf<Pair<String, String>>()

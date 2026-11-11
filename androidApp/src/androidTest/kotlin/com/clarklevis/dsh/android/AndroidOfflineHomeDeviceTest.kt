@@ -114,7 +114,7 @@ class AndroidOfflineHomeDeviceTest {
                         WorkspaceScreen(graph.stateHolder, {
                             graph.stateHolder.selectSession(it)
                             opened = true
-                        }, {}, {}, {}, {})
+                        }, {}, {}, {}, {}, onConnectors = {})
                     }
                 }
             }

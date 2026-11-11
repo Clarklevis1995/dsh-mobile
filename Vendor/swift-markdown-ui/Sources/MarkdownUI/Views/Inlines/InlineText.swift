@@ -29,6 +29,7 @@ private struct InlineTextContent: View {
   let inlines: [InlineNode]
   let hasInlineCode: Bool
   let images: [String: Image]
+  var imageBaselineOffsets: [String: CGFloat] = [:]
   @Environment(\.baseURL) private var baseURL
   @Environment(\.softBreakMode) private var softBreakMode
   @Environment(\.theme) private var theme
@@ -45,6 +46,7 @@ private struct InlineTextContent: View {
           link: self.theme.link
         ),
         images: self.images,
+        imageBaselineOffsets: self.imageBaselineOffsets,
         softBreakMode: self.softBreakMode,
         attributes: attributes
       )
@@ -67,6 +69,7 @@ private struct InlineTextWithImages: View {
   private struct LoadedImages {
     let inlines: [InlineNode]
     let images: [String: Image]
+    let offsets: [String: CGFloat]
   }
 
   private var currentImages: [String: Image] {
@@ -78,38 +81,43 @@ private struct InlineTextWithImages: View {
     InlineTextContent(
       inlines: self.inlines,
       hasInlineCode: self.hasInlineCode,
-      images: self.currentImages
+      images: self.currentImages,
+      imageBaselineOffsets: self.loaded?.inlines == self.inlines ? self.loaded!.offsets : [:]
     )
     .task(id: self.inlines) {
-      let images = (try? await self.loadInlineImages()) ?? [:]
+      let images = (try? await self.loadInlineImages()) ?? ([:], [:])
       // provider 即使忽略取消也不能把旧 A 结果写回 A→B 或已移除的分支。
       guard !Task.isCancelled else { return }
-      self.loaded = LoadedImages(inlines: self.inlines, images: images)
+      self.loaded = LoadedImages(inlines: self.inlines, images: images.0, offsets: images.1)
     }
   }
 
-  private func loadInlineImages() async throws -> [String: Image] {
+  private func loadInlineImages() async throws -> ([String: Image], [String: CGFloat]) {
     let images = Set(self.inlines.flatMap(\.inlineImages))
-    guard !images.isEmpty else { return [:] }
+    guard !images.isEmpty else { return ([:], [:]) }
 
-    return await withTaskGroup(of: (String, Image?).self) { taskGroup in
+    return await withTaskGroup(of: (String, Image?, CGFloat).self) { taskGroup in
       for image in images {
         guard let url = URL(string: image.source, relativeTo: self.imageBaseURL) else {
           continue
         }
 
         taskGroup.addTask {
-          (image.source, try? await self.inlineImageProvider.image(with: url, label: image.alt))
+          let loaded = try? await self.inlineImageProvider.image(with: url, label: image.alt)
+          let offset = await self.inlineImageProvider.baselineOffset(with: url, label: image.alt)
+          return (image.source, loaded, offset)
         }
       }
 
       var inlineImages: [String: Image] = [:]
+      var offsets: [String: CGFloat] = [:]
 
       for await result in taskGroup {
         inlineImages[result.0] = result.1
+        offsets[result.0] = result.2
       }
 
-      return inlineImages
+      return (inlineImages, offsets)
     }
   }
 }

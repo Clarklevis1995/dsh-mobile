@@ -11,6 +11,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -159,7 +161,7 @@ class ConversationPagerChromeDeviceTest {
     }
 
     @Test
-    fun softEdgeProtectsToolbarAndEndsBeforeTheFirstBubble() {
+    fun softEdgeProtectsTitleAndFadesBelowToolbar() {
         compose.setContent {
             MaterialTheme {
                 val pager = rememberPagerState(pageCount = { 2 })
@@ -191,13 +193,16 @@ class ConversationPagerChromeDeviceTest {
             return row.max() - row.min()
         }
         val body = contrast(160)
-        val toolbarEdge = contrast(63)
-        val transition = contrast(68)
-        assertTrue("标题下缘不能透出清晰正文产生重影", toolbarEdge < body * 0.05f)
-        assertTrue("状态栏后方也应充分遮挡正文", contrast(16) < body * 0.05f)
-        assertTrue("渐隐只能位于顶栏与首条消息之间的留白", transition > body * 0.10f && transition < body * 0.90f)
-        for (yDp in listOf(72, 80, 104)) {
-            assertEquals("首条气泡所在区域不能被蒙层覆盖", body, contrast(yDp), 0.01f)
+        for (yDp in listOf(16, 36, 48)) {
+            assertTrue("标题和模式文字后应充分遮挡正文", contrast(yDp) < body * 0.05f)
+        }
+        assertTrue("顶栏底部仍应保留较强遮挡", contrast(64) < body * 0.30f)
+        assertTrue("栏底以下应保持连续渐隐", contrast(60) < contrast(68) && contrast(68) < contrast(80) && contrast(80) < contrast(92))
+        assertTrue("原有遮罩下方也应进入渐变范围", contrast(80) < body * 0.80f)
+        assertTrue("模糊和底色在渐变起点不能形成接缝", kotlin.math.abs(contrast(56) - contrast(55)) < body * 0.015f)
+        assertTrue("渐变终点应平缓接回正文", kotlin.math.abs(contrast(96) - contrast(95)) < body * 0.015f)
+        for (yDp in listOf(96, 104, 120)) {
+            assertEquals("渐变结束后正文不能继续被蒙层覆盖", body, contrast(yDp), 0.01f)
         }
         InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
             .resolve("conversation-soft-edge-contrast.png").outputStream().use {
@@ -233,7 +238,53 @@ class ConversationPagerChromeDeviceTest {
         val blue = topSample()
         assertTrue("正文变化后玻璃应同步更新采样", blue.blue > blue.red + 0.005f)
         val root = compose.onNodeWithTag("glass-root").captureToImage().toPixelMap()
-        val body = root[root.width / 4, with(compose.density) { 72.dp.roundToPx() }]
+        val body = root[root.width / 4, with(compose.density) { 104.dp.roundToPx() }]
         assertTrue("玻璃不能改变下方正文的颜色", body.blue > 0.95f && body.red < 0.05f)
+    }
+
+    @Test
+    fun fadeHasNoSeamInLightDarkAndReducedEffectsModes() {
+        var dark by mutableStateOf(false)
+        var reduced by mutableStateOf(false)
+        compose.setContent {
+            MaterialTheme(colorScheme = if (dark) darkColorScheme(surface = Color.Black) else lightColorScheme(surface = Color.White)) {
+                CompositionLocalProvider(LocalUiEffectsReduced provides reduced) {
+                    val pager = rememberPagerState(pageCount = { 2 })
+                    ConversationPagerChrome(pager, "seam", {}, Modifier.testTag("seam-root"),
+                        topBar = { Box(Modifier.fillMaxWidth().height(64.dp)) }) { _, _ ->
+                        Canvas(Modifier.fillMaxSize()) {
+                            val stripe = 6.dp.toPx()
+                            repeat((size.width / stripe).toInt() + 1) { index ->
+                                drawRect(if (index % 2 == 0) Color.Black else Color.White,
+                                    Offset(index * stripe, 0f), Size(stripe, size.height))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for ((isDark, effectsReduced) in listOf(false to false, true to false, false to true, true to true)) {
+            compose.runOnIdle { dark = isDark; reduced = effectsReduced }
+            val image = compose.onNodeWithTag("seam-root").captureToImage()
+            val pixels = image.toPixelMap()
+            fun contrast(yDp: Int): Float {
+                val y = with(compose.density) { yDp.dp.roundToPx() }
+                // 中央分页指示器有自己的底色；只测左侧未叠加控件的遮罩区域。
+                val row = (pixels.width / 8 until pixels.width / 4).map { pixels[it, y].red }
+                return row.max() - row.min()
+            }
+            val label = "dark=$isDark reduced=$effectsReduced"
+            assertTrue("渐变起点不能发生突变：$label", kotlin.math.abs(contrast(56) - contrast(55)) < 0.015f)
+            assertTrue("渐变终点不能形成边线：$label", kotlin.math.abs(contrast(96) - contrast(95)) < 0.015f)
+            for (y in 57..96) {
+                val jump = kotlin.math.abs(contrast(y) - contrast(y - 1))
+                assertTrue("整段渐变必须保持连续：$label y=$y jump=$jump", jump < 0.06f)
+            }
+            assertEquals("遮罩之外的正文不受影响：$label", contrast(160), contrast(104), 0.01f)
+            InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
+                .resolve("conversation-fade-dark-$isDark-reduced-$effectsReduced.png").outputStream().use {
+                    image.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+        }
     }
 }

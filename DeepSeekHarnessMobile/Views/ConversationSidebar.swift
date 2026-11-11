@@ -1,11 +1,47 @@
 import SwiftUI
 
+/// 两个侧栏共用导航图标，连接器使用带线插头；旧系统回退到横向插头。
+struct SidebarNavigationIcon: View {
+    enum Symbol { case clock, connector }
+
+    let symbol: Symbol
+    var size: CGFloat = 22
+    private var lineWidth: CGFloat { size * (1.9 / 22) }
+    private var connectorSymbolName: String {
+        if #available(iOS 17.0, *) { return "powercord" }
+        return "powerplug"
+    }
+
+    var body: some View {
+        Group {
+            switch symbol {
+            case .clock:
+                ZStack {
+                    Circle().strokeBorder(lineWidth: lineWidth)
+                    Path { path in
+                        path.move(to: CGPoint(x: size * 0.5, y: size * 0.24))
+                        path.addLine(to: CGPoint(x: size * 0.5, y: size * 0.5))
+                        path.addLine(to: CGPoint(x: size * 0.29, y: size * 0.5))
+                    }
+                    .stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+                }
+            case .connector:
+                Image(systemName: connectorSymbolName)
+                    .font(.system(size: size, weight: .regular))
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}
+
 /// 侧栏触发的导航动作，由会话页传入，最终交给持有导航栈的 RootNavigationHost。
 /// 默认值都是空操作，侧栏脱离导航栈单独预览时不会崩溃。
 struct ConversationSidebarActions {
     var openSession: (SessionSummary) -> Void = { _ in }
     var openPlugins: () -> Void = {}
     var openScheduledTasks: () -> Void = {}
+    var openConnectors: () -> Void = {}
     var openSettings: () -> Void = {}
 }
 
@@ -41,11 +77,11 @@ struct ConversationSidebar: View {
                     .frame(width: 20, height: 20)
             }
             navigationRow(String(localized: "定时任务"), action: actions.openScheduledTasks) {
-                Image(systemName: "clock")
-                    .resizable()
-                    .scaledToFit()
-                    .fontWeight(.regular)
-                    .frame(width: 20, height: 20)
+                SidebarNavigationIcon(symbol: .clock, size: 20)
+            }
+
+            navigationRow(String(localized: "连接器"), action: actions.openConnectors) {
+                SidebarNavigationIcon(symbol: .connector, size: 20)
             }
 
             Text("工作区")

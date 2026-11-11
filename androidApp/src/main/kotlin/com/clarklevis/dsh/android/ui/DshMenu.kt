@@ -179,13 +179,14 @@ internal fun DshMenuItem(
     trailingIcon: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
     contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 10.dp),
-    minHeight: Dp = 48.dp
+    minHeight: Dp = 48.dp,
+    horizontalSpacing: Dp = 12.dp
 ) {
     androidx.compose.foundation.layout.Row(
         modifier.fillMaxWidth().heightIn(min = minHeight).alpha(if (enabled) 1f else .38f)
             .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
             .padding(contentPadding),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(horizontalSpacing),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
     ) {
         leadingIcon?.invoke()

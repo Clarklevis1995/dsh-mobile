@@ -33,7 +33,7 @@ data class SharedUploadTransition(
 
 /**
  * 单飞有界队列：同一 uploadId 永远只有一个在途操作，以确认偏移推进。
- * 实例属于一个 gateway；bind 的连接代际或会话变化会使所有凭证失效。
+ * 实例属于一个 gateway；上传中的 uploadId 属于连接，已完成的 receipt 属于会话。
  */
 class SharedFileUploadStore {
     private val drafts = mutableListOf<SharedUploadDraft>()
@@ -59,23 +59,36 @@ class SharedFileUploadStore {
     fun receipts(): List<String> = if (canSend()) drafts.mapNotNull { it.receiptId } else emptyList()
 
     fun bind(sessionId: String?, connectionKey: String?, available: Boolean): SharedUploadTransition {
+        val sessionChanged = sessionId != this.sessionId
         val next = if (sessionId != null && connectionKey != null) "$connectionKey/$sessionId" else null
         val cancels = if ((next != binding || !available) && connectionKey == this.connectionKey && this.available) cancellation() else emptyList()
-        if (next != binding || !available) {
+        if (sessionChanged || next != binding || !available) {
             clearActive()
             drafts.indices.forEach { index ->
-                drafts[index] = drafts[index].copy(status = "error", receiptId = null, confirmedBytes = 0,
-                    error = UiMessage("upload.sessionChanged"))
+                val draft = drafts[index]
+                drafts[index] = when {
+                    sessionChanged -> draft.copy(status = "error", receiptId = null, confirmedBytes = 0,
+                        error = UiMessage("upload.sessionChanged"))
+                    // 同一会话的完成凭证不依赖手机 socket；离线时由 available 阻止发送。
+                    draft.status == "ready" -> draft
+                    // 只恢复被断线中断的任务，不自动重试校验失败等已有错误。
+                    draft.status in setOf("waiting", "opening", "uploading", "committing") ->
+                        draft.copy(status = "waiting", receiptId = null, confirmedBytes = 0, error = null)
+                    else -> draft
+                }
             }
-            submissionKey = null
-            submissionId = null
+            if (sessionChanged) {
+                submissionKey = null
+                submissionId = null
+            }
         }
         binding = next
         this.connectionKey = connectionKey
         abandonedOpens.entries.removeAll { it.value.first != connectionKey }
         this.sessionId = sessionId
         this.available = available && next != null
-        return transition(cancels)
+        val resumed = pump()
+        return resumed.copy(requests = cancels + resumed.requests)
     }
 
     fun add(id: String, name: String, size: Long, sha256: String): SharedUploadTransition {
@@ -117,7 +130,8 @@ class SharedFileUploadStore {
 
     /** 同一次失败提交保持 requestId；正文、图片或文件集合变更才建立新提交。 */
     fun submission(text: String, imageKey: String, proposedId: String): String {
-        val key = listOf(binding, text, imageKey, drafts.map { it.id to it.receiptId }).toString()
+        // 回执丢失后的手动重试跨重连沿用 requestId，避免同一消息重复进入队列。
+        val key = listOf(sessionId, text, imageKey, drafts.map { it.id to it.receiptId }).toString()
         if (key != submissionKey) { submissionKey = key; submissionId = proposedId }
         return submissionId ?: proposedId
     }
@@ -125,12 +139,12 @@ class SharedFileUploadStore {
     fun invalidateReceipts(): SharedUploadTransition {
         drafts.indices.forEach { index ->
             if (drafts[index].status == "ready") drafts[index] = drafts[index].copy(
-                status = "error", receiptId = null, error = UiMessage("upload.receiptExpired")
+                status = "waiting", receiptId = null, confirmedBytes = 0, error = null
             )
         }
         submissionKey = null
         submissionId = null
-        return transition()
+        return pump()
     }
 
     fun acceptFrame(json: String): SharedUploadTransition = accept(GatewayWireDecoder.decode(json))

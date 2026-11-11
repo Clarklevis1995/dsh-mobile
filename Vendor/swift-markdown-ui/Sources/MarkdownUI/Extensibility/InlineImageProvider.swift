@@ -13,4 +13,11 @@ public protocol InlineImageProvider {
   ///   - url: The URL of the image to display.
   ///   - label: The accessibility label associated with the image.
   func image(with url: URL, label: String) async throws -> Image
+
+  /// A baseline adjustment in points. Negative values lower the inline image.
+  func baselineOffset(with url: URL, label: String) async -> CGFloat
+}
+
+public extension InlineImageProvider {
+  func baselineOffset(with url: URL, label: String) async -> CGFloat { 0 }
 }

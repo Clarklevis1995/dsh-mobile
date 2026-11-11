@@ -134,7 +134,10 @@ internal fun WorkspaceFilePreviewHost(stateHolder: AndroidSharedStateHolder) {
             )
         } else {
             val external = { openWorkspaceFileExternally(context, stateHolder, file) }
-            WorkspaceFilePreviewContent(file, external, contentPadding)
+            val images = rememberDshMarkdownImages(stateHolder, file.sessionId)
+            androidx.compose.runtime.CompositionLocalProvider(LocalDshMarkdownImages provides images) {
+                WorkspaceFilePreviewContent(file, external, contentPadding)
+            }
         }
     }
 }

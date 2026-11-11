@@ -4302,7 +4302,7 @@ final class KMPSessionControlStoreAdapter {
             for (index, presetValue) in try array(presetsValue, "$.agentPresets").enumerated() {
                 _ = try allow(
                     presetValue,
-                    keys: ["id", "trust", "isDefault", "name", "description", "broken"],
+                    keys: ["id", "trust", "isDefault", "name", "description", "broken", "brokenReason"],
                     path: "$.agentPresets[\(index)]"
                 )
                 // trust 是显式 JSONValue 信任边界，不对其业务子树做未知字段判定。

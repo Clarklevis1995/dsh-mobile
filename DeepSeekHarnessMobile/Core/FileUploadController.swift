@@ -118,6 +118,8 @@ final class FileUploadController {
     func connected(sessionID: String?, supported: Bool) {
         context = UUID()
         preparing = false
+        timeouts.values.forEach { $0.cancel() }
+        timeouts.removeAll()
         connectionKey = UUID().uuidString
         self.supported = supported
         apply(shared.bind(sessionId: sessionID, connectionKey: connectionKey, available: supported))
@@ -142,6 +144,17 @@ final class FileUploadController {
             self.sessionID = sessionID
         }
         apply(shared.bind(sessionId: sessionID, connectionKey: connectionKey, available: supported && allowed))
+    }
+
+    /// 未发送草稿切换工作区时保留私有副本，凭证必须在新会话重新上传取得。
+    func retargetDraft(sessionID: String) {
+        context = UUID()
+        timeouts.values.forEach { $0.cancel() }; timeouts.removeAll()
+        self.sessionID = sessionID
+        preservedDraftIDs.removeAll()
+        localReferenceFailures.removeAll()
+        apply(shared.bind(sessionId: sessionID, connectionKey: connectionKey, available: supported))
+        for id in drafts.map(\.id) { apply(shared.retry(id: id)) }
     }
 
     func importFiles(_ urls: [URL]) async {
@@ -213,6 +226,8 @@ final class FileUploadController {
 
     private func apply(_ transition: SharedUploadTransition) {
         drafts = transition.drafts
+        // 凭证失效后重新上传可能取得新附件 ID，需要为同一草稿重新保存本地引用。
+        preservedDraftIDs.formIntersection(Set(drafts.filter { $0.status == "ready" }.map(\.id)))
         preserveReadyFiles()
         changed?()
         for request in transition.requests {

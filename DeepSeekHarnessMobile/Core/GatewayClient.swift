@@ -166,6 +166,7 @@ final class GatewayClient: ObservableObject {
     func installConnectedTransportForTesting(_ send: @escaping (String) -> Void = { _ in }) {
         testRequestTransport = send
         state = .connected
+        isReadyForSessionCreation = true
     }
 
     func installRtcConnectionForTesting(_ connection: any GatewayRtcConnection) {
@@ -186,6 +187,14 @@ final class GatewayClient: ObservableObject {
 
 
     @Published private(set) var state: ConnectionState = .disconnected
+    /// 分享新建会话必须等前台探测完成，不能把后台遗留的 connected 当作可用连接。
+    @Published private(set) var isReadyForSessionCreation = false
+
+    private func refreshSessionCreationReadiness() {
+        let ready = state.isConnected && !isApplicationInBackground && !isRecoveringFromBackground &&
+            foregroundProbeTask == nil && (conversationClient?.isReadyForSessionCreation ?? true)
+        if isReadyForSessionCreation != ready { isReadyForSessionCreation = ready }
+    }
     private struct NetworkDiagnosticsObserver {
         let pong: (String) -> Void
         let traffic: (Int, Int) -> Void
@@ -236,6 +245,7 @@ final class GatewayClient: ObservableObject {
     var onFrame: ((GatewayFrame) -> Void)?
     /// 仅命令菜单需要原始 JSON；对话流不能触发它的解析和 UI 发布。
     var onCommandFrame: ((String) -> Void)?
+    var onDeviceToolFrame: ((String) -> Void)?
     var onSpeechFrame: ((String) -> Void)?
     var onConnectionFailure: ((String) -> Void)?
     /// 传输生命周期与错误弹窗分离；静默恢复也必须废弃旧请求。
@@ -253,15 +263,17 @@ final class GatewayClient: ObservableObject {
     private var foregroundProbeSequence = 0
     private var sessionCreationContinuations: [String: CheckedContinuation<String, Error>] = [:]
 
-    func createSession(workspaceId: String?) async throws -> String {
+    func createSession(workspaceId: String?, agentPreset: String? = nil) async throws -> String {
         try Task.checkCancellation()
         guard state.isConnected else { throw URLError(.notConnectedToInternet) }
         let requestId = UUID().uuidString
+        traceLifecycle("session-create-start")
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 sessionCreationContinuations[requestId] = continuation
                 var payload: [String: Any] = ["type": "session-create", "requestId": requestId]
                 if let workspaceId { payload["workspaceId"] = workspaceId }
+                if let agentPreset { payload["agentPreset"] = agentPreset }
                 send(payload)
                 Task { [weak self] in
                     try? await Task.sleep(for: .seconds(15))
@@ -280,6 +292,7 @@ final class GatewayClient: ObservableObject {
     private func failSessionCreations() {
         let pending = sessionCreationContinuations
         sessionCreationContinuations.removeAll()
+        if !pending.isEmpty { traceLifecycle("session-create-interrupted count=\(pending.count) code=\(NSURLErrorNetworkConnectionLost)") }
         for continuation in pending.values {
             continuation.resume(throwing: URLError(.networkConnectionLost))
         }
@@ -292,8 +305,10 @@ final class GatewayClient: ObservableObject {
         guard let requestId = frame.requestId,
               let continuation = sessionCreationContinuations.removeValue(forKey: requestId) else { return true }
         if frame.kind == "session-created", let sessionId = frame.sessionId, !sessionId.isEmpty {
+            traceLifecycle("session-create-finished outcome=success")
             continuation.resume(returning: sessionId)
         } else {
+            traceLifecycle("session-create-finished outcome=rejected")
             continuation.resume(throwing: NSError(
                 domain: "GatewaySessionCreation", code: 1,
                 userInfo: [NSLocalizedDescriptionKey: frame.message ?? String(localized: "创建会话失败")]
@@ -379,6 +394,7 @@ final class GatewayClient: ObservableObject {
     /// 只记录场景状态。连接的生命周期由用户的连接意图与真实传输故障决定；
     /// 进入后台本身不再主动关闭 WebSocket。
     func applicationDidEnterBackground() {
+        isReadyForSessionCreation = false
         networkRecovery.cancel()
         if !isApplicationInBackground { backgroundConnectionWasRtc = lastSuccessfulConnectionWasRtc }
         foregroundRtcTimeoutTask?.cancel()
@@ -591,6 +607,7 @@ final class GatewayClient: ObservableObject {
     }
 
     private func disconnectTransport(reconnect: Bool) {
+        isReadyForSessionCreation = false
         foregroundRtcTimeoutTask?.cancel()
         foregroundRtcTimeoutTask = nil
         connectionGeneration = UUID()
@@ -1112,11 +1129,17 @@ final class GatewayClient: ObservableObject {
     nonisolated static func decodeIncomingFrame(_ data: Data) throws -> (GatewayFrame?, String?) {
         struct SpeechEnvelope: Decodable { let kind: String?; let requestType: String? }
         let header = try? JSONDecoder().decode(SpeechEnvelope.self, from: data)
-        if header?.kind?.hasPrefix("speech-") == true ||
-            (header?.kind == "error" && header?.requestType?.hasPrefix("speech-") == true) {
+        if header?.kind?.hasPrefix("device-tool") == true || header?.kind?.hasPrefix("speech-") == true ||
+            (header?.kind == "error" && (header?.requestType?.hasPrefix("speech-") == true || header?.requestType?.hasPrefix("device-tool") == true)) {
             return (nil, String(decoding: data, as: UTF8.self))
         }
         return (try GatewayWireDecoder.decode(data), nil)
+    }
+
+    private func deliverAuxiliaryFrame(_ json: String) {
+        let header = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
+        if (header?["kind"] as? String)?.hasPrefix("device-tool") == true || (header?["kind"] as? String == "error" && (header?["requestType"] as? String)?.hasPrefix("device-tool") == true) { onDeviceToolFrame?(json) }
+        else { onSpeechFrame?(json) }
     }
 
     private func receiveLoop(_ socket: URLSessionWebSocketTask) async {
@@ -1160,7 +1183,7 @@ final class GatewayClient: ObservableObject {
             let decoded = try await decodeBusinessFrame(data)
             guard !Task.isCancelled, self.socket === socket else { return }
             if let speech = decoded.1 {
-                if state.isConnected { onSpeechFrame?(speech) }
+                if state.isConnected { deliverAuxiliaryFrame(speech) }
                 return
             }
             guard let frame = decoded.0 else { return }
@@ -1240,7 +1263,9 @@ final class GatewayClient: ObservableObject {
                     foregroundRecoveryStartedAt = nil
                 }
                 if connectionMethod.isEmpty { connectionMethod = "WebSocket" }
+                isRecoveringFromBackground = false
                 state = .connected
+                refreshSessionCreationReadiness()
                 onConnectionReady?()
                 traceLifecycle("hello-connected")
                 startHeartbeat(for: socket)
@@ -1268,7 +1293,7 @@ final class GatewayClient: ObservableObject {
         do {
             let decoded = try await decodeBusinessFrame(data)
             guard !Task.isCancelled, self.socket === socket, state.isConnected else { return }
-            if let speech = decoded.1 { onSpeechFrame?(speech); return }
+            if let speech = decoded.1 { deliverAuxiliaryFrame(speech); return }
             guard let frame = decoded.0, frame.kind != "hello", frame.kind != "paired" else { return }
             deliverApplicationFrame(frame, data: data)
         } catch {
@@ -1287,6 +1312,10 @@ final class GatewayClient: ObservableObject {
         client.expectedGatewayID = expectedGatewayID
         client.trustedEndpoints = trustedEndpoints
         conversationClient = client
+        client.onConnectionReady = { [weak self, weak client] in
+            guard let self, self.conversationClient === client else { return }
+            self.refreshSessionCreationReadiness()
+        }
         client.networkTrafficObserved = { [weak self] in self?.networkObservers.isEmpty == false }
         client.forwardNetworkTraffic = { [weak self] sent, received in self?.recordNetworkTraffic(sent: sent, received: received) }
         client.onFrame = { [weak self, weak client] frame in
@@ -1404,6 +1433,7 @@ final class GatewayClient: ObservableObject {
     }
 
     private func fail(_ detail: String, shouldReconnect: Bool, reportFailure: Bool = true) {
+        isReadyForSessionCreation = false
         foregroundRtcTimeoutTask?.cancel()
         foregroundRtcTimeoutTask = nil
         if let rtcLink, rtcLink.isRtc {
@@ -1512,6 +1542,7 @@ final class GatewayClient: ObservableObject {
     /// URLSession 可能尚未报告后台或网络切换断线；以 ping 验证连接，超时则自动恢复。
     private func probeForegroundConnection() {
         guard let socket, state.isConnected, foregroundProbeTask == nil else { return }
+        isReadyForSessionCreation = false
         onConnectionCheckStarted?()
         foregroundProbeSequence += 1
         let sequence = foregroundProbeSequence
@@ -1528,6 +1559,7 @@ final class GatewayClient: ObservableObject {
                     self.foregroundRecoveryStartedAt = nil
                     self.isRecoveringFromBackground = false
                     self.traceLifecycle("foreground-rtc-probe-pong channels=control,conversation")
+                    self.refreshSessionCreationReadiness()
                     self.onConnectionReady?()
                 } catch {
                     guard !Task.isCancelled, let self, let socket, self.socket === socket,
@@ -1565,6 +1597,7 @@ final class GatewayClient: ObservableObject {
                     self.foregroundRtcRetryAvailable = false
                     self.foregroundRecoveryStartedAt = nil
                     self.isRecoveringFromBackground = false
+                    self.refreshSessionCreationReadiness()
                     self.onConnectionReady?()
                 }
             }

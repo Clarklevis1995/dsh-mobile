@@ -154,9 +154,53 @@ class AndroidSharedStateHolder(
     var sessionAgentPreset by mutableStateOf(sessionAgentPresetStore.snapshot())
         private set
     private val scope = graph?.let { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+    private val markdownImageLoader = graph?.let { appGraph ->
+        com.clarklevis.dsh.android.platform.AndroidMarkdownImageLoader(requireNotNull(scope), appGraph.attachmentCache,
+            send = appGraph.gatewayRuntime::sendRequest, readAttachment = appGraph.gatewayRuntime::readCachedAttachment)
+    }
+    internal fun cachedMarkdownImage(sessionId: String, source: String) = markdownImageLoader?.cached(sessionId, source)
+    internal suspend fun loadMarkdownImage(sessionId: String, source: String): com.clarklevis.dsh.android.platform.MarkdownImageAsset {
+        val reference = com.clarklevis.dsh.shared.facade.ConversationFileReferences.filePath(source)?.let(snapshot.markdownImages::get)
+        return requireNotNull(markdownImageLoader).load(sessionId, teamStore.workspaceSessionId(sessionId), source,
+            "file-references-v1" in gatewayState.capabilities, reference)
+    }
     val fileUploads = com.clarklevis.dsh.android.platform.AndroidFileUploadController(graph, scope) { platformError = it }
 
+    fun pasteAttachments(uris: List<Uri>) {
+        if (isChangingNewConversationWorkspace || !selectedMemberCanSend) return
+        val appGraph = graph ?: return
+        val target = snapshot.selectedSessionId
+        scope?.launch {
+            if (uris.size + preparedImages.size + preparingImageCount + fileUploads.drafts.size > 20 || fileUploads.preparing) {
+                platformError = appText("一次最多添加 20 个附件，请等待已有附件准备完成")
+                return@launch
+            }
+            try {
+                val (images, files) = withContext(Dispatchers.IO) {
+                    uris.partition { appGraph.application.contentResolver.getType(it)?.startsWith("image/") == true }
+                }
+                if (snapshot.selectedSessionId != target) return@launch
+                if (images.isNotEmpty() && "images" !in gatewayState.capabilities ||
+                    files.isNotEmpty() && (!fileUploads.supported || isViewingTeamMember)) {
+                    platformError = appText("当前会话或网关不支持此类附件")
+                    return@launch
+                }
+                if (files.isNotEmpty() && target == null && !prepareNewSession()) return@launch
+                voiceInput.setVoiceMode(false)
+                images.forEach(::prepareImage)
+                if (files.isNotEmpty()) {
+                    fileUploads.select(snapshot.selectedSessionId, true)
+                    fileUploads.importFiles(files)
+                }
+            } catch (failure: Exception) {
+                if (failure is kotlinx.coroutines.CancellationException) throw failure
+                platformError = failure.message ?: appText("无法读取粘贴的附件")
+            }
+        }
+    }
+
     fun prepareFiles(uris: List<Uri>, pickerSessionId: String?) {
+        if (isChangingNewConversationWorkspace) return
         if (pickerSessionId != snapshot.selectedSessionId || isViewingTeamMember) return
         scope?.launch {
             if (snapshot.selectedSessionId == null && !prepareNewSession()) return@launch
@@ -1078,12 +1122,36 @@ class AndroidSharedStateHolder(
     }
 
     private var preparingNewSession = false
+    private val newConversationWorkspaceStore = com.clarklevis.dsh.shared.facade.SharedNewConversationWorkspace()
+    var newConversationWorkspace by mutableStateOf(newConversationWorkspaceStore.snapshot())
+        private set
+    var isChangingNewConversationWorkspace by mutableStateOf(false)
+        private set
+    val showsNewConversationWorkspace: Boolean
+        get() = newConversationWorkspace.visible && newConversationWorkspace.sessionId == snapshot.selectedSessionId &&
+            !isViewingTeamMember && !sessionAgentPreset.locked
 
-    suspend fun prepareNewSession(useDefaultWorkspace: Boolean = false): Boolean {
-        if (!useDefaultWorkspace && selectedWorkspaceId == ALL_WORKSPACES_ID) {
-            platformError = appText("请先选择一个具体工作区，再创建新会话。")
-            return false
+    fun selectNewConversationWorkspace(workspaceId: String?) {
+        val holderScope = scope ?: return
+        if (!showsNewConversationWorkspace || isChangingNewConversationWorkspace ||
+            pendingMessageSubmission != null || pendingCommandSubmission != null || fileUploads.preparing || preparingImages ||
+            (workspaceId != null && availableWorkspaces.none { it.workspaceId == workspaceId })) return
+        val token = newConversationWorkspaceStore.begin(workspaceId)
+        if (token == 0L) return
+        newConversationWorkspace = newConversationWorkspaceStore.snapshot()
+        isChangingNewConversationWorkspace = true
+        holderScope.launch {
+            try { prepareNewSession(replacementWorkspaceId = workspaceId, workspaceSelectionToken = token) }
+            finally {
+                newConversationWorkspaceStore.fail(token)
+                newConversationWorkspace = newConversationWorkspaceStore.snapshot()
+                isChangingNewConversationWorkspace = false
+            }
         }
+    }
+
+    suspend fun prepareNewSession(useDefaultWorkspace: Boolean = false, replacementWorkspaceId: String? = null,
+                                  workspaceSelectionToken: Long = 0): Boolean {
         teamLeadSessionId = null
         teamSnapshot = com.clarklevis.dsh.shared.facade.TeamSnapshot()
         if (preparingNewSession) return false
@@ -1097,14 +1165,19 @@ class AndroidSharedStateHolder(
             return false
         }
         preparingNewSession = true
+        val previousSessionId = snapshot.selectedSessionId
+        val previousModel = snapshot.modelCatalog?.current
+        val previousPermission = snapshot.permissions?.currentValue ?: snapshot.permissions?.preset
+        val previousPreset = sessionAgentPreset.agentPreset
         try {
             val requestId = UUID.randomUUID().toString()
-            val workspaceId = if (useDefaultWorkspace) null else activeWorkspace?.workspaceId
+            val workspaceId = if (workspaceSelectionToken != 0L) replacementWorkspaceId
+                else if (useDefaultWorkspace) null else replacementWorkspaceId ?: activeWorkspace?.workspaceId
             // 先登记再发送，快速返回的本地网关也不会丢失创建结果。
             val response = pendingSessionCreation.begin(requestId)
             val event = try {
                 if (!appGraph.gatewayRuntime.sendRequest(
-                        GatewayRequests.createSession(requestId, workspaceId)
+                        GatewayRequests.createSession(requestId, workspaceId, previousPreset.takeIf { workspaceSelectionToken != 0L })
                     )
                 ) {
                     null
@@ -1120,6 +1193,14 @@ class AndroidSharedStateHolder(
                 platformError = frame?.message ?: appText("创建会话失败，请检查连接后重试")
                 return false
             }
+            if (workspaceSelectionToken != 0L) {
+                if (snapshot.selectedSessionId != previousSessionId ||
+                    !newConversationWorkspaceStore.complete(workspaceSelectionToken, sessionId)) return false
+                fileUploads.retargetDraft(sessionId)
+            } else {
+                newConversationWorkspaceStore.open(sessionId, workspaceId)
+            }
+            newConversationWorkspace = newConversationWorkspaceStore.snapshot()
             pendingSelectedSessionId = sessionId
             inputGeneration += 1
             applySlashCommandTransition(slashCommandStore.reset(sessionId))
@@ -1127,6 +1208,11 @@ class AndroidSharedStateHolder(
                 pendingSelectedSessionId = null
                 visibleAttachmentKeys = emptySet()
                 pruneAttachmentStateForSession()
+            }
+            if (workspaceSelectionToken != 0L) {
+                if (previousModel != null) appGraph.gatewayRuntime.sendRequest(GatewayRequests.selectModel(
+                    sessionId, previousModel.provider, previousModel.model, previousModel.reasoningEffort))
+                if (previousPermission != null) appGraph.gatewayRuntime.sendRequest(GatewayRequests.setPermission(sessionId, previousPermission))
             }
             if (snapshot.selectedSessionId == sessionId && snapshot.selectedHistoryLoadedEventCount == 0) {
                 appGraph.gatewayRuntime.subscribe(sessionId)
@@ -1142,6 +1228,13 @@ class AndroidSharedStateHolder(
         } finally {
             preparingNewSession = false
         }
+    }
+
+    /** 分享面板的工作区选择独立于首页筛选，返回本次创建的会话。 */
+    suspend fun prepareIncomingShareConversation(workspaceId: String?): String? {
+        if (workspaceId != null && availableWorkspaces.none { it.workspaceId == workspaceId }) return null
+        if (!prepareNewSession(useDefaultWorkspace = workspaceId == null, replacementWorkspaceId = workspaceId)) return null
+        return pendingSelectedSessionId ?: snapshot.selectedSessionId
     }
 
     suspend fun prepareScheduledTaskConversation(): Boolean {
@@ -1704,6 +1797,7 @@ class AndroidSharedStateHolder(
     }
 
     fun selectModel(provider: String, model: String, reasoningEffort: String?) {
+        if (isChangingNewConversationWorkspace) return
         val sessionId = snapshot.selectedSessionId ?: return
         graph?.let { appGraph ->
             appGraph.gatewayScope.launch {
@@ -1716,6 +1810,7 @@ class AndroidSharedStateHolder(
     }
 
     fun setSessionPermission(name: String) {
+        if (isChangingNewConversationWorkspace) return
         val sessionId = snapshot.selectedSessionId ?: return
         graph?.let { appGraph ->
             appGraph.gatewayScope.launch {
@@ -1748,6 +1843,7 @@ class AndroidSharedStateHolder(
     }
 
     fun selectSessionAgentPreset(presetId: String) {
+        if (isChangingNewConversationWorkspace) return
         applySessionAgentPresetTransition(sessionAgentPresetStore.select(presetId))
     }
 
@@ -1940,6 +2036,12 @@ class AndroidSharedStateHolder(
         attachmentStates = emptyMap()
     }
 
+    val deviceConnectors = graph?.let { current ->
+        com.clarklevis.dsh.android.platform.devicetools.AndroidDeviceConnectors(
+            current.application, current.gatewayLocalId, current.applicationScope
+        ) { json -> current.gatewayRuntime.sendDeviceToolFrame(json) }
+    }
+
     val gatewayLocalId: String get() = graph?.gatewayLocalId ?: "legacy"
     val gatewayDisplayName: String get() = graph?.gatewayDisplayName.orEmpty()
 
@@ -2002,12 +2104,67 @@ class AndroidSharedStateHolder(
         }
     }
 
+    internal suspend fun applyIncomingShare(share: IncomingShare): Boolean {
+        val appGraph = graph ?: return false
+        val target = snapshot.selectedSessionId
+        val (images, files) = share.files.partition { uri ->
+            android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                java.io.File(uri.path.orEmpty()).extension.lowercase())?.startsWith("image/") == true
+        }
+        if (files.isNotEmpty() && (!fileUploads.supported || fileUploads.preparing || fileUploads.drafts.size + files.size > 20)) {
+            platformError = appText("请连接支持文件上传的网关，并确认附件数量未超出限制")
+            return false
+        }
+        var importedPreviousIDs: Set<String>? = null
+        return try {
+            val prepared = images.map { appGraph.imagePreprocessor.prepare(it) }
+            require(preparedImages.size + prepared.size <= AndroidImagePreprocessor.MAXIMUM_IMAGE_COUNT &&
+                (preparedImages + prepared).sumOf(AndroidPreparedImage::byteCount) <= AndroidImagePreprocessor.MAXIMUM_TOTAL_BYTES) {
+                appText("分享图片超出单条消息附件限制")
+            }
+            if (target != snapshot.selectedSessionId) return false
+            if (files.isNotEmpty()) {
+                fileUploads.select(target, !isViewingTeamMember)
+                val previousIDs = fileUploads.drafts.map { it.id }.toSet()
+                importedPreviousIDs = previousIDs
+                fileUploads.importFiles(files)
+                if (target != snapshot.selectedSessionId) return false
+                if (fileUploads.drafts.size - previousIDs.size != files.size) {
+                    fileUploads.drafts.filter { it.id !in previousIDs }.forEach { fileUploads.remove(it.id) }
+                    return false
+                }
+            }
+            voiceInput.setVoiceMode(false)
+            if (share.text.isNotBlank()) {
+                messageDraft = if ("message-quotes-v1" in gatewayState.capabilities)
+                    com.clarklevis.dsh.shared.protocol.ComposerQuoteDraft.insertQuote(messageDraft, share.text, 0, 0)
+                else listOf(messageDraft, share.text).filter { it.isNotBlank() }.joinToString("\n\n")
+            }
+            preparedImages = preparedImages + prepared
+            true
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            if (target == snapshot.selectedSessionId) importedPreviousIDs?.let { previous ->
+                fileUploads.drafts.filter { it.id !in previous }.forEach { fileUploads.remove(it.id) }
+            }
+            throw cancelled
+        } catch (failure: Exception) {
+            platformError = failure.message ?: appText("读取分享内容失败")
+            false
+        }
+    }
+
+    private var preparingImageCount by mutableStateOf(0)
+    val preparingImages: Boolean get() = preparingImageCount > 0
+
     fun prepareImage(uri: Uri) {
+        if (isChangingNewConversationWorkspace) return
         val appGraph = graph ?: return
         appGraph.diagnostics.intent(GatewayDiagnosticAction.PREPARE_IMAGE)
         val imageTarget = snapshot.selectedSessionId
         platformError = null
         scope?.launch {
+            preparingImageCount += 1
+            try {
             runCatching { appGraph.imagePreprocessor.prepare(uri) }
                 .onSuccess { image ->
                     val destination = if (snapshot.selectedSessionId == imageTarget) preparedImages else teamDrafts[imageTarget]?.second.orEmpty()
@@ -2027,6 +2184,7 @@ class AndroidSharedStateHolder(
                     }
                 }
                 .onFailure { platformError = "image-preprocess-failed" }
+            } finally { preparingImageCount -= 1 }
         }
     }
 
@@ -2055,6 +2213,7 @@ class AndroidSharedStateHolder(
     }
 
     fun sendMessage(mode: String = "queue") {
+        if (isChangingNewConversationWorkspace) return
         if (!selectedMemberCanSend) { platformError = appText("此子智能体会话为只读，无法继续对话"); return }
         if (localSearchIsFragment || localSearchIsOpening) {
             platformError = appText("当前为只读本地搜索片段，请先返回最新消息。")
@@ -2071,6 +2230,8 @@ class AndroidSharedStateHolder(
             return
         }
         if (commandExecution == null || submission.images.isEmpty() || commandExecution.allowsImages) {
+            newConversationWorkspaceStore.lock(submission.sessionId)
+            newConversationWorkspace = newConversationWorkspaceStore.snapshot()
             applySessionAgentPresetTransition(sessionAgentPresetStore.beginMessage())
         }
         pendingMessageSubmission = submission
@@ -2282,6 +2443,7 @@ class AndroidSharedStateHolder(
     }
 
     fun close() {
+        deviceConnectors?.connection(false)
         fileUploads.clear()
         closed = true
         catalogWriteJob?.cancel()
@@ -2336,6 +2498,7 @@ class AndroidSharedStateHolder(
 
     val canSend: Boolean
         get() = gatewayState.connection == GatewayConnectionState.CONNECTED && selectedMemberCanSend &&
+            !isChangingNewConversationWorkspace &&
             !localSearchIsFragment &&
             !localSearchIsOpening &&
             !sessionAgentPreset.blocksSending &&
@@ -2462,8 +2625,11 @@ class AndroidSharedStateHolder(
     }
 
     private fun sendSlashCommandImmediately(text: String) {
+        if (isChangingNewConversationWorkspace) return
         if (localSearchIsFragment || localSearchIsOpening) return
         if (sessionAgentPreset.blocksSending) return
+        newConversationWorkspaceStore.lock(snapshot.selectedSessionId)
+        newConversationWorkspace = newConversationWorkspaceStore.snapshot()
         applySessionAgentPresetTransition(sessionAgentPresetStore.beginMessage())
         val appGraph = graph ?: return
         val sessionId = snapshot.selectedSessionId ?: return
@@ -2485,9 +2651,12 @@ class AndroidSharedStateHolder(
     }
 
     private fun executeSlashCommandImmediately(command: com.clarklevis.dsh.shared.facade.SharedSlashCommandExecution) {
+        if (isChangingNewConversationWorkspace) return
         val appGraph = graph ?: return
         val sessionId = snapshot.selectedSessionId ?: return
         if (sessionAgentPreset.blocksSending) return
+        newConversationWorkspaceStore.lock(sessionId)
+        newConversationWorkspace = newConversationWorkspaceStore.snapshot()
         applySessionAgentPresetTransition(sessionAgentPresetStore.beginMessage())
         appGraph.gatewayScope.launch {
             if (!appGraph.gatewayRuntime.executeCommand(command.line, emptyList(), sessionId)) {
@@ -3091,6 +3260,7 @@ class AndroidSharedStateHolder(
                             val didReconnect = state.connection == GatewayConnectionState.CONNECTED &&
                                 lastObservedConnection != GatewayConnectionState.CONNECTED
                             gatewayState = state
+                            deviceConnectors?.connection(state.connection == GatewayConnectionState.CONNECTED, state.capabilities)
                             voiceInput.connectionChanged(state.connection == GatewayConnectionState.CONNECTED,
                                 "speech-input-v1" in state.capabilities)
                             if (didReconnect) {
@@ -3177,6 +3347,18 @@ class AndroidSharedStateHolder(
                                 }
                                 return@collect
                             }
+                            if (event is GatewayRuntimeEvent.Frame && withContext(Dispatchers.Main.immediate) {
+                                    markdownImageLoader?.accept(event.frame, event.rawJson) == true
+                                }) return@collect
+                            val markdownRequestId = when (event) {
+                                is GatewayRuntimeEvent.RequestTimedOut -> event.correlationId
+                                is GatewayRuntimeEvent.RequestCancelled -> event.correlationId
+                                is GatewayRuntimeEvent.RequestRejected -> event.correlationId
+                                else -> null
+                            }
+                            if (markdownRequestId != null && withContext(Dispatchers.Main.immediate) {
+                                    markdownImageLoader?.failed(markdownRequestId) == true
+                                }) return@collect
                             if (event is GatewayRuntimeEvent.RequestTimedOut && event.requestType.startsWith("file-upload-")) {
                                 withContext(Dispatchers.Main.immediate) { event.correlationId?.let(fileUploads::timedOut) }
                                 return@collect
@@ -3184,6 +3366,10 @@ class AndroidSharedStateHolder(
                             if (chatPrefetcher?.interceptTerminal(event) == true) return@collect
                             when (event) {
                                 is GatewayRuntimeEvent.Frame -> {
+                                    if (event.frame.kind.startsWith("device-tool") || (event.frame.kind == "error" && event.frame.requestType?.startsWith("device-tool") == true)) {
+                                        withContext(Dispatchers.Main.immediate) { deviceConnectors?.receive(event.rawJson) }
+                                        return@collect
+                                    }
                                     if (event.frame.kind.startsWith("file-upload-") || event.frame.requestType?.startsWith("file-upload-") == true) {
                                         withContext(Dispatchers.Main.immediate) { fileUploads.accept(event.frame) }
                                         return@collect

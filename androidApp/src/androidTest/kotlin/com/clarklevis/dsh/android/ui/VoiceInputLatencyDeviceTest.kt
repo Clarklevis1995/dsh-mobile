@@ -128,7 +128,7 @@ class VoiceInputLatencyDeviceTest {
             )
             assertTrue("权限仍在等待时应立即显示蒙层", voice.state.overlayVisible)
             assertTrue(voice.state.phase == "authorizing")
-            assertTrue(voice.state.status == "正在获取麦克风权限")
+            assertTrue(voice.state.status?.key == "voice.status.authorizing")
         } finally {
             send(MotionEvent.ACTION_UP)
             compose.mainClock.autoAdvance = true

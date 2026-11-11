@@ -205,7 +205,7 @@ object GatewayRequests {
     fun simple(type: String, responseKind: String = type): GatewayRequest =
         request(type, responseKind, lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST)
 
-    fun createSession(requestId: String, workspaceId: String?): GatewayRequest = request(
+    fun createSession(requestId: String, workspaceId: String?, agentPreset: String? = null): GatewayRequest = request(
         "session-create",
         "session-created",
         correlationId = requestId,
@@ -213,6 +213,7 @@ object GatewayRequests {
     ) {
         put("requestId", requestId)
         workspaceId?.takeIf(String::isNotBlank)?.let { put("workspaceId", it) }
+        agentPreset?.takeIf(String::isNotBlank)?.let { put("agentPreset", it) }
     }
 
     fun archiveSession(sessionId: String): GatewayRequest = request(

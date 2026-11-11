@@ -52,6 +52,23 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class GatewayRuntimeIntegrationTest {
     @Test
+    fun deviceToolStatusUsesNegotiatedControlTransportWithoutEnteringRpcLane() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport)
+        val status = """{"type":"device-tools-status","version":1,"requestId":"status-1"}"""
+        runCurrent()
+        assertFalse(runtime.sendDeviceToolFrame(status))
+        runtime.connect("ws://localhost/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","protocol":3,"capabilities":["device-tools-v1"]}""")
+        runCurrent()
+        assertTrue(runtime.sendDeviceToolFrame(status), "connection=${runtime.state.value.connection}, capabilities=${runtime.state.value.capabilities}")
+        assertEquals(status, transport.sentPayloads.last())
+        assertFalse(runtime.sendDeviceToolFrame("""{"type":"chat","message":"bypass"}"""))
+        assertTrue(runtime.sendRequest(GatewayRequests.simple("sessions")))
+    }
+
+    @Test
     fun pluginUpdateProgressKeepsLaneUntilMatchingFinalResult() = runTest {
         val transport = FakeTransport()
         val runtime = newRuntime(transport)

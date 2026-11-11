@@ -8,7 +8,9 @@ import org.commonmark.ext.gfm.tables.TableBlock
 import org.commonmark.ext.gfm.tables.TableCell
 import org.commonmark.node.Node
 
-internal data class DshTableCell(val text: Spanned, val plainText: String, val alignment: TableCell.Alignment?)
+internal data class DshTableCell(val text: Spanned, val plainText: String, val alignment: TableCell.Alignment?) {
+    val hasImages: Boolean get() = text.getSpans(0, text.length, DshMarkdownImageMarker::class.java).isNotEmpty()
+}
 internal data class DshTableData(val rows: List<List<DshTableCell>>) {
     val columnCount: Int get() = rows.maxOfOrNull { it.size } ?: 0
     val plainRows: List<List<String>>

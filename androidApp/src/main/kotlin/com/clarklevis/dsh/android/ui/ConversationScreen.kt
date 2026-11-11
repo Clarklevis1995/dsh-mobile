@@ -82,7 +82,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -160,10 +159,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -376,6 +372,11 @@ private fun ConversationScreenContent(
                             onBrowseFiles = {
                                 workspaceInitialPath = null
                                 showWorkspaceFiles = true
+                            },
+                            canShowStats = stateHolder.snapshot.selectedSessionId != null,
+                            onShowStats = {
+                                dismissInput()
+                                showStats = true
                             }
                         )
                         Spacer(Modifier.width(8.dp))
@@ -388,7 +389,6 @@ private fun ConversationScreenContent(
                     stateHolder = stateHolder,
                     onPickImage = onPickImage,
                     onPickFile = onPickFile,
-                    onShowFullStats = { showStats = true },
                     onDismissInput = dismissInput,
                     topContentInset = topContentInset
                 )
@@ -476,7 +476,9 @@ internal fun TopBarCircleButton(
 @Composable
 internal fun ConversationMoreMenu(
     canBrowseFiles: Boolean,
-    onBrowseFiles: () -> Unit
+    onBrowseFiles: () -> Unit,
+    canShowStats: Boolean,
+    onShowStats: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -488,8 +490,8 @@ internal fun ConversationMoreMenu(
         DshMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.width(228.dp).testTag("conversation-more-menu"),
-            offset = DpOffset(x = (-220).dp, y = 8.dp)
+            modifier = Modifier.width(200.dp).testTag("conversation-more-menu"),
+            offset = DpOffset(x = (-192).dp, y = 8.dp)
         ) {
             ConversationMoreMenuItem(
                 title = appText("工作区文件"),
@@ -498,6 +500,14 @@ internal fun ConversationMoreMenu(
             ) {
                 expanded = false
                 onBrowseFiles()
+            }
+            ConversationMoreMenuItem(
+                title = appText("会话状态"),
+                iconRes = R.drawable.ic_session_stats,
+                enabled = canShowStats
+            ) {
+                expanded = false
+                onShowStats()
             }
         }
     }
@@ -514,7 +524,7 @@ private fun ConversationMoreMenuItem(
         text = {
             Text(
                 title,
-                fontSize = 17.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Medium
             )
         },
@@ -522,12 +532,14 @@ private fun ConversationMoreMenuItem(
             Icon(
                 painter = painterResource(iconRes),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(18.dp)
             )
         },
-        modifier = Modifier.height(58.dp),
+        modifier = Modifier.height(44.dp),
         enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 20.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp),
+        minHeight = 44.dp,
+        horizontalSpacing = 8.dp,
         onClick = onClick
     )
 }
@@ -538,7 +550,6 @@ private fun ConversationPage(
     stateHolder: AndroidSharedStateHolder,
     onPickImage: () -> Unit,
     onPickFile: () -> Unit,
-    onShowFullStats: () -> Unit,
     onDismissInput: () -> Unit,
     topContentInset: Dp = 0.dp
 ) {
@@ -621,23 +632,19 @@ private fun ConversationPage(
             modifier = Modifier.align(Alignment.BottomCenter),
             contentHeight = bottomContentHeight
         )
-        Column(
+        ConversationComposerChrome(
             Modifier
                 .align(Alignment.BottomCenter)
                 .adaptiveContentWidth().testTag("conversation-composer-column")
                 .graphicsLayer { alpha = if (stateHolder.voiceInput.state.overlayVisible) 0f else 1f }
-                .imePadding()
+                .imePadding(),
+            composerModifier = Modifier
                 .onSizeChanged { size ->
                     bottomContentHeight.value = with(density) { size.height.toDp() }
                 }
-                .navigationBarsPadding()
-        ) {
-            AnimatedVisibility(
-                visible = stateHolder.snapshot.conversation.isNotEmpty() && !isPinnedToBottom,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-                enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.85f),
-                exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.85f)
-            ) {
+                .navigationBarsPadding(),
+            jumpVisible = stateHolder.snapshot.conversation.isNotEmpty() && !isPinnedToBottom,
+            jumpButton = {
                 ScrollToBottomButton(
                     isGenerating = stateHolder.snapshot.sessions
                         .firstOrNull { it.id == sessionId }
@@ -645,6 +652,7 @@ private fun ConversationPage(
                     onClick = { scrollToBottomToken += 1 }
                 )
             }
+        ) {
             if (approval != null) {
                 ApprovalRequestCard(
                     request = approval,
@@ -682,14 +690,15 @@ private fun ConversationPage(
                                 onSelect = stateHolder::selectSessionAgentPreset,
                                 onRetry = stateHolder::refreshSessionAgentPreset
                             )
-                            stateHolder.snapshot.statsSnapshot?.let { snapshot ->
-                                SessionStatsBanner(
-                                    snapshot = snapshot,
-                                    sessionId = sessionId,
-                                    modifier = Modifier.weight(1f),
-                                    onViewFullStats = onShowFullStats
-                                )
-                            }
+                            Spacer(Modifier.weight(1f))
+                            if (stateHolder.showsNewConversationWorkspace) NewConversationWorkspaceControl(
+                                selectedId = stateHolder.newConversationWorkspace.workspaceId,
+                                workspaces = stateHolder.availableWorkspaces,
+                                changing = stateHolder.isChangingNewConversationWorkspace,
+                                enabled = stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED &&
+                                    !stateHolder.fileUploads.preparing && !stateHolder.preparingImages,
+                                onSelect = stateHolder::selectNewConversationWorkspace
+                            )
                         }
                         TaskGoalPanels(
                             stateHolder = stateHolder,
@@ -1228,84 +1237,87 @@ private fun ConversationTimeline(
                 }
             }
         }
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(historyEdgeScroll)
-                .adaptiveContentWidth().testTag("conversation-message-list")
-                .imePadding()
-                .padding(horizontal = 20.dp)
-                .alpha(if (hasInitialContent && !initialPositionApplied) 0f else 1f),
-            contentPadding = remember(topContentInset) {
-                ComposerViewportPadding(bottomContentHeight, topContentInset + 8.dp, 22.dp)
-            }
-        ) {
-            items(
-                items = timelineEntries,
-                key = ConversationTimelineEntry::id,
-                contentType = ConversationTimelineEntry::contentType
-            ) { entry ->
-                Box(Modifier.testTag("conversation-entry:${entry.id}").graphicsLayer {
-                    alpha = if (entry.id in revealIds) revealAlpha.value else 1f
-                }) {
-                    when (entry) {
-                        is ConversationTimelineEntry.Display -> when (val display = entry.entry) {
-                            is ConversationDisplayEntry.Message -> ConversationRow(
-                                item = display.item,
-                                thumbnails = stateHolder.attachmentThumbnails,
-                                attachmentStates = stateHolder.attachmentStates,
-                                onRetryAttachment = stateHolder::retryAttachment,
-                                onPreviewImages = onPreviewImages
-                            )
-                            is ConversationDisplayEntry.Process -> ConversationProcessRow(display.group)
-                        }
-                        is ConversationTimelineEntry.AssistantHeader -> AssistantMessageHeader(
-                            item = entry.item,
-                            thumbnails = stateHolder.attachmentThumbnails,
-                            states = stateHolder.attachmentStates,
-                            onRetry = stateHolder::retryAttachment
-                        )
-                        is ConversationTimelineEntry.AssistantMarkdown -> DshLazyMarkdownText(
-                            markdown = entry.markdown,
-                            copyMarkdown = entry.copyMarkdown,
-                            knownFiles = entry.knownFiles,
-                            onOpenFile = { path ->
-                                selectedSessionId?.let { session ->
-                                    stateHolder.openConversationFile(stateHolder.gatewayLocalId, session, path)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                        )
-                        is ConversationTimelineEntry.AssistantFooter -> Column(
-                            Modifier.fillMaxWidth().padding(top = 7.dp, bottom = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            entry.files.forEach { file ->
-                                FileReferenceCard(
-                                    path = file.path,
-                                    description = file.description,
-                                    modifier = Modifier.align(Alignment.End),
-                                    onClick = {
-                                        selectedSessionId?.let { session ->
-                                            stateHolder.openConversationFile(stateHolder.gatewayLocalId, session, file.path)
-                                        }
-                                    }
+        val markdownImages = rememberDshMarkdownImages(stateHolder, selectedSessionId)
+        androidx.compose.runtime.CompositionLocalProvider(LocalDshMarkdownImages provides markdownImages) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(historyEdgeScroll)
+                    .adaptiveContentWidth().testTag("conversation-message-list")
+                    .imePadding()
+                    .padding(horizontal = 20.dp)
+                    .alpha(if (hasInitialContent && !initialPositionApplied) 0f else 1f),
+                contentPadding = remember(topContentInset) {
+                    ComposerViewportPadding(bottomContentHeight, topContentInset + 8.dp, 22.dp)
+                }
+            ) {
+                items(
+                    items = timelineEntries,
+                    key = ConversationTimelineEntry::id,
+                    contentType = ConversationTimelineEntry::contentType
+                ) { entry ->
+                    Box(Modifier.testTag("conversation-entry:${entry.id}").graphicsLayer {
+                        alpha = if (entry.id in revealIds) revealAlpha.value else 1f
+                    }) {
+                        when (entry) {
+                            is ConversationTimelineEntry.Display -> when (val display = entry.entry) {
+                                is ConversationDisplayEntry.Message -> ConversationRow(
+                                    item = display.item,
+                                    thumbnails = stateHolder.attachmentThumbnails,
+                                    attachmentStates = stateHolder.attachmentStates,
+                                    onRetryAttachment = stateHolder::retryAttachment,
+                                    onPreviewImages = onPreviewImages
                                 )
+                                is ConversationDisplayEntry.Process -> ConversationProcessRow(display.group)
                             }
-                            AssistantMessageActions(entry.text)
+                            is ConversationTimelineEntry.AssistantHeader -> AssistantMessageHeader(
+                                item = entry.item,
+                                thumbnails = stateHolder.attachmentThumbnails,
+                                states = stateHolder.attachmentStates,
+                                onRetry = stateHolder::retryAttachment
+                            )
+                            is ConversationTimelineEntry.AssistantMarkdown -> DshLazyMarkdownText(
+                                markdown = entry.markdown,
+                                copyMarkdown = entry.copyMarkdown,
+                                knownFiles = entry.knownFiles,
+                                onOpenFile = { path ->
+                                    selectedSessionId?.let { session ->
+                                        stateHolder.openConversationFile(stateHolder.gatewayLocalId, session, path)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                            )
+                            is ConversationTimelineEntry.AssistantFooter -> Column(
+                                Modifier.fillMaxWidth().padding(top = 7.dp, bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                entry.files.forEach { file ->
+                                    FileReferenceCard(
+                                        path = file.path,
+                                        description = file.description,
+                                        modifier = Modifier.align(Alignment.End),
+                                        onClick = {
+                                            selectedSessionId?.let { session ->
+                                                stateHolder.openConversationFile(stateHolder.gatewayLocalId, session, file.path)
+                                            }
+                                        }
+                                    )
+                                }
+                                AssistantMessageActions(entry.text)
+                            }
                         }
                     }
                 }
-            }
-            if (selectedSessionIsRunning) {
-                item(key = "deep-search-progress", contentType = "deep-search-progress") {
-                    DeepSearchProgressRow(
-                        timing = stateHolder.snapshot.activeTurnTiming,
-                        cues = items.drop(items.indexOfLast { it.kind == ConversationItemKind.USER } + 1)
-                            .filter { it.kind != ConversationItemKind.SYSTEM }
-                            .map { DeepSearchProgressCue(it.kind, it.epochSeconds, it.isError) }
-                    )
+                if (selectedSessionIsRunning) {
+                    item(key = "deep-search-progress", contentType = "deep-search-progress") {
+                        DeepSearchProgressRow(
+                            timing = stateHolder.snapshot.activeTurnTiming,
+                            cues = items.drop(items.indexOfLast { it.kind == ConversationItemKind.USER } + 1)
+                                .filter { it.kind != ConversationItemKind.SYSTEM }
+                                .map { DeepSearchProgressCue(it.kind, it.epochSeconds, it.isError) }
+                        )
+                    }
                 }
             }
         }
@@ -1751,6 +1763,7 @@ private fun Composer(
                 ) {
                     ComposerMorphLayout(
                         expanded = composerExpanded,
+                        keepActionWhenCollapsed = stateHolder.showsSessionStopButton,
                         modifier = Modifier.testTag("composer-morph-layout"),
                         leading = {
                             Box {
@@ -1758,9 +1771,15 @@ private fun Composer(
                                 ComposerIconButton(R.drawable.ic_composer_add, appText("添加附件"), { attachmentMenu = true })
                                 DshMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
                                     DshMenuItem(text = { Text(appText("图片")) },
+                                        leadingIcon = {
+                                            Icon(painterResource(R.drawable.ic_photo_outline), null, Modifier.size(20.dp))
+                                        },
                                         enabled = "images" in stateHolder.gatewayState.capabilities && stateHolder.preparedImages.size < 20,
                                         onClick = { attachmentMenu = false; onPickImage() })
                                     DshMenuItem(text = { Text(appText("文件")) },
+                                        leadingIcon = {
+                                            Icon(painterResource(R.drawable.ic_pending_file), null, Modifier.size(20.dp))
+                                        },
                                         enabled = !stateHolder.isViewingTeamMember &&
                                             !stateHolder.fileUploads.preparing && stateHolder.fileUploads.drafts.size < 20 && !stateHolder.messageSubmissionPending,
                                         onClick = {
@@ -1777,7 +1796,7 @@ private fun Composer(
                             if (voice.state.voiceMode) {
                                 VoiceHoldInput(voice, Modifier.offset(y = (-4.5).dp))
                             } else {
-                                BasicTextField(
+                                ComposerPasteTextField(
                                     enabled = !voice.state.inputBlocked,
                                     value = inputValue,
                                     // 只限制显示行数，不切换 singleLine，避免聚焦时重启 IME 连接。
@@ -1797,7 +1816,8 @@ private fun Composer(
                                         .testTag("composer-input"),
                                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                                     cursorBrush = SolidColor(DshColors.Ocean),
-                                    visualTransformation = slashCommandVisualTransformation(commandToken),
+                                    commandToken = commandToken,
+                                    onPasteAttachments = stateHolder::pasteAttachments,
                                     decorationBox = { field ->
                                         Box(contentAlignment = Alignment.TopStart) {
                                             if (stateHolder.composerText.isEmpty()) {
@@ -2218,24 +2238,6 @@ private fun SlashCommandMenus(
 internal fun dshFloatingSurfaceShadow(isDark: Boolean): Color =
     Color.Black.copy(alpha = if (isDark) 0.20f else 0.08f)
 
-private fun slashCommandVisualTransformation(commandToken: String?): VisualTransformation {
-    if (commandToken == null) return VisualTransformation.None
-    return VisualTransformation { source ->
-        val highlightsCommand = source.text == commandToken || source.text.startsWith("$commandToken ")
-        val transformed = buildAnnotatedString {
-            append(source)
-            if (highlightsCommand) {
-                addStyle(
-                    SpanStyle(color = DshColors.Ocean, fontWeight = FontWeight.SemiBold),
-                    start = 0,
-                    end = commandToken.length
-                )
-            }
-        }
-        TransformedText(transformed, OffsetMapping.Identity)
-    }
-}
-
 internal fun dshGlassEdge(isDark: Boolean): Brush = Brush.verticalGradient(
     colorStops = arrayOf(
         0f to Color.White.copy(alpha = if (isDark) 0.21f else 0.72f),
@@ -2257,6 +2259,63 @@ private fun ComposerIconButton(iconRes: Int, description: String, onClick: () ->
             modifier = Modifier.size(22.dp).offset(x = (-1.5).dp),
             tint = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@Composable
+internal fun NewConversationWorkspaceControl(
+    selectedId: String?,
+    workspaces: List<com.clarklevis.dsh.shared.protocol.GatewayWorkspace>,
+    changing: Boolean,
+    enabled: Boolean,
+    onSelect: (String?) -> Unit
+) {
+    val workspace = workspaces.firstOrNull { it.workspaceId == selectedId }
+    var expanded by remember(selectedId) { mutableStateOf(false) }
+    val shape = RoundedCornerShape(13.dp)
+    val isDark = isSystemInDarkTheme()
+    Box {
+        Surface(
+            shape = shape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            border = androidx.compose.foundation.BorderStroke(0.8.dp, dshGlassEdge(isDark)),
+            modifier = Modifier.testTag("new-conversation-workspace-capsule")
+                .widthIn(max = 180.dp)
+                .dropShadow(shape, Shadow(radius = 10.dp, color = dshFloatingSurfaceShadow(isDark), offset = DpOffset(0.dp, 4.dp)))
+                .clip(shape)
+                .clickable(enabled = enabled && !changing) { expanded = true }
+        ) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(painterResource(R.drawable.ic_folder_outline), contentDescription = null, modifier = Modifier.size(16.dp))
+                Text(if (changing) appText("切换中…") else workspace?.title ?: appText("未分组"),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Icon(painterResource(R.drawable.ic_question_chevron_down), contentDescription = appText("选择工作区"),
+                    modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f))
+            }
+        }
+        ComposerGlassPopover(expanded = expanded, onDismiss = { expanded = false }, width = 292.dp,
+            alignToEnd = true, maximumContentHeight = 380.dp, contentPadding = PaddingValues(vertical = 6.dp),
+            arrangement = Arrangement.Top, testTag = "new-conversation-workspace-popover") {
+            val choices = listOf<Pair<String?, String>>(null to appText("未分组")) +
+                workspaces.map { it.workspaceId to it.title }
+            choices.forEach { (id, title) ->
+                DshMenuItem(modifier = Modifier.testTag("new-conversation-workspace-${id ?: "ungrouped"}"),
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(title, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            workspaces.firstOrNull { it.workspaceId == id }?.path?.let {
+                                Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_folder_outline), contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    trailingIcon = { if (id == selectedId) Icon(painterResource(R.drawable.ic_menu_check),
+                        contentDescription = appText("已选择"), modifier = Modifier.size(18.dp)) },
+                    onClick = { expanded = false; onSelect(id) })
+            }
+        }
     }
 }
 
@@ -3591,42 +3650,33 @@ private fun SystemRow(item: ConversationItem) {
 }
 
 @Composable
-private fun AttachmentGrid(
+internal fun AttachmentGrid(
     attachments: List<GatewayImageAttachment>,
     thumbnails: Map<String, ImageBitmap>,
     states: Map<String, AttachmentLoadState>,
     onRetry: (String) -> Unit
 ) {
     if (attachments.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        attachments.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                row.forEach { attachment ->
-                    val image = thumbnails[attachment.attachmentId]
-                    Box(
-                        Modifier.weight(1f).heightIn(min = 80.dp, max = 240.dp)
-                            .clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                            .clickable(enabled = states[attachment.attachmentId] in setOf(AttachmentLoadState.FAILED, AttachmentLoadState.DEFERRED)) {
-                                onRetry(attachment.attachmentId)
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (image != null) {
-                            Image(image, null, Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
-                        } else {
-                            Text(
-                                when (states[attachment.attachmentId]) {
-                                    AttachmentLoadState.FAILED -> appText("加载失败 · 点击重试")
-                                    AttachmentLoadState.DEFERRED -> appText("已释放 · 点击重载")
-                                    else -> appText("正在加载图片…")
-                                },
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    // 元数据先决定占位尺寸，缩略图和错误提示只填充区域，不参与行高计算。
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columnWidth = if (attachments.size == 1) maxWidth else (maxWidth - 6.dp) / 2
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            attachments.chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    row.forEach { attachment ->
+                        val size = userSingleAttachmentPreviewSize(
+                            attachment.width, attachment.height,
+                            minOf(if (attachments.size == 1) 320.dp else 180.dp, columnWidth)
+                        )
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.TopStart) {
+                            UserAttachmentImage(
+                                attachment, thumbnails[attachment.attachmentId], states[attachment.attachmentId],
+                                onRetry, {}, Modifier.size(size.width, size.height), 12.dp, 0.dp
                             )
                         }
                     }
+                    if (row.size == 1 && attachments.size > 1) Spacer(Modifier.weight(1f))
                 }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }

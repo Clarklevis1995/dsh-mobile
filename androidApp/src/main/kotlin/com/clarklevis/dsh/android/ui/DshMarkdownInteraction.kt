@@ -52,7 +52,8 @@ internal val markdownInteractionParser = Parser.builder()
     .customBlockParserFactory(DshTableBlockParserFactory())
     .build()
 
-internal fun markdownPlainText(source: String): String = markdownPlainText(markdownInteractionParser.parse(source))
+internal fun markdownPlainText(source: String): String =
+    markdownPlainText(markdownInteractionParser.parse(prepareMarkdownMath(source, forSelection = true)))
 
 /** 复制直接遍历 AST，避免把表格占位符、代码背景的 NBSP 和复制按钮文案写入剪贴板。 */
 internal fun markdownPlainText(node: Node): String {

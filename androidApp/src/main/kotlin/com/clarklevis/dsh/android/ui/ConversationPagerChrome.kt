@@ -106,11 +106,12 @@ internal fun ConversationPagerChrome(
                     page(index, topInset)
                 }
             }
-            val glassProtectedHeight = topInset
-            // 消息从顶栏下方 8dp 开始，渐隐必须在这段留白内结束，避免覆盖首条气泡。
-            val glassFadeHeight = 8.dp
+            // 标题和模式文字后保持完整遮挡，40dp 渐变从栏底前 8dp 延伸到栏底后 32dp。
+            val glassProtectedHeight = (topInset - 8.dp).coerceAtLeast(0.dp)
+            val glassFadeHeight = 40.dp
+            val glassHeight = glassProtectedHeight + glassFadeHeight
             Box(
-                Modifier.fillMaxWidth().height(glassProtectedHeight + glassFadeHeight)
+                Modifier.fillMaxWidth().height(glassHeight)
                     .clipToBounds()
                     .conversationTopGlass(backdrop, glassProtectedHeight, glassFadeHeight)
                     .semantics { hideFromAccessibility() }

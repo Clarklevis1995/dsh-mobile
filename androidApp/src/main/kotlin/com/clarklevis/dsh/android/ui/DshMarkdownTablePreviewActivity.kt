@@ -34,35 +34,48 @@ class DshMarkdownTablePreviewActivity : ComponentActivity() {
         }
         setContent {
             DshTheme {
-                val context = LocalContext.current
-                val palette = dshMarkdownPalette(compact = false)
-                val renderer = remember(palette) { buildDshMarkwon(context, palette, interactiveTables = true) }
-                val snapshot by produceState<PreviewSnapshot?>(null, sourceFile, renderer) {
-                    value = withContext(Dispatchers.IO) {
-                        runCatching {
-                            val data = JSONObject(requireNotNull(sourceFile).readText())
-                            val rendered = renderer.toMarkdown(data.getString("markdown"))
-                            val tables = rendered.getSpans(0, rendered.length, DshTableMarker::class.java)
-                                .sortedBy(rendered::getSpanStart)
-                            PreviewSnapshot(tables[data.getInt("index")].table, data.getDouble("textSize").toFloat())
-                        }.getOrNull()
+                DshMenuHost {
+                    val context = LocalContext.current
+                    val palette = dshMarkdownPalette(compact = false)
+                    val renderer = remember(palette) { buildDshMarkwon(context, palette, interactiveTables = true) }
+                    val snapshot by produceState<PreviewSnapshot?>(null, sourceFile, renderer) {
+                        value = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val data = JSONObject(requireNotNull(sourceFile).readText())
+                                val rendered = renderer.toMarkdown(data.getString("markdown"))
+                                val tables = rendered.getSpans(0, rendered.length, DshTableMarker::class.java)
+                                    .sortedBy(rendered::getSpanStart)
+                                PreviewSnapshot(tables[data.getInt("index")].table, data.getDouble("textSize").toFloat(),
+                                    data.optString("imageGatewayId").takeIf(String::isNotEmpty),
+                                    data.optString("imageSessionId").takeIf(String::isNotEmpty),
+                                    data.optString("imageDocumentPath").takeIf(String::isNotEmpty))
+                            }.getOrNull()
+                        }
+                        if (value == null) finish()
                     }
-                    if (value == null) finish()
-                }
-                snapshot?.let { current ->
-                    DshMarkdownTablePreview(current.table, current.textSize,
-                        onClose = { finish() },
-                        onRotate = {
-                            requestedOrientation = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                            } else {
-                                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                            }
-                        },
-                        onOpenFile = { path ->
-                            setResult(RESULT_OK, Intent().putExtra(EXTRA_OPEN_FILE, path))
-                            finish()
-                        })
+                    snapshot?.let { current ->
+                        val holder = (application as? com.clarklevis.dsh.android.DshAndroidApplication)?.graph
+                            ?.takeIf { it.gatewayLocalId == current.gatewayId }?.stateHolder
+                        val base = holder?.let { rememberDshMarkdownImages(it, current.sessionId) }
+                        val images = remember(base, current.documentPath) {
+                            current.documentPath?.let { base?.relativeTo(it) } ?: base
+                        }
+                        androidx.compose.runtime.CompositionLocalProvider(LocalDshMarkdownImages provides images) {
+                            DshMarkdownTablePreview(current.table, current.textSize,
+                                onClose = { finish() },
+                                onRotate = {
+                                    requestedOrientation = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                                        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                    } else {
+                                        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                    }
+                                },
+                                onOpenFile = { path ->
+                                    setResult(RESULT_OK, Intent().putExtra(EXTRA_OPEN_FILE, path))
+                                    finish()
+                                })
+                        }
+                    }
                 }
             }
         }
@@ -74,17 +87,22 @@ class DshMarkdownTablePreviewActivity : ComponentActivity() {
         if (isFinishing) sourceFile?.delete()
     }
 
-    private data class PreviewSnapshot(val table: DshTableData, val textSize: Float)
+    private data class PreviewSnapshot(val table: DshTableData, val textSize: Float,
+        val gatewayId: String?, val sessionId: String?, val documentPath: String?)
 
     companion object {
         private const val EXTRA_SOURCE = "table_preview_source"
         internal const val EXTRA_OPEN_FILE = "table_preview_open_file"
 
-        internal fun createIntent(context: Context, markdown: String, tableIndex: Int, textSizeSp: Float): Intent {
+        internal fun createIntent(context: Context, markdown: String, tableIndex: Int, textSizeSp: Float,
+            images: DshMarkdownImageContext? = null): Intent {
             val file = File.createTempFile("table-preview-", ".json", context.cacheDir)
             try {
                 file.writeText(JSONObject().put("markdown", markdown).put("index", tableIndex)
-                    .put("textSize", textSizeSp.toDouble()).toString())
+                    .put("textSize", textSizeSp.toDouble())
+                    .put("imageGatewayId", images?.gatewayId)
+                    .put("imageSessionId", images?.sessionId)
+                    .put("imageDocumentPath", images?.documentPath).toString())
                 return Intent(context, DshMarkdownTablePreviewActivity::class.java).putExtra(EXTRA_SOURCE, file.name)
             } catch (error: Exception) {
                 file.delete()

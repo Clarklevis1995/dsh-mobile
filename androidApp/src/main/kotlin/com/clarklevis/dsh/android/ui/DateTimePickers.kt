@@ -12,7 +12,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -250,7 +249,7 @@ internal fun DshClockPicker(time: String, onDismiss: () -> Unit, onConfirm: (Str
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(appText("保留毫秒"))
-                    Switch(checked = keepFraction, onCheckedChange = { keepFraction = it })
+                    DshSwitch(checked = keepFraction, onCheckedChange = { keepFraction = it })
                 }
             }
         }

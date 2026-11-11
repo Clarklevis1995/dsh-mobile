@@ -291,7 +291,7 @@ internal fun DshLazyMarkdownText(
 }
 
 @Composable
-private fun DshRenderedMarkdownText(
+internal fun DshRenderedMarkdownText(
     markdown: String,
     rendered: Spanned,
     palette: DshMarkdownPalette,
@@ -306,6 +306,9 @@ private fun DshRenderedMarkdownText(
         buildList<Any> {
             addAll(rendered.getSpans(0, rendered.length, DshTableMarker::class.java))
             addAll(rendered.getSpans(0, rendered.length, DshCodeBlockMarker::class.java))
+            addAll(rendered.getSpans(0, rendered.length, DshMarkdownImageMarker::class.java))
+            addAll(rendered.getSpans(0, rendered.length, DshMathFormula::class.java))
+            addAll(rendered.getSpans(0, rendered.length, ConnectorAppCard::class.java))
         }.sortedBy(rendered::getSpanStart)
     }
     if (blocks.isNotEmpty()) {
@@ -326,6 +329,13 @@ private fun DshRenderedMarkdownText(
                         Modifier.fillMaxWidth(), knownFiles, onOpenFile, copyMarkdown)
                 }
                 when (marker) {
+                    is DshMathFormula -> {
+                        val margins = rendered.getSpans(rendered.getSpanStart(marker), rendered.getSpanEnd(marker), LeadingMarginSpan::class.java)
+                        DshMathBlock(marker, textSizeSp, palette.textColor, copyMarkdown,
+                            Modifier.padding(start = with(LocalDensity.current) { margins.sumOf { it.getLeadingMargin(true) }.toDp() }))
+                    }
+                    is ConnectorAppCard -> ConnectorAppCardView(marker)
+                    is DshMarkdownImageMarker -> DshMarkdownImage(marker)
                     is DshTableMarker -> {
                         DshMarkdownTableCard(marker.table, textSizeSp, onOpenFile, copyMarkdown, markdown, tableIndex)
                         tableIndex++
@@ -398,7 +408,7 @@ private fun DshRenderedMarkdownText(
             textView.onOpenFile = onOpenFile
             textView.onMessageMenuRequested = { messageMenuAnchor = it }
             textView.onSelectText = { selectionText = copyMarkdown }
-            textView.plainTextProvider = { markdownPlainText(markwon.parse(copyMarkdown)) }
+            textView.plainTextProvider = { markdownPlainText(copyMarkdown) }
             val nextTag = MarkdownRenderTag(markdown, palette, knownFilePaths, onOpenFile != null, rendered)
             if (textView.tag == nextTag) return@AndroidView
             textView.resetTextInteraction()
@@ -441,14 +451,14 @@ private fun DshRenderedMarkdownText(
     run {
         DshPointMenu(messageMenuAnchor, { messageMenuAnchor = null }, Modifier.width(180.dp)) {
             DshMenuItem(text = { androidx.compose.material3.Text(com.clarklevis.dsh.android.localization.appText("复制")) },
-                onClick = { messageMenuAnchor = null; context.copyMarkdownText(markdownPlainText(markwon.parse(copyMarkdown))) })
+                onClick = { messageMenuAnchor = null; context.copyMarkdownText(markdownPlainText(copyMarkdown)) })
             DshMenuItem(text = { androidx.compose.material3.Text(com.clarklevis.dsh.android.localization.appText("选择文字")) },
                 onClick = { messageMenuAnchor = null; selectionText = copyMarkdown })
             if (onReply != null) DshMenuItem(
                 text = { androidx.compose.material3.Text(com.clarklevis.dsh.android.localization.appText("回复")) },
                 onClick = {
                     messageMenuAnchor = null
-                    onReply(markdownPlainText(markwon.parse(copyMarkdown)))
+                    onReply(markdownPlainText(copyMarkdown))
                 })
         }
     }
@@ -504,6 +514,8 @@ internal fun buildDshMarkwon(
         .usePlugin(CorePlugin.create())
         .usePlugin(
             object : AbstractMarkwonPlugin() {
+                override fun processMarkdown(markdown: String): String = prepareMarkdownMath(markdown)
+
                 override fun configureConfiguration(builder: MarkwonConfiguration.Builder) {
                     val dark = androidx.core.graphics.ColorUtils.calculateLuminance(palette.textColor) > 0.5
                     builder.syntaxHighlight { language, code ->
@@ -552,6 +564,8 @@ internal fun buildDshMarkwon(
         .usePlugin(HtmlPlugin.create())
         .usePlugin(MovementMethodPlugin.create(TableAwareMovementMethod.create()))
         .usePlugin(DshMarkdownCopyPlugin((44 * context.resources.displayMetrics.density).toInt()))
+        .usePlugin(DshMarkdownImagePlugin())
+        .usePlugin(ConnectorAppCardPlugin())
         .build()
 }
 
