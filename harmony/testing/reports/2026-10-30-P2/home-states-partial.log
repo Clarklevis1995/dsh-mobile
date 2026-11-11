@@ -1,0 +1,20 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-home-state-yzbsm_o3
+操作 home-auth
+操作 host-add
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 conversation-back
+操作 workspace-picker
+操作 workspace-workspace-smoke
+操作 workspace-picker
+操作 workspace-ungrouped
+操作 鸿蒙原生会话验证
+操作 message-send
+操作 conversation-back
+操作 session-refresh
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/home_state_ui.py", line 48, in <module>
+    ui.wait('运行中', 'description', timeout=18)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 62, in wait
+    raise AssertionError('未找到控件：' + value)
+AssertionError: 未找到控件：运行中

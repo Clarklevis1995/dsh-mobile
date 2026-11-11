@@ -1,0 +1,6 @@
+[
+  {
+    "task": "P5-voice-protocol-F",
+    "detail": "真实原生长按、松手、TaskPool 编码与 Native WAV／协议验证；转写中编辑保留新稿，明确插入后合并；麦克风仅测试适配器，不替代 AudioCapturer F／D"
+  }
+]

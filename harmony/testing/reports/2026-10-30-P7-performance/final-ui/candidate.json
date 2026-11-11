@@ -1,0 +1,6 @@
+{
+  "sha256": "2d2e6e1494be570610cb277e04ba40cc75cf0db6a705fd68715b65ec0187fcc7",
+  "package": "com.clarklevis.whaleness.harmony.smoke",
+  "native": "release optimized",
+  "instrumentation": "test-only performance callbacks and actual SDK PSS"
+}

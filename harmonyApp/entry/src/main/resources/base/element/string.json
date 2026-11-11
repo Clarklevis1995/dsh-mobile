@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "Whaleness"
+    },
+    {
+      "name": "module_desc",
+      "value": "通过 Mobile Gateway 连接 DeepSeek Harness"
+    },
+    {
+      "name": "microphone_reason",
+      "value": "用于将你按住录制的语音转换成聊天草稿"
+    }
+  ]
+}

@@ -40,3 +40,13 @@ captures/
 
 # iOS 本地真机签名配置
 /config/Local.xcconfig
+
+# 鸿蒙本地产物与签名
+oh_modules/
+.hvigor/
+*.hap
+*.app
+*.p12
+*.p7b
+*.cer
+/harmonyApp/entry/src/main/cpp/generated/

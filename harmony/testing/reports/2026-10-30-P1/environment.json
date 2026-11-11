@@ -1,0 +1,11 @@
+{
+  "bundle": "com.clarklevis.whaleness.harmony.acceptance",
+  "device": "Mate70Pro ARM64 emulator / API21",
+  "hapSha256": "1b206d9c34822be7874d197a56f5f3db86f6af09e01b325f3e22d86758f3d6d3",
+  "hostRuntimeVersion": "0.11.0",
+  "scope": "本轮新建 A/B 会话；独立观测设备；正式客户端未覆盖",
+  "limitations": [
+    "尚未完成所有真实异常场景",
+    "源仓库 package 版本 0.11.1，运行 Host 返回 0.11.0"
+  ]
+}

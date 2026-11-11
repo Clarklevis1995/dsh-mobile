@@ -1,0 +1,65 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p
+操作 home-settings
+STACK settings
+操作 settings-font
+STACK settings|settings/font
+STACK settings|settings/font
+STACK settings
+STACK <home>
+PASS native-settings-gesture 原生两层栈、短边缘尝试未出栈、右侧返回字号、左侧返回首页
+操作 home-settings
+操作 settings-manage-hosts
+STACK settings|hosts
+操作 host-add
+STACK settings|hosts|hosts/add
+STACK settings|hosts
+操作 host-add
+操作 gateway-connect
+STACK settings|hosts|hosts/add
+STACK settings|hosts
+STACK settings|hosts
+PASS native-auth-cancel 在途认证短边缘不取消，右边缘实际出栈取消；延迟配对到达后无新增主机或迟到激活
+STACK settings
+PASS native-host-origin 主机认证、主机列表侧滑逐级返回真实设置来源
+操作 home-auth
+操作 host-add
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+STACK conversation
+操作 history-older
+STACK <home>
+操作 鸿蒙原生会话验证
+STACK conversation
+PASS native-reading-anchor 聊天出栈重建后保留内存草稿和分页历史阅读锚点，位置偏差不超过5px
+操作 conversation-sidebar
+STACK conversation
+操作 conversation-back
+操作 home-settings
+操作 settings-manage-hosts
+操作 host-edit-c0f078b0-f117-45ee-999f-b5774ac8a78e
+STACK settings|hosts|hosts/edit
+STACK settings|hosts
+操作 host-edit-c0f078b0-f117-45ee-999f-b5774ac8a78e
+操作 host-save
+STACK settings|hosts
+STACK settings
+STACK <home>
+操作 鸿蒙原生会话验证
+PASS native-host-edit 主机编辑侧滑放弃未保存更改，保存返回原列表，再逐级回设置与首页
+操作 message-send
+操作 interaction-inbox
+STACK conversation|inbox
+STACK conversation
+操作 conversation-back
+操作 interaction-inbox
+STACK inbox
+STACK <home>
+PASS native-conversation-gesture 聊天出栈重入保留草稿，抽屉先关闭，待处理按聊天或首页真实来源返回
+操作 workspace-picker
+操作 workspace-browse
+STACK workspaces|directory
+STACK workspaces
+操作 page-back
+STACK <home>
+PASS native-directory-gesture 目录侧滑回工作区，工具栏返回与系统返回共享原生栈
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p

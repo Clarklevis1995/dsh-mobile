@@ -1,0 +1,12 @@
+{
+  "task": "P2-02-dynamics",
+  "activeDrawCallsPerSecond": 11.052118322678513,
+  "totalDraws": 308,
+  "averageJsSubmitMs": 1.4025974025974026,
+  "maximumJsSubmitMs": 15,
+  "inactiveDrawDelta": 0,
+  "reduceMotionDrawDelta": 0,
+  "backgroundDrawDelta": 1,
+  "scope": "Actual API21 Canvas in dedicated no-network app; temporary instrumentation only",
+  "limits": "JS command submission cost; not GPU frame time or real-device power consumption"
+}

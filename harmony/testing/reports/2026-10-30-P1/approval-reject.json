@@ -1,0 +1,9 @@
+{
+  "rpcId": "29b9ecb5-0509-4e18-a714-e695ad1b1cb9",
+  "tool": "write",
+  "decision": "rejected",
+  "beforeExists": false,
+  "afterExists": false,
+  "file": "/private/tmp/harmony-p1-7aa225ae-allowed.txt",
+  "note": "广泛权限允许动作被自动审查拦截，已通过原生界面拒绝，未扩大权限"
+}

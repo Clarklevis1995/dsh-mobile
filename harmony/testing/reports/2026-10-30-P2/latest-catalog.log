@@ -1,0 +1,20 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-q_abjq0q
+操作 home-auth
+操作 host-add
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 conversation-back
+操作 workspace-picker
+操作 workspace-browse
+操作 directory-harmony
+操作 workspace-create
+操作 workspace-picker
+操作 workspace-ungrouped
+操作 open-sidebar
+操作 重命名
+操作 session-rename-save
+操作 归档
+操作 归档
+PASS P2-06-part 目录选择、新建工作区、会话搜索接通协议；真实Host业务结果仍需单独验收
+PASS P2-07-part 原生上下文菜单重命名、归档取消与确认；真实Host无恢复接口，恢复保持未完成
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-q_abjq0q

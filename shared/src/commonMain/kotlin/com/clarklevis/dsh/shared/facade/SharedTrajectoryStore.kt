@@ -81,6 +81,9 @@ class SharedTrajectoryStore {
             payload
         }
 
+    /** 已构建节点的只读视图；平台摘要不需要反序列化包含原始记录的完整 patch。 */
+    fun projectedNodes(sessionId: String): List<TrajectoryNode> = nodesBySession[sessionId].orEmpty()
+
     fun clearSession(sessionId: String): SharedMviDispatchResult = dispatch("clear") {
         require(sessionId.isNotBlank()) { "sessionId must not be blank" }
         val patch = SharedTrajectoryPatch(

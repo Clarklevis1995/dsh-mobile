@@ -1,0 +1,21 @@
+{
+  "tasks": [
+    "P2-06-G-part",
+    "P2-07-G-part"
+  ],
+  "gatewayVersion": "0.11.1",
+  "upstream": "controlled-local-adapter",
+  "hostRoot": "/private/tmp/harmony-isolated-host",
+  "sessionId": "session-c717d1ff-fb35-487c-b25e-8a7827a5d9e4",
+  "checks": [
+    "native directory and workspace-create",
+    "native search and rename; independent server title matches",
+    "archive cancel has no side effect",
+    "native archive confirmed by independent archivedSessionIds"
+  ],
+  "limits": [
+    "restore protocol is not provided by current Host",
+    "production Host unchanged"
+  ],
+  "rollbackData": "/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-isolated-catalog-b45wgzhz/before-test"
+}

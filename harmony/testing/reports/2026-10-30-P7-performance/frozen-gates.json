@@ -1,0 +1,13 @@
+{
+  "frozenBeforeFirstRun": "2026-10-30",
+  "scope": "API21 ARM64 emulator, isolated smoke bundle; UI callback and bridge timing, not GPU frame time",
+  "stableHistoryEventsMinimum": 1000,
+  "liveMessageCardsMaximum": 24,
+  "firstTailReadyMillisecondsMaximum": 3000,
+  "bridgeP95MillisecondsMaximum": 100,
+  "viewUpdateP95MillisecondsMaximum": 16,
+  "draftCallbackP95MillisecondsMaximum": 50,
+  "processPssMiBMaximum": 450,
+  "scrollIdlePssGrowthMiBMaximum": 48,
+  "note": "首次测量前固定。失败保留，不静默放宽。调试仪表仅进入临时测试包，P7完整帧／设备门禁仍另行验证。"
+}

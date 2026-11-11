@@ -1,0 +1,7 @@
+{
+  "bundleId": "com.clarklevis.whaleness.harmony.smoke",
+  "hapSha256": "62234ca06fb72c4a68e44158a83dac766af4549d639e90a2690dbaa4ecf9b952",
+  "source": "frozen product run pk42ig6f",
+  "gatewayVersion": "0.11.1",
+  "provider": "controlled local adapter; no external LLM"
+}

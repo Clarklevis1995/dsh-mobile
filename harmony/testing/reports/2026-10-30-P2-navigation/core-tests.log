@@ -1,0 +1,122 @@
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:compileKotlinJvm UP-TO-DATE
+> Task :shared:jvmProcessResources NO-SOURCE
+> Task :shared:jvmMainClasses UP-TO-DATE
+> Task :shared:jvmJar UP-TO-DATE
+> Task :shared:compileTestKotlinJvm UP-TO-DATE
+> Task :shared:jvmTestProcessResources NO-SOURCE
+> Task :shared:jvmTestClasses UP-TO-DATE
+> Task :shared:jvmTest UP-TO-DATE
+
+BUILD SUCCESSFUL in 414ms
+4 actionable tasks: 4 up-to-date
+TAP version 13
+# Subtest: 旧凭据迁移在元信息写入失败时保留原 Asset，重试只产生一台主机
+ok 1 - 旧凭据迁移在元信息写入失败时保留原 Asset，重试只产生一台主机
+  ---
+  duration_ms: 110.134375
+  ...
+# Subtest: 迁移完成标志防止清空资料后旧 Asset 复活
+ok 2 - 迁移完成标志防止清空资料后旧 Asset 复活
+  ---
+  duration_ms: 58.738916
+  ...
+# Subtest: 两个主机的资料、当前选择及 Asset 独立，移除 A 不清 B
+ok 3 - 两个主机的资料、当前选择及 Asset 独立，移除 A 不清 B
+  ---
+  duration_ms: 52.3905
+  ...
+# Subtest: 资料写失败不会发布未保存快照，随后操作仍可成功
+ok 4 - 资料写失败不会发布未保存快照，随后操作仍可成功
+  ---
+  duration_ms: 43.856917
+  ...
+# Subtest: 并发主机写入排队，不丢失其他资料；外观设置可重新加载
+ok 5 - 并发主机写入排队，不丢失其他资料；外观设置可重新加载
+  ---
+  duration_ms: 44.335917
+  ...
+# Subtest: 相同会话 ID 的两台主机使用独立消息视图、问题和草稿
+ok 6 - 相同会话 ID 的两台主机使用独立消息视图、问题和草稿
+  ---
+  duration_ms: 37.12675
+  ...
+# Subtest: 设置进入主机编辑后按真实来源逐级返回
+ok 7 - 设置进入主机编辑后按真实来源逐级返回
+  ---
+  duration_ms: 42.398291
+  ...
+# Subtest: 字号和目录分别成为独立目的页面
+ok 8 - 字号和目录分别成为独立目的页面
+  ---
+  duration_ms: 10.093208
+  ...
+# Subtest: 切换会话复用唯一聊天目的页并返回待处理入口
+ok 9 - 切换会话复用唯一聊天目的页并返回待处理入口
+  ---
+  duration_ms: 8.757416
+  ...
+# Subtest: 取消原生返回不清理认证，完成出栈只清理一次
+ok 10 - 取消原生返回不清理认证，完成出栈只清理一次
+  ---
+  duration_ms: 7.538167
+  ...
+# Subtest: 切换主机清空整个旧路径而不是留下可返回的旧上下文
+ok 11 - 切换主机清空整个旧路径而不是留下可返回的旧上下文
+  ---
+  duration_ms: 8.135084
+  ...
+# Subtest: 断开时尚未返回的 Asset 读取不能重新打开连接
+ok 12 - 断开时尚未返回的 Asset 读取不能重新打开连接
+  ---
+  duration_ms: 108.718709
+  ...
+# Subtest: 旧连接回调不会污染新一代连接，主动断开不会重连
+ok 13 - 旧连接回调不会污染新一代连接，主动断开不会重连
+  ---
+  duration_ms: 55.446917
+  ...
+# Subtest: 无关错误不会撤销另一个请求的超时
+ok 14 - 无关错误不会撤销另一个请求的超时
+  ---
+  duration_ms: 52.023375
+  ...
+# Subtest: 前台恢复复用健康连接，无响应则重连而不重发消息
+ok 15 - 前台恢复复用健康连接，无响应则重连而不重发消息
+  ---
+  duration_ms: 44.703542
+  ...
+# Subtest: socket.send 返回 false 会关闭坏连接并安排重连
+ok 16 - socket.send 返回 false 会关闭坏连接并安排重连
+  ---
+  duration_ms: 40.547458
+  ...
+# Subtest: 草稿按会话保留，迟到确认只清原文且保留新输入
+ok 17 - 草稿按会话保留，迟到确认只清原文且保留新输入
+  ---
+  duration_ms: 36.16125
+  ...
+# Subtest: 身份校验失败后立即禁用业务操作并禁止自动重连
+ok 18 - 身份校验失败后立即禁用业务操作并禁止自动重连
+  ---
+  duration_ms: 30.555709
+  ...
+# Subtest: 底层 connect 未返回时握手超时仍会关闭连接
+ok 19 - 底层 connect 未返回时握手超时仍会关闭连接
+  ---
+  duration_ms: 32.266916
+  ...
+# Subtest: 旧 ACK 不清除改成新文后又改回原文的草稿
+ok 20 - 旧 ACK 不清除改成新文后又改回原文的草稿
+  ---
+  duration_ms: 31.11725
+  ...
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 538.149

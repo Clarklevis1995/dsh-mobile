@@ -1,0 +1,32 @@
+{
+  "package": "com.clarklevis.dsh.android.harmonyp7v",
+  "version": "1.7.12 (33)",
+  "device": "emulator-5556",
+  "apkSha256": "00625fdf0d11de9f0d77cbe494039d34203da67e16d4f6202cd4a022bbea72c7",
+  "originalPhysicalPixels": [
+    1080,
+    2424
+  ],
+  "originalDensity": 420,
+  "originalFontScale": 1.0,
+  "freshInstall": true,
+  "toolchain": "unchanged; temporary init script changes applicationId only",
+  "temporaryDisplayOverride": {
+    "size": "1316x2832",
+    "density": 560,
+    "restoreSize": "reset",
+    "restoreDensity": "reset"
+  },
+  "temporaryPhysicalKeyboardLanguageToggle": true,
+  "ownedReversePort": 18897,
+  "originalAnimatorDurationScale": "null",
+  "restoration": {
+    "at": "2026-10-31T09:54:47.758202",
+    "size": "Physical size: 1080x2424",
+    "density": "Physical density: 420",
+    "fontScale": "1.0",
+    "animatorDurationScale": "null",
+    "physicalKeyboardLanguageToggleReversed": true,
+    "ownedReverseRemoved": true
+  }
+}

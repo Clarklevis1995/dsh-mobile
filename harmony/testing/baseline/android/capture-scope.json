@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-30",
+  "package": "com.clarklevis.dsh.android.harmonybaselinea9f5",
+  "version": "1.7.12 (33)",
+  "device": "emulator-5556",
+  "physicalPixels": [
+    1080,
+    2424
+  ],
+  "cliDeviceSyntax": "--device=emulator-5556",
+  "state": "fresh install, unpaired during capture",
+  "captured": [
+    "home-empty-light",
+    "settings-light",
+    "settings-dark",
+    "appearance-menu-light",
+    "font-dark"
+  ],
+  "correction": "All four earlier images replaced; incorrect CLI space argument could select another device. No old image is used as verified evidence."
+}

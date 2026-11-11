@@ -1,0 +1,22 @@
+[
+  {
+    "state": "normal",
+    "assertion": "真实目录回包后显示本轮会话",
+    "method": "F native UI with explicit local fixture"
+  },
+  {
+    "state": "search-empty",
+    "assertion": "正文／标题均无匹配",
+    "method": "F native UI with explicit local fixture"
+  },
+  {
+    "state": "empty",
+    "assertion": "服务端空工作区的sessionIds为空",
+    "method": "F native UI with explicit local fixture"
+  },
+  {
+    "state": "loading",
+    "assertion": "本轮刷新目录延迟6秒，截图时仍有在途目录请求",
+    "method": "F native UI with explicit local fixture"
+  }
+]

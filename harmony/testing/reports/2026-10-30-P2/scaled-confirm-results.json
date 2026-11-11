@@ -1,0 +1,10 @@
+{
+  "modes": [
+    "light-100",
+    "light-150",
+    "dark-150",
+    "dark-100"
+  ],
+  "component": "production ConfirmDialog",
+  "network": false
+}

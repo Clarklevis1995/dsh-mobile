@@ -1,0 +1,8 @@
+{
+  "method": "F actual NotificationKit / system panel / WantAgent, isolated API21 emulator",
+  "lines": [
+    "PASS actual SDK notification privacy",
+    "PASS actual WantAgent click target",
+    "DONE NOTIFICATION probe"
+  ]
+}

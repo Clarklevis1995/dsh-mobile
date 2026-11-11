@@ -1,0 +1,19 @@
+{
+  "task": "P1-07-G-part",
+  "gatewayVersion": "0.11.1",
+  "upstream": "controlled-local-adapter; no external model requests",
+  "bundle": "com.clarklevis.whaleness.harmony.restart",
+  "hapSha256": "be72e5cf260fc600c001c015904abf1545c19be2b5e2064a196dd582af490ecb",
+  "sessionId": "session-c717d1ff-fb35-487c-b25e-8a7827a5d9e4",
+  "hostPid": 16522,
+  "checks": [
+    "generation-time real Host restart",
+    "native credential reconnect",
+    "persisted event sequence coverage",
+    "one user message; no automatic resend",
+    "new message and persisted assistant reply after restart"
+  ],
+  "limits": [
+    "ACK-window and approval-window restart not covered"
+  ]
+}

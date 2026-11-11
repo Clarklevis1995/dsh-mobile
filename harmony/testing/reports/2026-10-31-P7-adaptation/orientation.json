@@ -1,0 +1,15 @@
+{
+  "portrait": [
+    1316,
+    2832
+  ],
+  "landscape": [
+    2832,
+    1316
+  ],
+  "restored": [
+    1316,
+    2832
+  ],
+  "source": "actual PNG header; UITest dump clips to stale portrait width after rotation"
+}

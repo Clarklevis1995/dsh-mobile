@@ -1,0 +1,16 @@
+{
+  "root": "/private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-p7-owned-host-fckv4bez",
+  "ports": [
+    18897,
+    18899
+  ],
+  "observerStopConfirmed": true,
+  "processGroupsVerifiedBeforeTermination": true,
+  "temporaryHomeRemoved": true,
+  "userPortsUntouched": [
+    3080,
+    3081,
+    3082
+  ],
+  "ownedHdc18897ForwardRemoved": true
+}

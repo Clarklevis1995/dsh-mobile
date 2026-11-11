@@ -1,0 +1,1899 @@
+{
+  "bundle": "com.clarklevis.whaleness.harmony",
+  "version": "0.1.0",
+  "nativeOptimization": "release",
+  "hapBuildMode": "debug",
+  "signing": "unsigned; local signing not configured",
+  "installedByThisBuild": false,
+  "artifacts": [
+    {
+      "path": "harmonyApp/entry/build/default/outputs/default/entry-default-unsigned.hap",
+      "bytes": 39352597,
+      "sha256": "be0f31f0a7c8256a8d0338212d4b4171331901db42defcf648a2fd0999804369"
+    }
+  ],
+  "nativeEntries": [
+    {
+      "entry": "libs/arm64-v8a/libformula.so",
+      "bytes": 87864,
+      "sha256": "0035b2936933b0d6071b2d4aaff60ba9d2a73abf3c9ddd4ca844c8fab80a9bcc"
+    },
+    {
+      "entry": "libs/arm64-v8a/libstdx.encoding.json.so",
+      "bytes": 162344,
+      "sha256": "ad59dab23c4fe6594447af0b02af4d8e333650041bf25201d61bbeb915a88b85"
+    },
+    {
+      "entry": "libs/arm64-v8a/libformula.mhchem.so",
+      "bytes": 418888,
+      "sha256": "fa600cbe1dff76e40ae0b53b2f4095f8e483517d3cfa801e02a67d35a67abcba"
+    },
+    {
+      "entry": "libs/arm64-v8a/libwhaleness.so",
+      "bytes": 9874304,
+      "sha256": "77918f7c3ff4f961a9425b5fe8c2f02084b4dedef9d893500b4f6ac18a88eb5f"
+    },
+    {
+      "entry": "libs/arm64-v8a/liblatex.so",
+      "bytes": 2740528,
+      "sha256": "ade13985097903c476135415500e2486261e6507fa1f7558786e12a490f4759a"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libohos.labels.so",
+      "bytes": 21416,
+      "sha256": "81f0d5381b012eb5eea5dc0ed0d29abe2fb23dd7b3d6885eb1e5763652e9d1bc"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libohos.hilog.so",
+      "bytes": 45904,
+      "sha256": "0363e53489ebd648db95a52c0fef7442ca4db712b85ac9944a61fc842e5a7a31"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-std-convert.so",
+      "bytes": 171736,
+      "sha256": "aad030c6a4c9459941b88170b16e2a4058cc4c13ac2aeda0d324a910c7e149c2"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-std-regex.so",
+      "bytes": 116008,
+      "sha256": "0bed114688ac5507f5ee9304f9ec46779bfcacd5818008f573df9ee7b6511883"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-dynamicLoader-opensslFFI.so",
+      "bytes": 106704,
+      "sha256": "d2b9b91a9fc742621ec52de490ad7b1d2089d2e67d0fa4cf457ffbd3e168c493"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-std-math.so",
+      "bytes": 270344,
+      "sha256": "524bfdf0593fb0fd5fad3e412d61ff9fd8ad1479b3c16a4e76c0dd6017f5f560"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-std-random.so",
+      "bytes": 35432,
+      "sha256": "2e6a858e641143a86a99f41881900d299c7a8fc87c1417b04d815c29f7df4e2a"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-std-time.so",
+      "bytes": 288792,
+      "sha256": "df98ebaeed35fba12ef3dc6fc5dfa5ffc265e7c763d430ea538b52c88373bf0b"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-runtime.so",
+      "bytes": 1192200,
+      "sha256": "ee666fc271cc6c6e539acb4955adc3722ff4fd0fc3f1412e0b9a08ca646641e7"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-std-sync.so",
+      "bytes": 214472,
+      "sha256": "767443c50d9896681fc8d06163a0156c45352ffab010ddedd3736114a80bc947"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libsecurec.so",
+      "bytes": 63736,
+      "sha256": "78b8cf742e2e993cf073eca0b14219525d0ec63c1a6134aba137b80e93eaae61"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-std-collection.so",
+      "bytes": 519704,
+      "sha256": "7acbca0f8ee0aa69d5e5b3736de7431bd87fb7ab2ebe3d15baeb01f11820b815"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libohos.base.so",
+      "bytes": 264608,
+      "sha256": "4b300c20e7205d5b187107e08be77c23f85e993ab1d91ae4098c28d1c560c48d"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-std-sort.so",
+      "bytes": 138480,
+      "sha256": "6110bb2e6d36ef0844a7d0e36df0a74b7ca62c71265e02e51393bdaf08fb498a"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-std-math.numeric.so",
+      "bytes": 304456,
+      "sha256": "742108319408a4bc6cb08824649cfc2d1f3f0bfc84090252628d754501f3fb7d"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libcangjie-std-core.so",
+      "bytes": 698920,
+      "sha256": "62564abcaa27dc03c8aa04bf7a21e28e29e921fb3145b9ac514320dd399a55e0"
+    },
+    {
+      "entry": "libs/arm64-v8a/runtime/libohos.ark_interop.so",
+      "bytes": 1013936,
+      "sha256": "69f0bd7a3ecbba6aba89186420c93257d50d5f6710cee98a3c43450fac684929"
+    },
+    {
+      "entry": "libs/arm64-v8a/libc++_shared.so",
+      "bytes": 1262248,
+      "sha256": "17f67c7ff663857c15225a430d16e600344fbb5b53a2be43deb77ba18b3df0a6"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libappkit_delegator_diff.z.so",
+      "bytes": 4120,
+      "sha256": "892f9c12f9f96210cf11ff85aa5c911db4888d2ba3e912394968604bab42290a"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_power_ffi_diff.z.so",
+      "bytes": 4200,
+      "sha256": "fb8d17607716468bdcf58af482f00ceb089047f7427702d3e61e3ca2a2c7a094"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_running_lock_ffi_diff.z.so",
+      "bytes": 4344,
+      "sha256": "c6d810ab974bde8d9cf92cd986734e39fcccfe6837dadbda5387de0f28f5ef79"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_metadatahelper_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "93199bae1c163d0c1a0a8ee1adc9e3462262cb990ac0e59b14749efd46d00c07"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_running_lock_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "ecd5f1e1d47e218739cd364fee77d18d00968bfde2fcf306b15c330d60121f0d"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_osaccount_ffi_diff.z.so",
+      "bytes": 5080,
+      "sha256": "d2de997a303b40cd255a52b8f2d47b570bf6b447d4d99d9a746fe2395968e093"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_multimedia_avsession_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "08fa1d1e4d1b00b25ccf661383286c1794106eb4089bf6db2bbbde4754fae415"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_advertising_ffi_diff.z.so",
+      "bytes": 4392,
+      "sha256": "5da1a015eed4ab21e06ee136096441b228ed7bad05d9407a3b7ff5f98f4edbc1"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_battery_info_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "daebf28c951586c5a3f519624dc4d42809c01466ce453a8bca59efa857445242"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_settings_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "fcb86b69f57cdd16b87ecb468c97312de1dd883360e29780e877a48203065998"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_userauth_ffi_diff.z.so",
+      "bytes": 4376,
+      "sha256": "afe3916b6b4c6b933cedc34307ea4d32e1585e8cc78d7a86677c394f0e102e8f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_cert_manager_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "b844adefe637af86c59481d62e7d428ccb38192e6796663d73c1549c83e48ad5"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_data_share_predicates_ffi_diff.z.so",
+      "bytes": 4744,
+      "sha256": "87e820c5fb1da49abf4ed50379527d0801a12f6869532f99ecf4e04a4c00ab96"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_secureelement_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "7e9fbeb89097f175fb7cbb6e879767f08aa2e7a7d6e4a1ec981f0d945b02d8eb"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_net_websocket_ffi_diff.z.so",
+      "bytes": 4408,
+      "sha256": "551b9291fd0efab9eca778cd947d1d60ffa04b3ebd6f308dde342a1faf1afbff"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_bluetooth_ble_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "77c3803528c3e3e91ca2010986c11becbf54905f53eac5928f1f9d84a96e166f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_share_extension.z.so",
+      "bytes": 4072,
+      "sha256": "3a916f0a3a8cbf9b6ea7541feae45a4d6690feeb4dc35f7ac54370b49988b831"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_want_agent_ffi_diff.z.so",
+      "bytes": 4552,
+      "sha256": "fa7ddc29867568f8c3884f96ce93f8a4f2e92b485998ca6dee3919b932149265"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_accessibility_ffi_diff.z.so",
+      "bytes": 4456,
+      "sha256": "9364ebe4a109cee2367e5f0bdde71141dd3f54410eff69c9d0a10a1bcfb4e6a9"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_bundle_manager_ffi_diff.z.so",
+      "bytes": 4552,
+      "sha256": "e6226072d0303b6989e4e0ec15566a33e7ac4d20d3976cf74d3dbde2fc777e75"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_observer_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "2c7b89cc22ad2dbd11ba16683770715285a43e22e4788027d34551c01e26860a"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_hidebug_ffi_diff.z.so",
+      "bytes": 5096,
+      "sha256": "d6564012f619df106f036a0d93ab45ac82538e12def593fd4a0a0998fd1042ed"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_formBindingData_ffi_diff.z.so",
+      "bytes": 4136,
+      "sha256": "56bf38a7b2fcac06637f037c6b94084b744a793ffd20cc07343acf42498fe2a9"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_bluetooth_connection_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "9ec5dd9278ac8c8dde52e5536e1050010ccd85fe0c7610f8f611cc17be246ad1"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_notification_manager_ffi_diff.z.so",
+      "bytes": 5880,
+      "sha256": "2fc8d4b3a5afe5f208e09dce09a5c7228e838fcae612a24dcb69c5c97340333c"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_camera_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "27654fd614aaca3b00137659484966cad0eae86b2586785772bffd742696182a"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_screen_lock_file_manager_ffi_diff.z.so",
+      "bytes": 4232,
+      "sha256": "2549b51f2c014dde234ab12b75fbec60d50260716d0d928d378cf133ba9b28c4"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_bluetooth_connection_ffi_diff.z.so",
+      "bytes": 5304,
+      "sha256": "4b57cfde3cce21b9acf6ea3190c20927af39661676d28060e584ae52348b5f5d"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_observer_ffi_diff.z.so",
+      "bytes": 5656,
+      "sha256": "c070f8788a29b2ffb696cdca44065ecb90cdfd42e9b4c9956d526d69f098529f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_vibrator_ffi_diff.z.so",
+      "bytes": 4472,
+      "sha256": "c36898201087e3a0d474c1dc1e98de8551866474632b0434a18172645b995942"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_app_recovery_ffi_diff.z.so",
+      "bytes": 4296,
+      "sha256": "0bc13cf5fcf9dee790a42aec042775d96e7906002cd6905e1cf1b594d1079e4d"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_ndk_ffi_diff.z.so",
+      "bytes": 38600,
+      "sha256": "fc3d20f783c09c9b1c703f903132582d57a0047945818561d0fdf7f517a09b29"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_inputmethod_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "8f7e04a20dcc607fd6c3be33b98188f33e2aa816d6e04fa9f6aae8ab29acf2b3"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_abilitykit_native_ffi_diff.z.so",
+      "bytes": 4312,
+      "sha256": "89ce83b1f02837d934847f4285b186251f0968e280bc849f7ad7e1f09a7f0f0a"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_action_extension_diff.z.so",
+      "bytes": 4136,
+      "sha256": "6bdf8bec1dbdc0b144388ff9b60c19a06cf3df0cbbdf60afac8bbaaafacdfe72"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_app_manager_ffi_diff.z.so",
+      "bytes": 4328,
+      "sha256": "a605b5e6f16f9e9349cd56bd5a084b381a405775b5dabe650acf77f0a1346a20"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_distributed_device_manager_ffi_diff.z.so",
+      "bytes": 5320,
+      "sha256": "e5e2ac6032c37417e693ecc8f6badc3af94aafc6f91c65f429fe0d90d743cc76"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_abilitykit_native_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "17ec0a82aef298463b7d6b28abf1773247d9750e19b1fbc09e8c36b23e6cce0e"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_accessibility_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "7688d57d3df1ecc23be08f7cd64da08825ab5465a344f2a9068a4b6f18861578"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_photo_editor_extension_diff.z.so",
+      "bytes": 4456,
+      "sha256": "c33fcb42b95c5b96df1e0af8fcae1bc70556651bac815c9f9dc1e2feab2da657"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_wifi_ffi_diff.z.so",
+      "bytes": 5512,
+      "sha256": "5daaf2601a9ea69000d4b7829f784ce6b64946b28220ff3ca0f2b7f4ba33cdb0"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_inputmethod_ffi_diff.z.so",
+      "bytes": 5944,
+      "sha256": "26254bb877e9dc40cb901d2ab0f3aca9a6fc1ca80e4bfd48001646e2c1daa6aa"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_i18n_ffi_diff.z.so",
+      "bytes": 9384,
+      "sha256": "75b9ac7970bac2f750140ddab2d69275be63dc85dbf599cf4ad6c313e6e3be6f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_distributed_account_ffi_diff.z.so",
+      "bytes": 4264,
+      "sha256": "fa0dddec3e8025d1dc6749aaa202ab73250f0897ac165413f59bf17e9a925259"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_intl_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "d8e593524d955871da126e95915ec5e764923903ed2e2b24007ebe3ab4f94335"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_geolocationmanager_ffi_diff.z.so",
+      "bytes": 6712,
+      "sha256": "49b6430cc1800f214cb53c5b9559f53b0db80c533be167786c143cb39a6ba5f3"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_app_recovery_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "d9518b0e39d3c55689212f5ce237cc3c34425aac29daa8167ae8c6cf5524319f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_ability_ffi_diff.z.so",
+      "bytes": 6664,
+      "sha256": "00a5b81cf509751cefdc53cf9b329ffece71f6d7c3dfa55b926b68011c89a80c"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_bluetooth_a2dp_ffi_diff.z.so",
+      "bytes": 4312,
+      "sha256": "047e00364e2ba9693f6f7046819af86dc7a5b3bd170e3adb88fc333d567d156e"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_ability_context_native_diff.z.so",
+      "bytes": 4248,
+      "sha256": "f9ebe80a97ed0dd0c3a2a37e726c3cf8267dfe9822f0d9dc57db7c93aed70873"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_ipc_ffi_diff.z.so",
+      "bytes": 11944,
+      "sha256": "31871e90dde249db38b1da53505afc9ce812f51efcafc1f85e5e2795d03accb5"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_distributed_device_manager_ffi.z.so",
+      "bytes": 4088,
+      "sha256": "bb00859f2395b69d4dfb75c2a065cb179adbf24b9313facab2925b978b1c221d"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_wifi_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "acaee1d9550196bcbe278f213f7b6c9b79d9832ed96f6372feede1cab2aee55b"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_data_share_predicates_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "372bea5391a07f878c032b9fb931c1be8f02110f801dbdea2151a2df081354b5"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_distributed_kv_store_ffi_diff.z.so",
+      "bytes": 8472,
+      "sha256": "df6473cc206fb071ae09b925a036a53a6c2f054142551bcd22b5e878b7246126"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_camera_ffi_diff.z.so",
+      "bytes": 14408,
+      "sha256": "a6a3cc90268ce36d3c9c35f96628a85caa1b7667ed21226d341e4721880cae91"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_media_avrecorder_ffi_diff.z.so",
+      "bytes": 5160,
+      "sha256": "985f46db75b7f93bc1a0ff80556536cc632724936090cade984aa98657d28e35"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_picker_ffi_diff.z.so",
+      "bytes": 4120,
+      "sha256": "44b3a467040fcdd2ec8c94731d936d10c00a110653f2eb09abfd973e501329cf"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_formBindingData_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "31d2ecd979624540df48b17eaf101845d6062a7125fcfe3e2bdd33843323e0bd"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_soundpool_ffi_diff.z.so",
+      "bytes": 4888,
+      "sha256": "d1aae7c2f6189b4abb2e00cf2ccb3a114365fdaead69873fb2a8993a6645d752"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_nfc_cardemulation_ffi_diff.z.so",
+      "bytes": 4360,
+      "sha256": "848170e7948c82ff9b59db6e73d69898a9a3dc9d14ae2546fcb965ddd3d4f60e"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcangjie-runtime_diff.z.so",
+      "bytes": 4120,
+      "sha256": "95de442c7a4932decfc23bfae00528b22b7b0e3bc681ced4b28c8b3d03f5e9fb"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_context_ffi_diff.z.so",
+      "bytes": 5016,
+      "sha256": "f92aa89ddbc16bb89f2b21dd89bd24fc6e0e6cf924a0a232977ed4ddf06e4a78"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libappkit_native_diff.z.so",
+      "bytes": 4296,
+      "sha256": "c2b9ec813777a154ae2f25be2064190fd04419fbd7f97b3c91549551d54852d7"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_camera_picker_ffi_diff.z.so",
+      "bytes": 4120,
+      "sha256": "7158b5ea1a12675d0d1a5acdad9024f0a4179e8242b2632f92f751952a284c03"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_avscreen_capture_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "d05616ca04f263260c865229a2b7896ad34a820dff84d9e068ac0e31e1337d8d"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_want_agent_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "3b592b604eeba91a99babaa4592b66b1436afce4f333a921b719e985cef8f0e2"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_extensionkit_native.z.so",
+      "bytes": 4072,
+      "sha256": "b465465e3a1455b9221a4610056b73461daf39269fb3d86534dea0fc132ae446"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_ability_context_native.z.so",
+      "bytes": 4072,
+      "sha256": "211dcf4ec6bc562622eb2a0a98763263f6ce9154360904fcb2af9ae86f064b7b"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libark_interop_diff.z.so",
+      "bytes": 4488,
+      "sha256": "a1814ac24df958683f23a7f687a6ba0e5625152fb08e8091ea7246f2e6b52f7a"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_unified_data_channel_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "f308fd89b61e574b67975ad1e87bd73b715b1298aa0a3188e7595561d474b1ba"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_ndk_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "c600689abeeb486ecbc1940770ab6775f0e5d25d031c4b8eb039fb04571ff07c"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_sms_ffi_diff.z.so",
+      "bytes": 4328,
+      "sha256": "435756789ae8a6b9ab369f7c30caca68ddf48908ea64e2a924922214cb5d0512"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_intl_ffi_diff.z.so",
+      "bytes": 6904,
+      "sha256": "186e6e08fc64c251f777adefa8ff74e7c565c5d8168ae1ff3194bff2499aa57f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_vibrator_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "5528de6147eee73cbd89c5b29bb9e91a49ee4b5da941795857c78900e68a216b"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_sms_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "8b789452af7a6e3820e1562e7a17b62e60a55a905e92624dad7f3ae082bd787a"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_avplayer_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "b582e63df4c61a91115fcab7028060b5bd905a06bff7e85baf996eb5e295bd45"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_resource_manager_ffi_diff.z.so",
+      "bytes": 4264,
+      "sha256": "a05028c801038059d9890baeead257d6b3784c92777f0bfe77bdccd65263179a"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_uniform_type_descriptor_ffi_diff.z.so",
+      "bytes": 5144,
+      "sha256": "7a3e69275ca5ae573c3d43540c452d2c02a79cecf4728c6851b34fb70527b2ff"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_secureelement_ffi_diff.z.so",
+      "bytes": 5400,
+      "sha256": "ea7c7258e3620908c97618cb6950984850dc9e70d0aa47349f5772842c62bdb4"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_screenshot_ffi_diff.z.so",
+      "bytes": 4168,
+      "sha256": "731e05504e0f37dbc7b6fd886a4d87e1cbb89cdf9ad921a32e3a13f5433740ef"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_power_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "7fe62763ab52e6b462dff53ac3048cb3dfbbb361f9a0df1e11d9f28768e207da"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_audiohaptic_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "b177c73eaea542d2d11e194e8605a05feeb5fbd90c4df49440ecc189a8f9b3e3"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_geolocationmanager_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "bdba6cd8daabc39677726bfabf55d8dfbfa1d531e091a18cbd4c754f7c9f1c66"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_screenshot_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "0d4c5e5878a40f863a4f57ea3654d464fb4a942a97b7b52148742f35fc53b9b4"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_soundpool_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "2d696cdbf03109c2836963e7c5ec5efd303d49cf91f35397acc870fc6994c96c"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_embedded_ui_extension_diff.z.so",
+      "bytes": 4136,
+      "sha256": "eb70e0ece16c5a9501dd57a6d31d3edf29bf8bcf3cf9e654fb446e818954e6b7"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_bluetooth_access_ffi_diff.z.so",
+      "bytes": 4296,
+      "sha256": "eeda9a7acd2b501f6e18bfec75dd9b30da0be6a56d9a708343a5ca5b02bf43f6"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_unified_data_channel_ffi_diff.z.so",
+      "bytes": 4696,
+      "sha256": "f8fa2e0d14191272b47f47b50ba5a47a4c9402b67da87ae2f060edcec008420b"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_app_manager_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "a13530b63b8daa44448c71069543f7b3d32a462a078cf6bf6afa6edef086bf6c"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_appAccount_ffi_diff.z.so",
+      "bytes": 6216,
+      "sha256": "3af09c21456eb9548e301da68613b6c0933234c98300eeaa6f2fd5a14829037f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_avplayer_ffi_diff.z.so",
+      "bytes": 11000,
+      "sha256": "f28b67923abfe59abacb6d00dffb72c6393647fa5a64beeb52f4bf6adc253ab0"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_bluetooth_access_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "b8d13dc778335c6b81737fd15cd5f7347cd0274e694581eea46e2f7e725db716"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_statvfs_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "b0bc26d42ca504758e52f4e9fa21a5d5998e675195c6f23dd2dbd477a4399b90"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_huks_ffi_diff.z.so",
+      "bytes": 4104,
+      "sha256": "e902bedc2404ec856256e4fe39b755c10f181815cdf620fdbd47ada682cf7c2d"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_relational_store_ffi_diff.z.so",
+      "bytes": 4824,
+      "sha256": "86aa959990d42b7b43f1805a26659c653de49b8310c2bad76fb9a5a33b99728f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_work_scheduler_ffi_diff.z.so",
+      "bytes": 4456,
+      "sha256": "1ea1068dbb7210756dd4abce11f45b0bc24d93f6de1c6c189df9ec3b129ddfce"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_audiohaptic_ffi_diff.z.so",
+      "bytes": 4808,
+      "sha256": "7a50c803e4ce7457c4cbd7a43d964ef81ca31bef5947cff10c3dcf964444dc46"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_effect_kit_ffi_diff.z.so",
+      "bytes": 4952,
+      "sha256": "c2d36ad2c899837d0cd3af2b1fcaf5f5ce2b186877cfc11ea7bcd4d6885d6952"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_context_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "0bae6514d6a27a5e13b4b26252961372bc879e4a13ebe4cacf732665544c80c7"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_uniform_type_descriptor_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "bdb4481ff6ff2c704e14594f49fd084aea4ab50434f23037ccbaa34e9b7640d1"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_appAccount_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "a60943399049bdb1a4ae65478865cceca922c1e094ca7f4b4f4c9f70fa8cf5a9"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_camera_picker_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "bc40d23ed23cddb8678c364bfeebdb5bce8a56437afa2fb02f999aed856232a4"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_multimedia_audio_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "8798a846b43e6bcb0cf8bad6ad2da4cb5d6946ac5977c1ff1d6520498457f0aa"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_bluetooth_ble_ffi_diff.z.so",
+      "bytes": 6344,
+      "sha256": "c948d5d1392a60392f06d97d62bbe9aa63f6a2dbd84e8a9fa9c77d8562dd1a54"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_nfc_cardemulation_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "52d909cdff0c26eb301bc5c3e26d5bb5cc712a7b795eda1ea321fad97b16a2d9"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_extensionkit_native_diff.z.so",
+      "bytes": 4136,
+      "sha256": "f1ced64950bf71617bec8c20c6ef8b9dd8aa653f83a8fc372c8ab7f10134b80f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_radio_ffi_diff.z.so",
+      "bytes": 4648,
+      "sha256": "97e5dccb0c4039011f04462454a052c917ee80e44c6ffba60f213e429cb42f15"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_errormanager_ffi_diff.z.so",
+      "bytes": 4200,
+      "sha256": "a5ebe393b1cac0aef56ac66aa98b02ae523302cc43bc7662ecd674ffdb9c7fc8"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_sensor_ffi_diff.z.so",
+      "bytes": 4776,
+      "sha256": "0decbda8ca71e73bc1adba2a3246cd26ae1bd5e3b07d3b54e5001e55e4e6f0c1"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_picker_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "5126d22fbd90502c1db27cf9d79a2ca7ad10e347958bb2061ba8b2f8a58d6d4f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_distributed_account_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "fa68bcfdf484aa0df9d1a3ca4ec694795708fe396389f3fb9dabe40058d825c5"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_frontend_ohos_diff.z.so",
+      "bytes": 82200,
+      "sha256": "2e473cca8b2b896a8c98e64e191fdb7e72f8d1319eeaf0194f20791e85480f50"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_photoaccesshelper_ffi_diff.z.so",
+      "bytes": 8440,
+      "sha256": "23de6378b9e4dc38afa3c8f3afe0e0e06057c393e98b57fe06a9c4f24ac13415"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_bluetooth_a2dp_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "a97a17de9a43322a3e58fbfa7a5ee4d5859f94711fccaefc444325c82e591853"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_faultlogger_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "cad45e495fca640dad55e14345c9dbca8f8e2335018ffce9e0a677ec90ed09b6"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_ability_access_ctrl_ffi_diff.z.so",
+      "bytes": 4280,
+      "sha256": "2fcf5b9b7085e957e0095ecf8219c2dd89d68188e94488cd19609a57b7001864"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_radio_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "da6281ad079e845207d3059b7679cd2dd4320a179d3cbabd2f806eddd7c099ba"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_userauth_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "149531099714a9b9c6d5e07b64996100fac52cbf0b9aae8e229465622a46d659"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_hidebug_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "4d5eeb9b76556c33f6be2090e2aca7ce56a16a7a0f7c402f1ac286b41b4c1c6b"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_avscreen_capture_ffi_diff.z.so",
+      "bytes": 4760,
+      "sha256": "bf87ab213aed986d594632ebd0fb9edaf9cb1aaa5a3dce6168a9b6b34e08ee1e"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_sim_ffi_diff.z.so",
+      "bytes": 5000,
+      "sha256": "619140b4201a5dd5de15e1f94430b45e59a57fabdfd11d9960f3bd329ca00715"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcontact_cj_diff.z.so",
+      "bytes": 4584,
+      "sha256": "dd46426507a185f0f071f5a461184d009c3c2b6ebd6e2b332328845982ffeb54"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_advertising_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "540339a4d6ff715bf1a7e3bd0fd4a0ff4e5e900b5fc017a292df3486232bd678"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_cert_ffi_diff.z.so",
+      "bytes": 10120,
+      "sha256": "784f0a6cd500712079ea7c613a3fe8dfeb4caedf46a0bdd239df575cd860aee8"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_metadatahelper_ffi_diff.z.so",
+      "bytes": 4824,
+      "sha256": "7a6828b084f8cd0b67df24d8f1dece383043a7ffb04e9c9673be41af720534dd"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_osaccount_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "1066c71c5cca04d3d5eeccc9a03a085f14059df0f2296110072126cbbfc8c604"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_photo_editor_extension.z.so",
+      "bytes": 4072,
+      "sha256": "a36da50318fedb8bf872927458d2b3c76e6b39761b3d9e3c7deb30774561cbbc"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libabilitykit_native_diff.z.so",
+      "bytes": 5192,
+      "sha256": "b2daa6365dcde58279866e35bde10e699369767c076e922be482160e9c6a735f"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_media_avrecorder_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "7c9348be8c9e01580122d62874201d5bbaec5b79c1b132e443c8ff271b6517f7"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_action_extension.z.so",
+      "bytes": 4072,
+      "sha256": "f2d4e091015061a378ac8cc3be4f2aaa6e52c9d2add03e242825bce991c0fc2e"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_display_ffi_diff.z.so",
+      "bytes": 4936,
+      "sha256": "2d3b399db99e470f7fed056d20f49001c6f213ec18d35d53935e951fd4031bc1"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_image_ffi_diff.z.so",
+      "bytes": 5528,
+      "sha256": "efe84148cea691cee039f9de5e39439d275d714273440026126031ab3a413e6b"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_statvfs_ffi_diff.z.so",
+      "bytes": 4184,
+      "sha256": "f11561f0db63769f7d7f7d825b8d7104d30f9065b39224bc617064f9709d7cd1"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_webview_ffi_diff.z.so",
+      "bytes": 18760,
+      "sha256": "49de910cad81c039f97faebf75fad1ca4644e63d5949e431d8203dc3754de42d"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_battery_info_ffi_diff.z.so",
+      "bytes": 4680,
+      "sha256": "7d304b06517ed7d329350a78793d1cd0955ac94b8db5aaab34129f25ef63b1a0"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_effect_kit_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "b810d0a12e46366d5467d5834a29e0954b65d3325f7183ccfc03f2610f414405"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_file_fs_ffi_diff.z.so",
+      "bytes": 4696,
+      "sha256": "577836b52467da3c0b1dff133078369c97bb73a9c5b4305419dbc96555978147"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_screen_lock_file_manager_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "9b4ea6e027e702bed2282ddde486cd7672fe135e04d3c09967e8ab2e1d5c3703"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_cert_manager_ffi_diff.z.so",
+      "bytes": 5592,
+      "sha256": "6505f1011fe0396af72f802c17981d0191a4712417d7feb0845746997417117c"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcjLibLoader.z.so",
+      "bytes": 4056,
+      "sha256": "82d34326a65a71d7e57529bf74f9dfa679fb5a276d24518d09452c39f42123ee"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_cellular_data_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "1efa0a56abb0f8265bdb038221fe2b5c7280de820959c52e59b1cccb33a1e35a"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_photoaccesshelper_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "90c53d72bddf7f2ab220b8feeb9e559b00f20e8b8cc76b89c95336b8cc59541e"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_net_websocket_ffi.z.so",
+      "bytes": 4072,
+      "sha256": "3450d242583c5931022364bbbb165bcffa4b074b360c2464a9066d7bf1327d03"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_request_ffi_diff.z.so",
+      "bytes": 4280,
+      "sha256": "5f4638ea15c38310080593e0d0f9f729856b1badb19772460479fe3fd35a66d4"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_faultlogger_ffi_diff.z.so",
+      "bytes": 4200,
+      "sha256": "2048f6497d78e0904137b71777034f101fa8fbb5a96f5a211dd4abbc3eba1727"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcontact_cj.z.so",
+      "bytes": 4056,
+      "sha256": "dff7cde108e6b7beddf6a260a32ae826a6d4ec7dde205948b1e345bcc820fbce"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_ui_extension_diff.z.so",
+      "bytes": 5256,
+      "sha256": "03047f7357d4662252ec154fd60743e1f96828028247d97d956fabc098a4f568"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_environment_diff.z.so",
+      "bytes": 4120,
+      "sha256": "a66cb947898a20e30582f5bb936e90a6298125f4a5e0e62c3290e9731dd1b74b"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_cellular_data_ffi_diff.z.so",
+      "bytes": 4504,
+      "sha256": "5d834fdd34e9aff77e741e75e0271cae61320b8c9240c240724b3eccff3d45d9"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_cert_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "4cab3d97806abe3adbaae5470949775dcbaed1849d5d17edb797575d550d00c1"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_ipc_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "7dbd98867ae5cd82e6b388ccc0d2f2a7c5cbac2d87bf1354977dc08289425caa"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_sensor_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "bfefa40e374c581a37ffb886ac671dc110839de2d0358732c450b765f0499ed3"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_embedded_ui_extension.z.so",
+      "bytes": 4072,
+      "sha256": "64eb5e5cef1eba55d2966c0c167afa586d51e1f387c38e5808c9fed3028f8db0"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_cryptoframework_ffi_diff.z.so",
+      "bytes": 4184,
+      "sha256": "4c84571d29fa9874b5763f322cb9b1a12480e8364348b33aee52f07dfa93f8f6"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_sim_ffi.z.so",
+      "bytes": 4056,
+      "sha256": "a81c03d99ed800daadf0560288bbc4a125629c43a15853f362b148a52827c515"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_multimedia_audio_ffi_diff.z.so",
+      "bytes": 9096,
+      "sha256": "db6d64a42adfd382f22c0cbd761675deb8533128251bba6050689a5797f565f4"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_settings_ffi_diff.z.so",
+      "bytes": 4344,
+      "sha256": "4e3449582547c08eb8dea2a9e00fe351c6d2150654637d58c667fdd5f3d20317"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_multimedia_avsession_ffi_diff.z.so",
+      "bytes": 8152,
+      "sha256": "28ad00cb42a0c0ef8baa0f5e817803cbd1cd1bd41a530f310d0185c78844efb2"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_ui_extension.z.so",
+      "bytes": 4056,
+      "sha256": "b11cbd56c4b574819ec46c7d0a5aed698f4b279e7c406c7dbc82310f600353be"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_window_ffi_diff.z.so",
+      "bytes": 5848,
+      "sha256": "0e12e15e1ca822349c6dec01c8439f68eace8ec9bcde63b18c2ab632d77907dd"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_net_connection_ffi_diff.z.so",
+      "bytes": 4120,
+      "sha256": "43bfcf8c90e16c76d36b9c4025b59fdd8210e44901e2073c6582fd4fd60ae4de"
+    },
+    {
+      "entry": "libs/arm64-v8a/ohos/libcj_share_extension_diff.z.so",
+      "bytes": 4136,
+      "sha256": "ba5a5d8e2c4804520ded8385cd49ab7bf4f42775381f226c001ad6c15c53bc09"
+    },
+    {
+      "entry": "libs/arm64-v8a/libark_interop_loader.so",
+      "bytes": 323968,
+      "sha256": "ae85350a3228461843c0d465066687d9bf29e81bc11a6664b1dba5d06e9f2cc4"
+    },
+    {
+      "entry": "libs/arm64-v8a/libstdx.serialization.serialization.so",
+      "bytes": 154248,
+      "sha256": "9a7805cf6cc3911a6476b935c4e39684a4369ed0d4a6868fb4845c0a01ea4357"
+    },
+    {
+      "entry": "libs/arm64-v8a/libwhaleness_bridge.so",
+      "bytes": 60664,
+      "sha256": "8589c30d9382880cf9512797f67db448756bd6a8d1b5ecc7805924c10f59d57f"
+    },
+    {
+      "entry": "libs/x86_64/libformula.so",
+      "bytes": 87432,
+      "sha256": "ed23b9c114aac43a08c086a733ccfe575410260a9dc9b6055694cde0b5385d93"
+    },
+    {
+      "entry": "libs/x86_64/libstdx.encoding.json.so",
+      "bytes": 149544,
+      "sha256": "f37857cc2f7bc1e0bcb4091fa0bec4d6f11b2abf464c4b5317a525050931a934"
+    },
+    {
+      "entry": "libs/x86_64/libformula.mhchem.so",
+      "bytes": 432696,
+      "sha256": "05d1c0c13af8622ec62608641b2211b358246da3b5be98f4f72b52622894af05"
+    },
+    {
+      "entry": "libs/x86_64/liblatex.so",
+      "bytes": 2845520,
+      "sha256": "f38d5eeacb750b8bb9ad478053e9e3ee4db44e29afe5209ca21745de37ce4438"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libohos.labels.so",
+      "bytes": 25552,
+      "sha256": "5b1a9e92a96c7c5a42c44d14bfa25be8a510b9b22294b65739eb8df191af0dc9"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libohos.hilog.so",
+      "bytes": 49872,
+      "sha256": "b4fa509277817e473fa07f91b4669ef116b2904332543d043adf8340718cc93e"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-std-convert.so",
+      "bytes": 175752,
+      "sha256": "b43d3bc3161e807e6e37970a1c2fde804e8790b0343c318ad6122f28a3fb5b15"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-std-regex.so",
+      "bytes": 119664,
+      "sha256": "c2540d02d4f89d9d02c51515027e952ed2a9194b457c1bd662171e7b19e85234"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-dynamicLoader-opensslFFI.so",
+      "bytes": 86360,
+      "sha256": "78a6e21dc8da04d1bbc1b6ff5dc9cd5db1bbf4537441cf58ddeae71f0855863a"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-std-math.so",
+      "bytes": 261032,
+      "sha256": "b008799e9d46c00231c3eb0068a9f60343e987fd5e15f77e337fbbabd45d58c0"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-std-random.so",
+      "bytes": 39376,
+      "sha256": "415af224645362c05e8ccfae0e02c68ffeb4980ad21dd88e9032f47c068a2c49"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-std-time.so",
+      "bytes": 291832,
+      "sha256": "61135c24db73b41b7a14b69eec6adbd573dfeaca532ee2f5ef3840c2e17490ee"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-runtime.so",
+      "bytes": 1239976,
+      "sha256": "ad166ab640b16cd3f7fc1851a79b54dc1650d7d21c8937f9995841445b155f5f"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-std-sync.so",
+      "bytes": 209328,
+      "sha256": "da1722cdc5c5b5773903d2fd9b2bf45ddd67f383f8a7b1fc774f021770d7ec77"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libsecurec.so",
+      "bytes": 64672,
+      "sha256": "d848d8265b84344f303a90c53cb32d941825b5a592879af71c44f9ac32ca6ebb"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-std-collection.so",
+      "bytes": 541152,
+      "sha256": "4fa4ca111766abeb17274b7be3be2abba3a6b10727913d04804e3f6bd68838b6"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libohos.base.so",
+      "bytes": 258416,
+      "sha256": "6b5e608094b660a751143fddad9b471b98b8bbca737a04467e166901fa6a7211"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-std-sort.so",
+      "bytes": 158720,
+      "sha256": "365cd42c3afac022f5e06e5f5f96d650132001ae22b35f3c7eb0c8294b0f07c4"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-std-math.numeric.so",
+      "bytes": 328440,
+      "sha256": "d3a63b35328234c29229a89ab13593b03e289e1cf3cf02af8b1362422e997353"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libcangjie-std-core.so",
+      "bytes": 692792,
+      "sha256": "fecb4fdae517693de6e57975446c0a85b1e6e9f9a8b63d461d959ddd0058c376"
+    },
+    {
+      "entry": "libs/x86_64/runtime/libohos.ark_interop.so",
+      "bytes": 991552,
+      "sha256": "fcc51dee75988576a26952d1d999756a075b6346266ecd010346185ee79b76f8"
+    },
+    {
+      "entry": "libs/x86_64/libc++_shared.so",
+      "bytes": 1294680,
+      "sha256": "7f2d966d62c7ec6e833c020f4cbad96593e6d9acf2b61c6f598a5e4b3b1c86f1"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libappkit_delegator_diff.z.so",
+      "bytes": 4152,
+      "sha256": "ca1719437fa4ab6d7bfb2b921060b1d01236e92a730b7230e1b5c1b72c5735e4"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_power_ffi_diff.z.so",
+      "bytes": 4248,
+      "sha256": "2fabce116f4f170593043c78913cf3b013928655a2639c4e53945bd5afc9eac4"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_running_lock_ffi_diff.z.so",
+      "bytes": 4408,
+      "sha256": "83eeb8cdd30afaa59bcc181de16493a3c10fca1a1b1edbfbdb071a08def54730"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_metadatahelper_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "226193b96af9aacb63b4c53fb17605628d5f7752722b4446628eb14e5c3906b7"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_running_lock_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "caea9674a091122cf30e894f216f97ce98a0e3b3ece4bd471bf232f0c05d6186"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_osaccount_ffi_diff.z.so",
+      "bytes": 5208,
+      "sha256": "7379d6badb6c0ed3b4d648cc4a73eacd1370adbfd3fa2ba85aecfad3d775e09a"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_multimedia_avsession_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "dee7dd9ac13d520c3ab7b7b3d7df20e51c7624b0b1b98741ed3dca67fa371a8b"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_advertising_ffi_diff.z.so",
+      "bytes": 4456,
+      "sha256": "3c0b6d04a85b16942d1febcd79bcc0a3e0693d669927b071cde70f3d22f9eb07"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_battery_info_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "e1d33b6d8eb84b553d07c53ee95dea50859a3c726ada38e2b5c2edc5f9792977"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_settings_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "9d01efe5131f8551f605d1dada8ed6fa0e9bb6e91e08166c1a89cf6144177ab7"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_userauth_ffi_diff.z.so",
+      "bytes": 4440,
+      "sha256": "df86aa71ee5a02c81d6a8ba32bec32e0c5ff7f62c39676c2b97e22f9af331394"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_cert_manager_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "1c3cad73a2c9e3aa2a31e4ef0d583388668d4a8252e1456027370cb6db00a1a6"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_data_share_predicates_ffi_diff.z.so",
+      "bytes": 4840,
+      "sha256": "f507f01636110757b439e34fbf18c833dc4cd3a492a03e2639e7ad5516e2eb38"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_secureelement_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "f814c09b98586af8f00f25b061611fcae8dead4d634cc48848a330391cb2d1c4"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_net_websocket_ffi_diff.z.so",
+      "bytes": 4472,
+      "sha256": "5df6423c1ea2d13c08cf4c7da27131edf3db0d82ab720c12be3195966ab78a0e"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_bluetooth_ble_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "3c5b589f319bce88d8edb94925ed08096a7b439248f02190a0acafe06184a8d7"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_share_extension.z.so",
+      "bytes": 4024,
+      "sha256": "755bbbdbc3e998b50f3c1468a163ca834f10cd660ab0fb67cd217bf0bfcfb02e"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_want_agent_ffi_diff.z.so",
+      "bytes": 4648,
+      "sha256": "86a42a758ec81552063e5a77ffd6a3adc86f0f49a2240083f4bf82d6e575b49c"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_accessibility_ffi_diff.z.so",
+      "bytes": 4520,
+      "sha256": "72cc5444a361d764cea983aef124099bde815bdde08b0c10908a912aebddd179"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_bundle_manager_ffi_diff.z.so",
+      "bytes": 4632,
+      "sha256": "2a0ff002d46ce9dbf220563408037fd279d9cd8e3d269aec6ac433ab9794e110"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_observer_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "8353babff8b07477e5d4158843876d67e3fd1604a06d6569c029df6c43143b35"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_hidebug_ffi_diff.z.so",
+      "bytes": 5256,
+      "sha256": "40628f846d7eabb7afbfa0c3b8c5562dfa768d512ac5adb9ec924d433a8a187b"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_formBindingData_ffi_diff.z.so",
+      "bytes": 4168,
+      "sha256": "d6a360eff25d51cb4cdce7f350327d9dfb050cf4c4650d94a44532bffad2004e"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_bluetooth_connection_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "8fa88f6aa27f7da481fcb3d1cffb471ca3d07e65f29c5fe2ffb9bd3132d266b3"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_notification_manager_ffi_diff.z.so",
+      "bytes": 6088,
+      "sha256": "eb3aff9ffc5fe5aeb65cf44992e065178246aa1625527d26fc31010ef004a912"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_camera_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "6c52e88c56e08b9a763d43339a0e19e9e9791a14f8d455690b5e555270bae8c5"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_screen_lock_file_manager_ffi_diff.z.so",
+      "bytes": 4264,
+      "sha256": "72d16816e307a72c30f695265a387c0860a6403c4d50e8918e0ac93fad505121"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_bluetooth_connection_ffi_diff.z.so",
+      "bytes": 5464,
+      "sha256": "958abc9856019638d7c4b53f781c705cebd323eb89e16ef57e1cbddfaae4fbee"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_observer_ffi_diff.z.so",
+      "bytes": 5848,
+      "sha256": "60311ab382500008c7994062e5c4ae5f02db89915cbed732ced6a4162aa4d768"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_vibrator_ffi_diff.z.so",
+      "bytes": 4552,
+      "sha256": "18bdc07c770f53bd65e7da458615143352740349d4890a9172330d77321f9e39"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_app_recovery_ffi_diff.z.so",
+      "bytes": 4344,
+      "sha256": "2d7dbb68245240ec6451bb4bd468df91632bb628807a0ad327e2a3f439a95cad"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_ndk_ffi_diff.z.so",
+      "bytes": 43576,
+      "sha256": "2d81ffd8401daf6ff6861fb0f9cd18958d9108a6fa22aa90fbe62ccc5961584c"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_inputmethod_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "4672cbab9b0318fd48e0d20ed4b25c9dfd6caa18415753c166e8e652f84d5591"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_abilitykit_native_ffi_diff.z.so",
+      "bytes": 4360,
+      "sha256": "37876640ff3bab993122d3a99d57f19fa8c0610d01206402fadbee67261d1563"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_action_extension_diff.z.so",
+      "bytes": 4152,
+      "sha256": "538479a4d985b6e7a7eeca53163570f6bf33c05e43fec76e7e7b1304e0888ddb"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_app_manager_ffi_diff.z.so",
+      "bytes": 4376,
+      "sha256": "d2419e7ec48edb3f8fe4a7308204724263cf16f086d599b4cb99ce4e858e065f"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_distributed_device_manager_ffi_diff.z.so",
+      "bytes": 5464,
+      "sha256": "8d5b9864b3b21109d8cd499433fd05fdfe95ec4c43f4f80dab317e7ab388b6da"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_abilitykit_native_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "c6f5eea583a4ccb824fc20527e8f2731c123a1b8c7e92d049fbb2a5e346b8db0"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_accessibility_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "dcc80c97431966f008ad20b1c5b84a78a9865527c30e147fe947b0e618210663"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_photo_editor_extension_diff.z.so",
+      "bytes": 4520,
+      "sha256": "360943ed721d4fc4b5ea41814cf9785ad2312f0b8a28bfe781980cc6422595b7"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_wifi_ffi_diff.z.so",
+      "bytes": 5752,
+      "sha256": "4de33c555e46eb1a1d4e92d99e9c7f3e8c73fededa1f1e43bc3d4f20e76632b4"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_inputmethod_ffi_diff.z.so",
+      "bytes": 6168,
+      "sha256": "0c073b634475eee29299dd599c021beadc17af39994929681124ea7bf2c1321e"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_i18n_ffi_diff.z.so",
+      "bytes": 10104,
+      "sha256": "6e1506cf55e8c3fd12f6fba0ad64c92d0d240b5ba6dce396bb201fe0ad1330f7"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_distributed_account_ffi_diff.z.so",
+      "bytes": 4296,
+      "sha256": "5ba4fdc1585b0cb1d82c5afad69dce8c6e51fdaa737376817a0ae82f111f7e64"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_intl_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "d9830996f473b8919a8a01c205978d0b9abb92ce3bd0d58b345c85caf3ae0fb6"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_geolocationmanager_ffi_diff.z.so",
+      "bytes": 7000,
+      "sha256": "98630603e64988b98f7f47b99615fdc2da49f40c54eae19549e121d626c747e4"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_app_recovery_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "460c4b61921a277ac149d9fb78bbe42119ddd013aba46bbffba6b251610e8381"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_ability_ffi_diff.z.so",
+      "bytes": 6984,
+      "sha256": "37e75be0ab78feaf32d12a2c039ae3001496ade41da072af329c3ed7dd1e84a3"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_bluetooth_a2dp_ffi_diff.z.so",
+      "bytes": 4360,
+      "sha256": "b5514123f03447b0f87776d49a1add16de74b5ecc7d539802db16e5c4b6fdda4"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_ability_context_native_diff.z.so",
+      "bytes": 4280,
+      "sha256": "8dfca5988822161c1146b94a13e56c9f83861409f36a37001848498d80d6f5bb"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_ipc_ffi_diff.z.so",
+      "bytes": 12872,
+      "sha256": "055f12cbc41a103b19d8200e2d57ddd8f2b4a1c3397a64b12abce3a81e1d1cb0"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_distributed_device_manager_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "c3a0a1099774667bcfa63d62f6289f7f1457947d6f748a06e5afa66ac4b991df"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_wifi_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "c87c4557c83141a9883382c4faca6747948835a82fffd99989d3ea1d73ffac10"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_data_share_predicates_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "8ebc79389ea2a8779632825bf3161a99e9133595d2d00386d77201195f56b378"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_distributed_kv_store_ffi_diff.z.so",
+      "bytes": 8936,
+      "sha256": "a72cf611c45be3603dc5e8a4ce54c61baa8ff903fd2820a74ce25beb99c366f3"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_camera_ffi_diff.z.so",
+      "bytes": 15688,
+      "sha256": "1d13a6417a910318a335752b59cc2972684b4b19672aec2a2e655c89ab27dc02"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_media_avrecorder_ffi_diff.z.so",
+      "bytes": 5320,
+      "sha256": "6db3b5a4f7c441e83dd81ec831c45dcfa9ab574cbd8ff60a465cd982b701ddcc"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_picker_ffi_diff.z.so",
+      "bytes": 4152,
+      "sha256": "1c5e9434d12af8a6b918ac33305ee8c407f99eecb6a28269a62bfcfff6265222"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_formBindingData_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "aacded42d5f1564f74d089379e995ec1870e9e0fc98ce57883c837405a42b121"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_soundpool_ffi_diff.z.so",
+      "bytes": 5032,
+      "sha256": "4ab6bfa4556593185213f3b6ef40246705239f816b6a50fe623fd7d878fd893c"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_nfc_cardemulation_ffi_diff.z.so",
+      "bytes": 4424,
+      "sha256": "f94c6e00e3b44e94608af2e325a17e16a69cdac5a68b189537781cacfdc6225d"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcangjie-runtime_diff.z.so",
+      "bytes": 4152,
+      "sha256": "10ab717038879fe90a2f2d14683958598551f6e2bd5a2cd56d64ad868bfe12c9"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_context_ffi_diff.z.so",
+      "bytes": 5176,
+      "sha256": "b5eef03f4710016352ad47653f0b67ac9b0610cd992b8e053b530e2a18fca6e6"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libappkit_native_diff.z.so",
+      "bytes": 4344,
+      "sha256": "2963371bc1fb12e7b7b495d1efa631d370e1025334869260a426a8247ec7bfb1"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_camera_picker_ffi_diff.z.so",
+      "bytes": 4152,
+      "sha256": "83efa26cbb02fe0387d76ec31a5cd2c4e317361233c6248cabf52b931fb7299f"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_avscreen_capture_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "c3867c077b4d33f9f034474a0ef83afbb8ca401be53e57173b0f06bd55aa0aaa"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_want_agent_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "bfa7c79088835e4c963745d532b819a9ede1de49e535164cf05c4e7604ec2252"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_extensionkit_native.z.so",
+      "bytes": 4024,
+      "sha256": "95b7fad3bb7352ccced1bbf357d08bfe57224b90da06d8b1e12ec06c8d816b44"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_ability_context_native.z.so",
+      "bytes": 4040,
+      "sha256": "45b3787271f26ce6f9e8a7b906d9591b377e3bc79beb7b4ac17111344ed52b36"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libark_interop_diff.z.so",
+      "bytes": 4568,
+      "sha256": "2d7df51ddaccb7c5c716b83f6affb2f745da00f0bbeb1082a9c4f8fbf2437276"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_unified_data_channel_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "52a54fde62a47a19f461378b753a06d1278414163c7be4bb490b9a01f8818da3"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_ndk_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "d0e0e1b42257f0d64002c20b116d858a78062981d9662476de2a2e714d6d30c0"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_sms_ffi_diff.z.so",
+      "bytes": 4376,
+      "sha256": "f7ce5fa845cdf9bb8e62d6a0cbe166ff0e16c90171032157dc2a2f2290c7719d"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_intl_ffi_diff.z.so",
+      "bytes": 7240,
+      "sha256": "99e45f802e790e0ab46df283ca04cf08194006ac5b1437dd17002e4929a1a5f6"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_vibrator_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "e5d8ebf27dafe06204b0023c19d76d47dbc5b0d5135d4eb06552321e14f97015"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_sms_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "30dbc5520205b6bdfa5b745bf7b49510f048c16977d04f1a0c28598aca4cd6ce"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_avplayer_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "62803b58d2ae70afc591387afa9e2fa3545467ea931fec2e322ca1a06e6c7919"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_resource_manager_ffi_diff.z.so",
+      "bytes": 4312,
+      "sha256": "7bf9997763c55ce41b9fdd5dfc5d26d47b49c6f629ce0fd5cbc107d24e106324"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_uniform_type_descriptor_ffi_diff.z.so",
+      "bytes": 5272,
+      "sha256": "1f06a45a53822327f886e537d919c5b163893c60e733d61d4a3fc96f5c0aec47"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_secureelement_ffi_diff.z.so",
+      "bytes": 5608,
+      "sha256": "373bafe5223d64a02d3f7e5818e949fa720b9f5346f847aecd06c86c3232cc58"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_screenshot_ffi_diff.z.so",
+      "bytes": 4200,
+      "sha256": "048780d4dc95fe66001f88afe1519587772644395d84d7ffa3b5d11cb473e94a"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_power_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "3850ac81fd91c28125c27da3a4364748bc167e88918f5d9ab4abf9c4ee06f30c"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_audiohaptic_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "5f6d1d08d060075884ec096c411ba2317f951e09cf9a74cf5fe01ff217f4540a"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_geolocationmanager_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "1003c0b19fff41459de7fe0247f4a5788216e23edfe40d019e46a3811eaab98b"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_screenshot_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "192b9e295fcadd1d29e49d8c4e42b28b1c7405085fed196cf3df2cb533416059"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_soundpool_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "6a32009a5ab895abecd16d20105af0c486da06e2c537592768b40ed789ff8f50"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_embedded_ui_extension_diff.z.so",
+      "bytes": 4168,
+      "sha256": "991f724fe88ce015a7a7be35745bb887611f47ac8db61289423a61d2143a84d4"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_bluetooth_access_ffi_diff.z.so",
+      "bytes": 4344,
+      "sha256": "4448ef427206959af2427dcf3c5ce665ba877b15d0d1a356e38fc3b847ee5720"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_unified_data_channel_ffi_diff.z.so",
+      "bytes": 4792,
+      "sha256": "57c4a763f62879ad5154e7df57e0ccc849fe2a99f6d1decf21f5ba4242fc0f56"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_app_manager_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "9f15df905e773b67bfd3e1958f9aba5507942d67025045efb61e74a04e0a9577"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_appAccount_ffi_diff.z.so",
+      "bytes": 6456,
+      "sha256": "891034642cefd25b98d78a7cc68f57349e307a7d8642529a72fef9bcf581b45d"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_avplayer_ffi_diff.z.so",
+      "bytes": 11912,
+      "sha256": "9dc1e06fbc8a459888bc99ab110ad3d019c8638dd2b8e3611fe049ef158f6c70"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_bluetooth_access_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "a7821b99f40278656b05b01bb4a7e93c4500d3ff9bc5b3df773780d26efa14c6"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_statvfs_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "4d6b31d7bf7a0d2073a97e3156b8274846c3217bdbe21d2cad4470c392ad40c2"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_huks_ffi_diff.z.so",
+      "bytes": 4136,
+      "sha256": "73b987578eb3d7b4e14f25b1aeb9eccc300ecc9c65334f428114d5dd16e0d53f"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_relational_store_ffi_diff.z.so",
+      "bytes": 4936,
+      "sha256": "67b734d98156b1e0d16a36215b33118b816a8850b6ae7b78e28c659c98cc7cb0"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_work_scheduler_ffi_diff.z.so",
+      "bytes": 4536,
+      "sha256": "296db26f800b10439150fae1fb5d544c4488f2a0974bc94d45e0d2828494a4e5"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_audiohaptic_ffi_diff.z.so",
+      "bytes": 4920,
+      "sha256": "12aa097e18a3ffa2ee6ce79e7e815dc46855ccce7ef83fda7711f3d302795168"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_effect_kit_ffi_diff.z.so",
+      "bytes": 5096,
+      "sha256": "a5fabe7ad6eda7628e357984f35d51442e19de1da17ca965ca409de85bdada4b"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_context_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "591a965eb14329c8e49987d1c34a3cae44d5d5edf5c7f10457084bf73c097383"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_uniform_type_descriptor_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "9a8e2cc9e8e18105008f5a93123e7e95c19eec6b821442e0828a24ebfe9447aa"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_appAccount_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "27a34365b66084dca3fcce090bce779e610bc3cbcdfff6a1028fbb9950c7e35d"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_camera_picker_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "1e38dece1844a64a6d40cc0f468098eddd12fad71f7d704e878b84a5ec1f26e0"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_multimedia_audio_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "433cfb1412cbca8d0af16875fc111df6af3f3c7c80a3a4a6aab2c5b7f6a9e87d"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_bluetooth_ble_ffi_diff.z.so",
+      "bytes": 6616,
+      "sha256": "87a5d34d895532bd723fe48ba4f9de8a0f64c2de6ff0335951ea71feee1b73b8"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_nfc_cardemulation_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "ca22f04bbef128fac4c2ea00e53f538f2be901b4118714e3f4ad0e2083756144"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_extensionkit_native_diff.z.so",
+      "bytes": 4152,
+      "sha256": "dcff9896d0049cceff391e38f250588f830a63e1f2ae2f2e1ebd2964dd272d1a"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_radio_ffi_diff.z.so",
+      "bytes": 4744,
+      "sha256": "6600430c5c5ea40850f083cffd3090ca96600488f860d7a4d736ad5934a302e3"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_errormanager_ffi_diff.z.so",
+      "bytes": 4232,
+      "sha256": "3246cdd1546fba530bbf6e0823f564acab1c8eb9b0063c80d6c0161592318bf1"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_sensor_ffi_diff.z.so",
+      "bytes": 4888,
+      "sha256": "419a7795127716d72826f41759e755950f397b1641037c117a081782bf197db9"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_picker_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "883eb422645a8fd41821aa9c56c91d4d4601713f76f40c105b422c041aa65ac7"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_distributed_account_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "31572d7da789959feff453ee027181ad4a08f27f1df699b50818d0c206f70b54"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_frontend_ohos_diff.z.so",
+      "bytes": 90664,
+      "sha256": "c5eeccd9973905b5bafe42a0e0182d81942cd6c9d7320888922ae0d39f2f9401"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_photoaccesshelper_ffi_diff.z.so",
+      "bytes": 8984,
+      "sha256": "51258c9f65dce8114586674ade5e41a6a0aab56f34a060b7b26a501f6faa9804"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_bluetooth_a2dp_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "b89c8f38f8b64d6e53755124c2a1b0857bcb28c9e0d5e06973ae8c2af69db556"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_faultlogger_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "ab476fac56eb3e8c757c0b8335d166366ce35afd9e12169a65e8ca13209d85f6"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_ability_access_ctrl_ffi_diff.z.so",
+      "bytes": 4312,
+      "sha256": "9119a9a40efdbe8412e3c60115837dcf92ef52a7cc0d30713435a32194eb4fa5"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_radio_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "7666c24880b94556a9dd19aac714e808f2d57babf7dd8e98bbaa5d7c29b9437d"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_userauth_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "c498d673043f789515636a606c80e6ed849044592019cc50954005fae7e8cdc1"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_hidebug_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "0b50022f991b014eba18d7db9248e0262d7d1d88e1b6538a5855c25f48ab2f18"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_avscreen_capture_ffi_diff.z.so",
+      "bytes": 4872,
+      "sha256": "d2e2f477d329e7300cf7c98cdb33056e6ab600f555577125a7fe2d38f54704e0"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_sim_ffi_diff.z.so",
+      "bytes": 5128,
+      "sha256": "2ff061a6ebf688e3439b64c1dd0de6e0efa79c01bb1133809ab6fab8c24cf44e"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcontact_cj_diff.z.so",
+      "bytes": 4664,
+      "sha256": "d84129de83c4203ccbf22008142d7be8f173c7de89cac8fe7c944954a5c85f70"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_advertising_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "503dcc6630ee0fc0393768eab6c5ad7b6a4151c15616b2aaa5708b10f2fd374f"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_cert_ffi_diff.z.so",
+      "bytes": 10856,
+      "sha256": "13e6b8793bb475b1a93d33ab0c026257b492acb3d5e405f9ac03235855c57b0d"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_metadatahelper_ffi_diff.z.so",
+      "bytes": 4936,
+      "sha256": "54297b68f4fba18fbd15ffc34d5979be7a8fdf35df154a6f33b67254b0ac2fe6"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_osaccount_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "dc58fc097b709759424f677235299a8a01895cad6f18ef52eb1ad54d24f6f12a"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_photo_editor_extension.z.so",
+      "bytes": 4040,
+      "sha256": "0e15ac719ece9f9548e494500cc0912aa8d278b482731fd888d7957e44ffa799"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libabilitykit_native_diff.z.so",
+      "bytes": 5336,
+      "sha256": "66a0f8dec49553a597e7d884cb091f59be48fca697b7768b58d277bcdb60f09f"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_media_avrecorder_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "3a5d19863fb0de5f78b6ecc19870dae974e3c1e72c39a351064d80eca5d33e37"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_action_extension.z.so",
+      "bytes": 4024,
+      "sha256": "04e7845fe10cd5973c9aff8550aff100dd1fadab6bfd9dd282b3c418d40443fc"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_display_ffi_diff.z.so",
+      "bytes": 5064,
+      "sha256": "d35cc33f1d4e5742b6f90ad9e63945885db488c3e5530509f0b8c5f8cc2674ba"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_image_ffi_diff.z.so",
+      "bytes": 5720,
+      "sha256": "a745ee93fcf51f93ed28ee7022554887aae4461735b404c991dc52e13b47a0d3"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_statvfs_ffi_diff.z.so",
+      "bytes": 4216,
+      "sha256": "29ca726cc906b029bc914a765111038898d8d38f0055273c98baf7516af5b63b"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_webview_ffi_diff.z.so",
+      "bytes": 20520,
+      "sha256": "11e382dc1337c6582b138b7fd3ff3bb9ff19f57cb817f395d1b385c44ed3b05f"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_battery_info_ffi_diff.z.so",
+      "bytes": 4776,
+      "sha256": "462ce0d33d27cc0d58fdb0ec98e1ca3eaf844e2957fc54f75d75588b7aab4068"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_effect_kit_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "4e36701b5c5410734b7a9de72f7b755a30953a5411490c66194a79fa6eb953b7"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_file_fs_ffi_diff.z.so",
+      "bytes": 4792,
+      "sha256": "fdbdf8cbe314a29b4ea588f88e2a51c9dfd98f18b5b0f45b01eabfc1ed3c1a74"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_screen_lock_file_manager_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "ea328f046bc8b9a4f99c9a9e836437b42174975bc924004685d212d42ebb7eed"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_cert_manager_ffi_diff.z.so",
+      "bytes": 5848,
+      "sha256": "dfe57e8abe72f2478f712c823a6481b98a6a0fe6bdbcaa50fb761b340e62d433"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcjLibLoader.z.so",
+      "bytes": 4024,
+      "sha256": "fc7d1f47fe8307027b98fabf5c817d29731e5a5649105ebfc1e0d5c30ccf3c0f"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_cellular_data_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "e7c1f426f5a1080b5b38b8f22c6dd9d4f26848a9855a9b2ecbfb775f2319e0d1"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_photoaccesshelper_ffi.z.so",
+      "bytes": 4040,
+      "sha256": "68b413c4901da9dfeda68c9999057e72d4c195b85d34bef46356fb251d480d54"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_net_websocket_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "3aa19f801dc2f4aaab370eff60f00e2c574d39339da589b41449c55d23f2b0ee"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_request_ffi_diff.z.so",
+      "bytes": 4328,
+      "sha256": "c7eac660570e2614e52dd0ca7932c23faa3f65d3e3fcb950dd541da4fa89297f"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_faultlogger_ffi_diff.z.so",
+      "bytes": 4248,
+      "sha256": "49fad8012bee7d49d9beda6a0d974d619d83004d9c27fe293809c3f6312eac0b"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcontact_cj.z.so",
+      "bytes": 4024,
+      "sha256": "49f107e847011aeffba0ad1a35b748c65e3fef9ee9efd86ea8009179cb090b61"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_ui_extension_diff.z.so",
+      "bytes": 5416,
+      "sha256": "89dd151251e8e1eb3dd2fa84979a35788625589d6a9abf5bcae29db96a55b212"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_environment_diff.z.so",
+      "bytes": 4136,
+      "sha256": "187f8989bfd6b75815f866bb0aac1e3e7303a4df88847654a33ed465355b9ed1"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_cellular_data_ffi_diff.z.so",
+      "bytes": 4568,
+      "sha256": "f4bbd64f4038e046b1419661c5c8f5f0b314b196718093324d17e32de6d7fd69"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_cert_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "f285a34fef48178fafa4acbb1416ea8e110e2d617a898a1ca362de6f5b2abd51"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_ipc_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "3a55dbe2ab8033dcbbfd424cf4ce7030ffe40b28e4b78f99d03e61980a29a4c0"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_sensor_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "e9318f07d8eeac0b6ac089e2a07d857e2dedcb6032ae2a238634398aa71f670c"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_embedded_ui_extension.z.so",
+      "bytes": 4040,
+      "sha256": "8de0660d7efb9d1579d46c8a0efa56c56d6384cb98147041490beffdfe8c951c"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_cryptoframework_ffi_diff.z.so",
+      "bytes": 4216,
+      "sha256": "dcba6c2215d1273da166c13afc4592436aa2d1627dfa1433157cc76e994d08dc"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_sim_ffi.z.so",
+      "bytes": 4024,
+      "sha256": "88983b18e3da719c12ebcc89ae10f4f7afcca0a4be444e801e71b8441e02d9f9"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_multimedia_audio_ffi_diff.z.so",
+      "bytes": 9816,
+      "sha256": "52fe4113d0211d98b921e40783cefc6fcde59603bd991a76a866fb28e3aeaf24"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_settings_ffi_diff.z.so",
+      "bytes": 4392,
+      "sha256": "f6a4b2c7566fc0405ade97ac1c6a6cb19faabf0860556acec5d5c14fb9a84c02"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_multimedia_avsession_ffi_diff.z.so",
+      "bytes": 8600,
+      "sha256": "4b3e985a3710ad90e61fec878f8f1e8588e3a34f8ce5cb00fb5b35198a200582"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_ui_extension.z.so",
+      "bytes": 4024,
+      "sha256": "e9cab801d96756c46384dcde1e1d4a294e36f6ac4a0b9524b61a110437d09068"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_window_ffi_diff.z.so",
+      "bytes": 6120,
+      "sha256": "98857babfbf04a26306518bf28dc690369a1085959fc50638fbf2d52eaae3ccb"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_net_connection_ffi_diff.z.so",
+      "bytes": 4152,
+      "sha256": "21130bfee1f27bc22747bda57d22323618d1ca13639b413354ae2d79c14e63d0"
+    },
+    {
+      "entry": "libs/x86_64/ohos/libcj_share_extension_diff.z.so",
+      "bytes": 4152,
+      "sha256": "f82abab2c79bbefc2202d4ad371bf8bd84c56df5a3ce7e15c262f47d6ff54405"
+    },
+    {
+      "entry": "libs/x86_64/libark_interop_loader.so",
+      "bytes": 345200,
+      "sha256": "219880a6d0a192f5d4ce4f5b5438045e7e3848e0bce88a135f3bfca2d7ea964b"
+    },
+    {
+      "entry": "libs/x86_64/libstdx.serialization.serialization.so",
+      "bytes": 92336,
+      "sha256": "f3ef7626180a32ae2a4244367f38780c51eba8c726e31355c4a4057423309bb0"
+    }
+  ],
+  "finalAppBuild": "native-hap-build.log",
+  "nativeBuild": "native-hap-build.log"
+}

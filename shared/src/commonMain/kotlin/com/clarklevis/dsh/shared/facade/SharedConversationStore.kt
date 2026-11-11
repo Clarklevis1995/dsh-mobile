@@ -11,7 +11,7 @@ import com.clarklevis.dsh.shared.protocol.RawSessionEvent
 import com.clarklevis.dsh.shared.protocol.SessionEvent
 import com.clarklevis.dsh.shared.protocol.wireJson
 import com.clarklevis.dsh.shared.sync.AssistantChunk
-import kotlin.time.Clock
+import com.clarklevis.dsh.shared.platform.platformNowEpochMilliseconds
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -141,6 +141,9 @@ class SharedConversationStore(
     }
 
     /** 平台用它决定能否走 streaming 行内路径，否则回退到 baseline。 */
+    /** 只读附件引用查询，不复制会话投影。 */
+    fun projectedItems(sessionId: String): List<ConversationItem> = projectors[sessionId]?.items.orEmpty()
+
     fun hasProjection(sessionId: String): Boolean = projectors.containsKey(sessionId)
 
     fun hasAssistantChunks(sessionId: String): Boolean = projectors[sessionId]?.hasAssistantChunks == true
@@ -202,7 +205,7 @@ class SharedConversationStore(
     fun replaceSteeringMessages(sessionId: String, itemsJson: String): SharedMviDispatchResult = dispatch("steering") {
         require(sessionId.isNotBlank())
         val items = requireNotNull(JsonValue.fromJsonElement(wireJson.parseToJsonElement(itemsJson)).arrayValue)
-        val now = Clock.System.now().toEpochMilliseconds().toDouble()
+        val now = platformNowEpochMilliseconds().toDouble()
         val records = items.filter { it["placement"]?.stringValue == "steering" }.map { row ->
             val message = requireNotNull(row["message"])
             require(!message["id"]?.stringValue.isNullOrBlank())

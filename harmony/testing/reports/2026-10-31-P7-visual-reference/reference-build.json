@@ -1,0 +1,14 @@
+{
+  "package": "com.clarklevis.dsh.android.harmonyp7v",
+  "apkSha256": "00625fdf0d11de9f0d77cbe494039d34203da67e16d4f6202cd4a022bbea72c7",
+  "version": "1.7.12",
+  "viewportPixels": [
+    1316,
+    2832
+  ],
+  "androidDensity": 560,
+  "logicalWidth": 376,
+  "language": "zh-CN",
+  "sampling": "actual independent emulator; no user sessions altered",
+  "states": "home before pairing; light/dark same owned Host conversation; dark connected settings"
+}

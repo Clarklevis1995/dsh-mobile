@@ -1,0 +1,8 @@
+{
+  "gatewayVersion": "0.11.0",
+  "bundle": "com.clarklevis.whaleness.harmony.acceptance",
+  "hapSha256": "c6359a6131eba79cac838e6a55e9124ea24563c130a491936eca351a72b0104e",
+  "sessionId": "session-a409beda-e5e2-4f1e-a8fa-b41687eb8b85",
+  "workspacePath": "/Users/lichaofan/DeepseekHarnessProject/dsh-mobile/.harmony-validation/p1-f305f8c6",
+  "evidence": "G-real-host-native-ui"
+}

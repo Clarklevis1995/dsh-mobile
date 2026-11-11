@@ -1,0 +1,20 @@
+{
+  "root": "/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-p7-preview-ujzno8vj",
+  "bundle": "com.clarklevis.whaleness.harmony.previewp7023e04",
+  "label": "Whaleness P7",
+  "hap": "/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-p7-preview-ujzno8vj/app/entry/build/default/outputs/default/entry-default-unsigned.hap",
+  "sha256": "ce5585badae87f6e33727ee6c169763dbf52a39c176eeaf7d21e4948dedb4b88",
+  "bytes": 39352664,
+  "source": "production source; only bundle and launcher label changed",
+  "testInstrumentation": false,
+  "fixture": false,
+  "installed": true,
+  "nativeValidation": {
+    "kotlinBinaryExactMatch": true,
+    "bridgeRecompiledFromIdenticalSources": true,
+    "bridgeSourceFiles": 4,
+    "bridgeWholeFileDiffers": "independent CMake build; not expected to be reproducible across paths"
+  },
+  "target": "127.0.0.1:5559",
+  "testSmokeRemoved": true
+}

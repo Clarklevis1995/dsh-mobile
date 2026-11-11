@@ -1,0 +1,12 @@
+{
+  "name": "entry",
+  "version": "0.1.0",
+  "description": "Whaleness ArkUI entry",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {
+    "libwhaleness_bridge.so": "file:./src/main/cpp/types/libwhaleness_bridge",
+    "@lidary/markdown": "3.0.5"
+  }
+}

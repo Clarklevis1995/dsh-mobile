@@ -1,0 +1,5 @@
+{
+  "sha256": "155b12f3142b012d47ff6b36139a0e85af88a9b5f849a84895bf2438efa95122",
+  "native": "release; heartbeat history-dirty fix included",
+  "package": "com.clarklevis.whaleness.harmony.smoke"
+}

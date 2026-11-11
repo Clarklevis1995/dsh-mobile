@@ -1,0 +1,24 @@
+{
+  "jvmTests": {
+    "passed": 100,
+    "failures": 0,
+    "errors": 0
+  },
+  "nodeTests": {
+    "passed": 47,
+    "failures": 0
+  },
+  "ktlint": {
+    "passed": true,
+    "outputLines": 0
+  },
+  "clangFormat": "Google; previously verified; no later C++ edit",
+  "detekt": {
+    "passed": false,
+    "weightedIssues": 135,
+    "categories": "complexity, length, magic numbers and related structure; not suppressed globally"
+  },
+  "androidAndIosSimulatorArm64Compilation": "passed; source unchanged since recorded build",
+  "scope": "core and static checks only; no full-page V or device D",
+  "cacheHeartbeatRegression": "old implementation failed; fixed content-only revision passed"
+}

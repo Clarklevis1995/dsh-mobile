@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="whaleness.HarmonyEngineTest" tests="25" skipped="0" failures="0" errors="0" timestamp="2026-10-30T05:18:25" hostname="192.168.1.94" time="0.112">
+  <properties/>
+  <testcase name="questionUsesSharedValidationAndSingleFlight[jvm]" classname="whaleness.HarmonyEngineTest" time="0.059"/>
+  <testcase name="searchTimeoutDoesNotAutomaticallyResendSameQuery[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="independentAssistantStreamRejectsRetiredFrames[jvm]" classname="whaleness.HarmonyEngineTest" time="0.014"/>
+  <testcase name="disconnectedInteractionsRequireServerReplayBeforeResubmission[jvm]" classname="whaleness.HarmonyEngineTest" time="0.005"/>
+  <testcase name="profileValidationNormalizesMetadataAndRejectsUnsafeAddresses[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="lateHistoryCannotReplaceStreamBaselineAndExplicitOlderPageCanPrepend[jvm]" classname="whaleness.HarmonyEngineTest" time="0.006"/>
+  <testcase name="renameAndArchiveWaitForMatchingHostAcknowledgement[jvm]" classname="whaleness.HarmonyEngineTest" time="0.003"/>
+  <testcase name="changingHostsClearsPreviousCatalogAndSelection[jvm]" classname="whaleness.HarmonyEngineTest" time="0.002"/>
+  <testcase name="manualReconnectOnlyRetainsStateForSameGatewayIdentity[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="sentReceiptRemainsBoundToOriginalSessionAfterSwitch[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="rejectsUnencryptedPublicEndpoint[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="searchCoalescesQueriesAndIgnoresStaleResults[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="legacySameSequenceDeltasPreserveAllText[jvm]" classname="whaleness.HarmonyEngineTest" time="0.002"/>
+  <testcase name="splitConnectionWaitsForConversationHandshake[jvm]" classname="whaleness.HarmonyEngineTest" time="0.0"/>
+  <testcase name="approvalHasLocalizedDetailsAndOnlyExplicitSingleUseDecision[jvm]" classname="whaleness.HarmonyEngineTest" time="0.003"/>
+  <testcase name="rejectsUnexpectedGatewayBeforeCatalogRequests[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="requestIsNotAcknowledgedByAnotherSession[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="directoriesAreSingleFlightAndLateResponseCannotOverwriteNewHost[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="questionCanBeCancelledAndExpiredRequestIsRemoved[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="expiredResponseRemovesInteractionEvenAfterTimeout[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="approvalRejectAndRequestScopedTimeoutDoNotAffectMessages[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="resumePreservesVisibleConversationUntilFreshBaseline[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="workspaceCreationRequiresAcknowledgementAndPublishesReturnedWorkspace[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <testcase name="catalogLoadingEndsAfterBothSnapshotsAndTimeoutKeepsKnownRows[jvm]" classname="whaleness.HarmonyEngineTest" time="0.0"/>
+  <testcase name="invalidJsonDoesNotEchoSecret[jvm]" classname="whaleness.HarmonyEngineTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

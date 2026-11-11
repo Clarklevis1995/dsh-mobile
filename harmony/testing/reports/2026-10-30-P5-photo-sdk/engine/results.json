@@ -1,0 +1,8 @@
+{
+  "method": "F actual engine SDK on API21 ARM64 emulator",
+  "lines": [
+    "PASS 32 actual Native create / close / double-close / rejected-use cycles",
+    "PASS unrelated Native engine remains valid",
+    "DONE ENGINE probe"
+  ]
+}

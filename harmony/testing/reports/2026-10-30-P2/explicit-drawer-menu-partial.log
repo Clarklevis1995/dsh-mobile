@@ -1,0 +1,22 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-ck3_3y2s
+操作 home-settings
+操作 settings-style
+操作 appearance-dark
+操作 settings-language
+操作 language-en
+操作 settings-font
+操作 font-scale-reset
+操作 home-settings
+操作 settings-style
+操作 appearance-dark
+操作 settings-language
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 184, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 175, in main
+    if args.scenario != 'hosts': test_settings()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 66, in test_settings
+    ui.click('settings-language'); ui.wait('language-zh'); ui.screenshot('language-selected-en'); ui.click('language-zh'); ui.wait('settings-font')
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 62, in wait
+    raise AssertionError('未找到控件：' + value)
+AssertionError: 未找到控件：language-zh

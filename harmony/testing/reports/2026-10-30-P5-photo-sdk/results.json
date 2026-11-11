@@ -1,0 +1,15 @@
+{
+  "method": "F actual photo SDK on API21 ARM64 emulator",
+  "lines": [
+    "PASS EXIF 1 · orientation / corners / digest",
+    "PASS EXIF 2 · orientation / corners / digest",
+    "PASS EXIF 3 · orientation / corners / digest",
+    "PASS EXIF 4 · orientation / corners / digest",
+    "PASS EXIF 5 · orientation / corners / digest",
+    "PASS EXIF 6 · orientation / corners / digest",
+    "PASS EXIF 7 · orientation / corners / digest",
+    "PASS EXIF 8 · orientation / corners / digest",
+    "PASS large · 2048px / JPEG / <=1MiB",
+    "DONE PHOTO probe"
+  ]
+}

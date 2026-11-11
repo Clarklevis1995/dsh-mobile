@@ -1,0 +1,10 @@
+{
+  "harmonyApp/entry/src/main/ets/core/AppNavigation.ets": "d760b6e00f9bea831ef4b0bc13922163a831c1a6b1d8de1ea76180c2238b0d67",
+  "harmonyApp/entry/src/main/ets/pages/Index.ets": "211d8eb1e21340c5e9e1f479437bfc7ae2fd51bf63c74b639067fe682de2470e",
+  "harmonyApp/entry/src/main/ets/pages/ConversationPage.ets": "045015b583ead283c9598001ba95e754822feac32098b3f13955e802542a5de2",
+  "harmonyApp/entry/src/main/ets/pages/SettingsPage.ets": "9aa9fa9282f1225d153bc91adcb7fd1381ce195dfbca9882a23159b14c585f25",
+  "harmonyApp/entry/src/main/ets/pages/HostPage.ets": "8a258abcf09e353b217e7982639a0645585b74804e60ba90818067714ebbacaa",
+  "harmony/testing/product_ui.py": "630b0f8b715f5b77e5456f348da249e9ed5798c499a822886f738e1ff116dd9f",
+  "harmony/testing/gateway_fixture.py": "4a269dd0c6626c66ea08c246c3ce810881ab33217530178590b50c5c40225e56",
+  "harmony/testing/navigation.test.cjs": "c0999d9ea7e72095ab57e7afa0f967752d279a7d9efd2e93d8e53cd8f394dd42"
+}

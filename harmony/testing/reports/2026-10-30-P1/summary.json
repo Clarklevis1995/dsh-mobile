@@ -1,0 +1,48 @@
+{
+  "run": "7aa225ae",
+  "gatewayVersion": "0.11.0",
+  "capabilities": [
+    "split-channels",
+    "assistant-stream-v1",
+    "history-format-version",
+    "projection-baseline",
+    "turn-outline-v1",
+    "images",
+    "session-create",
+    "session-agent-preset",
+    "agent-team-v1",
+    "subagent-conversations-v1",
+    "commands",
+    "tasks",
+    "goals",
+    "schedule-management",
+    "plugin-management-v1",
+    "speech-input-v1",
+    "file-upload-v1",
+    "session-cancel",
+    "queue-control",
+    "session-archive",
+    "session-rename",
+    "file-downloads",
+    "file-references-v1"
+  ],
+  "sessions": [
+    {
+      "id": "session-500fdf0e-4056-489d-952a-f27a427975a6",
+      "name": "鸿蒙 P1-7aa225ae-A",
+      "records": 124,
+      "streamFrames": 1800,
+      "sequenceConflicts": 0,
+      "hasMore": true,
+      "nextBeforeSeq": 12
+    },
+    {
+      "id": "session-72a6af96-4466-4dea-8ba2-4913090c13f3",
+      "name": "鸿蒙 P1-7aa225ae-B",
+      "records": 19,
+      "streamFrames": 52,
+      "sequenceConflicts": 0,
+      "hasMore": false
+    }
+  ]
+}

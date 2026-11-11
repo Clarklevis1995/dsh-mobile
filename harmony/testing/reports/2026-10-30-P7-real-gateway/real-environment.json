@@ -1,0 +1,10 @@
+{
+  "root": "/private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-p7-owned-host-fckv4bez",
+  "port": 18897,
+  "observerPort": 18899,
+  "gatewayVersion": "0.11.1",
+  "model": "controlled local adapter; no external LLM requests",
+  "sessionId": "session-19d5ba4b-b668-4cce-9d45-df900564165e",
+  "workspace": "/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-p7-owned-host-fckv4bez/workspace",
+  "checks": "G with real Host and native smoke; no device D"
+}

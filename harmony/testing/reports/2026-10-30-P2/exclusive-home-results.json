@@ -1,0 +1,32 @@
+[
+  {
+    "state": "normal",
+    "assertion": "真实目录回包后显示本轮会话",
+    "method": "F native UI with explicit local fixture"
+  },
+  {
+    "state": "search-empty",
+    "assertion": "正文／标题均无匹配",
+    "method": "F native UI with explicit local fixture"
+  },
+  {
+    "state": "empty",
+    "assertion": "服务端空工作区的sessionIds为空",
+    "method": "F native UI with explicit local fixture"
+  },
+  {
+    "state": "loading",
+    "assertion": "本轮刷新目录延迟6秒，截图时仍有在途目录请求",
+    "method": "F native UI with explicit local fixture"
+  },
+  {
+    "state": "running",
+    "assertion": "服务端目录包含当前受控流的真实运行标记",
+    "method": "F native UI with explicit local fixture"
+  },
+  {
+    "state": "offline",
+    "assertion": "断开本轮夹具后保留当前内存会话并显示重连状态",
+    "method": "F native UI with explicit local fixture"
+  }
+]

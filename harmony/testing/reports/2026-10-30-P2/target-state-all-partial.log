@@ -1,0 +1,90 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-bhhy_4o4
+操作 home-settings
+操作 settings-style
+操作 appearance-dark
+操作 settings-language
+操作 language-en
+操作 settings-font
+操作 font-scale-reset
+操作 home-settings
+操作 settings-style
+操作 appearance-dark
+操作 settings-language
+操作 language-zh
+操作 settings-font
+操作 font-follow-system
+操作 page-back
+操作 settings-style
+操作 appearance-light
+操作 settings-about
+操作 page-back
+操作 settings-privacy
+操作 page-back
+操作 page-back
+PASS P2-08 主题、语言与150%字号在杀进程重启后保留；隐私与真实构建版本可见
+操作 home-auth
+操作 host-add
+操作 gateway-connect
+操作 gateway-cancel
+操作 page-back
+PASS P2-04-cancel 连接失败／取消后没有新增主机资料或迟到激活
+操作 home-auth
+操作 host-add
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 conversation-back
+操作 home-auth
+操作 host-edit-d52997f2-0564-4f1b-8887-734a0cfc3b67
+操作 host-save
+操作 host-add
+操作 gateway-connect
+操作 B 鸿蒙原生会话验证
+操作 conversation-back
+操作 home-auth
+操作 host-select-d52997f2-0564-4f1b-8887-734a0cfc3b67
+操作 鸿蒙原生会话验证
+操作 conversation-back
+操作 home-auth
+操作 host-select-80203c62-305b-4ba9-ae27-031265b4b446
+操作 B 鸿蒙原生会话验证
+PASS P2-05 独立网关相同会话/消息ID：A→B→A→B正文与内存草稿隔离，迟到回包不改当前主机
+操作 conversation-back
+操作 home-auth
+操作 host-select-d52997f2-0564-4f1b-8887-734a0cfc3b67
+操作 home-auth
+操作 host-edit-d52997f2-0564-4f1b-8887-734a0cfc3b67
+操作 host-save
+操作 home-auth
+操作 host-remove-80203c62-305b-4ba9-ae27-031265b4b446
+操作 host-remove-80203c62-305b-4ba9-ae27-031265b4b446
+操作 page-back
+操作 home-auth
+操作 host-edit-d52997f2-0564-4f1b-8887-734a0cfc3b67
+操作 host-save
+操作 home-auth
+操作 host-edit-d52997f2-0564-4f1b-8887-734a0cfc3b67
+操作 host-save
+PASS P2-04-identity 错误网关身份被拒绝，原凭据仍可恢复原主机，未静默降级
+PASS P2-04-part 主机别名、独立凭据、多地址失败回退、移除取消与确认；迁移另有核心测试
+操作 workspace-picker
+操作 workspace-browse
+操作 directory-harmony
+操作 workspace-create
+操作 workspace-picker
+操作 workspace-ungrouped
+操作 open-sidebar
+操作 重命名
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 183, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 175, in main
+    if args.scenario != 'settings': test_hosts_and_workspace()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 139, in test_hosts_and_workspace
+    ui.click('重命名', 'text'); ui.input('session-rename-input', 'P2 重命名验证'); ui.click('session-rename-save')
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 93, in click
+    row, x, y = self.control(value, key, scroll)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 77, in control
+    row = self.wait(value, key)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 62, in wait
+    raise AssertionError('未找到控件：' + value)
+AssertionError: 未找到控件：重命名

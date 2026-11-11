@@ -1,0 +1,9 @@
+{
+  "method": "F actual audio SDK on isolated API21 emulator",
+  "lines": [
+    "PASS actual microphone permission",
+    "PASS actual AudioCapturer 16000Hz / mono / S16LE",
+    "PASS release before capture; no audio collected",
+    "DONE AUDIO probe"
+  ]
+}

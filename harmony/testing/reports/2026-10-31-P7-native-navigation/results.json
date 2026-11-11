@@ -1,0 +1,22 @@
+[
+  {
+    "task": "native-reading-anchor",
+    "detail": "聊天出栈重建后保留内存草稿和分页历史阅读锚点，位置偏差不超过5px"
+  },
+  {
+    "task": "native-trajectory-gesture",
+    "detail": "更多菜单进入轨迹的独立 NavDestination，系统边缘逐级返回聊天且保留草稿"
+  },
+  {
+    "task": "native-host-edit",
+    "detail": "主机编辑侧滑放弃未保存更改，保存返回原列表，再逐级回设置与首页"
+  },
+  {
+    "task": "native-conversation-gesture",
+    "detail": "聊天出栈重入保留草稿，抽屉先关闭，待处理按聊天或首页真实来源返回"
+  },
+  {
+    "task": "native-directory-gesture",
+    "detail": "目录侧滑回工作区，工具栏返回与系统返回共享原生栈"
+  }
+]

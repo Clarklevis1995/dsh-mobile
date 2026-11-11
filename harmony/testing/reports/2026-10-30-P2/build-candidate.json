@@ -1,0 +1,31 @@
+{
+  "bundle": {
+    "bundleName": "com.clarklevis.whaleness.harmony",
+    "vendor": "Whaleness",
+    "versionCode": 1,
+    "versionName": "0.1.0",
+    "icon": "$media:app_icon",
+    "label": "$string:app_name",
+    "configuration": "$profile:configuration"
+  },
+  "hap": "harmonyApp/entry/build/default/outputs/default/entry-default-unsigned.hap",
+  "hapSha256": "bd349497b79195d3d59b39358d70aed45a20f23d1f9bcb502558793d8985177a",
+  "hapBytes": 14515411,
+  "productionUiSourceFiles": 30,
+  "productionUiSourceDigest": "2eef5577e3cb37e48db205a9dd246829101292998e94dbc009c68b7e9a8fe911",
+  "coreTests": {
+    "jvm": 25,
+    "arkTs": 15,
+    "failures": 0
+  },
+  "nativeValidation": "existing current Kotlin/Native artifact; UI-only changes after latest publishNative",
+  "uiValidation": {
+    "settingsHosts": "latest-settings-hosts-verified.json",
+    "catalog": "latest-catalog-verified.json",
+    "exclusiveDrawer": "exclusive-drawer-results.json",
+    "exclusiveHome": "exclusive-home-results.json",
+    "limits": "full V, physical font settings, wide combinations, restore protocol remain open"
+  },
+  "signing": "unsigned simulator candidate; physical signing not verified",
+  "detekt": "53 existing findings, not passed"
+}

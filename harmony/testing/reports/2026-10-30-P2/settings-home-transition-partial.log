@@ -1,0 +1,39 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-o01as_32
+操作 home-settings
+操作 settings-style
+操作 appearance-dark
+操作 settings-language
+操作 language-en
+操作 settings-font
+操作 font-scale-reset
+操作 home-settings
+操作 settings-style
+操作 appearance-dark
+操作 settings-language
+操作 language-zh
+操作 settings-font
+操作 font-follow-system
+操作 page-back
+操作 settings-style
+操作 appearance-light
+操作 settings-about
+操作 page-back
+操作 settings-privacy
+操作 page-back
+操作 page-back
+PASS P2-08 主题、语言与150%字号在杀进程重启后保留；隐私与真实构建版本可见
+操作 home-auth
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 182, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 174, in main
+    if args.scenario != 'settings': test_hosts_and_workspace()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 93, in test_hosts_and_workspace
+    ui.click('home-auth'); ui.wait('host-add'); ui.click('host-add')
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 93, in click
+    row, x, y = self.control(value, key, scroll)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 77, in control
+    row = self.wait(value, key)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 62, in wait
+    raise AssertionError('未找到控件：' + value)
+AssertionError: 未找到控件：home-auth

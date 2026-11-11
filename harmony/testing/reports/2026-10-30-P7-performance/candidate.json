@@ -1,0 +1,6 @@
+{
+  "bundle": "com.clarklevis.whaleness.harmony.smoke",
+  "mode": "debug HAP + optimized release Native",
+  "hapSha256": "a577fce06f9e5b8a10cced54d135223de99f12284fb7d9b0170aceafd9193e02",
+  "candidateRun": "harmony-product-p2-rof8zvx7"
+}

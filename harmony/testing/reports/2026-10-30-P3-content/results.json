@@ -1,0 +1,22 @@
+[
+  {
+    "task": "P3-table-F",
+    "detail": "原生表格排版、对齐、中文长单元格、复制纯文本矩阵和原生预览返回通过"
+  },
+  {
+    "task": "P3-code-F",
+    "detail": "Kotlin 高亮代码卡片、展开收起、中文/emoji/制表符/长行原文复制一致"
+  },
+  {
+    "task": "P3-text-selection-F",
+    "detail": "标题、行内样式、列表/任务列表、引用、分隔线原生渲染；跨段落选择页及全选复制可操作"
+  },
+  {
+    "task": "P3-trajectory-F",
+    "detail": "共享真实事件投影、对话/轨迹切换、模型/工具过滤与原生详情返回通过"
+  },
+  {
+    "task": "P3-native-stream-F",
+    "detail": "正式 Native 协议到原生 Markdown Worker 的连续增量与终帧显示通过"
+  }
+]

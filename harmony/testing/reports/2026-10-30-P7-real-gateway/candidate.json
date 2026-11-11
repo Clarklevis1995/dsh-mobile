@@ -1,0 +1,8 @@
+{
+  "bundleId": "com.clarklevis.whaleness.harmony.smoke",
+  "hapSha256": "2bfb916f26a6a1528f38bb167a0b9b69bd6862f5046cba70679e303b6a861bfe",
+  "gateway": "0.11.1",
+  "provider": "controlled local adapter; no external model calls",
+  "port": 18897,
+  "observer": 18899
+}

@@ -1,0 +1,74 @@
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:compileKotlinOhosArm64 UP-TO-DATE
+> Task :shared:xcodeVersion UP-TO-DATE
+> Task :shared:linkDebugSharedOhosArm64 UP-TO-DATE
+> Task :shared:publishNative UP-TO-DATE
+
+BUILD SUCCESSFUL in 400ms
+4 actionable tasks: 4 up-to-date
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+install completed in 0s 29ms
+> hvigor UP-TO-DATE :entry:default@PreBuild...  
+> hvigor Finished :entry:default@CreateModuleInfo... after 1 ms 
+> hvigor UP-TO-DATE :entry:default@GenerateMetadata...  
+> hvigor Finished :entry:default@ConfigureCmake... after 5 ms 
+> hvigor UP-TO-DATE :entry:default@MergeProfile...  
+> hvigor UP-TO-DATE :entry:default@CreateBuildProfile...  
+> hvigor Finished :entry:default@PreCheckSyscap... after 1 ms 
+> hvigor Finished :entry:default@GeneratePkgContextInfo... after 3 ms 
+> hvigor Finished :entry:default@ProcessIntegratedHsp... after 1 ms 
+> hvigor Finished :entry:default@BuildNativeWithCmake... after 6 ms 
+> hvigor UP-TO-DATE :entry:default@MakePackInfo...  
+> hvigor Finished :entry:default@SyscapTransform... after 6 ms 
+> hvigor UP-TO-DATE :entry:default@ProcessProfile...  
+> hvigor UP-TO-DATE :entry:default@ProcessRouterMap...  
+> hvigor UP-TO-DATE :entry:default@ProcessShareConfig...  
+> hvigor Finished :entry:default@ProcessStartupConfig... after 1 ms 
+> hvigor UP-TO-DATE :entry:default@ProcessResource...  
+> hvigor UP-TO-DATE :entry:default@GenerateLoaderJson...  
+> hvigor UP-TO-DATE :entry:default@CompileResource...  
+> hvigor Finished :entry:default@BuildJS... after 2 ms 
+> hvigor Finished :entry:default@BuildNativeWithNinja... after 17 ms 
+> hvigor UP-TO-DATE :entry:default@ProcessLibs...  
+> hvigor UP-TO-DATE :entry:default@DoNativeStrip...  
+> hvigor UP-TO-DATE :entry:default@CacheNativeLibs...  
+> hvigor WARN: WARN: ArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/entryability/EntryAbility.ets:9:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/CredentialStore.ets:45:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PreferenceStore.ets:21:25
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PreferenceStore.ets:25:25
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PreferenceStore.ets:35:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PreferenceStore.ets:36:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ConversationPage.ets:112:10
+ 'onScroll' has been deprecated.
+
+WARN: ArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/Index.ets:120:5
+ Function may throw exceptions. Special handling is required.
+
+
+> hvigor Finished :entry:default@CompileArkTS... after 2 s 528 ms 
+> hvigor UP-TO-DATE :entry:default@GeneratePkgModuleJson...  
+> hvigor Finished :entry:default@ProcessCompiledResources... after 1 ms 
+> hvigor Finished :entry:default@PackageHap... after 35 ms 
+> hvigor Finished :entry:default@PackingCheck... after 4 ms 
+> hvigor WARN: No signingConfig found for product default
+> hvigor Finished :entry:default@SignHap... after 1 ms 
+> hvigor Finished :entry:default@CollectDebugSymbol... after 1 ms 
+> hvigor Finished :entry:assembleHap... after 1 ms 
+> hvigor BUILD SUCCESSFUL in 3 s 860 ms 

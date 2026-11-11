@@ -1,0 +1,7 @@
+{
+  "modelVersion": "6.0.0",
+  "name": "whaleness-harmony",
+  "version": "0.1.0",
+  "description": "Whaleness 鸿蒙原生客户端",
+  "dependencies": {}
+}

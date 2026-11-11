@@ -1,0 +1,8 @@
+测试产物：/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/whaleness-smoke-uwcr9x6p
+操作 home-auth
+操作 host-add
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 message-send
+PASS 前后台恢复、断线重连、保留草稿
+全部模拟器回归通过

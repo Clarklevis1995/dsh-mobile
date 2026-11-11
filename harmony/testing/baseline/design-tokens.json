@@ -1,0 +1,53 @@
+{
+  "colors": {
+    "navy": "#06172B",
+    "navyRaised": "#0D2440",
+    "ocean": "#2E6BE6",
+    "mist": "#BFD6FF",
+    "ink": "#0E131A",
+    "paper": "#F9FAFC",
+    "purple": "#7A54C7",
+    "orange": "#F07D14",
+    "amber": "#FFAD1F",
+    "success": "#2EB85C"
+  },
+  "layout": {
+    "phoneContentPadding": 20,
+    "heroFontSize": 32,
+    "subtitleFontSize": 14,
+    "minimumTouchTarget": 48,
+    "conversationToolbar": 54,
+    "settingsTitleFontSize": 17,
+    "wideBreakpoint": 900,
+    "wideMinimumHeight": 500,
+    "wideMaximumFontScale": 1.5,
+    "pageMaximumWidth": 1040,
+    "workspaceMaximumWidth": 1440
+  },
+  "typography": "fp 随系统缩放；自定义字号范围 0.8～1.5 倍，来自 AppearanceSettings.normalizeFontScale",
+  "resources": {
+    "whale": "DeepSeekHarnessMobile/Resources/Assets.xcassets/HeroWhaleMask.imageset/hero-whale.svg",
+    "wordmark": "DeepSeekHarnessMobile/Resources/Assets.xcassets/WhalenessHarnessWordmark.imageset/whaleness-harness.svg",
+    "icons": "androidApp/src/main/res/drawable/ic_*.xml"
+  },
+  "licenses": "项目 MIT；Montserrat OFL 与单独第三方许可随对应原资源保留，不复制 iOS/Android 实现专用库",
+  "themeMapping": {
+    "source": "androidApp/src/main/kotlin/com/clarklevis/dsh/android/ui/DshTheme.kt + SettingsScreen.kt",
+    "background": {
+      "light": "#F9FAFC",
+      "dark": "#090D13"
+    },
+    "settingsBackground": {
+      "light": "#F1F1F6",
+      "dark": "#0D1118"
+    },
+    "surface": {
+      "light": "#FFFFFF",
+      "dark": "#111720"
+    },
+    "accent": {
+      "light": "#2E6BE6",
+      "dark": "#7EA8FF"
+    }
+  }
+}

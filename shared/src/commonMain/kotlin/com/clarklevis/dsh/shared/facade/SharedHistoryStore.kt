@@ -431,7 +431,11 @@ class SharedHistoryStore(
         }
     }
 
-    fun cachedWindowJson(sessionId: String, historyFormatVersion: Int?, persistentCursor: Int?): String? {
+    fun cachedWindowJson(sessionId: String, historyFormatVersion: Int?, persistentCursor: Int?): String? =
+        cachedWindowJsonWithinBudget(sessionId, historyFormatVersion, persistentCursor, ChatCacheWindowPolicy.DEFAULT_MAXIMUM_BYTES, ChatCacheWindowPolicy.DEFAULT_MAXIMUM_EVENTS)
+
+    /** 平台可降低内存／磁盘窗口预算，原三参数入口和格式保持兼容。 */
+    fun cachedWindowJsonWithinBudget(sessionId: String, historyFormatVersion: Int?, persistentCursor: Int?, maximumBytes: Long, maximumEvents: Int): String? {
         if (sessionId in cachedSequences) return null
         val records = eventsBySession[sessionId] ?: return null
         val session = state.sessions[sessionId] ?: return null
@@ -444,7 +448,9 @@ class SharedHistoryStore(
                 hasMore = session.hasMore,
                 nextBeforeSequence = session.nextBeforeSequence
             ),
-            records
+            records,
+            maximumBytes,
+            maximumEvents
         )
     }
 
@@ -491,52 +497,54 @@ class SharedHistoryStore(
         operation: String,
         fallbackSessionId: String?,
         block: () -> Transition
-    ): SharedMviDispatchResult = try {
-        val transition = block()
-        val sessionId = transition.sessionId ?: fallbackSessionId
-        require(!sessionId.isNullOrBlank()) { "sessionId must not be blank" }
-        val unchangedData = transition.state == state &&
-            transition.eventsBySession == eventsBySession &&
-            transition.cacheSequences == cachedSequences
-        if (unchangedData && transition.result == HistoryResult.None && transition.eventPatch == null) {
-            return SharedMviDispatchResult(true, null, null)
-        }
-        val patch = SharedHistoryPatch(
-            sessionId = sessionId,
-            session = transition.state.sessions[sessionId],
-            pendingSessionId = transition.state.pendingSessionId,
-            pendingSessionChanged = transition.state.pendingSessionId != state.pendingSessionId,
-            eventPatch = transition.eventPatch,
-            outcome = transition.result.outcome(),
-            failureCode = (transition.result as? HistoryResult.Failed)?.code?.name,
-            completedEventCount = (transition.result as? HistoryResult.Completed)?.eventCount,
-            completedByteCount = (transition.result as? HistoryResult.Completed)?.byteCount,
-            completedHasMore = (transition.result as? HistoryResult.Completed)?.hasMore
-        )
-        val effect = transition.result.effect(sessionId)
-        val statePayload = wireJson.encodeToString(patch)
-        val effectsPayload = wireJson.encodeToString(effect?.let(::listOf).orEmpty())
-        state = transition.state
-        eventsBySession = transition.eventsBySession
-        cachedSequences = transition.cacheSequences
-        if (transition.eventPatch != null) {
-            val sequence = events.currentSequence + 1
-            projectionSnapshots[sequence] = SharedHistoryProjectionSnapshot(
-                sessionId, sequence, transition.eventsBySession[sessionId].orEmpty()
+    ): SharedMviDispatchResult {
+        return try {
+            val transition = block()
+            val sessionId = transition.sessionId ?: fallbackSessionId
+            require(!sessionId.isNullOrBlank()) { "sessionId must not be blank" }
+            val unchangedData = transition.state == state &&
+                transition.eventsBySession == eventsBySession &&
+                transition.cacheSequences == cachedSequences
+            if (unchangedData && transition.result == HistoryResult.None && transition.eventPatch == null) {
+                return SharedMviDispatchResult(true, null, null)
+            }
+            val patch = SharedHistoryPatch(
+                sessionId = sessionId,
+                session = transition.state.sessions[sessionId],
+                pendingSessionId = transition.state.pendingSessionId,
+                pendingSessionChanged = transition.state.pendingSessionId != state.pendingSessionId,
+                eventPatch = transition.eventPatch,
+                outcome = transition.result.outcome(),
+                failureCode = (transition.result as? HistoryResult.Failed)?.code?.name,
+                completedEventCount = (transition.result as? HistoryResult.Completed)?.eventCount,
+                completedByteCount = (transition.result as? HistoryResult.Completed)?.byteCount,
+                completedHasMore = (transition.result as? HistoryResult.Completed)?.hasMore
             )
+            val effect = transition.result.effect(sessionId)
+            val statePayload = wireJson.encodeToString(patch)
+            val effectsPayload = wireJson.encodeToString(effect?.let(::listOf).orEmpty())
+            state = transition.state
+            eventsBySession = transition.eventsBySession
+            cachedSequences = transition.cacheSequences
+            if (transition.eventPatch != null) {
+                val sequence = events.currentSequence + 1
+                projectionSnapshots[sequence] = SharedHistoryProjectionSnapshot(
+                    sessionId, sequence, transition.eventsBySession[sessionId].orEmpty()
+                )
+            }
+            val event = events.emitTransition(
+                transactionId = "history-$operation:${events.currentSequence + 1}",
+                statePayloadJson = statePayload,
+                effectsJson = effectsPayload
+            )
+            SharedMviDispatchResult(true, event.transactionId, event.sequence)
+        } catch (error: Throwable) {
+            if (operation == "cache") chatCacheLog("restore-failed", "reason=invalid-window", warning = true)
+            val code = "history-$operation-failed"
+            val message = error.message ?: error::class.simpleName ?: "unknown-error"
+            val event = events.emitError("$code:${events.currentSequence + 1}", code, message)
+            SharedMviDispatchResult(false, event.transactionId, event.sequence, code, message)
         }
-        val event = events.emitTransition(
-            transactionId = "history-$operation:${events.currentSequence + 1}",
-            statePayloadJson = statePayload,
-            effectsJson = effectsPayload
-        )
-        SharedMviDispatchResult(true, event.transactionId, event.sequence)
-    } catch (error: Throwable) {
-        if (operation == "cache") chatCacheLog("restore-failed", "reason=invalid-window", warning = true)
-        val code = "history-$operation-failed"
-        val message = error.message ?: error::class.simpleName ?: "unknown-error"
-        val event = events.emitError("$code:${events.currentSequence + 1}", code, message)
-        SharedMviDispatchResult(false, event.transactionId, event.sequence, code, message)
     }
 
     private inner class Transition(

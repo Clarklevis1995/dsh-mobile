@@ -38,7 +38,7 @@ import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import com.clarklevis.dsh.shared.protocol.JsonValue
 import com.clarklevis.dsh.shared.protocol.SessionEvent
 import com.clarklevis.dsh.shared.protocol.wireJson
-import kotlin.time.Clock
+import com.clarklevis.dsh.shared.platform.platformNowEpochMilliseconds
 import kotlinx.serialization.json.decodeFromJsonElement
 
 data class SharedMobileSnapshot(
@@ -101,7 +101,7 @@ data class SharedMobileApprovalSubmission(
  */
 class SharedMobileStore(
     private val nowEpochSeconds: () -> Double = {
-        Clock.System.now().toEpochMilliseconds().toDouble() / 1_000.0
+        platformNowEpochMilliseconds().toDouble() / 1_000.0
     }
 ) {
     private var sessionListState = SessionListState()

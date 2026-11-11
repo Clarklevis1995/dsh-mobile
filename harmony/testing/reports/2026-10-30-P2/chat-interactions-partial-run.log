@@ -1,0 +1,51 @@
+测试产物：/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/whaleness-smoke-jooqw42c
+操作 home-auth
+操作 host-add
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 history-older
+PASS 配对、双通道、快照、历史分页
+操作 另一个会话
+操作 鸿蒙原生会话验证
+操作 message-send
+PASS 会话草稿隔离、发送确认、流式输出
+操作 message-send
+操作 停止
+PASS 停止生成
+操作 message-send
+操作 interaction-inbox
+操作 question-option-q-8-0-0
+操作 question-option-q-8-1-0
+操作 question-option-q-8-1-1
+操作 question-submit-q-8
+操作 interaction-inbox
+PASS 多题回答：单选、多选、自定义答案
+操作 message-send
+操作 interaction-inbox
+操作 question-cancel-q-9
+操作 interaction-inbox
+PASS 取消回答
+操作 message-send
+操作 interaction-inbox
+操作 approval-allow-a-10
+操作 interaction-inbox
+操作 message-send
+操作 interaction-inbox
+操作 approval-reject-a-11
+操作 interaction-inbox
+PASS 工具参数与原因展示、单次允许、拒绝
+操作 message-send
+操作 interaction-inbox
+操作 approval-allow-a-12
+操作 interaction-inbox
+操作 message-send
+PASS 审批超时可见、禁止自动重试、服务端解决后移除
+操作 message-send
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 323, in <module>
+    main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 309, in main
+    run(ui)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 262, in run
+    assert (ui.folder / 'gateway.log').read_text().count('request message') == message_count + 1, '恢复后不应自动重发消息'
+NameError: name 'message_count' is not defined

@@ -1,0 +1,25 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-_ad1jcj2
+操作 home-settings
+操作 settings-style
+操作 appearance-dark
+操作 settings-language
+操作 language-en
+操作 settings-font
+操作 font-follow-system
+操作 home-settings
+操作 settings-style
+操作 appearance-dark
+操作 settings-language
+操作 language-zh
+操作 settings-font
+操作 font-follow-system
+操作 page-back
+操作 settings-style
+操作 appearance-light
+操作 settings-about
+操作 page-back
+操作 settings-privacy
+操作 page-back
+操作 page-back
+PASS P2-08 主题、语言与150%字号在杀进程重启后保留；隐私与真实构建版本可见
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-_ad1jcj2

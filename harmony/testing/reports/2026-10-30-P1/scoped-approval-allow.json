@@ -1,0 +1,11 @@
+{
+  "run": "f305f8c6",
+  "workspaceId": "bd845b04-09d3-42dd-a2e8-4fb2841ff585",
+  "sessionId": "session-a409beda-e5e2-4f1e-a8fa-b41687eb8b85",
+  "workspace": "/Users/lichaofan/DeepseekHarnessProject/dsh-mobile/.harmony-validation/p1-f305f8c6",
+  "rpcId": "f610156b-2692-401c-bfd4-b628f9740d97",
+  "requestedScope": "workspace-write",
+  "decision": "allowed-once",
+  "beforeExists": false,
+  "afterContent": "HARMONY_SCOPED_TEST"
+}

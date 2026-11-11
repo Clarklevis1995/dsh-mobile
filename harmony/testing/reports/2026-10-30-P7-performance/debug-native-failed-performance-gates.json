@@ -1,0 +1,35 @@
+{
+  "checks": [
+    {
+      "label": "尾部首屏",
+      "passed": true
+    },
+    {
+      "label": "挂载数量",
+      "passed": true
+    },
+    {
+      "label": "桥接 P95",
+      "passed": false
+    },
+    {
+      "label": "镜像更新 P95",
+      "passed": true
+    },
+    {
+      "label": "编辑回调 P95",
+      "passed": true
+    },
+    {
+      "label": "真实 PSS 峰值",
+      "passed": true
+    },
+    {
+      "label": "滚动后 PSS 增量",
+      "passed": true
+    }
+  ],
+  "failures": [
+    "桥接 P95"
+  ]
+}

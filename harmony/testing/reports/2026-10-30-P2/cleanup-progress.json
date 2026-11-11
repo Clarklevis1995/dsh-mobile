@@ -1,0 +1,56 @@
+{
+  "ownControllers": [
+    18885,
+    18887,
+    18893,
+    18895,
+    18896
+  ],
+  "ownControllersStopped": true,
+  "isolatedHost18891Stopped": true,
+  "primaryAcceptanceDevicesRevoked": 1,
+  "ownedApprovalOutputRemovedAfterExactContentCheck": true,
+  "userServices3080_3081_3082": "not stopped or restarted",
+  "remaining": "none from this run",
+  "deviceCleanup": [
+    {
+      "ownTestPackage": "com.clarklevis.whaleness.harmony.smoke",
+      "uninstallExitCode": 0
+    },
+    {
+      "ownTestPackage": "com.clarklevis.whaleness.harmony.acceptance",
+      "uninstallExitCode": 0
+    },
+    {
+      "ownTestPackage": "com.clarklevis.whaleness.harmony.restart",
+      "uninstallExitCode": 0
+    },
+    {
+      "ownTestPackage": "com.clarklevis.whaleness.harmony.compatibility",
+      "uninstallExitCode": 0
+    },
+    {
+      "ownTestPackage": "com.clarklevis.whaleness.harmony.gallery",
+      "uninstallExitCode": 0
+    },
+    {
+      "ownTestPackage": "com.clarklevis.whaleness.harmony.brandprobe",
+      "uninstallExitCode": 0
+    },
+    {
+      "ownRoute": 18885,
+      "removeExitCode": 0
+    },
+    {
+      "ownAndroidBaselinePackage": "uninstalled",
+      "exitCode": 0
+    }
+  ],
+  "userServiceListeningAtEnd": {
+    "3080": true,
+    "3081": true,
+    "3082": true
+  },
+  "formalHarmonyPackage": "preserved, not overwritten",
+  "formalAndroidPackage": "preserved, debug artifact restored to 1.7.12 (33)"
+}

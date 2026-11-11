@@ -1,0 +1,74 @@
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+ohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.
+install completed in 0s 26ms
+> hvigor Finished :entry:clean... after 13 ms 
+> hvigor WARN: The version number of the 'entry' module does not comply with the SemVer specification.
+               This will affect the installation and publication by ohpm.
+               Make sure the value of version in the oh-package.json5 file of the module complies with the SemVer specification.
+> hvigor Finished :entry:default@PreBuild... after 111 ms 
+> hvigor Finished :entry:default@CreateModuleInfo... after 1 ms 
+> hvigor Finished :entry:default@GenerateMetadata... after 2 ms 
+> hvigor Finished :entry:default@ConfigureCmake... after 11 ms 
+> hvigor Finished :entry:default@MergeProfile... after 4 ms 
+> hvigor Finished :entry:default@CreateBuildProfile... after 1 ms 
+> hvigor Finished :entry:default@PreCheckSyscap... after 1 ms 
+> hvigor Finished :entry:default@GeneratePkgContextInfo... after 6 ms 
+> hvigor Finished :entry:default@ProcessIntegratedHsp... after 1 ms 
+> hvigor Finished :entry:default@MakePackInfo... after 2 ms 
+> hvigor Finished :entry:default@SyscapTransform... after 1 ms 
+> hvigor Finished :entry:default@ProcessProfile... after 60 ms 
+> hvigor Finished :entry:default@ProcessRouterMap... after 2 ms 
+> hvigor Finished :entry:default@ProcessShareConfig... after 2 ms 
+> hvigor Finished :entry:default@ProcessStartupConfig... after 1 ms 
+> hvigor Finished :entry:default@ProcessResource... after 2 ms 
+> hvigor Finished :entry:default@GenerateLoaderJson... after 3 ms 
+> hvigor Finished :entry:default@CompileResource... after 118 ms 
+> hvigor Finished :entry:default@BuildJS... after 1 ms 
+> hvigor Finished :entry:default@BuildNativeWithCmake... after 666 ms 
+> hvigor Finished :entry:default@BuildNativeWithNinja... after 449 ms 
+> hvigor Finished :entry:default@ProcessLibs... after 29 ms 
+> hvigor Finished :entry:default@DoNativeStrip... after 35 ms 
+> hvigor Finished :entry:default@CacheNativeLibs... after 3 ms 
+> hvigor WARN: WARN: ArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/entryability/EntryAbility.ets:9:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/core/CredentialStore.ets:45:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/core/PreferenceStore.ets:21:25
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/core/PreferenceStore.ets:25:25
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/core/PreferenceStore.ets:35:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/core/PreferenceStore.ets:36:11
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/pages/ConversationPage.ets:112:10
+ 'onScroll' has been deprecated.
+
+WARN: ArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/pages/Index.ets:120:5
+ Function may throw exceptions. Special handling is required.
+
+WARN: ArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/pages/ConversationPage.ets:86:98
+ The current component id "interaction-inbox" is duplicate with /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/pages/WorkspacePage.ets:102:100.
+WARN: ArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/pages/InteractionPage.ets:18:30
+ The current component id "interaction-inbox" is duplicate with /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-s6sjn37p/app/entry/src/main/ets/pages/WorkspacePage.ets:102:100.
+
+> hvigor Finished :entry:default@CompileArkTS... after 3 s 625 ms 
+> hvigor Finished :entry:default@GeneratePkgModuleJson... after 1 ms 
+> hvigor Finished :entry:default@ProcessCompiledResources... after 1 ms 
+> hvigor Finished :entry:default@PackageHap... after 28 ms 
+> hvigor Finished :entry:default@PackingCheck... after 3 ms 
+> hvigor WARN: No signingConfig found for product default
+> hvigor Finished :entry:default@SignHap... after 1 ms 
+> hvigor Finished :entry:default@CollectDebugSymbol... after 1 ms 
+> hvigor Finished :entry:assembleHap... after 1 ms 
+> hvigor BUILD SUCCESSFUL in 5 s 424 ms 

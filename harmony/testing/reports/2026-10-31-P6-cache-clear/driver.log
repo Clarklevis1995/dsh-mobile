@@ -1,0 +1,49 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-wppkow0w
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+输入 message-draft
+操作 conversation-back
+操作 home-settings
+操作 settings-storage
+操作 storage-refresh
+操作 storage-refresh
+操作 鸿蒙原生会话验证
+输入 message-draft
+操作 鸿蒙原生会话验证
+PASS P6-offline-cold-F 实际进程终止后，无网冷启动恢复稳定历史和文字草稿；离线修改再次杀进程保留，发送禁用
+操作 conversation-back
+操作 home-settings
+操作 settings-storage
+操作 storage-search
+输入 offline-search-input
+操作 offline-search-session
+操作 offline-result-harmony-smoke-24
+操作 offline-result-harmony-smoke-24
+PASS P6-offline-search-F 真实索引中文查询、主机／当前会话范围及消息定位，定位不覆盖草稿
+PASS P6-network-takeover-F 同一受控网关恢复后自动建立新快照并移除缓存标签，离线文字不被覆盖
+操作 conversation-back
+操作 page-back
+操作 storage-refresh
+操作 storage-refresh
+操作 storage-clear-history
+操作 取消
+操作 storage-refresh
+操作 storage-clear-history
+操作 confirmation-accept
+操作 storage-refresh
+操作 storage-refresh
+操作 storage-clear-drafts
+操作 取消
+操作 storage-refresh
+操作 storage-clear-drafts
+操作 confirmation-accept
+操作 storage-refresh
+操作 storage-refresh
+操作 storage-search
+输入 offline-search-input
+PASS P6-storage-clear-F 实际存储统计，清理取消、仅历史保留草稿、历史加草稿确认后归零，搜索索引同步移除；仅独立测试包当前主机，不替代临时资源租约全矩阵
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-wppkow0w

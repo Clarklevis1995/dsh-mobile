@@ -1,0 +1,18 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-n3uj_l4i
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 message-body-harmony-smoke-1004-table-all-0:table
+操作 page-back
+代码定位 0 1004 1005 older
+代码定位 1 None None older
+代码定位 2 1004 1004 older
+操作 message-body-harmony-smoke-1003-code-expand-0:code
+操作 conversation-back
+操作 鸿蒙原生会话验证
+操作 message-body-harmony-smoke-1003-code-collapse-top-0:code
+PASS P3-P7-long-reading-F 完整 160 行表格实际末行可达；千行代码展开、顶部收起入口、返回重入后仍展开；不替代横向宽表格、工具长输出和 GPU／D
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-n3uj_l4i
