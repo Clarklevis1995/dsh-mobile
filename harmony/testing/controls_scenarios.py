@@ -64,9 +64,9 @@ def run(ui, m, folder, passed):
         ui.screenshot('queue-steer-confirmed'); ui.click('message-stop')
         passed('P4-queue-steer-F', '生成中通过原生入口将指定排队项提升为插话，夹具核对请求及确认，确认后移出队列且不回填编辑草稿；不替代真实 Host 执行 G')
         return
-    ui.click('conversation-controls'); ui.wait('control-model-fixture-read')
-    ui.text('✓ 读取模型'); ui.text('构建 Agent')
+    ui.click('conversation-controls'); ui.wait('session-agent-current'); ui.text('构建 Agent')
     ui.click('session-agent-read'); ui.text('✓ 阅读 Agent')
+    ui.control('control-model-fixture-read',scroll=True);ui.text('✓ 读取模型')
     ui.click('control-model-fixture-reason'); ui.text('✓ 推理模型')
     ui.click('control-effort-high'); ui.text('✓ 高')
     ui.click('control-model-fixture-fail'); ui.text('测试模型暂不可用')
@@ -100,7 +100,8 @@ def run(ui, m, folder, passed):
     passed('P4-agent-lock-F', '首条消息确认后锁定 Agent，禁止继续切换通过')
 
     ui.navigate('conversation-back', 'home-settings'); ui.navigate('home-settings', 'settings-defaults')
-    ui.click('settings-defaults'); ui.wait('default-model-current-fixture-read')
+    ui.click('settings-defaults'); ui.wait('default-model-current-fixture-reason')
+    ui.click('control-model-fixture-read'); ui.wait('confirmation-accept'); ui.click('confirmation-accept'); ui.wait('default-model-current-fixture-read')
     ui.click('control-model-fixture-reason'); ui.wait('confirmation-accept'); ui.click('confirmation-accept'); ui.wait('default-model-current-fixture-reason')
     ui.click('default-effort-fixture-reason-high'); ui.wait('confirmation-accept'); ui.click('confirmation-accept')
     ui.navigate('page-back','settings-default-permission');ui.click('settings-default-permission');ui.wait('default-permission-workspace-write');ui.click('default-permission-workspace-write');ui.wait('confirmation-accept');ui.click('confirmation-accept');ui.text('工作区写入')

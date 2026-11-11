@@ -5,7 +5,11 @@ import { PageHeader } from '../components/DesignSystem';
 @Component
 export struct SessionControlPage {
   @ObjectLink a: Appearance;
+  @Prop @Watch('visibleChanged') active: boolean = true;
+  @Prop @Watch('visibleChanged') resumeRevision: number = 0;
+  private visibleChanged(): void { if (this.active) { this.refresh(); } }
   @Prop state: SharedState;
+  @Prop @Watch('connectionChanged') connected: boolean = false;
   @Prop features: SessionFeatureData = emptyFeatures();
   @Prop data: ControlData = emptyControls();
   @Prop isDefault: boolean = false;
@@ -13,10 +17,16 @@ export struct SessionControlPage {
   onBack: () => void = () => {};
   onAction: (command: Command) => void = () => {};
   aboutToAppear(): void { this.refresh(); }
-  private refresh(): void { const command = new Command(this.isDefault ? 'controls-defaults' : 'controls-open'); command.sessionId = this.isDefault ? undefined : this.state.selectedSessionId; this.onAction(command); }
+  private connectionChanged(): void { if (this.connected) { this.refresh(); } }
+  private refresh(): void { if (!this.active || !this.connected) { return; } const command = new Command(this.isDefault ? 'controls-defaults' : 'controls-open'); command.sessionId = this.isDefault ? undefined : this.state.selectedSessionId; this.onAction(command); }
   private current(): ControlData { return this.isDefault ? !this.data.sessionId ? this.data : emptyControls() : this.data.sessionId === this.state.selectedSessionId ? this.data : emptyControls(); }
   private selection(): ModelSelection | undefined { return this.isDefault ? this.current().defaultModel : this.current().models?.current; }
-  private canRequest(kind: string): boolean { return this.state.connected && !this.current().loading.includes(kind); }
+  private canRequest(kind: string): boolean {
+    const loading = this.current().loading;
+    return this.active && this.connected && !loading.includes(kind) &&
+      (!['select-model', 'save-default-model'].includes(kind) || !loading.includes('models')) &&
+      (kind !== 'permission' || !loading.includes('permission-options'));
+  }
   private selectModel(provider: string, model: string, effort?: string): void {
     const command = new Command(this.isDefault ? 'controls-save-model' : 'controls-model');
     command.sessionId = this.isDefault ? undefined : this.state.selectedSessionId; command.provider = provider; command.model = model; command.reasoningEffort = effort; this.onAction(command);
@@ -39,7 +49,7 @@ export struct SessionControlPage {
       PageHeader({ a: this.a, title: this.a.t(this.isDefault ? '默认配置' : '会话设置'), onBack: this.onBack })
       Scroll() {
         Column({ space: 8 }) {
-          if (!this.state.connected) { Text(this.a.t('已断开')).fontColor(this.a.muted).fontSize(this.a.font(14)).width('100%') }
+          if (!this.connected) { Text(this.a.t('已断开')).fontColor(this.a.muted).fontSize(this.a.font(14)).width('100%') }
           if (this.current().error) { Text(this.current().error).id('control-error').fontColor('#D65D64').fontSize(this.a.font(14)).width('100%') }
           if (this.current().loading.length) { LoadingProgress().id('control-loading').width(24).height(24).color(this.a.accent) }
           if (!this.isDefault && this.currentAgent().agent.supported) {
@@ -51,11 +61,16 @@ export struct SessionControlPage {
             ForEach(this.currentAgent().agent.presets, (preset: AgentPreset) => {
               Button((this.currentAgent().agent.preset === preset.id ? '✓ ' : '') + (preset.name || preset.id)).id('session-agent-' + preset.id)
                 .fontSize(this.a.font(15)).fontColor(this.a.fg).backgroundColor(this.a.surface).width('100%').height(48)
-                .enabled(this.state.connected && this.currentAgent().agent.canSelect && !preset.broken).onClick(() => this.sessionAgent(preset.id))
+                .enabled(this.connected && this.currentAgent().agent.canSelect && !preset.broken).onClick(() => this.sessionAgent(preset.id))
             }, (preset: AgentPreset) => JSON.stringify(preset))
-            if (!this.currentAgent().agent.known && !this.currentAgent().agent.loading) { Button(this.a.t('刷新 Agent')).id('session-agent-refresh').height(44).enabled(this.state.connected).onClick(() => this.agentRefresh()) }
+            if (!this.currentAgent().agent.known && !this.currentAgent().agent.loading) { Button(this.a.t('刷新 Agent')).id('session-agent-refresh').height(44).enabled(this.connected).onClick(() => this.agentRefresh()) }
           }
           this.heading('模型与思考强度')
+          if (!this.isDefault) {
+            Text(this.a.english ? 'The host also tries to save this model and reasoning choice as the default for new sessions. Other running sessions keep their configuration.' : '切换模型或思考等级后，主机会尝试同步为新会话默认值。其他已启动会话保持原配置。')
+              .id('session-model-default-note').fontSize(this.a.font(12)).lineHeight(this.a.font(18)).fontColor(this.a.muted).width('100%')
+          }
+
           if (!this.current().models?.groups.length && !this.current().loading.includes('models')) { Text(this.a.t('主机未提供可选模型')).fontColor(this.a.muted).fontSize(this.a.font(14)).width('100%') }
           ForEach(this.current().models?.groups ?? [], (group: ModelGroup) => {
             Column({ space: 6 }) {
@@ -102,7 +117,7 @@ export struct SessionControlPage {
               ForEach(this.current().metrics ?? [], (metric: ControlMetric) => { this.metric(metric.label, metric.value) }, (metric: ControlMetric) => metric.id + ":" + metric.value)
             }.padding(16).width('100%').borderRadius(20).backgroundColor(this.a.surface)
           }
-          Button(this.a.t('刷新')).id('control-refresh').height(48).width('100%').fontSize(this.a.font(15)).enabled(this.state.connected).onClick(() => this.refresh())
+          Button(this.a.t('刷新')).id('control-refresh').height(48).width('100%').fontSize(this.a.font(15)).enabled(this.connected).onClick(() => this.refresh())
         }.padding(16).width('100%').constraintSize({ maxWidth: 760 })
       }.layoutWeight(1).width('100%').align(Alignment.Top)
     }.width('100%').height('100%').backgroundColor(this.a.settingsBg)

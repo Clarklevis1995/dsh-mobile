@@ -27,6 +27,16 @@ def run(ui,m,folder,passed):
         return event.get('text') or ''.join(block.get('text','') for block in blocks if block.get('type')=='text')
     state=call('/status');assert state['gatewayVersion']==meta['gatewayVersion']=='0.12.0'
     time.sleep(2);ui.screenshot('real-home-empty-dark')
+    if os.environ.get('HARMONY_REAL_SCOPE') in ['configuration','agent-presets']:
+        # 部署基线先经原生UI恢复，再创建并执行新会话，避免上轮失败残留影响新会话的启动配置。
+        ui.navigate('home-auth','host-add');ui.navigate('host-add','gateway-payload')
+        payload=call('/bootstrap')['qrPayload'];assert isinstance(payload,str)
+        ui.input('gateway-payload',payload);ui.click('gateway-connect');ui.text('已连接',timeout=45);ui.wait('home-settings')
+        if os.environ.get('HARMONY_REAL_SCOPE')=='agent-presets':
+            from real_agent_presets_scenarios import run as agents
+            agents(ui,m,folder,passed,call,owned);return
+        from real_default_configuration_scenarios import run as configuration
+        configuration(ui,m,folder,passed,call,None,owned);return
     if os.environ.get('HARMONY_REAL_SCOPE') in ['history','history-restore','cache']:
         seed=json.loads(Path(os.environ['HARMONY_HISTORY_SEED_JSON']).read_text());assert Path(seed['root']).resolve()==owned and seed['complete']
         session=next(r for r in state['sessions'] if r['id']==seed['sessionId'])
@@ -46,9 +56,6 @@ def run(ui,m,folder,passed):
     assert isinstance(payload,str)
     ui.input('gateway-payload',payload);ui.click('gateway-connect');ui.text('已连接',timeout=45)
     ui.click('session-'+session['id']);ui.wait('message-draft')
-    if os.environ.get('HARMONY_REAL_SCOPE') == 'configuration':
-        from real_default_configuration_scenarios import run as configuration
-        configuration(ui,m,folder,passed,call,session,owned);return
     if os.environ.get('HARMONY_REAL_SCOPE') == 'cache':
         from real_cache_scenarios import run as caching
         caching(ui,m,folder,passed,call,session);return

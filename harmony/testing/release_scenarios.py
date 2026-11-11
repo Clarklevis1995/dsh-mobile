@@ -34,6 +34,13 @@ def run(ui,m,folder,passed):
     check('quota','检查过于频繁')
     check('empty','尚未找到公开发布')
     check('invalid','检查更新失败')
+    state.write_text('delayed');ui.click('release-check');ui.wait('release-check-loading')
+    m.hdc('shell','uitest','uiInput','keyEvent','Home');time.sleep(.5)
+    m.hdc('shell','aa','start','-a','EntryAbility','-b',m.BUNDLE);ui.wait('release-check')
+    assert str(ui.wait('release-check')['enabled']).lower()=='true'
+    assert '检查官方项目' in ui.wait('release-check-status')['text'],'实际后台返回后检查没有取消'
+    ui.screenshot('release-background-cancelled')
+    check('apk','未提供鸿蒙安装包')
     state.write_text('delayed'); ui.click('release-check'); ui.wait('release-check-loading')
     ui.navigate('page-back','settings-updates'); ui.click('settings-updates',scroll=True); ui.wait('release-check')
     check('apk','未提供鸿蒙安装包')
@@ -43,5 +50,5 @@ def run(ui,m,folder,passed):
     # 冷启后回到首页，设置仍有有效本版说明与版本入口。
     m.hdc('shell','aa','force-stop',m.BUNDLE);m.hdc('shell','aa','start','-a','EntryAbility','-b',m.BUNDLE)
     ui.wait('home-settings');ui.navigate('home-settings','settings-about');ui.click('settings-about',scroll=True);ui.text('应用版本');ui.navigate('page-back','settings-updates')
-    (folder/'release-results.json').write_text(json.dumps(dict(scope='原生生产页面/HTTP栈；仅测试副本的公开元数据URL指向本轮HTTP夹具；不提供真实HAP下载，不是公网G',outcomes=outcomes,systemGestureBack=True,lateResponseIgnored=True,coldStartAbout=True),ensure_ascii=False,indent=2))
+    (folder/'release-results.json').write_text(json.dumps(dict(scope='原生生产页面/HTTP栈；仅测试副本的公开元数据URL指向本轮HTTP夹具；不提供真实HAP下载，不是公网G',outcomes=outcomes,systemGestureBack=True,lateResponseIgnored=True,actualBackgroundCancelled=True,coldStartAbout=True),ensure_ascii=False,indent=2))
     passed('P4-release-settings-F','本版说明/系统手势返回；APK隔离/HAP元数据/当前版/限流/未发布/畸形响应/重试/旧请求取消与冷启关于通过，未下载或安装更新')

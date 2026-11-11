@@ -86,6 +86,12 @@ async function connect(channel, pairingCode) {
   return socket;
 }
 function send(socket, value) { socket.send(JSON.stringify(value)); }
+function ownedConfigurationScope() {
+const ownedRoot=fs.realpathSync(process.env.HARMONY_OWNED_REAL_ROOT || '.');
+if (!path.basename(ownedRoot).startsWith('harmony-p7-owned-host-') || base!=='http://127.0.0.1:18897') throw new Error('部署配置仅限本轮专属Host');
+const scope=JSON.parse(fs.readFileSync(path.join(ownedRoot,'owned-processes.json'),'utf8'));
+if (fs.realpathSync(scope.root)!==ownedRoot || scope.port!==18897 || path.dirname(fs.realpathSync(scope.workspace))!==ownedRoot) throw new Error('专属Host归属不匹配');
+}
 function scoped(id) { if (!own.has(id)) throw new Error('仅允许操作本轮专用会话'); return own.get(id); }
 async function create(label) {
   const requestId = crypto.randomUUID();
@@ -145,12 +151,25 @@ async function stop() {
       else if (route === '/history') { const s = scoped(args.id); result = { records: [...s.records.values()].sort((a, b) => a.seq - b.seq), audit: audit.filter(a => a.sessionId === args.id) }; }
       else if (route === '/pending') result = [...pending.values()].filter(f => own.has(f.sessionId));
       else if (route === '/options') { scoped(args.id); const answer = wait('permission-options', f => f.sessionId === args.id); send(control, { type: 'permission-options', sessionId: args.id }); result = await answer; }
+      else if (route === '/agent-configuration') {
+        ownedConfigurationScope();
+        const catalog=wait('agent-presets');send(control,{type:'agent-presets'});const presets=await catalog;
+        const defaults=wait('defaults');send(control,{type:'defaults'});const values=await defaults;
+        result={presets:presets.presets,authorable:presets.authorable,hasDocument:presets.hasDocument,agent:values.agentPresetDefault};
+      }
+      else if (route === '/session-agent') {
+        ownedConfigurationScope();scoped(args.id);const requestId=crypto.randomUUID();
+        const response=wait('session-agent-preset',f=>f.sessionId===args.id && f.requestId===requestId);
+        send(control,{type:'session-agent-preset',sessionId:args.id,requestId});result=await response;
+      }
+      else if (route === '/session-configuration') {
+        ownedConfigurationScope();scoped(args.id);
+        const response=wait('models');send(control,{type:'models',sessionId:args.id});const value=await response;
+        result={current:value.current,routable:value.routable};
+      }
       else if (route === '/default-configuration') {
         // 部署配置查询仅用于本轮专属Host，拒绝默认3080或任何用户主机。
-        const ownedRoot=path.resolve(process.env.HARMONY_OWNED_REAL_ROOT || '.');
-        if (!path.basename(ownedRoot).startsWith('harmony-p7-owned-host-') || base!=='http://127.0.0.1:18897') throw new Error('部署配置仅限本轮专属Host');
-        const scope=JSON.parse(fs.readFileSync(path.join(ownedRoot,'owned-processes.json'),'utf8'));
-        if (path.resolve(scope.root)!==ownedRoot || scope.port!==18897 || path.dirname(path.resolve(scope.workspace))!==ownedRoot) throw new Error('专属Host归属不匹配');
+        ownedConfigurationScope();
         const models=wait('models',f=>!f.sessionId);send(control,{type:'models'});const catalog=await models;
         const model=wait('default-model');send(control,{type:'default-model'});const selection=await model;
         const defaults=wait('defaults');send(control,{type:'defaults'});const values=await defaults;

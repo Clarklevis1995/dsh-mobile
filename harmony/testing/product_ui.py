@@ -243,7 +243,7 @@ def test_workspace_and_catalog():
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'photos', 'scan', 'real', 'menus', 'host-reset', 'home-visual', 'brand', 'home-rows', 'settings-visual', 'release', 'default-model', 'default-visual'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'photos', 'scan', 'real', 'menus', 'host-reset', 'home-visual', 'brand', 'home-rows', 'settings-visual', 'release', 'default-model', 'default-visual', 'model-matrix', 'model-session-matrix', 'agent-presets'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
     print('REPORT_DIR', folder, flush=True)
     app = args.app_dir or folder / 'app'
     if not args.app_dir:
@@ -291,7 +291,7 @@ def main():
     with (folder / 'build.log').open('w') as log:
         subprocess.run([str(m.DEVECO / 'tools/ohpm/bin/ohpm'), 'install', '--all'], cwd=app, env=env, stdout=log, stderr=log, check=True)
         subprocess.run([str(m.DEVECO / 'tools/node/bin/node'), str(m.DEVECO / 'tools/hvigor/bin/hvigorw.js'), '--mode', 'module', '-p', 'module=entry@default', '-p', 'product=default', '-p', 'buildMode=debug', 'assembleHap', '--no-daemon'], cwd=app, env=env, stdout=log, stderr=log, check=True)
-    servers = []; logs = []; forwards = []
+    servers = []; logs = []; forwards = []; fixture_controls = {}
     try:
         fixtures = [(18783, '', 'a56a1098-8519-43a1-9dce-fb99863bf5bb'), (18784, 'B ', 'b56a1098-8519-43a1-9dce-fb99863bf5bb')]
         if args.scenario in ['menus','home-visual','brand','release']: fixtures = []
@@ -323,7 +323,9 @@ def main():
         if args.scenario == 'native-navigation': fixtures.append((18785, '延迟 ', 'c56a1098-8519-43a1-9dce-fb99863bf5bb'))
         for port, label, identity in fixtures:
             log = (folder / ('gateway-' + str(port) + '.log')).open('w'); logs.append(log)
-            process = subprocess.Popen([sys.executable, str(ROOT / 'harmony/testing/gateway_fixture.py')], env=dict(os.environ, HARMONY_FIXTURE_PORT=str(port), HARMONY_FIXTURE_LABEL=label, HARMONY_FIXTURE_ID=identity, HARMONY_FIXTURE_PAIR_DELAY='45' if port == 18785 else '0', HARMONY_FIXTURE_VOICE_RELEASE=str(folder/'release-transcript'), HARMONY_FIXTURE_VOICE='1' if args.scenario == 'voice' else '0', HARMONY_FIXTURE_PERF='1' if args.scenario in ['perf','reading'] else '0', HARMONY_FIXTURE_FILES='1' if args.scenario == 'files' else '0', HARMONY_FIXTURE_UPLOADS='1' if args.scenario in ['uploads', 'photos'] else '0', HARMONY_FIXTURE_PRODUCTS='1' if args.scenario in ['products', 'goals'] else '0', HARMONY_FIXTURE_SLASH='1' if args.scenario == 'slash' else '0', HARMONY_FIXTURE_FEATURES='1' if args.scenario in ['controls', 'slash', 'products', 'goals', 'settings-visual', 'default-model', 'default-visual'] else '0', HARMONY_FIXTURE_RICH='1' if args.scenario in ['richtext', 'controls', 'settings-visual', 'default-model', 'default-visual'] else '0'), stdout=log, stderr=log); servers.append(process)
+            fixture_env = dict(os.environ, HARMONY_FIXTURE_PORT=str(port), HARMONY_FIXTURE_LABEL=label, HARMONY_FIXTURE_ID=identity, HARMONY_FIXTURE_PAIR_DELAY='45' if port == 18785 else '0', HARMONY_FIXTURE_VOICE_RELEASE=str(folder/'release-transcript'), HARMONY_FIXTURE_VOICE='1' if args.scenario == 'voice' else '0', HARMONY_FIXTURE_PERF='1' if args.scenario in ['perf','reading'] else '0', HARMONY_FIXTURE_FILES='1' if args.scenario == 'files' else '0', HARMONY_FIXTURE_UPLOADS='1' if args.scenario in ['uploads', 'photos'] else '0', HARMONY_FIXTURE_PRODUCTS='1' if args.scenario in ['products', 'goals'] else '0', HARMONY_FIXTURE_SLASH='1' if args.scenario == 'slash' else '0', HARMONY_FIXTURE_FEATURES='1' if args.scenario in ['controls', 'slash', 'products', 'goals', 'settings-visual', 'default-model', 'default-visual', 'model-matrix', 'model-session-matrix', 'agent-presets'] else '0', HARMONY_FIXTURE_RICH='1' if args.scenario in ['richtext', 'controls', 'settings-visual', 'default-model', 'default-visual', 'model-matrix', 'model-session-matrix', 'agent-presets'] else '0', HARMONY_FIXTURE_PRESET_MODE=str(folder/'preset-mode') if args.scenario=='agent-presets' else '', HARMONY_FIXTURE_MODEL_MODE=str(folder/'model-mode') if args.scenario in ['model-matrix','model-session-matrix', 'agent-presets'] else '')
+            process = subprocess.Popen([sys.executable, str(ROOT / 'harmony/testing/gateway_fixture.py')], env=fixture_env, stdout=log, stderr=log); servers.append(process)
+            fixture_controls[port] = dict(process=process, env=fixture_env, log=log)
             route = 'tcp:' + str(port)
             if route + ' ' + route not in m.hdc('fport', 'ls'): m.hdc('rport', route, route); forwards.append(route)
         time.sleep(0.4); assert all(server.poll() is None for server in servers)
@@ -375,6 +377,15 @@ def main():
         elif args.scenario == 'richtext':
             from richtext_scenarios import run
             run(ui, m, folder, passed)
+        elif args.scenario == 'agent-presets':
+            from agent_presets_scenarios import run
+            run(ui,m,folder,passed,fixture_controls[18783],servers)
+        elif args.scenario == 'model-session-matrix':
+            from model_matrix_scenarios import run_session
+            run_session(ui,m,folder,passed,fixture_controls[18783],servers)
+        elif args.scenario == 'model-matrix':
+            from model_matrix_scenarios import run
+            run(ui,m,folder,passed,fixture_controls[18783],servers)
         elif args.scenario == 'default-visual':
             from default_model_scenarios import capture
             m.connect(ui);ui.navigate('conversation-back','home-settings');ui.navigate('home-settings','settings-defaults');ui.click('settings-defaults');ui.wait('default-model-current-fixture-read')

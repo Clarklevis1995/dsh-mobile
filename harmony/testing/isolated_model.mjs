@@ -1,6 +1,7 @@
 // 独立真实 Host 的受控上游；不向外部模型服务发送任何请求。
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
+import fs from 'node:fs';
 if (!process.env.HARMONY_DSH_NODE_MODULES) throw new Error('需要 HARMONY_DSH_NODE_MODULES');
 const { LlmAdapter } = await import(pathToFileURL(path.join(process.env.HARMONY_DSH_NODE_MODULES, '@deepseek-ai/dsh-llm/lib/index.js')).href);
 class ControlledAdapter extends LlmAdapter {
@@ -9,10 +10,19 @@ class ControlledAdapter extends LlmAdapter {
     if (process.env.HARMONY_CONFIGURATION_CATALOG === '1') rows.push({ provider, id: 'harmony-controlled-alt', name: 'Harmony controlled alternate' });
     return rows;
   }
-  async resolveModel(provider, model) { return { provider, id: model, name: 'Harmony controlled upstream', context: { contextWindow: 65536 } }; }
+  async resolveModel(provider, model) {
+    const reasoning = process.env.HARMONY_CONFIGURATION_CATALOG === '1' && model === 'harmony-controlled-alt'
+      ? { efforts: [{ id: 'low', name: 'Low' }, { id: 'high', name: 'High' }], defaultEffort: 'low' } : undefined;
+    return { provider, id: model, name: model === 'harmony-controlled-alt' ? 'Harmony controlled alternate' : 'Harmony controlled upstream', context: { contextWindow: 262144 }, reasoning };
+  }
   async *stream(options) {
     const prompt = options.messages.filter(message => message.role === 'user').map(message => typeof message.content === 'string' ? message.content : message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')).join('\n');
     const marker = prompt.match(/HARMONY_[A-Z0-9_]+/g)?.at(-1) || 'HARMONY_READY';
+    if (process.env.HARMONY_CONFIGURATION_CATALOG === '1' && marker.startsWith('HARMONY_CONFIG_ROUTING_')) {
+      const root = fs.realpathSync(process.env.DSH_HOME || '.');
+      if (!path.basename(root).startsWith('harmony-p7-owned-host-')) throw new Error('配置审计仅限本轮专属Host');
+      fs.appendFileSync(path.join(root, 'configuration-routing-audit.jsonl'), JSON.stringify({ marker, provider: options.provider, model: options.model, reasoningEffort: options.reasoningEffort }) + '\n');
+    }
     // 真实审批仍由 Host 的 write / fs sandbox / ApprovalService 执行；只写临时工作区。
     if (marker.startsWith('HARMONY_APPROVAL_')) {
       const root = process.env.DSH_HOME || '';

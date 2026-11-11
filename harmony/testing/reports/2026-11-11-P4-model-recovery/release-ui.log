@@ -1,0 +1,22 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-tw6ekw75
+操作 home-settings
+操作 settings-release-notes
+操作 settings-updates
+操作 release-check
+操作 release-check
+操作 release-check
+操作 release-check
+操作 release-check
+操作 release-check
+操作 release-check
+操作 release-check
+操作 release-check
+操作 page-back
+操作 settings-updates
+操作 release-check
+操作 page-back
+操作 home-settings
+操作 settings-about
+操作 page-back
+PASS P4-release-settings-F 本版说明/系统手势返回；APK隔离/HAP元数据/当前版/限流/未发布/畸形响应/重试/旧请求取消与冷启关于通过，未下载或安装更新
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-tw6ekw75

@@ -1,0 +1,14 @@
+{
+  "emptyCatalog": true,
+  "emptyRetry": true,
+  "unsupportedError": true,
+  "errorRetry": true,
+  "actualTcpDisconnect": true,
+  "offlineModelDisabled": true,
+  "reconnected": true,
+  "changedServerDefaultRefreshed": true,
+  "settingsRootRefreshed": true,
+  "actualBackgroundReturn": true,
+  "noAutomaticWrite": true,
+  "scope": "真实生产页面/Native；空/不支持来自显式夹具数据，网络断开为本轮拥有的服务子进程退出，F不替代G"
+}

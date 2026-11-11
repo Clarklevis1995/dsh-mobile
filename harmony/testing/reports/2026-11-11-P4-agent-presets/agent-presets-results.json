@@ -1,0 +1,18 @@
+{
+  "cancelNoWrite": true,
+  "confirmedRetained": true,
+  "failedSaveRollback": true,
+  "brokenDisabled": true,
+  "emptyRetry": true,
+  "unsupportedRetry": true,
+  "actualTcpDisconnectDisabled": true,
+  "reconnectedServerDefaultRead": true,
+  "actualHomeReturnRefreshed": true,
+  "coldStartRead": true,
+  "noAutomaticWrite": true,
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "scope": "API21模拟器生产Native/ArkUI，隔离夹具F；真实Host与V另验"
+}

@@ -6,15 +6,20 @@ import { PageHeader } from '../components/DesignSystem';
 @Component
 export struct DefaultModelPage {
   @ObjectLink a: Appearance;
+  @Prop @Watch('visibleChanged') active: boolean = true;
+  @Prop @Watch('visibleChanged') resumeRevision: number = 0;
+  private visibleChanged(): void { if (this.active) { this.refresh(); } }
   @Prop data: ControlData = emptyControls();
-  @Prop connected: boolean = false;
+  @Prop @Watch('connectionChanged') connected: boolean = false;
   onBack: () => void = () => {};
   onAction: (command: Command) => void = () => {};
   onChoose: (provider: string, model: string, effort?: string) => void = () => {};
-  aboutToAppear(): void { this.onAction(new Command('controls-defaults')); }
+  aboutToAppear(): void { this.refresh(); }
+  private refresh(): void { if (this.active && this.connected) { this.onAction(new Command('controls-defaults')); } }
+  private connectionChanged(): void { if (this.connected) { this.refresh(); } }
   private current(): ControlData { return this.data.sessionId ? emptyControls() : this.data; }
   private selected(group: ModelGroup, model: ModelItem): boolean { return this.current().defaultModel?.provider === group.id && this.current().defaultModel?.model === model.id; }
-  private available(): boolean { return this.connected && !this.current().loading.includes('save-default-model'); }
+  private available(): boolean { return this.active && this.connected && !this.current().loading.some(kind => ['models', 'default-model', 'save-default-model'].includes(kind)); }
   private choose(group: ModelGroup, model: ModelItem): void {
     const current = this.current().defaultModel?.reasoningEffort;
     this.onChoose(group.id, model.id, model.reasoning?.efforts.some(row => row.id === current) ? current : model.reasoning?.defaultEffort);
@@ -58,13 +63,16 @@ export struct DefaultModelPage {
               .fontSize(this.a.font(14)).lineHeight(this.a.font(20)).fontColor(this.a.fg).opacity(.52).width('100%')
           }.width('100%').padding({ bottom: 4 })
           if (!this.connected) { Text(this.a.t('已断开')).fontSize(this.a.font(14)).fontColor(this.a.muted).width('100%') }
-          if (this.current().error) { Text(this.current().error).id('control-error').fontColor('#D65D64').fontSize(this.a.font(14)).width('100%') }
+          if (this.current().error) {
+            Text(this.current().error).id('control-error').fontColor('#D65D64').fontSize(this.a.font(14)).width('100%')
+            Button(this.a.t('重试')).id('control-refresh').height(48).enabled(this.connected).onClick(() => this.onAction(new Command('controls-defaults')))
+          }
           if (this.current().loading.length) { LoadingProgress().id('control-loading').width(24).height(24).color(this.a.accent) }
           if (!this.current().models?.groups.length && !this.current().loading.includes('models')) {
             Column({ space: 8 }) {
               Text(this.a.english ? 'No models available' : '暂无可用模型').fontSize(this.a.font(17)).fontColor(this.a.fg)
               Text(this.a.english ? 'Check your gateway connection and retry.' : '未能读取到模型列表，请检查网关连接后重试。').fontSize(this.a.font(14)).fontColor(this.a.fg).opacity(.52)
-              Button(this.a.t('重试')).id('control-refresh').height(48).enabled(this.connected).onClick(() => this.onAction(new Command('controls-defaults')))
+              if (!this.current().error) { Button(this.a.t('重试')).id('control-refresh').height(48).enabled(this.connected).onClick(() => this.onAction(new Command('controls-defaults'))) }
             }.padding(24).width('100%').backgroundColor(this.a.surface).borderRadius(16)
           }
           ForEach(this.current().models?.groups ?? [], (group: ModelGroup) => {

@@ -1,3 +1,4 @@
+import { common } from '@kit.AbilityKit';
 import { Appearance } from '../core/Appearance';
 import { ReleaseChecker, ReleaseCheckState } from '../core/ReleaseChecker';
 import { PageHeader } from '../components/DesignSystem';
@@ -9,10 +10,16 @@ export struct ReleasePage {
   @Prop @Watch('activeChanged') active: boolean = true;
   @State private checkState: ReleaseCheckState = new ReleaseCheckState();
   private checker?: ReleaseChecker;
+  private context?: common.UIAbilityContext;
+  private backgroundListener: () => void = () => this.checker?.cancel();
   onBack: () => void = () => {};
   onLink: (url: string) => void = () => {};
-  aboutToAppear(): void { this.checker = new ReleaseChecker(this.checkState); }
-  aboutToDisappear(): void { this.checker?.cancel(); }
+  aboutToAppear(): void {
+    this.checker = new ReleaseChecker(this.checkState);
+    this.context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.context?.eventHub.on('gatewayBackground', this.backgroundListener);
+  }
+  aboutToDisappear(): void { this.context?.eventHub.off('gatewayBackground', this.backgroundListener); this.context = undefined; this.checker?.cancel(); }
   private activeChanged(): void { if (!this.active) { this.checker?.cancel(); } }
   private status(): string {
     if (this.checkState.status === 'loading') { return this.a.english ? 'Checking for a HarmonyOS release…' : '正在检查鸿蒙版本…'; }
@@ -34,9 +41,9 @@ export struct ReleasePage {
           Text(this.status()).id('release-check-status').fontSize(this.a.font(15)).fontColor(this.a.fg).lineHeight(this.a.font(24)).width('100%').accessibilityText(this.status())
           if (this.checkState.busy) { LoadingProgress().id('release-check-loading').width(28).height(28).color(this.a.accent) }
           Button(this.checkState.status === 'idle' ? this.a.english ? 'Check now' : '立即检查' : this.a.english ? 'Check again' : '重新检查')
-            .id('release-check').fontSize(this.a.font(15)).height(48).width('100%').enabled(this.active && !this.checkState.busy).onClick(() => this.checker?.check(this.version))
+            .id('release-check').fontSize(this.a.font(15)).fontColor(this.a.dark ? '#0E131A' : '#FFFFFF').backgroundColor(this.a.accent).height(48).width('100%').enabled(this.active && !this.checkState.busy).onClick(() => this.checker?.check(this.version))
           if (this.checkState.status === 'available') {
-            Button(this.a.english ? 'View official release' : '查看官方发布').id('release-open').fontSize(this.a.font(15)).height(48).width('100%').onClick(() => this.onLink(this.checkState.url))
+            Button(this.a.english ? 'View official release' : '查看官方发布').id('release-open').fontSize(this.a.font(15)).fontColor(this.a.dark ? '#0E131A' : '#FFFFFF').backgroundColor(this.a.accent).height(48).width('100%').onClick(() => this.onLink(this.checkState.url))
           }
         }.padding(20).width('100%').constraintSize({ maxWidth: 720 })
       }.layoutWeight(1).width('100%').align(Alignment.Top)

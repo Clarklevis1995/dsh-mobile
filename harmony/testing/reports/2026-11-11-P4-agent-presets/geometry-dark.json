@@ -1,0 +1,120 @@
+{
+  "scope": "376逻辑宽/标准字号/相同静态Agent目录和默认值；按返回按钮归一系统安全区，只比较标签与卡片矩形，字形/系统触摸框/完整异常V另验",
+  "checks": [
+    {
+      "metric": "Agent 预设0.centerY",
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "metric": "Agent 预设1.centerY",
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "metric": "预设决定 Agent 使用的工具、提示词与能力。选择后只对新建会话生效。0.centerY",
+      "differenceVp": -0.2857,
+      "passed": true
+    },
+    {
+      "metric": "预设决定 Agent 使用的工具、提示词与能力。选择后只对新建会话生效。0.left",
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "metric": "构建 Agent0.centerY",
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "metric": "构建 Agent0.left",
+      "differenceVp": -0.2857,
+      "passed": true
+    },
+    {
+      "metric": "build0.centerY",
+      "differenceVp": 0.1429,
+      "passed": true
+    },
+    {
+      "metric": "当前使用0.centerY",
+      "differenceVp": 0.1429,
+      "passed": true
+    },
+    {
+      "metric": "由 DeepSeek Harness 提供的 Agent 预设。0.centerY",
+      "differenceVp": -0.2857,
+      "passed": true
+    },
+    {
+      "metric": "由 DeepSeek Harness 提供的 Agent 预设。0.left",
+      "differenceVp": -0.2857,
+      "passed": true
+    },
+    {
+      "metric": "由 DeepSeek Harness 提供的 Agent 预设。1.centerY",
+      "differenceVp": -0.5714,
+      "passed": true
+    },
+    {
+      "metric": "由 DeepSeek Harness 提供的 Agent 预设。1.left",
+      "differenceVp": -0.2857,
+      "passed": true
+    },
+    {
+      "metric": "阅读 Agent0.centerY",
+      "differenceVp": -0.2857,
+      "passed": true
+    },
+    {
+      "metric": "阅读 Agent0.left",
+      "differenceVp": -0.2857,
+      "passed": true
+    },
+    {
+      "metric": "read0.centerY",
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "metric": "build.card.left",
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "metric": "build.card.top",
+      "differenceVp": -0.4286,
+      "passed": true
+    },
+    {
+      "metric": "build.card.right",
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "metric": "build.card.bottom",
+      "differenceVp": -0.7143,
+      "passed": true
+    },
+    {
+      "metric": "read.card.left",
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "metric": "read.card.top",
+      "differenceVp": -0.7143,
+      "passed": true
+    },
+    {
+      "metric": "read.card.right",
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "metric": "read.card.bottom",
+      "differenceVp": -1.0,
+      "passed": true
+    }
+  ]
+}

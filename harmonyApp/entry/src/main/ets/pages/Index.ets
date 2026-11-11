@@ -72,6 +72,7 @@ struct Index {
   @State private errorText: string = '';
   @State private connecting: boolean = false;
   @State private appForeground: boolean = true;
+  @State private resumeRevision: number = 0;
   @State private wide: boolean = false;
   @State private version: string = '';
   @State private buildCode: number = 0;
@@ -161,7 +162,7 @@ struct Index {
   private hostWindow?: window.Window;
   private keyboardVisible: boolean = false;
   private switchRevision: number = 0;
-  private foreground: () => void = () => { this.appForeground = true; this.refreshVoiceActive(); this.runtime?.client.setForeground(true); };
+  private foreground: () => void = () => { this.appForeground = true; this.resumeRevision++; this.refreshVoiceActive(); this.runtime?.client.setForeground(true); };
   private backgroundListener: () => void = () => { this.appForeground = false; this.refreshVoiceActive(); this.runtime?.client.setForeground(false); };
   private keyboard: (height: number) => void = height => this.keyboardVisible = height > 0;
   private environment: EnvironmentCallback = {
@@ -707,9 +708,9 @@ struct Index {
       } else if (name === AppRoute.Trajectory) {
         TrajectoryPage({ a: this.a, state: this.shared, data: this.trajectory, active: this.nav.current === AppRoute.Trajectory, standalone: true, onBack: () => this.back(), onAction: command => this.action(command) })
       } else if (name === AppRoute.Defaults) {
-        DefaultModelPage({ a: this.a, data: this.controlData, connected: this.shared.connected, onBack: () => this.back(), onAction: c => this.action(c), onChoose: (provider: string, model: string, effort?: string) => this.defaultModel(provider, model, effort) })
+        DefaultModelPage({ active: this.appForeground && this.nav.current === AppRoute.Defaults, resumeRevision: this.resumeRevision, a: this.a, data: this.controlData, connected: this.shared.connected, onBack: () => this.back(), onAction: c => this.action(c), onChoose: (provider: string, model: string, effort?: string) => this.defaultModel(provider, model, effort) })
       } else if (name === AppRoute.Controls) {
-        SessionControlPage({ onPresetChange: id => this.defaultAgent(id), a: this.a, features: this.sessionFeatures, state: this.shared, data: this.controlData, isDefault: false, onBack: () => this.back(), onAction: command => this.action(command) })
+        SessionControlPage({ connected: this.shared.connected, active: this.appForeground && this.nav.current === AppRoute.Controls, resumeRevision: this.resumeRevision, onPresetChange: id => this.defaultAgent(id), a: this.a, features: this.sessionFeatures, state: this.shared, data: this.controlData, isDefault: false, onBack: () => this.back(), onAction: command => this.action(command) })
       } else if (name === AppRoute.Content) {
         ContentPreviewPage({ a: this.a, content: this.previewContent, table: this.previewTable, heading: this.previewHeading, onBack: () => this.back(), onLink: url => this.openLink(url), onExport: csv => this.exportTable(csv) })
       } else if (name === AppRoute.Inbox) {
@@ -720,14 +721,14 @@ struct Index {
         OfflineSearchPage({ a: this.a, scope: this.activeId, sessionTitle: (id: string) => this.shared.sessions.find(session => session.id === id)?.title || this.a.t('会话'), sessionId: this.offlineScopeSession, initialQuery: this.offlineQuery, onBack: () => this.back(),
           onSearch: (host: string, query: string, session?: string) => this.database ? this.database.search(host, query, session) : Promise.reject(new Error('本地数据库不可用')), onResult: (host: string, row: OfflineSearchRow) => this.offlineResult(host, row) })
       } else if (name === AppRoute.AgentPresets) {
-        AgentPresetsPage({ a: this.a, data: this.controlData, connected: this.shared.connected, onBack: () => this.back(), onAction: command => this.action(command), onChoose: id => this.defaultAgent(id) })
+        AgentPresetsPage({ active: this.appForeground && this.nav.current === AppRoute.AgentPresets, resumeRevision: this.resumeRevision, a: this.a, data: this.controlData, connected: this.shared.connected, onBack: () => this.back(), onAction: command => this.action(command), onChoose: id => this.defaultAgent(id) })
       } else if (name === AppRoute.Storage) {
         StoragePage({ a: this.a, hostName: this.hostName(), stats: this.storageStats, loading: this.storageLoading, status: this.storageStatus, onBack: () => this.back(), onRefresh: () => this.refreshStorage(), onClear: drafts => this.clearStorage(drafts), onSearch: () => this.openOfflineSearch() })
       } else if (name === AppRoute.Update) {
-        ReleasePage({ a: this.a, version: this.version, active: this.active && this.nav.current === AppRoute.Update, onBack: () => this.back(), onLink: url => this.openLink(url) })
+        ReleasePage({ a: this.a, version: this.version, active: this.appForeground && this.nav.current === AppRoute.Update, onBack: () => this.back(), onLink: url => this.openLink(url) })
       } else if (name.startsWith('settings')) {
         SettingsPage({ notificationsEnabled: this.notificationsEnabled, notificationStatus: this.notificationStatus, onNotifications: (enabled: boolean) => this.notifications?.setEnabled(enabled), a: this.a, section: name === AppRoute.Settings ? 'root' : name.substring('settings/'.length),
-          active: this.active && this.nav.current === name, version: this.version, buildCode: this.buildCode, snapshot: this.settingsData, gatewayVersion: this.shared.connected && this.pluginData.fresh ? this.pluginData.bundles.find(row => row.gateway)?.version || '' : '',
+          active: this.appForeground && this.nav.current === name, resumeRevision: this.resumeRevision, connected: this.shared.connected, version: this.version, buildCode: this.buildCode, snapshot: this.settingsData, gatewayVersion: this.shared.connected && this.pluginData.fresh ? this.pluginData.bundles.find(row => row.gateway)?.version || '' : '',
           onPermission: value => this.defaultPermission(value), onLink: url => this.openLink(url), onNotes: () => this.nav.push(AppRoute.ReleaseNotes),
           onAction: command => this.action(command), onConnection: () => { if (this.shared.connected) { this.runtime?.client.disconnect(); } else if (this.activeId) { this.reconnect(); } else { this.showHosts(); } }, onPing: () => this.pingGateway(),
           onAgents: () => this.nav.push(AppRoute.AgentPresets), onSchedules: () => this.nav.push(AppRoute.Schedules), onPlugins: () => this.nav.push(AppRoute.Plugins), onDefaults: () => this.nav.push(AppRoute.Defaults), onBack: () => this.back(), onHosts: () => this.showHosts(),

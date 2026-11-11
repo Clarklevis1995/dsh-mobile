@@ -1,0 +1,14 @@
+{
+  "gatewayVersion": "0.12.0",
+  "hostRuntime": "DSH 0.2.2-rc.1",
+  "defaultCancelUnchanged": true,
+  "defaultConfirmedPersisted": true,
+  "coldStartRead": true,
+  "existingSessionUnchanged": true,
+  "newSessionInherited": true,
+  "blankSessionSelectionConfirmed": true,
+  "firstMessageLocked": true,
+  "lockedDisabled": true,
+  "restored": true,
+  "scope": "仅本轮临时Host/受控本机上游，真实Host Agent预设服务/协议/Native/ArkUI；不代表外部模型与真机"
+}

@@ -1,0 +1,10 @@
+{
+  "emptyCatalog": true,
+  "unsupportedError": true,
+  "errorRetry": true,
+  "actualTcpDisconnect": true,
+  "offlineDisabled": true,
+  "reconnectedSelectionRefreshed": true,
+  "noAutomaticSelectionWrite": true,
+  "manualSelectionRestored": true
+}

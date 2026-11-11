@@ -17,7 +17,9 @@ export struct SettingsPage {
   @ObjectLink a: Appearance;
   @ObjectLink snapshot: SettingsData;
   @Prop section: string = 'root';
-  @Prop active: boolean = true;
+  @Prop @Watch('activeChanged') active: boolean = true;
+  @Prop @Watch('connectionChanged') connected: boolean = false;
+  @Prop @Watch('activeChanged') resumeRevision: number = 0;
   onOpenSection: (section: string) => void = () => {};
   @Prop version: string = '';
   @Prop buildCode: number = 0;
@@ -27,7 +29,12 @@ export struct SettingsPage {
   onAction: (command: Command) => void = () => {};
   onConnection: () => void = () => {};
   onPing: () => void = () => {};
-  aboutToAppear(): void { if (this.section === 'root' && this.snapshot.connected) { this.onAction(new Command('controls-defaults')); this.onAction(new Command('plugins-open')); } }
+  aboutToAppear(): void { this.refreshDefaults(); }
+  private activeChanged(): void { if (this.active) { this.refreshDefaults(); } }
+  private connectionChanged(): void { if (this.connected) { this.refreshDefaults(); } }
+  private refreshDefaults(): void {
+    if (this.section === 'root' && this.active && this.connected) { this.onAction(new Command('controls-defaults')); this.onAction(new Command('plugins-open')); }
+  }
   onBack: () => void = () => {};
   onSchedules: () => void = () => {};
   onPlugins: () => void = () => {};
@@ -83,6 +90,10 @@ export struct SettingsPage {
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'model', controlId: 'settings-defaults', onPress: this.onDefaults })
               Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'permission', controlId: 'settings-default-permission', onPermission: this.onPermission })
+            }
+            if (!this.snapshot.controls.sessionId && this.snapshot.controls.error) {
+              Text(this.snapshot.controls.error).id('settings-default-error').fontSize(this.a.font(13)).fontColor('#D65D64').width('100%')
+              Button(this.a.t('重试')).id('settings-default-retry').height(48).enabled(this.connected).onClick(() => this.onAction(new Command('controls-defaults')))
             }
             SettingsSection({ a: this.a, title: 'Mobile Gateway' }) {
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'endpoint', controlId: 'settings-hosts', onPress: this.onHosts })

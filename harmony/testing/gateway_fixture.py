@@ -5,6 +5,7 @@ import hashlib
 import itertools
 import json
 import os
+from pathlib import Path
 import socket
 import socketserver
 import struct
@@ -33,15 +34,15 @@ VOICE_TEST = os.environ.get('HARMONY_FIXTURE_VOICE') == '1'
 FILES_TEST = os.environ.get('HARMONY_FIXTURE_FILES') == '1'
 UPLOAD_TEST = os.environ.get('HARMONY_FIXTURE_UPLOADS') == '1'
 LAST_COMMAND_SELECTION = None
-MODELS = {}
+MODELS = {'harmony-smoke': dict(provider='fixture', model=os.environ['HARMONY_FIXTURE_CURRENT_MODEL'])} if os.environ.get('HARMONY_FIXTURE_CURRENT_MODEL') else {}
 PERMISSIONS = {}
 AGENTS = {}
 QUEUES = {'harmony-smoke': [
     dict(id='q-edit', placement='queued', message=dict(content=[dict(type='text', text='待编辑的排队原文')])),
     dict(id='q-remove', placement='queued', message=dict(content=[dict(type='text', text='待移除排队消息')])),
     dict(id='q-file', placement='queued', message=dict(content=[dict(type='file', name='fixture.txt')]))]}
-DEFAULT_MODEL = dict(provider='fixture', model='read')
-DEFAULTS = {'permission': 'read-only', 'agent-preset': 'build'}
+DEFAULT_MODEL = dict(provider='fixture', model=os.environ.get('HARMONY_FIXTURE_DEFAULT_MODEL','read'))
+DEFAULTS = {'permission': 'read-only', 'agent-preset': os.environ.get('HARMONY_FIXTURE_DEFAULT_AGENT','build')}
 PRESETS = [dict(id='build', name='构建 Agent'), dict(id='read', name='阅读 Agent')]
 PERMISSION_OPTIONS = [dict(value='read-only', name='只读', description='仅限测试夹具'), dict(value='workspace-write', name='工作区写入', description='仅限测试夹具')]
 MODEL_GROUPS = [dict(id='fixture', name='共享模型', models=[dict(id='read', name='读取模型'),
@@ -77,19 +78,30 @@ def feature_request(client, request, identifier):
     elif SLASH and kind == 'command-execute':
         client.send(dict(kind='command-executed', sessionId=identifier))
         event(identifier, dict(type='assistant/message', turn=15, step=1, text='命令执行完成：' + request['line']))
-    elif kind == 'models': client.send(dict(kind=kind, current=MODELS.get(identifier, dict(provider='fixture', model='read')) if identifier else None, routable=bool(identifier), groups=MODEL_GROUPS))
+    elif kind == 'models':
+        mode_path = os.environ.get('HARMONY_FIXTURE_MODEL_MODE', '')
+        mode = Path(mode_path).read_text().strip() if mode_path and Path(mode_path).exists() else 'normal'
+        if mode == 'unsupported': client.send(dict(kind='error',requestType=kind,message='测试主机不支持模型列表'))
+        else: client.send(dict(kind=kind, current=MODELS.get(identifier, dict(provider='fixture', model='read')) if identifier else None, routable=bool(identifier), groups=[] if mode=='empty' else MODEL_GROUPS))
     elif kind == 'select-model':
         time.sleep(.5)
         if request['model'] == 'fail': client.send(dict(kind='error', requestType=kind, sessionId=identifier, message='测试模型暂不可用'))
         else:
             MODELS[identifier] = {key: request[key] for key in ['provider', 'model', 'reasoningEffort'] if key in request}
+            # 对齐真实DSH 0.2.2的契约：会话选择也尝试保存为新会话默认值。
+            DEFAULT_MODEL = dict(MODELS[identifier])
             client.send(dict(kind=kind, sessionId=identifier, selected=MODELS[identifier]))
     elif kind == 'permission-options': client.send(dict(kind=kind, sessionPermissions=dict(currentValue=PERMISSIONS.get(identifier, 'workspace-write'), options=PERMISSION_OPTIONS)))
     elif kind == 'permission':
         PERMISSIONS[identifier] = request['name']; client.send(dict(kind=kind, sessionId=identifier, set=request['name']))
     elif kind == 'context-usage': client.send(dict(kind=kind, sessionId=identifier, contextPressure=dict(contextWindow=128000, pressureTokens=1234, projectedTokens=5678)))
     elif kind == 'session-stats': client.send(dict(kind=kind, sessionId=identifier, sessionStats=dict(turns=7, steps=9, llmMs=1500.5, toolMs=100.25, ttftMs=80.5), tokenUsage=dict(totals=dict(inputTokens=4321, outputTokens=1234, cacheReadTokens=9007199254740993))))
-    elif kind == 'agent-presets': client.send(dict(kind=kind, presets=PRESETS, modeSelectionEnabled=True, authorable=False, hasDocument=False))
+    elif kind == 'agent-presets':
+        mode_path=os.environ.get('HARMONY_FIXTURE_PRESET_MODE');mode=Path(mode_path).read_text().strip() if mode_path and Path(mode_path).exists() else 'normal'
+        if mode=='unsupported': client.send(dict(kind='error',requestType=kind,message='测试主机不支持Agent预设'))
+        else:
+            presets=[] if mode=='empty' else PRESETS + ([dict(id='fail',name='失败预设'),dict(id='broken',name='损坏预设',broken=True,brokenReason='仅测试：配置损坏')] if mode=='failure' else [])
+            client.send(dict(kind=kind,presets=presets,modeSelectionEnabled=True,authorable=False,hasDocument=False))
     elif kind == 'session-agent-preset':
         value = AGENTS.setdefault(identifier, dict(agentPreset='build', locked=False)); client.send(dict(kind=kind, sessionId=identifier, requestId=request['requestId'], **value))
     elif kind == 'select-agent-preset':
@@ -104,7 +116,9 @@ def feature_request(client, request, identifier):
             DEFAULT_MODEL = {key: request[key] for key in ['provider', 'model', 'reasoningEffort'] if key in request}; client.send(dict(kind=kind, saved=DEFAULT_MODEL))
     elif kind == 'defaults': client.send(dict(kind=kind, agentPresetDefault=DEFAULTS['agent-preset'], permissionDefault=DEFAULTS['permission'], permissionDefaultOptions=PERMISSION_OPTIONS))
     elif kind == 'set-default':
-        DEFAULTS[request['target']] = request['value']; client.send(dict(kind=kind, applied=True, target=request['target'], value=request['value']))
+        if request['target']=='agent-preset' and request['value']=='fail': client.send(dict(kind='error',requestType=kind,message='测试默认预设暂不可用'))
+        else:
+            DEFAULTS[request['target']] = request['value']; client.send(dict(kind=kind, applied=True, target=request['target'], value=request['value']))
     elif kind == 'queue-update':
         item = next((row for row in QUEUES.get(identifier, []) if row['id'] == request['itemId']), None)
         time.sleep(.5)

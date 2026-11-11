@@ -1,0 +1,354 @@
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:compileKotlinOhosArm64 UP-TO-DATE
+> Task :shared:xcodeVersion UP-TO-DATE
+> Task :shared:linkReleaseSharedOhosArm64 UP-TO-DATE
+> Task :shared:publishNative UP-TO-DATE
+
+BUILD SUCCESSFUL in 323ms
+4 actionable tasks: 4 up-to-date
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[32minstall completed in 0s 33ms[39m
+> hvigor [32mUP-TO-DATE :entry:default@PreBuild...  [39m
+> hvigor [32mFinished :entry:default@CreateModuleInfo... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@GenerateMetadata...  [39m
+> hvigor [32mFinished :entry:default@ConfigureCmake... after 12 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@CreateBuildProfile...  [39m
+> hvigor [32mFinished :entry:default@PreCheckSyscap... after 1 ms [39m
+> hvigor [32mFinished :entry:default@ProcessIntegratedHsp... after 1 ms [39m
+> hvigor [32mFinished :entry:default@BuildNativeWithCmake... after 4 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@MakePackInfo...  [39m
+> hvigor [32mFinished :entry:default@SyscapTransform... after 5 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@GeneratePkgContextInfo...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessProfile...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessRouterMap...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessShareConfig...  [39m
+> hvigor [32mFinished :entry:default@ProcessStartupConfig... after 4 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessResource...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@GenerateLoaderJson...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@CompileResource...  [39m
+> hvigor [32mFinished :entry:default@BuildJS... after 2 ms [39m
+> hvigor [32mFinished :entry:default@BuildNativeWithNinja... after 190 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessLibs...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@DoNativeStrip...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@CacheNativeLibs...  [39m
+> hvigor [91mERROR: Failed :entry:default@CompileArkTS... [39m
+> hvigor [33mWARN:
+[33m1 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/entryability/EntryAbility.ets:16:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m2 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/CredentialStore.ets:45:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m3 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/LocalDatabase.ets:21:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m4 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/LocalDatabase.ets:22:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m5 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/LocalDatabase.ets:41:68
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m6 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/LocalDatabase.ets:48:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m7 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/LocalDatabase.ets:49:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m8 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/LocalDatabase.ets:49:43
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m9 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/LocalDatabase.ets:49:74
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m10 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/LocalDatabase.ets:49:111
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m11 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/LocalDatabase.ets:141:58
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m12 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:9:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m13 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:11:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m14 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:26:37
+ 'packing' has been deprecated.
+[39m[39m
+[33m15 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:28:64
+ 'packing' has been deprecated.
+[39m[39m
+[33m16 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:31:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m17 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:32:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m18 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:32:120
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m19 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:33:66
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m20 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:33:108
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m21 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:34:32
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m22 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PhotoWorker.ets:39:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m23 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:9:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m24 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:11:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m25 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:12:10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m26 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:13:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m27 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:14:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m28 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:15:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m29 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:17:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m30 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:18:10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m31 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:19:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m32 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:21:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m33 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:23:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m34 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:25:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m35 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:28:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m36 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:34:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m37 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:36:27
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m38 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:37:59
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m39 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:40:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m40 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:49:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m41 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:50:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m42 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:51:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m43 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:58:49
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m44 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:58:133
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m45 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:59:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m46 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:61:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m47 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:65:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m48 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:66:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m49 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:68:60
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m50 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:70:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m51 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:75:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m52 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:77:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m53 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:78:53
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m54 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:79:51
+ 'decodeWithStream' has been deprecated.
+[39m[39m
+[33m55 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:81:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m56 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:86:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m57 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:87:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m58 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:87:92
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m59 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:87:131
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m60 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:87:168
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m61 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/FileWorker.ets:88:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m62 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/ContentActions.ets:17:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m63 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/ContentActions.ets:29:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m64 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/ContentActions.ets:33:27
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m65 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/ContentActions.ets:36:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m66 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/components/MarkdownCode.ets:52:17
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m67 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/components/TableReader.ets:73:184
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m68 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/components/MarkdownTable.ets:23:17
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m69 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ScheduleEditorPage.ets:44:22
+ 'show' has been deprecated.
+[39m[39m
+[33m70 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ScheduleEditorPage.ets:47:22
+ 'show' has been deprecated.
+[39m[39m
+[33m71 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ContentPreviewPage.ets:23:17
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m72 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PreferenceStore.ets:21:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m73 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PreferenceStore.ets:25:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m74 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PreferenceStore.ets:35:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m75 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/core/PreferenceStore.ets:36:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m76 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/components/VoiceInput.ets:61:76
+ 'screenY' has been deprecated.
+[39m[39m
+[33m77 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/components/VoiceInput.ets:62:117
+ 'screenY' has been deprecated.
+[39m[39m
+[33m78 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/components/MessageCard.ets:36:37
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m79 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ConversationPage.ets:179:23
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m80 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ConversationPage.ets:192:58
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m81 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ConversationPage.ets:195:23
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m82 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ConversationPage.ets:211:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m83 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ConversationPage.ets:214:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m84 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ConversationPage.ets:232:27
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m85 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/HostPage.ets:40:69
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m86 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/HostPage.ets:44:28
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33m87 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/HostPage.ets:44:40
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33m88 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/HostPage.ets:46:19
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33m89 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/HostPage.ets:46:43
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33m90 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/HostPage.ets:48:70
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33m91 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/HostPage.ets:52:72
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33m92 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/HostPage.ets:56:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m93 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/Index.ets:227:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m94 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/Index.ets:408:104
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m95 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/Index.ets:591:44
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m96 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/Index.ets:657:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m97 WARN: [33m[33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/Index.ets:663:17
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33m98 WARN: [33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/DefaultModelPage.ets:75:67
+ The current component id "control-refresh" is duplicate with /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/DefaultModelPage.ets:68:36.[39m[39m
+[33m99 WARN: [33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/SessionControlPage.ets:53:66
+ The current component id "control-error" is duplicate with /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/DefaultModelPage.ets:67:40.[39m[39m
+[33m100 WARN: [33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/SessionControlPage.ets:54:66
+ The current component id "control-loading" is duplicate with /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/DefaultModelPage.ets:70:66.[39m[39m
+[33m101 WARN: [33mArkTS:WARN File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/SessionControlPage.ets:115:34
+ The current component id "control-refresh" is duplicate with /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/DefaultModelPage.ets:68:36.[39m[39m[39m
+> hvigor [91mERROR: ArkTS Compiler Error
+[31m1 ERROR: [31m10505001 ArkTS Compiler Error
+Error Message: Property 'background' in type 'ReleasePage' is not assignable to the same property in base type 'CustomComponent'.
+  Type '() => void' is not assignable to type '(content: ResourceColor | CustomBuilder, options?: BackgroundOptions) => CommonAttribute'.
+    Type 'void' is not assignable to type 'CommonAttribute'. At File: /Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/src/main/ets/pages/ReleasePage.ets:14:11
+[39m
+[39m
+[31mCOMPILE RESULT:FAIL {ERROR:2 WARN:101}[39m
+
+[31m* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --debug option to get more log output.
+[39m
+> hvigor [91mERROR: BUILD FAILED in 4 s 652 ms [39m

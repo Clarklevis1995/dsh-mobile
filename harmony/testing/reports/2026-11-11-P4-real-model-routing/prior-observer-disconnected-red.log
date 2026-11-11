@@ -1,0 +1,29 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-hv9t1sxp
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 430, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 337, in main
+    run(ui, m, folder, passed)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/real_scenarios.py", line 36, in run
+    configuration(ui,m,folder,passed,call,None,owned);return
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/real_default_configuration_scenarios.py", line 9, in run
+    before=call('/default-configuration');baseline=json.loads((owned/'configuration-initial.json').read_text());original=baseline['selection'];permission=baseline['permission']
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/real_scenarios.py", line 15, in call
+    return json.load(urllib.request.urlopen(req,timeout=30))
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/urllib/request.py", line 214, in urlopen
+    return opener.open(url, data, timeout)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/urllib/request.py", line 523, in open
+    response = meth(req, response)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/urllib/request.py", line 632, in http_response
+    response = self.parent.error(
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/urllib/request.py", line 561, in error
+    return self._call_chain(*args)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/urllib/request.py", line 494, in _call_chain
+    result = func(*args)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/urllib/request.py", line 641, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 400: Bad Request
