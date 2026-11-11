@@ -1,0 +1,5 @@
+{
+  "core/LocalDatabase.ets": "cae7ec65ebc7d83355a3d12a89d060668f3eb8ae55d45051d07584de858ecb63",
+  "core/CacheController.ets": "ab4b1331a0d29676cd6051b252b5f2b74f033fdf0197a4c70aa31b5f86c96133",
+  "pages/OfflineSearchPage.ets": "19cddf923fe2f37958e7a88164aeba696fda5ed2bb9d124786e2ae77de0b84cb"
+}

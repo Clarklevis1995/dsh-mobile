@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/refresh_candidate_ui.py", line 112, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/refresh_candidate_ui.py", line 32, in main
+    assert version() == previous['versionCode'], '候选版本已变化，必须先核对新证据'
+AssertionError: 候选版本已变化，必须先核对新证据

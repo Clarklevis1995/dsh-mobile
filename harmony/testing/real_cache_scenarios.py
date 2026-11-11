@@ -24,6 +24,10 @@ def run(ui,m,folder,passed,call,session):
         wait(check,20)
     seed=json.loads(Path(os.environ['HARMONY_HISTORY_SEED_JSON']).read_text());prefix='HARMONY_HISTORY_'+seed['run']+'_'
     wait(lambda:len(snapshot().get('markers',[]))>0)
+    bilingual = None
+    if os.environ.get('HARMONY_CACHE_BILINGUAL') == '1':
+        from real_cache_bilingual_scenarios import prepare
+        bilingual = prepare(ui,call,session,seed)
     for _ in range(45):
         if ui.find('history-older'):break
         ui.scroll(False)
@@ -38,11 +42,18 @@ def run(ui,m,folder,passed,call,session):
         def result():return next((r['id'] for r in ui.nodes() if r.get('id','').startswith('offline-result-')),None)
         key=wait(result);ui.screenshot('real-cache-search-English');ui.click('offline-search-session');wait(result);ui.click(key);ui.wait('message-draft');ui.text(query);assert ui.find('message-draft')['text']==edited;ui.screenshot('real-cache-search-located')
         ui.navigate('conversation-back','offline-search-input');assert ui.find('offline-search-input')['text']==query;ui.navigate('page-back','storage-refresh');ui.navigate('page-back','settings-style');ui.navigate('page-back','home-settings');ui.click('session-'+session['id'],scroll=True);ui.wait('message-draft')
+        if bilingual:
+            from real_cache_bilingual_scenarios import offline
+            offline(ui,storage,wait,bilingual,edited,folder)
+            ui.click('session-'+session['id'],scroll=True);ui.wait('message-draft')
+            passed('P6-real-cache-bilingual-G','真实Host新增双语消息稳定落盘，断网后中文/英文大小写/百分号下划线字面量在主机与当前会话范围一致；无结果、中文定位和返回查询/草稿保留通过')
         passed('P6-real-cache-offline-G','真实长历史加密落盘，断网实际冷启及离线改稿再次冷启保留、缓存范围和禁发、英文当前主机/会话搜索定位与返回保留查询通过')
         proxy('/online');wait(lambda:str(ui.wait('message-send')['enabled']).lower()=='true',50);wait(lambda:not ui.find('cached-history-notice'),30);assert ui.find('message-draft')['text']==edited;ui.screenshot('real-cache-network-takeover')
         records=call('/history',{'id':session['id']})['records'];assert not any(edited in json.dumps(r,ensure_ascii=False) or draft in json.dumps(r,ensure_ascii=False) for r in records),'离线草稿被自动重发'
         storage();count('storage-window-count','· 1');ui.click('storage-clear-history');ui.wait('confirmation-accept');ui.click('取消','text');count('storage-window-count','· 1');ui.click('storage-clear-history');ui.wait('confirmation-accept');ui.click('confirmation-accept');count('storage-window-count','· 0');count('storage-draft-count','· 1 ·');time.sleep(2);count('storage-window-count','· 0')
         ui.navigate('storage-search','offline-search-input');ui.input('offline-search-input',query);ui.wait('offline-search-empty');ui.screenshot('real-cache-clear-index-empty')
+        if bilingual:
+            ui.input('offline-search-input',bilingual['chinese']);ui.wait('offline-search-empty');ui.screenshot('real-cache-clear-Chinese-index-empty')
         (folder/'real-cache-audit.json').write_text(json.dumps(dict(sessionId=session['id'],cachedUserMarkers=len(cached_markers),coldOfflineRetained=True,offlineEditedRetained=True,searchQuery=query,networkTakeoverRetainedDraft=True,noAutomaticDraftSend=True,historyClearedIndexEmpty=True),ensure_ascii=False,indent=2))
         passed('P6-real-cache-takeover-clear-G','真实网络恢复接管不清离线新稿、不自动重发；清理取消/确认、仅历史保留草稿、心跳后不复活及索引移除通过')
     finally:proxy('/online')

@@ -1,0 +1,26 @@
+[
+  {
+    "kind": "Chinese",
+    "query": "鲸鱼离线检索_06A9605B",
+    "messageIds": [
+      "offline-result-session-fbd864db-f78a-4435-bcde-433d0940b670-user-9a2ede11-4826-4ed8-8977-1a93e025b871"
+    ],
+    "sessionIdsMatch": true
+  },
+  {
+    "kind": "English-casefold",
+    "query": "mixedcase_06a9605b",
+    "messageIds": [
+      "offline-result-session-fbd864db-f78a-4435-bcde-433d0940b670-user-9a2ede11-4826-4ed8-8977-1a93e025b871"
+    ],
+    "sessionIdsMatch": true
+  },
+  {
+    "kind": "literal-percent-underscore",
+    "query": "100%_literal_06A9605B",
+    "messageIds": [
+      "offline-result-session-fbd864db-f78a-4435-bcde-433d0940b670-user-9a2ede11-4826-4ed8-8977-1a93e025b871"
+    ],
+    "sessionIdsMatch": true
+  }
+]
