@@ -1,0 +1,10 @@
+[
+  {
+    "task": "P5-photo-picker-cancel-F",
+    "detail": "实际系统相册取消后无附件，保留文字草稿"
+  },
+  {
+    "task": "P5-photo-send-preview-F",
+    "detail": "真实系统相册三选二、TaskPool规范化JPEG、移除、草稿预览及切图、正文与图片发送、远端按字节解码核对、消息下载缩略图和收到后预览通过"
+  }
+]

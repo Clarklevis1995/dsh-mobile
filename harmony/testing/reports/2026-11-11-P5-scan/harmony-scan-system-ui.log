@@ -1,0 +1,9 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-wc2md3lj
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-payload
+操作 gateway-scan
+SCAN_SYSTEM [('', '授权配对', None), ('', '粘贴配对内容，或填写地址及配对码', None), ('gateway-scan', '正在扫码', None), ('gateway-payload', 'scan-cancel-preserves-edit', None), ('gateway-endpoint', 'ws://127.0.0.1:18783/ws/mobile', None), ('gateway-connect', '连接', None), ('gateway-cancel', '取消', None), ('', '安全访问相机', None), ('', '应用仅可访问二维码/条形码生成的信息，无法访问摄像头的取景内容。进一步了解', None), ('scan_scan_title', '扫描二维码/条形码', None), ('', '扫描二维码/条形码', None), ('scan_page_openPicker', '图库', None), ('', '图库', None), ('ClockStatusView', '01, :, 50', None), ('', '01', None), ('TimeView_Text_timeText', ':', None), ('', '50', None), ('BatteryComponent-batteryIcon_Text_batterySoc', '100', None)]
+PASS P5-system-scan-cancel-F 实际默认扫码界面可打开，系统返回取消后表单和地址保留，按钮恢复且未认证
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-wc2md3lj

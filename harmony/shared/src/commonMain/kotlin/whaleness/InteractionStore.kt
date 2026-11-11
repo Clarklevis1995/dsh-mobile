@@ -39,6 +39,8 @@ data class HarmonyApproval(
     val status: String,
     val outcome: String? = null,
     val error: String? = null,
+    val reasonEnglish: String? = null,
+    val replay: Boolean = false,
 )
 
 /** 提交校验、重复点击与服务端确认由已有共享 Store 处理；鸿蒙仅适配视图和 I/O。 */
@@ -244,6 +246,8 @@ class InteractionStore {
                 status?.kind ?: "idle",
                 status?.outcome,
                 status?.takeIf { it.kind == "rejected" }?.let { failureText(it.failureCode, it.failureArgument) },
+                reasonEnglish = request.localizedReason("en"),
+                replay = request.replay,
             )
         }
 

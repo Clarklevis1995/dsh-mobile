@@ -254,3 +254,18 @@ test('程序填充后的同值输入回调不再作为真实编辑，不会重�
   assert.equal(drafts.version('s'), revision);
   assert.equal(drafts.changed('s', '/switch changed'), true);
 });
+
+test('手动 Ping 必须等待经过共享校验的控制 pong，发送成功不能冒充响应', async () => {
+  const env = await connected(); let done = false;
+  const result = env.client.ping().then(value => { done = true; return value; });
+  await env.flush(); assert.equal(done, false);
+  env.sockets[0].emit({ kind: 'other' }); await env.advance(100); assert.equal(done, false);
+  env.sockets[0].emit({ kind: 'pong' }); await env.advance(50); assert.equal(await result, true);
+});
+test('Ping 无回包超时、发送失败及中途断开均不能返回成功', async () => {
+  const env = await connected(); const missing = env.client.ping(); await env.flush();
+  await env.advance(5001); assert.equal(await missing, false);
+  env.sockets[0].sendSucceeds = false; assert.equal(await env.client.ping(), false);
+  env.sockets[0].sendSucceeds = true; const disconnected = env.client.ping(); await env.flush();
+  env.client.disconnect(); await env.advance(50); assert.equal(await disconnected, false);
+});

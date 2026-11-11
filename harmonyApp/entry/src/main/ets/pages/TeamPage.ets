@@ -33,7 +33,7 @@ export struct TeamPage {
       Scroll() {
         Column({ space: 16 }) {
           if (!this.state.connected) { Text(this.a.t('连接已断开，当前显示上次读取的团队')).fontSize(this.a.font(13)).fontColor(this.a.muted) }
-          if (this.data.lead.error) { Text(this.data.lead.error).id('team-error').fontSize(this.a.font(14)).fontColor('#D65D64') }
+          if (this.data.lead.error) { Text(this.a.t(this.data.lead.error)).id('team-error').fontSize(this.a.font(14)).fontColor('#D65D64') }
           if (!this.data.lead.members.length) {
             Text(this.a.t(this.data.lead.state === 'unsupported' ? '此主机未启用团队能力' : this.data.lead.state === 'loading' ? '正在读取团队' : '当前会话暂无团队成员')).fontSize(this.a.font(15)).fontColor(this.a.muted).padding(24)
           }

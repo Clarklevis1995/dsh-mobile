@@ -1,0 +1,18 @@
+[
+  {
+    "task": "P1-real-approval-ALLOW-G",
+    "detail": "真实 write工具的ALLOW：审批前不执行，明确决定后核对实际文件与唯一服务端审计；单次授权不改变只读权限"
+  },
+  {
+    "task": "P1-real-approval-REJECT-G",
+    "detail": "真实 write工具的REJECT：审批前不执行，明确决定后核对实际文件与唯一服务端审计；单次授权不改变只读权限"
+  },
+  {
+    "task": "P1-real-approval-EXTERNAL-G",
+    "detail": "真实 write工具的EXTERNAL：审批前不执行，明确决定后核对实际文件与唯一服务端审计；单次授权不改变只读权限"
+  },
+  {
+    "task": "P1-real-approval-REPLAY-G",
+    "detail": "真实 write工具的REPLAY：审批前不执行，明确决定后核对实际文件与唯一服务端审计；单次授权不改变只读权限"
+  }
+]

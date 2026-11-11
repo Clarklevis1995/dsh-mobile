@@ -1,0 +1,14 @@
+[
+  {
+    "task": "P1-real-question-CANCEL-G",
+    "detail": "真实三题问题的CANCEL通过；同一rpc重放、明确取消/另一端处理后移除过期入口，独立观察用户消息仅一次"
+  },
+  {
+    "task": "P1-real-question-EXTERNAL_REPLAY-G",
+    "detail": "真实三题问题的EXTERNAL_REPLAY通过；同一rpc重放、明确取消/另一端处理后移除过期入口，独立观察用户消息仅一次"
+  },
+  {
+    "task": "P1-real-question-AGENT_CANCEL-G",
+    "detail": "真实三题问题的AGENT_CANCEL通过；同一rpc重放、明确取消/另一端处理后移除过期入口，独立观察用户消息仅一次"
+  }
+]

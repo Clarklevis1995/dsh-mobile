@@ -1,7 +1,10 @@
+import { SettingsSection } from '../components/SettingsSection';
+import { SettingsData } from '../core/SettingsData';
+import { SettingsGatewayRow } from '../components/SettingsGatewayRow';
 import { FontSizePanel } from '../components/FontSizePanel';
 import { PreferenceMenuRow } from '../components/PreferenceMenuRow';
 import { Appearance, iconTint } from '../core/Appearance';
-import { AppearanceData } from '../core/Models';
+import { AppearanceData, Command } from '../core/Models';
 import { PageHeader } from '../components/DesignSystem';
 
 @Component
@@ -10,12 +13,15 @@ export struct SettingsPage {
   @Prop notificationStatus: string = '';
   onNotifications: (enabled: boolean) => void = () => {};
   @ObjectLink a: Appearance;
+  @ObjectLink snapshot: SettingsData;
   @Prop section: string = 'root';
   onOpenSection: (section: string) => void = () => {};
   @Prop version: string = '';
   @Prop buildCode: number = 0;
-  @Prop hostName: string = '';
-  @Prop status: string = '';
+  onAction: (command: Command) => void = () => {};
+  onConnection: () => void = () => {};
+  onPing: () => void = () => {};
+  aboutToAppear(): void { if (this.section === 'root' && this.snapshot.connected) { this.onAction(new Command('controls-defaults')); } }
   onBack: () => void = () => {};
   onSchedules: () => void = () => {};
   onPlugins: () => void = () => {};
@@ -34,13 +40,13 @@ export struct SettingsPage {
     if (motion !== undefined) { next.reduceMotion = motion; }
     this.onChange(next);
   }
-  @Builder private row(title: string, detail: string, id: string, action: () => void) {
+  @Builder private row(title: string, detail: string, id: string, action: () => void, enabled: boolean = true) {
     Row({ space: 12 }) {
       Text(this.a.t(title)).fontSize(this.a.font(16)).fontColor(this.a.fg).layoutWeight(1)
       Text(detail).fontSize(this.a.font(14)).fontColor(this.a.muted).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       Image($rawfile('icons/chevron_right.svg')).width(16).height(16).colorFilter(iconTint(this.a.muted))
-    }.padding({ left: 18, right: 18, top: 18, bottom: 18 }).width('100%').constraintSize({ minHeight: 56 })
-      .backgroundColor(this.a.surface).id(id).onClick(action)
+    }.padding({ left: 16, right: 16, top: 15, bottom: 15 }).width('100%').constraintSize({ minHeight: 56 })
+      .backgroundColor(this.a.surface).id(id).opacity(enabled ? 1 : .4).enabled(enabled).onClick(action)
   }
   private title(): string {
     if (this.section === 'font') { return this.a.t('字体大小'); }
@@ -56,43 +62,60 @@ export struct SettingsPage {
           onScale: value => this.set(undefined, undefined, false, value) }).layoutWeight(1)
       } else {
       Scroll() {
-        Column({ space: 20 }) {
+        Column({ space: 22 }) {
           if (this.section === 'root') {
-            Text('Mobile Gateway').fontSize(this.a.font(14)).fontWeight(FontWeight.Bold).fontColor(this.a.muted).width('100%').padding({ left: 18 })
-            Column() {
-              this.row('主机', this.hostName || this.a.t('选择主机'), 'settings-hosts', this.onHosts)
-              Divider().color(this.a.line).margin({ left: 18, right: 18 })
-              this.row('主机管理', this.a.t(this.status), 'settings-manage-hosts', this.onHosts)
-              Divider().color(this.a.line).margin({ left: 18, right: 18 })
-              this.row('默认配置', '', 'settings-defaults', this.onDefaults)
-              Divider().color(this.a.line).margin({ left: 18, right: 18 })
-              this.row('Agent 预设', '', 'settings-agent-presets', this.onAgents)
-            }.borderRadius(26).clip(true).width('100%')
-            Text(this.a.t('外观')).fontSize(this.a.font(14)).fontWeight(FontWeight.Bold).fontColor(this.a.muted).width('100%').padding({ left: 18 })
-            Column() {
+            SettingsSection({ a: this.a, title: '新会话默认配置', footer: '与 WebUI 使用同一份部署级设置。修改只影响之后新建的会话，运行中的会话保持启动时的配置。' }) {
+              SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'agent', controlId: 'settings-agent-presets', onPress: this.onAgents })
+              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'model', controlId: 'settings-defaults', onPress: this.onDefaults })
+              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'permission', controlId: 'settings-default-permission', onPress: this.onDefaults })
+            }
+            SettingsSection({ a: this.a, title: 'Mobile Gateway' }) {
+              SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'endpoint', controlId: 'settings-hosts', onPress: this.onHosts })
+              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'status', controlId: 'settings-manage-hosts', onPress: this.onHosts })
+              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'connection', controlId: 'settings-connection', onPress: this.onConnection })
+              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'ping', controlId: 'settings-ping', onPress: this.onPing })
+            }
+            if (this.snapshot.hostSnapshot) {
+              SettingsSection({ a: this.a, title: 'DSH Host' }) {
+                SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'host-version', controlId: 'settings-host-version' })
+                Divider().color(this.a.line).margin({ left: 16, right: 16 })
+                SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'host-sessions', controlId: 'settings-host-sessions' })
+                if (this.snapshot.hostSnapshot?.cwd) {
+                  Divider().color(this.a.line).margin({ left: 16, right: 16 })
+                  SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'host-cwd', controlId: 'settings-host-cwd' })
+                }
+              }
+            }
+            SettingsSection({ a: this.a, title: '外观' }) {
               PreferenceMenuRow({ a: this.a, kind: 'style', onChoose: value => this.set(value) })
-              Divider().color(this.a.line).margin({ left: 18, right: 18 })
+              Divider().color(this.a.line).margin({ left: 16, right: 16 })
               PreferenceMenuRow({ a: this.a, kind: 'language', onChoose: value => this.set(undefined, value) })
-              Divider().color(this.a.line).margin({ left: 18, right: 18 })
-              this.row('字号', this.a.data.fontFollowsSystem ? this.a.t('系统') : Math.round(this.a.data.fontScale * 100) + '%', 'settings-font', () => this.onOpenSection('font'))
-              Divider().color(this.a.line).margin({ left: 18, right: 18 })
+              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'font', controlId: 'settings-font', onPress: () => this.onOpenSection('font') })
+              Divider().color(this.a.line).margin({ left: 16, right: 16 })
               Row() {
                 Text(this.a.t('减少动态效果')).fontSize(this.a.font(16)).fontColor(this.a.fg).layoutWeight(1)
-                Toggle({ type: ToggleType.Switch, isOn: this.a.data.reduceMotion }).id('settings-motion')
-                  .onChange(value => this.set(undefined, undefined, undefined, undefined, value))
-              }.padding(18).backgroundColor(this.a.surface).width('100%')
-            }.borderRadius(26).clip(true).width('100%')
-            Column() {
+                Toggle({ type: ToggleType.Switch, isOn: this.a.data.reduceMotion }).id('settings-motion').onChange(value => this.set(undefined, undefined, undefined, undefined, value))
+              }.padding(16).backgroundColor(this.a.surface).width('100%').constraintSize({ minHeight: 54 })
+            }
+            SettingsSection({ a: this.a, title: '本地存储' }) {
               this.row('存储空间', '', 'settings-storage', () => this.onOpenSection('storage'))
-              Divider().color(this.a.line).margin({ left: 18, right: 18 })
-              this.row('隐私', '', 'settings-privacy', () => this.onOpenSection('privacy'))
-              Divider().color(this.a.line).margin({ left: 18, right: 18 })
-              this.row('关于', this.version, 'settings-about', () => this.onOpenSection('about'))
-              Divider().color(this.a.line).margin({ left: 18, right: 18 })
+            }
+            SettingsSection({ a: this.a, title: '主机扩展' }) {
               this.row('插件', '', 'settings-plugins', this.onPlugins)
-              Divider().color(this.a.line).margin({ left: 18, right: 18 })
+              Divider().color(this.a.line).margin({ left: 16, right: 16 })
               this.row('定时任务', '', 'settings-schedules', this.onSchedules)
-            }.borderRadius(26).clip(true).width('100%')
+            }
+            SettingsSection({ a: this.a, title: '关于' }) {
+              this.row('当前版本', this.version, 'settings-about', () => this.onOpenSection('about'))
+              Divider().color(this.a.line).margin({ left: 16, right: 16 })
+              this.row('隐私', '', 'settings-privacy', () => this.onOpenSection('privacy'))
+            }
           } else if (this.section === 'privacy') {
             Column({ space: 18 }) {
               Row({ space: 12 }) {
@@ -115,7 +138,7 @@ export struct SettingsPage {
               Text('MIT License').fontSize(this.a.font(13)).fontColor(this.a.muted)
             }.padding(24).backgroundColor(this.a.surface).borderRadius(26).width('100%')
           }
-        }.padding(20).width('100%').constraintSize({ maxWidth: 720 })
+        }.padding({ left: 20, right: 20, top: 8, bottom: 30 }).width('100%').constraintSize({ maxWidth: 720 })
       }.layoutWeight(1).width('100%').align(Alignment.Top)
       }
     }.width('100%').height('100%').backgroundColor(this.section === 'font' && !this.a.dark ? '#F7F7F8' : this.a.settingsBg)

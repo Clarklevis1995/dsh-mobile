@@ -28,6 +28,8 @@ export class ApprovalView {
   sessionId: string;
   toolName: string = '';
   reason?: string;
+  reasonEnglish?: string;
+  replay: boolean = false;
   arguments?: string;
   status: string = 'idle';
   outcome?: string;
@@ -41,7 +43,7 @@ export class ApprovalView {
 
   update(row: ApprovalRequest): void {
     this.toolName = row.toolName;
-    this.reason = row.reason;
+    this.reason = row.reason; this.reasonEnglish = row.reasonEnglish; this.replay = row.replay ?? false;
     this.arguments = row.arguments;
     this.status = row.status;
     this.outcome = row.outcome;

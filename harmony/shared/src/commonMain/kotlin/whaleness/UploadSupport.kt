@@ -4,6 +4,7 @@ import com.clarklevis.dsh.shared.facade.SharedFileUploadStore
 import com.clarklevis.dsh.shared.facade.SharedUploadTransition
 import com.clarklevis.dsh.shared.gateway.GatewayOutgoingImage
 import com.clarklevis.dsh.shared.gateway.GatewayRequest
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import kotlinx.serialization.Serializable
 import kotlin.io.encoding.Base64
@@ -16,7 +17,7 @@ data class HarmonyUploadDraft(
     val sha256: String,
     val status: String,
     val confirmedBytes: Long,
-    val error: String?,
+    val error: UiMessage?,
 )
 
 @Serializable
@@ -134,17 +135,23 @@ internal class UploadSupport {
         if (command.op == "image-add") {
             require(photosAvailable && photos.size < 4 && photos.none { it.view.id == command.itemId }) { "当前最多可选择四张图片" }
             require(
-                command.fileName.isNotBlank() && command.fileName.length <= 255 &&
+                command.fileName.isNotBlank() &&
+                    command.fileName.length <= 255 &&
                     command.fileName.none { it == '/' || it == '\\' || it.isISOControl() },
             ) { "图片名称无效" }
             require(command.sha256.matches(Regex("[a-fA-F0-9]{64}"))) { "图片摘要无效" }
             require(
-                command.input.length <= 1_398_104 && command.byteSize in 1..1_048_576 && command.imageWidth in 1..2048 &&
+                command.input.length <= 1_398_104 &&
+                    command.byteSize in 1..1_048_576 &&
+                    command.imageWidth in 1..2048 &&
                     command.imageHeight in 1..2048,
             ) { "图片大小或尺寸无效" }
             val bytes = Base64.decode(command.input)
             require(
-                bytes.size.toLong() == command.byteSize && bytes.size >= 4 && bytes[0] == 0xff.toByte() && bytes[1] == 0xd8.toByte() &&
+                bytes.size.toLong() == command.byteSize &&
+                    bytes.size >= 4 &&
+                    bytes[0] == 0xff.toByte() &&
+                    bytes[1] == 0xd8.toByte() &&
                     bytes[bytes.lastIndex - 1] == 0xff.toByte() &&
                     bytes.last() == 0xd9.toByte(),
             ) { "图片内容无效" }
@@ -190,7 +197,7 @@ internal class UploadSupport {
                 }
 
                 "file-read-failed" -> {
-                    store.readFailed(command.requestKey, "文件读取失败，请重新选择")
+                    store.readFailed(command.requestKey, UiMessage("upload.readFailed"))
                 }
 
                 else -> {

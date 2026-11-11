@@ -1,0 +1,27 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-gpk952jb
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 session-session-cc66d2bf-3630-409a-a866-5fef1d35e272
+输入 message-draft
+操作 message-send
+输入 message-draft
+操作 message-send
+PASS P1-real-same-text-G 同一正文主动发送两次，真实历史保留两条用户消息，各轮收束
+输入 message-draft
+操作 message-send
+输入 message-draft
+PASS P1-real-background-stream-G 真实200段约40秒流式经Home离开/返回，终帧逐字一致、消息唯一、草稿保留
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 approval-reject-b6124506-9652-48e4-a838-2a205ec9120e
+操作 page-back
+PASS P1-real-background-approval-G 真实待审批状态经Home返回保留同rpc，未经选择无执行，拒绝后不写文件
+输入 message-draft
+输入 message-draft
+操作 message-send
+PASS P1-real-host-restart-idle-G 专属真实Host重启后身份重连，原消息不重发，草稿保留，继续发送唯一且无序列冲突
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-gpk952jb

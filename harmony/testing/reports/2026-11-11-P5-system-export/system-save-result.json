@@ -1,0 +1,9 @@
+{
+  "name": "harmony-export-93f6e9af671944cea7f17a28eab41a0a.md",
+  "bytes": 173,
+  "sha256": "4f33b71b2a1750de94756b92a03ba389d03b352777e37de8cc47999570680643",
+  "readBackEquals": true,
+  "method": "real DocumentViewPicker.save -> actual TaskPool export -> reopen granted destination URI -> byte equality; cleanup only owned filename",
+  "shellReadBackEquals": true,
+  "cleanup": "removed only owned UUID file after byte validation"
+}

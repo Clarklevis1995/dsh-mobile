@@ -7,6 +7,8 @@ import { Engine } from 'libwhaleness_bridge.so';
 import { Credential, CredentialStore } from './CredentialStore';
 import { Command, SharedResult, SharedState, ChatMessage, ConversationPatch, GatewayConnectionInfo, TrajectoryData, ControlData, SessionFeatureData, SlashData, DraftMutation, PluginData, ScheduleData, TeamData, UploadData, UploadReadData, AttachmentData, RawAttachmentData, WorkspaceFilesData, FileIoData, FileCompletionData, CacheExportData, emptyState } from './Models';
 
+interface HeartbeatFrame { kind?: string; }
+
 export class GatewayClient {
   onNotifications: (notices: AgentNotice[]) => void = () => {};
   voiceDraft: () => string = () => '';
@@ -45,6 +47,7 @@ export class GatewayClient {
   private messages: ChatMessage[] = [];
   private visibleSession: string = '';
   private generation: number = 0;
+  private controlPong: number = 0;
   private status: string = '尚未连接';
   private error: string = '';
   private queue: Promise<void> = Promise.resolve();
@@ -63,6 +66,17 @@ export class GatewayClient {
 
   constructor(profileId?: string) { this.secrets = new CredentialStore(profileId); }
 
+  async ping(): Promise<boolean> {
+    if (!this.state.connected || !this.control) { return false; }
+    const generation = this.generation; const pong = this.controlPong;
+    try { if (!await this.control.send('{"type":"ping"}')) { return false; } } catch (_) { return false; }
+    const until = Date.now() + 5000;
+    while (generation === this.generation && this.state.connected && Date.now() < until) {
+      if (this.controlPong > pong) { return true; }
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+    }
+    return false;
+  }
   get connected(): boolean { return this.state.connected; }
   get connectionGeneration(): number { return this.generation; }
   get selectedSessionId(): string | undefined { return this.state.selectedSessionId; }
@@ -189,6 +203,9 @@ export class GatewayClient {
 
   private call(command: Command): SharedResult {
     const result = JSON.parse(this.engine.dispatch(JSON.stringify(command))) as SharedResult;
+    if (result.ok && command.op === 'frame' && command.channel === 'control') {
+      try { if ((JSON.parse(command.frame) as HeartbeatFrame).kind === 'pong') { this.controlPong++; } } catch (_) {}
+    }
     if (result.state) { this.state = result.state; }
     if (this.visibleSession !== (this.state.selectedSessionId ?? '')) {
       this.messages = [];

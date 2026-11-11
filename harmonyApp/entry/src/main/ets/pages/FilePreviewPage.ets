@@ -60,6 +60,7 @@ export struct FilePreviewPage {
   onBack: () => void = () => {};
   onLink: (url: string) => void = () => {};
   onClosed: (file: LocalFileData) => void = () => {};
+  onAcquire: (file: LocalFileData) => (() => void) | undefined = () => undefined;
   aboutToAppear(): void { this.alive = true; this.opened = this.file; if (this.isText()) { this.read(); } }
   aboutToDisappear(): void { this.alive = false; const file = this.opened; if (file) { setTimeout(() => this.onClosed(file), 0); } }
   private isText(): boolean { return this.file.mediaType.startsWith('text/') || /\.(md|txt|json|ya?ml|xml|csv|kt|kts|js|ts|ets|tsx|jsx|py|c|cpp|h|hpp|java|swift|sh|log|toml|css|html)$/i.test(this.file.name); }
@@ -72,10 +73,13 @@ export struct FilePreviewPage {
   }
   private context(): common.UIAbilityContext | undefined { return this.getUIContext().getHostContext() as common.UIAbilityContext | undefined; }
   private async save(): Promise<void> {
-    const context = this.context(); if (!context || this.exporting) { return; } this.exporting = true;
-    try { const uris = await new picker.DocumentViewPicker(context).save({ newFileNames: [this.file.name] }); if (uris.length) { await taskpool.execute(new taskpool.Task(exportWorkspaceFile, this.file.localPath, uris[0]), taskpool.Priority.HIGH); if (this.alive) { this.getUIContext().getPromptAction().showToast({ message: this.a.t('已保存') }); } } }
+    const context = this.context(); if (!context || this.exporting) { return; }
+    const file = this.file; const release = this.onAcquire(file);
+    if (!release) { this.error = this.a.t('文件副本已失效，请重新下载'); return; }
+    this.exporting = true;
+    try { const uris = await new picker.DocumentViewPicker(context).save({ newFileNames: [file.name] }); if (uris.length) { await taskpool.execute(new taskpool.Task(exportWorkspaceFile, file.localPath, uris[0]), taskpool.Priority.HIGH); if (this.alive) { this.getUIContext().getPromptAction().showToast({ message: this.a.t('已保存') }); } } }
     catch (_) { if (this.alive) { this.error = this.a.t('文件保存失败，请重试'); } }
-    finally { if (this.alive) { this.exporting = false; } }
+    finally { release(); if (this.alive) { this.exporting = false; } }
   }
   private async open(): Promise<void> {
     try { await this.context()?.startAbility({ action: 'ohos.want.action.viewData', uri: fileUri.getUriFromPath(this.file.localPath), type: this.file.mediaType, flags: wantConstant.Flags.FLAG_AUTH_READ_URI_PERMISSION }); }

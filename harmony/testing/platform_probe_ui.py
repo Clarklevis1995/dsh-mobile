@@ -12,14 +12,22 @@ import smoke_ui as m
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument('--probe', choices=['rdb','photo','notification','engine','audio'], required=True); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument('--probe', choices=['rdb','photo','notification','engine','audio','scan'], required=True); args = parser.parse_args()
     folder = Path(tempfile.mkdtemp(prefix='harmony-platform-' + args.probe + '-')); print('REPORT_DIR', folder, flush=True)
     app = folder / 'app'; shutil.copytree(m.ROOT / 'harmonyApp', app, ignore=shutil.ignore_patterns('build', '.hvigor', 'oh_modules', '.idea'))
     config = app / 'AppScope/app.json5'; data = json.loads(config.read_text()); data['app']['bundleName'] = m.BUNDLE; config.write_text(json.dumps(data))
-    shutil.copyfile(m.ROOT / ('harmony/testing/compatibility/' + {'rdb':'RdbProbe.ets','photo':'PhotoProbe.ets','notification':'NotificationProbe.ets','engine':'EngineProbe.ets','audio':'AudioProbe.ets'}[args.probe]), app / 'entry/src/main/ets/pages/Index.ets')
+    shutil.copyfile(m.ROOT / ('harmony/testing/compatibility/' + {'rdb':'RdbProbe.ets','photo':'PhotoProbe.ets','notification':'NotificationProbe.ets','engine':'EngineProbe.ets','audio':'AudioProbe.ets','scan':'ScanProbe.ets'}[args.probe]), app / 'entry/src/main/ets/pages/Index.ets')
     if args.probe == 'photo':
         from generate_photo_fixtures import generate
         generate(app / 'entry/src/main/resources/rawfile')
+    if args.probe == 'scan':
+        import base64
+        def payload(expires):
+            value=dict(version=2,publicUrl='ws://127.0.0.1:18783/ws/mobile',pairingCode='harmony-smoke',expiresAt=expires,gatewayId='a56a1098-8519-43a1-9dce-fb99863bf5bb')
+            return base64.urlsafe_b64encode(json.dumps(value,separators=(',',':')).encode()).decode().rstrip('=')
+        rows=[dict(label='valid pairing',value=payload(time.time()*1000+3600000),valid=True),dict(label='expired pairing',value=payload(time.time()*1000-10000),valid=False),dict(label='invalid pairing',value='not-a-pairing-payload',valid=False)]
+        raw=app/'entry/src/main/resources/rawfile';raw.mkdir(exist_ok=True,parents=True);(raw/'scan-fixtures.json').write_text(json.dumps(rows))
+        subprocess.run(['swift', str(m.ROOT/'harmony/testing/generate_qr_fixtures.swift'), str(raw/'scan-fixtures.json'), str(raw/'scan-images')], check=True)
     done = 'DONE ' + args.probe.upper() + ' probe'
     env = dict(os.environ, DEVECO_SDK_HOME=str(m.DEVECO / 'sdk')); env['PATH'] = str(m.DEVECO / 'tools/node/bin') + ':' + str(m.DEVECO / 'tools/ohpm/bin') + ':' + env['PATH']
     with (folder / 'build.log').open('w') as log:

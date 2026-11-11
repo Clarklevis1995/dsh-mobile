@@ -1,0 +1,18 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-letm2m9h
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 session-session-8fc71a21-b043-4e53-a3a8-c0fc1ca869c5
+输入 message-draft
+PASS P1-real-rapid-double-tap-G 真实发送按钮快速双击仅产生一条用户消息和一轮回复
+PASS P1-real-cross-client-append-G 另一真实客户端追加消息与回复自动在当前原生会话显示，消息唯一
+输入 message-draft
+操作 message-send
+操作 message-stop
+输入 message-draft
+操作 message-send
+输入 message-draft
+操作 message-send
+PASS P1-real-stop-current-session-G A/B真实同时生成，原生停止A后B仍产生流帧；A收束且可继续聊天，已结束A的取消不破坏下一轮
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-letm2m9h

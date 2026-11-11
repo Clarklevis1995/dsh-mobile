@@ -1,9 +1,63 @@
 """实际 Native 状态机、真实 ArkUI 页面与隔离协议服务的会话控制验收。"""
 import time
+import os
 
 
 def run(ui, m, folder, passed):
     m.connect(ui)
+    if os.environ.get('HARMONY_CONTROL_START') == 'font':
+        from font_visual_scenarios import run as fonts
+        fonts(ui,m,folder,passed);return
+    if os.environ.get('HARMONY_CONTROL_START') == 'settings':
+        import json
+        ui.navigate('conversation-back','home-settings');ui.navigate('home-settings','settings-defaults')
+        ui.text('新会话默认配置');ui.text('构建 Agent');ui.text('读取模型');ui.control('settings-host-version',scroll=True);ui.text('0.2.2-fixture');ui.text('已连接会话');ui.scroll(False);ui.scroll(False);ui.screenshot('settings-connected-light-root')
+        (folder/'settings-root-layout.json').write_text(json.dumps(ui.nodes(),ensure_ascii=False,indent=2))
+        ui.click('settings-ping',scroll=True);time.sleep(.5);ui.screenshot('settings-ping-response')
+        assert 'manual-ping-response' in (folder/'gateway-18783.log').read_text()
+        ui.click('settings-connection',scroll=True);ui.text('已断开');ui.screenshot('settings-disconnected')
+        ui.scroll(False);ui.scroll(False)
+        assert str(ui.wait('settings-defaults').get('enabled')).lower()=='false'
+        ui.click('settings-connection',scroll=True);ui.text('已连接',timeout=25)
+        ui.navigate('settings-font','font-follow-system');ui.text('代码');ui.screenshot('font-light-standard');(folder/'font-light-layout.json').write_text(json.dumps(ui.nodes(),ensure_ascii=False,indent=2));ui.navigate('page-back','settings-style')
+        ui.navigate('settings-style','appearance-dark');ui.choose('appearance-dark')
+        for _ in range(3):ui.scroll(False)
+        ui.text('新会话默认配置');ui.screenshot('settings-connected-dark-root')
+        ui.navigate('settings-font','font-follow-system');ui.screenshot('font-dark-standard');(folder/'font-dark-layout.json').write_text(json.dumps(ui.nodes(),ensure_ascii=False,indent=2));ui.navigate('page-back','settings-style')
+        ui.navigate('settings-style','appearance-light');ui.choose('appearance-light')
+        for _ in range(3):ui.scroll(False)
+        ui.screenshot('settings-connected-light-restored')
+        passed('P4-settings-navigation-F','设置按新会话默认配置/网关/外观顺序展示真实默认值；控制通道Ping回包、主动断开禁用默认设置、重连与浅深字号入口通过')
+        return
+    if os.environ.get('HARMONY_CONTROL_START') == 'localization':
+        ui.navigate('conversation-back', 'home-settings'); ui.navigate('home-settings', 'settings-language')
+        ui.navigate('settings-language', 'language-en'); ui.choose('language-en'); ui.navigate('page-back', 'home-settings')
+        ui.click('鸿蒙原生会话验证','text'); ui.wait('message-draft'); ui.click('queue-expand'); ui.click('queue-remove-q-remove')
+        until = time.monotonic() + 12
+        while ui.find('queue-remove-q-remove'):
+            assert time.monotonic() < until
+            time.sleep(.3)
+        ui.text('Attachment message'); ui.text('待编辑的排队原文'); ui.screenshot('semantic-queue-English-host-original')
+        ui.navigate('conversation-back','home-settings'); ui.navigate('home-settings','settings-language'); ui.navigate('settings-language','language-zh'); ui.choose('language-zh'); ui.navigate('page-back','home-settings')
+        ui.click('鸿蒙原生会话验证','text'); ui.wait('message-draft')
+        if ui.find('queue-expand'): ui.click('queue-expand')
+        ui.text('附件消息'); ui.text('待编辑的排队原文'); ui.screenshot('semantic-queue-Chinese-host-original')
+        passed('P7-shared-message-language-F','同一进程切换中英后，共享附件占位语义文案即时重解；主机排队正文逐字保持原文，不当成本地文案翻译')
+        return
+    if os.environ.get('HARMONY_CONTROL_START') == 'steer':
+        ui.message('slow'); ui.wait('message-stop'); ui.click('queue-expand')
+        until = time.monotonic() + 15
+        while time.monotonic() < until and str(ui.wait('queue-steer-q-edit').get('enabled')).lower() != 'true': time.sleep(.3)
+        ui.click('queue-steer-q-edit')
+        until = time.monotonic() + 15
+        while ui.find('queue-steer-q-edit'):
+            assert time.monotonic() < until, '插话未获确认'
+            time.sleep(.3)
+        assert 'queue-steer-confirmed harmony-smoke q-edit' in (folder/'gateway-18783.log').read_text()
+        assert ui.wait('message-draft').get('text','') == ''
+        ui.screenshot('queue-steer-confirmed'); ui.click('message-stop')
+        passed('P4-queue-steer-F', '生成中通过原生入口将指定排队项提升为插话，夹具核对请求及确认，确认后移出队列且不回填编辑草稿；不替代真实 Host 执行 G')
+        return
     ui.click('conversation-controls'); ui.wait('control-model-fixture-read')
     ui.text('✓ 读取模型'); ui.text('构建 Agent')
     ui.click('session-agent-read'); ui.text('✓ 阅读 Agent')

@@ -97,5 +97,10 @@ export class ImageCache {
       if (entry.original) { fs.unlink(entry.original).catch(() => {}); } if (entry.thumbnail) { fs.unlink(entry.thumbnail).catch(() => {}); }
     }
   }
+  releaseMemory(): void {
+    this.epoch++; this.queue = []; this.active = undefined; this.pinned.clear();
+    this.entries.forEach(entry => { if (entry.original) { fs.unlink(entry.original).catch(() => {}); } if (entry.thumbnail) { fs.unlink(entry.thumbnail).catch(() => {}); } });
+    this.entries.clear(); this.onChange();
+  }
   dispose(): void { this.alive = false; this.epoch++; this.client.onAttachment = () => {}; this.queue = []; this.active = undefined; this.entries.forEach(entry => { if (entry.original) { fs.unlink(entry.original).catch(() => {}); } if (entry.thumbnail) { fs.unlink(entry.thumbnail).catch(() => {}); } }); this.entries.clear(); this.onChange = () => {}; }
 }

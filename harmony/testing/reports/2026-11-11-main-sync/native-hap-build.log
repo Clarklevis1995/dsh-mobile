@@ -1,0 +1,49 @@
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:compileKotlinOhosArm64 UP-TO-DATE
+> Task :shared:xcodeVersion UP-TO-DATE
+> Task :shared:linkReleaseSharedOhosArm64 UP-TO-DATE
+> Task :shared:publishNative
+
+BUILD SUCCESSFUL in 657ms
+4 actionable tasks: 1 executed, 3 up-to-date
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[32minstall completed in 0s 39ms[39m
+> hvigor [32mUP-TO-DATE :entry:default@PreBuild...  [39m
+> hvigor [32mFinished :entry:default@CreateModuleInfo... after 1 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@GenerateMetadata...  [39m
+> hvigor [32mFinished :entry:default@ConfigureCmake... after 15 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@MergeProfile...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@CreateBuildProfile...  [39m
+> hvigor [32mFinished :entry:default@PreCheckSyscap... after 1 ms [39m
+> hvigor [32mFinished :entry:default@ProcessIntegratedHsp... after 1 ms [39m
+> hvigor [32mFinished :entry:default@BuildNativeWithCmake... after 4 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@MakePackInfo...  [39m
+> hvigor [32mFinished :entry:default@SyscapTransform... after 6 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@GeneratePkgContextInfo...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessProfile...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessRouterMap...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessShareConfig...  [39m
+> hvigor [32mFinished :entry:default@ProcessStartupConfig... after 5 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@ProcessResource...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@GenerateLoaderJson...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@CompileResource...  [39m
+> hvigor [32mUP-TO-DATE :entry:default@CompileArkTS...  [39m
+> hvigor [32mFinished :entry:default@BuildJS... after 1 ms [39m
+> hvigor [32mFinished :entry:default@BuildNativeWithNinja... after 615 ms [39m
+> hvigor [32mFinished :entry:default@ProcessLibs... after 203 ms [39m
+> hvigor [32mFinished :entry:default@DoNativeStrip... after 621 ms [39m
+> hvigor [32mFinished :entry:default@CacheNativeLibs... after 13 ms [39m
+> hvigor [32mUP-TO-DATE :entry:default@GeneratePkgModuleJson...  [39m
+> hvigor [32mFinished :entry:default@ProcessCompiledResources... after 1 ms [39m
+> hvigor [32mFinished :entry:default@PackageHap... after 391 ms [39m
+> hvigor [32mFinished :entry:default@PackingCheck... after 3 ms [39m
+> hvigor [33mWARN: No signingConfig found for product default[39m
+> hvigor [32mFinished :entry:default@SignHap... after 1 ms [39m
+> hvigor [32mFinished :entry:default@CollectDebugSymbol... after 1 ms [39m
+> hvigor [32mFinished :entry:assembleHap... after 1 ms [39m
+> hvigor [32mBUILD SUCCESSFUL in 3 s 41 ms [39m

@@ -39,6 +39,8 @@ export struct ConversationPage {
   @Prop slash: SlashData = emptySlash();
   @State private sendMode: string = 'queue';
   @State private voiceRequested: boolean = false;
+  @State private composerModeLocked: boolean = false;
+  private composerCooldownTimer: number = -1;
   @Prop features: SessionFeatureData = emptyFeatures();
   @State private trajectoryOpen: boolean = false;
   @Prop trajectory: TrajectoryData = { sessionId: '', nodes: [] };
@@ -103,12 +105,17 @@ export struct ConversationPage {
   private permissionTitle(): string { const permissions = this.currentControls().permissions; const preset = permissions?.preset || permissions?.currentValue; if (preset === 'read-only') { return this.a.t('只读'); } if (preset === 'workspace-write') { return this.a.t('工作区写入'); } if (preset === 'danger-full-access') { return this.a.t('完全访问'); } return permissions?.options?.find(row => row.value === permissions.currentValue)?.name || this.a.t('默认权限'); }
   private contextPercent(): number { const value = this.currentControls().context?.pressure; return value?.contextWindow ? Math.min(100,Math.max(0,(value.pressureTokens ?? 0)*100/value.contextWindow)) : 0; }
   aboutToAppear(): void { this.stateChanged(); if (this.state.connected && this.state.selectedSessionId && !this.state.childConversation && this.controls.sessionId !== this.state.selectedSessionId) { const command = new Command('controls-open'); command.sessionId = this.state.selectedSessionId; this.onAction(command); } }
-  aboutToDisappear(): void { this.captureAnchor(); clearTimeout(this.timer); clearTimeout(this.historyTimer); }
+  aboutToDisappear(): void { this.captureAnchor(); clearTimeout(this.timer); clearTimeout(this.historyTimer); clearTimeout(this.composerCooldownTimer); this.composerModeLocked = false; }
   private currentSlash(): SlashData { return this.slash.sessionId === this.state.selectedSessionId ? this.slash : emptySlash(); }
   @Builder private slashPopup() { SlashSuggestions({ a: this.a, data: this.currentSlash(), sessionId: this.state.selectedSessionId ?? '', onAction: this.onAction, onReconnect: this.onReconnect }) }
   private closeSlash(): void { const command = new Command('slash-dismiss'); command.sessionId = this.state.selectedSessionId; this.onAction(command); }
   private currentFeatures(): SessionFeatureData { return this.features.sessionId === this.state.selectedSessionId ? this.features : emptyFeatures(); }
-  private sendMessage(): void { const command = new Command('send'); command.mode = this.state.generating ? this.sendMode : 'queue'; this.onAction(command); this.jumpToTail(); }
+  private sendMessage(): void {
+    if (!this.canSubmit()) { return; }
+    // 同一触点快速连点不能在ACK清稿后误触新出现的停止/语音操作。新文字的再次发送仍可用。
+    this.composerModeLocked = true; clearTimeout(this.composerCooldownTimer);
+    this.composerCooldownTimer = setTimeout(() => { this.composerModeLocked = false; this.composerCooldownTimer = -1; }, 400);
+    const command = new Command('send'); command.mode = this.state.generating ? this.sendMode : 'queue'; this.onAction(command); this.jumpToTail(); }
   private searchChanged(): void {
     if (this.searchTarget) { this.anchorTarget = this.searchTarget; this.anchorInset = 0; this.anchorTries = 0; this.followTail = false; this.atTail = false; this.changed(); }
   }
@@ -116,7 +123,7 @@ export struct ConversationPage {
     if (!this.state.generating) { this.sendMode = 'queue'; }
     const key = this.scope + ':' + (this.state.selectedSessionId ?? '');
     if (key !== this.conversationKey) {
-      this.conversationKey = key; this.voiceRequested = false; this.sendMode = 'queue'; this.renderedIds.clear(); this.unread = false; this.lastTail = '';
+      this.conversationKey = key; this.voiceRequested = false; clearTimeout(this.composerCooldownTimer); this.composerModeLocked = false; this.sendMode = 'queue'; this.renderedIds.clear(); this.unread = false; this.lastTail = '';
       this.anchorTarget = this.searchTarget || this.savedAnchor; this.anchorInset = this.searchTarget ? 0 : this.savedInset; this.anchorTries = 0;
       this.followTail = !this.anchorTarget && this.savedScrollY < 0; this.atTail = this.followTail; this.restoreY = this.anchorTarget ? -1 : this.savedScrollY;
       this.scopeChanged = true;
@@ -297,13 +304,13 @@ export struct ConversationPage {
           } else { Blank().layoutWeight(1) }
           if (this.showsStop()) {
             Button({ type: ButtonType.Circle }) { Rect().width(14).height(14).radius(3).fill('#FFFFFF') }
-              .id('message-stop').accessibilityText(this.a.t('停止生成')).width(44).height(44).padding(0).backgroundColor('#2E6BE6').enabled(this.state.connected).onClick(() => this.onAction(new Command('cancel')))
+              .id('message-stop').accessibilityText(this.a.t('停止生成')).width(44).height(44).padding(0).backgroundColor('#2E6BE6').enabled(this.state.connected && !this.composerModeLocked).onClick(() => this.onAction(new Command('cancel')))
           } else if (this.hasContent() || this.state.childConversation) {
             Button({ type: ButtonType.Circle }) { Image($rawfile('icons/arrow_up.svg')).width(24).height(24).colorFilter(iconTint('#FFFFFF')) }
               .id('message-send').accessibilityText(this.a.t(this.state.pendingMessageSessionId === this.state.selectedSessionId ? '消息发送中' : '发送')).width(44).height(44).padding(0).backgroundColor('#2E6BE6').enabled(this.canSubmit()).onClick(() => this.sendMessage())
           } else {
             Button({ type: ButtonType.Circle }) { Image($rawfile('icons/'+(this.voice.voiceMode ? 'composer_keyboard' : 'voice_waveform')+'.svg')).width(24).height(24).colorFilter(iconTint('#FFFFFF')) }
-              .id('voice-mode').accessibilityText(this.a.t(this.voice.voiceMode ? '键盘' : '语音')).width(44).height(44).padding(0).backgroundColor('#2E6BE6').enabled(this.state.connected && !!this.state.selectedSessionId).onClick(() => { if (!this.voice.voiceMode) { this.getUIContext().getFocusController().clearFocus(); } this.voiceRequested = true; this.onVoiceMode(!this.voice.voiceMode); })
+              .id('voice-mode').accessibilityText(this.a.t(this.voice.voiceMode ? '键盘' : '语音')).width(44).height(44).padding(0).backgroundColor('#2E6BE6').enabled(this.state.connected && !!this.state.selectedSessionId && !this.composerModeLocked).onClick(() => { if (!this.voice.voiceMode) { this.getUIContext().getFocusController().clearFocus(); } this.voiceRequested = true; this.onVoiceMode(!this.voice.voiceMode); })
           }
         }.width('100%')
       }.padding(12).width('calc(100% - 24vp)').margin({ left: 12, right: 12, bottom: 8 }).backgroundColor(this.a.surface).borderRadius(24).border({ width: .8, color: this.a.dark ? '#40FFFFFF' : '#0C0E131A', radius: 24 }).shadow({ radius: 10, color: this.a.dark ? '#3D000000' : '#14000000', offsetY: 4 })

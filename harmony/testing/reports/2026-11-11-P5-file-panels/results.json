@@ -1,0 +1,10 @@
+[
+  {
+    "task": "P5-file-save-share-cancel-F",
+    "detail": "真实DocumentViewPicker保存与ShareKit分享面板打开/系统返回，原生预览继续可读且无错误；不发送给任何外部对象"
+  },
+  {
+    "task": "P5-workspace-files-F",
+    "detail": "实际目录／中文空格路径，下载背压与落盘、Markdown／代码／表格、单页原生 PDF、图片和多块文本阅读；错误摘要拒绝预览"
+  }
+]

@@ -1,3 +1,4 @@
+import { SettingsData } from '../core/SettingsData';
 import { TrajectoryPage } from './TrajectoryPage';
 import { AgentNotifications } from '../core/AgentNotifications';
 import { NotificationTarget } from '../core/NotificationTypes';
@@ -49,6 +50,7 @@ import { SessionSidebar } from './SessionSidebar';
 @Entry
 @Component
 struct Index {
+  @State private settingsData: SettingsData = new SettingsData();
   @State private a: Appearance = new Appearance();
   @State private startupPhase: string = 'loading';
   @State private nav: AppNavigation = new AppNavigation();
@@ -162,7 +164,7 @@ struct Index {
   private keyboard: (height: number) => void = height => this.keyboardVisible = height > 0;
   private environment: EnvironmentCallback = {
     onConfigurationUpdated: (config: Configuration): void => this.configure(config),
-    onMemoryLevel: (_level: number): void => {}
+    onMemoryLevel: (_level: number): void => { this.runtimes.forEach((runtime: HostRuntime, id: string) => { if (id !== this.activeId && !runtime.client.connected) { runtime.client.action(new Command('release-history')).catch(() => {}); this.imageCaches.get(id)?.releaseMemory(); } }); }
   };
   private renameDialog: CustomDialogController = new CustomDialogController({
     builder: RenameDialog({ a: this.a, initial: this.renameTitle, onSave: (title: string) => this.rename(title) }),
@@ -319,7 +321,7 @@ struct Index {
       }
       this.shared = state; this.messages = runtime.messages; this.sessions = runtime.sessions;
       this.questions = runtime.questions; this.approvals = runtime.approvals; this.draft = runtime.draft;
-      this.status = status; this.errorText = error; this.refreshVoiceActive(); this.settleNotificationTarget();
+      this.status = status; this.syncSettings(); this.errorText = error; this.refreshVoiceActive(); this.settleNotificationTarget();
       if (changed && runtime.navigateCreated && state.selectedSessionId) { runtime.navigateCreated = false; this.nav.conversation(); }
       if (!state.selectedSessionId && this.nav.paths.getAllPathName().includes(AppRoute.Conversation)) { this.nav.home(); }
     };
@@ -338,7 +340,7 @@ struct Index {
       if (runtime.state.selectedSessionId === session) { runtime.draft = restored; if (this.activeId === id) { this.draft = restored; } }
     };
     runtime.client.onControls = value => {
-      if (this.activeId === id && this.active && (!value.sessionId || value.sessionId === this.shared.selectedSessionId)) { this.controlData = value; }
+      if (this.activeId === id && this.active && (!value.sessionId || value.sessionId === this.shared.selectedSessionId)) { this.controlData = value; this.syncSettings(); }
     };
     runtime.client.onTrajectory = value => {
       if (this.activeId !== id || value.sessionId !== this.shared.selectedSessionId) { return; }
@@ -365,7 +367,17 @@ struct Index {
     const revision = ++this.switchRevision;
     try { await this.repository.select(id); } catch (error) { this.errorText = (error as Error).message; return; }
     if (revision !== this.switchRevision || !this.active) { return; }
-    if (this.activeId !== id) { this.runtime?.client.disconnect(); clearTimeout(this.slashTimer); this.voiceData = emptyVoice(); this.goalTasks = emptyGoalTasks(); this.teamData = emptyTeam(); this.scheduleData = emptySchedules(); this.pluginData = emptyPlugins(); this.slashData = emptySlash(); this.sessionFeatures = emptyFeatures(); this.controlData = emptyControls(); this.trajectory = { sessionId: '', nodes: [] }; this.previewContent = ''; }
+    if (this.activeId !== id && this.runtime) {
+      const previous = this.runtime; const previousId = this.activeId;
+      // 导出先取得独立字符串快照，后台加密写入仍按数据库队列和 epoch 仲裁。
+      try { await previous.client.action(new Command('cache-export')); } catch (_) {}
+      if (revision !== this.switchRevision || !this.active) { return; }
+      previous.client.disconnect();
+      try { await previous.client.action(new Command('release-history')); } catch (_) {}
+      this.imageCaches.get(previousId)?.releaseMemory();
+      if (revision !== this.switchRevision || !this.active) { return; }
+    }
+    if (this.activeId !== id) { clearTimeout(this.slashTimer); this.voiceData = emptyVoice(); this.goalTasks = emptyGoalTasks(); this.teamData = emptyTeam(); this.scheduleData = emptySchedules(); this.pluginData = emptyPlugins(); this.slashData = emptySlash(); this.sessionFeatures = emptyFeatures(); this.controlData = emptyControls(); this.trajectory = { sessionId: '', nodes: [] }; this.previewContent = ''; }
     clearTimeout(this.searchTimer); clearTimeout(this.slashTimer); this.drawerOpen = false; this.renameDialog.close(); this.confirmation.close(); this.confirmAction = () => {}; this.renameId = ''; this.activeId = id;
     const runtime = this.runtimeFor(id); this.runtime = runtime; this.refreshVoiceActive();
     this.workspaceFiles = this.workspaceControllers.get(id)?.snapshot ?? emptyWorkspaceFiles();
@@ -380,7 +392,19 @@ struct Index {
       catch (error) { if (this.activeId === id) { this.errorText = (error as Error).message; } }
     }
   }
-  private reconnect(): void { const id = this.activeId; if (!id) { return; } this.runtime?.client.disconnect(); this.activate(id); }
+  private syncSettings(): void {
+    const profile = this.profiles.find(row => row.localId === this.activeId);
+    this.settingsData.hostSnapshot = this.shared.hostSnapshot; this.settingsData.connected = this.shared.connected; this.settingsData.controls = this.controlData;
+    this.settingsData.status = this.status; this.settingsData.hostName = this.hostName();
+    this.settingsData.endpoint = profile?.preferredEndpoint || profile?.endpoints[0] || '';
+  }
+  private async pingGateway(): Promise<void> {
+    const runtime = this.runtime; if (!runtime?.client.connected) { return; }
+    const host = this.activeId; const generation = runtime.client.connectionGeneration;
+    const ok = await runtime.client.ping();
+    if (this.active && host === this.activeId && generation === runtime.client.connectionGeneration) { this.getUIContext().getPromptAction().showToast({ message: this.a.t(ok ? '网关已响应' : '网关未响应，请检查连接') }); }
+  }
+  private reconnect(): void { const id = this.activeId; if (!id) { return; } this.runtime?.client.disconnect(); this.activate(id, true, false); }
   private showHosts(): void { this.nav.push(AppRoute.Hosts); this.errorText = ''; }
   private async connect(endpoint: string, code: string, payload: string): Promise<void> {
     if (this.connecting) { return; }
@@ -642,7 +666,7 @@ struct Index {
       } else if (name === AppRoute.Files) {
         WorkspaceFilesPage({ a: this.a, state: this.shared, data: this.workspaceFiles, onBack: () => this.back(), onAction: command => this.action(command) })
       } else if (name === AppRoute.FilePreview && this.readyFile) {
-        FilePreviewPage({ a: this.a, file: this.readyFile!, onBack: () => this.back(), onLink: url => this.openLink(url), onClosed: file => this.workspaceControllers.get(file.hostId)?.release(file.transferId) })
+        FilePreviewPage({ a: this.a, file: this.readyFile!, onBack: () => this.back(), onLink: url => this.openLink(url), onClosed: file => this.workspaceControllers.get(file.hostId)?.release(file.transferId), onAcquire: file => this.workspaceControllers.get(file.hostId)?.acquire(file.transferId) })
       } else if (name === AppRoute.Photos) {
         PhotoPreviewPage({ a: this.a, sources: this.photoSources, initialIndex: this.photoIndex, onBack: () => this.back() })
       } else if (name === AppRoute.Team) {
@@ -676,7 +700,8 @@ struct Index {
         StoragePage({ a: this.a, hostName: this.hostName(), stats: this.storageStats, loading: this.storageLoading, status: this.storageStatus, onBack: () => this.back(), onRefresh: () => this.refreshStorage(), onClear: drafts => this.clearStorage(drafts), onSearch: () => this.openOfflineSearch() })
       } else if (name.startsWith('settings')) {
         SettingsPage({ notificationsEnabled: this.notificationsEnabled, notificationStatus: this.notificationStatus, onNotifications: (enabled: boolean) => this.notifications?.setEnabled(enabled), a: this.a, section: name === AppRoute.Settings ? 'root' : name.substring('settings/'.length),
-          version: this.version, buildCode: this.buildCode, hostName: this.hostName(), status: this.status,
+          version: this.version, buildCode: this.buildCode, snapshot: this.settingsData,
+          onAction: command => this.action(command), onConnection: () => { if (this.shared.connected) { this.runtime?.client.disconnect(); } else if (this.activeId) { this.reconnect(); } else { this.showHosts(); } }, onPing: () => this.pingGateway(),
           onAgents: () => this.nav.push(AppRoute.AgentPresets), onSchedules: () => this.nav.push(AppRoute.Schedules), onPlugins: () => this.nav.push(AppRoute.Plugins), onDefaults: () => this.nav.push(AppRoute.Defaults), onBack: () => this.back(), onHosts: () => this.showHosts(),
           onOpenSection: section => this.nav.push(('settings/' + section) as AppRoute),
           onChange: value => this.appearance(value), onForgetAll: () => this.forgetAll() })

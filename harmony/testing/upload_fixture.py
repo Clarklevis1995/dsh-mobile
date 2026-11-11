@@ -3,12 +3,15 @@ import base64
 import hashlib
 import itertools
 import struct
+import os
+import time
 
 IDS = itertools.count(1)
 UPLOADS = {}
 RECEIPTS = {}
 IMAGES = {}
 SENT = []
+FAILED_NAMES = set()
 
 
 def handle(client, request, session):
@@ -19,6 +22,11 @@ def handle(client, request, session):
         client.send(dict(kind='file-upload-opened', requestId=rid, sessionId=session, uploadId=identity, size=request['size'], chunkBytes=65536, maxBytes=536870912))
     elif kind == 'file-upload-chunk':
         identity = request['uploadId']; entry = UPLOADS[identity]; assert request['offset'] == len(entry['data'])
+        if os.environ.get('HARMONY_UPLOAD_FAILURES') == '1' and entry['name'].startswith('harmony-文件验收') and entry['name'] not in FAILED_NAMES:
+            FAILED_NAMES.add(entry['name']); print('upload-failed-once', identity, flush=True)
+            client.send(dict(kind='error', requestType=kind, requestId=rid, sessionId=entry['session'], uploadId=identity, message='受控上传失败，请重试')); return True
+        if entry['name'].startswith('harmony-cancel-') and request['offset'] == 0:
+            print('upload-chunk-delayed', identity, flush=True); time.sleep(8)
         block = base64.b64decode(request['data'], validate=True); assert 0 < len(block) <= 65536
         entry['data'].extend(block); assert len(entry['data']) <= entry['size']
         client.send(dict(kind='file-upload-chunk-accepted', requestId=rid, sessionId=entry['session'], uploadId=identity, nextOffset=len(entry['data'])))
@@ -31,6 +39,7 @@ def handle(client, request, session):
         client.send(dict(kind='file-upload-completed', requestId=rid, sessionId=entry['session'], uploadId=identity, receiptId=receipt, sha256=entry['sha256'], file=file))
     elif kind == 'file-upload-cancel':
         entry = UPLOADS.pop(request['uploadId'], None)
+        if entry: print('upload-cancel-confirmed', entry['name'], flush=True)
         client.send(dict(kind='file-upload-cancelled', requestId=rid, sessionId=entry['session'] if entry else session, uploadId=request['uploadId']))
     elif kind == 'attachment':
         image, data = IMAGES[(session, request['attachmentId'])]
@@ -60,5 +69,6 @@ def content(request, session):
         width, height = jpeg_size(data); assert max(width, height) <= 2048
         image = dict(attachmentId='fixture-image-' + str(next(IDS)), mediaType=item['mediaType'], bytes=len(data), width=width, height=height, name=item.get('name'))
         IMAGES[(session, image['attachmentId'])] = (image, data); images.append(image)
+    if images: print('photo-payload-validated', len(images), [(image['width'], image['height'], image['bytes']) for image in images], flush=True)
     SENT.append(dict(sessionId=session, files=files, images=images, text=request['text'], requestId=request.get('requestId')))
     return files, images

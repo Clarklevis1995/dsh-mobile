@@ -20,6 +20,7 @@ export struct MarkdownText {
           .fontStyle(run.italic ? FontStyle.Italic : FontStyle.Normal)
           .decoration({ type: run.strike ? TextDecorationType.LineThrough : run.href ? TextDecorationType.Underline : TextDecorationType.None })
           .fontFamily(run.code || this.mono ? 'monospace' : 'sans-serif')
+          .textBackgroundStyle({ color: run.code ? (this.a.dark ? '#13F1F4FA' : '#130E131A') : Color.Transparent, radius: 6 })
           .fontColor(run.href ? this.a.accent : (this.a.dark ? run.dark : run.light) || this.a.fg)
           .onClick(() => { if (run.href) { this.onLink(run.href); } })
       })

@@ -112,6 +112,22 @@ class PhotoAndAttachmentTest {
         assertTrue(support.pendingKeys().isEmpty())
     }
 
+    @Test fun runtimeAttachmentBudgetCanGrowWithoutChangingHarmonyImageBudget() {
+        val size = GatewayAttachmentPayload.MAXIMUM_BYTES + 1
+        val bytes = ByteArray(size)
+        val frame =
+            GatewayFrame(
+                kind = "attachment",
+                sessionId = "s",
+                attachment = image.copy(bytes = size),
+                data =
+                    kotlin.io.encoding.Base64
+                        .encode(bytes),
+            )
+        assertNull(GatewayAttachmentPayload.validatedBytes(frame))
+        assertEquals(size, GatewayAttachmentPayload.validatedBytes(frame, 32 * 1024 * 1024)!!.size)
+    }
+
     @Test fun sharedAttachmentValidatorRejectsOversizedEncodingBeforeDecoding() {
         assertNull(
             GatewayAttachmentPayload.validatedBytes(

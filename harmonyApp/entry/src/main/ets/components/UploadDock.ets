@@ -36,7 +36,7 @@ export struct UploadDock {
           Column({ space: 4 }) {
             Text(row.name).fontSize(this.a.font(13)).fontColor(this.a.fg).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
             Text(this.label(row.status) + ' · ' + row.confirmedBytes.toString() + ' / ' + row.size.toString() + ' B').id('upload-status-' + row.id).fontSize(this.a.font(11)).fontColor(this.a.muted).width('100%')
-            if (row.error) { Text(row.error).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).fontSize(this.a.font(12)).fontColor('#D65D64').width('100%') }
+            if (row.error) { Text(this.a.t(row.error)).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).fontSize(this.a.font(12)).fontColor('#D65D64').width('100%') }
             if (row.status === 'uploading') { Progress({ value: row.confirmedBytes, total: Math.max(1, row.size), type: ProgressType.Linear }).height(3).color(this.a.accent).width('100%') }
           }.layoutWeight(1)
           if (row.status === 'error') { Button(this.a.t('重试')).id('upload-retry-' + row.id).fontSize(this.a.font(12)).height(44).enabled(this.data.available && !this.submitting).onClick(() => this.action('file-retry', row.id)) }

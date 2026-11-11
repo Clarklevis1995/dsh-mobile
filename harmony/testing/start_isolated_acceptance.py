@@ -66,6 +66,9 @@ def main():
     (home/'owned-processes.json').write_text(json.dumps(processes,indent=2))
     try:
         state=wait('http://127.0.0.1:'+str(PORT)+'/mgw/status');assert state.get('gatewayEnabled')
+        # 验收只走本机，不创建对外隧道候选地址。
+        request=urllib.request.Request('http://127.0.0.1:'+str(PORT)+'/mgw/cloudflare',json.dumps({'enabled':False}).encode(),{'Content-Type':'application/json'})
+        with urllib.request.urlopen(request,timeout=15) as response:json.load(response)
         with (home/'observer.log').open('w') as log:
             observer=subprocess.Popen([str(NODE),str(ROOT/'harmony/testing/live_gateway_control.cjs')],cwd=workspace,env=dict(environment,HARMONY_GATEWAY_PACKAGE=str(GATEWAY),HARMONY_LIVE_HTTP='http://127.0.0.1:'+str(PORT),HARMONY_LIVE_PORT=str(OBSERVER_PORT)),stdout=log,stderr=log,start_new_session=True)
         processes['observerPid']=observer.pid;processes['gatewayVersion']=state.get('version');(home/'owned-processes.json').write_text(json.dumps(processes,indent=2))

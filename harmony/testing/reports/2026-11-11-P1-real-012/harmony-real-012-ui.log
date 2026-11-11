@@ -1,0 +1,30 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-p2ued7ea
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 鸿蒙 P1-d73a328c-P7-daily
+输入 message-draft
+操作 message-send
+输入 message-draft
+操作 message-send
+操作 message-stop
+PASS P1-P3-P7-real-chat-G 0.12.0 真 Host／Agent／事件存储与受控本地模型，原生发送、流式、停止；独立观察确认用户消息恰好一次，不访问用户网关
+输入 message-draft
+操作 message-send
+操作 question-option-fdf9de04-71de-4acd-971e-6c40430492d8-0-0
+操作 question-option-fdf9de04-71de-4acd-971e-6c40430492d8-1-0
+操作 question-option-fdf9de04-71de-4acd-971e-6c40430492d8-1-1
+输入 question-custom-fdf9de04-71de-4acd-971e-6c40430492d8-2
+操作 question-submit-fdf9de04-71de-4acd-971e-6c40430492d8
+PASS P1-P3-real-question-G 真实 Agent 的 UserQuestions 服务发出三题；原生单选／多选／自定义回答后 Agent 继续，独立观察确认请求已解决
+操作 conversation-files
+操作 conversation-overflow
+操作 鸿蒙验收报告.md
+操作 page-back
+操作 page-back
+PASS P5-real-workspace-download-G 真实独立 Host 工作区中文文件下载、落盘摘要校验及 Native Markdown／代码／表格预览；来源仅本轮临时目录
+输入 message-draft
+操作 鸿蒙 P1-d73a328c-P7-daily
+PASS P6-real-cold-restore-G 真实应用终止／重开后 Asset 身份重连、实际主机历史接管及加密草稿恢复；观察端序列无冲突
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-p2ued7ea

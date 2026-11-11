@@ -1,0 +1,14 @@
+[
+  {
+    "task": "P5-file-upload-F",
+    "detail": "实际系统选择中文空格文件名，后台私有副本/摘要、多块偏移确认、附件单独发送及确认后移除通过；原文 SHA-256=a3d6aa6af4a5bbbc35ef61b2b36d18f424805e5623a2ed3c62942d9e9ded728a"
+  },
+  {
+    "task": "P5-file-upload-retry-F",
+    "detail": "实际系统文件上传遭服务端拒绝后显示原生错误，用户重试从新上传开始，最终摘要及发送确认通过"
+  },
+  {
+    "task": "P5-file-upload-cancel-late-F",
+    "detail": "上传期间移除附件向服务端取消，迟到分块确认不重建草稿附件，文字输入保持"
+  }
+]

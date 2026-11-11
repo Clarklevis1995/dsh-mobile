@@ -1,0 +1,6 @@
+[
+  {
+    "task": "P6-cross-host-history-release-F",
+    "detail": "两台隔离主机相同会话ID各载入1005条历史，A→B→A后非活动主机Native历史字节/会话数/ArkUI镜像均为0；当前主机历史重新接管且文字草稿逐字保持"
+  }
+]

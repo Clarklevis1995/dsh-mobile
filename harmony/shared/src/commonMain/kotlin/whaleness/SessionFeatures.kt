@@ -4,6 +4,7 @@ import com.clarklevis.dsh.shared.facade.SharedQueueStore
 import com.clarklevis.dsh.shared.facade.SharedSessionAgentPresetStore
 import com.clarklevis.dsh.shared.facade.SharedSessionAgentPresetTransition
 import com.clarklevis.dsh.shared.gateway.GatewayRequest
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.protocol.GatewayAgentPreset
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import kotlinx.serialization.Serializable
@@ -24,7 +25,7 @@ data class HarmonyAgent(
 @Serializable
 data class HarmonyQueuedItem(
     val id: String,
-    val preview: String,
+    val preview: UiMessage,
     val attachmentCount: Int,
     val editable: Boolean,
 )
@@ -38,8 +39,8 @@ data class HarmonySessionFeatures(
     val pendingQueueItem: String? = null,
     val pendingQueueSession: String? = null,
     val queueUncertain: Boolean = false,
-    val queueError: String? = null,
-    val error: String? = null,
+    val queueError: UiMessage? = null,
+    val error: UiMessage? = null,
 )
 
 internal data class FeatureChange(
@@ -58,7 +59,7 @@ internal class SessionFeatures {
     private var agentSupported = false
     private var queueSupported = false
     private var published: HarmonySessionFeatures? = null
-    private var lastError: String? = null
+    private var lastError: UiMessage? = null
     private var catalogError: String? = null
     private val agentRequests = mutableMapOf<String, GatewayRequest>()
     private var ordinal = 0L
@@ -116,7 +117,8 @@ internal class SessionFeatures {
         return agentChanged(agent.beginMessage())
     }
 
-    fun messageFailed(sessionId: String?): FeatureChange = agentChanged(agent.requestFailed("message", sessionId, null, "消息结果尚未确认"))
+    fun messageFailed(sessionId: String?): FeatureChange =
+        agentChanged(agent.requestFailed("message", sessionId, null, UiMessage.raw("消息结果尚未确认")))
 
     fun selectAgent(
         sessionId: String,
@@ -149,7 +151,7 @@ internal class SessionFeatures {
         if (queueKey == key) {
             queueKey = null
             queueUncertain = true
-            queue.failPending("队列操作超时，结果未确认，请重新连接")
+            queue.failPending(UiMessage.raw("队列操作超时，结果未确认，请重新连接"))
             return change()
         }
         val request = agentRequests.remove(key) ?: return FeatureChange()
@@ -157,7 +159,9 @@ internal class SessionFeatures {
             catalogError = "读取 Agent 预设超时，请刷新"
             return change()
         }
-        return agentChanged(agent.requestFailed(request.requestType, request.targetSessionId, request.correlationId, "Agent 请求超时，请刷新"))
+        return agentChanged(
+            agent.requestFailed(request.requestType, request.targetSessionId, request.correlationId, UiMessage.raw("Agent 请求超时，请刷新")),
+        )
     }
 
     fun accept(
@@ -184,7 +188,8 @@ internal class SessionFeatures {
             if (control || frame.kind in setOf("sent", "command-executed", "error")) {
                 val matched =
                     agentRequests.values.any {
-                        frame.requestId != null && frame.requestId == it.correlationId &&
+                        frame.requestId != null &&
+                            frame.requestId == it.correlationId &&
                             frame.sessionId == it.targetSessionId
                     }
                 if (frame.kind == "agent-presets" && frame.presets != null) catalogError = null
@@ -197,10 +202,12 @@ internal class SessionFeatures {
                 requests += transition.requests
                 refreshCommands = refreshCommands || transition.refreshCommands
                 invalidSession =
-                    invalidSession || transition.invalidSession
+                    invalidSession ||
+                    transition.invalidSession
                 if (transition.error != null) {
                     lastError = transition.error
-                } else if (matched && frame.kind in setOf("session-agent-preset", "select-agent-preset") &&
+                } else if (matched &&
+                    frame.kind in setOf("session-agent-preset", "select-agent-preset") &&
                     transition.snapshot.known
                 ) {
                     lastError = null
@@ -208,7 +215,8 @@ internal class SessionFeatures {
             }
         }
         var drafts = emptyMap<String, String>()
-        if (control && queueSupported &&
+        if (control &&
+            queueSupported &&
             (
                 frame.kind in setOf("session-queues", "session-queue", "queue-item-updated") ||
                     (frame.kind == "error" && frame.requestType == "queue-update")
@@ -251,14 +259,29 @@ internal class SessionFeatures {
                 focus,
                 HarmonyAgent(a.supported, a.agentPreset, a.locked, a.known, a.loading, a.saving, a.canSelect, a.blocksSending, a.presets),
                 queueSupported,
-                q.queues[focus].orEmpty().map { HarmonyQueuedItem(it.id, it.preview.take(240), it.attachmentCount, it.editable) },
+                q.queues[focus].orEmpty().map {
+                    HarmonyQueuedItem(
+                        it.id,
+                        it.preview.let { text ->
+                            if (text.key ==
+                                UiMessage.RAW_KEY
+                            ) {
+                                text.copy(args = text.args.map { arg -> arg.take(240) })
+                            } else {
+                                text
+                            }
+                        },
+                        it.attachmentCount,
+                        it.editable,
+                    )
+                },
                 q.pendingItemId,
                 queueSession,
                 queueUncertain,
-                q.lastError ?: "上次队列操作未确认，请重新连接".takeIf {
+                q.lastError ?: UiMessage.raw("上次队列操作未确认，请重新连接").takeIf {
                     queueUncertain
                 },
-                listOfNotNull(lastError, catalogError).joinToString("\n").takeIf { it.isNotEmpty() },
+                lastError ?: catalogError?.let(UiMessage::raw),
             )
         val changed = value != published
         published = value

@@ -4,6 +4,7 @@ import com.clarklevis.dsh.shared.facade.SharedVoiceInputStore
 import com.clarklevis.dsh.shared.facade.SharedVoiceInputTransition
 import com.clarklevis.dsh.shared.facade.VoiceHardwareEffect
 import com.clarklevis.dsh.shared.gateway.GatewayRequest
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -19,12 +20,12 @@ data class HarmonyVoice(
     val progress: Double = 0.0,
     val level: Float = 0f,
     val waveform: List<Float> = emptyList(),
-    val alert: String? = null,
-    val error: String? = null,
+    val alert: UiMessage? = null,
+    val error: UiMessage? = null,
     val pendingTranscript: String? = null,
     val seconds: Double = 0.0,
     val timeLabel: String = "",
-    val status: String = "",
+    val status: UiMessage? = null,
     val blocked: Boolean = false,
     val overlay: Boolean = false,
     val cancelArmed: Boolean = false,
@@ -36,7 +37,7 @@ data class HarmonyVoiceEffect(
     val action: String,
     val recordingId: String,
     val discard: Boolean,
-    val message: String,
+    val message: UiMessage?,
     val delayMilliseconds: Long,
 )
 
@@ -101,7 +102,7 @@ internal class VoiceSupport {
                         "voice-suspend" -> store.suspendCapture()
                         "voice-permission" -> store.permissionResult(command.value, command.mode == "granted", command.nowMillis)
                         "voice-started" -> store.captureStarted(command.value, command.nowMillis)
-                        "voice-failed" -> store.captureFailed(command.value, "录音暂不可用，请检查麦克风权限或占用情况")
+                        "voice-failed" -> store.captureFailed(command.value, UiMessage.raw("录音暂不可用，请检查麦克风权限或占用情况"))
                         "voice-level" -> store.level(command.value, command.byteCount / 10000f, command.nowMillis)
                         "voice-finished" -> store.captureFinished(command.value, command.input, command.nowMillis)
                         "voice-tick" -> store.tick(command.nowMillis)

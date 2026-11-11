@@ -5,6 +5,7 @@ export struct CircleIcon {
   @Prop icon: string = 'settings';
   @Prop diameter: number = 48;
   @Prop glass: boolean = false;
+  @Prop outlined: boolean = false;
   @Prop lifted: boolean = false;
   @Prop label: string = '';
   @Prop ink: string = '#FFFFFF';
@@ -23,7 +24,7 @@ export struct CircleIcon {
     }.id(this.controlId).accessibilityText(this.label).width(this.diameter).height(this.diameter)
       .backgroundColor(this.fill).backgroundBlurStyle(this.glass ? BlurStyle.COMPONENT_THIN : BlurStyle.NONE, { colorMode: ThemeColorMode.DARK })
       .shadow({ radius: this.lifted ? 12 : 0, color: '#13000000', offsetY: 4 })
-      .border({ width: this.glass ? .8 : this.lifted ? .7 : 0, color: this.glass ? '#4059779C' : this.ink === '#F1F4FA' ? '#22F1F4FA' : '#0E0E131A', radius: this.diameter / 2 }).enabled(this.available).onClick(this.onPress)
+      .border({ width: this.glass ? .8 : this.lifted || this.outlined ? .7 : 0, color: this.glass ? '#4059779C' : this.ink === '#F1F4FA' ? '#22F1F4FA' : '#0E0E131A', radius: this.diameter / 2 }).enabled(this.available).onClick(this.onPress)
   }
 }
 
@@ -34,10 +35,10 @@ export struct PageHeader {
   onBack: () => void = () => {};
   build() {
     Row() {
-      CircleIcon({ icon: 'back_chevron', label: this.a.t('返回'), controlId: 'page-back', ink: this.a.fg, fill: this.a.surface, onPress: this.onBack })
-      Text(this.title).fontSize(this.a.font(17)).fontWeight(FontWeight.Bold).fontColor(this.a.fg).layoutWeight(1).textAlign(TextAlign.Center)
-      Blank().width(48)
-    }.width('100%').height(54).padding({ left: 12, right: 12 })
+      CircleIcon({ icon: 'back_chevron', diameter: 46, outlined: true, label: this.a.t('返回'), controlId: 'page-back', ink: this.a.fg, fill: this.a.surface, onPress: this.onBack })
+      Text(this.title).fontSize(this.a.font(17)).fontWeight(600).fontColor(this.a.fg).layoutWeight(1).textAlign(TextAlign.Center)
+      Blank().width(46)
+    }.width('100%').height(64).padding({ left: 12, right: 12 })
   }
 }
 

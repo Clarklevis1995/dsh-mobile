@@ -243,13 +243,19 @@ def test_workspace_and_catalog():
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'real'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
+    parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'photos', 'scan', 'real'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
     print('REPORT_DIR', folder, flush=True)
     app = args.app_dir or folder / 'app'
     if not args.app_dir:
         shutil.copytree(ROOT / 'harmonyApp', app, ignore=shutil.ignore_patterns('build', '.hvigor', 'oh_modules', '.idea'))
         p = app / 'AppScope/app.json5'; value = json.loads(p.read_text()); value['app']['bundleName'] = m.BUNDLE; p.write_text(json.dumps(value, indent=2))
     assert json.loads((app / 'AppScope/app.json5').read_text())['app']['bundleName'] == m.BUNDLE
+    if args.scenario == 'files' and os.environ.get('HARMONY_FILES_SAVE') == '1':
+        from file_actions_probe import instrument
+        instrument(app)
+    if args.scenario == 'photos':
+        from photo_probe import instrument
+        instrument(app)
     if args.scenario == 'voice':
         from voice_probe import instrument
         instrument(app)
@@ -275,11 +281,25 @@ def main():
         fixtures = [(18783, '', 'a56a1098-8519-43a1-9dce-fb99863bf5bb'), (18784, 'B ', 'b56a1098-8519-43a1-9dce-fb99863bf5bb')]
         if args.scenario == 'real':
             fixtures = []; route = 'tcp:18897'
+            if os.environ.get('HARMONY_REAL_SCOPE') in ['transport','generation-network']:
+                import urllib.request,socket
+                for proxyPort in [18907,18908]:
+                    with socket.socket() as guard:guard.bind(('127.0.0.1',proxyPort))
+                proxyLog=(folder/'owned-proxy.log').open('w');logs.append(proxyLog)
+                proxy=subprocess.Popen(['/Users/lichaofan/.nvm/versions/node/v24.20.0/bin/node',str(ROOT/'harmony/testing/owned_transport_proxy.cjs')],env=os.environ.copy(),stdout=proxyLog,stderr=proxyLog);servers.append(proxy)
+                end=time.monotonic()+10
+                while True:
+                    try:
+                        assert json.load(urllib.request.urlopen('http://127.0.0.1:18908/status',timeout=1))['owned'];break
+                    except Exception:
+                        if time.monotonic()>end:raise
+                        time.sleep(.2)
+                route='tcp:18907'
             if route + ' ' + route not in m.hdc('fport','ls'): m.hdc('rport',route,route); forwards.append(route)
         if args.scenario == 'native-navigation': fixtures.append((18785, '延迟 ', 'c56a1098-8519-43a1-9dce-fb99863bf5bb'))
         for port, label, identity in fixtures:
             log = (folder / ('gateway-' + str(port) + '.log')).open('w'); logs.append(log)
-            process = subprocess.Popen([sys.executable, str(ROOT / 'harmony/testing/gateway_fixture.py')], env=dict(os.environ, HARMONY_FIXTURE_PORT=str(port), HARMONY_FIXTURE_LABEL=label, HARMONY_FIXTURE_ID=identity, HARMONY_FIXTURE_PAIR_DELAY='45' if port == 18785 else '0', HARMONY_FIXTURE_VOICE_RELEASE=str(folder/'release-transcript'), HARMONY_FIXTURE_VOICE='1' if args.scenario == 'voice' else '0', HARMONY_FIXTURE_PERF='1' if args.scenario in ['perf','reading'] else '0', HARMONY_FIXTURE_FILES='1' if args.scenario == 'files' else '0', HARMONY_FIXTURE_UPLOADS='1' if args.scenario == 'uploads' else '0', HARMONY_FIXTURE_PRODUCTS='1' if args.scenario in ['products', 'goals'] else '0', HARMONY_FIXTURE_SLASH='1' if args.scenario == 'slash' else '0', HARMONY_FIXTURE_FEATURES='1' if args.scenario in ['controls', 'slash', 'products', 'goals'] else '0', HARMONY_FIXTURE_RICH='1' if args.scenario in ['richtext', 'controls'] else '0'), stdout=log, stderr=log); servers.append(process)
+            process = subprocess.Popen([sys.executable, str(ROOT / 'harmony/testing/gateway_fixture.py')], env=dict(os.environ, HARMONY_FIXTURE_PORT=str(port), HARMONY_FIXTURE_LABEL=label, HARMONY_FIXTURE_ID=identity, HARMONY_FIXTURE_PAIR_DELAY='45' if port == 18785 else '0', HARMONY_FIXTURE_VOICE_RELEASE=str(folder/'release-transcript'), HARMONY_FIXTURE_VOICE='1' if args.scenario == 'voice' else '0', HARMONY_FIXTURE_PERF='1' if args.scenario in ['perf','reading'] else '0', HARMONY_FIXTURE_FILES='1' if args.scenario == 'files' else '0', HARMONY_FIXTURE_UPLOADS='1' if args.scenario in ['uploads', 'photos'] else '0', HARMONY_FIXTURE_PRODUCTS='1' if args.scenario in ['products', 'goals'] else '0', HARMONY_FIXTURE_SLASH='1' if args.scenario == 'slash' else '0', HARMONY_FIXTURE_FEATURES='1' if args.scenario in ['controls', 'slash', 'products', 'goals'] else '0', HARMONY_FIXTURE_RICH='1' if args.scenario in ['richtext', 'controls'] else '0'), stdout=log, stderr=log); servers.append(process)
             route = 'tcp:' + str(port)
             if route + ' ' + route not in m.hdc('fport', 'ls'): m.hdc('rport', route, route); forwards.append(route)
         time.sleep(0.4); assert all(server.poll() is None for server in servers)
@@ -310,6 +330,12 @@ def main():
         elif args.scenario == 'cache':
             from cache_scenarios import run
             run(ui, m, folder, passed, servers)
+        elif args.scenario == 'scan':
+            from scan_scenarios import run
+            run(ui, m, folder, passed)
+        elif args.scenario == 'photos':
+            from photo_scenarios import run
+            run(ui, m, folder, passed)
         elif args.scenario == 'uploads':
             from upload_scenarios import run
             run(ui, m, folder, passed)

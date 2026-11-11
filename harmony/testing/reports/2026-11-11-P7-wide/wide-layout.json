@@ -1,0 +1,9 @@
+{
+  "states": {
+    "portrait": "compact:658x1299",
+    "landscape": "wide:1416x609",
+    "restored": "compact:658x1299",
+    "largeFontLandscape": "compact:1416x609"
+  },
+  "method": "Actual WindowStage customDensity=2; physical Window rotation; unmodified production breakpoint 900vp/500vp; API21 phone emulator, not tablet D"
+}

@@ -26,3 +26,8 @@ def instrument(app, root):
     patch('pages/Index.ets', "    Column() {\n      if (this.errorText)", "    Column() {\n      Text(this.perfText).id('test-p7-stats').fontSize(1).height(1)\n      if (this.errorText)")
     patch('pages/Index.ets', '  private editedDraft(value: string): void {', '  private editedDraft(value: string): void { const perfStart = Date.now();')
     patch('pages/Index.ets', '    }, 80);', '    }, 80); PerfStats.add(PerfStats.drafts, Date.now()-perfStart);')
+
+    patch('core/GatewayClient.ets', '  get connected(): boolean', "  get historyBytesForProbe(): number { return this.state.historyMemoryBytes ?? 0; }\n  get historySessionsForProbe(): number { return this.state.retainedHistorySessions ?? 0; }\n  get connected(): boolean")
+    patch('pages/Index.ets', "  @State private perfText:", "  @State private memoryText: string = '';\n  @State private perfText:")
+    patch('pages/Index.ets', 'this.perfText = PerfStats.report(this.messages.length);', "this.perfText = PerfStats.report(this.messages.length); this.memoryText = Array.from(this.runtimes.values()).map(runtime => runtime.id + ':' + runtime.client.historyBytesForProbe.toString() + ':' + runtime.client.historySessionsForProbe.toString() + ':' + runtime.messages.length.toString()).join('|');")
+    patch('pages/Index.ets', "Text(this.perfText).id('test-p7-stats').fontSize(1).height(1)", "Text(this.perfText).id('test-p7-stats').fontSize(1).height(1)\n      Text(this.memoryText).id('test-memory-hosts').fontSize(1).height(1)")

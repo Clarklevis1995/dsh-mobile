@@ -1,0 +1,22 @@
+[
+  {
+    "type": "approval/asked",
+    "seq": 75,
+    "time": 1794374859073,
+    "data": {
+      "id": "f20cb304-57bd-40da-9967-51f8383b6386",
+      "toolName": "write",
+      "callId": "approval-HARMONY_APPROVAL_REPLAY_CC7D6876",
+      "reason": "escalate sandbox to workspace-write: 仅在本轮临时工作区创建验收标记文件，允许后执行，拒绝时不写入。"
+    }
+  },
+  {
+    "type": "approval/decided",
+    "seq": 76,
+    "time": 1794374874294,
+    "data": {
+      "id": "f20cb304-57bd-40da-9967-51f8383b6386",
+      "outcome": "rejected"
+    }
+  }
+]

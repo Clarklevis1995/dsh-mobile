@@ -1,0 +1,14 @@
+[
+  {
+    "task": "P1-real-rapid-double-tap-G",
+    "detail": "真实发送按钮快速双击仅产生一条用户消息和一轮回复"
+  },
+  {
+    "task": "P1-real-cross-client-append-G",
+    "detail": "另一真实客户端追加消息与回复自动在当前原生会话显示，消息唯一"
+  },
+  {
+    "task": "P1-real-stop-current-session-G",
+    "detail": "A/B真实同时生成，原生停止A后B仍产生流帧；A收束且可继续聊天，已结束A的取消不破坏下一轮"
+  }
+]

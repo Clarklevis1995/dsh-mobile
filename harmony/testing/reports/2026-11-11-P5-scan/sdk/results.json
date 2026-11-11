@@ -1,0 +1,13 @@
+{
+  "method": "F actual scan SDK on API21 ARM64 emulator",
+  "lines": [
+    "ScanKit image decode / Native pairing validation",
+    "SKIP generate only: Emulator is not supported",
+    "PASS actual QR decode + Native valid pairing",
+    "SKIP generate only: Emulator is not supported",
+    "PASS actual QR decode + Native expired pairing",
+    "SKIP generate only: Emulator is not supported",
+    "PASS actual QR decode + Native invalid pairing",
+    "DONE SCAN probe"
+  ]
+}

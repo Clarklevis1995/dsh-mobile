@@ -1,0 +1,2249 @@
+[
+  {
+    "direction": "response",
+    "kind": "paired",
+    "channel": "control",
+    "time": 1794378530599
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "control",
+    "time": 1794378530599
+  },
+  {
+    "direction": "response",
+    "kind": "session-archives",
+    "channel": "control",
+    "time": 1794378530599
+  },
+  {
+    "direction": "response",
+    "kind": "session-queues",
+    "channel": "control",
+    "time": 1794378530599
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794378530599
+  },
+  {
+    "direction": "response",
+    "kind": "approval-requested",
+    "rpcId": "b5a79220-4b33-4150-ba4c-0e61ddec34b9",
+    "sessionId": "session-b03c7ec0-15a9-4b22-8c77-fced00fda3b3",
+    "channel": "control",
+    "replay": true,
+    "time": 1794378530599
+  },
+  {
+    "direction": "request",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794378530618
+  },
+  {
+    "direction": "request",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794378530618
+  },
+  {
+    "direction": "request",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794378530618
+  },
+  {
+    "direction": "response",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794378530619
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "conversation",
+    "time": 1794378530621
+  },
+  {
+    "direction": "response",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794378530625
+  },
+  {
+    "direction": "response",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794378530626
+  },
+  {
+    "direction": "request",
+    "kind": "tasks",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532510
+  },
+  {
+    "direction": "response",
+    "kind": "tasks",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532511
+  },
+  {
+    "direction": "request",
+    "kind": "goal",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532511
+  },
+  {
+    "direction": "request",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-1",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532511
+  },
+  {
+    "direction": "request",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794378532511
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-1",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532511
+  },
+  {
+    "direction": "request",
+    "kind": "subagents",
+    "requestId": "team-2",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532511
+  },
+  {
+    "direction": "request",
+    "kind": "speech-catalog",
+    "requestId": "voice-5532b2bca0218b01-1",
+    "channel": "control",
+    "time": 1794378532511
+  },
+  {
+    "direction": "request",
+    "kind": "subscribe",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378532511
+  },
+  {
+    "direction": "response",
+    "kind": "goal",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532512
+  },
+  {
+    "direction": "response",
+    "kind": "speech-catalog",
+    "requestId": "voice-5532b2bca0218b01-1",
+    "channel": "control",
+    "time": 1794378532513
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-1",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532513
+  },
+  {
+    "direction": "response",
+    "kind": "subagents",
+    "requestId": "team-2",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532513
+  },
+  {
+    "direction": "request",
+    "kind": "speech-subscribe",
+    "requestId": "voice-5532b2bca0218b01-2",
+    "channel": "control",
+    "time": 1794378532514
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-1",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532514
+  },
+  {
+    "direction": "response",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794378532515
+  },
+  {
+    "direction": "response",
+    "kind": "subscribed",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378532515
+  },
+  {
+    "direction": "response",
+    "kind": "session-snapshot",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378532515
+  },
+  {
+    "direction": "response",
+    "kind": "speech-subscribed",
+    "requestId": "voice-5532b2bca0218b01-2",
+    "channel": "control",
+    "time": 1794378532516
+  },
+  {
+    "direction": "response",
+    "kind": "error",
+    "requestId": "voice-5532b2bca0218b01-2",
+    "channel": "control",
+    "time": 1794378532516
+  },
+  {
+    "direction": "request",
+    "kind": "models",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532526
+  },
+  {
+    "direction": "response",
+    "kind": "models",
+    "channel": "control",
+    "time": 1794378532528
+  },
+  {
+    "direction": "request",
+    "kind": "permission-options",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532535
+  },
+  {
+    "direction": "request",
+    "kind": "commands",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532536
+  },
+  {
+    "direction": "request",
+    "kind": "context-usage",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532537
+  },
+  {
+    "direction": "request",
+    "kind": "session-stats",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532546
+  },
+  {
+    "direction": "response",
+    "kind": "permission-options",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532546
+  },
+  {
+    "direction": "response",
+    "kind": "context-usage",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532547
+  },
+  {
+    "direction": "response",
+    "kind": "session-stats",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532547
+  },
+  {
+    "direction": "response",
+    "kind": "commands",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378532547
+  },
+  {
+    "direction": "response",
+    "kind": "approval-resolved",
+    "rpcId": "b5a79220-4b33-4150-ba4c-0e61ddec34b9",
+    "sessionId": "session-b03c7ec0-15a9-4b22-8c77-fced00fda3b3",
+    "channel": "control",
+    "time": 1794378537937
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-b03c7ec0-15a9-4b22-8c77-fced00fda3b3",
+    "channel": "control",
+    "time": 1794378537953
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-b03c7ec0-15a9-4b22-8c77-fced00fda3b3",
+    "channel": "control",
+    "time": 1794378537954
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-b03c7ec0-15a9-4b22-8c77-fced00fda3b3",
+    "channel": "control",
+    "time": 1794378537954
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-0cb934eff52a21aca7c1ef0fe00dd0c5-3",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540874
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378540875
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378540876
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540876
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378540878
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-0cb934eff52a21aca7c1ef0fe00dd0c5-3",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540878
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540878
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540878
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378540878
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378540878
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378540878
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540886
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540886
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540886
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378540886
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540890
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540890
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540890
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540890
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378540891
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540891
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540891
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540891
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378540891
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378540891
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378540891
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "control",
+    "time": 1794378550638
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "conversation",
+    "time": 1794378550638
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "control",
+    "time": 1794378550638
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "conversation",
+    "time": 1794378550638
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-0cb934eff52a21aca7c1ef0fe00dd0c5-4",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556379
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378556380
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378556380
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556381
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378556383
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-0cb934eff52a21aca7c1ef0fe00dd0c5-4",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556383
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556383
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556383
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378556383
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378556383
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378556383
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556391
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556391
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556391
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378556392
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556396
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556396
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556396
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556396
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378556397
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556397
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556397
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556397
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378556397
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378556397
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378556397
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "control",
+    "time": 1794378563537
+  },
+  {
+    "direction": "response",
+    "kind": "session-archives",
+    "channel": "control",
+    "time": 1794378563537
+  },
+  {
+    "direction": "response",
+    "kind": "session-queues",
+    "channel": "control",
+    "time": 1794378563537
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794378563537
+  },
+  {
+    "direction": "request",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794378563548
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-3",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563548
+  },
+  {
+    "direction": "request",
+    "kind": "subagents",
+    "requestId": "team-4",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563548
+  },
+  {
+    "direction": "request",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794378563548
+  },
+  {
+    "direction": "request",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794378563548
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-3",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563550
+  },
+  {
+    "direction": "response",
+    "kind": "subagents",
+    "requestId": "team-4",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563551
+  },
+  {
+    "direction": "response",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794378563552
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "conversation",
+    "time": 1794378563554
+  },
+  {
+    "direction": "response",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794378563560
+  },
+  {
+    "direction": "response",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794378563561
+  },
+  {
+    "direction": "request",
+    "kind": "tasks",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563570
+  },
+  {
+    "direction": "request",
+    "kind": "goal",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563570
+  },
+  {
+    "direction": "request",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-2",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563570
+  },
+  {
+    "direction": "request",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794378563570
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-5",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563570
+  },
+  {
+    "direction": "request",
+    "kind": "subscribe",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378563570
+  },
+  {
+    "direction": "response",
+    "kind": "tasks",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563571
+  },
+  {
+    "direction": "response",
+    "kind": "goal",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563572
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-5",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563572
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-2",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378563573
+  },
+  {
+    "direction": "response",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794378563574
+  },
+  {
+    "direction": "response",
+    "kind": "subscribed",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378563574
+  },
+  {
+    "direction": "response",
+    "kind": "session-snapshot",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378563575
+  },
+  {
+    "direction": "request",
+    "kind": "speech-catalog",
+    "requestId": "voice-5532b2bca0218b01-3",
+    "channel": "control",
+    "time": 1794378563576
+  },
+  {
+    "direction": "response",
+    "kind": "speech-catalog",
+    "requestId": "voice-5532b2bca0218b01-3",
+    "channel": "control",
+    "time": 1794378563577
+  },
+  {
+    "direction": "request",
+    "kind": "speech-subscribe",
+    "requestId": "voice-5532b2bca0218b01-4",
+    "channel": "control",
+    "time": 1794378563588
+  },
+  {
+    "direction": "response",
+    "kind": "speech-subscribed",
+    "requestId": "voice-5532b2bca0218b01-4",
+    "channel": "control",
+    "time": 1794378563589
+  },
+  {
+    "direction": "response",
+    "kind": "error",
+    "requestId": "voice-5532b2bca0218b01-4",
+    "channel": "control",
+    "time": 1794378563589
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-0cb934eff52a21aca7c1ef0fe00dd0c5-7",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572021
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378572022
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378572022
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572023
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378572024
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-0cb934eff52a21aca7c1ef0fe00dd0c5-7",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572024
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572024
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572024
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378572024
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378572024
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378572024
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572032
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572032
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572033
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378572033
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572037
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572037
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572038
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572038
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572038
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572038
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378572038
+  },
+  {
+    "direction": "response",
+    "kind": "question-requested",
+    "rpcId": "daf7376a-45a2-4863-ad38-a990ff9df391",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378572042
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "control",
+    "time": 1794378583616
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "conversation",
+    "time": 1794378583616
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "control",
+    "time": 1794378583616
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "conversation",
+    "time": 1794378583616
+  },
+  {
+    "direction": "request",
+    "kind": "question-answer",
+    "rpcId": "daf7376a-45a2-4863-ad38-a990ff9df391",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378592371
+  },
+  {
+    "direction": "response",
+    "kind": "question-resolved",
+    "rpcId": "daf7376a-45a2-4863-ad38-a990ff9df391",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378592371
+  },
+  {
+    "direction": "response",
+    "kind": "question-response",
+    "rpcId": "daf7376a-45a2-4863-ad38-a990ff9df391",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378592371
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592373
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592373
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592383
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592383
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592387
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592387
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592387
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592387
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378592388
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592388
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592388
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592388
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378592388
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378592388
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378592388
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "control",
+    "time": 1794378603713
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "conversation",
+    "time": 1794378603713
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "control",
+    "time": 1794378603714
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "conversation",
+    "time": 1794378603714
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378616675
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378616675
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378616675
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378616675
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "conversation",
+    "time": 1794378623714
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "control",
+    "time": 1794378623714
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "conversation",
+    "time": 1794378623714
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "control",
+    "time": 1794378623714
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-0cb934eff52a21aca7c1ef0fe00dd0c5-8",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624041
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378624042
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378624042
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624043
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378624044
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-0cb934eff52a21aca7c1ef0fe00dd0c5-8",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624044
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624044
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624044
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378624044
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378624044
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378624045
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624053
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624053
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624053
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378624053
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624053
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624058
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624058
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624058
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624058
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624058
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624058
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624059
+  },
+  {
+    "direction": "response",
+    "kind": "approval-requested",
+    "rpcId": "4980e5e8-8cba-44f3-8705-12e04af8e796",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378624063
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378624063
+  },
+  {
+    "direction": "request",
+    "kind": "approval-response",
+    "rpcId": "4980e5e8-8cba-44f3-8705-12e04af8e796",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378633278
+  },
+  {
+    "direction": "response",
+    "kind": "approval-resolved",
+    "rpcId": "4980e5e8-8cba-44f3-8705-12e04af8e796",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378633278
+  },
+  {
+    "direction": "response",
+    "kind": "approval-response",
+    "rpcId": "4980e5e8-8cba-44f3-8705-12e04af8e796",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378633278
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633279
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633279
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633279
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633289
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633289
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633293
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633293
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633293
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633293
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378633294
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633294
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633294
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633294
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378633294
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378633294
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378633294
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "control",
+    "time": 1794378643749
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "conversation",
+    "time": 1794378643749
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "control",
+    "time": 1794378643749
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "conversation",
+    "time": 1794378643749
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "control",
+    "time": 1794378663746
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "conversation",
+    "time": 1794378663746
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "control",
+    "time": 1794378663746
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "conversation",
+    "time": 1794378663747
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-0cb934eff52a21aca7c1ef0fe00dd0c5-9",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664806
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378664807
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378664807
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664808
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378664809
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-0cb934eff52a21aca7c1ef0fe00dd0c5-9",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664810
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664810
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664810
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378664810
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378664810
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378664810
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664819
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664819
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664819
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378664819
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664823
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664823
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664824
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664824
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664824
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664824
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664824
+  },
+  {
+    "direction": "response",
+    "kind": "approval-requested",
+    "rpcId": "0a0590fe-9b13-4003-8a6b-09e1aaed6159",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378664829
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378664829
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "control",
+    "time": 1794378674390
+  },
+  {
+    "direction": "response",
+    "kind": "session-archives",
+    "channel": "control",
+    "time": 1794378674390
+  },
+  {
+    "direction": "response",
+    "kind": "session-queues",
+    "channel": "control",
+    "time": 1794378674390
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794378674390
+  },
+  {
+    "direction": "response",
+    "kind": "approval-requested",
+    "rpcId": "0a0590fe-9b13-4003-8a6b-09e1aaed6159",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "replay": true,
+    "time": 1794378674390
+  },
+  {
+    "direction": "request",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794378674398
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-6",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674398
+  },
+  {
+    "direction": "request",
+    "kind": "subagents",
+    "requestId": "team-7",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674398
+  },
+  {
+    "direction": "request",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794378674398
+  },
+  {
+    "direction": "request",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794378674398
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-6",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674399
+  },
+  {
+    "direction": "response",
+    "kind": "subagents",
+    "requestId": "team-7",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674399
+  },
+  {
+    "direction": "response",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794378674399
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "conversation",
+    "time": 1794378674403
+  },
+  {
+    "direction": "response",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794378674405
+  },
+  {
+    "direction": "response",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794378674406
+  },
+  {
+    "direction": "request",
+    "kind": "tasks",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674410
+  },
+  {
+    "direction": "request",
+    "kind": "goal",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674410
+  },
+  {
+    "direction": "request",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-3",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674410
+  },
+  {
+    "direction": "request",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794378674410
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-8",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674410
+  },
+  {
+    "direction": "request",
+    "kind": "subscribe",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378674410
+  },
+  {
+    "direction": "response",
+    "kind": "tasks",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674411
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-8",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674412
+  },
+  {
+    "direction": "response",
+    "kind": "goal",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674412
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-3",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378674413
+  },
+  {
+    "direction": "response",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794378674413
+  },
+  {
+    "direction": "response",
+    "kind": "subscribed",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378674413
+  },
+  {
+    "direction": "response",
+    "kind": "approval-requested",
+    "rpcId": "0a0590fe-9b13-4003-8a6b-09e1aaed6159",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "replay": true,
+    "time": 1794378674413
+  },
+  {
+    "direction": "response",
+    "kind": "session-snapshot",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378674415
+  },
+  {
+    "direction": "request",
+    "kind": "speech-catalog",
+    "requestId": "voice-5532b2bca0218b01-5",
+    "channel": "control",
+    "time": 1794378674422
+  },
+  {
+    "direction": "request",
+    "kind": "speech-subscribe",
+    "requestId": "voice-5532b2bca0218b01-6",
+    "channel": "control",
+    "time": 1794378674422
+  },
+  {
+    "direction": "response",
+    "kind": "speech-catalog",
+    "requestId": "voice-5532b2bca0218b01-5",
+    "channel": "control",
+    "time": 1794378674423
+  },
+  {
+    "direction": "response",
+    "kind": "speech-subscribed",
+    "requestId": "voice-5532b2bca0218b01-6",
+    "channel": "control",
+    "time": 1794378674424
+  },
+  {
+    "direction": "response",
+    "kind": "error",
+    "requestId": "voice-5532b2bca0218b01-6",
+    "channel": "control",
+    "time": 1794378674424
+  },
+  {
+    "direction": "request",
+    "kind": "approval-response",
+    "rpcId": "0a0590fe-9b13-4003-8a6b-09e1aaed6159",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378676855
+  },
+  {
+    "direction": "response",
+    "kind": "approval-resolved",
+    "rpcId": "0a0590fe-9b13-4003-8a6b-09e1aaed6159",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378676855
+  },
+  {
+    "direction": "response",
+    "kind": "approval-response",
+    "rpcId": "0a0590fe-9b13-4003-8a6b-09e1aaed6159",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378676855
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676856
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676856
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676856
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676865
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676865
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676870
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676870
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676870
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676870
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378676871
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676871
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676871
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676871
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "conversation",
+    "time": 1794378676871
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378676871
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-be7b10fd-852b-4128-9e32-afbb7cf89d11",
+    "channel": "control",
+    "time": 1794378676871
+  }
+]

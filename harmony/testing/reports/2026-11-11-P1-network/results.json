@@ -1,0 +1,22 @@
+[
+  {
+    "task": "P1-transport-confirmation-edited-G",
+    "detail": "真实发送确认被延迟，确认前新草稿保持；晚确认不清除新草稿，服务端消息与客户端请求均唯一"
+  },
+  {
+    "task": "P1-transport-confirmation-disconnect-G",
+    "detail": "真实发送确认被延迟，确认前新草稿保持；断开并自动重连后未自动重发，服务端消息与客户端请求均唯一"
+  },
+  {
+    "task": "P1-transport-question-timeout-late-G",
+    "detail": "真实问题回答已由Host处理，移动端因回应延迟明确显示结果未确认；晚回应后旧入口移除，未自动重答"
+  },
+  {
+    "task": "P1-transport-approval-timeout-late-G",
+    "detail": "真实只读write审批拒绝回应被延迟到本地超时后再释放，旧入口移除且无自动重复提交"
+  },
+  {
+    "task": "P1-transport-approval-network-replay-G",
+    "detail": "真实只读write审批经连接中断同rpc恢复，未经选择不执行，明确拒绝后不写文件"
+  }
+]

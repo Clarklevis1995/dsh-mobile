@@ -132,9 +132,17 @@ class TeamSupportTest {
         val key = open.state!!.pendingOperations.first { it.startsWith("team:") }
         val timeout = command(HarmonyCommand("operation-timeout", requestKey = key))
         assertFalse(key in timeout.state!!.pendingOperations)
+        assertEquals(
+            "raw",
+            timeout.team!!
+                .lead.error!!
+                .key,
+        )
         assertTrue(
             timeout.team!!
                 .lead.error!!
+                .args
+                .first()
                 .contains("超时"),
         )
         val retry = command(HarmonyCommand("team-refresh", sessionId = "lead"))

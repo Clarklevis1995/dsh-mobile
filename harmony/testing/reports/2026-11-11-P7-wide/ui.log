@@ -1,0 +1,23 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-qoyi0q8l
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+输入 message-draft
+操作 test-orientation-toggle
+操作 session-harmony-other
+输入 message-draft
+操作 session-harmony-smoke
+操作 test-orientation-toggle
+操作 conversation-back
+操作 home-settings
+操作 settings-font
+操作 page-back
+操作 page-back
+操作 session-harmony-smoke
+操作 test-orientation-toggle
+操作 test-orientation-toggle
+PASS P7-real-wide-layout-F 实际SDK密度2与窗口旋转触发大于900vp双栏；A/B草稿隔离、恢复与转回单栏、大字号安全回退通过；不修改系统密度或宽屏阈值
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-qoyi0q8l

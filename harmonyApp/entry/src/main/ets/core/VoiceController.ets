@@ -1,3 +1,4 @@
+import { UiText } from './UiMessages';
 import { audio } from '@kit.AudioKit';
 import { abilityAccessCtrl, common } from '@kit.AbilityKit';
 import { taskpool } from '@kit.ArkTS';
@@ -8,7 +9,7 @@ import { encodeVoicePcm } from './VoiceEncodeWorker';
 
 /** 平台只执行录音／权限 effect；业务状态、超时、取消与草稿合并均来自 Native 共享状态机。 */
 export class VoiceController {
-  onToast: (message: string) => void = () => {};
+  onToast: (message: UiText) => void = () => {};
   onChange: (value: VoiceData) => void = () => {};
   onDraft: (session: string, value: string) => void = () => {};
   private context: common.UIAbilityContext;
@@ -47,7 +48,7 @@ export class VoiceController {
   mode(enabled: boolean): void { if (this.active) { this.intent('voice-mode', '', enabled ? 'on' : 'off'); } }
   private effect(effect: VoiceEffect): void {
     if (!this.alive) { return; }
-    if (effect.action === 'showToast') { this.onToast(effect.message); }
+    if (effect.action === 'showToast') { if (effect.message) { this.onToast(effect.message); } }
     else if (effect.action === 'permission') { this.permission(effect.recordingId); }
     else if (effect.action === 'start') { this.start(effect.recordingId); }
     else if (effect.action === 'stop' && effect.discard) { this.releaseCapture(); }

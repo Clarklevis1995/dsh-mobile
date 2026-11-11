@@ -45,7 +45,7 @@ export struct SessionControlPage {
           if (!this.isDefault && this.currentAgent().agent.supported) {
             this.heading('会话 Agent')
             if (this.currentAgent().agent.loading || this.currentAgent().agent.saving) { LoadingProgress().width(24).height(24).color(this.a.accent) }
-            if (this.currentAgent().error) { Text(this.currentAgent().error).fontSize(this.a.font(13)).fontColor('#D65D64').width('100%') }
+            if (this.currentAgent().error) { Text(this.a.t(this.currentAgent().error)).fontSize(this.a.font(13)).fontColor('#D65D64').width('100%') }
             Text((this.currentAgent().agent.preset ?? '—') + (this.currentAgent().agent.locked ? ' · ' + this.a.t('已锁定') : ''))
               .id('session-agent-current').fontSize(this.a.font(14)).fontColor(this.a.muted).width('100%')
             ForEach(this.currentAgent().agent.presets, (preset: AgentPreset) => {

@@ -6,9 +6,12 @@ import com.clarklevis.dsh.shared.protocol.GatewayFrame
 object GatewayAttachmentPayload {
     const val MAXIMUM_BYTES = 8 * 1_024 * 1_024
 
-    fun validatedBytes(frame: GatewayFrame): ByteArray? {
+    fun validatedBytes(
+        frame: GatewayFrame,
+        maximumBytes: Int = MAXIMUM_BYTES,
+    ): ByteArray? {
         val attachment = frame.attachment ?: return null
-        if (frame.kind != "attachment" || frame.sessionId.isNullOrBlank() || attachment.bytes !in 0..MAXIMUM_BYTES) return null
+        if (frame.kind != "attachment" || frame.sessionId.isNullOrBlank() || attachment.bytes !in 0..maximumBytes) return null
         val encoded = frame.data ?: return null
         if (encoded.length > ((attachment.bytes + 2) / 3) * 4) return null
         val bytes = decodeBase64(encoded) ?: return null

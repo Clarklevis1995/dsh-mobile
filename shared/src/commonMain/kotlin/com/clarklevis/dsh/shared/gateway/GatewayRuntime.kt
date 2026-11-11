@@ -1006,7 +1006,7 @@ class GatewayRuntime(
     private suspend fun cacheAttachmentLocked(frame: GatewayFrame): Boolean {
         if (frame.kind != "attachment") return true
         val attachment = frame.attachment
-        val bytes = GatewayAttachmentPayload.validatedBytes(frame)
+        val bytes = GatewayAttachmentPayload.validatedBytes(frame, MAXIMUM_ATTACHMENT_BYTES)
         if (
             attachment == null || bytes == null || attachment.bytes < 0 ||
             bytes.size != attachment.bytes

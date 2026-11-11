@@ -1,0 +1,47 @@
+{
+  "gatewayVersion": "0.12.0",
+  "tool": "Host built-in write with workspace-write escalation",
+  "checks": [
+    {
+      "case": "ALLOW",
+      "rpcId": "c6e64a93-b493-48bb-80e4-66a57ed9b645",
+      "approvalId": "2e740657-ab32-4291-95dc-ab14404def67",
+      "serviceAuditId": "4ace9aff-069d-447d-8ea2-7a8b03880433",
+      "callId": "approval-HARMONY_APPROVAL_ALLOW_8FD8409A",
+      "outcome": "allowed-once",
+      "fileExists": true,
+      "standingPermission": "read-only"
+    },
+    {
+      "case": "REJECT",
+      "rpcId": "1770fe25-b98e-45fe-af01-4aca7b77baf0",
+      "approvalId": "46643b6c-1dc9-4d22-b1ae-616a5a7a65b4",
+      "serviceAuditId": "7ca35b0b-801a-450a-a5ea-0efdabeae5ab",
+      "callId": "approval-HARMONY_APPROVAL_REJECT_84299945",
+      "outcome": "rejected",
+      "fileExists": false,
+      "standingPermission": "read-only"
+    },
+    {
+      "case": "EXTERNAL",
+      "rpcId": "42133fad-d605-4430-b248-0abfb14b1b24",
+      "approvalId": "ccafd077-4038-4ff3-9402-a298c8279daa",
+      "serviceAuditId": "8719e7fd-e552-40a7-965d-10fdc86be1fe",
+      "callId": "approval-HARMONY_APPROVAL_EXTERNAL_93F568AA",
+      "outcome": "rejected",
+      "fileExists": false,
+      "standingPermission": "read-only"
+    },
+    {
+      "case": "REPLAY",
+      "rpcId": "6d33af40-47c4-448a-8836-1c580ed82069",
+      "approvalId": "7f05599a-f3ab-425c-ace2-d1e29f582e63",
+      "serviceAuditId": "f20cb304-57bd-40da-9967-51f8383b6386",
+      "callId": "approval-HARMONY_APPROVAL_REPLAY_CC7D6876",
+      "outcome": "rejected",
+      "fileExists": false,
+      "standingPermission": "read-only"
+    }
+  ],
+  "scope": "owned temp workspace only; controlled model, real Agent and approval audit"
+}

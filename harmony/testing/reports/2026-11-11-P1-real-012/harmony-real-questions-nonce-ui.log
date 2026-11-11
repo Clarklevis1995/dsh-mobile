@@ -1,0 +1,28 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-buj019f2
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 session-session-d6b2c650-102d-4dc4-94bd-4373fea3a023
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 question-cancel-808cff74-cfdb-483b-8abb-dc78f9f6aafc
+操作 page-back
+PASS P1-real-question-CANCEL-G 真实三题问题的CANCEL通过；同一rpc重放、明确取消/另一端处理后移除过期入口，独立观察用户消息仅一次
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 interaction-inbox
+操作 page-back
+操作 session-session-d6b2c650-102d-4dc4-94bd-4373fea3a023
+PASS P1-real-question-EXTERNAL_REPLAY-G 真实三题问题的EXTERNAL_REPLAY通过；同一rpc重放、明确取消/另一端处理后移除过期入口，独立观察用户消息仅一次
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 page-back
+PASS P1-real-question-AGENT_CANCEL-G 真实三题问题的AGENT_CANCEL通过；同一rpc重放、明确取消/另一端处理后移除过期入口，独立观察用户消息仅一次
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-buj019f2

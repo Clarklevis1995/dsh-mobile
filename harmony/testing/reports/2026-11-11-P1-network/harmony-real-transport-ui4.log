@@ -1,0 +1,39 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-pllzgnqb
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 session-session-be7b10fd-852b-4128-9e32-afbb7cf89d11
+输入 message-draft
+操作 message-send
+输入 message-draft
+PASS P1-transport-confirmation-edited-G 真实发送确认被延迟，确认前新草稿保持；晚确认不清除新草稿，服务端消息与客户端请求均唯一
+输入 message-draft
+操作 message-send
+输入 message-draft
+PASS P1-transport-confirmation-disconnect-G 真实发送确认被延迟，确认前新草稿保持；断开并自动重连后未自动重发，服务端消息与客户端请求均唯一
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 question-option-daf7376a-45a2-4863-ad38-a990ff9df391-0-0
+操作 question-option-daf7376a-45a2-4863-ad38-a990ff9df391-1-0
+输入 question-custom-daf7376a-45a2-4863-ad38-a990ff9df391-2
+操作 question-submit-daf7376a-45a2-4863-ad38-a990ff9df391
+操作 page-back
+PASS P1-transport-question-timeout-late-G 真实问题回答已由Host处理，移动端因回应延迟明确显示结果未确认；晚回应后旧入口移除，未自动重答
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 approval-reject-4980e5e8-8cba-44f3-8705-12e04af8e796
+操作 page-back
+PASS P1-transport-approval-timeout-late-G 真实只读write审批拒绝回应被延迟到本地超时后再释放，旧入口移除且无自动重复提交
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 approval-reject-0a0590fe-9b13-4003-8a6b-09e1aaed6159
+操作 page-back
+PASS P1-transport-approval-network-replay-G 真实只读write审批经连接中断同rpc恢复，未经选择不执行，明确拒绝后不写文件
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-pllzgnqb

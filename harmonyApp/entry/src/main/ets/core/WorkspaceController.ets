@@ -12,6 +12,7 @@ class DownloadCopy {
   retired: boolean = false;
   complete: boolean = false;
   pinned: boolean = false;
+  leases: number = 0;
   bytes: number = 0;
   touched: number = Date.now();
   task?: taskpool.Task;
@@ -46,7 +47,9 @@ export class WorkspaceController {
   }
   private discard(id: string): void {
     const copy = this.copies.get(id); if (!copy) { return; }
-    copy.retired = true; this.copies.delete(id);
+    copy.retired = true;
+    if (copy.leases > 0) { return; }
+    this.copies.delete(id);
     if (copy.task) { try { taskpool.cancel(copy.task); } catch (_) {} }
     fs.unlink(copy.path).catch(() => {});
   }
@@ -82,10 +85,19 @@ export class WorkspaceController {
     copy.complete = true; copy.pinned = true; copy.touched = Date.now(); this.evict();
     this.onReady({ hostId: this.hostId, transferId: file.transferId, sessionId: file.sessionId, remotePath: file.path, localPath: copy.path, name: file.name, mediaType: file.mediaType, size: file.size, sha256: file.sha256 });
   }
+  acquire(id: string): (() => void) | undefined {
+    const copy = this.copies.get(id);
+    if (!this.alive || !copy || !copy.complete || copy.retired) { return undefined; }
+    copy.leases++; let released = false;
+    return () => {
+      if (released) { return; } released = true; copy.leases--;
+      if (copy.retired) { this.discard(id); } else { this.evict(); }
+    };
+  }
   release(id: string): void { const copy = this.copies.get(id); if (copy) { copy.pinned = false; copy.touched = Date.now(); } this.evict(); }
   private evict(): void {
     let bytes = 0; this.copies.forEach(copy => bytes += copy.bytes);
-    const rows = Array.from(this.copies.entries()).filter(row => row[1].complete && !row[1].pinned).sort((a, b) => a[1].touched - b[1].touched);
+    const rows = Array.from(this.copies.entries()).filter(row => row[1].complete && !row[1].pinned && row[1].leases === 0 && !row[1].retired).sort((a, b) => a[1].touched - b[1].touched);
     for (const row of rows) { if (this.copies.size <= 5 && bytes <= 134217728) { break; } bytes -= row[1].bytes; this.discard(row[0]); }
   }
   dispose(): void { this.alive = false; this.copies.forEach((_copy: DownloadCopy, id: string) => this.discard(id)); this.client.onWorkspaceFiles = () => {}; this.client.onFileIo = () => {}; this.client.onFileDiscard = () => {}; this.client.onFileCompletion = () => {}; this.onChange = () => {}; this.onReady = () => {}; }

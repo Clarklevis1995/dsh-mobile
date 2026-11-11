@@ -1,3 +1,4 @@
+import { UiText } from './UiMessages';
 import { AgentNotice } from './NotificationTypes';
 import { VoiceData, VoiceEffect } from './VoiceTypes';
 export interface SessionRow {
@@ -17,7 +18,10 @@ export interface WorkspaceRow {
   sessionIds: string[];
 }
 
+export interface HostSnapshotData { version?: string; dshVersion?: string; cwd?: string; attachedSessions?: number; }
+
 export interface SharedState {
+  hostSnapshot?: HostSnapshotData;
   connected: boolean;
   pendingRequest: boolean;
   pendingMessageSessionId?: string;
@@ -44,6 +48,8 @@ export interface SharedState {
   historyRevision: number;
   catalogRevision?: number;
   cachedHistory: boolean;
+  retainedHistorySessions?: number;
+  historyMemoryBytes?: number;
   childConversation: boolean;
   canSend: boolean;
   operationTimeouts?: Record<string, number>;
@@ -201,6 +207,8 @@ export interface ApprovalRequest {
   sessionId: string;
   toolName: string;
   reason?: string;
+  reasonEnglish?: string;
+  replay?: boolean;
   arguments?: string;
   status: string;
   outcome?: string;
@@ -276,8 +284,8 @@ export interface ControlData {
 export function emptyControls(): ControlData { return { metrics: [], presets: [], permissionDefaultOptions: [], loading: [] }; }
 
 export interface AgentState { supported: boolean; preset?: string; locked: boolean; known: boolean; loading: boolean; saving: boolean; canSelect: boolean; blocksSending: boolean; presets: AgentPreset[]; }
-export interface QueuedItem { id: string; preview: string; attachmentCount: number; editable: boolean; }
-export interface SessionFeatureData { sessionId?: string; agent: AgentState; queueSupported: boolean; queue: QueuedItem[]; pendingQueueItem?: string; pendingQueueSession?: string; queueUncertain: boolean; queueError?: string; error?: string; }
+export interface QueuedItem { id: string; preview: UiText; attachmentCount: number; editable: boolean; }
+export interface SessionFeatureData { sessionId?: string; agent: AgentState; queueSupported: boolean; queue: QueuedItem[]; pendingQueueItem?: string; pendingQueueSession?: string; queueUncertain: boolean; queueError?: UiText; error?: UiText; }
 export function emptyFeatures(): SessionFeatureData { return { agent: { supported: false, locked: false, known: false, loading: false, saving: false, canSelect: false, blocksSending: false, presets: [] }, queueSupported: false, queue: [], queueUncertain: false }; }
 
 export interface SlashItem { id: string; name: string; description: string; kind: string; }
@@ -300,11 +308,11 @@ export function emptySchedules(): ScheduleData { return { loaded: false, loading
 
 export interface TeamMemberData { id: string; name: string; role: string; phase: string; mode: string; parentSessionId?: string; model?: string; detail?: string; running?: boolean; error?: string; canOpen: boolean; avatarIndex: number; }
 export interface TeamTaskData { id: string; revision: number; subject: string; description: string; status: string; ownerName?: string; blockedBy: string[]; writeScopes: string[]; ready: boolean; writeScopeWarnings: string[]; }
-export interface TeamSnapshotData { leadSessionId: string; members: TeamMemberData[]; tasks: TeamTaskData[]; state: string; error?: string; visible: boolean; isTeam: boolean; }
+export interface TeamSnapshotData { leadSessionId: string; members: TeamMemberData[]; tasks: TeamTaskData[]; state: string; error?: UiText; visible: boolean; isTeam: boolean; }
 export interface TeamData { lead: TeamSnapshotData; connected: boolean; }
 export function emptyTeam(): TeamData { return { lead: { leadSessionId: '', members: [], tasks: [], state: 'loading', visible: false, isTeam: false }, connected: false }; }
 
-export interface UploadDraftData { id: string; name: string; size: number; sha256: string; status: string; confirmedBytes: number; error?: string; }
+export interface UploadDraftData { id: string; name: string; size: number; sha256: string; status: string; confirmedBytes: number; error?: UiText; }
 export interface PhotoDraftData { id: string; name: string; size: number; width: number; height: number; }
 export interface UploadData { sessionId?: string; available: boolean; canSend: boolean; drafts: UploadDraftData[]; photosAvailable: boolean; photos: PhotoDraftData[]; }
 export interface UploadReadData { sessionId: string; id: string; offset: number; length: number; token: string; }

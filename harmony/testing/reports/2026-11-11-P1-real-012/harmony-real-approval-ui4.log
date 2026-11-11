@@ -1,0 +1,39 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-kou7nyal
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 鸿蒙 P1-d73a328c-P7-approval-ac7021
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 approval-collapse-c6e64a93-b493-48bb-80e4-66a57ed9b645
+操作 approval-collapse-c6e64a93-b493-48bb-80e4-66a57ed9b645
+操作 approval-details-c6e64a93-b493-48bb-80e4-66a57ed9b645
+操作 approval-allow-c6e64a93-b493-48bb-80e4-66a57ed9b645
+操作 page-back
+PASS P1-real-approval-ALLOW-G 真实 write工具的ALLOW：审批前不执行，明确决定后核对实际文件与唯一服务端审计；单次授权不改变只读权限
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 approval-reject-1770fe25-b98e-45fe-af01-4aca7b77baf0
+操作 page-back
+PASS P1-real-approval-REJECT-G 真实 write工具的REJECT：审批前不执行，明确决定后核对实际文件与唯一服务端审计；单次授权不改变只读权限
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 page-back
+PASS P1-real-approval-EXTERNAL-G 真实 write工具的EXTERNAL：审批前不执行，明确决定后核对实际文件与唯一服务端审计；单次授权不改变只读权限
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 interaction-inbox
+操作 approval-reject-6d33af40-47c4-448a-8836-1c580ed82069
+操作 page-back
+操作 鸿蒙 P1-d73a328c-P7-approval-ac7021
+PASS P1-real-approval-REPLAY-G 真实 write工具的REPLAY：审批前不执行，明确决定后核对实际文件与唯一服务端审计；单次授权不改变只读权限
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-kou7nyal

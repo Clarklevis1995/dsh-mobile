@@ -105,8 +105,11 @@ def feature_request(client, request, identifier):
     elif kind == 'queue-update':
         item = next((row for row in QUEUES.get(identifier, []) if row['id'] == request['itemId']), None)
         time.sleep(.5)
-        client.send(dict(kind='queue-item-updated', sessionId=identifier, itemId=request['itemId'], action=request['action'], accepted=item is not None))
-        if item: QUEUES[identifier] = [row for row in QUEUES[identifier] if row['id'] != request['itemId']]
+        accepted = item is not None and (request['action'] != 'steer' or (identifier in CANCELLED and not CANCELLED[identifier].is_set()))
+        client.send(dict(kind='queue-item-updated', sessionId=identifier, itemId=request['itemId'], action=request['action'], accepted=accepted))
+        if accepted: QUEUES[identifier] = [row for row in QUEUES[identifier] if row['id'] != request['itemId']]
+        if accepted and request['action'] == 'steer':
+            print('queue-steer-confirmed', identifier, request['itemId'], flush=True)
         broadcast(dict(kind='session-queue', sessionId=identifier, items=QUEUES.get(identifier, [])))
     else: return False
     return True
@@ -252,7 +255,7 @@ class Handler(socketserver.StreamRequestHandler):
             if paired:
                 self.send(dict(kind='paired', token='fixture-token', gatewayId=GATEWAY_ID))
             self.send(dict(kind='hello', protocol=3, authenticated=True, gatewayId=GATEWAY_ID,
-                historyFormatVersion=3, capabilities=(['speech-input-v1'] if VOICE_TEST else []) + ['split-channels', 'assistant-stream-v1', 'session-create'] + (['session-agent-preset', 'queue-control'] if FEATURES else []) + (['commands'] if SLASH else []) + (['agent-team-v1', 'subagent-conversations-v1', 'tasks', 'goals'] if PRODUCTS else []) + (['file-upload-v1'] if UPLOAD_TEST else []) + (['file-downloads', 'file-references-v1'] if FILES_TEST else [])))
+                historyFormatVersion=3, capabilities=(['speech-input-v1'] if VOICE_TEST else []) + ['split-channels', 'assistant-stream-v1', 'session-create', 'session-cancel'] + (['session-agent-preset', 'queue-control'] if FEATURES else []) + (['commands'] if SLASH else []) + (['agent-team-v1', 'subagent-conversations-v1', 'tasks', 'goals'] if PRODUCTS else []) + (['file-upload-v1'] if UPLOAD_TEST else []) + (['file-downloads', 'file-references-v1'] if FILES_TEST else [])))
             if self.channel == 'control':
                 if FEATURES: self.send(dict(kind='session-queues', queues=QUEUES))
                 for value in list(QUESTIONS.values()) + [value[0] for value in APPROVALS.values()]:
@@ -302,6 +305,8 @@ class Handler(socketserver.StreamRequestHandler):
             if self.catalog_requests > 1:
                 time.sleep(float(os.environ.get('HARMONY_FIXTURE_CATALOG_DELAY', '0')))
             self.send(dict(kind=kind, items=catalog()))
+        elif kind == 'host':
+            self.send(dict(kind='host', version='0.12.0-fixture', dshVersion='0.2.2-fixture', cwd='/smoke/harmony', attachedSessions=2))
         elif kind == 'workspaces':
             self.send(dict(kind=kind, items=WORKSPACES))
         elif kind == 'subscribe':
@@ -366,6 +371,7 @@ class Handler(socketserver.StreamRequestHandler):
                 broadcast(dict(kind='approval-resolved', rpcId=rpc, sessionId=identifier))
                 event(identifier, dict(type='assistant/message', text='已允许此次调用' if request['outcome'] == 'allowed-once' else '已拒绝工具调用'))
         elif kind == 'ping':
+            print('manual-ping-response', self.channel, flush=True)
             self.send(dict(kind='pong'))
         elif kind == 'directories':
             path = request.get('path') or '/smoke'

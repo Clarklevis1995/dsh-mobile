@@ -9,7 +9,7 @@ export struct PreferenceMenuRow {
   private current(): string { return this.kind === 'style' ? this.a.data.style : this.a.data.language; }
   private values(): string[] { return this.kind === 'style' ? ['system', 'light', 'dark'] : ['system', 'zh', 'en']; }
   private label(value: string): string {
-    return this.kind === 'style' ? this.a.option(value) : value === 'system' ? this.a.t('系统') : value === 'zh' ? '简体中文' : 'English';
+    return this.kind === 'style' ? value === 'system' ? this.a.t('跟随系统') : this.a.option(value) : value === 'system' ? this.a.t('跟随系统') : value === 'zh' ? '简体中文' : 'English';
   }
   @Builder private optionsMenu() {
     Menu() {
@@ -26,7 +26,7 @@ export struct PreferenceMenuRow {
         Text(this.a.t(this.kind === 'style' ? '界面' : '语言')).fontSize(this.a.font(16)).fontColor(this.a.fg).layoutWeight(1)
         Text(this.label(this.current())).fontSize(this.a.font(14)).fontColor(this.a.muted).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         Image($rawfile('icons/chevron_right.svg')).width(16).height(16).colorFilter(iconTint(this.a.muted))
-      }.padding(18).width('100%').constraintSize({ minHeight: 56 })
+      }.padding(16).width('100%').constraintSize({ minHeight: 54 })
     }.padding(0).width('100%').borderRadius(0).backgroundColor(this.a.surface)
       .id(this.kind === 'style' ? 'settings-style' : 'settings-language').bindMenu(this.optionsMenu)
   }

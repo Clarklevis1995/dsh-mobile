@@ -18,6 +18,7 @@ import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.projection.ConversationProjectionLabels
 import com.clarklevis.dsh.shared.protocol.GatewayDirectoryItem
 import com.clarklevis.dsh.shared.protocol.GatewayEvent
+import com.clarklevis.dsh.shared.protocol.GatewayHostSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
 import com.clarklevis.dsh.shared.protocol.GatewaySearchItem
 import com.clarklevis.dsh.shared.protocol.GatewaySessionSummary
@@ -30,6 +31,7 @@ import com.clarklevis.dsh.shared.sync.HistorySyncConfiguration
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
+import kotlin.random.Random
 
 @Serializable
 data class HarmonyCommand(
@@ -94,6 +96,7 @@ data class HarmonyDirectory(
 @Serializable
 data class HarmonyState(
     val connected: Boolean,
+    val hostSnapshot: GatewayHostSnapshot? = null,
     val pendingRequest: Boolean,
     val pendingMessageSessionId: String?,
     val pendingOperations: List<String>,
@@ -196,6 +199,7 @@ class HarmonyEngine {
     private var preparedEndpoint: String? = null
     private var normalizedProfile: GatewayProfile? = null
     private var capabilities = emptyList<String>()
+    private var hostSnapshot: GatewayHostSnapshot? = null
     private var directory = HarmonyDirectory()
 
     private data class CatalogRequest(
@@ -264,6 +268,7 @@ class HarmonyEngine {
     private var controlsResult: HarmonyControls? = null
     private var trajectoryResult: HarmonyTrajectory? = null
     private var historyRevision = 0L
+    private val requestNamespace = Random.nextBytes(16).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
     private var requestSequence = 0L
     private var pendingCreate: String? = null
     private var pendingMessage: String? = null
@@ -486,7 +491,9 @@ class HarmonyEngine {
 
             "cache-export" -> {
                 val catalog =
-                    if (connected() && sessionsConfirmed && workspacesConfirmed &&
+                    if (connected() &&
+                        sessionsConfirmed &&
+                        workspacesConfirmed &&
                         catalogKey == null
                     ) {
                         CacheSupport.catalog(sessions, workspaces, command.workspaceId, teamSupport.routing(), teamSupport.avatars())
@@ -667,6 +674,20 @@ class HarmonyEngine {
 
             "disconnect" -> {
                 disconnect()
+            }
+
+            "release-history" -> {
+                require(!connected()) { "已连接主机的阅读历史不能被跨主机回收" }
+                history.inactiveSessionsOutside(emptyList()).forEach { id ->
+                    history.clearSession(id)
+                    conversation.clearSession(id)
+                    trajectorySupport.remove(id)
+                }
+                recentHistorySessions.clear()
+                stream.retainSessions(emptyList())
+                more.clear()
+                cursors.clear()
+                historyMemoryBytes = 0
             }
 
             "resume" -> {
@@ -891,6 +912,8 @@ class HarmonyEngine {
             }
             interactions.reset()
             controlReady = true
+            hostSnapshot = null
+            send(GatewayRequests.simple("host"))
             capabilities = frame.capabilities.orEmpty()
             uploadSupport.connected()
             applyTeam(teamSupport.accept(command.frame, frame, true))
@@ -939,7 +962,8 @@ class HarmonyEngine {
                 return
             }
         }
-        if (frame.kind == "error" && frame.resetRequired != true &&
+        if (frame.kind == "error" &&
+            frame.resetRequired != true &&
             frame.requestType in
             setOf(
                 "session-agent-preset",
@@ -953,17 +977,33 @@ class HarmonyEngine {
         ) {
             return
         }
-        if (frame.kind == "error" && frame.resetRequired != true &&
+        if (frame.kind == "error" &&
+            frame.resetRequired != true &&
             frame.requestType in setOf("plugin-catalog", "plugin-bundle-set-enabled", "plugin-entry-set-enabled")
         ) {
             return
         }
-        if (frame.kind == "error" && frame.resetRequired != true &&
+        if (frame.kind == "error" &&
+            frame.resetRequired != true &&
             frame.requestType in setOf("schedule-catalog", "schedule-update", "schedule-delete")
         ) {
             return
         }
         when (frame.kind) {
+            "host" -> {
+                if (command.channel == "control") {
+                    hostSnapshot =
+                        GatewayHostSnapshot(
+                            version = frame.version,
+                            dshVersion = frame.dshVersion,
+                            cwd = frame.cwd,
+                            provider = frame.provider,
+                            model = frame.model,
+                            attachedSessions = frame.attachedSessions,
+                            canOpenPath = frame.canOpenPath,
+                        )
+                }
+            }
             "sessions" -> {
                 val incoming =
                     requireNotNull(frame.items).map {
@@ -1064,7 +1104,8 @@ class HarmonyEngine {
             }
 
             "sent" -> {
-                if (pendingMessage != null && frame.sessionId == pendingMessageSessionId &&
+                if (pendingMessage != null &&
+                    frame.sessionId == pendingMessageSessionId &&
                     (frame.requestId == pendingMessage || (frame.requestId == null && !uploadSupport.requiresNonce()))
                 ) {
                     catalogRevision++
@@ -1124,8 +1165,11 @@ class HarmonyEngine {
         }
         if (frame.kind != "error") interactions.accept(frame)
         if (frame.kind == "history" && frame.sessionId !in loading) return
-        if (frame.kind == "history" && frame.sessionId != null && usesStream &&
-            stream.hasBaseline(frame.sessionId) && frame.sessionId !in loadingOlder
+        if (frame.kind == "history" &&
+            frame.sessionId != null &&
+            usesStream &&
+            stream.hasBaseline(frame.sessionId) &&
+            frame.sessionId !in loadingOlder
         ) {
             return
         }
@@ -1349,6 +1393,7 @@ class HarmonyEngine {
 
     private fun disconnect() {
         controlReady = false
+        hostSnapshot = null
         conversationReady = false
         split = false
         stream.disconnect()
@@ -1485,7 +1530,7 @@ class HarmonyEngine {
         change.requests.forEach(::send)
     }
 
-    private fun nextRequestId(): String = "harmony-${++requestSequence}"
+    private fun nextRequestId(): String = "harmony-$requestNamespace-${++requestSequence}"
 
     private fun connected(): Boolean = controlReady && (!split || conversationReady)
 
@@ -1494,8 +1539,11 @@ class HarmonyEngine {
             state =
                 HarmonyState(
                     connected = connected(),
+                    hostSnapshot = hostSnapshot,
                     pendingRequest =
-                        pendingCreate != null || pendingMessage != null || slashSupport.executingSession() != null ||
+                        pendingCreate != null ||
+                            pendingMessage != null ||
+                            slashSupport.executingSession() != null ||
                             sessions.selectedSessionId in loading,
                     pendingMessageSessionId = pendingMessageSessionId ?: slashSupport.executingSession(),
                     pendingOperations =

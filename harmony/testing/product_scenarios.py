@@ -60,7 +60,11 @@ def run(ui, m, folder, passed):
     ui.click('schedule-edit-weekly', scroll=True); ui.wait('schedule-title-input')
     ui.input('schedule-title-input', '修改后的中文任务'); ui.input('schedule-prompt-input', '保留完整 expected 的任务内容')
     ui.click('schedule-timing-clock', scroll=True); ui.input('schedule-clock-input', '10:15', scroll=True)
-    ui.click('schedule-save', scroll=True); ui.wait('schedule-edit-weekly'); ui.text('修改后的中文任务')
+    ui.click('schedule-save', scroll=True); ui.wait('schedule-edit-weekly')
+    for _ in range(12):
+        if ui.find('修改后的中文任务','text'): break
+        ui.scroll(False)
+    ui.text('修改后的中文任务')
     
     if ui.find('schedule-details-weekly').get('text') == '详情': ui.click('schedule-details-weekly')
     ui.text('America/New_York'); ui.text('10:15:00'); ui.text('周一、周三'); ui.screenshot('schedules-confirmed-edit')

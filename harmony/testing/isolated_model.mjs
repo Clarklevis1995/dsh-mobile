@@ -9,6 +9,21 @@ class ControlledAdapter extends LlmAdapter {
   async *stream(options) {
     const prompt = options.messages.filter(message => message.role === 'user').map(message => typeof message.content === 'string' ? message.content : message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')).join('\n');
     const marker = prompt.match(/HARMONY_[A-Z0-9_]+/g)?.at(-1) || 'HARMONY_READY';
+    // 真实审批仍由 Host 的 write / fs sandbox / ApprovalService 执行；只写临时工作区。
+    if (marker.startsWith('HARMONY_APPROVAL_')) {
+      const root = process.env.DSH_HOME || '';
+      if (!path.basename(root).startsWith('harmony-p7-owned-host-')) throw new Error('审批验收仅允许本轮独立主机');
+      const lastUser = options.messages.findLastIndex(message => message.role === 'user' && JSON.stringify(message.content).includes(marker));
+      if (!options.messages.slice(lastUser + 1).some(message => message.role === 'tool')) {
+        if (!options.tools?.some(tool => tool.name === 'write')) throw new Error('验收 Host 未提供 write');
+        const argumentsText = JSON.stringify({ file_path: path.join(root, 'workspace', marker + '.txt'), content: marker + '\n', sandbox_permissions: 'workspace-write', justification: '仅在本轮临时工作区创建验收标记文件，允许后执行，拒绝时不写入。' });
+        const id = 'approval-' + marker;
+        yield { type: 'block-start', index: 0, blockType: 'tool-call' };
+        yield { type: 'tool-call-delta', index: 0, id, name: 'write', argumentsDelta: argumentsText };
+        yield { type: 'block-end', index: 0, block: { type: 'tool-call', id, name: 'write', arguments: argumentsText } };
+        yield { type: 'finish', reason: { kind: 'tool-calls' } }; return;
+      }
+    }
     // 仅独立 Host 的固定验收标记可触发此工具；由真实 Agent／UserQuestions 服务处理。
     if (marker.startsWith('HARMONY_QUESTION_')) {
       const lastUser = options.messages.findLastIndex(message => message.role === 'user' && JSON.stringify(message.content).includes(marker));

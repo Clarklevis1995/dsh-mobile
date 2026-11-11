@@ -1,0 +1,16 @@
+本机测试网关：ws://127.0.0.1:18783/ws/mobile；测试配对码：harmony-smoke
+connected control
+request sessions  
+request workspaces  
+connected conversation
+request subscribe  
+request ping  
+request ping  
+websocket-ping control
+websocket-ping conversation
+request ping  
+request ping  
+request message  
+photo-payload-validated 2 [(96, 64, 962), (96, 64, 963)]
+request attachment  
+request attachment  

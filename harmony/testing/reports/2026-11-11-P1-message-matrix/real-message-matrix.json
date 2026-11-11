@@ -1,0 +1,23 @@
+{
+  "gatewayVersion": "0.12.0",
+  "checks": [
+    {
+      "case": "rapid-double-tap",
+      "userMessages": 1
+    },
+    {
+      "case": "cross-client-append",
+      "userMessages": 1
+    },
+    {
+      "case": "stop-current-session",
+      "stoppedSession": "session-8fc71a21-b043-4e53-a3a8-c0fc1ca869c5",
+      "unaffectedSession": "session-37313c57-07a4-48cc-8df9-10627f028e8b",
+      "otherStreamBefore": 3,
+      "otherStreamAfter": 13,
+      "continuedUserMessages": 1,
+      "afterEndedCancelUserMessages": 1
+    }
+  ],
+  "method": "real owned Host, native ArkUI, local controlled model; no user sessions"
+}

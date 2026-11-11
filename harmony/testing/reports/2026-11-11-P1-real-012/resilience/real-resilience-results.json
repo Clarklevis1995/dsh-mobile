@@ -1,0 +1,30 @@
+{
+  "gatewayVersion": "0.12.0",
+  "checks": [
+    {
+      "case": "same-text",
+      "userMessages": 2
+    },
+    {
+      "case": "background-stream",
+      "chunks": 200,
+      "userMessages": 1,
+      "exactFinal": true,
+      "draftPreserved": true
+    },
+    {
+      "case": "background-approval",
+      "rpcId": "b6124506-9652-48e4-a838-2a205ec9120e",
+      "rejected": true,
+      "fileExists": false
+    },
+    {
+      "case": "host-restart",
+      "oldMessagesReplayed": 0,
+      "draftPreserved": true,
+      "newUserMessages": 1,
+      "sequenceConflicts": 0
+    }
+  ],
+  "scope": "real isolated Host; local controlled model; API21 simulator, not locked device"
+}

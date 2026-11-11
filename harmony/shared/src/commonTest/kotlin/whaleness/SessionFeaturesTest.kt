@@ -108,6 +108,25 @@ class SessionFeaturesTest {
         )
     }
 
+    @Test fun typedQueuePreviewIsBoundedWithoutTruncatingConfirmedDraftRestore() {
+        ready()
+        val text = "原文%1\$s".repeat(100)
+        val received =
+            frame(
+                """{"kind":"session-queue","sessionId":"s","items":[{"id":"long","placement":"queued","message":{"content":[{"type":"text","text":"$text"}]}}]}""",
+            )
+        val preview =
+            received.features!!
+                .queue
+                .single()
+                .preview
+        assertEquals("raw", preview.key)
+        assertEquals(text.take(240), preview.args.single())
+        command(HarmonyCommand("queue-action", sessionId = "s", itemId = "long", value = "edit"))
+        val accepted = frame("""{"kind":"queue-item-updated","sessionId":"s","itemId":"long","action":"remove","accepted":true}""")
+        assertEquals(text, accepted.restoredDrafts["s"])
+    }
+
     @Test fun queueTimeoutNeverRestoresDraftOrAllowsAmbiguousRetryUntilReconnect() {
         ready()
         queued()

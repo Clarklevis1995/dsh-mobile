@@ -1,0 +1,26 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-r7x0nl1b
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 conversation-files
+操作 conversation-overflow
+操作 workspace-file-资料
+操作 workspace-file-资料/报告 空格.md
+操作 file-preview-save
+SAVE_DOWNLOAD [('', '报告 空格.md', 'Text'), ('file-preview-save', '保存', 'Button'), ('file-preview-open', '打开', 'Button'), ('file-preview-share', '分享', 'Button'), ('file-preview-copy', '复制', 'Button'), ('file-preview-mode', '原文', 'Button'), ('file-markdown', '原生文件预览', 'Text'), ('file-markdown-block-1:paragraph', '下载后的中文内容与 粗体。', 'Text'), ('', 'KOTLIN', 'Text'), ('file-markdown-code-copy-2:code', '复制代码', 'Button'), ('file-markdown-code-2:code', 'val harmony = "worker native syntax"', 'Text'), ('file-markdown-table-copy-3:table', '复制表格', 'Button'), ('file-markdown-table-preview-3:table', '预览表格', 'Button'), ('file-markdown-table-export-3:table', 'CSV', 'Button'), ('', '项目', 'Text'), ('', '状态', 'Text'), ('', '文件', 'Text'), ('', '完整校验', 'Text'), ('', '将文件保存至 "Download"', 'Text'), ('', 'harmony-export-93f6e9af671944cea7f17a28eab41a0a.md', 'TextInput'), ('', '我的手机', 'Text'), ('', 'Download', 'Text'), ('', 'Documents', 'Text'), ('', '我的云盘', 'Text'), ('ClockStatusView', '02, :, 10', 'Flex'), ('', '02', 'Text'), ('TimeView_Text_timeText', ':', 'Text'), ('', '10', 'Text'), ('BatteryComponent-batteryIcon_Text_batterySoc', '100', 'Text')]
+PASS P5-file-save-roundtrip-F 系统选择Download与本轮唯一文件名，实际TaskPool保存并重开目标URI，173字节逐字一致；仅删除本轮导出文件
+操作 file-preview-mode
+操作 page-back
+操作 workspace-file-资料/示例.pdf
+操作 page-back
+操作 files-parent
+操作 workspace-file-图片.png
+操作 page-back
+操作 workspace-file-分块验收.txt
+操作 page-back
+操作 workspace-file-损坏下载.txt
+PASS P5-workspace-files-F 实际目录／中文空格路径，下载背压与落盘、Markdown／代码／表格、单页原生 PDF、图片和多块文本阅读；错误摘要拒绝预览
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-r7x0nl1b

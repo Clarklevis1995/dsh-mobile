@@ -6,12 +6,12 @@ export struct VoiceStateBar {
   @ObjectLink a: Appearance;
   @Prop data: VoiceData;
   onCommand: (op: string) => void = () => {};
-  private feedback(): string { const raw = this.data.alert || this.data.error || ''; return raw === 'Enable the official voice input bundle in DSH plugin management' ? this.a.t('请先在桌面端启用语音输入') : raw; }
+  private feedback(): string { const raw = this.a.t(this.data.alert || this.data.error || ''); return raw === 'Enable the official voice input bundle in DSH plugin management' ? this.a.t('请先在桌面端启用语音输入') : raw; }
   build() {
     if (this.data.overlay || this.data.phase === 'stopping' || this.data.phase === 'transcribing' || this.data.error || this.data.alert || this.data.pendingTranscript || (this.data.voiceMode && !this.data.ready)) {
       Column({ space: 8 }) {
         if (this.data.overlay) {
-          Text(this.a.t(this.data.status)).fontSize(this.a.font(14)).fontColor(this.data.cancelArmed ? '#D92D20' : this.a.fg)
+          Text(this.a.t(this.data.status ?? '')).fontSize(this.a.font(14)).fontColor(this.data.cancelArmed ? '#D92D20' : this.a.fg)
           Text(this.data.timeLabel).fontSize(this.a.font(12)).fontColor(this.a.muted)
           Row({ space: 2 }) {
             ForEach(this.data.waveform, (level: number) => { Rect().width(2).height(Math.max(2, level * 24)).fill(this.data.cancelArmed ? '#D92D20' : this.a.accent) })

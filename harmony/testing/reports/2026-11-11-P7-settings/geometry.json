@@ -1,0 +1,58 @@
+{
+  "scope": "settings root vertical geometry only; same 376 logical width / 100% size; normalized to back-button center to remove 13vp system-safe-area difference; Android unpaired vs Harmony owned fixture connected, data/color-state not compared",
+  "frozenCommit": "9e13dde3",
+  "androidPackage": "com.clarklevis.dsh.android.harmonyv1111",
+  "version": "1.7.12",
+  "checks": [
+    {
+      "text": "设置",
+      "androidOffsetDp": 0.0,
+      "harmonyOffsetVp": -0.143,
+      "difference": -0.143,
+      "passed": true
+    },
+    {
+      "text": "新会话默认配置",
+      "androidOffsetDp": 52.0,
+      "harmonyOffsetVp": 51.857,
+      "difference": -0.143,
+      "passed": true
+    },
+    {
+      "text": "Agent 预设",
+      "androidOffsetDp": 99.143,
+      "harmonyOffsetVp": 99.0,
+      "difference": -0.143,
+      "passed": true
+    },
+    {
+      "text": "默认模型",
+      "androidOffsetDp": 153.714,
+      "harmonyOffsetVp": 153.286,
+      "difference": -0.429,
+      "passed": true
+    },
+    {
+      "text": "权限",
+      "androidOffsetDp": 208.286,
+      "harmonyOffsetVp": 207.571,
+      "difference": -0.714,
+      "passed": true
+    },
+    {
+      "text": "Mobile Gateway",
+      "androidOffsetDp": 313.143,
+      "harmonyOffsetVp": 312.429,
+      "difference": -0.714,
+      "passed": true
+    },
+    {
+      "text": "外观",
+      "androidOffsetDp": 584.857,
+      "harmonyOffsetVp": 583.286,
+      "difference": -1.571,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

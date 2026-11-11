@@ -3,6 +3,15 @@ import { DraftStore } from './DraftStore';
 import { ChatMessage, SharedState, emptyState } from './Models';
 import { ApprovalView, MessageView, QuestionView, SessionView } from '../components/ViewModels';
 
+// 控制握手的空快照与重放可能在同一绘制帧内合并；保留有界原对象，ForEach才能继续观察。
+function trimInteractionViews<T>(views: Map<string, T>, activeIds: Set<string>): void {
+  if (views.size <= 128) { return; }
+  for (const id of views.keys()) {
+    if (views.size <= 128) { break; }
+    if (!activeIds.has(id)) { views.delete(id); }
+  }
+}
+
 export interface ReadingAnchor { messageId: string; inset: number; }
 
 /** 所有易变状态归属本地主机 ID；相同远端会话 ID 也不会共享视图或草稿。 */
@@ -50,13 +59,13 @@ export class HostRuntime {
       if (view) { view.update(row); } else { view = new QuestionView(row); this.questionViews.set(row.rpcId, view); }
       return view;
     });
-    this.questionViews.forEach((_view: QuestionView, id: string) => { if (!state.questions.some(row => row.rpcId === id)) { this.questionViews.delete(id); } });
+    trimInteractionViews(this.questionViews, new Set(state.questions.map(row => row.rpcId)));
     this.approvals = state.approvals.map(row => {
       let view = this.approvalViews.get(row.rpcId);
       if (view) { view.update(row); } else { view = new ApprovalView(row); this.approvalViews.set(row.rpcId, view); }
       return view;
     });
-    this.approvalViews.forEach((_view: ApprovalView, id: string) => { if (!state.approvals.some(row => row.rpcId === id)) { this.approvalViews.delete(id); } });
+    trimInteractionViews(this.approvalViews, new Set(state.approvals.map(row => row.rpcId)));
     this.sessions = state.sessions.map(row => {
       let view = this.sessionViews.get(row.id);
       if (view) { view.update(row); } else { view = new SessionView(row); this.sessionViews.set(row.id, view); }

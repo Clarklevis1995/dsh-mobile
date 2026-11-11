@@ -1,0 +1,7 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-platform-scan-dntu5rm0
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/platform_probe_ui.py", line 60, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/platform_probe_ui.py", line 54, in main
+    assert done in lines and not any(line.startswith('FAIL') for line in lines), lines
+AssertionError: ['ScanKit image decode / Native pairing validation', 'FAIL generate valid pairing  Emulator is not supported.']

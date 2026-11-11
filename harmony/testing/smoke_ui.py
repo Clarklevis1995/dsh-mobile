@@ -75,6 +75,7 @@ class UI:
         time.sleep(0.4)
 
     def control(self, value, key='id', scroll=False):
+        if key == 'id' and value.startswith('settings-') and not self.find(value, key): scroll = True
         if key == 'id' and value in ['conversation-controls','conversation-files','conversation-team','conversation-tab-trajectory','interaction-inbox'] and not self.find(value,key) and self.find('conversation-overflow'):
             self.click('conversation-overflow')
         for _ in range(8):
@@ -110,6 +111,7 @@ class UI:
         for attempt in range(2):
             self.click(value)
             try:
+                if ready.startswith('settings-'): return self.control(ready, scroll=True)[0]
                 return self.wait(ready, timeout=3)
             except AssertionError:
                 if attempt or not self.find(value):

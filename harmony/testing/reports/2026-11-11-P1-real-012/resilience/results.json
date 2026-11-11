@@ -1,0 +1,18 @@
+[
+  {
+    "task": "P1-real-same-text-G",
+    "detail": "同一正文主动发送两次，真实历史保留两条用户消息，各轮收束"
+  },
+  {
+    "task": "P1-real-background-stream-G",
+    "detail": "真实200段约40秒流式经Home离开/返回，终帧逐字一致、消息唯一、草稿保留"
+  },
+  {
+    "task": "P1-real-background-approval-G",
+    "detail": "真实待审批状态经Home返回保留同rpc，未经选择无执行，拒绝后不写文件"
+  },
+  {
+    "task": "P1-real-host-restart-idle-G",
+    "detail": "专属真实Host重启后身份重连，原消息不重发，草稿保留，继续发送唯一且无序列冲突"
+  }
+]

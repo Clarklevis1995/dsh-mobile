@@ -29,6 +29,20 @@ class HarmonyEngineTest {
         frame("""{"kind":"workspaces","items":[]}""")
     }
 
+    @Test fun hostDetailsFollowOnlyControlFramesAndClearOnDisconnect() {
+        command(HarmonyCommand("prepare", endpoint = "ws://127.0.0.1/ws/mobile"))
+        val hello = frame("""{"kind":"hello","authenticated":true}""")
+        assertTrue(hello.outbound.any { it.channel == "control" && "\"type\":\"host\"" in it.text })
+        val raw = """{"kind":"host","version":"fallback","dshVersion":"0.2.2-rc.1","cwd":"/owned/workspace","attachedSessions":7}"""
+        val current = frame(raw).state!!.hostSnapshot!!
+        assertEquals("0.2.2-rc.1", current.dshVersion)
+        assertEquals("/owned/workspace", current.cwd)
+        assertEquals(7, current.attachedSessions)
+        assertEquals(current, frame("""{"kind":"host","dshVersion":"wrong-channel"}""", "conversation").state!!.hostSnapshot)
+        assertNull(command(HarmonyCommand("disconnect")).state!!.hostSnapshot)
+        assertNull(frame("""{"kind":"hello","authenticated":true}""").state!!.hostSnapshot)
+    }
+
     @Test fun rejectsUnencryptedPublicEndpoint() {
         val result = command(HarmonyCommand("prepare", endpoint = "ws://example.com/ws/mobile"))
         assertFalse(result.ok)
@@ -496,5 +510,22 @@ class HarmonyEngineTest {
                 .single()
                 .id,
         )
+    }
+
+    @Test fun approvalKeepsBothLocalizedReasonsAndReplayWithoutTranslatingHostFallback() {
+        connected()
+        val localized =
+            frame(
+                """{"kind":"approval-requested","sessionId":"s","rpcId":"locale","approvalId":"a1","toolName":"write","reason":"host %1${'$'}s 原文","displayReason":{"zh-CN":"写入本轮文件","en":"Write owned test file"},"replay":true}""",
+            ).state!!.approvals.single()
+        assertEquals("写入本轮文件", localized.reason)
+        assertEquals("Write owned test file", localized.reasonEnglish)
+        assertTrue(localized.replay)
+        val raw =
+            frame(
+                """{"kind":"approval-requested","sessionId":"s","rpcId":"raw","approvalId":"a2","toolName":"write","reason":"host 原文"}""",
+            ).state!!.approvals.last()
+        assertEquals("host 原文", raw.reason)
+        assertEquals(raw.reason, raw.reasonEnglish)
     }
 }

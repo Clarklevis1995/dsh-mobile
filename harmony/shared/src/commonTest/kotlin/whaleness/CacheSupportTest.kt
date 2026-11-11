@@ -142,4 +142,22 @@ class CacheSupportTest {
             assertTrue(state.retainedHistorySessions <= 4)
         }
     }
+
+    @Test fun inactiveHostCanReleaseHistoryWithoutLosingSelectionOrDiskRestore() {
+        online()
+        val saved = call(HarmonyCommand("cache-export")).cache!!.windows.single()
+        assertFalse(call(HarmonyCommand("release-history")).ok)
+        call(HarmonyCommand("disconnect"))
+        val released = call(HarmonyCommand("release-history"))
+        assertTrue(released.ok, released.error)
+        assertEquals("s", released.state!!.selectedSessionId)
+        assertEquals(0, released.state!!.retainedHistorySessions)
+        assertEquals(0L, released.state!!.historyMemoryBytes)
+        assertTrue(released.patches.any { it.sessionId == "s" && it.replacesAll && it.replacementItems!!.isEmpty() })
+        assertTrue(call(HarmonyCommand("release-history")).ok)
+        val restored = call(HarmonyCommand("cache-import-window", sessionId = "s", input = saved.json))
+        assertTrue(restored.ok, restored.error)
+        assertTrue(restored.state!!.cachedHistory)
+        assertTrue(restored.patches.any { it.replacesAll && it.replacementItems!!.any { item -> item.text == "原生中文 English" } })
+    }
 }
