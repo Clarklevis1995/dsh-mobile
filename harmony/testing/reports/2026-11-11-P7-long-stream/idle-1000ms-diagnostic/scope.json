@@ -1,0 +1,4 @@
+{
+  "scope": "诊断A/B，仅临时副本空闲销毁2s→1s，未改生产、未改冻结门槛、未调GC",
+  "parserIdleMilliseconds": 1000
+}

@@ -28,7 +28,9 @@ def main():
     assert os.environ.get('HARMONY_TEST_TARGET') == previous['target']
     def version():
         dump = m.hdc('shell', 'bm', 'dump', '-n', m.BUNDLE)
-        return int(re.search(r'"versionCode"\s*:\s*(\d+)', dump)[1])
+        info = json.loads(dump[dump.index('{'):])
+        assert info['name'] == m.BUNDLE
+        return int(info['versionCode'])
     assert version() == previous['versionCode'], '候选版本已变化，必须先核对新证据'
     with socket.socket() as guard:
         guard.bind(('127.0.0.1', 18783))

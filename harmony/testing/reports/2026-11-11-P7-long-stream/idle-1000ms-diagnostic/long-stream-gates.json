@@ -1,0 +1,44 @@
+{
+  "checks": [
+    {
+      "label": "首屏",
+      "passed": true
+    },
+    {
+      "label": "挂载数量",
+      "passed": true
+    },
+    {
+      "label": "桥接P95",
+      "passed": true
+    },
+    {
+      "label": "镜像P95",
+      "passed": true
+    },
+    {
+      "label": "编辑P95",
+      "passed": true
+    },
+    {
+      "label": "PSS峰值",
+      "passed": true
+    },
+    {
+      "label": "短时3秒空闲PSS增量",
+      "passed": true
+    },
+    {
+      "label": "空闲PSS增量",
+      "passed": true
+    }
+  ],
+  "completedMessageIds": [
+    "harmony-smoke-1007",
+    "harmony-smoke-1009"
+  ],
+  "expectedProjection": {
+    "length": 55274,
+    "hash": "3682621544"
+  }
+}
