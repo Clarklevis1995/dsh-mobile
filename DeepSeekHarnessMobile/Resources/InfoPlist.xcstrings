@@ -15,6 +15,12 @@
             "state" : "translated",
             "value" : "Whaleness"
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Whaleness"
+          }
         }
       }
     },
@@ -28,6 +34,12 @@
           }
         },
         "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Whaleness"
+          }
+        },
+        "ja" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Whaleness"
@@ -49,6 +61,12 @@
             "state" : "translated",
             "value" : "允许 Whaleness 扫描 DeepSeek Harness WebUI 生成的设备配对二维码。"
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Whaleness が DeepSeek Harness WebUI のデバイスペアリング用 QR コードを読み取るためにカメラを使用します。"
+          }
         }
       }
     },
@@ -65,6 +83,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接局域网中的 DeepSeek Harness Mobile Gateway。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカルネットワーク上の DeepSeek Harness Mobile Gateway に接続するために使用します。"
           }
         }
       }
@@ -83,6 +107,12 @@
             "state" : "translated",
             "value" : "Agent 执行期间使用低精度后台定位维持任务连接；位置数据不会保存或上传。"
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エージェント実行中のタスク接続を維持するために、低精度のバックグラウンド位置情報を使用します。位置情報は保存も送信もされません。"
+          }
         }
       }
     },
@@ -100,6 +130,12 @@
             "state" : "translated",
             "value" : "Agent 执行期间使用低精度定位维持任务连接；位置数据不会保存或上传。"
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エージェント実行中に低精度の位置情報を使用してタスク接続を維持します。位置情報は保存も送信もされません。"
+          }
         }
       }
     },
@@ -116,6 +152,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用于按住说话，将录音通过你的 DSH 网关转成文字。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長押しで録音し、DSH ゲートウェイ経由で音声をテキストに変換するために使用します。"
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryAddUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Whaleness to save chat images to your photo library."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于将聊天中预览的图片保存到相册。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "チャットでプレビューした画像を写真ライブラリに保存するために使用します。"
           }
         }
       }

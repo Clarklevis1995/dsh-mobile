@@ -15,10 +15,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -182,16 +184,39 @@ class AdaptiveLayoutDeviceTest {
     @Test
     fun scheduledTaskSearchLeavesBackButtonUsableInNarrowFoldedWindow() {
         val holder = AndroidSharedStateHolder()
+        var createClicks = 0
         compose.setContent {
             DshTheme {
-                Box(Modifier.width(280.dp).fillMaxSize()) { ScheduledTasksScreen(holder, {}, {}) }
+                Box(Modifier.width(280.dp).fillMaxSize()) {
+                    ScheduledTasksScreen(holder, {}, {}, onCreateTask = { createClicks++ })
+                }
             }
         }
         try {
+            val buttons = listOf("scheduled-tasks-search", "scheduled-tasks-more")
+            for (id in buttons) compose.onNodeWithTag(id).assertIsDisplayed()
+            assertTrue(bounds(buttons[0]).right < bounds(buttons[1]).left)
+            compose.onNodeWithTag("scheduled-tasks-create").assertDoesNotExist()
+            compose.onNodeWithTag("scheduled-tasks-more").performClick()
+            compose.onNodeWithText("删除已结束的定时任务").assertExists()
+            compose.onNodeWithText("添加定时任务").assertExists()
+            assertTrue(compose.onNodeWithText("添加定时任务").fetchSemanticsNode().boundsInRoot.top <
+                compose.onNodeWithText("删除已结束的定时任务").fetchSemanticsNode().boundsInRoot.top)
+            compose.onNodeWithTag("scheduled-tasks-create").performClick()
+            compose.runOnIdle { assertEquals(1, createClicks) }
+            compose.onNodeWithTag("scheduled-tasks-filter").assertDoesNotExist()
+            compose.onNodeWithTag("scheduled-tasks-status-tabs").assertIsDisplayed()
+            for (title in listOf("已开启", "已暂停", "已结束", "全部")) {
+                compose.onNodeWithText(title).assertIsDisplayed()
+            }
+            for (status in listOf("active", "paused", "ended", "all")) {
+                compose.onNodeWithTag("scheduled-status-$status").performClick().assertIsSelected()
+            }
             compose.onNodeWithContentDescription("搜索定时任务").performClick()
             compose.onNodeWithContentDescription("关闭搜索").assertIsDisplayed()
-            assertTrue(bounds("scheduled-search-controls").left >= bounds("scheduled-back").right)
+            assertTrue(bounds("scheduled-search-controls").top >= bounds("scheduled-back").bottom)
             compose.onNodeWithTag("scheduled-back").assertIsDisplayed()
+            compose.onNodeWithTag("scheduled-tasks-status-tabs").assertIsDisplayed()
         } finally { compose.runOnIdle { holder.close() } }
     }
 

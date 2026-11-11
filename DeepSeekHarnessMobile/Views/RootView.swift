@@ -6,7 +6,6 @@ import DeepSeekHarnessShared
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
     @EnvironmentObject private var hosts: MultiGatewayStore
-    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         RootNavigationHost(store: store)
@@ -16,9 +15,7 @@ struct RootView: View {
             .alert("Whaleness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
                 Button(String(localized: "好"), role: .cancel) { store.lastError = nil }
             } message: { Text(store.lastError ?? "") }
-            .onChangeCompat(of: scenePhase) { _, phase in
-                store.handleScenePhase(phase)
-            }
+            .modifier(AppConnectionLifecycleModifier(tunnel: .shared, phaseChanged: store.handleScenePhase))
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
                 store.handleMemoryWarning()
             }
@@ -27,6 +24,27 @@ struct RootView: View {
                       let profile = hosts.profiles.first(where: { $0.id == route.gatewayID }) else { return }
                 hosts.select(profile)
             }
+    }
+}
+
+/// Scene 生命周期是前后台恢复的唯一入口；先标记隧道，再通知网关，建连时共用恢复屏障。
+struct AppConnectionLifecycleModifier: ViewModifier {
+    @Environment(\.scenePhase) private var scenePhase
+    let tunnel: TailscaleTunnelController
+    let phaseChanged: (ScenePhase) -> Void
+
+    func body(content: Content) -> some View {
+        content.onChangeCompat(of: scenePhase) { _, phase in
+            switch phase {
+            case .background:
+                tunnel.applicationDidEnterBackground()
+            case .active:
+                Task { await tunnel.refreshAfterReturningToApp() }
+            default:
+                break
+            }
+            phaseChanged(phase)
+        }
     }
 }
 
@@ -90,11 +108,6 @@ private struct RootNavigationHost: View, Equatable {
                 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task {
-            if case .disconnected = store.gateway.state {
-                await store.connectOnColdLaunchIfPaired()
-            }
-        }
         .onChangeCompat(of: navigationPath) { _, path in
             if path.isEmpty { store.resumeWorkspace() }
         }
@@ -130,17 +143,23 @@ private struct RootNavigationHost: View, Equatable {
                     await store.activatePreparedConversation(sessionID: header.sessionID)
                 }
             ) { activeView, topInset in
-                ConversationView(activeView: activeView, topContentInset: topInset)
+                ConversationView(activeView: activeView, topContentInset: topInset, initialDraft: header.initialDraft)
             }
         case .settings:
-            SettingsView()
+            // 设置及其子页共用根路径，避免 iOS 17 真机的目标式导航反复布局。
+            SettingsView(open: openSettingsPage)
+        case .settingsDetail(let route):
+            SettingsDestinationView(route: route, open: openSettingsPage, close: {
+                guard navigationPath.last == .settingsDetail(route) else { return }
+                navigationPath.removeLast()
+            })
         case .plugins:
             PluginsView(store: store)
         case .scheduledTasks:
-            ScheduledTasksView(store: store) { sessionID in
+            ScheduledTasksView(store: store, onCreateTask: createScheduledTaskConversation) { sessionID in
                 let session = store.sessions.first(where: { $0.id == sessionID }) ?? SessionSummary(
                     id: sessionID,
-                    title: store.scheduledTasks.first(where: { $0.sessionID == sessionID })?.title ?? "会话",
+                    title: store.scheduledTasks.first(where: { $0.sessionID == sessionID })?.title ?? String(localized: "会话"),
                     lastActivity: .now,
                     isRunning: false,
                     hasUnread: false
@@ -155,6 +174,23 @@ private struct RootNavigationHost: View, Equatable {
                     navigationPath = [.conversation(header)]
                 }
             }
+        }
+    }
+
+    private func createScheduledTaskConversation() {
+        guard newConversationTask == nil else { return }
+        let operationID = UUID()
+        conversationOperationID = operationID
+        newConversationTask = Task { @MainActor in
+            defer { if conversationOperationID == operationID { newConversationTask = nil } }
+            guard await store.prepareNewConversation(useDefaultWorkspace: true), !Task.isCancelled else { return }
+            let header = ConversationNavigationHeader(
+                sessionID: store.selectedSessionId,
+                title: String(localized: "session.new.fallback", defaultValue: "新建 DeepSeek Harness"),
+                agentPresetTitle: agentPresetDisplayName(for: store.agentPresetDefault),
+                initialDraft: String(localized: "请根据需求创建一个自动化任务。")
+            )
+            navigationPath = [.conversation(header)]
         }
     }
 
@@ -182,6 +218,10 @@ private struct RootNavigationHost: View, Equatable {
     private func navigate(to route: AppRoute) {
         guard navigationPath.last != route else { return }
         navigationPath.append(route)
+    }
+
+    private func openSettingsPage(_ route: SettingsRoute) {
+        navigate(to: .settingsDetail(route))
     }
 
     private func openLiveActivityURL(_ url: URL) {
@@ -253,6 +293,7 @@ private struct RootNavigationHost: View, Equatable {
     private enum AppRoute: Hashable {
         case conversation(ConversationNavigationHeader)
         case settings
+        case settingsDetail(SettingsRoute)
         case plugins
         case scheduledTasks
     }
@@ -273,12 +314,13 @@ private struct WorkspaceDrawerDestination: View {
 }
 
 enum ScheduledTaskStatusFilter: String, CaseIterable {
-    case all, active, ended
+    case active, paused, ended, all
 
     var title: String {
         switch self {
         case .all: String(localized: "全部")
         case .active: String(localized: "已开启")
+        case .paused: String(localized: "已暂停")
         case .ended: String(localized: "已结束")
         }
     }
@@ -293,32 +335,52 @@ func filteredScheduledTasks(
         switch status {
         case .all: matchesStatus = true
         case .active: matchesStatus = task.status == "active"
-        case .ended: matchesStatus = task.status != "active"
+        case .paused: matchesStatus = task.status == "paused"
+        case .ended: matchesStatus = task.status != "active" && task.status != "paused"
         }
         return matchesStatus && (search.isEmpty || task.title.localizedStandardContains(search) ||
             task.prompt.localizedStandardContains(search))
     }
 }
 
+/// 将卡片的上方阴影留在滚动内容内，避开筛选栏不透明背景的绘制边界。
+struct ScheduledTaskListShadowInset: ViewModifier {
+    static let topClearance: CGFloat = 16
+    let enabled: Bool
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.contentMargins(.top, enabled ? Self.topClearance : 0, for: .scrollContent)
+        } else {
+            content
+        }
+    }
+}
+
 private struct ScheduledTasksView: View {
     private enum ActiveAlert: Identifiable {
         case delete(ScheduledTask)
+        case deleteEnded
         case error(String)
 
         var id: String {
             switch self {
             case .delete(let task): "delete-\(task.id)"
+            case .deleteEnded: "delete-ended"
             case .error(let message): "error-\(message)"
             }
         }
     }
 
     @ObservedObject var store: AppStore
+    let onCreateTask: () -> Void
     let onOpenSession: (String) -> Void
+    @State private var historyTask: ScheduledTask?
     @State private var expandedTaskIDs: Set<String> = []
     @State private var editingTask: ScheduledTask?
     @State private var activeAlert: ActiveAlert?
     @State private var statusFilter: ScheduledTaskStatusFilter = .all
+    @State private var statusSelectionFeedback = UISelectionFeedbackGenerator()
     @State private var searchQuery = ""
     @State private var isSearching = false
     @FocusState private var searchIsFocused: Bool
@@ -327,7 +389,30 @@ private struct ScheduledTasksView: View {
     }
 
     var body: some View {
+        navigationContent
+        .sheet(item: $historyTask) { task in
+            historySheet(for: task)
+        }
+        .sheet(item: $editingTask) { task in
+            ScheduledTaskEditSheet(task: task, store: store)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .onChangeCompat(of: store.scheduledTaskMutationError) { _, error in
+            if let error, editingTask == nil { activeAlert = .error(error) }
+        }
+        .alert(item: $activeAlert) { alert in
+            taskAlert(alert)
+        }
+    }
+
+    private var taskList: some View {
         List {
+            if store.supportsScheduleManagement {
+                if store.scheduledTasks.count < store.scheduledTasksTotal {
+                    Button("加载更多任务") { store.loadMoreScheduledTasks() }.disabled(store.scheduledTasksLoading)
+                }
+            }
             if store.scheduledTasksLoading && store.scheduledTasks.isEmpty {
                 ProgressView("正在加载定时任务…")
                     .frame(maxWidth: .infinity)
@@ -346,13 +431,13 @@ private struct ScheduledTasksView: View {
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
             } else if store.scheduledTasks.isEmpty {
-                DshEmptyState("暂无定时任务", systemImage: "clock", description: Text("在会话中创建的定时任务会显示在这里"))
+                DshEmptyState(String(localized: "暂无定时任务"), systemImage: "clock", description: Text("在会话中创建的定时任务会显示在这里"))
                     .padding(.top, 40)
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
             } else if visibleTasks.isEmpty {
                 DshEmptyState(
-                    "没有符合条件的定时任务",
+                    String(localized: "没有符合条件的定时任务"),
                     systemImage: "line.3.horizontal.decrease.circle",
                     description: Text(searchQuery.isEmpty
                         ? String(localized: "试试其他任务状态")
@@ -362,90 +447,132 @@ private struct ScheduledTasksView: View {
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
             } else {
+                if #unavailable(iOS 17.0) {
+                    Color.clear.frame(height: ScheduledTaskListShadowInset.topClearance)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden).listRowBackground(Color.clear)
+                        .environment(\.defaultMinListRowHeight, 0)
+                        .accessibilityHidden(true)
+                }
                 ForEach(visibleTasks) { task in
-                    ScheduledTaskCard(
-                        task: task,
-                        sessionTitle: store.sessions.first(where: { $0.id == task.sessionID })?.title ?? task.sessionID,
-                        expanded: expandedTaskIDs.contains(task.id),
-                        onOpen: { onOpenSession(task.sessionID) },
-                        onExpand: {
-                            if !expandedTaskIDs.insert(task.id).inserted { expandedTaskIDs.remove(task.id) }
-                        }
-                    )
-                    .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) { activeAlert = .delete(task) } label: {
-                            Label("删除", systemImage: "trash")
-                        }
-                        .disabled(store.scheduledTaskPendingID == task.id)
-                        if task.status == "active" {
-                            Button { editingTask = task } label: {
-                                Label("编辑", systemImage: "pencil")
-                            }
-                            .tint(.blue)
-                            .disabled(store.scheduledTaskPendingID == task.id)
-                        }
-                    }
+                    taskRow(for: task)
                 }
             }
         }
+    }
+
+    private var listContent: some View {
+        taskList
         .listStyle(.plain)
+        .modifier(ScheduledTaskListShadowInset(enabled: !visibleTasks.isEmpty))
         .adaptiveListWidth()
         .scrollContentBackground(.hidden)
         .refreshable { store.refreshScheduledTasks() }
+        .onChangeCompat(of: statusFilter) { _, filter in
+            store.filterScheduledTasks(active: filter == .all ? nil : filter == .active)
+        }
         .background(Color(uiColor: .systemBackground))
+    }
+
+    private var navigationContent: some View {
+        listContent
         .safeAreaInset(edge: .top, spacing: 0) {
-            if isSearching {
-                searchField
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .readableContentWidth()
-                    .background(Color(uiColor: .systemBackground))
+            VStack(spacing: 0) {
+                if isSearching {
+                    searchField.padding(.vertical, 8)
+                }
+                statusSwitchBar
             }
+            .padding(.horizontal, 20)
+            .readableContentWidth()
+            .background(Color(uiColor: .systemBackground))
         }
         .navigationTitle(String(localized: "定时任务"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if !isSearching {
-                // 独立工具栏项由系统按横向或竖向排列，不能共用固定宽度的 HStack。
-                ToolbarItem(placement: .topBarTrailing) {
-                    searchButton
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    statusFilterMenu
-                }
-            }
-        }
+        .toolbar { taskToolbar }
         .task {
             if !store.gateway.state.isConnected { store.refreshScheduledTasks() }
         }
         .onReceive(store.gateway.$state) { state in
             if state.isConnected { store.refreshScheduledTasks() }
         }
-        .sheet(item: $editingTask) { task in
-            ScheduledTaskEditSheet(task: task, store: store)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
-        .onChangeCompat(of: store.scheduledTaskMutationError) { _, error in
-            if let error, editingTask == nil { activeAlert = .error(error) }
-        }
-        .alert(item: $activeAlert) { alert in
-            switch alert {
-            case .delete(let task):
-                Alert(
-                    title: Text("删除定时任务？"),
-                    message: Text("删除后任务及投递记录无法恢复；已进入会话队列的消息不会撤回。"),
-                    primaryButton: .destructive(Text("删除任务及投递记录")) {
-                        store.deleteScheduledTask(task)
-                    },
-                    secondaryButton: .cancel(Text("取消"))
-                )
-            case .error(let message):
-                Alert(title: Text("定时任务操作失败"), message: Text(message), dismissButton: .default(Text("好")))
+    }
+
+    @ToolbarContentBuilder
+    private var taskToolbar: some ToolbarContent {
+        if !isSearching {
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarTrailing) { searchButton }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                ToolbarItem(placement: .topBarTrailing) { moreMenu }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) { searchButton.buttonStyle(ScheduledTaskToolbarButtonStyle()) }
+                ToolbarItem(placement: .topBarTrailing) { moreMenu.buttonStyle(ScheduledTaskToolbarButtonStyle()) }
             }
+        }
+    }
+
+    private func taskRow(for task: ScheduledTask) -> some View {
+        ScheduledTaskCard(
+            task: task,
+            sessionTitle: store.sessions.first(where: { $0.id == task.sessionID })?.title ?? task.sessionID,
+            expanded: expandedTaskIDs.contains(task.id),
+            onOpen: { if !task.sessionID.isEmpty { onOpenSession(task.sessionID) } },
+            onExpand: {
+                if !expandedTaskIDs.insert(task.id).inserted { expandedTaskIDs.remove(task.id) }
+            },
+            onShowHistory: store.supportsScheduleManagement ? { historyTask = task; store.loadScheduleHistory(task) } : nil
+        )
+        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) { activeAlert = .delete(task) } label: {
+                Image("ScheduleTrash").renderingMode(.template)
+                    .resizable().scaledToFit().frame(width: 24, height: 24)
+            }
+            .accessibilityLabel("删除")
+            .disabled(store.scheduledTaskPendingID != nil)
+            if ScheduleTaskPresentation.shared.canEdit(status: task.status) {
+                Button { editingTask = task } label: {
+                    Image(systemName: "pencil")
+                }
+                .accessibilityLabel("编辑")
+                .tint(.blue)
+                .disabled(store.scheduledTaskPendingID != nil)
+            }
+        }
+    }
+
+    private func historySheet(for task: ScheduledTask) -> some View {
+        ScheduledTaskHistorySheet(store: store, task: task, onOpenSession: { sessionID in
+            historyTask = nil
+            onOpenSession(sessionID)
+        })
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func taskAlert(_ alert: ActiveAlert) -> Alert {
+        switch alert {
+        case .delete(let task):
+            Alert(
+                title: Text("删除定时任务？"),
+                message: Text("删除后任务及投递记录无法恢复；已进入会话队列的消息不会撤回。"),
+                primaryButton: .destructive(Text("删除任务及投递记录")) {
+                    store.deleteScheduledTask(task)
+                },
+                secondaryButton: .cancel(Text("取消"))
+            )
+        case .error(let message):
+            Alert(title: Text("定时任务操作失败"), message: Text(message), dismissButton: .default(Text("好")))
+        case .deleteEnded:
+            Alert(
+                title: Text("删除已结束的定时任务？"),
+                message: Text("已结束任务及其投递记录将被删除，无法恢复。"),
+                primaryButton: .destructive(Text("删除")) { store.clearEndedScheduledTasks() },
+                secondaryButton: .cancel(Text("取消"))
+            )
         }
     }
 
@@ -495,25 +622,140 @@ private struct ScheduledTasksView: View {
         .accessibilityIdentifier("scheduled-tasks-search")
     }
 
-    private var statusFilterMenu: some View {
+    private var moreMenu: some View {
         Menu {
-            ForEach(ScheduledTaskStatusFilter.allCases, id: \.self) { option in
-                Button {
-                    statusFilter = option
-                } label: {
-                    if statusFilter == option {
-                        Label(option.title, systemImage: "checkmark")
-                    } else {
-                        Text(option.title)
-                    }
+            Button(action: onCreateTask) {
+                Label {
+                    Text("添加定时任务")
+                } icon: {
+                    Image("ScheduleCreate").renderingMode(.template)
                 }
             }
+            .accessibilityIdentifier("scheduled-tasks-create")
+            Button(role: .destructive) { activeAlert = .deleteEnded } label: {
+                Label {
+                    Text("删除已结束的定时任务")
+                } icon: {
+                    Image("ScheduleTrash").renderingMode(.template)
+                }
+            }
+            .disabled(!store.supportsScheduleManagement || !store.gateway.state.isConnected || store.scheduledTaskPendingID != nil)
+            .accessibilityIdentifier("scheduled-tasks-delete-ended")
         } label: {
-            Label("筛选定时任务", systemImage: "line.3.horizontal.decrease")
-                .labelStyle(.iconOnly)
+            Label("更多", systemImage: "ellipsis").labelStyle(.iconOnly)
         }
-        .accessibilityLabel("筛选定时任务，当前\(statusFilter.title)")
-        .accessibilityIdentifier("scheduled-tasks-filter")
+        .accessibilityIdentifier("scheduled-tasks-more")
+    }
+
+    private var statusSwitchBar: some View {
+        Picker("定时任务状态", selection: Binding(get: { statusFilter }, set: { next in
+            guard next != statusFilter else { return }
+            // 仅用户切换选项时反馈，刷新和状态恢复不触发震动。
+            statusSelectionFeedback.selectionChanged()
+            statusSelectionFeedback.prepare()
+            statusFilter = next
+        })) {
+            ForEach(ScheduledTaskStatusFilter.allCases, id: \.self) { option in
+                Text(option.title).tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.vertical, 8)
+        .accessibilityIdentifier("scheduled-tasks-status-tabs")
+        .onAppear { statusSelectionFeedback.prepare() }
+    }
+
+
+}
+
+struct ScheduledTaskHistorySheet: View {
+    @ObservedObject var store: AppStore
+    let task: ScheduledTask
+    let onOpenSession: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    private var records: [JSONValue] { store.scheduleHistory?["records"]?.arrayValue ?? [] }
+    private var before: String? { store.scheduleHistory?["nextBefore"]?.stringValue }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    Text(task.title).appFont(.headline)
+                    ForEach(Array(records.enumerated()), id: \.offset) { _, record in
+                        historyRow(record)
+                    }
+                    if store.scheduleHistoryLoading {
+                        ProgressView().frame(maxWidth: .infinity)
+                    } else if let error = store.scheduleHistoryError {
+                        Text(error).foregroundStyle(.secondary)
+                        Button("重试") { store.loadScheduleHistory(task, before: before) }
+                    } else if records.isEmpty {
+                        Text("暂无运行轨迹").foregroundStyle(.secondary)
+                    }
+                    if let before, !store.scheduleHistoryLoading, store.scheduleHistoryError == nil {
+                        Button("加载更早轨迹") { store.loadScheduleHistory(task, before: before) }
+                            .frame(maxWidth: .infinity)
+                    }
+                    if store.scheduleHistory?["retention"] != nil && store.scheduleHistory?["retention"] != .null ||
+                        store.scheduleHistory?["earlierRecordsPruned"]?.boolValue == true ||
+                        store.scheduleHistory?["earlierRecordsUnavailable"]?.boolValue == true {
+                        Text("仅显示宿主仍保留的运行记录").appFont(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(20)
+            }
+            .navigationTitle("运行轨迹")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+            .safeAreaInset(edge: .bottom) {
+                if !task.sessionID.isEmpty {
+                    Button { onOpenSession(task.sessionID) } label: {
+                        Label("关联会话", systemImage: "bubble.left.and.bubble.right")
+                            .frame(maxWidth: .infinity).padding()
+                    }
+                    .background(.regularMaterial)
+                }
+            }
+        }
+        .accessibilityIdentifier("scheduled-task-history-sheet")
+    }
+
+    private func historyRow(_ record: JSONValue) -> some View {
+        let timestamp = record["scheduledAt"]?.stringValue ?? record["deliveredAt"]?.stringValue
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "clock").foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 10) {
+                Text(timestamp.map(ScheduledTaskFormat.date) ?? String(localized: "时间未知"))
+                    .appFont(.headline)
+                Text(record["title"]?.stringValue ?? task.title).appFont(.body)
+                DisclosureGroup(String(localized: "详情")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(record["prompt"]?.stringValue ?? task.prompt)
+                        if let delivered = record["deliveredAt"]?.stringValue {
+                            Text(ScheduledTaskFormat.date(delivered)).foregroundStyle(.secondary)
+                        }
+                        if let message = record["messageId"]?.stringValue {
+                            Text(message).appFont(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                        }
+                        if let session = (record["targetSessionId"] ?? record["sessionId"])?.stringValue, !session.isEmpty, session != task.sessionID {
+                            Button("关联会话") { onOpenSession(session) }
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+                }
+                Divider()
+            }
+        }
+    }
+}
+
+/// iOS 16 使用显式圆形材质，避免调用仅 iOS 17 起提供的 ButtonBorderShape.circle。
+private struct ScheduledTaskToolbarButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: 44, height: 44)
+            .background(.ultraThinMaterial, in: Circle())
+            .overlay { Circle().strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5) }
+            .opacity(configuration.isPressed ? 0.65 : 1)
     }
 }
 
@@ -523,6 +765,7 @@ struct ScheduledTaskCard: View {
     let expanded: Bool
     let onOpen: () -> Void
     let onExpand: () -> Void
+    var onShowHistory: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -575,7 +818,7 @@ struct ScheduledTaskCard: View {
                 onExpand()
             } label: {
                 HStack {
-                    Text(task.status == "active" ? ScheduledTaskFormat.date(task.scheduledAt) : String(localized: "已结束"))
+                    Text(task.status == "active" ? ScheduledTaskFormat.date(task.scheduledAt) : ScheduleTaskPresentation.shared.statusLabel(status: task.status).localized)
                         .appFont(.system(size: 15))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -602,10 +845,29 @@ struct ScheduledTaskCard: View {
             detail(String(localized: "执行规则"), ScheduledTaskFormat.fullRule(task))
             detail(String(localized: "下次计划时间"), task.status == "active" ? ScheduledTaskFormat.date(task.scheduledAt) : String(localized: "无"))
             detail(String(localized: "所属会话"), sessionTitle)
-            detail(String(localized: "状态"), task.status == "active" ? String(localized: "运行中") : String(localized: "已结束"))
+            detail(String(localized: "状态"), ScheduleTaskPresentation.shared.statusLabel(status: task.status).localized)
             detail(String(localized: "最近投递"), task.lastDelivery?["deliveredAt"]?.stringValue.map {
                 String(localized: "schedule.last-delivery", defaultValue: "已投递 · \(ScheduledTaskFormat.date($0))")
             } ?? String(localized: "暂无投递记录"))
+            if let onShowHistory {
+                Divider()
+                Button(action: onShowHistory) {
+                    HStack(spacing: 12) {
+                        Image("ScheduleHistory").renderingMode(.template)
+                            .resizable().scaledToFit().frame(width: 24, height: 24)
+                        Text("查看运行轨迹").frame(maxWidth: .infinity, alignment: .leading)
+                        Image("ScheduleChevronRight").renderingMode(.template)
+                            .resizable().scaledToFit().frame(width: 20, height: 20)
+                    }
+                    .appFont(.system(size: 15))
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 48)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.blue)
+                .accessibilityIdentifier("scheduled-task-history")
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 18)
@@ -654,9 +916,9 @@ private struct ScheduledTaskEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var prompt: String
-    @State private var selectedDate: Date
-    @State private var selectedTime: Date
-    @State private var useSpecificDate: Bool
+    @State private var timing: ScheduleTimingForm
+    @State private var target: ScheduleTargetForm
+    private let originalTiming: ScheduleTimingForm
     @State private var pendingRequestID: String?
     @State private var localError: String?
 
@@ -665,48 +927,27 @@ private struct ScheduledTaskEditSheet: View {
         self.store = store
         _title = State(initialValue: task.title)
         _prompt = State(initialValue: task.prompt)
-        _selectedDate = State(initialValue: Self.parseDate(task.scheduledAt) ?? Date().addingTimeInterval(3_600))
-        _selectedTime = State(initialValue: Self.initialClock(task))
-        _useSpecificDate = State(initialValue: task.kind == "at" || task.kind == "after")
+        let form = ScheduleTimingForm(task: task)
+        originalTiming = form
+        _timing = State(initialValue: form)
+        _target = State(initialValue: ScheduleTargetForm(task: task))
     }
 
-    private var isRepeating: Bool { !["at", "after"].contains(task.kind) }
-    private var zone: TimeZone { TimeZone(identifier: task.raw["timeZone"]?.stringValue ?? "") ?? .current }
-    private var clock: String {
-        let formatter = DateFormatter()
-        formatter.timeZone = zone
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter.string(from: selectedTime)
-    }
     private var timingChange: JSONValue? {
-        if useSpecificDate {
-            let original = Self.parseDate(task.scheduledAt)
-            guard isRepeating || original == nil || abs(selectedDate.timeIntervalSince(original!)) > 1 else { return nil }
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            return .object(["kind": .string("at"), "at": .string(formatter.string(from: selectedDate))])
-        }
-        guard String(clock.prefix(5)) != String((task.raw["time"]?.stringValue ?? "").prefix(5)) else { return nil }
-        let timeZone = task.raw["timeZone"]?.stringValue ?? zone.identifier
-        if task.kind == "daily" {
-            return .object(["kind": .string("daily"), "daily": .object([
-                "time": .string(clock), "time_zone": .string(timeZone)
-            ])])
-        }
-        if task.kind == "weekly" {
-            return .object(["kind": .string("weekly"), "weekly": .object([
-                "time": .string(clock), "time_zone": .string(timeZone),
-                "weekdays": task.raw["weekdays"] ?? .array([])
-            ])])
-        }
-        return nil
+        guard let json = ScheduleTimingEditor.shared.changeJson(draft: timing.shared, original: originalTiming.shared) else { return nil }
+        return try? JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
+    }
+    private var timingError: String? { timing == originalTiming ? nil : timing.validationError }
+    private var targetChange: JSONValue? { target.change(task: task) }
+    private var targetError: String? {
+        target == ScheduleTargetForm(task: task) ? nil : target.validationError(task: task)
     }
     private var canSave: Bool {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanTitle.isEmpty, cleanTitle.count <= 120, !cleanPrompt.isEmpty else { return false }
-        guard cleanTitle != task.title || cleanPrompt != task.prompt || timingChange != nil else { return false }
-        if useSpecificDate && timingChange != nil && selectedDate <= .now { return false }
+        guard !cleanTitle.isEmpty, cleanTitle.utf16.count <= 120, !cleanPrompt.isEmpty else { return false }
+        guard cleanTitle != task.title || cleanPrompt != task.prompt || timingChange != nil || targetChange != nil else { return false }
+        if timingError != nil || targetError != nil { return false }
         return pendingRequestID == nil
     }
 
@@ -714,6 +955,7 @@ private struct ScheduledTaskEditSheet: View {
         VStack(spacing: 0) {
             HStack {
                 Button("取消") { dismiss() }
+                    .disabled(pendingRequestID != nil)
                 Spacer()
                 Text("编辑定时任务").appFont(.system(size: 17, weight: .semibold))
                 Spacer()
@@ -729,6 +971,7 @@ private struct ScheduledTaskEditSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("标题").appFont(.subheadline.weight(.medium))
                         TextField("任务标题", text: $title)
+                            .disabled(pendingRequestID != nil)
                             .textInputAutocapitalization(.never)
                             .padding(13)
                             .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
@@ -737,38 +980,23 @@ private struct ScheduledTaskEditSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("任务内容").appFont(.subheadline.weight(.medium))
                         TextEditor(text: $prompt)
+                            .disabled(pendingRequestID != nil)
                             .scrollContentBackground(.hidden)
-                            .frame(minHeight: 130)
+                            .frame(height: 160)
                             .padding(8)
                             .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
                     }
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("执行时间").appFont(.subheadline.weight(.medium))
-                        if isRepeating {
-                            Toggle("改为指定日期执行一次", isOn: $useSpecificDate)
-                                .tint(Color(red: 0.03, green: 0.51, blue: 0.97))
-                        }
-                        if useSpecificDate {
-                            DatePicker("执行日期", selection: $selectedDate, in: Date()..., displayedComponents: .date)
-                                .datePickerStyle(.graphical)
-                            DatePicker("执行时刻", selection: $selectedDate, displayedComponents: .hourAndMinute)
-                                .datePickerStyle(.wheel)
-                            Text("按当前设备时区 \(TimeZone.current.identifier) 选择，保存后按该时间执行一次。")
-                                .appFont(.caption).foregroundStyle(.secondary)
-                            if timingChange != nil && selectedDate <= .now {
-                                Text("请选择未来的日期和时间。")
-                                    .appFont(.caption).foregroundStyle(.red)
-                            }
-                        } else if task.kind == "daily" || task.kind == "weekly" {
-                            DatePicker("执行时刻", selection: $selectedTime, displayedComponents: .hourAndMinute)
-                                .datePickerStyle(.wheel)
-                                .environment(\.timeZone, zone)
-                            Text("保留原有\(task.kind == "daily" ? "每日" : "每周")规则和时区 \(zone.identifier)。")
-                                .appFont(.caption).foregroundStyle(.secondary)
-                        } else {
-                            Text("当前规则：\(ScheduledTaskFormat.fullRule(task))。选择上方选项后，可用日期和时间选择器改为单次执行。")
-                                .appFont(.subheadline).foregroundStyle(.secondary)
-                        }
+                    if store.supportsScheduleManagement {
+                        ScheduleTargetControls(form: $target, task: task, workspaces: store.workspaces)
+                            .disabled(pendingRequestID != nil)
+                    }
+                    if let targetError {
+                        Text(targetError).appFont(.caption).foregroundStyle(.red)
+                    }
+                    ScheduleTimingControls(form: $timing)
+                        .disabled(pendingRequestID != nil)
+                    if let timingError {
+                        Text(timingError).appFont(.caption).foregroundStyle(.red)
                     }
                     if let error = localError ?? (pendingRequestID != nil ? store.scheduledTaskMutationError : nil) {
                         Text(error).appFont(.subheadline).foregroundStyle(.red)
@@ -779,8 +1007,10 @@ private struct ScheduledTaskEditSheet: View {
                 .padding(.top, 28)
                 .padding(.bottom, 20)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .background(Color(uiColor: .systemBackground))
+        .background(ScheduleKeyboardDismissProbe())
         .interactiveDismissDisabled(pendingRequestID != nil)
         .onChangeCompat(of: store.scheduledTaskCompletedRequestID) { _, completedID in
             if completedID != nil && completedID == pendingRequestID { dismiss() }
@@ -800,25 +1030,417 @@ private struct ScheduledTaskEditSheet: View {
     private func save() {
         localError = nil
         guard canSave else { return }
-        let requestID = store.updateScheduledTask(task, title: title, prompt: prompt, change: timingChange)
+        let requestID = store.updateScheduledTask(task, title: title, prompt: prompt, change: timingChange, target: targetChange)
         if let requestID { pendingRequestID = requestID }
         else { localError = store.scheduledTaskMutationError ?? String(localized: "操作正在进行，请稍后重试") }
     }
 
-    private static func parseDate(_ value: String) -> Date? {
+}
+
+struct ScheduleTargetForm: Equatable {
+    var kind: String
+    var cwd: String
+
+    init(task: ScheduledTask) {
+        let draft = ScheduleTargetEditor.shared.fromRecord(recordJson: task.raw.displayText)
+        kind = draft.kind
+        cwd = draft.cwd
+    }
+    private var shared: ScheduleTargetDraft { ScheduleTargetDraft(kind: kind, cwd: cwd) }
+    func change(task: ScheduledTask) -> JSONValue? {
+        guard let json = ScheduleTargetEditor.shared.changeJson(draft: shared, recordJson: task.raw.displayText) else { return nil }
+        return try? JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
+    }
+    /// Localized text of the validation failure, or nil when the target is valid.
+    func validationError(task: ScheduledTask) -> String? {
+        ScheduleTargetEditor.shared.validationError(draft: shared, recordJson: task.raw.displayText)?.localized
+    }
+}
+
+struct ScheduleTargetControls: View {
+    @Binding var form: ScheduleTargetForm
+    let task: ScheduledTask
+    let workspaces: [GatewayWorkspace]
+    @State private var selectingWorkspace = false
+    private var workspaceTitle: String {
+        if form.cwd.isEmpty { return String(localized: "使用默认工作区") }
+        return workspaces.first(where: { $0.path == form.cwd }).map { scheduleWorkspaceTitle($0.title) } ?? form.cwd
+    }
+    private var currentSessionAvailable: Bool {
+        ScheduleTargetEditor.shared.currentSessionId(recordJson: task.raw.displayText) != nil
+    }
+    private var targetTitle: String {
+        switch form.kind {
+        case "session": String(localized: "当前关联会话")
+        case "new_once": String(localized: "新建会话并复用")
+        case "new": String(localized: "每次新建会话")
+        default: form.kind
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("执行位置")
+                    .fixedSize(horizontal: true, vertical: false)
+                Menu {
+                    Picker("执行位置", selection: $form.kind) {
+                        Text("当前关联会话").tag("session").disabled(!currentSessionAvailable)
+                        Text("新建会话并复用").tag("new_once")
+                        Text("每次新建会话").tag("new")
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(targetTitle).lineLimit(1).minimumScaleFactor(0.8)
+                        Image(systemName: "chevron.down").appFont(.caption).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .trailing)
+                }
+                .foregroundStyle(.primary)
+                .accessibilityIdentifier("schedule-target-picker")
+            }
+            if form.kind == "new_once" || form.kind == "new" {
+                Text(form.kind == "new_once" ? LocalizedStringKey("首次运行时创建，之后沿用这个会话") : LocalizedStringKey("每次运行都创建独立会话"))
+                    .appFont(.caption).foregroundStyle(.secondary)
+                Divider()
+                Button { selectingWorkspace = true } label: {
+                    HStack {
+                        Text("关联工作区")
+                            .fixedSize(horizontal: true, vertical: false)
+                        Spacer()
+                        Text(workspaceTitle).lineLimit(2).truncationMode(.middle).multilineTextAlignment(.trailing)
+                        Image(systemName: "chevron.down").foregroundStyle(.secondary)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("schedule-workspace-picker")
+            }
+        }
+        .padding(14)
+        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        .sheet(isPresented: $selectingWorkspace) {
+            ScheduleWorkspacePicker(selection: $form.cwd, workspaces: workspaces)
+        }
+    }
+
+}
+
+private func scheduleWorkspaceTitle(_ title: String) -> String {
+    title == "default-workspace" ? String(localized: "默认工作区") : title
+}
+
+private struct ScheduleWorkspacePicker: View {
+    @Binding var selection: String
+    let workspaces: [GatewayWorkspace]
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    private var choices: [GatewayWorkspace] {
+        var paths = Set<String>()
+        return workspaces.filter { !$0.path.isEmpty && paths.insert($0.path).inserted &&
+            (query.isEmpty || scheduleWorkspaceTitle($0.title).localizedCaseInsensitiveContains(query) || $0.path.localizedCaseInsensitiveContains(query)) }
+    }
+    var body: some View {
+        NavigationStack {
+            List {
+                Button { selection = ""; dismiss() } label: {
+                    HStack(spacing: 12) { ScheduleSelectionMark(isSelected: selection.isEmpty); Text("使用默认工作区"); Spacer() }
+                }
+                if !selection.isEmpty && !workspaces.contains(where: { $0.path == selection }) {
+                    HStack(spacing: 12) { ScheduleSelectionMark(isSelected: true); Text(selection); Spacer() }
+                }
+                ForEach(choices) { workspace in
+                    Button { selection = workspace.path; dismiss() } label: {
+                        HStack(spacing: 12) {
+                            ScheduleSelectionMark(isSelected: selection == workspace.path)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(scheduleWorkspaceTitle(workspace.title))
+                                Text(workspace.path).appFont(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            .foregroundStyle(.primary)
+            .searchable(text: $query, prompt: Text("搜索工作区"))
+            .navigationTitle("关联工作区").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+        }
+        .background(ScheduleKeyboardDismissProbe())
+    }
+}
+
+/// 仅将共享规则草稿桥接为 SwiftUI 可绑定的值；编码和无损投影由 KMP 统一处理。
+struct ScheduleTimingForm: Equatable {
+    var frequency: String
+    var interval: String
+    var date: String
+    var time: String
+    var timeZone: String
+    var weekdays: String
+    var monthDay: String
+    var advanced: String
+
+    init(task: ScheduledTask) {
+        let zone = TimeZone(identifier: task.timeZone ?? "") ?? .current
+        let instant = Self.parseInstant(task.scheduledAt) ?? Date().addingTimeInterval(3600)
+        let formatter = Self.formatter("yyyy-MM-dd'T'HH:mm:ss.SSS", zone: zone)
+        let draft = ScheduleTimingEditor.shared.fromRecord(recordJson: task.raw.displayText,
+            defaultZone: zone.identifier, localStart: formatter.string(from: instant))
+        frequency = draft.frequency; interval = draft.interval; date = draft.date; time = draft.time
+        timeZone = draft.timeZone; weekdays = draft.weekdays; monthDay = draft.monthDay; advanced = draft.advanced
+    }
+    var shared: ScheduleTimingDraft {
+        ScheduleTimingDraft(frequency: frequency, interval: interval, date: date, time: time,
+            timeZone: timeZone, weekdays: weekdays, monthDay: monthDay, advanced: advanced)
+    }
+    /// Localized text of the first validation failure, or nil when the draft is valid.
+    var validationError: String? {
+        if let error = ScheduleTimingEditor.shared.validationError(draft: shared) { return error.localized }
+        guard let zone = TimeZone(identifier: timeZone) else { return String(localized: "请选择有效的 IANA 时区。") }
+        if frequency == "once" {
+            guard let instant = Self.formatter("yyyy-MM-dd'T'HH:mm:ss.SSS", zone: zone).date(from: "\(date)T\(time)")
+                ?? Self.formatter("yyyy-MM-dd'T'HH:mm:ss", zone: zone).date(from: "\(date)T\(time)") else { return String(localized: "请选择有效的日期和时间。") }
+            if instant <= .now { return String(localized: "请选择未来的日期和时间。") }
+        }
+        return nil
+    }
+    static func formatter(_ pattern: String, zone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = zone; formatter.dateFormat = pattern; formatter.isLenient = false
+        return formatter
+    }
+    static func parseInstant(_ value: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = formatter.date(from: value) { return date }
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: value)
     }
+}
 
-    private static func initialClock(_ task: ScheduledTask) -> Date {
-        let parts = (task.raw["time"]?.stringValue ?? "").split(separator: ":")
-        guard parts.count >= 2, let hour = Int(parts[0]), let minute = Int(parts[1]) else { return .now }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: task.raw["timeZone"]?.stringValue ?? "") ?? .current
-        return calendar.date(from: DateComponents(year: 2026, month: 1, day: 1, hour: hour, minute: minute)) ?? .now
+struct ScheduleTimingControls: View {
+    @Binding var form: ScheduleTimingForm
+    @State private var selectingZone = false
+    @State private var selectingTime = false
+    @State private var selectingInterval = false
+    private let frequencies: [(String, LocalizedStringKey)] = [("once", LocalizedStringKey("不重复")),
+        ("minutely", LocalizedStringKey("每分钟")), ("hourly", LocalizedStringKey("每小时")),
+        ("daily", LocalizedStringKey("每天")), ("weekly", LocalizedStringKey("每周")),
+        ("monthly", LocalizedStringKey("每月")), ("advanced", LocalizedStringKey("自定义"))]
+    private var zone: TimeZone { TimeZone(identifier: form.timeZone) ?? .current }
+    private var dateBinding: Binding<Date> {
+        Binding(get: { ScheduleTimingForm.formatter("yyyy-MM-dd", zone: zone).date(from: form.date) ?? .now },
+            set: { form.date = ScheduleTimingForm.formatter("yyyy-MM-dd", zone: zone).string(from: $0) })
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("执行时间").appFont(.subheadline.weight(.medium))
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("重复")
+                    Spacer()
+                    Picker("重复", selection: $form.frequency) {
+                        ForEach(frequencies, id: \.0) { value, label in Text(label).tag(value) }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .tint(.primary)
+                }
+                .frame(height: 52)
+                .accessibilityIdentifier("schedule-frequency-picker")
+                if form.frequency == "advanced" { advancedControls } else { guidedControls }
+                if form.frequency != "advanced" || !form.advanced.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("DTSTART") {
+                    Button { selectingZone = true } label: {
+                        HStack { Text("时区"); Spacer(); Text(form.timeZone).multilineTextAlignment(.trailing); Image(systemName: "chevron.down") }
+                            .frame(height: 52)
+                    }
+                    .foregroundStyle(.primary)
+                    .accessibilityIdentifier("schedule-zone-picker")
+                }
+            }
+            .padding(14)
+            .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+        }
+        .sheet(isPresented: $selectingZone) {
+            ScheduleTimeZonePicker(selection: $form.timeZone)
+        }
+        .sheet(isPresented: $selectingTime) {
+            ScheduleClockPicker(selection: $form.time)
+                .presentationDetents([.height(340)])
+        }
+        .sheet(isPresented: $selectingInterval) {
+            ScheduleIntervalPicker(selection: $form.interval,
+                unit: ScheduledTaskFormat.intervalUnit(form.frequency))
+                .presentationDetents([.height(340)])
+        }
+    }
+    @ViewBuilder private var guidedControls: some View {
+        if form.frequency != "once" {
+            Button { selectingInterval = true } label: {
+                HStack {
+                    Text("重复间隔")
+                    Spacer()
+                    Text(form.interval)
+                    Text(LocalizedStringKey(["minutely":"分钟", "hourly":"小时", "daily":"天", "weekly":"周", "monthly":"个月"][form.frequency] ?? ""))
+                    Image(systemName: "chevron.down").appFont(.caption).foregroundStyle(.secondary)
+                }
+                .frame(height: 52).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("schedule-interval-picker")
+        }
+        DatePicker(LocalizedStringKey(form.frequency == "once" ? "执行日期" : "开始日期"), selection: dateBinding, displayedComponents: .date)
+            .datePickerStyle(.compact)
+            .environment(\.timeZone, zone)
+            .frame(height: 52)
+            .accessibilityIdentifier("schedule-date-picker")
+        Button { selectingTime = true } label: {
+            HStack {
+                Text("时间")
+                Spacer()
+                Text(form.time).monospacedDigit()
+                Image(systemName: "clock").foregroundStyle(.secondary)
+            }
+            .frame(height: 52)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .bottom) { Divider() }
+        .accessibilityIdentifier("schedule-time-picker")
+        if form.frequency == "weekly" { weekdayControls.padding(.vertical, 8) }
+        if form.frequency == "monthly" {
+            HStack {
+                Text("每月几号")
+                Spacer()
+                TextField("1–31", text: $form.monthDay).keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing).frame(width: 80)
+            }
+            .frame(height: 52)
+            Text("当月不足该日期时，在月末执行。").appFont(.caption).foregroundStyle(.secondary)
+        }
+    }
+    private var weekdayControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("重复日期").appFont(.subheadline)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 8) {
+                ForEach(1...7, id: \.self) { day in
+                    let selected = form.weekdays.split(separator: ",").compactMap { Int($0) }.contains(day)
+                    Button {
+                        var days = Set(form.weekdays.split(separator: ",").compactMap { Int($0) })
+                        if days.contains(day) { days.remove(day) } else { days.insert(day) }
+                        form.weekdays = days.sorted().map(String.init).joined(separator: ",")
+                    } label: {
+                        Text(LocalizedStringKey(["周一", "周二", "周三", "周四", "周五", "周六", "周日"][day - 1]))
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .background(selected ? Color.accentColor.opacity(0.16) : Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    .foregroundStyle(selected ? Color.accentColor : .primary)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+        }
+    }
+    private var advancedControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Cron / RRULE").appFont(.subheadline)
+            TextEditor(text: $form.advanced).frame(height: 110).scrollContentBackground(.hidden)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            Text("Cron 使用 5 个字段；RRULE 保留 DTSTART 中的时区。规则由宿主校验，出错后可继续编辑。")
+                .appFont(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct ScheduleClockPicker: View {
+    @Binding var selection: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var hour: Int
+    @State private var minute: Int
+    @State private var second: Int
+    @State private var keepFraction = true
+    private let fraction: String
+
+    init(selection: Binding<String>) {
+        _selection = selection
+        let parts = selection.wrappedValue.prefix(8).split(separator: ":")
+        _hour = State(initialValue: Int(parts.first ?? "") ?? 8)
+        _minute = State(initialValue: parts.count > 1 ? Int(parts[1]) ?? 0 : 0)
+        _second = State(initialValue: parts.count > 2 ? Int(parts[2]) ?? 0 : 0)
+        fraction = selection.wrappedValue.dropFirst(8).description
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    wheel(LocalizedStringKey("小时"), value: $hour, count: 24)
+                    wheel(LocalizedStringKey("分钟"), value: $minute, count: 60)
+                    wheel(LocalizedStringKey("秒"), value: $second, count: 60)
+                }
+                .padding(.horizontal, 20)
+                if fraction.dropFirst().contains(where: { $0 != "0" }) {
+                    Toggle("保留毫秒", isOn: $keepFraction).padding(.horizontal, 24)
+                }
+            }
+            .navigationTitle("时间")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("确定") {
+                        selection = String(format: "%02d:%02d:%02d", hour, minute, second) + (keepFraction ? fraction : "")
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func wheel(_ title: LocalizedStringKey, value: Binding<Int>, count: Int) -> some View {
+        VStack(spacing: 0) {
+            Text(title).appFont(.caption).foregroundStyle(.secondary)
+            Picker(title, selection: value) {
+                ForEach(0..<count, id: \.self) { value in
+                    Text(String(format: "%02d", value)).monospacedDigit().tag(value)
+                }
+            }
+            .pickerStyle(.wheel)
+            .labelsHidden()
+            .frame(maxWidth: .infinity)
+            .frame(height: 220)
+            .clipped()
+        }
+    }
+}
+
+private struct ScheduleTimeZonePicker: View {
+    @Binding var selection: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    private var zones: [String] {
+        let values = ["UTC", TimeZone.current.identifier] + TimeZone.knownTimeZoneIdentifiers.filter { $0.contains("/") }.sorted()
+        var seen = Set<String>()
+        return values.filter { seen.insert($0).inserted && (query.isEmpty || $0.localizedCaseInsensitiveContains(query)) }
+    }
+    var body: some View {
+        NavigationStack {
+            List(zones, id: \.self) { zone in
+                Button { selection = zone; dismiss() } label: {
+                    HStack(spacing: 12) { ScheduleSelectionMark(isSelected: zone == selection); Text(zone); Spacer() }
+                }
+                .foregroundStyle(.primary)
+            }
+            .searchable(text: $query, prompt: Text("搜索时区"))
+            .navigationTitle("时区").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+        }
+        .background(ScheduleKeyboardDismissProbe())
     }
 }
 
@@ -829,21 +1451,41 @@ private enum ScheduledTaskFormat {
         case "weekly": String(localized: "每周")
         case "every": String(
             localized: "schedule.every.short",
-            defaultValue: "每 \(duration(Int(task.raw["everySeconds"]?.doubleValue ?? 0)))"
+            defaultValue: "每 \(duration(Int(task.everySeconds ?? 0)))"
         )
         case "cron": "Cron"
+        case "rrule": recurrenceLabel(ScheduleTimingForm(task: task))
         default: String(localized: "一次")
         }
     }
 
+    private static func recurrenceLabel(_ form: ScheduleTimingForm) -> String {
+        let labels = ["once": String(localized: "一次"), "minutely": String(localized: "每分钟"), "hourly": String(localized: "每小时"),
+            "daily": String(localized: "每天"), "weekly": String(localized: "每周"), "monthly": String(localized: "每月")]
+        guard let label = labels[form.frequency] else { return String(localized: "自定义") }
+        if form.interval == "1" { return label }
+        return String(localized: "schedule.repeat.interval", defaultValue: "每 \(form.interval) \(intervalUnit(form.frequency))执行")
+    }
+
+    static func intervalUnit(_ frequency: String) -> String {
+        switch frequency {
+        case "minutely": String(localized: "分钟")
+        case "hourly": String(localized: "小时")
+        case "daily": String(localized: "天")
+        case "weekly": String(localized: "周")
+        case "monthly": String(localized: "个月")
+        default: ""
+        }
+    }
+
     static func fullRule(_ task: ScheduledTask) -> String {
-        let time = task.raw["time"]?.stringValue ?? ""
-        let zone = task.raw["timeZone"]?.stringValue ?? ""
+        let time = task.clock ?? ""
+        let zone = task.timeZone ?? ""
         switch task.kind {
         case "daily":
             return String(localized: "schedule.daily.detail", defaultValue: "每天 \(time) · \(zone)")
         case "weekly":
-            let days = (task.raw["weekdays"]?.arrayValue ?? []).compactMap { $0.doubleValue.map(Int.init) }
+            let days = (task.weekdays?.arrayValue ?? []).compactMap { $0.doubleValue.map(Int.init) }
             let names = [
                 String(localized: "周一"), String(localized: "周二"), String(localized: "周三"),
                 String(localized: "周四"), String(localized: "周五"), String(localized: "周六"),
@@ -853,14 +1495,18 @@ private enum ScheduledTaskFormat {
             let weekdays = days.compactMap { (1...7).contains($0) ? names[$0 - 1] : nil }.joined(separator: separator)
             return String(localized: "schedule.weekly.detail", defaultValue: "每周 \(weekdays) · \(time) · \(zone)")
         case "every":
-            return String(localized: "schedule.every.detail", defaultValue: "每 \(duration(Int(task.raw["everySeconds"]?.doubleValue ?? 0)))执行一次")
+            return String(localized: "schedule.every.detail", defaultValue: "每 \(duration(Int(task.everySeconds ?? 0)))执行一次")
         case "cron":
-            return "\(task.raw["expression"]?.stringValue ?? "") · \(zone)"
+            return "\(task.expression ?? "") · \(zone)"
         case "after":
             let seconds = Int(task.raw["afterSeconds"]?.doubleValue ?? 0)
             return String(localized: "schedule.after.detail", defaultValue: "\(seconds) 秒后执行一次")
-        default:
+        case "at":
             return String(localized: "指定时间执行一次")
+        case "rrule":
+            return (task.raw["timing"] ?? task.raw)["rrule"]?.stringValue ?? ""
+        default:
+            return task.raw.displayText
         }
     }
 
@@ -880,7 +1526,11 @@ private enum ScheduledTaskFormat {
         let parsed = formatter.date(from: value)
         formatter.formatOptions = [.withInternetDateTime]
         guard let date = parsed ?? formatter.date(from: value) else { return value }
-        return date.formatted(.dateTime.year().month().day().hour().minute())
+        let display = DateFormatter()
+        display.locale = .current
+        display.calendar = Calendar(identifier: .gregorian)
+        display.dateFormat = String(localized: "schedule.date.pattern", defaultValue: "yyyy年M月d日 HH:mm")
+        return display.string(from: date)
     }
 }
 
@@ -891,6 +1541,7 @@ private struct ConversationNavigationHeader: Hashable {
     let sessionID: String?
     let title: String
     let agentPresetTitle: String
+    var initialDraft: String = ""
 }
 
 private struct WorkspaceFilesPresentation: Identifiable {
@@ -1118,7 +1769,7 @@ private struct WorkspaceFilesSheet: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if store.workspaceFileEntries.isEmpty {
                     DshEmptyState(
-                        "此目录为空",
+                        String(localized: "此目录为空"),
                         systemImage: "folder",
                         description: Text(store.workspaceFilePath)
                     )
@@ -1158,7 +1809,7 @@ private struct WorkspaceFilesSheet: View {
                     VStack(spacing: 9) {
                         ProgressView(value: progress)
                         HStack {
-                            Text("正在下载 · \(Int(progress * 100))%")
+                            Text(String(localized: "download.progress", defaultValue: "正在下载 · \(Int(progress * 100))%"))
                                 .appFont(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -1210,7 +1861,7 @@ private struct WorkspaceFilesSheet: View {
     private var workspaceFilePathBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "folder")
-            Text(store.workspaceFilePath == "." ? "工作区根目录" : store.workspaceFilePath)
+            Text(store.workspaceFilePath == "." ? String(localized: "工作区根目录") : store.workspaceFilePath)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
@@ -1310,7 +1961,9 @@ private struct WorkspaceFileRow: View {
                 .buttonStyle(.plain)
                 .disabled(isDownloading)
                 .accessibilityLabel(
-                    isDownloaded ? "\(item.name) 已下载，点击重新下载" : "下载 \(item.name)"
+                    isDownloaded
+                        ? String(localized: "\(item.name) 已下载，点击重新下载")
+                        : String(localized: "下载 \(item.name)")
                 )
             }
             .listRowBackground(FileIconCatalog.shared.resolve(name: item.name, mediaType: item.mediaType).cardBackground)
@@ -1337,7 +1990,7 @@ private struct WorkspaceFileRow: View {
     private func workspaceFileDetail(_ item: GatewayDirectoryItem) -> String {
         let size = item.bytes.map {
             ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)
-        } ?? "文件"
+        } ?? String(localized: "文件")
         guard let modifiedAt = item.modifiedAt else { return size }
         let date = Date(timeIntervalSince1970: modifiedAt / 1_000)
         return "\(size) · \(date.formatted(date: .abbreviated, time: .shortened))"
@@ -1584,10 +2237,10 @@ struct WorkspaceCodePreview: View {
             guard !Task.isCancelled else { return }
             document = loaded.value
         } catch WorkspaceCodePreviewLoadError.fileTooLarge {
-            errorMessage = "文件超过 2 MB，请使用系统应用打开"
+            errorMessage = String(localized: "文件超过 2 MB，请使用系统应用打开")
         } catch {
             guard !Task.isCancelled else { return }
-            errorMessage = "读取代码失败：\(error.localizedDescription)"
+            errorMessage = String(localized: "读取代码失败：\(error.localizedDescription)")
         }
     }
 }
@@ -2087,5 +2740,215 @@ private struct ConversationNavigationStatus: View {
                 .fixedSize(horizontal: !compact, vertical: false)
                 .accessibilityIdentifier("conversation-mode-label")
         }
+    }
+}
+
+private struct ScheduleCreateForm: View {
+    @ObservedObject var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var prompt = ""
+    @State private var timing = "{\"kind\":\"every\",\"every_seconds\":3600}"
+    @State private var target = "new_once"
+    @State private var sessionID = ""
+    @State private var requestID: String?
+    private var nextExecutionPreview: String {
+        guard let rule = try? JSONDecoder().decode(JSONValue.self, from: Data(timing.utf8)),
+              let kind = rule["kind"]?.stringValue else { return String(localized: "请填写有效规则") }
+        let spec = rule[kind]
+        let zone = TimeZone(identifier: spec?["time_zone"]?.stringValue ?? "") ?? .current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let now = Date()
+        var next: Date?
+        if kind == "after" || kind == "every" {
+            if let seconds = rule[kind == "after" ? "after_seconds" : "every_seconds"]?.doubleValue,
+               seconds > 0, seconds < 315_576_000 { next = now.addingTimeInterval(seconds) }
+        } else if kind == "at" {
+            let formatter = DateFormatter()
+            formatter.timeZone = zone
+            let time = spec?["time"]?.stringValue ?? ""
+            formatter.dateFormat = time.count == 5 ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd HH:mm:ss"
+            next = formatter.date(from: (spec?["date"]?.stringValue ?? "") + " " + time)
+        } else if kind == "daily" || kind == "weekly" {
+            let clock = (spec?["time"]?.stringValue ?? "").split(separator: ":").compactMap { Int($0) }
+            if clock.count >= 2, (0...23).contains(clock[0]), (0...59).contains(clock[1]) {
+                let components = DateComponents(hour: clock[0], minute: clock[1], second: clock.count > 2 ? clock[2] : 0)
+                let days = (spec?["weekdays"]?.arrayValue ?? []).compactMap { $0.doubleValue.map(Int.init) }
+                var candidate = now
+                for _ in 0...7 {
+                    guard let date = calendar.nextDate(after: candidate, matching: components, matchingPolicy: .nextTime) else { break }
+                    if kind == "daily" || days.contains((calendar.component(.weekday, from: date) + 5) % 7 + 1) { next = date; break }
+                    candidate = date
+                }
+            }
+        }
+        guard let next else { return String(localized: "下次执行时间由 Host 校验并计算") }
+        let formatter = DateFormatter()
+        formatter.timeZone = zone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss z"
+        return String(localized: "schedule.next.estimate", defaultValue: "预计下次执行 · \(formatter.string(from: next))\n最终以 Host 返回时间为准")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("标题", text: $title)
+                TextField("任务内容", text: $prompt, axis: .vertical)
+                Section("执行规则 JSON") {
+                    TextEditor(text: $timing).frame(minHeight: 100)
+                    Text("支持 after、at、every、daily、weekly、cron、rrule，时区使用 IANA 名称。")
+                    if let data = timing.data(using: .utf8),
+                       let value = try? JSONDecoder().decode(JSONValue.self, from: data) {
+                        Text("规则预览 · \(value.displayText)").appFont(.footnote.monospaced())
+                    }
+                    Text(nextExecutionPreview)
+                    Text("当前时区 · \(TimeZone.current.identifier)")
+                }
+                Picker("投递目标", selection: $target) {
+                    Text("首次新建并复用会话").tag("new_once")
+                    Text("每次新建会话").tag("new")
+                    Text("已有会话").tag("session")
+                }
+                if target == "session" { TextField("会话 ID", text: $sessionID) }
+                if let error = store.scheduledTaskMutationError { Text(error).foregroundStyle(.red) }
+                Button("创建") {
+                    requestID = store.createScheduledTask(title: title, prompt: prompt, timingJSON: timing, targetKind: target, sessionID: sessionID)
+                }.disabled(store.scheduledTaskPendingID != nil)
+            }
+            .navigationTitle("创建定时任务")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+            .onChangeCompat(of: store.scheduledTaskCompletedRequestID) { _, id in
+                if requestID != nil && id == requestID { dismiss() }
+            }
+        }
+    }
+}
+
+/// 只处理当前编辑页内的非输入区轻触，不拦截输入、选区、滚动或按钮事件。
+struct ScheduleKeyboardDismissProbe: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.isUserInteractionEnabled = false
+        view.isAccessibilityElement = false
+        view.windowChanged = { [weak coordinator = context.coordinator] view in coordinator?.attach(to: view) }
+        return view
+    }
+    func updateUIView(_ view: ProbeView, context: Context) { context.coordinator.attach(to: view) }
+    static func dismantleUIView(_ view: ProbeView, coordinator: Coordinator) {
+        coordinator.detach()
+        view.windowChanged = nil
+    }
+    final class ProbeView: UIView {
+        var windowChanged: ((ProbeView) -> Void)?
+        override func didMoveToWindow() { super.didMoveToWindow(); windowChanged?(self) }
+    }
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        private weak var scope: UIView?
+        private weak var window: UIWindow?
+        private lazy var tap: UITapGestureRecognizer = {
+            let gesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+            gesture.cancelsTouchesInView = false
+            gesture.delegate = self
+            return gesture
+        }()
+        func attach(to view: UIView) {
+            scope = view
+            guard window !== view.window else { return }
+            window?.removeGestureRecognizer(tap)
+            window = view.window
+            window?.addGestureRecognizer(tap)
+        }
+        func detach() { window?.removeGestureRecognizer(tap); window = nil; scope = nil }
+        func isOutsideEditor(_ view: UIView?) -> Bool {
+            var current = view
+            while let candidate = current {
+                if candidate is UITextField || candidate is UITextView { return false }
+                current = candidate.superview
+            }
+            return true
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let scope, scope.window === touch.view?.window,
+                  scope.bounds.contains(touch.location(in: scope)) else { return false }
+            return isOutsideEditor(touch.view)
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool { true }
+        @objc private func handleTap() {
+            // 先让菜单、复制和按钮处理当前轻触，再收键盘，不抢走它们的操作。
+            DispatchQueue.main.async { [weak self] in self?.dismissKeyboard() }
+        }
+        func dismissKeyboard() { window?.endEditing(true) }
+    }
+}
+
+struct ScheduleIntervalPicker: View {
+    @Binding var selection: String
+    let unit: String
+    @State private var draft: Int
+    @Environment(\.dismiss) private var dismiss
+    init(selection: Binding<String>, unit: String) {
+        _selection = selection
+        self.unit = unit
+        _draft = State(initialValue: min(10_000, max(1, Int(selection.wrappedValue) ?? 1)))
+    }
+    var body: some View {
+        NavigationStack {
+            ScheduleIntervalWheel(selection: $draft, unit: unit)
+                .frame(height: 220).padding(.horizontal, 20)
+                .navigationTitle("重复间隔").navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("确定") { selection = String(draft); dismiss() }
+                            .accessibilityIdentifier("schedule-interval-confirm")
+                    }
+                }
+        }
+    }
+}
+
+/// UIPickerView 按需创建行，避免为 10000 个间隔一次生成 SwiftUI 子视图。
+struct ScheduleIntervalWheel: UIViewRepresentable {
+    @Binding var selection: Int
+    let unit: String
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> UIPickerView {
+        let picker = UIPickerView()
+        picker.dataSource = context.coordinator
+        picker.delegate = context.coordinator
+        picker.accessibilityIdentifier = "schedule-interval-wheel"
+        return picker
+    }
+    func updateUIView(_ picker: UIPickerView, context: Context) {
+        let unitChanged = context.coordinator.parent.unit != unit
+        context.coordinator.parent = self
+        if unitChanged { picker.reloadAllComponents() }
+        let row = min(9999, max(0, selection - 1))
+        if picker.selectedRow(inComponent: 0) != row { picker.selectRow(row, inComponent: 0, animated: false) }
+    }
+    final class Coordinator: NSObject, UIPickerViewDataSource, UIPickerViewDelegate {
+        var parent: ScheduleIntervalWheel
+        init(_ parent: ScheduleIntervalWheel) { self.parent = parent }
+        func numberOfComponents(in pickerView: UIPickerView) -> Int { 1 }
+        func pickerView(_ pickerView: UIPickerView, numberOfRowsInComponent component: Int) -> Int { 10_000 }
+        func pickerView(_ pickerView: UIPickerView, rowHeightForComponent component: Int) -> CGFloat { 40 }
+        func pickerView(_ pickerView: UIPickerView, titleForRow row: Int, forComponent component: Int) -> String? {
+            "\(row + 1) \(parent.unit)"
+        }
+        func pickerView(_ pickerView: UIPickerView, didSelectRow row: Int, inComponent component: Int) {
+            parent.selection = row + 1
+        }
+    }
+}
+
+private struct ScheduleSelectionMark: View {
+    let isSelected: Bool
+    var body: some View {
+        Image(systemName: "checkmark").font(.system(size: 16))
+            .frame(width: 18).foregroundStyle(.primary)
+            .opacity(isSelected ? 1 : 0).accessibilityHidden(true)
     }
 }

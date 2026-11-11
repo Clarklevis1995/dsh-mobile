@@ -73,6 +73,27 @@ class PublishTest(unittest.TestCase):
             publish(client, 'bucket', self.apk, 'build22.apk', self.manifest, lambda _: None)
         self.assertNotIn('latest.json', client.objects)
 
+    def test_variant_failure_does_not_publish_manifest(self):
+        variant = self.apk.parent / 'DshMobile-android-v1.7.4-arm64-v8a.apk'
+        variant.write_bytes(b'variant')
+        self.manifest['abiApks'] = {'arm64-v8a': {'size': 7, 'sha256': 'incorrect'}}
+        client = FakeR2()
+        with self.assertRaises(ValueError):
+            publish(client, 'bucket', self.apk, 'build22.apk', self.manifest, lambda _: None)
+        self.assertNotIn('latest.json', client.objects)
+
+    def test_variant_is_verified_before_manifest(self):
+        import hashlib
+        variant = self.apk.parent / 'DshMobile-android-v1.7.4-arm64-v8a.apk'
+        variant.write_bytes(b'variant')
+        self.manifest['abiApks'] = {'arm64-v8a': {
+            'size': 7, 'sha256': hashlib.sha256(b'variant').hexdigest()}}
+        client = FakeR2()
+        verified = []
+        publish(client, 'bucket', self.apk, 'build22.apk', self.manifest, verified.append)
+        self.assertEqual(len(verified), 2)
+        self.assertEqual(client.writes[-1], 'latest.json')
+
 
 if __name__ == '__main__':
     unittest.main()

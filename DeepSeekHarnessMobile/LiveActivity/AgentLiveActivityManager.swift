@@ -61,6 +61,7 @@ final class AgentLiveActivityManager {
             ) {
                 return
             }
+            relocalizeIfNeeded(activityKey: activityKey, activity: newest)
         }
         for activity in restored where activity.id != activities.values.first?.id {
             dismissImmediately(activity)
@@ -115,9 +116,10 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .running,
-                status: "正在执行",
-                detail: "Agent 正在处理",
-                secondaryDetail: turn.map { "第 \($0) 轮 · 等待执行步骤" } ?? "正在等待执行步骤",
+                status: String(localized: "正在执行"),
+                detail: String(localized: "Agent 正在处理"),
+                secondaryDetail: turn.map { String(localized: "activity.turn.waiting", defaultValue: "第 \($0) 轮 · 等待执行步骤") }
+                    ?? String(localized: "正在等待执行步骤"),
                 sourceLabel: sourceLabel,
                 stepKind: .preparing
             )
@@ -137,9 +139,10 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .running,
-                status: "正在执行",
-                detail: "正在分析执行步骤",
-                secondaryDetail: step.map { "第 \($0) 步 · Agent 正在处理" } ?? "Agent 正在处理",
+                status: String(localized: "正在执行"),
+                detail: String(localized: "正在分析执行步骤"),
+                secondaryDetail: step.map { String(localized: "activity.step.processing", defaultValue: "第 \($0) 步 · Agent 正在处理") }
+                    ?? String(localized: "Agent 正在处理"),
                 sourceLabel: sourceLabel,
                 stepKind: .reasoning
             )
@@ -163,7 +166,7 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .running,
-                status: "正在执行",
+                status: String(localized: "正在执行"),
                 detail: headline,
                 secondaryDetail: detail,
                 sourceLabel: sourceLabel,
@@ -187,9 +190,11 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .running,
-                status: "正在执行",
-                detail: displayName?.isEmpty == false ? "正在执行 \(displayName!)" : "正在调用工具",
-                secondaryDetail: "Agent 正在处理当前步骤",
+                status: String(localized: "正在执行"),
+                detail: displayName?.isEmpty == false
+                    ? String(localized: "activity.tool.running", defaultValue: "正在执行 \(displayName!)")
+                    : String(localized: "正在调用工具"),
+                secondaryDetail: String(localized: "Agent 正在处理当前步骤"),
                 sourceLabel: sourceLabel,
                 toolName: toolName,
                 stepKind: .tool
@@ -210,9 +215,9 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .awaitingApproval,
-                status: "需要批准 · 仅限本次",
+                status: String(localized: "需要批准 · 仅限本次"),
                 detail: request.reason ?? request.toolName,
-                secondaryDetail: "仅授权本次操作",
+                secondaryDetail: String(localized: "仅授权本次操作"),
                 sourceLabel: sourceLabel,
                 command: command,
                 rpcID: request.rpcId,
@@ -236,11 +241,11 @@ final class AgentLiveActivityManager {
             title: title,
             state: state(
                 phase: .awaitingChoice,
-                status: "需要选择",
-                detail: "请打开 App 完成选择",
+                status: String(localized: "需要选择"),
+                detail: String(localized: "请打开 App 完成选择"),
                 secondaryDetail: normalizedPrompt?.isEmpty == false
                     ? normalizedPrompt
-                    : "Agent 正在等待你的回答",
+                    : String(localized: "Agent 正在等待你的回答"),
                 sourceLabel: sourceLabel,
                 rpcID: request.rpcId,
                 stepKind: .message
@@ -266,9 +271,9 @@ final class AgentLiveActivityManager {
             fallbackTitle: title,
             state: state(
                 phase: .running,
-                status: "正在执行",
-                detail: cancelled ? "已跳过选择" : "选择已提交",
-                secondaryDetail: "等待 Agent 继续执行",
+                status: String(localized: "正在执行"),
+                detail: cancelled ? String(localized: "已跳过选择") : String(localized: "选择已提交"),
+                secondaryDetail: String(localized: "等待 Agent 继续执行"),
                 sourceLabel: sourceLabel,
                 rpcID: rpcID,
                 stepKind: .message
@@ -334,16 +339,16 @@ final class AgentLiveActivityManager {
         command: String?,
         sourceLabel: String? = nil
     ) {
-        let detail = outcome == .allowedOnce ? "正在提交「允许一次」" : "正在提交「拒绝」"
+        let detail = outcome == .allowedOnce ? String(localized: "正在提交「允许一次」") : String(localized: "正在提交「拒绝」")
         upsert(
             gatewayID: gatewayID,
             sessionID: request.sessionId,
             title: title,
             state: state(
                 phase: .submittingApproval,
-                status: "正在提交决定",
+                status: String(localized: "正在提交决定"),
                 detail: detail,
-                secondaryDetail: "正在等待主机确认",
+                secondaryDetail: String(localized: "正在等待主机确认"),
                 sourceLabel: sourceLabel,
                 command: command,
                 rpcID: request.rpcId,
@@ -368,9 +373,9 @@ final class AgentLiveActivityManager {
             fallbackTitle: title,
             state: state(
                 phase: approved ? .approved : .rejected,
-                status: approved ? "已允许本次操作" : "已拒绝本次操作",
-                detail: approved ? "批准已送达" : "本次命令未执行",
-                secondaryDetail: approved ? "等待 Agent 更新下一步" : "决定已送达，等待 Agent 后续状态",
+                status: approved ? String(localized: "已允许本次操作") : String(localized: "已拒绝本次操作"),
+                detail: approved ? String(localized: "批准已送达") : String(localized: "本次命令未执行"),
+                secondaryDetail: approved ? String(localized: "等待 Agent 更新下一步") : String(localized: "决定已送达，等待 Agent 后续状态"),
                 sourceLabel: sourceLabel,
                 rpcID: rpcID
             )
@@ -391,9 +396,9 @@ final class AgentLiveActivityManager {
             fallbackTitle: title,
             state: state(
                 phase: .failed,
-                status: "未能确认审批结果",
-                detail: reason?.isEmpty == false ? reason : "确认结果后才能继续操作",
-                secondaryDetail: "确认结果后才能继续操作",
+                status: String(localized: "未能确认审批结果"),
+                detail: reason?.isEmpty == false ? reason : String(localized: "确认结果后才能继续操作"),
+                secondaryDetail: String(localized: "确认结果后才能继续操作"),
                 sourceLabel: sourceLabel,
                 rpcID: rpcID
             ),
@@ -415,19 +420,20 @@ final class AgentLiveActivityManager {
         if current.phase == .rejected {
             finalState = state(
                 phase: .rejected,
-                status: "已拒绝本次操作",
-                detail: "本次命令未执行",
-                secondaryDetail: "决定已送达，Agent 已停止当前操作",
+                status: String(localized: "已拒绝本次操作"),
+                detail: String(localized: "本次命令未执行"),
+                secondaryDetail: String(localized: "决定已送达，Agent 已停止当前操作"),
                 sourceLabel: sourceLabel ?? current.sourceLabel,
                 rpcID: current.rpcID
             )
         } else {
             finalState = state(
                 phase: failed ? .failed : .completed,
-                status: failed ? "执行失败" : "执行完成",
-                detail: failed ? "执行未完成" : "任务已完成",
-                secondaryDetail: failed ? "打开 App 查看详情" : "Agent 已完成本次任务",
-                sourceLabel: sourceLabel ?? current.sourceLabel
+                status: failed ? String(localized: "执行失败") : String(localized: "执行完成"),
+                detail: failed ? String(localized: "执行未完成") : String(localized: "任务已完成"),
+                secondaryDetail: failed ? String(localized: "打开 App 查看详情") : String(localized: "Agent 已完成本次任务"),
+                sourceLabel: sourceLabel ?? current.sourceLabel,
+                executionFailed: failed
             )
         }
         finalState.sessionTitle = normalizedTitle(title) ?? current.sessionTitle
@@ -507,6 +513,7 @@ final class AgentLiveActivityManager {
                 // 的唯一有效实例，让后续进度和 turn/end 能继续更新同一张卡片。
                 activities[activityKey] = activity
                 latestStates[activityKey] = activity.stateCompat
+                relocalizeIfNeeded(activityKey: activityKey, activity: activity)
             }
         }
     }
@@ -514,11 +521,56 @@ final class AgentLiveActivityManager {
     /// 后台保活脉冲不改变业务状态，只延长当前实时活动的有效期。
     func refreshActiveActivities() {
         for (activityKey, activity) in activities where !endingSessionKeys.contains(activityKey) {
-            var currentState = latestStates[activityKey] ?? activity.stateCompat
+            var currentState = relocalized(latestStates[activityKey] ?? activity.stateCompat)
             guard !currentState.phase.isTerminal else { continue }
             currentState.updatedAt = .now
             enqueueUpdate(activityKey: activityKey, activity: activity, state: currentState)
         }
+    }
+
+    /// An activity restored after the app language changed still carries text resolved in the
+    /// old language. Rebuild the phase-derived text and push it only when something changed.
+    private func relocalizeIfNeeded(activityKey: String, activity: Activity<AgentActivityAttributes>) {
+        guard !endingSessionKeys.contains(activityKey) else { return }
+        let current = latestStates[activityKey] ?? activity.stateCompat
+        guard !current.phase.isTerminal else { return }
+        var next = relocalized(current)
+        guard next != current else { return }
+        next.updatedAt = .now
+        enqueueUpdate(activityKey: activityKey, activity: activity, state: next)
+    }
+
+    /// Re-resolves labels and the status/detail text that depends only on the phase in the current
+    /// language. Event-provided content (session title, command, step/tool details, host reason,
+    /// question prompt) is preserved. The submitting phase's detail names the chosen outcome,
+    /// which the state does not record, so it keeps its text until the next event.
+    private func relocalized(_ state: AgentActivityAttributes.ContentState) -> AgentActivityAttributes.ContentState {
+        var next = state
+        next.labels = AgentActivityLabels.localized(phase: state.phase, executionFailed: false)
+        switch state.phase {
+        case .running:
+            next.status = String(localized: "正在执行")
+        case .awaitingChoice:
+            next.status = String(localized: "需要选择")
+            next.detail = String(localized: "请打开 App 完成选择")
+        case .awaitingApproval:
+            next.status = String(localized: "需要批准 · 仅限本次")
+            next.secondaryDetail = String(localized: "仅授权本次操作")
+        case .submittingApproval:
+            next.status = String(localized: "正在提交决定")
+            next.secondaryDetail = String(localized: "正在等待主机确认")
+        case .approved:
+            next.status = String(localized: "已允许本次操作")
+            next.detail = String(localized: "批准已送达")
+            next.secondaryDetail = String(localized: "等待 Agent 更新下一步")
+        case .rejected:
+            next.status = String(localized: "已拒绝本次操作")
+            next.detail = String(localized: "本次命令未执行")
+            next.secondaryDetail = String(localized: "决定已送达，等待 Agent 后续状态")
+        case .failed, .completed:
+            break
+        }
+        return next
     }
 
     private func upsert(
@@ -601,7 +653,7 @@ final class AgentLiveActivityManager {
         } catch {
             failedCreationKeys.insert(activityKey)
 #if DEBUG
-            print("[AgentLiveActivity] 无法创建实时活动：\(error.localizedDescription)")
+            appPrint("[AgentLiveActivity] Failed to create the Live Activity: \(error.localizedDescription)")
 #endif
         }
     }
@@ -672,19 +724,25 @@ final class AgentLiveActivityManager {
         switch state.phase {
         case .awaitingApproval:
             return AlertConfiguration(
-                title: "需要审批",
-                body: "Agent 请求批准本次操作",
+                title: Self.resolvedAlertText(String(localized: "需要审批")),
+                body: Self.resolvedAlertText(String(localized: "Agent 请求批准本次操作")),
                 sound: .default
             )
         case .awaitingChoice:
             return AlertConfiguration(
-                title: "需要选择",
-                body: "Agent 正在等待你的回答",
+                title: Self.resolvedAlertText(String(localized: "需要选择")),
+                body: Self.resolvedAlertText(String(localized: "Agent 正在等待你的回答")),
                 sound: .default
             )
         case .running, .submittingApproval, .approved, .rejected, .failed, .completed:
             return nil
         }
+    }
+
+    /// The system presents the alert, so hand it text already resolved in the app language
+    /// rather than a key it would re-localize with the device language.
+    private static func resolvedAlertText(_ text: String) -> LocalizedStringResource {
+        LocalizedStringResource(String.LocalizationValue(text))
     }
 
     private func normalizedTitle(_ title: String?) -> String? {
@@ -812,7 +870,7 @@ final class AgentLiveActivityManager {
               applicationState() == .active else { return false }
 
 #if DEBUG
-        print("[AgentLiveActivity] 检测到 \(systemActivities.count) 个实时活动，开始重建唯一实例")
+        appPrint("[AgentLiveActivity] Found \(systemActivities.count) Live Activities; rebuilding a single instance")
 #endif
         latestStates[activityKey] = state
         pendingCreations[activityKey] = attributes
@@ -860,12 +918,12 @@ final class AgentLiveActivityManager {
                 self.pendingCreations[activityKey] = nil
                 self.failedCreationKeys.remove(activityKey)
 #if DEBUG
-                print("[AgentLiveActivity] 实时活动重建完成 id=\(replacement.id)")
+                appPrint("[AgentLiveActivity] Live Activity rebuilt id=\(replacement.id)")
 #endif
             } catch {
                 self.failedCreationKeys.insert(activityKey)
 #if DEBUG
-                print("[AgentLiveActivity] 无法重建重复实时活动：\(error.localizedDescription)")
+                appPrint("[AgentLiveActivity] Failed to rebuild the duplicate Live Activity: \(error.localizedDescription)")
 #endif
             }
             self.rebuildingActivityKeys.remove(activityKey)
@@ -913,7 +971,8 @@ final class AgentLiveActivityManager {
         rpcID: String? = nil,
         approvalID: String? = nil,
         toolName: String? = nil,
-        stepKind: AgentActivityStepKind? = nil
+        stepKind: AgentActivityStepKind? = nil,
+        executionFailed: Bool = false
     ) -> AgentActivityAttributes.ContentState {
         AgentActivityAttributes.ContentState(
             phase: phase,
@@ -926,7 +985,8 @@ final class AgentLiveActivityManager {
             approvalID: approvalID,
             toolName: toolName,
             stepKind: stepKind,
-            updatedAt: .now
+            updatedAt: .now,
+            labels: AgentActivityLabels.localized(phase: phase, executionFailed: executionFailed)
         )
     }
 
@@ -1026,5 +1086,75 @@ private extension Activity where Attributes == AgentActivityAttributes {
         } else {
             await end(using: state ?? contentState, dismissalPolicy: dismissalPolicy)
         }
+    }
+}
+
+extension AgentActivityLabels {
+    /// Builds every widget chrome string for `phase` in the app language.
+    /// `executionFailed` separates a failed run from a failed approval submission in the compact badge.
+    static func localized(phase: AgentActivityPhase, executionFailed: Bool) -> AgentActivityLabels {
+        let badge: String
+        let compactBadge: String
+        let defaultTitle: String
+        let defaultDetail: String
+        switch phase {
+        case .running:
+            badge = String(localized: "activity.badge.running", defaultValue: "执行中")
+            compactBadge = ""
+            defaultTitle = String(localized: "Agent 正在处理")
+            defaultDetail = String(localized: "正在等待下一步")
+        case .awaitingChoice:
+            badge = String(localized: "activity.badge.choice", defaultValue: "待选择")
+            compactBadge = badge
+            defaultTitle = String(localized: "请打开 App 完成选择")
+            defaultDetail = String(localized: "Agent 正在等待你的回答")
+        case .awaitingApproval:
+            badge = String(localized: "activity.badge.approval", defaultValue: "待审批")
+            compactBadge = badge
+            defaultTitle = String(localized: "等待操作")
+            defaultDetail = String(localized: "仅授权本次操作")
+        case .submittingApproval:
+            badge = String(localized: "activity.badge.submitting", defaultValue: "提交中")
+            compactBadge = badge
+            defaultTitle = String(localized: "等待操作")
+            defaultDetail = String(localized: "仅授权本次操作")
+        case .approved:
+            badge = String(localized: "activity.badge.allowed", defaultValue: "已允许")
+            compactBadge = badge
+            defaultTitle = String(localized: "批准已送达")
+            defaultDetail = String(localized: "等待 Agent 更新下一步")
+        case .rejected:
+            badge = String(localized: "activity.badge.denied", defaultValue: "已拒绝")
+            compactBadge = badge
+            defaultTitle = String(localized: "本次命令未执行")
+            defaultDetail = String(localized: "决定已送达，等待 Agent 后续状态")
+        case .failed:
+            badge = String(localized: "activity.badge.failed", defaultValue: "失败")
+            compactBadge = executionFailed ? badge : String(localized: "activity.badge.unconfirmed", defaultValue: "待确认")
+            defaultTitle = String(localized: "执行未完成")
+            defaultDetail = String(localized: "打开 App 查看详情")
+        case .completed:
+            badge = String(localized: "activity.badge.done", defaultValue: "已完成")
+            compactBadge = badge
+            defaultTitle = String(localized: "任务已完成")
+            defaultDetail = String(localized: "Agent 已完成本次任务")
+        }
+        return AgentActivityLabels(
+            details: String(localized: "详情"),
+            viewDetails: String(localized: "查看详情"),
+            viewSession: String(localized: "查看会话"),
+            checkResult: String(localized: "检查结果"),
+            handleInApp: String(localized: "在 App 内处理审批"),
+            reject: String(localized: "拒绝"),
+            allowOnce: String(localized: "允许一次"),
+            awaitingOperationDetail: String(localized: "等待操作详情"),
+            awaitingHostConfirmation: String(localized: "正在等待主机确认"),
+            staleBadge: String(localized: "activity.badge.stale", defaultValue: "待同步"),
+            staleTitle: String(localized: "打开 App 获取最新进度"),
+            badge: badge,
+            compactBadge: compactBadge,
+            defaultTitle: defaultTitle,
+            defaultDetail: defaultDetail
+        )
     }
 }

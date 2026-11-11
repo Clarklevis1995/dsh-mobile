@@ -143,7 +143,7 @@ private struct MarkdownTableGrid: View {
                                     })
                                     .dynamicTypeSize(.large)
                                     .multilineTextAlignment(textAlignment(column))
-                            } else { Text(" ") }
+                            } else { Text(verbatim: " ") }
                         }
                         .padding(12)
                         .frame(width: widths[column], alignment: alignment)
@@ -212,7 +212,7 @@ private struct MarkdownTableActions: View {
     var body: some View {
         Group {
             if let onClose {
-                DocumentPageHeader(title: "表格", closeIdentifier: "markdown-table-close", onClose: onClose) {
+                DocumentPageHeader(title: LocalizedStringKey("表格"), closeIdentifier: "markdown-table-close", onClose: onClose) {
                     buttons
                 }
             } else {
@@ -243,19 +243,19 @@ private struct MarkdownTableActions: View {
         HStack(spacing: 0) {
             if copied && onClose == nil { Text("已复制").appFont(.system(size: 12)).foregroundStyle(DocumentPageAppearance.icon) }
             if let onRotate {
-                action("TableRotate", label: "旋转屏幕", onRotate)
+                action("TableRotate", label: LocalizedStringKey("旋转屏幕"), onRotate)
                     .accessibilityIdentifier("markdown-table-rotate")
             }
-            action("TableCopy", label: "复制表格") {
+            action("TableCopy", label: LocalizedStringKey("复制表格")) {
                 UIPasteboard.general.string = MarkdownTableExport.shared.plainText(rows: model.plainRows)
                 copied = true
             }
-            action("TableDownload", label: "下载 CSV") {
+            action("TableDownload", label: LocalizedStringKey("下载 CSV")) {
                 exportDocument = MarkdownTableCSVDocument(data: Data(MarkdownTableExport.shared.csv(rows: model.plainRows).utf8))
                 exporting = true
             }
             if let onExpand {
-                action("TableExpand", label: "全屏浏览表格", onExpand)
+                action("TableExpand", label: LocalizedStringKey("全屏浏览表格"), onExpand)
                     .accessibilityIdentifier("markdown-table-expand")
             }
         }

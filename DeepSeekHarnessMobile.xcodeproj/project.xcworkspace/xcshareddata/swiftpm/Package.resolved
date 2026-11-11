@@ -1,5 +1,5 @@
 {
-  "originHash" : "8996dceefcc0c24c52960526bab207223d059891f26efe951e04ed35a1c9f7e4",
+  "originHash" : "05f17068900d034ce8ffd0e092ff982e0dc4a8c9e95b2863940df1a0f93f9271",
   "pins" : [
     {
       "identity" : "chatlayout",
@@ -35,6 +35,15 @@
       "state" : {
         "revision" : "fa8244ed032f4a1ade4cb0571bf87d2f1a9fd2d7",
         "version" : "1.7.3"
+      }
+    },
+    {
+      "identity" : "webrtc",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/stasel/WebRTC.git",
+      "state" : {
+        "revision" : "0c0ad84dac6c1941c16a414dfcfba94691866e4c",
+        "version" : "154.0.0"
       }
     }
   ],

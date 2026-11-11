@@ -47,6 +47,7 @@ data class SharedMobileSnapshot(
     val searchResultSessionIds: List<String> = emptyList(),
     val selectedSessionId: String? = null,
     val conversation: List<ConversationItem> = emptyList(),
+    val activeTurnTiming: SharedTurnTimingSnapshot? = null,
     val pendingQuestions: List<GatewayPendingQuestionRequest> = emptyList(),
     val pendingQuestionCount: Int = 0,
     val pendingApprovals: List<GatewayPendingApprovalRequest> = emptyList(),
@@ -551,10 +552,10 @@ class SharedMobileStore(
         reset()
         acceptFrame("""{"kind":"sessions","items":[{"sessionId":"android-demo","updatedAt":1786937352000,"running":true,"blank":false,"cwd":"/tmp/kmp-demo","agentPreset":"standard"}]}""")
         selectSession("android-demo")
-        acceptFrame("""{"kind":"event","sessionId":"android-demo","seq":1,"time":1786937352,"event":{"type":"user/message","source":"user","text":"请验证 Android 是否使用共享 Reducer"}}""")
-        acceptFrame("""{"sessionId":"android-demo","seq":2,"time":1786937353,"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"text-delta","text":"共享协议解码、"}}""")
-        acceptFrame("""{"sessionId":"android-demo","seq":3,"time":1786937354,"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"text-delta","text":"Reducer 与投影已接入。"}}""")
-        acceptFrame("""{"kind":"question-requested","rpcId":"android-question","sessionId":"android-demo","replay":false,"questions":[{"id":"result","question":"人工测试是否通过？","options":[{"label":"通过"},{"label":"需要修复"}]}]}""")
+        acceptFrame("""{"kind":"event","sessionId":"android-demo","seq":1,"time":1786937352,"event":{"type":"user/message","source":"user","text":"Verify that Android uses the shared reducer"}}""")
+        acceptFrame("""{"sessionId":"android-demo","seq":2,"time":1786937353,"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"text-delta","text":"Shared protocol decoding, "}}""")
+        acceptFrame("""{"sessionId":"android-demo","seq":3,"time":1786937354,"event":{"type":"assistant/chunk","turn":1,"step":1,"chunkType":"text-delta","text":"reducer, and projection are connected."}}""")
+        acceptFrame("""{"kind":"question-requested","rpcId":"android-question","sessionId":"android-demo","replay":false,"questions":[{"id":"result","question":"Did the manual test pass?","options":[{"label":"Pass"},{"label":"Needs fix"}]}]}""")
         return makeSnapshot()
     }
 

@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.shared
 
 import com.clarklevis.dsh.shared.facade.SharedVoiceInputStore
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
@@ -61,7 +62,7 @@ class SharedVoiceInputStoreTest {
         assertTrue(store.touchDown(1000, true).effects.isEmpty())
         assertTrue(store.press(1200).effects.isEmpty())
         assertFalse(store.snapshot().active)
-        assertFalse(store.snapshot().hint.contains("按住说话"))
+        assertEquals(UiMessage("voice.hint"), store.snapshot().hint)
     }
 
     @Test fun switchingModesDoesNotRecordAndLeavingVoiceCancelsHeldCapture() {
@@ -110,12 +111,12 @@ class SharedVoiceInputStoreTest {
 
     @Test fun keyboardControlsHintWithoutStartingMicrophone() {
         val store = ready()
-        assertEquals("描述你想要构建的内容", store.snapshot().hint)
+        assertEquals(UiMessage("voice.hint"), store.snapshot().hint)
         store.keyboardChanged(true)
-        assertEquals("描述你想要构建的内容", store.snapshot().hint)
+        assertEquals(UiMessage("voice.hint"), store.snapshot().hint)
         assertTrue(store.press(1000).effects.isEmpty())
         store.keyboardChanged(false)
-        assertEquals("描述你想要构建的内容", store.snapshot().hint)
+        assertEquals(UiMessage("voice.hint"), store.snapshot().hint)
     }
 
     @Test fun releaseTranscribesAndFillsDraftWithoutSending() {
@@ -234,7 +235,7 @@ class SharedVoiceInputStoreTest {
         assertEquals(null, result.snapshot.error)
         assertEquals(null, result.snapshot.alertMessage)
         assertEquals(null, result.draftUpdate)
-        assertEquals("未识别到人声", result.effects.single { it.action == "showToast" }.message)
+        assertEquals(UiMessage("voice.noSpeech"), result.effects.single { it.action == "showToast" }.message)
         assertTrue(result.effects.any { it.action == "stopTicker" })
         assertFalse(result.effects.any { it.action == "focusEditor" })
     }
@@ -269,7 +270,7 @@ class SharedVoiceInputStoreTest {
         val released = store.release(1100)
         assertEquals("stopping", released.snapshot.phase)
         assertFalse(released.snapshot.overlayVisible)
-        assertEquals("", released.snapshot.status)
+        assertEquals(null, released.snapshot.status)
         assertFalse(released.effects.any { it.action == "stop" && it.discard })
         val stop = store.captureStarted(token, 1101).effects.single { it.action == "stop" }
         assertFalse(stop.discard)
@@ -285,13 +286,13 @@ class SharedVoiceInputStoreTest {
         val release = store.release(1500)
         assertTrue(release.snapshot.active)
         assertFalse(release.snapshot.overlayVisible)
-        assertEquals("", release.snapshot.status)
+        assertEquals(null, release.snapshot.status)
         assertTrue(release.effects.any { it.action == "stop" && !it.discard })
         val captured = store.captureFinished(token, Base64.encode(ByteArray(16000)), 1700)
         assertEquals("transcribing", captured.snapshot.phase)
         assertTrue(captured.snapshot.active)
         assertFalse(captured.snapshot.overlayVisible)
-        assertEquals("", captured.snapshot.status)
+        assertEquals(null, captured.snapshot.status)
         assertEquals("speech-transcribe", captured.requests.single().requestType)
         val completed = store.acceptJson("""{"kind":"speech-transcript","requestId":"$token","text":"后台回填文字"}""")
         assertEquals("后台回填文字", completed.draftUpdate)
@@ -366,7 +367,7 @@ class SharedVoiceInputStoreTest {
         val stopped = store.tick(121002)
         assertEquals("stopping", stopped.snapshot.phase)
         assertTrue(stopped.effects.any { it.action == "stop" })
-        assertEquals("已达到录音上限，正在转文字", stopped.effects.single { it.action == "showToast" }.message)
+        assertEquals(UiMessage("voice.limitReached"), stopped.effects.single { it.action == "showToast" }.message)
         assertTrue(store.tick(121102).effects.isEmpty())
         val finished = store.captureFinished(token, Base64.encode(ByteArray(3_850_000)), 121202)
         assertEquals(120.0, finished.snapshot.recordingSeconds)
@@ -424,14 +425,14 @@ class SharedVoiceInputStoreTest {
         assertEquals("starting", hold.snapshot.phase)
         assertTrue(hold.snapshot.inputBlocked)
         assertTrue(hold.snapshot.overlayVisible)
-        assertEquals("正在开启麦克风", hold.snapshot.status)
+        assertEquals(UiMessage("voice.status.starting"), hold.snapshot.status)
         assertEquals(1, hold.effects.count { it.action == "hapticStart" })
         store.tick(1500)
         assertTrue(store.snapshot().overlayVisible)
         assertEquals("starting", store.snapshot().phase)
         val first = store.captureStarted(token, 1600)
         assertTrue(first.snapshot.overlayVisible)
-        assertEquals("松手转文字 · 上滑取消", first.snapshot.status)
+        assertEquals(UiMessage("voice.status.recording"), first.snapshot.status)
         assertFalse(first.effects.any { it.action.startsWith("haptic") })
     }
 
@@ -463,7 +464,7 @@ class SharedVoiceInputStoreTest {
         val hold = store.press(1080)
         assertEquals("authorizing", hold.snapshot.phase)
         assertTrue(hold.snapshot.overlayVisible)
-        assertEquals("正在获取麦克风权限", hold.snapshot.status)
+        assertEquals(UiMessage("voice.status.authorizing"), hold.snapshot.status)
         assertEquals(1, hold.effects.count { it.action == "permission" })
     }
 
@@ -563,21 +564,7 @@ class SharedVoiceInputStoreTest {
         assertEquals(null, rejected.snapshot.error)
         assertTrue(rejected.effects.isEmpty())
         assertTrue(rejected.requests.isEmpty())
-        assertTrue(
-            rejected.snapshot.alertMessage
-                .orEmpty()
-                .contains("升级移动网关"),
-        )
-        assertTrue(
-            rejected.snapshot.alertMessage
-                .orEmpty()
-                .contains("桌面端"),
-        )
-        assertTrue(
-            rejected.snapshot.alertMessage
-                .orEmpty()
-                .contains("初始化"),
-        )
+        assertEquals(UiMessage("voice.unavailable.unsupported"), rejected.snapshot.alertMessage)
         assertEquals(null, store.dismissAlert().snapshot.alertMessage)
     }
 
@@ -719,7 +706,7 @@ class SharedVoiceInputStoreTest {
         assertEquals(null, result.snapshot.error)
         assertEquals(null, result.draftUpdate)
         assertTrue(result.requests.isEmpty())
-        assertEquals("未识别到人声", result.effects.single { it.action == "showToast" }.message)
+        assertEquals(UiMessage("voice.noSpeech"), result.effects.single { it.action == "showToast" }.message)
         assertFalse(result.effects.any { it.action == "focusEditor" })
         assertTrue(store.acceptJson(response).effects.isEmpty())
         val nextToken = transcribe(store)

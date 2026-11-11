@@ -52,7 +52,7 @@ struct VoiceRipplePanel: View {
                 }
                 .accessibilityHidden(true)
                 VStack(spacing: 8) {
-                    Text(LocalizedStringKey(state.status))
+                    Text(state.status?.localized ?? "")
                         .appFont(.system(size: 17, weight: .medium))
                     if state.phase == "recording" {
                         Text(state.recordingTimeLabel)

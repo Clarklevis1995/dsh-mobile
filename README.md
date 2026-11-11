@@ -35,13 +35,13 @@ Whaleness is an independently developed third-party native mobile client for Dee
 - `androidApp` implements the Android app with Kotlin, Jetpack Compose, and OkHttp.
 - `DeepSeekHarnessMobile` builds the iOS interface with SwiftUI/UIKit and accesses shared logic through a Kotlin/Native framework.
 
-Both apps connect to Harness over WebSocket through [`dsh-plugin-mobile-gateway`](https://github.com/Clarklevis1995/dsh-plugin-mobile-gateway). Networking, secure storage, files, images, lifecycle handling, and background execution use native platform APIs. Business rules are consolidated in `shared/commonMain` wherever practical.
+Both apps connect to Harness over WebSocket through [`dsh-plugin-mobile-gateway`](https://github.com/Clarklevis1995/dsh-plugin-mobile-gateway). With the gateway’s experimental WebRTC option enabled, paired clients prefer two native RTC data channels and explicitly fall back to WebSocket when negotiation fails. Settings shows the selected connection method. See [App integration and validation](Docs/webrtc-app-integration.md). Networking, secure storage, files, images, lifecycle handling, and background execution use native platform APIs. Business rules are consolidated in `shared/commonMain` wherever practical.
 
 ## Downloads and Prerequisites
 
 - **iOS**: [Join the TestFlight beta](https://testflight.apple.com/join/1Euwby6r). Supports iPhone and iPad running iOS / iPadOS 16.1 or later.
 - **Android**: [Download an APK from GitHub Releases](https://github.com/Clarklevis1995/dsh-mobile/releases). Requires Android 7.0 (API 24) or later. In-app update checks prefer the accelerated download source and verify downloaded packages.
-- **Desktop host**: Run DeepSeek Harness with **`dsh-plugin-mobile-gateway` 0.11.1 or later** installed and enabled. [`AppRelease/release-info.json`](AppRelease/release-info.json) defines the required minimum version.
+- **Desktop host**: Run DeepSeek Harness with **`dsh-plugin-mobile-gateway` 0.11.2 or later** installed and enabled. [`AppRelease/release-info.json`](AppRelease/release-info.json) defines the required minimum version.
 - **Voice input**: Enable the official Voice Input plugin in the desktop host's Plugins section, finish model download and initialization, and grant microphone access on the mobile device.
 
 ## Beta Community
@@ -49,10 +49,10 @@ Both apps connect to Harness over WebSocket through [`dsh-plugin-mobile-gateway`
 Join the Whaleness beta WeChat group 2 to share feedback, discuss your experience, and get support. Scan with WeChat, or save the image and recognize it in WeChat.
 
 <p align="center">
-  <a href="website/assets/support-wechat-2026-10-28.png"><img src="website/assets/support-wechat-2026-10-28.png" alt="Whaleness beta WeChat group 2 QR code, valid before November 4, 2026" width="320"></a>
+  <a href="website/assets/support-wechat-2026-11-05.png"><img src="website/assets/support-wechat-2026-11-05.png" alt="Whaleness beta WeChat group 2 QR code, valid before November 12, 2026" width="320"></a>
 </p>
 
-> Updated on October 28, 2026. The original image states that the code is valid before November 4, 2026. If it has expired, check the [product page](https://clarklevis1995.github.io/dsh-mobile/) for the latest group QR code.
+> Updated on November 5, 2026. The original image states that the code is valid before November 12, 2026. If it has expired, check the [product page](https://clarklevis1995.github.io/dsh-mobile/) for the latest group QR code.
 
 ## Platform Status
 
@@ -355,7 +355,7 @@ Each platform handles secure storage, image processing, temporary files, system 
 ### Common
 
 - Java 17.
-- DeepSeek Harness with `dsh-plugin-mobile-gateway` 0.11.1+ enabled.
+- DeepSeek Harness with `dsh-plugin-mobile-gateway` 0.11.2+ enabled.
 - A simulator, emulator, or physical device that can reach Mobile Gateway.
 
 ### Android
@@ -416,7 +416,7 @@ You do not need to build the framework manually first. To build only the Apple S
 
 ## Connection and Pairing
 
-1. Install or upgrade `dsh-plugin-mobile-gateway` in DeepSeek Harness (minimum 0.11.1), then fully exit and restart `dsh web`:
+1. Install or upgrade `dsh-plugin-mobile-gateway` in DeepSeek Harness (minimum 0.11.2), then fully exit and restart `dsh web`:
 
    ```bash
    dsh plugin --profile web add dsh-plugin-mobile-gateway@latest

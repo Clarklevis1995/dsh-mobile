@@ -828,11 +828,11 @@ private fun FooterIconButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(36.dp)) {
+    DshGlassButton(contentDescription, onClick, Modifier.size(36.dp), enabled) {
         Icon(
             painterResource(iconRes),
-            contentDescription,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.86f else 0.24f),
+            null,
+            tint = dshGlassForeground().copy(alpha = if (enabled) 1f else 0.3f),
             modifier = Modifier.size(20.dp)
         )
     }
@@ -841,7 +841,7 @@ private fun FooterIconButton(
 private data class OptionMetadata(val title: String, val isRecommended: Boolean)
 
 private fun optionMetadata(label: String): OptionMetadata {
-    val suffixes = listOf(" (recommended)", "（recommended）", " (推荐)", "（推荐）")
+    val suffixes = listOf(" (recommended)", "（recommended）", " (推荐)", "（推荐）") // i18n-ignore: matches recommendation suffixes sent by the host
     val suffix = suffixes.firstOrNull { label.lowercase().endsWith(it.lowercase()) }
     return OptionMetadata(
         title = suffix?.let { label.dropLast(it.length) } ?: label,

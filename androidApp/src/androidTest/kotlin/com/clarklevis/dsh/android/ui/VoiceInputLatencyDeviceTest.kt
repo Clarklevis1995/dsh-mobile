@@ -80,6 +80,7 @@ class VoiceInputLatencyDeviceTest {
             voice.onPermissionNeeded = { permissionAt.compareAndSet(0, SystemClock.uptimeMillis()) }
             view.viewTreeObserver.addOnDrawListener(drawListener)
         }
+        compose.onNodeWithTag("composer-input").performClick()
         compose.onNodeWithTag("composer-action").performClick()
         compose.onNodeWithTag("composer-input").assertDoesNotExist()
         val instrumentation = InstrumentationRegistry.getInstrumentation()

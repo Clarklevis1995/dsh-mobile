@@ -7,9 +7,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.clarklevis.dsh.android.AndroidAppGraph
+import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.facade.SharedFileUploadStore
 import com.clarklevis.dsh.shared.facade.SharedUploadDraft
 import com.clarklevis.dsh.shared.facade.SharedUploadTransition
+import com.clarklevis.dsh.shared.i18n.UiMessage
+import com.clarklevis.dsh.shared.i18n.UiMessageException
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import java.io.File
 import java.io.RandomAccessFile
@@ -107,7 +110,9 @@ class AndroidFileUploadController(
                     graph?.application?.cacheDir?.let { File(it, "upload-drafts/$id").delete() }
                     localFiles.remove(id)
                     if (failure is kotlinx.coroutines.CancellationException) throw failure
-                    if (context == token) error(failure.message ?: "文件准备失败")
+                    if (context == token) {
+                        error(if (failure is UiMessageException) appText(failure.uiMessage) else failure.message ?: appText("文件准备失败"))
+                    }
                 }
             }
         } finally {
@@ -141,7 +146,7 @@ class AndroidFileUploadController(
                 apply(shared.chunkReady(read.token, data, read.length))
             } catch (failure: Exception) {
                 if (failure is kotlinx.coroutines.CancellationException) throw failure
-                apply(shared.readFailed(read.token, failure.message ?: "文件读取失败"))
+                apply(shared.readFailed(read.token, failure.message?.let { UiMessage.raw(it) } ?: UiMessage("upload.readFailed")))
             }
         }
     }
@@ -161,7 +166,7 @@ class AndroidFileUploadController(
     private fun prepare(uri: Uri, id: String): Prepared {
         val app = requireNotNull(graph).application
         val resolver = app.contentResolver
-        var name = "附件"
+        var name = appText("附件")
         var declaredSize: Long? = null
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
@@ -171,15 +176,19 @@ class AndroidFileUploadController(
                 if (sizeColumn >= 0 && !cursor.isNull(sizeColumn)) declaredSize = cursor.getLong(sizeColumn)
             }
         }
-        require(name.isNotBlank() && name.length <= 255 && name !in setOf(".", "..") &&
-            name.none { it == '/' || it == '\\' || it.isISOControl() }) { "文件名无效" }
-        require((declaredSize ?: 0) <= SharedFileUploadStore.MAX_BYTES) { "文件不能超过 512 MiB" }
+        if (!(name.isNotBlank() && name.length <= 255 && name !in setOf(".", "..") &&
+            name.none { it == '/' || it == '\\' || it.isISOControl() })) {
+            throw UiMessageException(UiMessage("upload.invalidName"), "Invalid file name")
+        }
+        if ((declaredSize ?: 0) > SharedFileUploadStore.MAX_BYTES) {
+            throw UiMessageException(UiMessage("upload.tooLarge"), "File exceeds 512 MiB")
+        }
         val folder = File(app.cacheDir, "upload-drafts").apply { mkdirs() }
         val file = File(folder, id)
         try {
             val digest = MessageDigest.getInstance("SHA-256")
             var size = 0L
-            requireNotNull(resolver.openInputStream(uri)) { "无法读取所选文件" }.use { input ->
+            (resolver.openInputStream(uri) ?: throw IllegalArgumentException(appText("无法读取所选文件"))).use { input ->
                 file.outputStream().use { output ->
                     val buffer = ByteArray(256 * 1024)
                     while (true) {
@@ -187,7 +196,9 @@ class AndroidFileUploadController(
                         if (count < 0) break
                         if (count == 0) continue
                         size += count
-                        require(size <= SharedFileUploadStore.MAX_BYTES) { "文件不能超过 512 MiB" }
+                        if (size > SharedFileUploadStore.MAX_BYTES) {
+                            throw UiMessageException(UiMessage("upload.tooLarge"), "File exceeds 512 MiB")
+                        }
                         digest.update(buffer, 0, count)
                         output.write(buffer, 0, count)
                     }

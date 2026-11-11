@@ -200,7 +200,7 @@ class AndroidMultiGatewayStore(private val application: Application) {
         }
         stopPresence()
         val old = activeGraph
-        withContext(old.gatewayDispatcher) { old.gatewayRuntime.disconnect() }
+        withContext(old.gatewayDispatcher) { old.gatewayRuntime.retireConnection() }
         old.stateHolder.close()
         old.applicationScope.cancel()
         old.gatewayScope.cancel()
@@ -221,17 +221,26 @@ class AndroidMultiGatewayStore(private val application: Application) {
                         } else {
                             onlineIds - profile.localId
                         }
-                    if (state.shouldKeepAliveInBackground) {
-                        GatewayConnectionService.start(application)
-                    } else {
-                        GatewayConnectionService.stop(application)
-                    }
+                    turnKeepAlive = state.shouldKeepAliveInBackground
+                    applyConnectionKeepAlive()
                 }
             }
         if (connect && prepared == null) {
             withContext(activeGraph.gatewayDispatcher) {
                 activeGraph.gatewayRuntime.connect(profile.connectionEndpoints.first())
             }
+        }
+    }
+
+    // 前台服务的存在条件由两个来源共同决定：回合活跃（shared 层的判定）与内嵌隧道开启。
+    // 通知没有推送通道，全靠这条 socket，所以隧道开着时必须保证进程不被冻结。
+    private var turnKeepAlive = false
+
+    internal fun applyConnectionKeepAlive() {
+        if (turnKeepAlive || (application as? com.clarklevis.dsh.android.DshAndroidApplication)?.tunnelKeepAliveRequested == true) {
+            GatewayConnectionService.start(application)
+        } else {
+            GatewayConnectionService.stop(application)
         }
     }
 
@@ -256,7 +265,7 @@ class AndroidMultiGatewayStore(private val application: Application) {
                             profile = profile.copy(remoteDeviceId = frame.device?.id)
                             if (activeId == profile.localId) {
                                 val old = activeGraph
-                                withContext(old.gatewayDispatcher) { old.gatewayRuntime.disconnect() }
+                                withContext(old.gatewayDispatcher) { old.gatewayRuntime.retireConnection() }
                             }
                         }
                         if (frame.kind == "hello") identity.complete(frame)
@@ -427,7 +436,10 @@ class AndroidMultiGatewayStore(private val application: Application) {
         val token = credentials.loadToken("host:${profile.localId}") ?: return
         for (endpoint in profile.connectionEndpoints) {
             currentCoroutineContext().ensureActive()
-            val transport = OkHttpGatewayTransport()
+            val transport = OkHttpGatewayTransport(clientProvider = {
+                (application as? DshAndroidApplication)?.routeClient()
+                    ?: OkHttpGatewayTransport.defaultClient()
+            })
             try {
                 val online =
                     withTimeoutOrNull(PROBE_TIMEOUT_MS) {

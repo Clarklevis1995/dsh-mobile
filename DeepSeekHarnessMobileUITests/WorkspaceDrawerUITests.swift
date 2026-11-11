@@ -2,7 +2,7 @@ import XCTest
 import UIKit
 
 final class ModelMenuLayoutUITests: XCTestCase {
-    func testCompactMenuAtStandardAndMaximumFontSize() throws {
+    func testNativeModelSubmenusAtStandardAndMaximumFontSize() throws {
         continueAfterFailure = false
         for scale in ["1.0", "1.5"] {
             let app = XCUIApplication()
@@ -13,37 +13,203 @@ final class ModelMenuLayoutUITests: XCTestCase {
             let alert = app.alerts.firstMatch
             if alert.waitForExistence(timeout: 2) { alert.buttons.firstMatch.tap() }
             let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-"))
-            try XCTSkipUnless(sessions.firstMatch.waitForExistence(timeout: 10), "需要一个已有会话")
-            sessions.firstMatch.tap()
+            let session = ProcessInfo.processInfo.environment["DSH_MODEL_MENU_SESSION_ID"].map {
+                app.buttons["workspace-session-\($0)"]
+            } ?? sessions.firstMatch
+            try XCTSkipUnless(session.waitForExistence(timeout: 10), "需要一个已有普通会话")
+            session.tap()
+            let input = app.textViews["composer-input"]
+            XCTAssertTrue(input.waitForExistence(timeout: 10))
+            input.tap()
             let toggle = app.buttons["conversation-model-menu-toggle"]
             XCTAssertTrue(toggle.waitForExistence(timeout: 10))
-            try XCTSkipUnless(toggle.isEnabled, "需要会话模型目录")
+            try XCTSkipUnless(NSPredicate { _, _ in toggle.isEnabled }.evaluateAfterWaiting(timeout: 10),
+                              "需要可切换模型的会话目录")
+            let currentModelTitle = try XCTUnwrap(toggle.staticTexts.allElementsBoundByIndex.first?.label)
+            let hasSelectedEffort = toggle.staticTexts.count > 1
+            let outside = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.4))
+            let modelSubmenu = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "模型")).firstMatch
+            let effortSubmenu = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "推理等级")).firstMatch
+
             toggle.tap()
-            let menu = app.otherElements["conversation-model-menu"]
-            XCTAssertTrue(menu.waitForExistence(timeout: 5))
-            let effort = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "model-effort-")).firstMatch
-            if effort.exists {
-                XCTAssertEqual(effort.frame.height, 44, accuracy: 1, "短选项不应因字号而增加留白")
-            }
-            let screenshot = XCTAttachment(screenshot: app.screenshot())
-            screenshot.name = "紧凑模型菜单-字号\(scale)"
-            screenshot.lifetime = .keepAlways
-            add(screenshot)
-            let outside = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 2, dy: menu.frame.midY))
+            XCTAssertTrue(modelSubmenu.waitForExistence(timeout: 5))
+            XCTAssertTrue(effortSubmenu.exists)
+            let root = app.collectionViews.containing(.button, identifier: modelSubmenu.label).firstMatch
+            XCTAssertEqual(root.buttons.count, 2, "一级菜单只包含模型和推理等级两个入口")
+            XCTAssertLessThan(modelSubmenu.frame.midY, effortSubmenu.frame.midY)
+            XCTAssertTrue(modelSubmenu.label.contains(currentModelTitle) || root.staticTexts[currentModelTitle].exists)
+            XCTAssertEqual(app.sheets.count, 0, "模型选择继续使用原生菜单")
+            attachScreenshot(app, name: "模型二级菜单-一级-字号\(scale)")
+
+            modelSubmenu.tap()
+            let models = app.collectionViews.containing(.button, identifier: currentModelTitle).firstMatch
+            XCTAssertTrue(models.waitForExistence(timeout: 5))
+            XCTAssertFalse(models.buttons.allElementsBoundByIndex.filter { $0.images["checkmark"].exists }.isEmpty)
+            assertIndicators(in: models)
+            attachScreenshot(app, name: "模型二级菜单-模型选择-字号\(scale)")
             outside.tap()
-            XCTAssertFalse(menu.exists)
+            XCTAssertFalse(models.exists)
+
+            if !toggle.isHittable { input.tap() }
             toggle.tap()
-            XCTAssertTrue(menu.waitForExistence(timeout: 5))
-            // 再次点击当前选项，只验证关闭行为，不改变用户的模型或推理等级。
-            let options = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "model-"))
-            let selected = try XCTUnwrap(options.allElementsBoundByIndex.first(where: { $0.isSelected && $0.isHittable }))
-            selected.tap()
-            XCTAssertFalse(menu.exists)
+            XCTAssertTrue(effortSubmenu.waitForExistence(timeout: 5))
+            if effortSubmenu.isEnabled {
+                effortSubmenu.tap()
+                let efforts = app.collectionViews.containing(.image, identifier: "checkmark").firstMatch
+                if hasSelectedEffort {
+                    XCTAssertTrue(efforts.waitForExistence(timeout: 5))
+                    assertIndicators(in: efforts)
+                    XCTAssertFalse(efforts.buttons[currentModelTitle].exists, "等级子菜单不混入模型选项")
+                    attachScreenshot(app, name: "模型二级菜单-推理等级-字号\(scale)")
+                    // 重选当前等级，验证选择后关闭菜单，不改变会话配置。
+                    let selected = try XCTUnwrap(efforts.buttons.allElementsBoundByIndex.first {
+                        $0.images["checkmark"].exists && $0.isHittable
+                    })
+                    selected.tap()
+                    XCTAssertFalse(efforts.exists)
+                } else {
+                    outside.tap()
+                }
+            } else {
+                XCTAssertFalse(hasSelectedEffort, "不支持推理等级的模型不应显示旧模型的等级")
+                outside.tap()
+            }
         }
+    }
+
+    private func assertIndicators(in menu: XCUIElement) {
+        for option in menu.buttons.allElementsBoundByIndex where option.isHittable {
+            let indicator = option.images.matching(NSPredicate(
+                format: "identifier IN %@", ["checkmark", "circle"]
+            )).firstMatch
+            XCTAssertTrue(indicator.exists)
+            XCTAssertLessThan(indicator.frame.midX, option.frame.midX)
+        }
+    }
+
+    private func attachScreenshot(_ app: XCUIApplication, name: String) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+}
+
+final class CompactComposerUITests: XCTestCase {
+    func testAttachmentMenuDoesNotExpandCompactComposer() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        if app.alerts.firstMatch.waitForExistence(timeout: 2) { app.alerts.firstMatch.buttons.firstMatch.tap() }
+        let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-"))
+        try XCTSkipUnless(sessions.firstMatch.waitForExistence(timeout: 10), "需要一个已有会话验证附件菜单")
+        sessions.firstMatch.tap()
+        let input = app.textViews["composer-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 10))
+        let compact = input.frame
+        app.buttons["添加附件"].tap()
+        XCTAssertTrue(app.buttons["文件"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["图片"].exists)
+        XCTAssertEqual(input.frame.width, compact.width, accuracy: 1, "仅打开菜单不能展开输入框")
+        XCTAssertEqual(input.frame.height, compact.height, accuracy: 1)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        XCTAssertFalse(app.buttons["composer-action"].isHittable)
+        XCTAssertEqual(input.frame.width, compact.width, accuracy: 1)
+    }
+
+    func testFocusExpandsComposerAndTimelineTapRestoresCompactLayout() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: 2) { alert.buttons.firstMatch.tap() }
+        let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-"))
+        try XCTSkipUnless(sessions.firstMatch.waitForExistence(timeout: 10), "需要一个已有会话验证真实输入框")
+        sessions.firstMatch.tap()
+        let input = app.textViews["composer-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 10))
+        try XCTSkipUnless((input.value as? String ?? "").isEmpty, "保留已有草稿，仅在空草稿中验证输入")
+        let action = app.buttons["composer-action"]
+        XCTAssertFalse(action.isHittable)
+        let compactFrame = input.frame
+        attach(app, name: "会话输入框-收紧")
+        input.tap()
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        XCTAssertTrue(NSPredicate { _, _ in action.isHittable }.evaluateAfterWaiting(timeout: 5))
+        XCTAssertGreaterThan(input.frame.width, compactFrame.width + 30)
+        let draft = "Composer layout check"
+        input.typeText(draft)
+        defer {
+            if input.exists {
+                input.tap()
+                input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: draft.count))
+            }
+        }
+        attach(app, name: "会话输入框-展开")
+        let viewport = app.collectionViews["conversation-history-viewport"]
+        XCTAssertTrue(viewport.exists)
+        viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).tap()
+        XCTAssertTrue(NSPredicate { _, _ in !action.isHittable }.evaluateAfterWaiting(timeout: 5))
+        XCTAssertEqual(input.value as? String, draft)
+        XCTAssertEqual(input.frame.width, compactFrame.width, accuracy: 1)
+        attach(app, name: "会话输入框-收紧并保留草稿")
+    }
+
+    private func attach(_ app: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name; attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }
 
 final class TrajectoryGestureUITests: XCTestCase {
+    func testComposerSelectionDragDoesNotSwipePage() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: 2) { alert.buttons.firstMatch.tap() }
+        let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-"))
+        try XCTSkipUnless(sessions.firstMatch.waitForExistence(timeout: 10), "需要一个已有会话检查输入框手势")
+        sessions.firstMatch.tap()
+        let input = app.textViews["composer-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 10))
+        let previousDraft = input.value as? String ?? ""
+        try XCTSkipUnless(previousDraft.isEmpty, "保留已有草稿，仅在空输入框中检查拖选")
+        input.tap()
+        input.typeText("你好哈哈哈 selection gesture")
+        let draft = input.value as? String
+        defer {
+            if input.exists, input.isHittable {
+                // 点击末行右侧空白，将光标移到末尾后清理测试草稿。
+                input.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.9)).tap()
+                input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (draft ?? "").count))
+            }
+        }
+        let title = app.staticTexts["conversation-page-title"]
+        let originalX = input.frame.minX
+        let left = input.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
+        let right = input.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        // 长按拖选、快速移动光标，以及选择手柄伸出输入卡片的触摸范围。
+        for duration in [1.0, 0.05] {
+            right.press(forDuration: duration, thenDragTo: left)
+            XCTAssertEqual(title.value as? String, "对话")
+            XCTAssertEqual(input.frame.minX, originalX, accuracy: 1)
+            left.press(forDuration: duration, thenDragTo: right)
+            XCTAssertEqual(title.value as? String, "对话")
+            XCTAssertEqual(input.frame.minX, originalX, accuracy: 1)
+            XCTAssertEqual(input.value as? String, draft)
+        }
+        let above = input.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0))
+            .withOffset(CGVector(dx: 0, dy: -20))
+        above.press(forDuration: 0.05, thenDragTo: left)
+        XCTAssertEqual(title.value as? String, "对话")
+        XCTAssertEqual(input.frame.minX, originalX, accuracy: 1)
+    }
+
     func testOverviewDragDoesNotSwipePageAndBodyStillCanSwipe() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -184,6 +350,143 @@ final class WorkspaceDrawerUITests: XCTestCase {
     func testSettingsTapStillOpensSettings() {
         homeSettings.tap()
         XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 3))
+    }
+
+    func testTailscaleSettingsCanBeOpenedAndReturnedToRepeatedly() {
+        homeSettings.tap()
+        XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+        var initialEnabledValue: String?
+
+        for attempt in 0..<3 {
+            let entry = app.buttons["tailscale-tunnel-settings-row"]
+            for _ in 0..<6 {
+                if entry.exists && entry.isHittable { break }
+                app.swipeUp()
+            }
+            XCTAssertTrue(entry.waitForExistence(timeout: 3))
+            XCTAssertTrue(entry.isHittable)
+            entry.tap()
+
+            let bar = app.navigationBars["Tailscale 内嵌隧道"]
+            XCTAssertTrue(bar.waitForExistence(timeout: 5))
+            let enabled = app.switches["tunnel-enabled-switch"]
+            XCTAssertTrue(enabled.waitForExistence(timeout: 5), "必须呈现完整页面，不能只检查导航标题")
+            XCTAssertTrue(app.buttons["tunnel-add-account"].exists)
+            if attempt == 0 { initialEnabledValue = enabled.value as? String }
+            XCTAssertEqual(enabled.value as? String, initialEnabledValue, "页面往返不得修改隧道开关")
+
+            // 不启用隧道、不新增账号；验证返回与再次进入都能完成。
+            bar.buttons.firstMatch.tap()
+            XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+            XCTAssertFalse(enabled.exists)
+            XCTAssertEqual(app.state, .runningForeground)
+        }
+
+        app.navigationBars["设置"].buttons.firstMatch.tap()
+        XCTAssertTrue(homeSettings.waitForExistence(timeout: 5))
+        XCTAssertTrue(homeSettings.isHittable)
+    }
+
+    func testSettingsSecondaryPagesAndStorageDetailsCanReturn() {
+        homeSettings.tap()
+        let pages = [
+            ("network-diagnostics-entry", "网络检测"),
+            ("font-size-settings-row", "字体大小"),
+            ("storage-space-settings-row", "存储空间"),
+            ("log-export-entry", "日志导出与分享")
+        ]
+
+        for (identifier, title) in pages {
+            settingsEntry(identifier).tap()
+            let bar = app.navigationBars[title]
+            XCTAssertTrue(bar.waitForExistence(timeout: 5), "无法进入\(title)")
+            if identifier == "storage-space-settings-row" {
+                for (category, categoryTitle) in [("chats", "聊天记录"), ("images", "图片"),
+                                                   ("previews", "文件预览"), ("temporary", "临时文件")] {
+                    settingsEntry("storage-category-\(category)").tap()
+                    let detailBar = app.navigationBars[categoryTitle]
+                    XCTAssertTrue(detailBar.waitForExistence(timeout: 5))
+                    XCTAssertTrue(app.buttons["storage-clear-\(category)"].waitForExistence(timeout: 5))
+                    // 只验证导航，不清理缓存。
+                    detailBar.buttons.firstMatch.tap()
+                    XCTAssertTrue(bar.waitForExistence(timeout: 5))
+                }
+            } else if identifier == "font-size-settings-row" {
+                XCTAssertTrue(app.switches["font-size-follow-system"].exists)
+            } else if identifier == "log-export-entry" {
+                XCTAssertTrue(app.segmentedControls["log-range-picker"].exists)
+            }
+            bar.buttons.firstMatch.tap()
+            XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+            XCTAssertEqual(app.state, .runningForeground)
+        }
+    }
+
+    func testSettingsChoiceMenusReselectWithoutLeavingSettings() {
+        homeSettings.tap()
+        for (identifier, title, labels) in [("interface-style-settings-row", "界面", ["跟随系统", "浅色", "深色"]),
+                                            ("language-settings-row", "语言", ["跟随系统", "简体中文", "English"])] {
+            let entry = settingsEntry(identifier)
+            let previousLabel = entry.label
+            entry.tap()
+            let choices = app.buttons.matching(NSPredicate(format: "label IN %@", labels))
+            XCTAssertTrue(choices.firstMatch.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.navigationBars["设置"].exists, "选择菜单应留在设置页")
+            XCTAssertFalse(app.navigationBars[title].exists, "界面和语言不再打开子页面")
+            XCTAssertEqual(choices.count, 3)
+            if app.frame.width > 700 {
+                XCTAssertGreaterThan(choices.firstMatch.frame.midX, app.frame.midX, "iPad 菜单应锚定右侧当前值")
+            }
+            let screenshotURL = FileManager.default.temporaryDirectory.appendingPathComponent("settings-menu-\(identifier).png")
+            try? app.screenshot().pngRepresentation.write(to: screenshotURL)
+            print("SETTINGS_MENU_SCREENSHOT: \(screenshotURL.path)")
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "设置-\(title)-菜单"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            guard let selected = choices.allElementsBoundByIndex.first(where: \.isSelected)
+                ?? choices.allElementsBoundByIndex.first(where: { previousLabel.contains($0.label) }) else {
+                XCTFail("缺少已选择项")
+                return
+            }
+            selected.tap()
+            XCTAssertFalse(choices.firstMatch.waitForExistence(timeout: 1), "选择后菜单应关闭")
+            XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+            XCTAssertEqual(settingsEntry(identifier).label, previousLabel)
+        }
+    }
+
+    func testConnectedDefaultSettingsPagesCanReturn() throws {
+        homeSettings.tap()
+        let preset = settingsEntry("agent-preset-settings-row")
+        try XCTSkipUnless(preset.isEnabled, "需要已连接网关；不为导航测试修改连接或配对")
+        for (identifier, title) in [("agent-preset-settings-row", "Agent 预设"), ("default-model-settings-row", "默认模型")] {
+            settingsEntry(identifier).tap()
+            let bar = app.navigationBars[title]
+            XCTAssertTrue(bar.waitForExistence(timeout: 5))
+            bar.buttons.firstMatch.tap()
+            XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+        }
+    }
+
+    private func settingsEntry(_ identifier: String) -> XCUIElement {
+        let entry = app.buttons[identifier]
+        for _ in 0..<12 {
+            let top = app.navigationBars.firstMatch.frame.maxY
+            let bottom = app.frame.maxY - 40
+            if entry.exists && entry.isHittable && entry.frame.minY >= top && entry.frame.maxY <= bottom {
+                return entry
+            }
+            // Menu 不会像导航按钮那样自动滚入视口；先让整行可见再点击。
+            if entry.exists && entry.frame.midY < top {
+                app.swipeDown()
+            } else {
+                app.swipeUp()
+            }
+        }
+        XCTAssertTrue(entry.exists, "缺少入口：\(identifier)")
+        XCTAssertTrue(entry.isHittable, "入口不可点击：\(identifier)")
+        return entry
     }
 
     func testMarkdownLongPressOpensFullScreenSelectionAndRestoresReadingPosition() {
@@ -369,24 +672,44 @@ final class ScheduledTasksToolbarUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["定时任务"].waitForExistence(timeout: 5))
 
         let search = app.buttons["scheduled-tasks-search"]
-        let filter = app.buttons["scheduled-tasks-filter"]
+        let filter = app.segmentedControls["scheduled-tasks-status-tabs"]
+        let more = app.buttons["scheduled-tasks-more"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertTrue(search.isHittable)
         XCTAssertTrue(filter.isHittable)
+        XCTAssertFalse(app.buttons["scheduled-tasks-filter"].exists)
+        XCTAssertTrue(more.isHittable)
+        XCTAssertFalse(app.buttons["scheduled-tasks-create"].exists)
+        XCTAssertFalse(search.frame.intersects(more.frame))
+        XCTAssertGreaterThanOrEqual(filter.frame.minY, search.frame.maxY, "筛选入口必须位于导航栏下方")
         XCTAssertFalse(search.frame.intersects(filter.frame), "搜索和筛选不能互相重叠")
         let window = app.windows.firstMatch.frame
-        for button in [search, filter] {
+        for button in [search, filter, more] {
             XCTAssertGreaterThanOrEqual(button.frame.minX, window.minX)
             XCTAssertLessThanOrEqual(button.frame.maxX, window.maxX)
         }
         if #available(iOS 27.1, *), UIDevice.current.name.contains("Duo"), window.width > window.height {
-            XCTAssertEqual(search.frame.midX, filter.frame.midX, accuracy: 3)
-            XCTAssertGreaterThan(abs(search.frame.midY - filter.frame.midY), 35)
+            XCTAssertEqual(search.frame.midX, more.frame.midX, accuracy: 3)
+            XCTAssertGreaterThan(abs(search.frame.midY - more.frame.midY), 35)
         }
 
-        filter.tap()
-        XCTAssertTrue(app.buttons["全部"].waitForExistence(timeout: 5))
-        app.buttons["全部"].tap()
+        more.tap()
+        XCTAssertTrue(app.buttons["添加定时任务"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["删除已结束的定时任务"].exists)
+        XCTAssertLessThan(app.buttons["添加定时任务"].frame.minY,
+                          app.buttons["删除已结束的定时任务"].frame.minY)
+        let menuScreenshot = XCTAttachment(screenshot: app.screenshot())
+        menuScreenshot.name = "定时任务更多菜单"
+        menuScreenshot.lifetime = .keepAlways
+        add(menuScreenshot)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)).tap()
+
+        for title in ["已开启", "已暂停", "已结束", "全部"] {
+            let tab = filter.buttons[title]
+            XCTAssertTrue(tab.exists)
+            tab.tap()
+            XCTAssertTrue(tab.isSelected)
+        }
         search.tap()
         let field = app.textFields["搜索定时任务"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -396,6 +719,11 @@ final class ScheduledTasksToolbarUITests: XCTestCase {
         app.buttons["关闭搜索"].tap()
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertTrue(filter.isHittable)
+        XCTAssertTrue(more.isHittable)
+        let toolbarScreenshot = XCTAttachment(screenshot: app.screenshot())
+        toolbarScreenshot.name = "定时任务四项状态切换栏"
+        toolbarScreenshot.lifetime = .keepAlways
+        add(toolbarScreenshot)
     }
 }
 
@@ -650,5 +978,114 @@ final class ConversationSidebarToolbarUITests: XCTestCase {
         viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap()
         back.tap()
         XCTAssertTrue(app.buttons["设置"].waitForExistence(timeout: 5))
+    }
+}
+
+final class LogExportUITests: XCTestCase {
+    func testSingleSettingsEntryAndIndependentDateAndTimeSelection() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let alert = app.alerts.firstMatch
+        if alert.waitForExistence(timeout: 2) { alert.buttons.firstMatch.tap() }
+        let settings = app.buttons["设置"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
+        let entry = app.buttons["log-export-entry"]
+        for _ in 0..<6 {
+            if entry.exists && entry.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(entry.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["export-logs"].exists)
+        XCTAssertFalse(app.buttons["share-logs"].exists)
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["日志导出与分享"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["log-save"].exists)
+        XCTAssertTrue(app.buttons["log-share"].exists)
+        let toolbar = app.navigationBars["日志导出与分享"]
+        let save = toolbar.buttons["log-save"]
+        let share = toolbar.buttons["log-share"]
+        XCTAssertTrue(save.exists)
+        XCTAssertTrue(share.exists)
+        XCTAssertGreaterThan(save.frame.midX, toolbar.frame.midX)
+        XCTAssertGreaterThan(share.frame.midX, save.frame.midX)
+        let back = toolbar.buttons.element(boundBy: 0)
+        for button in [save, share] {
+            XCTAssertEqual(button.frame.width, button.frame.height, accuracy: 1, "工具栏按钮应为圆形")
+            XCTAssertEqual(button.frame.width, back.frame.width, accuracy: 1, "工具栏按钮宽度应与返回按钮一致")
+            XCTAssertEqual(button.frame.height, back.frame.height, accuracy: 1, "工具栏按钮高度应与返回按钮一致")
+        }
+        XCTAssertEqual(save.staticTexts.count, 0, "导出按钮只显示图标")
+        XCTAssertEqual(share.staticTexts.count, 0, "分享按钮只显示图标")
+        XCTAssertEqual(app.buttons.matching(identifier: "log-save").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "log-share").count, 1)
+        let ranges = app.segmentedControls["log-range-picker"]
+        XCTAssertTrue(ranges.exists, "时间范围必须使用系统分段控件")
+        XCTAssertEqual(ranges.buttons.count, 4)
+        ranges.buttons["今天"].tap()
+        XCTAssertTrue(ranges.buttons["今天"].isSelected)
+        ranges.buttons["1小时"].tap()
+        XCTAssertTrue(ranges.buttons["1小时"].isSelected)
+        let originalTime = app.buttons["log-start-time"].value as? String
+        XCTAssertNotNil(originalTime?.range(of: #"^\d{2}:00$"#, options: .regularExpression), "时间必须为整点")
+        attach(app, "日志导出主页面")
+        save.tap()
+        let cancelExport = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label IN %@", ["取消", "Cancel"])).firstMatch
+        XCTAssertTrue(cancelExport.waitForExistence(timeout: 10), "导出应打开系统文件面板")
+        attach(app, "日志保存面板")
+        if cancelExport.isHittable {
+            cancelExport.tap()
+        } else {
+            // 新系统文件面板可能仅暴露不可点击的取消占位节点，使用系统下拉关闭手势。
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+                .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
+        }
+        let returned = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: save)
+        XCTAssertEqual(XCTWaiter.wait(for: [returned], timeout: 5), .completed)
+        XCTAssertTrue(ranges.isEnabled)
+        XCTAssertEqual(app.buttons["log-start-time"].value as? String, originalTime)
+        share.tap()
+        let closeShare = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label IN %@", ["关闭", "Close"])).firstMatch
+        if closeShare.waitForExistence(timeout: 5) && closeShare.isHittable {
+            attach(app, "日志分享面板")
+            closeShare.tap()
+        } else {
+            app.swipeDown()
+        }
+        let returnedFromShare = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: save)
+        XCTAssertEqual(XCTWaiter.wait(for: [returnedFromShare], timeout: 5), .completed)
+        XCTAssertTrue(ranges.isEnabled)
+        XCTAssertEqual(app.buttons["log-start-time"].value as? String, originalTime)
+        app.buttons["log-start-date"].tap()
+        XCTAssertTrue(app.staticTexts["开始日期"].waitForExistence(timeout: 3))
+        attach(app, "日志日期选择")
+        app.buttons["取消"].tap()
+        app.buttons["log-start-time"].tap()
+        XCTAssertTrue(app.staticTexts["开始时间"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.pickers["log-native-hour-picker"].exists)
+        XCTAssertEqual(app.pickerWheels.count, 1, "时间选择器只保留小时一列")
+        XCTAssertFalse(app.datePickers.firstMatch.exists, "不应出现分钟选择器")
+        attach(app, "日志时间选择")
+        app.buttons["取消"].tap()
+        XCTAssertTrue(app.buttons["log-share"].exists)
+        XCTAssertEqual(app.buttons["log-start-time"].value as? String, originalTime)
+        XCTAssertTrue(ranges.buttons["1小时"].isSelected, "取消选择不应改变快捷范围")
+        app.buttons["log-end-time"].tap()
+        XCTAssertTrue(app.navigationBars["结束时间"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.pickerWheels.count, 1)
+        app.pickerWheels.firstMatch.adjust(toPickerWheelValue: "01:00")
+        app.buttons["完成"].tap()
+        XCTAssertEqual(app.buttons["log-end-time"].value as? String, "01:00")
+        XCTAssertTrue(ranges.buttons["自定义"].isSelected, "手动确认时间后切换到自定义范围")
+    }
+    private func attach(_ app: XCUIApplication, _ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

@@ -341,22 +341,33 @@ class SharedHistoryStore(
 
     /** 原子安装订阅窗口。显式 cursor 属于独立流状态，不能从精简 events 推导。 */
     fun installSnapshot(sessionId: String, eventsJson: String, hasMore: Boolean,
-        nextBeforeSequence: Int?): SharedMviDispatchResult = dispatch("snapshot", sessionId) {
+        nextBeforeSequence: Int?, loadRecentPages: Boolean = false): SharedMviDispatchResult = dispatch("snapshot", sessionId) {
         val records = wireJson.decodeFromString<List<SessionEvent>>(eventsJson)
         require(records.all { it.sessionId == sessionId })
         val normalized = records.associateBy(SessionEvent::seq).values.sortedBy(SessionEvent::seq)
         val unchanged = eventsBySession[sessionId] == normalized
         chatCacheLog("snapshot-installed", "events=${normalized.size} unchanged=$unchanged")
+        val baseline = state.copy(
+            sessions = state.sessions + (sessionId to HistorySessionState(
+                hasMore = hasMore, nextBeforeSequence = nextBeforeSequence
+            )),
+            pendingSessionId = state.pendingSessionId?.takeUnless { it == sessionId }
+        )
+        val recentPages = if (loadRecentPages && configuration.pagesPerBatch > 1 &&
+            hasMore && nextBeforeSequence != null) {
+            HistoryReducer.reduce(baseline, HistoryAction.Start(
+                sessionId, older = true, hasLocalEvents = normalized.isNotEmpty(), earliestLocalSequence = null
+            ), configuration).let { reduction ->
+                // 订阅快照计为第一页，沿显式游标补齐剩余页，保持实时 tail。
+                val loading = reduction.state.sessions.getValue(sessionId).copy(pageCount = 1)
+                reduction.copy(state = reduction.state.copy(sessions = reduction.state.sessions + (sessionId to loading)))
+            }
+        } else null
         Transition(
-            state = state.copy(
-                sessions = state.sessions + (sessionId to HistorySessionState(
-                    hasMore = hasMore, nextBeforeSequence = nextBeforeSequence
-                )),
-                pendingSessionId = state.pendingSessionId?.takeUnless { it == sessionId }
-            ),
+            state = recentPages?.state ?: baseline,
             eventsBySession = if (unchanged) eventsBySession else eventsBySession + (sessionId to normalized),
             eventPatch = if (unchanged) null else SharedHistoryEventPatch("replace", replacementEvents = normalized),
-            result = HistoryResult.None,
+            result = recentPages?.result ?: HistoryResult.None,
             cacheSequences = cachedSequences - sessionId
         )
     }

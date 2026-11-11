@@ -19,39 +19,78 @@ enum HarnessBackgroundStyle {
 struct HarnessAnimatedBackground: View {
     let style: HarnessBackgroundStyle
     var prefersOpenLightArcs = false
+    var animationPaused = false
+    @State private var animationClock = HarnessBackgroundAnimationClock()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
+    private var usesStaticBackground: Bool {
+        if #available(iOS 26.0, *) {
+            return reduceMotion
+        }
+        return true
+    }
+
     private var pausesAnimation: Bool {
-        reduceMotion || scenePhase != .active
+        animationPaused || usesStaticBackground || scenePhase != .active
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: pausesAnimation)) { timeline in
-            let elapsed = reduceMotion
-                ? 0
-                : timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 4_096)
-
-            ZStack {
-                HarnessFluidLayer(
-                    time: elapsed, style: style, prefersOpenLightArcs: prefersOpenLightArcs
-                )
-                HarnessTechnicalGrid(style: style)
-                HarnessWhaleField(time: elapsed, isStatic: reduceMotion, style: style)
-                    .blendMode(.screen)
-
-                LinearGradient(
-                    colors: [.clear, DSHColor.navy.opacity(0.12), Color.black.opacity(0.58)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+        Group {
+            if usesStaticBackground {
+                // 低版本保留静态粒子与构图，不创建逐帧更新时间线。
+                backgroundLayers(time: 0, isStatic: true)
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: pausesAnimation)) { timeline in
+                    let elapsed = animationClock.elapsed(at: timeline.date)
+                        .truncatingRemainder(dividingBy: 4_096)
+                    backgroundLayers(time: elapsed, isStatic: false)
+                }
             }
         }
+        .onAppear { animationClock.setPaused(pausesAnimation, at: Date()) }
+        .onChangeCompat(of: pausesAnimation) { _, paused in animationClock.setPaused(paused, at: Date()) }
         .background(DSHColor.navy)
         .ignoresSafeArea()
         .clipped()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    private func backgroundLayers(time: TimeInterval, isStatic: Bool) -> some View {
+        ZStack {
+            HarnessFluidLayer(
+                time: time, style: style, prefersOpenLightArcs: prefersOpenLightArcs
+            )
+            HarnessTechnicalGrid(style: style)
+            HarnessWhaleField(time: time, isStatic: isStatic, style: style)
+                .blendMode(.screen)
+
+            LinearGradient(
+                colors: [.clear, DSHColor.navy.opacity(0.12), Color.black.opacity(0.58)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+    }
+}
+
+/// 暂停时保持当前画面，恢复后接着播放，避免手指松开时背景突然跳到另一个相位。
+struct HarnessBackgroundAnimationClock {
+    private var pausedAt: Date?
+    private var pausedDuration: TimeInterval = 0
+
+    mutating func setPaused(_ paused: Bool, at date: Date) {
+        if paused {
+            if pausedAt == nil { pausedAt = date }
+        } else if let start = pausedAt {
+            pausedDuration += max(0, date.timeIntervalSince(start))
+            pausedAt = nil
+        }
+    }
+
+    func elapsed(at date: Date) -> TimeInterval {
+        (pausedAt ?? date).timeIntervalSinceReferenceDate - pausedDuration
     }
 }
 

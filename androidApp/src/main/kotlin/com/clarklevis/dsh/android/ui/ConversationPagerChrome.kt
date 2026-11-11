@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -105,9 +106,13 @@ internal fun ConversationPagerChrome(
                     page(index, topInset)
                 }
             }
+            val glassProtectedHeight = topInset
+            // 消息从顶栏下方 8dp 开始，渐隐必须在这段留白内结束，避免覆盖首条气泡。
+            val glassFadeHeight = 8.dp
             Box(
-                Modifier.fillMaxWidth().height(topInset + 32.dp)
-                    .conversationTopGlass(backdrop)
+                Modifier.fillMaxWidth().height(glassProtectedHeight + glassFadeHeight)
+                    .clipToBounds()
+                    .conversationTopGlass(backdrop, glassProtectedHeight, glassFadeHeight)
                     .semantics { hideFromAccessibility() }
                     .testTag("conversation-top-glass")
             )

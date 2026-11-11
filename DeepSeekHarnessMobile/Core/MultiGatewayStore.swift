@@ -18,6 +18,7 @@ final class MultiGatewayStore: ObservableObject {
     private var probes: [GatewayClient] = []
     @Published private(set) var isReady = false
     private var initializationTask: Task<Void, Never>?
+    private var coldLaunchConnectionTask: Task<Void, Never>?
     private static let profilesKey = "gateway.profiles.v1"
 
     init(defaults: UserDefaults = .standard, credentials: (any GatewayCredentialStoring)? = nil) {
@@ -47,7 +48,7 @@ final class MultiGatewayStore: ObservableObject {
             } else {
                 let legacy = UserDefaultsAppPreferences(userDefaults: defaults)
                 if defaults.string(forKey: "gateway.endpoint") != nil {
-                    let profile = GatewayProfile(gatewayName: URL(string: legacy.endpoint)?.host ?? "原有主机", endpoints: [legacy.endpoint])
+                    let profile = GatewayProfile(gatewayName: URL(string: legacy.endpoint)?.host ?? String(localized: "原有主机"), endpoints: [legacy.endpoint])
                     let scoped = UserDefaultsAppPreferences(userDefaults: defaults, gatewayID: profile.id)
                     scoped.endpoint = legacy.endpoint
                     scoped.saveSessions(legacy.loadSessions())
@@ -62,10 +63,15 @@ final class MultiGatewayStore: ObservableObject {
             }
             if let profile = profiles.first(where: { $0.id == defaults.string(forKey: "gateway.activeID") }) ?? profiles.first {
                 activate(profile, connect: false)
+                // 恢复连接由主机容器持有，不依赖导航页面 task 是否挂载或被取消。
+                let store = activeStore
+                coldLaunchConnectionTask = Task { [weak store] in
+                    await store?.connectOnColdLaunchIfPaired()
+                }
             } else {
                 installPairingHandler(on: activeStore)
             }
-        } catch { self.error = "读取或迁移主机资料失败：\(error.localizedDescription)" }
+        } catch { self.error = String(localized: "读取或迁移主机资料失败：\(error.localizedDescription)") }
     }
 
     var activeProfile: GatewayProfile? { profiles.first { $0.id == activeID } }
@@ -83,7 +89,7 @@ final class MultiGatewayStore: ObservableObject {
                 sessionID: intent.sessionID,
                 rpcID: intent.rpcID,
                 title: store.title(for: intent.sessionID),
-                reason: "该审批已失效或已在其他设备处理"
+                reason: String(localized: "该审批已失效或已在其他设备处理")
             )
             return false
         }
@@ -93,7 +99,7 @@ final class MultiGatewayStore: ObservableObject {
                 sessionID: intent.sessionID,
                 rpcID: intent.rpcID,
                 title: store.title(for: intent.sessionID),
-                reason: "当前未连接 Gateway，请打开 App 后重试"
+                reason: String(localized: "当前未连接 Gateway，请打开 App 后重试")
             )
             return false
         }
@@ -146,6 +152,8 @@ final class MultiGatewayStore: ObservableObject {
     }
 
     private func activate(_ profile: GatewayProfile, connect: Bool) {
+        coldLaunchConnectionTask?.cancel()
+        coldLaunchConnectionTask = nil
         let style = activeStore.interfaceStyle
         activeStore.deactivateGateway()
         activeStore = makeStore(profile)
@@ -172,7 +180,7 @@ final class MultiGatewayStore: ObservableObject {
         }
         var profile = existing ?? GatewayProfile(
             gatewayId: payload.gatewayId?.lowercased(),
-            gatewayName: payload.gatewayName ?? URL(string: endpoints[0])?.host ?? "新主机",
+            gatewayName: payload.gatewayName ?? URL(string: endpoints[0])?.host ?? String(localized: "新主机"),
             endpoints: endpoints,
             deviceKind: GatewayIdentity.isLocal(URL(string: endpoints[0])?.host ?? "") ? "desktopcomputer" : "server.rack"
         )
@@ -254,6 +262,8 @@ final class MultiGatewayStore: ObservableObject {
         cancelPairing()
         stopProbes()
         if activeID.map(knownIDs.contains) == true {
+            coldLaunchConnectionTask?.cancel()
+            coldLaunchConnectionTask = nil
             let style = activeStore.interfaceStyle
             observation = nil
             activeStore.deactivateGateway()
@@ -359,6 +369,6 @@ final class MultiGatewayStore: ObservableObject {
 
     private func persist() {
         do { defaults.set(try JSONEncoder().encode(profiles), forKey: Self.profilesKey) }
-        catch { self.error = "保存主机资料失败：\(error.localizedDescription)" }
+        catch { self.error = String(localized: "保存主机资料失败：\(error.localizedDescription)") }
     }
 }

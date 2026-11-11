@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupPositionProvider
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import com.clarklevis.dsh.shared.domain.SessionSummary
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 
@@ -141,8 +142,8 @@ internal fun ConversationSidebarButton(
                         Modifier.size(144.dp, 23.dp)
                     )
                 }
-                SidebarNavigationItem("插件", R.drawable.ic_drawer_plugin, "conversation-sidebar-plugins") { select(onPlugins) }
-                SidebarNavigationItem("定时任务", R.drawable.ic_drawer_schedule, "conversation-sidebar-scheduled-tasks") {
+                SidebarNavigationItem(appTextKey("插件"), R.drawable.ic_drawer_plugin, "conversation-sidebar-plugins") { select(onPlugins) }
+                SidebarNavigationItem(appTextKey("定时任务"), R.drawable.ic_drawer_schedule, "conversation-sidebar-scheduled-tasks") {
                     select(onScheduledTasks)
                 }
                 Text(
@@ -237,7 +238,7 @@ internal fun ConversationSidebarButton(
                     }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                SidebarNavigationItem("设置", R.drawable.ic_settings, "conversation-sidebar-settings") { select(onSettings) }
+                SidebarNavigationItem(appTextKey("设置"), R.drawable.ic_settings, "conversation-sidebar-settings") { select(onSettings) }
             }
         }
     }

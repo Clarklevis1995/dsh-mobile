@@ -53,7 +53,23 @@ import org.junit.Test
 
 /** 真 Runtime + 模拟传输 + 真 Room + Compose，验证主页离线可读而非仅测试辅助筛选函数。 */
 class AndroidOfflineHomeDeviceTest {
+    @Test fun coldStartConnectsAutomaticallyAfterTunnelPrerequisiteWithoutButtonTap() = runBlocking {
+        val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val ready = kotlinx.coroutines.CompletableDeferred<Unit>()
+        withGraph(storedConnectionPrerequisite = {
+            entered.complete(Unit)
+            ready.await()
+        }) { graph, transport ->
+            withTimeout(5_000) { entered.await() }
+            assertEquals(null, transport.generation)
+            ready.complete(Unit)
+            handshake(graph, transport)
+            assertEquals("CONNECTED", graph.stateHolder.gatewayState.connection.name)
+        }
+    }
+
     @get:Rule val compose = createComposeRule()
+
     @get:Rule val locale = com.clarklevis.dsh.android.ui.ChineseDeviceLocaleRule()
     private val application get() = ApplicationProvider.getApplicationContext<Application>()
     private var animatorScale: String? = null
@@ -273,6 +289,7 @@ class AndroidOfflineHomeDeviceTest {
         gatewayId: String = "offline-device-" + UUID.randomUUID(),
         autoConnect: Boolean = true,
         clearOnClose: Boolean = true,
+        storedConnectionPrerequisite: suspend () -> Unit = {},
         block: suspend (AndroidAppGraph, FakeTransport) -> Unit
     ) {
         val transport = FakeTransport()
@@ -299,7 +316,8 @@ class AndroidOfflineHomeDeviceTest {
             networkMonitorOverride = object : GatewayNetworkMonitor {
                 override val state = MutableStateFlow(GatewayNetworkState.AVAILABLE)
             },
-            gatewayLocalId = gatewayId
+            gatewayLocalId = gatewayId,
+            storedConnectionPrerequisite = storedConnectionPrerequisite
         )
         graph.stateHolder
         try {

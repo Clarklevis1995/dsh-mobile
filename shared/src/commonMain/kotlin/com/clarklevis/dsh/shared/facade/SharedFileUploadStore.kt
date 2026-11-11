@@ -2,6 +2,8 @@ package com.clarklevis.dsh.shared.facade
 
 import com.clarklevis.dsh.shared.gateway.GatewayRequest
 import com.clarklevis.dsh.shared.gateway.GatewayRequestLanePolicy
+import com.clarklevis.dsh.shared.i18n.UiMessage
+import com.clarklevis.dsh.shared.i18n.UiMessageException
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import com.clarklevis.dsh.shared.protocol.PresentedFile
@@ -18,7 +20,7 @@ data class SharedUploadDraft(
     val confirmedBytes: Long = 0,
     val receiptId: String? = null,
     val file: PresentedFile? = null,
-    val error: String? = null
+    val error: UiMessage? = null
 )
 
 data class SharedUploadRead(val id: String, val offset: Long, val length: Int, val token: String)
@@ -63,7 +65,7 @@ class SharedFileUploadStore {
             clearActive()
             drafts.indices.forEach { index ->
                 drafts[index] = drafts[index].copy(status = "error", receiptId = null, confirmedBytes = 0,
-                    error = "连接或会话已变化，请重新上传")
+                    error = UiMessage("upload.sessionChanged"))
             }
             submissionKey = null
             submissionId = null
@@ -78,10 +80,14 @@ class SharedFileUploadStore {
 
     fun add(id: String, name: String, size: Long, sha256: String): SharedUploadTransition {
         if (!available || drafts.size >= 20 || drafts.any { it.id == id }) return transition()
-        require(name.isNotBlank() && name.length <= 255 && name !in setOf(".", "..") &&
-            name.none { it == '/' || it == '\\' || it.isISOControl() }) { "文件名无效" }
-        require(size in 0..MAX_BYTES) { "文件不能超过 512 MiB" }
-        require(sha256.matches(Regex("[a-fA-F0-9]{64}"))) { "文件摘要无效" }
+        if (name.isBlank() || name.length > 255 || name in setOf(".", "..") ||
+            name.any { it == '/' || it == '\\' || it.isISOControl() }) {
+            throw UiMessageException(UiMessage("upload.invalidName"), "Invalid file name")
+        }
+        if (size !in 0..MAX_BYTES) throw UiMessageException(UiMessage("upload.tooLarge"), "File exceeds 512 MiB")
+        if (!sha256.matches(Regex("[a-fA-F0-9]{64}"))) {
+            throw UiMessageException(UiMessage("upload.invalidDigest"), "Invalid file digest")
+        }
         drafts += SharedUploadDraft(id, name, size, sha256.lowercase())
         return pump()
     }
@@ -119,7 +125,7 @@ class SharedFileUploadStore {
     fun invalidateReceipts(): SharedUploadTransition {
         drafts.indices.forEach { index ->
             if (drafts[index].status == "ready") drafts[index] = drafts[index].copy(
-                status = "error", receiptId = null, error = "附件凭证已失效，请重新上传"
+                status = "error", receiptId = null, error = UiMessage("upload.receiptExpired")
             )
         }
         submissionKey = null
@@ -144,27 +150,27 @@ class SharedFileUploadStore {
             if (frame.code == "file-upload-busy" && request.requestType == "file-upload-finish") {
                 return transition().copy(watch = request)
             }
-            return fail(frame.message ?: frame.code ?: "上传失败")
+            return fail((frame.message ?: frame.code)?.let { UiMessage.raw(it) } ?: UiMessage("upload.failed"))
         }
         if (frame.kind != request.responseKind || frame.sessionId != sessionId) {
             if (request.requestType == "file-upload-open" && frame.kind == "file-upload-opened") uploadId = frame.uploadId
-            return fail("上传响应不匹配")
+            return fail(UiMessage("upload.responseMismatch"))
         }
         val id = activeId ?: return transition()
         val draft = drafts.firstOrNull { it.id == id } ?: return transition()
-        if (frame.kind != "file-upload-opened" && frame.uploadId != uploadId) return fail("上传响应不匹配")
+        if (frame.kind != "file-upload-opened" && frame.uploadId != uploadId) return fail(UiMessage("upload.responseMismatch"))
         pending = null
         when (frame.kind) {
             "file-upload-opened" -> {
                 uploadId = frame.uploadId
                 val length = frame.chunkBytes ?: 0
                 if (uploadId.isNullOrBlank() || frame.size != draft.size || length !in 1..MAX_CHUNK_BYTES ||
-                    (frame.maxBytes != null && draft.size > frame.maxBytes)) return fail("上传响应无效")
+                    (frame.maxBytes != null && draft.size > frame.maxBytes)) return fail(UiMessage("upload.responseInvalid"))
                 chunkBytes = length
                 return readOrFinish()
             }
             "file-upload-chunk-accepted" -> {
-                if (frame.nextOffset != expectedOffset) return fail("上传确认偏移无效，请重试")
+                if (frame.nextOffset != expectedOffset) return fail(UiMessage("upload.offsetInvalid"))
                 update(id) { it.copy(confirmedBytes = expectedOffset) }
                 return readOrFinish()
             }
@@ -172,7 +178,7 @@ class SharedFileUploadStore {
                 val file = frame.file
                 if (frame.receiptId.isNullOrBlank() || frame.sha256?.lowercase() != draft.sha256 ||
                     file?.attachmentId.isNullOrBlank() || file.bytes != draft.size || file.name.isNullOrBlank()) {
-                    return fail("上传校验失败，请重试")
+                    return fail(UiMessage("upload.verifyFailed"))
                 }
                 update(id) { it.copy(status = "ready", confirmedBytes = it.size, receiptId = frame.receiptId, file = file, error = null) }
                 clearActive()
@@ -184,7 +190,7 @@ class SharedFileUploadStore {
 
     fun chunkReady(token: String, data: String, bytes: Int): SharedUploadTransition {
         val read = reading?.takeIf { it.token == token } ?: return transition()
-        if (bytes != read.length || data.isEmpty()) return fail("文件读取失败，请重新选择")
+        if (bytes != read.length || data.isEmpty()) return fail(UiMessage("upload.readFailed"))
         reading = null
         expectedOffset = read.offset + bytes
         val request = request("chunk", "file-upload-chunk-accepted") {
@@ -194,7 +200,7 @@ class SharedFileUploadStore {
         return transition(listOf(request))
     }
 
-    fun readFailed(token: String, message: String): SharedUploadTransition =
+    fun readFailed(token: String, message: UiMessage): SharedUploadTransition =
         if (reading?.token == token) fail(message) else transition()
 
     /** 只有 finish 可幂等重试；chunk 回执丢失必须取消并从头开始。 */
@@ -203,7 +209,7 @@ class SharedFileUploadStore {
         if (request.requestType == "file-upload-finish" && finishRetries++ < 4 && available) {
             return finish()
         }
-        return fail("上传确认超时，请重试")
+        return fail(UiMessage("upload.timeout"))
     }
 
     private fun pump(): SharedUploadTransition {
@@ -237,7 +243,7 @@ class SharedFileUploadStore {
         return transition(listOf(request))
     }
 
-    private fun fail(message: String): SharedUploadTransition {
+    private fun fail(message: UiMessage): SharedUploadTransition {
         val cancels = cancellation()
         activeId?.let { id -> update(id) { it.copy(status = "error", receiptId = null, error = message) } }
         clearActive()

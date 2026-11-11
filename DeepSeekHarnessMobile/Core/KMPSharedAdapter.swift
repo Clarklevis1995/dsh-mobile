@@ -17,6 +17,7 @@ private struct KMPConversationItemSnapshot: Decodable {
     let epochSeconds: Double
     let files: [PresentedFile]?
     let knownFiles: [PresentedFile]?
+    let textParts: [GatewayTextPart]?
 
     var item: ConversationItem? {
         guard !id.isEmpty,
@@ -31,7 +32,8 @@ private struct KMPConversationItemSnapshot: Decodable {
             isError: isError,
             date: Date(timeIntervalSince1970: epochSeconds),
             files: files ?? [],
-            knownFiles: knownFiles ?? []
+            knownFiles: knownFiles ?? [],
+            textParts: textParts
         )
     }
 }
@@ -46,6 +48,7 @@ private extension ConversationItem.Kind {
         case "TOOL": self = .tool
         case "JSON_TOOL": self = .jsonTool
         case "TOOL_RESULT": self = .toolResult
+        case "GENERATED_IMAGES": self = .generatedImages
         case "STATUS": self = .status
         case "SYSTEM": self = .system
         default: return nil
@@ -79,13 +82,13 @@ enum KMPConversationStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .encoding(let message):
-            "无法编码 iOS Conversation 输入：\(message)"
+            L10n.internalError("Failed to encode iOS Conversation input: \(message)")
         case .bridge(let code, let message):
-            "KMP Conversation 失败（\(code)）：\(message ?? "无详细信息")"
+            L10n.internalError("KMP Conversation failed (\(code)): \(message ?? "no details")")
         case .invalidEvent(let message):
-            "KMP Conversation 增量事件无效：\(message)"
+            L10n.internalError("KMP Conversation delta event is invalid: \(message)")
         case .runtimeFailed(let message):
-            "KMP Conversation 事件流已停止：\(message)"
+            L10n.internalError("KMP Conversation event stream stopped: \(message)")
         }
     }
 }
@@ -190,7 +193,7 @@ final class KMPConversationStoreAdapter {
             outputTruncated: String(localized: "assistant.outputTruncated", defaultValue: "输出已截断，保留开头和末尾")
         )
         guard let eventStore = store as? any KMPConversationEventBridging else {
-            failClosed(.runtimeFailed("Conversation bridge 不支持 MVI event stream"))
+            failClosed(.runtimeFailed("The Conversation bridge does not support the MVI event stream"))
             return
         }
         cancelEventSubscription = eventStore.observeConversationEvents { [weak self] event in
@@ -220,7 +223,7 @@ final class KMPConversationStoreAdapter {
 
     func assistantChunks(sessionID: String, attemptID: String, chunksJSON: String) throws {
         guard let shared = store as? SharedConversationStore else {
-            throw KMPConversationStoreError.invalidEvent("独立流需要共享 Conversation Store")
+            throw KMPConversationStoreError.invalidEvent("A standalone stream requires the shared Conversation store")
         }
         try dispatch(.transient(sessionID: sessionID)) {
             shared.assistantChunks(sessionId: sessionID, attemptId: attemptID, chunksJson: chunksJSON)
@@ -346,7 +349,7 @@ final class KMPConversationStoreAdapter {
         guard event.schema == 2,
               event.domain == "conversation",
               !event.transactionId.isEmpty else {
-            failClosed(.invalidEvent("MVI 信封 schema、domain 或 transactionId 无效"))
+            failClosed(.invalidEvent("MVI envelope schema, domain, or transactionId is invalid"))
             return
         }
         if event.kind == "snapshot" {
@@ -354,7 +357,7 @@ final class KMPConversationStoreAdapter {
                   let payload = event.statePayloadJson,
                   let bootstrap = try? decoder.decode(KMPConversationBootstrap.self, from: Data(payload.utf8)),
                   bootstrap.schema == 1 else {
-                failClosed(.invalidEvent("订阅基线无效"))
+                failClosed(.invalidEvent("Subscription baseline is invalid"))
                 return
             }
             lastEventSequence = event.sequence
@@ -362,7 +365,7 @@ final class KMPConversationStoreAdapter {
         }
         guard let previous = lastEventSequence,
               event.sequence == previous + 1 else {
-            failClosed(.runtimeFailed("MVI event sequence 不连续"))
+            failClosed(.runtimeFailed("MVI event sequence is not contiguous"))
             return
         }
         lastEventSequence = event.sequence
@@ -376,7 +379,7 @@ final class KMPConversationStoreAdapter {
             onError?(error)
         case "transition":
             guard let payload = event.statePayloadJson else {
-                failClosed(.invalidEvent("transition 缺少 patch"))
+                failClosed(.invalidEvent("transition is missing its patch"))
                 return
             }
             do {
@@ -390,7 +393,7 @@ final class KMPConversationStoreAdapter {
                 failClosed(.invalidEvent(error.localizedDescription))
             }
         default:
-            failClosed(.runtimeFailed("未知 MVI event kind：\(event.kind)"))
+            failClosed(.runtimeFailed("Unknown MVI event kind: \(event.kind)"))
         }
     }
 
@@ -399,14 +402,14 @@ final class KMPConversationStoreAdapter {
         intent: KMPConversationIntent?
     ) throws -> KMPConversationChange {
         guard patch.schema == 1, !patch.sessionId.isEmpty else {
-            throw KMPConversationStoreError.invalidEvent("patch schema 或 sessionId 无效")
+            throw KMPConversationStoreError.invalidEvent("patch schema or sessionId is invalid")
         }
         switch intent {
         case .transient(let sessionID):
             guard patch.sessionId == sessionID,
                   patch.lastSequence == (lastSequenceBySessionID[sessionID] ?? -1),
                   !patch.replacesAll, patch.replacementItems == nil else {
-                throw KMPConversationStoreError.invalidEvent("临时流改变了持久流水位")
+                throw KMPConversationStoreError.invalidEvent("the transient stream changed the persistent cursor")
             }
         case .event(let sessionID, let sequence):
             guard patch.sessionId == sessionID,
@@ -414,7 +417,7 @@ final class KMPConversationStoreAdapter {
                   !patch.replacesAll,
                   patch.replacementItems == nil,
                   (!patch.operations.isEmpty || sequence > (lastSequenceBySessionID[sessionID] ?? -1)) else {
-                throw KMPConversationStoreError.invalidEvent("live patch 与当前 event intent 不一致")
+                throw KMPConversationStoreError.invalidEvent("live patch does not match the current event intent")
             }
         case .replace(let sessionID, let lastSequence):
             guard patch.sessionId == sessionID,
@@ -422,12 +425,12 @@ final class KMPConversationStoreAdapter {
                   patch.replacesAll,
                   patch.replacementItems != nil,
                   patch.operations.isEmpty else {
-                throw KMPConversationStoreError.invalidEvent("replace patch 与当前 intent 不一致")
+                throw KMPConversationStoreError.invalidEvent("replace patch does not match the current intent")
             }
         case .history(let sessionID, let lastSequence):
             guard patch.sessionId == sessionID, patch.lastSequence == lastSequence,
                   (patch.replacesAll ? (patch.replacementItems != nil && patch.operations.isEmpty) : patch.replacementItems == nil) else {
-                throw KMPConversationStoreError.invalidEvent("history patch 与当前 intent 不一致")
+                throw KMPConversationStoreError.invalidEvent("history patch does not match the current intent")
             }
         case .clear(let sessionID):
             guard patch.sessionId == sessionID,
@@ -435,25 +438,25 @@ final class KMPConversationStoreAdapter {
                   patch.replacesAll,
                   patch.replacementItems?.isEmpty == true,
                   patch.operations.isEmpty else {
-                throw KMPConversationStoreError.invalidEvent("clear patch 与当前 intent 不一致")
+                throw KMPConversationStoreError.invalidEvent("clear patch does not match the current intent")
             }
         case nil:
-            throw KMPConversationStoreError.invalidEvent("transition 缺少对应 UI intent")
+            throw KMPConversationStoreError.invalidEvent("transition is missing its UI intent")
         }
 
         var next = itemsBySessionID[patch.sessionId] ?? []
         if patch.replacesAll {
             guard let replacementItems = patch.replacementItems else {
-                throw KMPConversationStoreError.invalidEvent("replace patch 缺少 replacementItems")
+                throw KMPConversationStoreError.invalidEvent("replace patch is missing replacementItems")
             }
             next = try replacementItems.map { snapshot in
                 guard let item = snapshot.item else {
-                    throw KMPConversationStoreError.invalidEvent("replacement item wire value 无效")
+                    throw KMPConversationStoreError.invalidEvent("replacement item wire value is invalid")
                 }
                 return item
             }
             guard Set(next.map(\.id)).count == next.count else {
-                throw KMPConversationStoreError.invalidEvent("replacement item id 重复")
+                throw KMPConversationStoreError.invalidEvent("replacement item id is duplicated")
             }
         } else {
             for operation in patch.operations {
@@ -465,7 +468,7 @@ final class KMPConversationStoreAdapter {
                           operation.delta == nil,
                           operation.epochSeconds == nil,
                           !next.contains(where: { $0.id == item.id }) else {
-                        throw KMPConversationStoreError.invalidEvent("insert operation 无效")
+                        throw KMPConversationStoreError.invalidEvent("insert operation is invalid")
                     }
                     next.append(item)
                 case "insert-before":
@@ -474,7 +477,7 @@ final class KMPConversationStoreAdapter {
                           operation.delta == nil, operation.epochSeconds == nil,
                           !next.contains(where: { $0.id == item.id }),
                           let index = next.firstIndex(where: { $0.id == anchor }) else {
-                        throw KMPConversationStoreError.invalidEvent("insert-before operation 无效")
+                        throw KMPConversationStoreError.invalidEvent("insert-before operation is invalid")
                     }
                     next.insert(item, at: index)
                 case "append-text":
@@ -483,7 +486,7 @@ final class KMPConversationStoreAdapter {
                           let delta = operation.delta, !delta.isEmpty,
                           let epochSeconds = operation.epochSeconds, epochSeconds.isFinite,
                           let index = next.firstIndex(where: { $0.id == itemID }) else {
-                        throw KMPConversationStoreError.invalidEvent("append-text operation 无效")
+                        throw KMPConversationStoreError.invalidEvent("append-text operation is invalid")
                     }
                     let old = next[index]
                     next[index] = ConversationItem(
@@ -495,7 +498,8 @@ final class KMPConversationStoreAdapter {
                         isError: old.isError,
                         date: Date(timeIntervalSince1970: epochSeconds),
                         files: old.files,
-                        knownFiles: old.knownFiles
+                        knownFiles: old.knownFiles,
+                        textParts: old.textParts
                     )
                 case "replace":
                     guard let item = operation.item?.item,
@@ -503,7 +507,7 @@ final class KMPConversationStoreAdapter {
                           operation.delta == nil,
                           operation.epochSeconds == nil,
                           let index = next.firstIndex(where: { $0.id == itemID }) else {
-                        throw KMPConversationStoreError.invalidEvent("replace operation 无效")
+                        throw KMPConversationStoreError.invalidEvent("replace operation is invalid")
                     }
                     next[index] = item
                 case "remove":
@@ -512,11 +516,11 @@ final class KMPConversationStoreAdapter {
                           operation.delta == nil,
                           operation.epochSeconds == nil,
                           let index = next.firstIndex(where: { $0.id == itemID }) else {
-                        throw KMPConversationStoreError.invalidEvent("remove operation 无效")
+                        throw KMPConversationStoreError.invalidEvent("remove operation is invalid")
                     }
                     next.remove(at: index)
                 default:
-                    throw KMPConversationStoreError.invalidEvent("未知 operation：\(operation.kind)")
+                    throw KMPConversationStoreError.invalidEvent("Unknown operation: \(operation.kind)")
                 }
             }
         }
@@ -671,10 +675,10 @@ enum KMPTrajectoryStoreError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .encoding(let message): "无法编码 iOS Trajectory 输入：\(message)"
-        case .bridge(let code, let message): "KMP Trajectory 失败（\(code)）：\(message ?? "无详细信息")"
-        case .invalidEvent(let message): "KMP Trajectory 增量事件无效：\(message)"
-        case .runtimeFailed(let message): "KMP Trajectory 事件流已停止：\(message)"
+        case .encoding(let message): L10n.internalError("Failed to encode iOS Trajectory input: \(message)")
+        case .bridge(let code, let message): L10n.internalError("KMP Trajectory failed (\(code)): \(message ?? "no details")")
+        case .invalidEvent(let message): L10n.internalError("KMP Trajectory delta event is invalid: \(message)")
+        case .runtimeFailed(let message): L10n.internalError("KMP Trajectory event stream stopped: \(message)")
         }
     }
 }
@@ -736,7 +740,7 @@ final class KMPTrajectoryStoreAdapter {
     ) {
         store = bridge ?? facade.makeTrajectoryStore()
         guard let eventStore = store as? any KMPTrajectoryEventBridging else {
-            failClosed(.runtimeFailed("Trajectory bridge 不支持 MVI event stream"))
+            failClosed(.runtimeFailed("The Trajectory bridge does not support the MVI event stream"))
             return
         }
         cancelEventSubscription = eventStore.observeTrajectoryEvents { [weak self] event in
@@ -761,7 +765,7 @@ final class KMPTrajectoryStoreAdapter {
     func receive(_ events: [SessionEvent]) throws {
         guard let first = events.first, let last = events.last else { return }
         guard events.allSatisfy({ $0.sessionId == first.sessionId }) else {
-            throw KMPTrajectoryStoreError.encoding("Trajectory batch 包含多个 session")
+            throw KMPTrajectoryStoreError.encoding("The Trajectory batch contains multiple sessions")
         }
         try dispatch(.event(sessionID: first.sessionId, sequence: last.seq)) {
             store.receiveEvents(eventsJson: try encode(events))
@@ -806,7 +810,7 @@ final class KMPTrajectoryStoreAdapter {
         guard event.schema == 2,
               event.domain == "trajectory",
               !event.transactionId.isEmpty else {
-            failClosed(.invalidEvent("MVI 信封无效"))
+            failClosed(.invalidEvent("MVI envelope is invalid"))
             return
         }
         if event.kind == "snapshot" {
@@ -814,14 +818,14 @@ final class KMPTrajectoryStoreAdapter {
                   let payload = event.statePayloadJson,
                   let bootstrap = try? decoder.decode(KMPTrajectoryBootstrap.self, from: Data(payload.utf8)),
                   bootstrap.schema == 1 else {
-                failClosed(.invalidEvent("订阅基线无效"))
+                failClosed(.invalidEvent("Subscription baseline is invalid"))
                 return
             }
             lastEventSequence = event.sequence
             return
         }
         guard let previous = lastEventSequence, event.sequence == previous + 1 else {
-            failClosed(.runtimeFailed("MVI event sequence 不连续"))
+            failClosed(.runtimeFailed("MVI event sequence is not contiguous"))
             return
         }
         lastEventSequence = event.sequence
@@ -835,7 +839,7 @@ final class KMPTrajectoryStoreAdapter {
             onError?(error)
         case "transition":
             guard let payload = event.statePayloadJson else {
-                failClosed(.invalidEvent("transition 缺少 patch"))
+                failClosed(.invalidEvent("transition is missing its patch"))
                 return
             }
             do {
@@ -848,7 +852,7 @@ final class KMPTrajectoryStoreAdapter {
                 failClosed(.invalidEvent(error.localizedDescription))
             }
         default:
-            failClosed(.runtimeFailed("未知 MVI event kind：\(event.kind)"))
+            failClosed(.runtimeFailed("Unknown MVI event kind: \(event.kind)"))
         }
     }
 
@@ -857,7 +861,7 @@ final class KMPTrajectoryStoreAdapter {
         intent: KMPTrajectoryIntent?
     ) throws -> KMPTrajectoryChange {
         guard patch.schema == 1, !patch.sessionId.isEmpty else {
-            throw KMPTrajectoryStoreError.invalidEvent("patch schema 或 sessionId 无效")
+            throw KMPTrajectoryStoreError.invalidEvent("patch schema or sessionId is invalid")
         }
         switch intent {
         case .event(let sessionID, let sequence):
@@ -866,7 +870,7 @@ final class KMPTrajectoryStoreAdapter {
                   !patch.replacesAll,
                   patch.replacementNodes == nil,
                   !patch.operations.isEmpty else {
-                throw KMPTrajectoryStoreError.invalidEvent("live patch 与 event intent 不一致")
+                throw KMPTrajectoryStoreError.invalidEvent("live patch does not match the event intent")
             }
         case .replace(let sessionID, let lastSequence):
             guard patch.sessionId == sessionID,
@@ -874,7 +878,7 @@ final class KMPTrajectoryStoreAdapter {
                   patch.replacesAll,
                   patch.replacementNodes != nil,
                   patch.operations.isEmpty else {
-                throw KMPTrajectoryStoreError.invalidEvent("replace patch 与 intent 不一致")
+                throw KMPTrajectoryStoreError.invalidEvent("replace patch does not match the intent")
             }
         case .clear(let sessionID):
             guard patch.sessionId == sessionID,
@@ -882,22 +886,22 @@ final class KMPTrajectoryStoreAdapter {
                   patch.replacesAll,
                   patch.replacementNodes?.isEmpty == true,
                   patch.operations.isEmpty else {
-                throw KMPTrajectoryStoreError.invalidEvent("clear patch 与 intent 不一致")
+                throw KMPTrajectoryStoreError.invalidEvent("clear patch does not match the intent")
             }
         case nil:
-            throw KMPTrajectoryStoreError.invalidEvent("transition 缺少对应 intent")
+            throw KMPTrajectoryStoreError.invalidEvent("transition is missing its intent")
         }
 
         var next = nodesBySessionID[patch.sessionId] ?? []
         if patch.replacesAll {
             next = try (patch.replacementNodes ?? []).map { snapshot in
                 guard let node = snapshot.node else {
-                    throw KMPTrajectoryStoreError.invalidEvent("replacement node wire value 无效")
+                    throw KMPTrajectoryStoreError.invalidEvent("replacement node wire value is invalid")
                 }
                 return node
             }
             guard Set(next.map(\.id)).count == next.count else {
-                throw KMPTrajectoryStoreError.invalidEvent("replacement node id 重复")
+                throw KMPTrajectoryStoreError.invalidEvent("replacement node id is duplicated")
             }
         } else {
             for operation in patch.operations {
@@ -923,14 +927,14 @@ final class KMPTrajectoryStoreAdapter {
                   (0...nodes.count).contains(index),
                   operation.itemId == nil,
                   !nodes.contains(where: { $0.id == node.id }) else {
-                throw KMPTrajectoryStoreError.invalidEvent("insert operation 无效")
+                throw KMPTrajectoryStoreError.invalidEvent("insert operation is invalid")
             }
             nodes.insert(node, at: index)
         case "remove":
             guard operation.item == nil,
                   let itemID = operation.itemId,
                   let index = nodes.firstIndex(where: { $0.id == itemID }) else {
-                throw KMPTrajectoryStoreError.invalidEvent("remove operation 无效")
+                throw KMPTrajectoryStoreError.invalidEvent("remove operation is invalid")
             }
             nodes.remove(at: index)
         case "move":
@@ -939,7 +943,7 @@ final class KMPTrajectoryStoreAdapter {
                   let source = nodes.firstIndex(where: { $0.id == itemID }),
                   let target = operation.index,
                   nodes.indices.contains(target) else {
-                throw KMPTrajectoryStoreError.invalidEvent("move operation 无效")
+                throw KMPTrajectoryStoreError.invalidEvent("move operation is invalid")
             }
             let node = nodes.remove(at: source)
             nodes.insert(node, at: target)
@@ -947,7 +951,7 @@ final class KMPTrajectoryStoreAdapter {
             guard let node = operation.item?.node,
                   operation.itemId == node.id,
                   let index = nodes.firstIndex(where: { $0.id == node.id }) else {
-                throw KMPTrajectoryStoreError.invalidEvent("replace operation 无效")
+                throw KMPTrajectoryStoreError.invalidEvent("replace operation is invalid")
             }
             nodes[index] = node
         case "update":
@@ -960,14 +964,14 @@ final class KMPTrajectoryStoreAdapter {
                   endEpochSeconds.isFinite,
                   endSequence >= nodes[index].endSeq,
                   (!subtitleDelta.isEmpty || !operation.appendedRecords.isEmpty || endSequence > nodes[index].endSeq) else {
-                throw KMPTrajectoryStoreError.invalidEvent("update operation 无效")
+                throw KMPTrajectoryStoreError.invalidEvent("update operation is invalid")
             }
             nodes[index].subtitle += subtitleDelta
             nodes[index].endSeq = endSequence
             nodes[index].end = Date(timeIntervalSince1970: endEpochSeconds)
             nodes[index].records.append(contentsOf: operation.appendedRecords)
         default:
-            throw KMPTrajectoryStoreError.invalidEvent("未知 operation：\(operation.kind)")
+            throw KMPTrajectoryStoreError.invalidEvent("Unknown operation: \(operation.kind)")
         }
     }
 
@@ -1083,10 +1087,10 @@ enum KMPHistoryStoreError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .encoding(let message): "无法编码 iOS History 输入：\(message)"
-        case .bridge(let code, let message): "KMP History 失败（\(code)）：\(message ?? "无详细信息")"
-        case .invalidEvent(let message): "KMP History 增量事件无效：\(message)"
-        case .runtimeFailed(let message): "KMP History 事件流已停止：\(message)"
+        case .encoding(let message): L10n.internalError("Failed to encode iOS History input: \(message)")
+        case .bridge(let code, let message): L10n.internalError("KMP History failed (\(code)): \(message ?? "no details")")
+        case .invalidEvent(let message): L10n.internalError("KMP History delta event is invalid: \(message)")
+        case .runtimeFailed(let message): L10n.internalError("KMP History event stream stopped: \(message)")
         }
     }
 }
@@ -1197,7 +1201,7 @@ final class KMPHistoryStoreAdapter {
     ) {
         store = bridge ?? facade.makeHistoryStore()
         guard let eventStore = store as? any KMPHistoryEventBridging else {
-            failClosed(.runtimeFailed("History bridge 不支持 MVI event stream"))
+            failClosed(.runtimeFailed("The History bridge does not support the MVI event stream"))
             return
         }
         cancelEventSubscription = eventStore.observeHistoryEvents { [weak self] event in
@@ -1325,7 +1329,7 @@ final class KMPHistoryStoreAdapter {
 
     func awaitSnapshot(sessionID: String) throws {
         guard let shared = store as? SharedHistoryStore else {
-            throw KMPHistoryStoreError.invalidEvent("订阅快照需要共享 History Store")
+            throw KMPHistoryStoreError.invalidEvent("A subscription snapshot requires the shared History store")
         }
         try dispatch(.awaitSnapshot(sessionID: sessionID)) {
             shared.awaitSnapshot(sessionId: sessionID)
@@ -1335,12 +1339,12 @@ final class KMPHistoryStoreAdapter {
     @discardableResult
     func installSnapshot(sessionID: String, events: [SessionEvent], hasMore: Bool, nextBeforeSequence: Int?) throws -> Bool {
         guard let shared = store as? SharedHistoryStore else {
-            throw KMPHistoryStoreError.invalidEvent("订阅快照需要共享 History Store")
+            throw KMPHistoryStoreError.invalidEvent("A subscription snapshot requires the shared History store")
         }
         let previousRevision = replacementRevision
         try dispatch(.page(sessionID: sessionID)) {
             shared.installSnapshot(sessionId: sessionID, eventsJson: try encode(events), hasMore: hasMore,
-                nextBeforeSequence: nextBeforeSequence.map { KotlinInt(int: Int32($0)) })
+                nextBeforeSequence: nextBeforeSequence.map { KotlinInt(int: Int32($0)) }, loadRecentPages: true)
         }
         return replacementRevision != previousRevision
     }
@@ -1425,7 +1429,7 @@ final class KMPHistoryStoreAdapter {
 
     private func receive(_ event: SharedMviEvent) {
         guard event.schema == 2, event.domain == "history", !event.transactionId.isEmpty else {
-            failClosed(.invalidEvent("MVI 信封无效"))
+            failClosed(.invalidEvent("MVI envelope is invalid"))
             return
         }
         if event.kind == "snapshot" {
@@ -1439,7 +1443,7 @@ final class KMPHistoryStoreAdapter {
                           && records.map(\.seq) == records.map(\.seq).sorted()
                           && Set(records.map(\.seq)).count == records.count
                   }) else {
-                failClosed(.invalidEvent("订阅基线无效"))
+                failClosed(.invalidEvent("Subscription baseline is invalid"))
                 return
             }
             sessions = bootstrap.state.sessions
@@ -1449,7 +1453,7 @@ final class KMPHistoryStoreAdapter {
             return
         }
         guard let previous = lastEventSequence, event.sequence == previous + 1 else {
-            failClosed(.runtimeFailed("MVI event sequence 不连续"))
+            failClosed(.runtimeFailed("MVI event sequence is not contiguous"))
             return
         }
         lastEventSequence = event.sequence
@@ -1463,13 +1467,13 @@ final class KMPHistoryStoreAdapter {
             onError?(error)
         case "transition":
             guard let payload = event.statePayloadJson else {
-                failClosed(.invalidEvent("transition 缺少 patch"))
+                failClosed(.invalidEvent("transition is missing its patch"))
                 return
             }
             do {
                 let patch = try decoder.decode(KMPHistoryPatch.self, from: Data(payload.utf8))
                 let effects = try decoder.decode([KMPHistoryEffect].self, from: Data(event.effectsJson.utf8))
-                guard effects.count <= 1 else { throw KMPHistoryStoreError.invalidEvent("effect 数量无效") }
+                guard effects.count <= 1 else { throw KMPHistoryStoreError.invalidEvent("effect count is invalid") }
                 let snapshot = patch.eventPatch == nil ? nil : (store as? SharedHistoryStore)?
                     .projectionSnapshotForEvent(sessionId: patch.sessionId, eventSequence: event.sequence)
                 let change = try apply(patch, effect: effects.first, intent: pendingIntent,
@@ -1482,7 +1486,7 @@ final class KMPHistoryStoreAdapter {
                 failClosed(.invalidEvent(error.localizedDescription))
             }
         default:
-            failClosed(.runtimeFailed("未知 MVI event kind：\(event.kind)"))
+            failClosed(.runtimeFailed("Unknown MVI event kind: \(event.kind)"))
         }
     }
 
@@ -1506,17 +1510,17 @@ final class KMPHistoryStoreAdapter {
               (patch.outcome == "completed") == (patch.completedHasMore != nil),
               (patch.completedEventCount.map { $0 >= 0 } ?? true),
               (patch.completedByteCount.map { $0 >= 0 } ?? true) else {
-            throw KMPHistoryStoreError.invalidEvent("patch 与 intent 或 wire state 不一致")
+            throw KMPHistoryStoreError.invalidEvent("patch does not match the intent or wire state")
         }
         if let effect {
             guard effect.action == "request-page",
                   effect.sessionId == patch.sessionId,
                   patch.outcome == "request-page",
                   intentMatchesRequestEffect(intent) else {
-                throw KMPHistoryStoreError.invalidEvent("effect 与同事务 intent/state 不一致")
+                throw KMPHistoryStoreError.invalidEvent("effect does not match the same-transaction intent/state")
             }
         } else if patch.outcome == "request-page" {
-            throw KMPHistoryStoreError.invalidEvent("request-page 缺少 effect")
+            throw KMPHistoryStoreError.invalidEvent("request-page is missing its effect")
         }
 
         var nextSessions = sessions
@@ -1528,7 +1532,7 @@ final class KMPHistoryStoreAdapter {
             try apply(eventPatch, sessionID: patch.sessionId, intent: intent, baseEventSequence: baseEventSequence,
                 projectionSnapshot: projectionSnapshot, to: &nextEvents)
         } else if case .live = intent {
-            throw KMPHistoryStoreError.invalidEvent("live intent 缺少 event patch")
+            throw KMPHistoryStoreError.invalidEvent("live intent is missing its event patch")
         }
 
         sessions = nextSessions
@@ -1583,7 +1587,7 @@ final class KMPHistoryStoreAdapter {
                   patch.index == records.count,
                   patch.replacementEvents == nil,
                   record.seq > (records.last?.seq ?? -1) else {
-                throw KMPHistoryStoreError.invalidEvent("append event patch 无效")
+                throw KMPHistoryStoreError.invalidEvent("append event patch is invalid")
             }
             records.append(record)
         case "upsert":
@@ -1595,7 +1599,7 @@ final class KMPHistoryStoreAdapter {
                   let index = patch.index,
                   (0...records.count).contains(index),
                   patch.replacementEvents == nil else {
-                throw KMPHistoryStoreError.invalidEvent("upsert event patch 无效")
+                throw KMPHistoryStoreError.invalidEvent("upsert event patch is invalid")
             }
             if patch.streamDelta == true {
                 // A live assistant delta that continues the row this journal
@@ -1606,7 +1610,7 @@ final class KMPHistoryStoreAdapter {
                 guard records.indices.contains(index),
                       records[index].seq == record.seq,
                       record.event.type == "assistant/chunk" else {
-                    throw KMPHistoryStoreError.invalidEvent("stream event patch 无效")
+                    throw KMPHistoryStoreError.invalidEvent("stream event patch is invalid")
                 }
                 records[index] = record
             } else {
@@ -1614,7 +1618,7 @@ final class KMPHistoryStoreAdapter {
                 else { records.insert(record, at: index) }
                 guard records.map(\.seq) == records.map(\.seq).sorted(),
                       Set(records.map(\.seq)).count == records.count else {
-                    throw KMPHistoryStoreError.invalidEvent("upsert 后事件顺序无效")
+                    throw KMPHistoryStoreError.invalidEvent("event order after upsert is invalid")
                 }
             }
         case "replace":
@@ -1633,7 +1637,7 @@ final class KMPHistoryStoreAdapter {
                     guard validReplacement(replacement, sessionID: sessionID) else {
                         throw KMPHistoryStoreError.invalidEvent("history reference fallback snapshot is invalid")
                     }
-                    NSLog("history-reference-mirror-recovered sequence=%lld", baseEventSequence + 1)
+                    appLog("history-reference-mirror-recovered sequence=%lld", baseEventSequence + 1)
                     records = replacement
                     return
                 }
@@ -1646,11 +1650,11 @@ final class KMPHistoryStoreAdapter {
                   replacement.map(\.seq) == replacement.map(\.seq).sorted(),
                   Set(replacement.map(\.seq)).count == replacement.count,
                   patch.referenceBaseEventSequence == nil else {
-                throw KMPHistoryStoreError.invalidEvent("replace event patch 无效")
+                throw KMPHistoryStoreError.invalidEvent("replace event patch is invalid")
             }
             records = replacement
         default:
-            throw KMPHistoryStoreError.invalidEvent("未知 event patch：\(patch.kind)")
+            throw KMPHistoryStoreError.invalidEvent("Unknown event patch: \(patch.kind)")
         }
     }
 
@@ -1769,7 +1773,7 @@ final class KMPHistoryStoreAdapter {
     }
 
     private func int32(_ value: Int) throws -> Int32 {
-        guard let exact = Int32(exactly: value) else { throw KMPHistoryStoreError.encoding("Int 超出 KMP Int 范围") }
+        guard let exact = Int32(exactly: value) else { throw KMPHistoryStoreError.encoding("Int is outside the KMP Int range") }
         return exact
     }
 
@@ -1856,15 +1860,15 @@ enum KMPSessionListStoreError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .encoding(let message):
-            "无法编码 iOS SessionList 输入：\(message)"
+            L10n.internalError("Failed to encode iOS SessionList input: \(message)")
         case .bridge(let code, let message):
-            "KMP SessionList 失败（\(code)）：\(message ?? "无详细信息")"
+            L10n.internalError("KMP SessionList failed (\(code)): \(message ?? "no details")")
         case .invalidSnapshot(let message):
-            "无法解码 KMP SessionList 快照：\(message)"
+            L10n.internalError("Failed to decode KMP SessionList snapshot: \(message)")
         case .initializationFailed(let message):
-            "KMP SessionList 初始化失败，已停止后续状态写入：\(message)"
+            L10n.internalError("KMP SessionList initialization failed; further state writes stopped: \(message)")
         case .runtimeFailed(let message):
-            "KMP SessionList 运行期快照失效，已停止后续状态写入：\(message)"
+            L10n.internalError("KMP SessionList runtime snapshot is invalid; further state writes stopped: \(message)")
         }
     }
 }
@@ -2009,7 +2013,7 @@ final class KMPSessionListStoreAdapter {
             if let pushedSnapshot { return pushedSnapshot }
             if result.isSuccess, result.snapshotJson == nil { return snapshot }
             let error = KMPSessionListStoreError.runtimeFailed(
-                "KMP mutation 未发布对应的 MVI event"
+                "KMP mutation did not publish a matching MVI event"
             )
             runtimeError = error
             throw error
@@ -2033,7 +2037,7 @@ final class KMPSessionListStoreAdapter {
         guard event.schema == 2,
               event.domain == "session-list",
               !event.transactionId.isEmpty else {
-            publish(error: .runtimeFailed("KMP SessionList event 信封无效"))
+            publish(error: .runtimeFailed("KMP SessionList event envelope is invalid"))
             return
         }
         if event.kind == "snapshot" {
@@ -2044,7 +2048,7 @@ final class KMPSessionListStoreAdapter {
                       from: Data(payload.utf8)
                   ),
                   baseline == snapshot else {
-                publish(error: .invalidSnapshot("订阅基线与初始化快照不一致"))
+                publish(error: .invalidSnapshot("Subscription baseline does not match the initialization snapshot"))
                 return
             }
             lastEventSequence = event.sequence
@@ -2052,7 +2056,7 @@ final class KMPSessionListStoreAdapter {
         }
         guard let previous = lastEventSequence,
               event.sequence == previous + 1 else {
-            publish(error: .runtimeFailed("KMP SessionList event sequence 不连续"))
+            publish(error: .runtimeFailed("KMP SessionList event sequence is not contiguous"))
             return
         }
         lastEventSequence = event.sequence
@@ -2064,7 +2068,7 @@ final class KMPSessionListStoreAdapter {
             return
         }
         guard event.kind == "transition" else {
-            publish(error: .runtimeFailed("未知 SessionList event kind：\(event.kind)"))
+            publish(error: .runtimeFailed("Unknown SessionList event kind: \(event.kind)"))
             return
         }
         do {
@@ -2231,12 +2235,12 @@ enum KMPQuestionStoreError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .encoding(let message): "无法编码 iOS Question 输入：\(message)"
-        case .bridge(let code, let message): "KMP Question 失败（\(code)）：\(message ?? "无详细信息")"
-        case .invalidSnapshot(let message): "无法解码 KMP Question 快照：\(message)"
-        case .invalidEffect(let message): "无法解码 KMP Question effect：\(message)"
-        case .initializationFailed(let message): "KMP Question 初始化失败，已停止后续状态写入：\(message)"
-        case .runtimeFailed(let message): "KMP Question 运行期结果失效，已停止后续状态写入：\(message)"
+        case .encoding(let message): L10n.internalError("Failed to encode iOS Question input: \(message)")
+        case .bridge(let code, let message): L10n.internalError("KMP Question failed (\(code)): \(message ?? "no details")")
+        case .invalidSnapshot(let message): L10n.internalError("Failed to decode KMP Question snapshot: \(message)")
+        case .invalidEffect(let message): L10n.internalError("Failed to decode KMP Question effect: \(message)")
+        case .initializationFailed(let message): L10n.internalError("KMP Question initialization failed; further state writes stopped: \(message)")
+        case .runtimeFailed(let message): L10n.internalError("KMP Question runtime result is invalid; further state writes stopped: \(message)")
         }
     }
 }
@@ -2360,7 +2364,7 @@ final class KMPQuestionStoreAdapter {
             if result.isSuccess, result.snapshotJson == nil, result.effectJson == nil {
                 return KMPQuestionTransition(snapshot: snapshot, effect: nil, error: nil)
             }
-            return failClosed(.runtimeFailed("KMP mutation 未发布对应的 MVI event"))
+            return failClosed(.runtimeFailed("KMP mutation did not publish a matching MVI event"))
         }
         let transition = decode(result, requiresSnapshot: false, intent: intent)
         // 仅用于不实现 Event 订阅的故障注入 bridge。
@@ -2372,7 +2376,7 @@ final class KMPQuestionStoreAdapter {
         guard event.schema == 2,
               event.domain == "question",
               !event.transactionId.isEmpty else {
-            publish(failClosed(.runtimeFailed("KMP Question event 信封无效")))
+            publish(failClosed(.runtimeFailed("KMP Question event envelope is invalid")))
             return
         }
         if event.kind == "snapshot" {
@@ -2384,7 +2388,7 @@ final class KMPQuestionStoreAdapter {
                   ),
                   baseline.hasValidWireValues,
                   baseline == snapshot else {
-                publish(failClosed(.invalidSnapshot("订阅基线与初始化快照不一致")))
+                publish(failClosed(.invalidSnapshot("Subscription baseline does not match the initialization snapshot")))
                 return
             }
             lastEventSequence = event.sequence
@@ -2392,7 +2396,7 @@ final class KMPQuestionStoreAdapter {
         }
         guard let previous = lastEventSequence,
               event.sequence == previous + 1 else {
-            publish(failClosed(.runtimeFailed("KMP Question event sequence 不连续")))
+            publish(failClosed(.runtimeFailed("KMP Question event sequence is not contiguous")))
             return
         }
         lastEventSequence = event.sequence
@@ -2406,7 +2410,7 @@ final class KMPQuestionStoreAdapter {
             return
         }
         guard event.kind == "transition" else {
-            publish(failClosed(.runtimeFailed("未知 Question event kind：\(event.kind)")))
+            publish(failClosed(.runtimeFailed("Unknown Question event kind: \(event.kind)")))
             return
         }
         let effectJson: String?
@@ -2416,7 +2420,7 @@ final class KMPQuestionStoreAdapter {
                 from: Data(event.effectsJson.utf8)
             )
             guard effects.count <= 1 else {
-                publish(failClosed(.invalidEffect("Question event 至多包含一个 effect")))
+                publish(failClosed(.invalidEffect("A Question event may contain at most one effect")))
                 return
             }
             effectJson = try effects.first.map(encode)
@@ -2467,10 +2471,10 @@ final class KMPQuestionStoreAdapter {
                 return failClosed(.invalidSnapshot(error.localizedDescription))
             }
             guard nextSnapshot.hasValidWireValues else {
-                return failClosed(.invalidSnapshot("KMP 返回了未知状态或动作"))
+                return failClosed(.invalidSnapshot("KMP returned an unknown state or action"))
             }
         } else if requiresSnapshot {
-            return failClosed(.invalidSnapshot("KMP 未返回初始化快照"))
+            return failClosed(.invalidSnapshot("KMP did not return an initialization snapshot"))
         } else {
             nextSnapshot = snapshot
         }
@@ -2478,7 +2482,7 @@ final class KMPQuestionStoreAdapter {
         let effect: KMPQuestionEffect?
         if let json = result.effectJson {
             guard result.snapshotJson != nil else {
-                return failClosed(.invalidEffect("effect 缺少同事务快照"))
+                return failClosed(.invalidEffect("effect is missing its same-transaction snapshot"))
             }
             do {
                 effect = try decoder.decode(KMPQuestionEffect.self, from: Data(json.utf8))
@@ -2486,11 +2490,11 @@ final class KMPQuestionStoreAdapter {
                 return failClosed(.invalidEffect(error.localizedDescription))
             }
             guard effect?.hasValidWireValues == true else {
-                return failClosed(.invalidEffect("KMP 返回了未知动作或不完整 payload"))
+                return failClosed(.invalidEffect("KMP returned an unknown action or an incomplete payload"))
             }
             guard let effect,
                   effectIsSemanticallyValid(effect, in: nextSnapshot, for: intent) else {
-                return failClosed(.invalidEffect("effect 与同事务快照或提交 intent 语义不一致"))
+                return failClosed(.invalidEffect("effect does not match the same-transaction snapshot or the committed intent"))
             }
         } else {
             effect = nil
@@ -2617,10 +2621,10 @@ enum KMPApprovalStoreError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .encoding(let message): "无法编码 iOS Approval 输入：\(message)"
-        case .bridge(let code, let message): "KMP Approval 失败（\(code)）：\(message ?? "无详细信息")"
-        case .invalidSnapshot(let message): "无法解码 KMP Approval 快照：\(message)"
-        case .invalidEffect(let message): "无法解码 KMP Approval effect：\(message)"
+        case .encoding(let message): L10n.internalError("Failed to encode iOS Approval input: \(message)")
+        case .bridge(let code, let message): L10n.internalError("KMP Approval failed (\(code)): \(message ?? "no details")")
+        case .invalidSnapshot(let message): L10n.internalError("Failed to decode KMP Approval snapshot: \(message)")
+        case .invalidEffect(let message): L10n.internalError("Failed to decode KMP Approval effect: \(message)")
         }
     }
 }
@@ -2705,7 +2709,7 @@ final class KMPApprovalStoreAdapter {
                 return KMPApprovalTransition(snapshot: snapshot, effect: nil, error: .invalidSnapshot(error.localizedDescription))
             }
         } else if requiresSnapshot {
-            return KMPApprovalTransition(snapshot: snapshot, effect: nil, error: .invalidSnapshot("KMP 未返回初始化快照"))
+            return KMPApprovalTransition(snapshot: snapshot, effect: nil, error: .invalidSnapshot("KMP did not return an initialization snapshot"))
         }
         let effect: KMPApprovalEffect?
         if let json = result.effectJson {
@@ -2718,7 +2722,7 @@ final class KMPApprovalStoreAdapter {
                   next.pendingRequests.contains(where: {
                       $0.rpcId == effect?.rpcId && $0.sessionId == effect?.sessionId && $0.approvalId == effect?.approvalId
                   }) else {
-                return KMPApprovalTransition(snapshot: snapshot, effect: nil, error: .invalidEffect("effect 与待审批请求不匹配"))
+                return KMPApprovalTransition(snapshot: snapshot, effect: nil, error: .invalidEffect("effect does not match the pending approval request"))
             }
         } else {
             effect = nil
@@ -3041,13 +3045,13 @@ enum KMPSessionControlStoreError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .encoding(let message): "无法编码 iOS SessionControl 输入：\(message)"
-        case .bridge(let code, let message): "KMP SessionControl 失败（\(code)）：\(message ?? "无详细信息")"
-        case .invalidSnapshot(let message): "无法解码 KMP SessionControl 快照：\(message)"
-        case .invalidPatch(let message): "KMP SessionControl 增量 patch 无效：\(message)"
-        case .invalidEffect(let message): "无法解码 KMP SessionControl effect：\(message)"
-        case .initializationFailed(let message): "KMP SessionControl 初始化失败，已停止后续状态写入：\(message)"
-        case .runtimeFailed(let message): "KMP SessionControl 运行期结果失效，已停止后续状态写入：\(message)"
+        case .encoding(let message): L10n.internalError("Failed to encode iOS SessionControl input: \(message)")
+        case .bridge(let code, let message): L10n.internalError("KMP SessionControl failed (\(code)): \(message ?? "no details")")
+        case .invalidSnapshot(let message): L10n.internalError("Failed to decode KMP SessionControl snapshot: \(message)")
+        case .invalidPatch(let message): L10n.internalError("KMP SessionControl delta patch is invalid: \(message)")
+        case .invalidEffect(let message): L10n.internalError("Failed to decode KMP SessionControl effect: \(message)")
+        case .initializationFailed(let message): L10n.internalError("KMP SessionControl initialization failed; further state writes stopped: \(message)")
+        case .runtimeFailed(let message): L10n.internalError("KMP SessionControl runtime result is invalid; further state writes stopped: \(message)")
         }
     }
 }
@@ -3281,7 +3285,7 @@ final class KMPSessionControlStoreAdapter {
                     error: nil
                 )
             }
-            return failClosed(.runtimeFailed("KMP mutation 未发布对应的 MVI event"))
+            return failClosed(.runtimeFailed("KMP mutation did not publish a matching MVI event"))
         }
         let transition = decode(result, requiresSnapshot: false, intent: intent)
         // 仅用于不实现 Event 订阅的故障注入 bridge。
@@ -3293,7 +3297,7 @@ final class KMPSessionControlStoreAdapter {
         guard event.schema == 2,
               event.domain == "session-control",
               !event.transactionId.isEmpty else {
-            publish(failClosed(.runtimeFailed("KMP MVI event 信封无效")))
+            publish(failClosed(.runtimeFailed("KMP MVI event envelope is invalid")))
             return
         }
         if event.kind == "snapshot" {
@@ -3305,7 +3309,7 @@ final class KMPSessionControlStoreAdapter {
                   ),
                   baseline.hasValidWireValues,
                   baseline == snapshot else {
-                publish(failClosed(.invalidSnapshot("订阅基线与初始化快照不一致")))
+                publish(failClosed(.invalidSnapshot("Subscription baseline does not match the initialization snapshot")))
                 return
             }
             lastEventSequence = event.sequence
@@ -3313,7 +3317,7 @@ final class KMPSessionControlStoreAdapter {
         }
         guard let previous = lastEventSequence,
               event.sequence == previous + 1 else {
-            publish(failClosed(.runtimeFailed("KMP MVI event sequence 不连续")))
+            publish(failClosed(.runtimeFailed("KMP MVI event sequence is not contiguous")))
             return
         }
         lastEventSequence = event.sequence
@@ -3332,7 +3336,7 @@ final class KMPSessionControlStoreAdapter {
                       from: Data(metadataJson.utf8)
                   ),
                   metadata.schema == 1 else {
-                publish(failClosed(.invalidPatch("SessionControl event metadata 无效")))
+                publish(failClosed(.invalidPatch("SessionControl event metadata is invalid")))
                 return
             }
             let result = SharedSessionControlResult(
@@ -3349,7 +3353,7 @@ final class KMPSessionControlStoreAdapter {
             pushedTransition = transition
             onTransition?(transition)
         default:
-            publish(failClosed(.runtimeFailed("未知 KMP MVI event kind：\(event.kind)")))
+            publish(failClosed(.runtimeFailed("Unknown KMP MVI event kind: \(event.kind)")))
         }
     }
 
@@ -3389,26 +3393,26 @@ final class KMPSessionControlStoreAdapter {
             )
         case .modelSelected(let sessionID, let selection):
             if isProjection {
-                guard let sessionID else { throw KMPSessionControlStoreError.encoding("模型投影缺少 sessionId") }
+                guard let sessionID else { throw KMPSessionControlStoreError.encoding("Model projection is missing sessionId") }
                 return store.mergeModelProjection(sessionId: sessionID, selectionJson: try encode(selection))
             }
             return store.modelSelected(sessionId: sessionID, selectionJson: try encode(selection))
         case .permissionsReceived(let sessionID, let permissions):
             if isProjection {
-                guard let sessionID else { throw KMPSessionControlStoreError.encoding("权限投影缺少 sessionId") }
+                guard let sessionID else { throw KMPSessionControlStoreError.encoding("Permission projection is missing sessionId") }
                 return store.mergePermissionsProjection(sessionId: sessionID, permissionsJson: try encode(permissions))
             }
             return store.permissionsReceived(sessionId: sessionID, permissionsJson: try encode(permissions))
         case .permissionSelected(let sessionID, let value):
             if isProjection {
-                guard let sessionID else { throw KMPSessionControlStoreError.encoding("权限事件投影缺少 sessionId") }
+                guard let sessionID else { throw KMPSessionControlStoreError.encoding("Permission-event projection is missing sessionId") }
                 return store.mergePermissionProjection(sessionId: sessionID, value: value)
             }
             return store.permissionSelected(sessionId: sessionID, value: value)
         case .contextReceived(let sessionID, let sequence, let usage, let pressure, let breakdown):
             let sequence = sequence.map { KotlinLong(longLong: Int64($0)) }
             if isProjection {
-                guard let sessionID else { throw KMPSessionControlStoreError.encoding("Context 投影缺少 sessionId") }
+                guard let sessionID else { throw KMPSessionControlStoreError.encoding("Context projection is missing sessionId") }
                 return store.mergeContextProjection(
                     sessionId: sessionID, asOfSequence: sequence,
                     tokenUsageJson: try usage.map(encode), pressureJson: try pressure.map(encode),
@@ -3424,7 +3428,7 @@ final class KMPSessionControlStoreAdapter {
         case .statsReceived(let sessionID, let sequence, let stats, let totals, let pressure):
             let sequence = sequence.map { KotlinLong(longLong: Int64($0)) }
             if isProjection {
-                guard let sessionID else { throw KMPSessionControlStoreError.encoding("Stats 投影缺少 sessionId") }
+                guard let sessionID else { throw KMPSessionControlStoreError.encoding("Stats projection is missing sessionId") }
                 return store.mergeStatsProjection(
                     sessionId: sessionID, asOfSequence: sequence,
                     statsJson: try stats.map(encode), tokenUsageTotalsJson: try totals.map(encode),
@@ -3438,7 +3442,7 @@ final class KMPSessionControlStoreAdapter {
                 )
             }
         case .requestStarted:
-            throw KMPSessionControlStoreError.encoding("Swift 不得直接启动 KMP 请求状态")
+            throw KMPSessionControlStoreError.encoding("Swift must not start KMP request state directly")
         case .requestFinished(let kind):
             guard let token = snapshot.requestTokens[kind] else { return nil }
             return store.requestFinished(kind: kind, isDefault: false, requestToken: token)
@@ -3446,7 +3450,7 @@ final class KMPSessionControlStoreAdapter {
             guard let token = snapshot.requestTokens[kind] else { return nil }
             return store.requestTimedOut(kind: kind, isDefault: false, requestToken: token)
         case .defaultConfigurationRequestStarted:
-            throw KMPSessionControlStoreError.encoding("Swift 不得直接启动 KMP 默认配置请求状态")
+            throw KMPSessionControlStoreError.encoding("Swift must not start KMP default-configuration request state directly")
         case .defaultConfigurationRequestFinished(let kind):
             guard let token = snapshot.requestTokens[kind] else { return nil }
             return store.requestFinished(kind: kind, isDefault: true, requestToken: token)
@@ -3454,7 +3458,7 @@ final class KMPSessionControlStoreAdapter {
             guard let token = snapshot.requestTokens[kind] else { return nil }
             return store.requestTimedOut(kind: kind, isDefault: true, requestToken: token)
         case .modelsRequestTargeted, .modelSelectionTargeted, .permissionOptionsTargeted:
-            throw KMPSessionControlStoreError.encoding("请求 target 必须与 KMP effect 在同一事务建立")
+            throw KMPSessionControlStoreError.encoding("The request target must be created in the same transaction as the KMP effect")
         case .modelSelectionResolved, .permissionOptionsResolved:
             return nil
         }
@@ -3489,7 +3493,7 @@ final class KMPSessionControlStoreAdapter {
                 if !requiresSnapshot,
                    let object = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
                    object["schema"] != nil {
-                    return failClosed(.invalidPatch("patch payload 缺少 committed 信号"))
+                    return failClosed(.invalidPatch("patch payload is missing the committed signal"))
                 }
                 nextSnapshot = try decoder.decode(KMPSessionControlSnapshot.self, from: Data(json.utf8))
                 patch = nil
@@ -3497,22 +3501,22 @@ final class KMPSessionControlStoreAdapter {
                 return failClosed(.invalidSnapshot(error.localizedDescription))
             }
             guard nextSnapshot.hasValidWireValues else {
-                return failClosed(.invalidSnapshot("loading kind、request token 或 target 关联无效"))
+                return failClosed(.invalidSnapshot("loading kind, request token, or target association is invalid"))
             }
         } else if requiresSnapshot {
-            return failClosed(.invalidSnapshot("KMP 未返回初始化快照"))
+            return failClosed(.invalidSnapshot("KMP did not return an initialization snapshot"))
         } else {
             nextSnapshot = snapshot
             patch = nil
         }
 
         guard !result.committed || result.snapshotJson != nil else {
-            return failClosed(.invalidSnapshot("committed 结果缺少同事务快照"))
+            return failClosed(.invalidSnapshot("committed result is missing its same-transaction snapshot"))
         }
         let completedKind = result.completedKind
         let completedToken = result.completedRequestToken
         guard (completedKind == nil) == (completedToken == nil) else {
-            return failClosed(.invalidSnapshot("completed kind/token 必须同时存在"))
+            return failClosed(.invalidSnapshot("completed kind and token must both be present"))
         }
         let effects: [KMPSessionControlEffect]
         do {
@@ -3524,24 +3528,24 @@ final class KMPSessionControlStoreAdapter {
         // result 的控制信号必须描述同一个原子事务。任何坏信号都会永久 fail closed，
         // 且在 snapshot 提交和 effect 暴露前返回，保证零平台 I/O。
         if result.committed != (patch != nil) {
-            return failClosed(.invalidPatch("committed 与增量 patch 必须同时存在"))
+            return failClosed(.invalidPatch("committed and the delta patch must both be present"))
         }
         if !requiresSnapshot, !result.committed, result.snapshotJson != nil, nextSnapshot != oldSnapshot {
             // 显式 snapshot() 只能用于无变化的诊断/兼容路径，不得绕过 patch 提交状态。
-            return failClosed(.invalidSnapshot("未 committed 的完整快照不得修改状态"))
+            return failClosed(.invalidSnapshot("a full snapshot that was not committed must not change state"))
         }
         guard result.applied || (!result.committed && effects.isEmpty && completedKind == nil) else {
-            return failClosed(.invalidSnapshot("未 applied 的结果不得提交、完成 generation 或产生 effect"))
+            return failClosed(.invalidSnapshot("a result that was not applied must not commit, complete a generation, or produce an effect"))
         }
         if !effects.isEmpty && (!result.applied || !result.committed || result.snapshotJson == nil) {
-            return failClosed(.invalidEffect("非空 effect 必须来自 applied + committed 的同事务快照"))
+            return failClosed(.invalidEffect("a non-empty effect must come from an applied and committed same-transaction snapshot"))
         }
         let stableTokenKinds = Set(oldSnapshot.requestTokens.keys).intersection(nextSnapshot.requestTokens.keys)
         guard stableTokenKinds.allSatisfy({ kind in
             oldSnapshot.requestTokens[kind] != nextSnapshot.requestTokens[kind]
                 || oldSnapshot.activeRequestTargets[kind] == nextSnapshot.activeRequestTargets[kind]
         }) else {
-            return failClosed(.invalidSnapshot("同 token 的 active target 不得变化"))
+            return failClosed(.invalidSnapshot("the active target must not change for the same token"))
         }
         let retiredKinds = Set(oldSnapshot.requestTokens.compactMap { kind, token in
             nextSnapshot.requestTokens[kind] == token ? nil : kind
@@ -3555,7 +3559,7 @@ final class KMPSessionControlStoreAdapter {
                   oldSnapshot.requestTokens[completedKind] == completedToken,
                   oldSnapshot.activeRequestTargets[completedKind] != nil,
                   nextSnapshot.requestTokens[completedKind] != completedToken else {
-                return failClosed(.invalidSnapshot("completed generation 与提交前后快照不一致"))
+                return failClosed(.invalidSnapshot("completed generation does not match the snapshots before and after commit"))
             }
         } else if !retiredKinds.isEmpty {
             let retirementIsValid: Bool
@@ -3567,7 +3571,7 @@ final class KMPSessionControlStoreAdapter {
             }
             // 断线或会话清理可一次退役多个 generation；其他事务必须明确回传 kind/token。
             guard retirementIsValid else {
-                return failClosed(.invalidSnapshot("request token 已变化但缺少 completed generation 信号"))
+                return failClosed(.invalidSnapshot("request token changed without a completed generation signal"))
             }
         }
         let effectCountIsValid: Bool
@@ -3582,7 +3586,7 @@ final class KMPSessionControlStoreAdapter {
                       completedKind: completedKind
                   )
               }) else {
-            return failClosed(.invalidEffect("effect 与快照、request token 或 intent 语义不一致"))
+            return failClosed(.invalidEffect("effect does not match the snapshot, request token, or intent"))
         }
         if let patch, !patchIsSemanticallyValid(
             patch,
@@ -3590,7 +3594,7 @@ final class KMPSessionControlStoreAdapter {
             oldSnapshot: oldSnapshot,
             nextSnapshot: nextSnapshot
         ) {
-            return failClosed(.invalidPatch("patch 携带了当前 intent 不允许的 session 或字段"))
+            return failClosed(.invalidPatch("patch carries a session or fields the current intent does not allow"))
         }
 
         snapshot = nextSnapshot
@@ -3612,7 +3616,7 @@ final class KMPSessionControlStoreAdapter {
         to old: KMPSessionControlSnapshot
     ) throws -> KMPSessionControlSnapshot {
         guard patch.schema == 2 else {
-            throw KMPSessionControlStoreError.invalidSnapshot("未知 patch schema: \(patch.schema)")
+            throw KMPSessionControlStoreError.invalidSnapshot("Unknown patch schema: \(patch.schema)")
         }
         var next = old
         var changed = false
@@ -3630,7 +3634,7 @@ final class KMPSessionControlStoreAdapter {
                       guard let oldValue = oldValues[key] else { return true }
                       return !equals(oldValue, value)
                   }) else {
-                throw KMPSessionControlStoreError.invalidSnapshot("patch upsert/remove 重叠、冗余或引用了不存在的 key")
+                throw KMPSessionControlStoreError.invalidSnapshot("patch upsert/remove overlaps, is redundant, or references a missing key")
             }
         }
 
@@ -3673,35 +3677,35 @@ final class KMPSessionControlStoreAdapter {
         }
 
         guard patch.globalModelCatalogChanged || patch.globalModelCatalog == nil else {
-            throw KMPSessionControlStoreError.invalidSnapshot("globalModelCatalog payload 缺少 changed 标记")
+            throw KMPSessionControlStoreError.invalidSnapshot("globalModelCatalog payload is missing the changed flag")
         }
         if patch.globalModelCatalogChanged {
             guard old.globalModelCatalog != patch.globalModelCatalog else {
-                throw KMPSessionControlStoreError.invalidSnapshot("globalModelCatalog patch 没有变化")
+                throw KMPSessionControlStoreError.invalidSnapshot("globalModelCatalog patch has no changes")
             }
             next.globalModelCatalog = patch.globalModelCatalog
             changed = true
         }
         guard patch.agentPresetsChanged == (patch.agentPresets != nil) else {
-            throw KMPSessionControlStoreError.invalidSnapshot("agentPresets payload 与 changed 标记不一致")
+            throw KMPSessionControlStoreError.invalidSnapshot("agentPresets payload does not match the changed flag")
         }
         if let presets = patch.agentPresets {
             guard old.agentPresets != presets else {
-                throw KMPSessionControlStoreError.invalidSnapshot("agentPresets patch 没有变化")
+                throw KMPSessionControlStoreError.invalidSnapshot("agentPresets patch has no changes")
             }
             next.agentPresets = presets
             changed = true
         }
         if let value = patch.agentPresetsAuthorable {
             guard old.agentPresetsAuthorable != value else {
-                throw KMPSessionControlStoreError.invalidSnapshot("agentPresetsAuthorable patch 没有变化")
+                throw KMPSessionControlStoreError.invalidSnapshot("agentPresetsAuthorable patch has no changes")
             }
             next.agentPresetsAuthorable = value
             changed = true
         }
         if let value = patch.agentPresetsHasDocument {
             guard old.agentPresetsHasDocument != value else {
-                throw KMPSessionControlStoreError.invalidSnapshot("agentPresetsHasDocument patch 没有变化")
+                throw KMPSessionControlStoreError.invalidSnapshot("agentPresetsHasDocument patch has no changes")
             }
             next.agentPresetsHasDocument = value
             changed = true
@@ -3724,7 +3728,7 @@ final class KMPSessionControlStoreAdapter {
         )
         if let options = patch.permissionDefaultOptions {
             guard old.permissionDefaultOptions != options else {
-                throw KMPSessionControlStoreError.invalidSnapshot("permissionDefaultOptions patch 没有变化")
+                throw KMPSessionControlStoreError.invalidSnapshot("permissionDefaultOptions patch has no changes")
             }
             next.permissionDefaultOptions = options
             changed = true
@@ -3740,14 +3744,14 @@ final class KMPSessionControlStoreAdapter {
         if let control = patch.control {
             let oldControl = old.controlPatch
             guard control != oldControl else {
-                throw KMPSessionControlStoreError.invalidSnapshot("control patch 没有变化")
+                throw KMPSessionControlStoreError.invalidSnapshot("control patch has no changes")
             }
             next.apply(control)
             changed = true
         }
 
         guard changed, next.hasValidWireValues else {
-            throw KMPSessionControlStoreError.invalidSnapshot("patch 为空或生成了非法状态")
+            throw KMPSessionControlStoreError.invalidSnapshot("patch is empty or produced an invalid state")
         }
         return next
     }
@@ -4115,18 +4119,18 @@ final class KMPSessionControlStoreAdapter {
     private func validatePatchEnvelope(_ data: Data) throws {
         let raw = try JSONSerialization.jsonObject(with: data)
         guard let patch = raw as? [String: Any] else {
-            throw KMPSessionControlStoreError.invalidPatch("patch 顶层必须是 object")
+            throw KMPSessionControlStoreError.invalidPatch("patch top level must be an object")
         }
 
         func object(_ value: Any, _ path: String) throws -> [String: Any] {
             guard let result = value as? [String: Any] else {
-                throw KMPSessionControlStoreError.invalidPatch("\(path) 必须是 object")
+                throw KMPSessionControlStoreError.invalidPatch("\(path) must be an object")
             }
             return result
         }
         func array(_ value: Any, _ path: String) throws -> [Any] {
             guard let result = value as? [Any] else {
-                throw KMPSessionControlStoreError.invalidPatch("\(path) 必须是 array")
+                throw KMPSessionControlStoreError.invalidPatch("\(path) must be an array")
             }
             return result
         }
@@ -4135,7 +4139,7 @@ final class KMPSessionControlStoreAdapter {
             let unknown = Set(result.keys).subtracting(keys)
             guard unknown.isEmpty else {
                 throw KMPSessionControlStoreError.invalidPatch(
-                    "\(path) 包含未知字段 \(unknown.sorted())；新语义必须升级 schema"
+                    "\(path) contains unknown fields \(unknown.sorted()); new semantics require a schema upgrade"
                 )
             }
             return result
@@ -4341,12 +4345,12 @@ final class KMPSessionControlStoreAdapter {
     ) throws {
         guard changedFlag else {
             guard value == nil else {
-                throw KMPSessionControlStoreError.invalidSnapshot("\(name) payload 缺少 changed 标记")
+                throw KMPSessionControlStoreError.invalidSnapshot("\(name) payload is missing the changed flag")
             }
             return
         }
         guard oldValue != value else {
-            throw KMPSessionControlStoreError.invalidSnapshot("\(name) patch 没有变化")
+            throw KMPSessionControlStoreError.invalidSnapshot("\(name) patch has no changes")
         }
         assign(value)
         changed = true

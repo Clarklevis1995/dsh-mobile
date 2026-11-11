@@ -1,34 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="14"
-    android:viewportHeight="14">
+    android:viewportWidth="24"
+    android:viewportHeight="24">
     <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FF000000"
-        android:strokeWidth="1"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M13 2H1C0.723858 2 0.5 2.22386 0.5 2.5V10.5C0.5 10.7761 0.723858 11 1 11H13C13.2761 11 13.5 10.7761 13.5 10.5V2.5C13.5 2.22386 13.2761 2 13 2Z" />
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FF000000"
-        android:strokeWidth="1"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M6 11L5 13.5" />
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FF000000"
-        android:strokeWidth="1"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M8 11L9 13.5" />
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FF000000"
-        android:strokeWidth="1"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M4 13.5H10" />
+        android:fillColor="#FF000000"
+        android:pathData="M10 19V17H4C3.45 17 2.97917 16.8042 2.5875 16.4125C2.19583 16.0208 2 15.55 2 15V5C2 4.45 2.19583 3.97917 2.5875 3.5875C2.97917 3.19583 3.45 3 4 3H20C20.55 3 21.0208 3.19583 21.4125 3.5875C21.8042 3.97917 22 4.45 22 5V15C22 15.55 21.8042 16.0208 21.4125 16.4125C21.0208 16.8042 20.55 17 20 17H14V19H15C15.2833 19 15.5208 19.0958 15.7125 19.2875C15.9042 19.4792 16 19.7167 16 20C16 20.2833 15.9042 20.5208 15.7125 20.7125C15.5208 20.9042 15.2833 21 15 21H9C8.71667 21 8.47917 20.9042 8.2875 20.7125C8.09583 20.5208 8 20.2833 8 20C8 19.7167 8.09583 19.4792 8.2875 19.2875C8.47917 19.0958 8.71667 19 9 19H10ZM4 15H20V5H4V15Z" />
 </vector>

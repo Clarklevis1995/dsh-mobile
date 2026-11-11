@@ -18,10 +18,11 @@ androidApp ──> shared <── KMPSharedAdapter <── SwiftUI/AppStore
 ## 工具链
 
 - Java 17
-- Gradle 9.1.0
-- Android Gradle Plugin 9.0.1
+- Gradle 9.3.1
+- Android Gradle Plugin 9.1.1
 - Kotlin 2.3.20
-- compileSdk / targetSdk 36
+- Compose BOM 2026.09.00（Compose UI / Foundation / Runtime 1.12.1）
+- `androidApp` compileSdk 37.0，targetSdk 36；`shared` compileSdk 36
 - minSdk 24
 
 本机 Android SDK 默认位于 `/Users/lichaofan/Library/Android/sdk`。不要提交 `local.properties`；命令行环境没有配置 `ANDROID_HOME` 时，应显式传入：

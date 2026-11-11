@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.android
 
+import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.cache.ChatCacheDiagnostics
 import com.clarklevis.dsh.shared.cache.ChatCacheRestoreSkipReason
 import com.clarklevis.dsh.shared.facade.CachedHistoryWindow
@@ -45,6 +46,7 @@ internal class AndroidGatewayProjection(
     ),
     private val conversationStore: SharedConversationStore = SharedConversationStore(mobileConversationLabels()),
     private val onResubscribe: (String) -> Unit = {},
+    private val nowMonotonicSeconds: () -> Double = { System.nanoTime() / 1e9 },
     private val onHistoryPageRequested: (sessionId: String, beforeSequence: Int?, historyFormatVersion: Int?) -> Unit = { _, _, _ -> }
 ) {
     private data class SearchFragment(
@@ -77,6 +79,7 @@ internal class AndroidGatewayProjection(
     private val conversationItems = mutableMapOf<String, List<ConversationItem>>()
     private val conversationLastSequences = mutableMapOf<String, Int>()
     private var controlSnapshot = mobileStore.snapshot()
+    private val turnTiming = com.clarklevis.dsh.shared.facade.SharedTurnTimingStore()
     private var lastFrameKind: String? = null
     private var queueSessionIds = emptySet<String>()
     private var lastError: String? = null
@@ -97,6 +100,7 @@ internal class AndroidGatewayProjection(
             preview?.let { request.rpcId to it }
         }.toMap()
         val normal = controlSnapshot.copy(
+            activeTurnTiming = controlSnapshot.selectedSessionId?.let(turnTiming::snapshot),
             selectedHistoryError = controlSnapshot.selectedSessionId?.let(historyErrors::get),
             conversation = controlSnapshot.selectedSessionId?.let(conversationItems::get).orEmpty(),
             approvalCommandPreviews = commandPreviews,
@@ -410,6 +414,7 @@ internal class AndroidGatewayProjection(
             if (!result.accepted) lastError = result.errorMessage
         }
         if (frame.kind == "hello") {
+            (frame.at ?: frame.time)?.let { turnTiming.observeServerTime(it, nowMonotonicSeconds()) }
             cancelSnapshotWait()
             usesAssistantStream = "assistant-stream-v1" in frame.capabilities.orEmpty()
             helloReceived = true
@@ -421,13 +426,15 @@ internal class AndroidGatewayProjection(
         val update = assistantStream.accept(frame)
         if (update.accepted) lastError = null
         update.invalidatedSessionIds.forEach {
+            turnTiming.clear(it)
             onCacheInvalidated(it)
             historyStore.clearSession(it)
             conversationStore.clearSession(it)
             historyHasMore.remove(it)
         }
         if (update.clearTransient) update.sessionId?.let { conversationStore.clearAssistantChunks(it) }
-        update.error?.let { lastError = it }
+        val streamError = update.error?.let { appText(it) }
+        streamError?.let { lastError = it }
         if (update.resubscribe && id != null) {
             awaitSnapshot(id)
             onResubscribe(id)
@@ -437,16 +444,18 @@ internal class AndroidGatewayProjection(
         ) {
             cancelSnapshotWait()
         }
-        val streamError = update.error
         if (streamError != null && !update.resubscribe && id != null) {
             historyErrors[id] = streamError
             historyCancelled(id)
         }
         if (frame.kind == "error" && frame.requestType in setOf("history", "subscribe") && id != null) {
-            historyErrors[id] = frame.message ?: "历史记录加载失败"
+            historyErrors[id] = frame.message ?: appText("历史记录加载失败")
             historyCancelled(id)
         }
         if (!update.accepted) return snapshot()
+        if (frame.kind == "assistant-stream") {
+            frame.frame?.get("time")?.doubleValue?.let { turnTiming.observeServerTime(it, nowMonotonicSeconds()) }
+        }
         val previouslyVisible = controlSnapshot.sessions.map { it.id }.toSet()
         when (frame.kind) {
             "session-snapshot" -> if (id != null) {
@@ -455,6 +464,7 @@ internal class AndroidGatewayProjection(
                 historyStore.clearSession(id)
                 conversationStore.clearSession(id)
                 val records = frame.events.orEmpty().map { it.normalized(id) }
+                updateTurnTimingHistory(id, records)
                 historyStore.installSnapshot(id, adapterJson.encodeToString(records), frame.hasMore == true, frame.nextBeforeSeq)
                 historyHasMore[id] = frame.hasMore == true
                 conversationStore.replaceSession(id, adapterJson.encodeToString(records))
@@ -466,6 +476,10 @@ internal class AndroidGatewayProjection(
             "hello" -> if (usesAssistantStream) controlSnapshot.selectedSessionId?.let(::awaitSnapshot)
             "paired", "attachment" -> Unit
             else -> {
+                if (frame.kind == "sent" && id != null &&
+                    controlSnapshot.sessions.none { it.id == id && it.isRunning } && turnTiming.snapshot(id) == null) {
+                    turnTiming.awaitStart(id, historyLastSequences[id] ?: -1)
+                }
                 controlSnapshot = mobileStore.acceptFrame(rawJson)
                 if (frame.kind == "sent" && frame.sessionId == controlSnapshot.selectedSessionId) assistantStream.selectSession(controlSnapshot.selectedSessionId)
             }
@@ -529,10 +543,10 @@ internal class AndroidGatewayProjection(
     }
 
     fun historyTimedOut(sessionId: String) {
-        historyErrors[sessionId] = "历史记录加载超时，请重试"
+        historyErrors[sessionId] = appText("历史记录加载超时，请重试")
         if (snapshotWait?.first == sessionId) {
             snapshotWait = null
-            lastError = "历史记录加载超时，请重试"
+            lastError = appText("历史记录加载超时，请重试")
         }
         historyStore.timedOut(sessionId)
     }
@@ -593,6 +607,7 @@ internal class AndroidGatewayProjection(
             return
         }
         historyHasMore[sessionId] = frame.hasMore == true
+        updateTurnTimingHistory(sessionId, historyEvents[sessionId].orEmpty())
         if (assistantStream.activeAttemptId() == null) {
             controlSnapshot = mobileStore.reconcileHistory(sessionId, historyEvents[sessionId].orEmpty())
         }
@@ -611,6 +626,7 @@ internal class AndroidGatewayProjection(
             lastError = "live-event-invalid"
             return
         }
+        turnTiming.receiveLiveEvent(sessionId, sequence, timestamp, gatewayEvent.type, nowMonotonicSeconds())
         // ConversationStore 已经增量处理 token。旧 MobileStore 会为每个 chunk 复制全部
         // SessionEvent 并从头重建 Conversation；长回复因此越到后面越慢。chunk 不会更新
         // Session 列表元数据，禁止再进入这条兼容性全量投影路径。
@@ -628,6 +644,15 @@ internal class AndroidGatewayProjection(
         if (!conversationResult.accepted) {
             conversationStore.replaceTypedSession(sessionId, historyEvents[sessionId].orEmpty())
         }
+    }
+
+    private fun updateTurnTimingHistory(sessionId: String, records: List<SessionEvent>) {
+        turnTiming.receiveHistory(sessionId, records.mapNotNull { record ->
+            if (record.event.type !in setOf("turn/start", "turn/end")) return@mapNotNull null
+            com.clarklevis.dsh.shared.facade.SharedTurnBoundary(
+                record.seq, record.time, record.event.type == "turn/start"
+            )
+        })
     }
 
     private fun acceptHistoryMviEvent(event: SharedMviEvent) {
@@ -881,18 +906,18 @@ private fun mobileConversationLabels(): ConversationProjectionLabels {
     val isChinese = Locale.getDefault().language.startsWith("zh")
     return if (isChinese) {
         ConversationProjectionLabels(
-            commandRunning = "正在执行…",
-            commandCompacting = "正在压缩…",
-            commandCompleted = "已完成",
-            commandFailed = "执行失败",
-            compactedHistory = "已压缩 {items} 条历史记录（约 {tokens} tokens）",
-            interrupted = "生成已中断",
-            modelAttemptFailed = "模型请求失败",
-            modelRetrying = "正在重试模型请求",
-            modelRetried = "已重试模型请求",
-            generationFailed = "生成失败",
-            generationCancelled = "生成已取消",
-            outputTruncated = "输出已截断，保留开头和末尾"
+            commandRunning = "正在执行…", // i18n-ignore: zh branch of locale switch
+            commandCompacting = "正在压缩…", // i18n-ignore: zh branch of locale switch
+            commandCompleted = "已完成", // i18n-ignore: zh branch of locale switch
+            commandFailed = "执行失败", // i18n-ignore: zh branch of locale switch
+            compactedHistory = "已压缩 {items} 条历史记录（约 {tokens} tokens）", // i18n-ignore: zh branch of locale switch
+            interrupted = "生成已中断", // i18n-ignore: zh branch of locale switch
+            modelAttemptFailed = "模型请求失败", // i18n-ignore: zh branch of locale switch
+            modelRetrying = "正在重试模型请求", // i18n-ignore: zh branch of locale switch
+            modelRetried = "已重试模型请求", // i18n-ignore: zh branch of locale switch
+            generationFailed = "生成失败", // i18n-ignore: zh branch of locale switch
+            generationCancelled = "生成已取消", // i18n-ignore: zh branch of locale switch
+            outputTruncated = "输出已截断，保留开头和末尾" // i18n-ignore: zh branch of locale switch
         )
     } else {
         ConversationProjectionLabels()

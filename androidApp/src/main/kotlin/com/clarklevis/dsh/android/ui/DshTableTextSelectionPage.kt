@@ -51,6 +51,7 @@ internal fun selectionBodyHtml(source: String): String = HtmlRenderer.builder()
 /** 表格与正文共用浏览器原生选区；系统文字菜单由 DshMenuWebView 接入项目浮层。 */
 @Composable
 internal fun DshTableTextSelectionPage(markdown: String, onDismiss: () -> Unit) {
+    val onQuote = LocalMessageQuote.current
     val colors = dshDocumentColors()
     val dark = colors.background == androidx.compose.ui.graphics.Color.Black
     val density = LocalDensity.current
@@ -77,7 +78,7 @@ internal fun DshTableTextSelectionPage(markdown: String, onDismiss: () -> Unit) 
                         settings.blockNetworkLoads = true
                         if (android.os.Build.VERSION.SDK_INT >= 29) isForceDarkAllowed = false
                         onMenuChanged = { native ->
-                            menu = native?.copy(actions = native.actions.filter {
+                            val actions = native?.actions.orEmpty().filter {
                                 it.first == appText("复制") || it.first == appText("全选")
                             }.map { (label, action) ->
                                 if (label == appText("复制")) label to {
@@ -88,7 +89,16 @@ internal fun DshTableTextSelectionPage(markdown: String, onDismiss: () -> Unit) 
                                         dismissTextMenu()
                                     }
                                 } else label to action
+                            }
+                            val quoteActions = if (onQuote == null) emptyList() else listOf(appText("引用") to {
+                                evaluateJavascript("window.dshSelectedText()") { result ->
+                                    val text = JSONTokener(result).nextValue() as? String
+                                    if (!text.isNullOrBlank()) onQuote(text)
+                                    dismissTextMenu()
+                                    onDismiss()
+                                }
                             })
+                            menu = native?.copy(actions = actions + quoteActions)
                         }
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView, url: String?) {

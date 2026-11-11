@@ -41,7 +41,7 @@ Whaleness 是独立开发的 DeepSeek Harness 第三方原生移动客户端。�
 
 - **iOS**：[加入 TestFlight 公测](https://testflight.apple.com/join/1Euwby6r)，支持 iPhone 与 iPad，要求 iOS / iPadOS 16.1 或更高版本。
 - **Android**：[从 GitHub Releases 下载 APK](https://github.com/Clarklevis1995/dsh-mobile/releases)，要求 Android 7.0（API 24）或更高版本。应用内检查更新优先使用加速下载源，并校验安装包。
-- **桌面端**：需要运行 DeepSeek Harness，并安装、启用 **`dsh-plugin-mobile-gateway` 0.11.1 或更高版本**。最低版本以 [`AppRelease/release-info.json`](AppRelease/release-info.json) 为准。
+- **桌面端**：需要运行 DeepSeek Harness，并安装、启用 **`dsh-plugin-mobile-gateway` 0.11.2 或更高版本**。最低版本以 [`AppRelease/release-info.json`](AppRelease/release-info.json) 为准。
 - **语音输入**：另需在桌面端的“插件”模块启用官方“语音输入”插件，完成模型下载和初始化，并授予移动端麦克风权限。
 
 ## 公测用户群
@@ -49,10 +49,10 @@ Whaleness 是独立开发的 DeepSeek Harness 第三方原生移动客户端。�
 欢迎加入 Whaleness 公测用户 2 群，交流使用体验、反馈问题并获取支持。使用微信扫码，或保存图片后在微信中识别。
 
 <p align="center">
-  <a href="website/assets/support-wechat-2026-10-28.png"><img src="website/assets/support-wechat-2026-10-28.png" alt="Whaleness 公测用户 2 群微信二维码，2026 年 11 月 4 日前有效" width="320"></a>
+  <a href="website/assets/support-wechat-2026-11-05.png"><img src="website/assets/support-wechat-2026-11-05.png" alt="Whaleness 公测用户 2 群微信二维码，2026 年 11 月 12 日前有效" width="320"></a>
 </p>
 
-> 当前二维码于 2026 年 10 月 28 日更新，原图注明 2026 年 11 月 4 日前有效。若已过期，请查看[产品页面](https://clarklevis1995.github.io/dsh-mobile/)中的最新群码。
+> 当前二维码于 2026 年 11 月 5 日更新，原图注明 2026 年 11 月 12 日前有效。若已过期，请查看[产品页面](https://clarklevis1995.github.io/dsh-mobile/)中的最新群码。
 
 ## 当前平台状态
 
@@ -355,7 +355,7 @@ Android 和 iOS 均在平台侧负责安全存储、图片处理、临时文件�
 ### 通用
 
 - Java 17
-- 已启用 `dsh-plugin-mobile-gateway` 0.11.1+ 的 DeepSeek Harness
+- 已启用 `dsh-plugin-mobile-gateway` 0.11.2+ 的 DeepSeek Harness
 - 能够访问 Mobile Gateway 的模拟器或真机
 
 ### Android
@@ -416,7 +416,7 @@ adb reverse tcp:3080 tcp:3080
 
 ## 连接与配对
 
-1. 在 DeepSeek Harness 中安装或升级 `dsh-plugin-mobile-gateway`（最低 0.11.1），完整退出并重新启动 `dsh web`：
+1. 在 DeepSeek Harness 中安装或升级 `dsh-plugin-mobile-gateway`（最低 0.11.2），完整退出并重新启动 `dsh web`：
 
    ```bash
    dsh plugin --profile web add dsh-plugin-mobile-gateway@latest

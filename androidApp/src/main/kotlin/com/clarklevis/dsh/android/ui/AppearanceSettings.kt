@@ -12,10 +12,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import java.util.Locale
 
 internal enum class InterfaceStyle(private val sourceTitle: String) {
-    SYSTEM("跟随系统"), LIGHT("浅色"), DARK("深色");
+    SYSTEM(appTextKey("跟随系统")), LIGHT(appTextKey("浅色")), DARK(appTextKey("深色"));
 
     val title: String get() = appText(sourceTitle)
 
@@ -31,7 +32,7 @@ internal enum class AppLanguage {
 
     val title: String get() = when (this) {
         SYSTEM -> appText("跟随系统")
-        SIMPLIFIED_CHINESE -> "简体中文"
+        SIMPLIFIED_CHINESE -> "简体中文" // i18n-ignore: language endonym, shown in its own language
         ENGLISH -> "English"
     }
 }
@@ -43,6 +44,14 @@ internal fun appLocale(language: AppLanguage, systemLocale: Locale): Locale = wh
 }
 
 internal class AppearanceSettings(private val preferences: SharedPreferences) {
+    var uiEffectsReduced by mutableStateOf(preferences.getBoolean("ui_effects_reduced", false))
+        private set
+
+    fun selectUiEffectsReduced(value: Boolean) {
+        preferences.edit().putBoolean("ui_effects_reduced", value).apply()
+        uiEffectsReduced = value
+    }
+
     var fontScale by mutableStateOf(normalizeFontScale(preferences.getFloat("font_scale", 1f)))
         private set
 
@@ -105,6 +114,9 @@ internal class AppearanceSettings(private val preferences: SharedPreferences) {
 
 internal fun normalizeFontScale(value: Float): Float =
     if (value.isFinite()) value.coerceIn(0.8f, 1.5f) else 1f
+
+// 独立预览和组件测试默认保留完整效果。
+internal val LocalUiEffectsReduced = staticCompositionLocalOf { false }
 
 internal val LocalAppearanceSettings = staticCompositionLocalOf<AppearanceSettings> {
     error("AppearanceSettings must be provided by DshTheme")

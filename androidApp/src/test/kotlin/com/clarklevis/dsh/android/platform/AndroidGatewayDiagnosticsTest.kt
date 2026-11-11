@@ -12,6 +12,25 @@ import org.junit.Test
 
 class AndroidGatewayDiagnosticsTest {
     @Test
+    fun rtcFallbackLogsReasonStageAndChannelWithoutRawValues() {
+        val lines = mutableListOf<String>()
+        val diagnostics = AndroidGatewayDiagnostics.forTest { _, _, message -> lines += message }
+        diagnostics.rtc("fallback-requested", "negotiation-timeout", "negotiating", "conversation", "none", 10500)
+        assertTrue(lines.single().contains("reason=negotiation-timeout phase=negotiating channel=conversation"))
+        diagnostics.rtc("selected", "gateway-rtc-unavailable", "websocket", "group", "websocket", 11000)
+        assertTrue(lines.last().contains("mode=websocket elapsedMs=11000"))
+        val secret = "token-secret\nSDP-secret"
+        diagnostics.rtc(secret, secret, secret, secret, secret, 0)
+        assertFalse(lines.last().contains("secret"))
+        val releaseLines = mutableListOf<String>()
+        val release = AndroidGatewayDiagnostics.forTest(enabled = false) { _, _, message -> releaseLines += message }
+        release.rtc("fallback-requested", "ice-failed", "active", "control", "webrtc", 5000)
+        release.intent(GatewayDiagnosticAction.CONNECT)
+        assertEquals(1, releaseLines.size)
+        assertTrue(releaseLines.single().contains("reason=ice-failed"))
+    }
+
+    @Test
     fun failureDetailsDistinguishPingTimeoutAndKeepSensitiveExceptionMessagesOut() {
         val lines = mutableListOf<String>()
         var now = 1_000L

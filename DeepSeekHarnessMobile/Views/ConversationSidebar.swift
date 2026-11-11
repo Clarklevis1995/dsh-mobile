@@ -33,14 +33,14 @@ struct ConversationSidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            navigationRow("插件", action: actions.openPlugins) {
+            navigationRow(String(localized: "插件"), action: actions.openPlugins) {
                 Image("DshPluginPinwheel")
                     .renderingMode(.template)
                     .resizable()
                     .scaledToFit()
                     .frame(width: 20, height: 20)
             }
-            navigationRow("定时任务", action: actions.openScheduledTasks) {
+            navigationRow(String(localized: "定时任务"), action: actions.openScheduledTasks) {
                 Image(systemName: "clock")
                     .resizable()
                     .scaledToFit()
@@ -78,7 +78,7 @@ struct ConversationSidebar: View {
             .frame(maxHeight: .infinity)
 
             Divider().opacity(0.3)
-            navigationRow("设置", action: actions.openSettings) {
+            navigationRow(String(localized: "设置"), action: actions.openSettings) {
                 Image(systemName: "gearshape")
                     .appFont(.system(size: 18, weight: .regular))
             }

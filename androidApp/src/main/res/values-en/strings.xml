@@ -4,11 +4,14 @@
     <string name="workspace_hero_title">Into the Unknown</string>
     <string name="gateway_notification_channel">Agent connection</string>
     <string name="gateway_notification_channel_description">Keep the Mobile Gateway connected while an Agent turn runs</string>
-    <string name="gateway_active_notification_title">DeepSeek Harness Agent is running</string>
+    <string name="gateway_active_notification_title">Whaleness Harness Agent is running</string>
     <string name="gateway_active_notification_text">Keep the Gateway connected until the current turn finishes</string>
     <string name="gateway_disconnect_action">Disconnect</string>
     <string name="agent_alert_notification_channel">Agent alerts</string>
-    <string name="agent_alert_notification_channel_description">Approval requests and task results</string>
+    <string name="agent_alert_notification_channel_description">Questions, approval requests and task results</string>
+    <string name="agent_question_notification_title">Answer required</string>
+    <string name="agent_question_notification_detail">%1$s: %2$s</string>
+    <string name="agent_question_notification_generic">%1$s: The agent is waiting for your answer or selection</string>
     <string name="agent_approval_notification_title">Approval required</string>
     <string name="agent_approval_notification_detail">%1$s: %2$s</string>
     <string name="agent_approval_notification_generic">%1$s: The agent is requesting approval for this action</string>

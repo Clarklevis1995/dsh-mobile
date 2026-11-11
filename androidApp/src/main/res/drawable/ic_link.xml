@@ -1,14 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Figma Simple Design System / Link. MIT. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M9.5,14.5L14.5,9.5M8.5,17.5L7.5,18.5C6.1,19.9 3.9,19.9 2.5,18.5C1.1,17.1 1.1,14.9 2.5,13.5L5,11C6.4,9.6 8.6,9.6 10,11M15.5,6.5L16.5,5.5C17.9,4.1 20.1,4.1 21.5,5.5C22.9,6.9 22.9,9.1 21.5,10.5L19,13C17.6,14.4 15.4,14.4 14,13"
-        android:strokeColor="#FF000000"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="1.8" />
+    <group>
+        <clip-path android:pathData="M2,2H22V22H2Z" />
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M10.3333 12.8333C10.6911 13.3118 11.1477 13.7077 11.672 13.9941C12.1964 14.2806 12.7762 14.4509 13.3721 14.4936C13.9681 14.5363 14.5662 14.4503 15.126 14.2415C15.6858 14.0327 16.1942 13.7059 16.6166 13.2833L19.1166 10.7833C19.8756 9.9975 20.2956 8.94499 20.2861 7.85251C20.2766 6.76002 19.8384 5.71497 19.0658 4.94243C18.2933 4.1699 17.2482 3.7317 16.1558 3.7222C15.0633 3.71271 14.0108 4.13269 13.2249 4.89168L11.7916 6.31668M13.6666 11.1667C13.3087 10.6882 12.8521 10.2924 12.3278 10.0059C11.8035 9.71943 11.2237 9.54908 10.6277 9.5064C10.0318 9.46372 9.4336 9.54971 8.8738 9.75853C8.314 9.96735 7.80566 10.2941 7.38326 10.7167L4.88326 13.2167C4.12426 14.0025 3.70429 15.055 3.71378 16.1475C3.72327 17.24 4.16148 18.2851 4.93401 19.0576C5.70655 19.8301 6.7516 20.2683 7.84408 20.2778C8.93657 20.2873 9.98908 19.8673 10.7749 19.1083L12.1999 17.6833"
+            android:strokeColor="#FF1E1E1E"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="2" />
+    </group>
 </vector>

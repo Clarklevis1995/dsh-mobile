@@ -24,7 +24,7 @@ class SharedMobileStoreTest {
         assertEquals(1, snapshot.sessions.size)
         assertTrue(snapshot.sessions.single().isRunning)
         assertEquals(2, snapshot.conversation.size)
-        assertEquals("共享协议解码、Reducer 与投影已接入。", snapshot.conversation.last().text)
+        assertEquals("Shared protocol decoding, reducer, and projection are connected.", snapshot.conversation.last().text)
         assertEquals(1, snapshot.pendingQuestionCount)
         assertEquals("question-requested", snapshot.lastFrameKind)
         assertNull(snapshot.lastError)

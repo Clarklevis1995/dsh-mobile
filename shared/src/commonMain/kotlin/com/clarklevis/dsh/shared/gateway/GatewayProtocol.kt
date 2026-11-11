@@ -1,10 +1,15 @@
 package com.clarklevis.dsh.shared.gateway
 
+import com.clarklevis.dsh.shared.i18n.UiMessage
+import com.clarklevis.dsh.shared.i18n.UiMessageException
 import com.clarklevis.dsh.shared.protocol.GatewayPairingPayload
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayGoalRef
 import com.clarklevis.dsh.shared.protocol.GatewayQuestionAnswer
 import com.clarklevis.dsh.shared.protocol.JsonValue
+import com.clarklevis.dsh.shared.protocol.GatewayTextPart
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.encodeToJsonElement
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonArray
@@ -14,21 +19,25 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-class GatewayPairingPayloadException(message: String) : IllegalArgumentException(message)
+/** 配对/地址校验失败；[uiMessage] 供界面本地化，`message` 为英文日志文本。 */
+class GatewayPairingPayloadException(uiMessage: UiMessage, logMessage: String) : UiMessageException(uiMessage, logMessage)
 
 /** 与 iOS PairingPayloadParser 相同的 version 2、严格 Base64URL 和过期语义。 */
 object GatewayPairingPayloadParser {
     fun parse(rawValue: String, nowEpochMilliseconds: Long): GatewayPairingPayload {
         val normalized = rawValue.trim()
         val decoded = decodeBase64Url(normalized)
-            ?: throw GatewayPairingPayloadException("配对内容不是有效的 Base64URL 字符串")
+            ?: throw GatewayPairingPayloadException(UiMessage("pairing.notBase64Url"), "Pairing content is not a valid Base64URL string")
         val payload = runCatching {
             wireJson.decodeFromString<GatewayPairingPayload>(decoded.decodeToString())
         }.getOrElse {
-            throw GatewayPairingPayloadException("Base64URL 解码后的内容不是有效的配对 JSON")
+            throw GatewayPairingPayloadException(UiMessage("pairing.invalidJson"), "Decoded Base64URL content is not valid pairing JSON")
         }
         if (payload.version != 2) {
-            throw GatewayPairingPayloadException("不支持的配对协议版本 ${payload.version}")
+            throw GatewayPairingPayloadException(
+                UiMessage("pairing.unsupportedVersion", listOf(payload.version.toString())),
+                "Unsupported pairing protocol version ${payload.version}"
+            )
         }
         requireWebSocketEndpoint(payload.publicUrl)
         if (
@@ -36,10 +45,10 @@ object GatewayPairingPayloadParser {
             ',' in payload.pairingCode ||
             payload.pairingCode.any { it.isWhitespace() || it.isISOControl() }
         ) {
-            throw GatewayPairingPayloadException("二维码中的一次性 pairingCode 无效")
+            throw GatewayPairingPayloadException(UiMessage("pairing.invalidCode"), "The QR code's one-time pairingCode is invalid")
         }
         if (payload.expiresAt <= nowEpochMilliseconds) {
-            throw GatewayPairingPayloadException("二维码配对码已经过期")
+            throw GatewayPairingPayloadException(UiMessage("pairing.expired"), "The QR pairing code has expired")
         }
         GatewayIdentity.validate(null, payload.gatewayId)
         GatewayIdentity.endpoints(payload)
@@ -77,6 +86,83 @@ data class GatewayRequest(
 
 /** 请求字段逐项复制现有 iOS GatewayClient 与 Mobile Gateway 已验证协议。 */
 object GatewayRequests {
+    private fun managementRequest(type: String, requestId: String, mutation: Boolean = false,
+        responseKind: String = type, fields: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit
+    ): GatewayRequest {
+        require(requestId.isNotBlank() && requestId.length <= 128)
+        return request(type, responseKind, correlationId = requestId,
+            lanePolicy = if (mutation) GatewayRequestLanePolicy.REJECT_IF_BUSY else GatewayRequestLanePolicy.COALESCE_LATEST
+        ) {
+            put("requestId", requestId)
+            fields()
+        }.copy(timeoutMilliseconds = if (type == "plugin-update") 600_000 else null)
+    }
+
+    fun pluginVersions(requestId: String, name: String): GatewayRequest =
+        managementRequest("plugin-versions", requestId) { put("name", name) }
+
+    fun pluginDetail(requestId: String, name: String, language: String): GatewayRequest =
+        managementRequest("plugin-detail", requestId) {
+            put("name", name)
+            put("language", language)
+        }
+
+    fun pluginUpdate(requestId: String, name: String, version: String, registry: String? = null): GatewayRequest =
+        managementRequest("plugin-update", requestId, true, "plugin-update-result") {
+            put("name", name)
+            put("version", version)
+            put("registry", registry?.let(::JsonPrimitive) ?: JsonNull)
+        }
+
+    fun hostScheduleList(requestId: String, active: Boolean? = null, limit: Int = 100, offset: Int = 0): GatewayRequest {
+        require(limit in 1..500 && offset >= 0)
+        return managementRequest("schedule-list", requestId) {
+            active?.let { put("active", it) }
+            put("limit", limit)
+            put("offset", offset)
+        }
+    }
+
+    fun scheduleView(requestId: String, id: String): GatewayRequest =
+        managementRequest("schedule-view", requestId) { put("id", id) }
+
+    fun scheduleCreate(requestId: String, title: String, prompt: String, timing: JsonValue,
+        target: JsonValue? = null): GatewayRequest {
+        require(title.trim().length in 1..120 && prompt.isNotBlank())
+        return managementRequest("schedule-create", requestId, true) {
+            put("title", title.trim())
+            put("prompt", prompt)
+            put("timing", timing.toJsonElement())
+            target?.let { put("target", it.toJsonElement()) }
+        }
+    }
+
+    fun scheduleEdit(requestId: String, id: String, expectedUpdatedAt: JsonValue?,
+        patch: JsonValue? = null, delete: Boolean = false): GatewayRequest {
+        require(delete || !patch?.objectValue.isNullOrEmpty())
+        return managementRequest("schedule-edit", requestId, true) {
+            put("id", id)
+            put("action", if (delete) "delete" else "update")
+            put("expectedUpdatedAt", expectedUpdatedAt?.toJsonElement() ?: JsonNull)
+            if (!delete) put("patch", requireNotNull(patch).toJsonElement())
+        }
+    }
+
+    fun hostScheduleHistory(requestId: String, id: String, limit: Int = 100, before: String? = null): GatewayRequest =
+        managementRequest("schedule-history", requestId) {
+            put("id", id)
+            put("limit", limit)
+            before?.let { put("before", it) }
+        }
+
+    fun scheduleRun(requestId: String, id: String): GatewayRequest =
+        managementRequest("schedule-run", requestId, true) { put("id", id) }
+
+    fun scheduleDeleteInactive(requestId: String, confirmed: Boolean): GatewayRequest {
+        require(confirmed)
+        return managementRequest("schedule-delete-inactive", requestId, true) { put("confirm", true) }
+    }
+
     fun pluginCatalog(requestId: String): GatewayRequest = request(
         "plugin-catalog", "plugin-catalog", correlationId = requestId
     ) { put("requestId", requestId) }
@@ -371,7 +457,7 @@ object GatewayRequests {
         put("sessionId", sessionId)
         put("maxMessages", maxMessages)
         beforeSequence?.let {
-            require(it >= 0 && historyFormatVersion != null) { "历史游标必须携带读取时的格式版本" }
+            require(it >= 0 && historyFormatVersion != null) { "History cursor must carry the format version it was read with" }
             put("beforeSeq", it)
             put("historyFormatVersion", historyFormatVersion)
         }
@@ -479,7 +565,8 @@ object GatewayRequests {
         clientTimeZone: String,
         mode: String = "queue",
         receipts: List<String> = emptyList(),
-        requestId: String? = null
+        requestId: String? = null,
+        textParts: List<GatewayTextPart>? = null
     ): GatewayRequest = request(
         "message",
         "sent",
@@ -494,7 +581,10 @@ object GatewayRequests {
         if (receipts.isNotEmpty()) put("files", buildJsonArray {
             receipts.forEach { add(buildJsonObject { put("receiptId", it) }) }
         })
-        put("text", text)
+        if (textParts == null) put("text", text) else {
+            GatewayTextPart.validate(textParts)
+            put("textParts", wireJson.encodeToJsonElement(textParts))
+        }
         put("images", buildJsonArray {
             images.forEach { image ->
                 add(buildJsonObject {
@@ -510,6 +600,18 @@ object GatewayRequests {
         require(mode == "queue" || mode == "steer")
         put("mode", mode)
         put("clientTimeZone", clientTimeZone)
+    }
+
+    fun queueEdit(sessionId: String, itemId: String, requestId: String, text: String,
+        textParts: List<GatewayTextPart>? = null): GatewayRequest = request(
+        "queue-update", "queue-item-updated", targetSessionId = sessionId, correlationId = itemId,
+        lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("sessionId", sessionId); put("itemId", itemId); put("requestId", requestId); put("action", "edit")
+        if (textParts == null) put("text", text) else {
+            GatewayTextPart.validate(textParts)
+            put("textParts", wireJson.encodeToJsonElement(textParts))
+        }
     }
 
     fun queueUpdate(sessionId: String, itemId: String, action: String): GatewayRequest = request(
@@ -627,18 +729,23 @@ object GatewayRequests {
 
 internal fun requireWebSocketEndpoint(endpoint: String) {
     if (endpoint.any { it.isWhitespace() || it.isISOControl() }) {
-        throw GatewayPairingPayloadException("publicUrl 不是有效的 ws:// 或 wss:// 地址")
+        throw invalidWebSocketEndpoint()
     }
     val separator = endpoint.indexOf("://")
     if (separator <= 0) {
-        throw GatewayPairingPayloadException("publicUrl 不是有效的 ws:// 或 wss:// 地址")
+        throw invalidWebSocketEndpoint()
     }
     val scheme = endpoint.take(separator).lowercase()
     val authority = endpoint.drop(separator + 3).substringBefore('/').substringBefore('?')
     if (scheme !in setOf("ws", "wss") || authority.isBlank() || '@' in authority) {
-        throw GatewayPairingPayloadException("publicUrl 不是有效的 ws:// 或 wss:// 地址")
+        throw invalidWebSocketEndpoint()
     }
 }
+
+private fun invalidWebSocketEndpoint() = GatewayPairingPayloadException(
+    UiMessage("pairing.invalidPublicUrl"),
+    "publicUrl is not a valid ws:// or wss:// address"
+)
 
 internal fun decodeBase64(value: String): ByteArray? = decodeBase64Alphabet(value, urlSafe = false)
 

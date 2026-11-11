@@ -7,6 +7,24 @@ import SwiftUI
 /// tables must exist, stay populated, and keep placeholder arguments intact,
 /// so the UI never exposes localization identifiers to users.
 final class LocalizationCatalogTests: XCTestCase {
+    func testAllWorkspaceCopyShipsInBothLanguagesAndPreservesCountsAndWorkspaceNames() throws {
+        let english = try englishTable("Localizable")
+        let chinese = try localizedTable("Localizable", localization: "zh-Hans")
+        XCTAssertEqual(english["请先选择工作区"], "Select a workspace first")
+        XCTAssertEqual(english["请先选择一个具体工作区，再创建新会话。"],
+            "Select a specific workspace before creating a new session.")
+        XCTAssertEqual(chinese["请先选择一个具体工作区，再创建新会话。"], "请先选择一个具体工作区，再创建新会话。")
+        XCTAssertEqual(english["全部会话"], "All sessions")
+        XCTAssertEqual(english["收起"], "Collapse")
+        XCTAssertEqual(english["workspace.session.count.one"], "1 session")
+        XCTAssertEqual(english["workspace.section.expand.one"], "Show 1 more session")
+        XCTAssertEqual(String(format: try XCTUnwrap(english["workspace.section.expand"]), 95), "Show 95 more sessions")
+        XCTAssertEqual(String(format: try XCTUnwrap(english["workspace.section.named-accessibility"]), "dsh-mobile", 7),
+            "Workspace dsh-mobile, 7 sessions")
+        XCTAssertEqual(String(format: try XCTUnwrap(chinese["workspace.section.named-accessibility"]), "移动端工程", 7),
+            "工作区 移动端工程，7 个会话")
+    }
+
     func testFontScaleNormalizesInvalidValues() {
         XCTAssertEqual(AppFontScale.normalized(.nan), 1)
         XCTAssertEqual(AppFontScale.normalized(.infinity), 1)
@@ -79,10 +97,12 @@ final class LocalizationCatalogTests: XCTestCase {
     func testEnglishLocalizableTableIsPresentAndPopulated() throws {
         let table = try englishTable("Localizable")
         XCTAssertFalse(table.isEmpty, "en.lproj/Localizable.strings is missing from the app bundle")
-        XCTAssertGreaterThanOrEqual(table.count, 600, "English Localizable table looks truncated")
+        XCTAssertGreaterThanOrEqual(table.count, 1200, "English Localizable table looks truncated")
 
         let blank = table.filter { $0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         XCTAssertTrue(blank.isEmpty, "Blank English translations for: \(blank.keys.sorted())")
+        let withHan = table.filter { $0.value.range(of: "\\p{Han}", options: .regularExpression) != nil }
+        XCTAssertTrue(withHan.isEmpty, "English translations still contain Chinese: \(withHan.keys.sorted())")
         XCTAssertEqual(table["语言"], "Language")
         XCTAssertEqual(table["语言设置将在重新启动应用后生效。"],
                        "Language changes take effect after restarting the app.")
@@ -99,13 +119,15 @@ final class LocalizationCatalogTests: XCTestCase {
 
         XCTAssertEqual(AppLanguage.load(from: defaults), .system)
 
-        AppLanguage.english.apply(to: defaults)
+        // Simulate the old override: system languages must be recovered, not read from it.
+        defaults.set(["en"], forKey: "AppleLanguages")
+        AppLanguage.english.apply(to: defaults, systemLanguages: ["ru", "en"])
         XCTAssertEqual(AppLanguage.load(from: defaults), .english)
-        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en"])
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en", "ru"])
 
-        AppLanguage.simplifiedChinese.apply(to: defaults)
+        AppLanguage.simplifiedChinese.apply(to: defaults, systemLanguages: ["ru", "en"])
         XCTAssertEqual(AppLanguage.load(from: defaults), .simplifiedChinese)
-        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["zh-Hans"])
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["zh-Hans", "ru", "en"])
 
         AppLanguage.system.apply(to: defaults)
         XCTAssertEqual(AppLanguage.load(from: defaults), .system)
@@ -130,8 +152,33 @@ final class LocalizationCatalogTests: XCTestCase {
         XCTAssertEqual(table["Input"], "输入")
     }
 
+    func testBuiltInPermissionLabelsUseAppLanguageAndPreserveCustomNames() throws {
+        let cases = [
+            ("ask", "Ask every time", "每次询问", "Ask every time"),
+            ("read-only", "Read-only", "只读", "Read-only"),
+            ("workspace-write", "Workspace write", "工作区写入", "Workspace write"),
+            ("danger-full-access", "Full access", "完全访问", "Full access")
+        ]
+        for language in ["zh-Hans", "en"] {
+            let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
+            let bundle = try XCTUnwrap(Bundle(path: path))
+            for (id, legacyName, chinese, english) in cases {
+                let expected = language == "zh-Hans" ? chinese : english
+                for serverName in [nil, "", id, legacyName] {
+                    XCTAssertEqual(L10n.permissionName(for: id, fallback: serverName, bundle: bundle), expected)
+                }
+                XCTAssertEqual(L10n.permissionName(for: id, fallback: "Team review", bundle: bundle), "Team review")
+            }
+            XCTAssertEqual(L10n.permissionName(for: "future-permission", fallback: "Future permission", bundle: bundle), "Future permission")
+            XCTAssertEqual(L10n.permissionName(for: "future-permission", bundle: bundle), "future-permission")
+        }
+    }
+
     func testAgentNotificationCopyIsReadableInChinese() throws {
         let table = try localizedTable("Localizable", localization: "zh-Hans")
+        XCTAssertEqual(table["agent.notification.question.title"], "需要回答")
+        XCTAssertEqual(table["agent.notification.question.body"], "%@：%@")
+        XCTAssertEqual(table["agent.notification.question.body.generic"], "%@：Agent 正在等待你的回答或选择")
         XCTAssertEqual(table["agent.notification.approval.title"], "需要审批")
         XCTAssertEqual(table["agent.notification.approval.body"], "%@：%@")
         XCTAssertEqual(table["agent.notification.approval.body.generic"], "%@：Agent 请求批准本次操作")

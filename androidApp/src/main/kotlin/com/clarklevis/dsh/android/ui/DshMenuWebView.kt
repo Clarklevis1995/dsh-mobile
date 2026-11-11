@@ -8,6 +8,7 @@ import android.view.MenuItem
 import android.view.View
 import android.webkit.WebView
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import java.util.Locale
 
 internal data class DshNativeTextMenu(
@@ -70,10 +71,10 @@ internal class DshMenuWebView(context: Context) : WebView(context) {
                     .map { item ->
                         val title = item.title.toString()
                         val label = when (title.lowercase(Locale.ROOT)) {
-                            "copy", "复制" -> "复制"
-                            "cut", "剪切" -> "剪切"
-                            "paste", "粘贴" -> "粘贴"
-                            "select all", "全选" -> "全选"
+                            "copy", "复制" -> appTextKey("复制") // i18n-ignore: also matches the Chinese system menu title
+                            "cut", "剪切" -> appTextKey("剪切") // i18n-ignore: also matches the Chinese system menu title
+                            "paste", "粘贴" -> appTextKey("粘贴") // i18n-ignore: also matches the Chinese system menu title
+                            "select all", "全选" -> appTextKey("全选") // i18n-ignore: also matches the Chinese system menu title
                             else -> title
                         }
                         appText(label) to {

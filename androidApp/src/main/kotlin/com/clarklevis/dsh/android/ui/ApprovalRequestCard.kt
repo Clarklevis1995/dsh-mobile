@@ -68,7 +68,7 @@ internal fun ApprovalRequestCard(
         ?: appText("%1\$s 请求执行需要审批的操作", request.toolName)
 
     LaunchedEffect(request.rpcId, status.kind, collapsed, detailsExpanded) {
-        Log.i(
+        com.clarklevis.dsh.android.platform.LocalAppLog.i(
             "DshApproval",
             "ui card visible replay=${request.replay} status=${status.kind} " +
                 "collapsed=$collapsed detailsExpanded=$detailsExpanded " +

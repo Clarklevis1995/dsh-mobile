@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import com.clarklevis.dsh.shared.projection.RequestTokenUsage
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.projection.TrajectoryNodeKind
@@ -50,19 +51,19 @@ import java.util.Date
 import java.util.Locale
 
 private enum class GenericDetailTab(private val sourceTitle: String) {
-    SUMMARY("摘要"), PREVIEW("预览"), RAW("原始");
+    SUMMARY(appTextKey("摘要")), PREVIEW(appTextKey("预览")), RAW(appTextKey("原始"));
 
     val title: String get() = appText(sourceTitle)
 }
 
 private enum class RequestDetailTab(private val sourceTitle: String) {
-    SUMMARY("摘要"), OPTIONS("选项"), USAGE("用量"), TIMING("耗时");
+    SUMMARY(appTextKey("摘要")), OPTIONS(appTextKey("选项")), USAGE(appTextKey("用量")), TIMING(appTextKey("耗时"));
 
     val title: String get() = appText(sourceTitle)
 }
 
 private enum class ToolDetailTab(private val sourceTitle: String) {
-    SUMMARY("摘要"), PAYLOAD("参数"), RESULT("结果"), SCHEMA("Schema"), TIMING("耗时");
+    SUMMARY(appTextKey("摘要")), PAYLOAD(appTextKey("参数")), RESULT(appTextKey("结果")), SCHEMA("Schema"), TIMING(appTextKey("耗时"));
 
     val title: String get() = appText(sourceTitle)
 }

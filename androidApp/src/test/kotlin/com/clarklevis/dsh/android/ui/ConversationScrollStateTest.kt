@@ -1,11 +1,15 @@
 package com.clarklevis.dsh.android.ui
 
+import com.clarklevis.dsh.android.localization.LocaleTestRule
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 
 class ConversationScrollStateTest {
+    @get:Rule val locale = LocaleTestRule()
+
     @Test
     fun `bottom delta includes the full last row and composer padding`() {
         assertEquals(

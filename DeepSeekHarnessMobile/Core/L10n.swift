@@ -1,4 +1,5 @@
 import Foundation
+import DeepSeekHarnessShared
 
 /// Centralized user-facing strings that are compared programmatically, shared
 /// across screens, or need stable localization keys with interpolated
@@ -76,12 +77,31 @@ enum L10n {
 
     // MARK: Permission labels
 
-    static func permissionName(for id: String) -> String {
+    /// Prefer the stable protocol identifier for built-in permissions. Gateway
+    /// display names may be raw IDs or English descriptions, while the app's
+    /// source language and catalog already define the corresponding labels.
+    /// Deployment-specific names remain visible so an operator's custom label
+    /// is not silently replaced by the built-in translation.
+    static func permissionName(for id: String, fallback: String? = nil, bundle: Bundle = .main) -> String {
+        let serverName = fallback?.trimmingCharacters(in: .whitespacesAndNewlines)
+        func isBuiltInName(_ names: Set<String>) -> Bool {
+            guard let serverName, !serverName.isEmpty else { return true }
+            return serverName == id || names.contains(serverName)
+        }
         switch id {
-        case "read-only": String(localized: "只读")
-        case "workspace-write": String(localized: "工作区写入")
-        case "danger-full-access": String(localized: "完全访问")
-        default: id
+        case "ask":
+            return isBuiltInName(["Ask", "Ask every time"]) ? String(localized: "每次询问", bundle: bundle) : (serverName ?? id)
+        case "read-only":
+            return isBuiltInName(["Read", "Read-only", "Read Only", "Can read the workspace but not modify files"])
+                ? String(localized: "只读", bundle: bundle) : (serverName ?? id)
+        case "workspace-write":
+            return isBuiltInName(["Workspace write", "Workspace Write", "Can read and write within the current workspace"])
+                ? String(localized: "工作区写入", bundle: bundle) : (serverName ?? id)
+        case "danger-full-access":
+            return isBuiltInName(["Full access", "Full Access", "Can access the host environment without sandbox limits"])
+                ? String(localized: "完全访问", bundle: bundle) : (serverName ?? id)
+        default:
+            return serverName ?? id
         }
     }
 
@@ -95,4 +115,38 @@ enum L10n {
         default: level
         }
     }
+
+    /// User-visible wrapper for bridge invariant failures; the English detail is for bug reports.
+    static func internalError(_ detail: String) -> String {
+        String(localized: "diagnostic.internal", defaultValue: "内部错误（\(detail)）")
+    }
+
+    // MARK: Shared UI messages
+
+    /// Key of a shared `UiMessage` whose single argument is host- or OS-provided text.
+    static let rawMessageKey = "raw"
+
+    /// Resolves a shared message key: raw text stays verbatim; semantic keys use the catalog.
+    /// When the first argument is "1" and the catalog has a `<key>.one` entry (e.g.
+    /// `tool.lines.one`), that singular template is used, mirroring Android.
+    static func message(key: String, args: [String]) -> String {
+        if key == rawMessageKey { return args.first ?? "" }
+        var template = String(localized: String.LocalizationValue(key))
+        if args.first == "1" {
+            let singularKey = key + ".one"
+            let singular = String(localized: String.LocalizationValue(singularKey))
+            if singular != singularKey { template = singular }
+        }
+        return args.isEmpty ? template : String(format: template, arguments: args)
+    }
+}
+
+extension UiMessage {
+    /// Localized text for a message produced by shared code.
+    var localized: String { L10n.message(key: key, args: args) }
+}
+
+extension String {
+    /// Wraps platform-provided text so shared stores display it verbatim.
+    var rawUiMessage: UiMessage { UiMessage(key: L10n.rawMessageKey, args: [self]) }
 }

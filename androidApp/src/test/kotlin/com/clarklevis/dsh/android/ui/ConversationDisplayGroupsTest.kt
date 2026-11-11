@@ -20,6 +20,20 @@ class ConversationDisplayGroupsTest {
     @get:Rule val locale = LocaleTestRule()
 
     @Test
+    fun generatedImagesRemainVisibleOutsideCollapsedToolProcess() {
+        val image = com.clarklevis.dsh.shared.protocol.GatewayImageAttachment("image", "image/png", 10, 100, 80)
+        val generated = item("result-images", ConversationItemKind.GENERATED_IMAGES, text = "").copy(images = listOf(image))
+        val entries = makeConversationDisplayEntries(listOf(
+            item("call", ConversationItemKind.TOOL), item("result", ConversationItemKind.TOOL_RESULT), generated
+        ))
+        assertEquals(2, entries.size)
+        assertTrue(entries.first() is ConversationDisplayEntry.Process)
+        assertEquals(generated, (entries.last() as ConversationDisplayEntry.Message).item)
+        val timeline = makeConversationTimelineEntries(entries)
+        assertEquals(listOf(image), timeline.last().images)
+    }
+
+    @Test
     fun fileCardsRemainInFooterAndKnownReferencesReachMarkdown() {
         val files = listOf(com.clarklevis.dsh.shared.protocol.PresentedFile("build/报告.pdf", "8 页"))
         val reply = item("reply", ConversationItemKind.ASSISTANT, text = "请看 `报告.pdf`")

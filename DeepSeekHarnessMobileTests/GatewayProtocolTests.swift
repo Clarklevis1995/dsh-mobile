@@ -1,4 +1,8 @@
 import XCTest
+import class DeepSeekHarnessShared.ScheduleTimingEditor
+import class DeepSeekHarnessShared.RtcSelectedPath
+import class DeepSeekHarnessShared.RtcPathInspector
+import UserNotifications
 import Network
 import CryptoKit
 import Security
@@ -350,7 +354,7 @@ final class AgentLiveActivityLifecycleTests: XCTestCase {
         XCTAssertTrue(requestedDetails.isEmpty)
         appState = .active
         manager.applicationDidBecomeActive()
-        XCTAssertEqual(requestedDetails, ["正在执行 Bash"])
+        XCTAssertEqual(requestedDetails, [String(localized: "activity.tool.running", defaultValue: "正在执行 \("Bash")")])
         // 请求失败后，后续高频进度不能不断重试系统调用。
         manager.stepStarted(gatewayID: "gateway", sessionID: "session", title: "任务", step: 2)
         XCTAssertEqual(requestedDetails.count, 1)
@@ -481,8 +485,8 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
             ])
         )))
 
-        XCTAssertEqual(projected.headline, "写入")
-        XCTAssertEqual(projected.detail, "articles/北京中轴线.md · 2 行")
+        XCTAssertEqual(projected.headline, L10n.message(key: "tool.kind.write", args: []))
+        XCTAssertEqual(projected.detail, "articles/北京中轴线.md · \(L10n.message(key: "tool.lines", args: ["2"]))")
         XCTAssertEqual(projected.kind, .writing)
     }
 
@@ -493,7 +497,7 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
             toolName: nil
         ))
 
-        XCTAssertEqual(projected.headline, "思考")
+        XCTAssertEqual(projected.headline, String(localized: "思考"))
         XCTAssertEqual(projected.detail, "Now check character count")
         XCTAssertEqual(projected.kind, .reasoning)
     }
@@ -504,7 +508,10 @@ final class AgentLiveActivityEventProjectionTests: XCTestCase {
             completedToolLabel: "写入"
         ))
 
-        XCTAssertEqual(projected.headline, "写入完成")
+        XCTAssertEqual(
+            projected.headline,
+            String(localized: "activity.tool.completed", defaultValue: "\("写入")完成")
+        )
         XCTAssertEqual(projected.detail, "saved")
         XCTAssertEqual(projected.kind, .result)
     }
@@ -648,6 +655,654 @@ final class SlashCommandComposerPresentationTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(40))
         XCTAssertEqual(afterFirstCharacter.text, "/p")
         XCTAssertTrue(afterFirstCharacter.isFirstResponder)
+    }
+}
+
+@MainActor
+final class CompactComposerLayoutTests: XCTestCase {
+    func testMorphIntermediateFramesResizeOuterBoundsAndKeepPlusFullyVisible() async throws {
+        var heights: [CGFloat] = []
+        for progress in stride(from: 0.0, through: 1.0, by: 0.1) {
+            let host = UIHostingController(rootView: VStack {
+                ComposerMorphLayout(expansion: progress) {
+                ComposerFrameProbe(identifier: "plus-probe", height: 32)
+                ComposerFrameProbe(identifier: "editor-probe", height: 38)
+                Color.clear
+                Color.clear
+                }.padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(ComposerFrameProbe(identifier: "card-probe"))
+                Spacer()
+            })
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 360, height: 600)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            host.view.frame = window.bounds
+            try await Task.sleep(for: .milliseconds(50))
+            host.view.layoutIfNeeded()
+            func find(_ identifier: String, in view: UIView) -> UIView? {
+                if view.accessibilityIdentifier == identifier { return view }
+                return view.subviews.lazy.compactMap { find(identifier, in: $0) }.first
+            }
+            let plus = try XCTUnwrap(find("plus-probe", in: host.view))
+            let card = try XCTUnwrap(find("card-probe", in: host.view))
+            let frame = plus.convert(plus.bounds, to: card)
+            XCTAssertEqual(frame.height, 32, accuracy: 0.5)
+            XCTAssertGreaterThanOrEqual(frame.minY, 0)
+            XCTAssertLessThanOrEqual(frame.maxY, card.bounds.height + 0.5,
+                                     "加号在展开和收起路径的任意进度都不能被外框裁掉")
+            XCTAssertFalse(plus.isHidden)
+            XCTAssertEqual(plus.alpha, 1)
+            heights.append(card.bounds.height)
+        }
+        XCTAssertEqual(heights.first!, 58, accuracy: 0.5)
+        XCTAssertEqual(heights.last!, 118, accuracy: 0.5)
+        for (previous, next) in zip(heights, heights.dropFirst()) {
+            XCTAssertGreaterThan(next, previous, "外框必须经过中间高度，不能先跳到终点大小")
+            XCTAssertLessThan(next - previous, 8)
+        }
+    }
+
+    func testLongCompactDraftUsesEllipsisAndRestoresFullNativeTextAndSelection() {
+        let draft = String(repeating: "这是一段需要收紧预览的超长草稿。", count: 30) + "\n第二段也要保留。"
+        let input = CommandTextView(frame: CGRect(x: 0, y: 0, width: 220, height: 38))
+        input.font = .systemFont(ofSize: 17)
+        input.textContainerInset = .zero
+        input.textContainer.lineFragmentPadding = 0
+        input.isScrollEnabled = false
+        input.apply(text: draft, presentation: nil, placeholder: "消息")
+        input.selectedRange = NSRange(location: 8, length: 2)
+        input.setCompactPreview(true)
+        input.layoutManager.ensureLayout(for: input.textContainer)
+        XCTAssertNotEqual(input.layoutManager.truncatedGlyphRange(inLineFragmentForGlyphAt: 0).location, NSNotFound)
+        XCTAssertEqual(input.text, draft)
+        XCTAssertEqual(input.selectedRange, NSRange(location: 8, length: 2))
+        input.setCompactPreview(false)
+        input.frame.size.height = 200
+        input.layoutManager.ensureLayout(for: input.textContainer)
+        XCTAssertEqual(input.layoutManager.truncatedGlyphRange(inLineFragmentForGlyphAt: 0).location, NSNotFound)
+        XCTAssertEqual(input.text, draft)
+        XCTAssertEqual(input.selectedRange, NSRange(location: 8, length: 2))
+    }
+
+    func testFocusTransactionStartsBeforeKeyboardResponderWork() throws {
+        var focused = false
+        let input = SlashCommandTextView(text: .constant(""), presentation: nil, placeholder: "消息",
+            isFocused: Binding(get: { focused }, set: { focused = $0 }))
+        let coordinator = input.makeCoordinator()
+        let native = CommandTextView(frame: CGRect(x: 0, y: 0, width: 300, height: 38))
+        native.delegate = coordinator
+        native.onFocusWillChange = { next in
+            XCTAssertNotEqual(native.isFirstResponder, next, "先提交目标状态，再开始键盘 responder 切换")
+            coordinator.nativeFocusWillChange(next)
+        }
+        // 系统打开菜单时会查询能力，这类查询不能写入焦点 Binding。
+        XCTAssertTrue(native.canBecomeFirstResponder)
+        XCTAssertFalse(focused)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        let controller = UIViewController()
+        window.rootViewController = controller
+        controller.view.addSubview(native)
+        window.makeKeyAndVisible()
+        defer { native.onFocusWillChange = nil; native.delegate = nil; window.isHidden = true }
+        XCTAssertTrue(native.becomeFirstResponder())
+        XCTAssertTrue(focused)
+        _ = native.canResignFirstResponder
+        XCTAssertTrue(focused, "能否失焦的查询也不能提前收起输入框")
+        XCTAssertTrue(native.resignFirstResponder())
+        XCTAssertFalse(focused)
+    }
+
+    func testFocusMorphKeepsNativeEditorAndMultilineDraftInBothThemes() async throws {
+        for dark in [false, true] {
+            let controller = UIHostingController(rootView: CompactComposerHarness()
+                .environment(\.colorScheme, dark ? .dark : .light))
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 390, height: 420)
+            window.rootViewController = controller
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            controller.view.frame = window.bounds
+            controller.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(100))
+            let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: controller.view))
+            let compactFrame = editor.convert(editor.bounds, to: window)
+            attach(window, name: dark ? "输入框收紧-夜间" : "输入框收紧-日间")
+            XCTAssertTrue(editor.becomeFirstResponder())
+            try await Task.sleep(for: .milliseconds(350))
+            editor.insertText("第一行草稿\n第二行草稿")
+            try await Task.sleep(for: .milliseconds(100))
+            controller.view.layoutIfNeeded()
+            XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: controller.view))
+            XCTAssertTrue(editor.isFirstResponder)
+            let expandedFrame = editor.convert(editor.bounds, to: window)
+            XCTAssertGreaterThan(expandedFrame.width, compactFrame.width + 30)
+            XCTAssertLessThan(expandedFrame.minX, compactFrame.minX)
+            attach(window, name: dark ? "输入框展开-夜间" : "输入框展开-日间")
+            editor.resignFirstResponder()
+            try await Task.sleep(for: .milliseconds(350))
+            controller.view.layoutIfNeeded()
+            XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: controller.view))
+            XCTAssertEqual(editor.text, "第一行草稿\n第二行草稿")
+            XCTAssertEqual(editor.convert(editor.bounds, to: window).width, compactFrame.width, accuracy: 1)
+            XCTAssertFalse(editor.isFirstResponder)
+        }
+    }
+    private func attach(_ window: UIWindow, name: String) {
+        let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            window.rootViewController?.view.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = name; attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
+private struct ComposerFrameProbe: UIViewRepresentable {
+    let identifier: String
+    var height: CGFloat? = nil
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.accessibilityIdentifier = identifier
+        return view
+    }
+    func updateUIView(_ view: UIView, context: Context) {}
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIView, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 32, height: height ?? proposal.height ?? 0)
+    }
+}
+
+@MainActor
+final class ComposerHintAlignmentTests: XCTestCase {
+    func testFocusStateAloneDoesNotMoveHintOrDraftBeforeMorphProgress() async throws {
+        for text in ["", "保持原来的草稿"] {
+            let model = ComposerHintAlignmentModel()
+            let host = UIHostingController(rootView: ComposerHintAlignmentHarness(model: model, text: text))
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            try await Task.sleep(for: .milliseconds(80))
+            let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+            func origin() -> CGPoint { editor.convert(.zero, to: host.view) }
+            let compact = origin()
+            model.expanded = true
+            try await Task.sleep(for: .milliseconds(40))
+            XCTAssertEqual(origin().y, compact.y, accuracy: 0.5, "焦点已变化但进度仍为零，hint 不能提前跳到顶部")
+            let compactTop = max(0, (42 - ceil(UIFont.appPreferredFont(forTextStyle: .body).lineHeight)) / 2)
+            for step in 1...10 {
+                model.progress = CGFloat(step) / 10
+                try await Task.sleep(for: .milliseconds(25))
+                XCTAssertEqual(origin().y, compact.y + (6 - compactTop) * model.progress, accuracy: 0.75)
+                XCTAssertEqual(origin().x, compact.x - 44 * model.progress, accuracy: 0.75)
+            }
+            let expanded = origin()
+            model.expanded = false
+            try await Task.sleep(for: .milliseconds(40))
+            XCTAssertEqual(origin().y, expanded.y, accuracy: 0.5, "失焦但进度仍为一，hint 不能提前跳回居中")
+            for step in stride(from: 9, through: 0, by: -1) {
+                model.progress = CGFloat(step) / 10
+                try await Task.sleep(for: .milliseconds(25))
+                XCTAssertEqual(origin().y, compact.y + (6 - compactTop) * model.progress, accuracy: 0.75)
+                XCTAssertEqual(origin().x, compact.x - 44 * model.progress, accuracy: 0.75)
+            }
+            XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+            XCTAssertEqual(editor.text, text)
+        }
+    }
+}
+
+private final class ComposerHintAlignmentModel: ObservableObject {
+    @Published var progress: CGFloat = 0
+    @Published var expanded = false
+}
+
+private struct ComposerHintAlignmentHarness: View {
+    @ObservedObject var model: ComposerHintAlignmentModel
+    @State var text: String
+    @State private var focused = false
+    @StateObject private var voice = VoiceInputAdapter()
+    var body: some View {
+        VStack {
+            ComposerMorphLayout(expansion: model.progress) {
+                Image(systemName: "plus.circle").frame(width: 32, height: 32)
+                VoiceComposerTextInput(text: $text, isFocused: $focused, presentation: nil,
+                    state: voice.state, voice: voice, isCompact: !model.expanded)
+                Color.clear
+                Color.clear
+            }
+            Spacer()
+        }.padding(14).transaction { $0.animation = nil }
+    }
+}
+
+@MainActor
+final class ComposerAttachmentMotionTests: XCTestCase {
+    func testPreparedImageIsHiddenUntilExpansionAndThenMovesWithTheComposer() async throws {
+        let model = ComposerAttachmentMotionModel()
+        let host = UIHostingController(rootView: ComposerAttachmentMotionHarness(model: model))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        try await Task.sleep(for: .milliseconds(100))
+        func find(_ view: UIView) -> UIView? {
+            if view.accessibilityIdentifier == "attachment-card" { return view }
+            return view.subviews.lazy.compactMap { find($0) }.first
+        }
+        let card = try XCTUnwrap(find(host.view))
+        let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+        let compactHeight = card.bounds.height
+        let compactOrigin = editor.convert(CGPoint.zero, to: card)
+        model.hasImage = true
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(card.bounds.height, compactHeight, accuracy: 1, "准备好图片但未开始展开时，不能先占满预览高度")
+        XCTAssertEqual(editor.convert(CGPoint.zero, to: card).y, compactOrigin.y, accuracy: 1)
+        let format = UIGraphicsImageRendererFormat()
+        format.preferredRange = .standard
+        format.scale = 1
+        let snapshot = UIGraphicsImageRenderer(size: host.view.bounds.size, format: format).image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: snapshot)
+        attachment.name = "附件未展开首帧"; attachment.lifetime = .keepAlways; add(attachment)
+        let cgImage = try XCTUnwrap(snapshot.cgImage)
+        XCTAssertEqual(cgImage.bitsPerPixel, 32)
+        let bytes = try XCTUnwrap(cgImage.dataProvider?.data)
+        let pixels = try XCTUnwrap(CFDataGetBytePtr(bytes))
+        var magenta = 0
+        // 图片探针使用纯洋红色；收紧首帧不能有任何露出的缩略图区域。
+        for row in 0..<cgImage.height {
+            for column in 0..<cgImage.width {
+                let offset = row * cgImage.bytesPerRow + column * 4
+                if pixels[offset] > 180 && pixels[offset + 1] < 70 && pixels[offset + 2] > 180 { magenta += 1 }
+            }
+        }
+        XCTAssertEqual(magenta, 0)
+        var editorSamples: [(CGFloat, CGFloat)] = []
+        let recorder = ComposerQuoteFrameRecorder {
+            let origin = editor.convert(CGPoint.zero, to: card)
+            let progress = (compactOrigin.x - origin.x) / 44
+            editorSamples.append((origin.y - compactOrigin.y, progress))
+            return (card.bounds.height - compactHeight, progress)
+        }
+        recorder.start()
+        model.expanded = true
+        try await Task.sleep(for: .milliseconds(350))
+        recorder.stop()
+        XCTAssertTrue(recorder.samples.contains { $0.1 > 0.05 && $0.1 < 0.95 })
+        let compactTextTop = max(0, (42 - ceil(UIFont.appPreferredFont(forTextStyle: .body).lineHeight)) / 2)
+        for sample in recorder.samples { XCTAssertEqual(sample.0, 143 * sample.1, accuracy: 1.5) }
+        for sample in editorSamples { XCTAssertEqual(sample.0, (83 + 6 - compactTextTop) * sample.1, accuracy: 1.5) }
+        XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+        model.hasImage = false
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertEqual(card.bounds.height, compactHeight + 60, accuracy: 1, "附件移除和退出缓存释放不能留下空白占位")
+        XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+    }
+}
+
+private final class ComposerAttachmentMotionModel: ObservableObject {
+    @Published var hasImage = false
+    @Published var expanded = false
+}
+
+private struct ComposerAttachmentMotionHarness: View {
+    @ObservedObject var model: ComposerAttachmentMotionModel
+    @State private var text = ""
+    @State private var focused = false
+    @StateObject private var voice = VoiceInputAdapter()
+    var body: some View {
+        VStack {
+            ComposerAttachmentStack(shown: model.expanded, hasContent: model.hasImage) {
+                if model.hasImage { Color(red: 1, green: 0, blue: 1).frame(height: 77) }
+            } content: {
+                ComposerMorphLayout(expansion: model.expanded ? 1 : 0) {
+                    Image(systemName: "plus.circle").frame(width: 32, height: 32)
+                    VoiceComposerTextInput(text: $text, isFocused: $focused, presentation: nil,
+                        state: voice.state, voice: voice, isCompact: !model.expanded)
+                        .transaction { $0.animation = nil }
+                    Color.clear
+                    Color.clear
+                }
+                .animation(.easeOut(duration: 0.22), value: model.expanded)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(ComposerFrameProbe(identifier: "attachment-card"))
+            Spacer()
+        }.padding(14)
+    }
+}
+
+@MainActor
+final class ComposerQuoteMotionTests: XCTestCase {
+    func testShrinkingRowsKeepsNativeViewportAndBodyMotionSynchronized() async throws {
+        let model = ComposerQuoteMotionModel()
+        model.parts = (0..<4).map { GatewayTextPart(type: "quote", text: "引用\($0)") }
+        let host = UIHostingController(rootView: ComposerQuoteMotionHarness(model: model, text: "保留正文"))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        try await Task.sleep(for: .milliseconds(100))
+        let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+        func findScroll(_ view: UIView) -> UIScrollView? {
+            if let scroll = view as? UIScrollView, !(scroll is UITextView) { return scroll }
+            return view.subviews.lazy.compactMap { findScroll($0) }.first
+        }
+        let scroll = try XCTUnwrap(findScroll(host.view))
+        let initialHeight = scroll.bounds.height
+        let initialY = editor.convert(.zero, to: host.view).y
+        let recorder = ComposerQuoteFrameRecorder {
+            (scroll.bounds.height - initialHeight, editor.convert(.zero, to: host.view).y - initialY)
+        }
+        recorder.start()
+        model.parts.removeFirst()
+        try await Task.sleep(for: .milliseconds(350))
+        recorder.stop()
+        XCTAssertTrue(recorder.samples.contains { $0.0 < -2 && $0.0 > scroll.bounds.height - initialHeight + 2 })
+        for sample in recorder.samples {
+            XCTAssertEqual(sample.0, sample.1, accuracy: 1, "视口不能先缩到终点、裁掉仍在移动的 Cell")
+        }
+    }
+
+    func testQuoteRevealAndNativeEditorMoveInTheSameFrames() async throws {
+        for text in ["", "保留正在输入的正文"] {
+            let model = ComposerQuoteMotionModel()
+            let host = UIHostingController(rootView: ComposerQuoteMotionHarness(model: model, text: text))
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            try await Task.sleep(for: .milliseconds(100))
+            host.view.layoutIfNeeded()
+            let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+            func findCard(_ view: UIView) -> UIView? {
+                if view.accessibilityIdentifier == "quote-motion-card" { return view }
+                return view.subviews.lazy.compactMap { findCard($0) }.first
+            }
+            let card = try XCTUnwrap(findCard(host.view))
+            let baselineY = editor.convert(editor.bounds, to: card).minY
+            let baselineHeight = card.bounds.height
+            let recorder = ComposerQuoteFrameRecorder {
+                (editor.convert(editor.bounds, to: card).minY - baselineY, card.bounds.height - baselineHeight)
+            }
+            recorder.start()
+            model.parts = [GatewayTextPart(type: "quote", text: "这是被引用的内容")]
+            try await Task.sleep(for: .milliseconds(350))
+            recorder.stop()
+            let expandedHeight = card.bounds.height - baselineHeight
+            XCTAssertGreaterThan(expandedHeight, 80)
+            XCTAssertTrue(recorder.samples.contains { $0.1 > 2 && $0.1 < expandedHeight - 2 }, "必须采到展开中间帧")
+            for sample in recorder.samples { XCTAssertEqual(sample.0, sample.1, accuracy: 1, "引用高度和文字位移必须逐帧一致") }
+            recorder.samples = []
+            recorder.start()
+            model.parts = []
+            try await Task.sleep(for: .milliseconds(350))
+            recorder.stop()
+            XCTAssertTrue(recorder.samples.contains { $0.1 > 2 && $0.1 < expandedHeight - 2 }, "必须采到收起中间帧")
+            for sample in recorder.samples { XCTAssertEqual(sample.0, sample.1, accuracy: 1) }
+            XCTAssertEqual(card.bounds.height, baselineHeight, accuracy: 1)
+            XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+            XCTAssertEqual(editor.text, text)
+        }
+    }
+}
+
+@MainActor
+private final class ComposerQuoteFrameRecorder: NSObject {
+    var samples: [(CGFloat, CGFloat)] = []
+    let sample: () -> (CGFloat, CGFloat)
+    private var displayLink: CADisplayLink?
+    init(sample: @escaping () -> (CGFloat, CGFloat)) { self.sample = sample }
+    func start() {
+        displayLink = CADisplayLink(target: self, selector: #selector(tick))
+        displayLink?.add(to: .main, forMode: .common)
+    }
+    func stop() { displayLink?.invalidate(); displayLink = nil }
+    @objc private func tick() { samples.append(sample()) }
+}
+
+private final class ComposerQuoteMotionModel: ObservableObject {
+    @Published var parts: [GatewayTextPart] = []
+}
+
+private struct ComposerQuoteMotionHarness: View {
+    @ObservedObject var model: ComposerQuoteMotionModel
+    @State var text: String
+    @State private var focused = false
+    var body: some View {
+        VStack {
+            ComposerQuoteStack(parts: model.parts, visible: true, onRemove: { _ in model.parts = [] }) {
+                SlashCommandTextView(text: $text, presentation: nil, placeholder: "描述你想要构建的内容", isFocused: $focused)
+                    .frame(height: 38)
+                    .transaction { $0.animation = nil }
+            }
+            .background(ComposerFrameProbe(identifier: "quote-motion-card"))
+            Spacer()
+        }.padding(14)
+    }
+}
+
+@MainActor
+final class ComposerQuoteIdentityTests: XCTestCase {
+    func testDuplicateRemovalKeepsSurvivorIdentityAndUsesUpdatedProtocolIndex() throws {
+        let store = ComposerQuoteIdentityStore()
+        let initial = [GatewayTextPart(type: "text", text: "正文"), GatewayTextPart(type: "quote", text: "同一引用"),
+            GatewayTextPart(type: "text", text: "中间正文"), GatewayTextPart(type: "quote", text: "同一引用")]
+        let entries = store.update(initial)
+        XCTAssertNotEqual(entries[0].id, entries[1].id)
+        XCTAssertEqual(store.remove(entries[0].id, from: initial), 1)
+        let remaining = [GatewayTextPart(type: "text", text: "正文中间正文"), GatewayTextPart(type: "quote", text: "同一引用")]
+        let survivor = try XCTUnwrap(store.update(remaining).first)
+        XCTAssertEqual(survivor.id, entries[1].id)
+        XCTAssertEqual(survivor.partIndex, 1)
+        let reindexed = [GatewayTextPart(type: "quote", text: "同一引用"), GatewayTextPart(type: "text", text: "新正文")]
+        XCTAssertEqual(store.update(reindexed).first?.id, survivor.id)
+        XCTAssertEqual(store.remove(survivor.id, from: reindexed), 0)
+        XCTAssertTrue(store.update([]).isEmpty)
+        XCTAssertNotEqual(store.update([GatewayTextPart(type: "quote", text: "同一引用")]).first?.id, survivor.id)
+    }
+
+    func testDeletedCloseLeavesWithItsCellAndSurvivorCloseDoesNotMove() async throws {
+        let model = ComposerQuoteIdentityMotionModel()
+        let host = UIHostingController(rootView: ComposerQuoteIdentityMotionHarness(model: model))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        try await Task.sleep(for: .milliseconds(100))
+        let entries = model.identities.update(model.parts)
+        func find(_ id: String, in view: UIView) -> UIView? {
+            if view.accessibilityIdentifier == id { return view }
+            return view.subviews.lazy.compactMap { find(id, in: $0) }.first
+        }
+        let removed = try XCTUnwrap(find("identity-close-\(entries[0].id)", in: host.view) as? UIButton)
+        let close = try XCTUnwrap(find("identity-close-\(entries[1].id)", in: host.view) as? UIButton)
+        let cell = try XCTUnwrap(find("identity-cell-\(entries[1].id)", in: host.view))
+        let originalX = close.convert(close.bounds, to: host.view).maxX
+        let originalWidth = cell.bounds.width
+        let recorder = ComposerQuoteFrameRecorder { (close.convert(close.bounds, to: host.view).maxX, cell.bounds.width) }
+        recorder.start()
+        removed.sendActions(for: .touchUpInside)
+        try await Task.sleep(for: .milliseconds(350))
+        recorder.stop()
+        XCTAssertNil(find("identity-close-\(entries[0].id)", in: host.view))
+        XCTAssertTrue(close === find("identity-close-\(entries[1].id)", in: host.view))
+        XCTAssertTrue(cell === find("identity-cell-\(entries[1].id)", in: host.view))
+        XCTAssertTrue(recorder.samples.contains { $0.1 > originalWidth + 2 && $0.1 < cell.bounds.width - 2 })
+        for sample in recorder.samples { XCTAssertEqual(sample.0, originalX, accuracy: 1, "保留的叉号不能从另一 Cell 飞过来") }
+        XCTAssertGreaterThan(cell.bounds.width, originalWidth * 1.9)
+        XCTAssertEqual(close.alpha, 1)
+    }
+}
+
+private final class ComposerQuoteIdentityMotionModel: ObservableObject {
+    let identities = ComposerQuoteIdentityStore()
+    @Published var parts = [GatewayTextPart(type: "quote", text: "同一引用"), GatewayTextPart(type: "quote", text: "同一引用")]
+}
+
+private struct ComposerQuoteIdentityMotionHarness: View {
+    @ObservedObject var model: ComposerQuoteIdentityMotionModel
+    var body: some View {
+        let entries = model.identities.update(model.parts)
+        VStack {
+            GeometryReader { geometry in
+                let columns = max(1, entries.count)
+                let width = (geometry.size.width - CGFloat(columns - 1) * 8) / CGFloat(columns)
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { slot, entry in
+                        ZStack(alignment: .topTrailing) {
+                            ComposerFrameProbe(identifier: "identity-cell-\(entry.id)")
+                            ComposerQuoteCloseProbe(identifier: "identity-close-\(entry.id)") {
+                                if let index = model.identities.remove(entry.id, from: model.parts) { model.parts.remove(at: index) }
+                            }.frame(width: 44, height: 44)
+                        }
+                        .modifier(ComposerQuoteCellFrame(rect: CGRect(x: CGFloat(slot) * (width + 8), y: 0, width: width, height: 72)))
+                        .animation(.easeOut(duration: 0.22), value: width)
+                        .transition(.identity)
+                    }
+                }.frame(width: geometry.size.width, height: 72, alignment: .topLeading)
+            }.frame(height: 72)
+            Spacer()
+        }.padding(14)
+    }
+}
+
+private struct ComposerQuoteCloseProbe: UIViewRepresentable {
+    let identifier: String
+    let onTap: () -> Void
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .system)
+        button.accessibilityIdentifier = identifier
+        button.addTarget(context.coordinator, action: #selector(Coordinator.tap), for: .touchUpInside)
+        return button
+    }
+    func updateUIView(_ view: UIButton, context: Context) { context.coordinator.onTap = onTap }
+    final class Coordinator: NSObject {
+        var onTap: (() -> Void)?
+        @objc func tap() { onTap?() }
+    }
+}
+
+@MainActor
+final class ComposerQuoteGridLayoutTests: XCTestCase {
+    func testQuotesPackThreePerRowAndScrollWithinThreeRowsInBothThemes() async throws {
+        func parts(_ count: Int) -> [GatewayTextPart] {
+            [GatewayTextPart(type: "text", text: "正文仍然保留")] + (1...count).map {
+                GatewayTextPart(type: "quote", text: "引用\($0)：" + String(repeating: "这是一段需要预览的引用内容。", count: 6))
+            }
+        }
+        for dark in [false, true] {
+            func root(_ count: Int) -> some View {
+                ComposerQuoteGridHarness(parts: parts(count))
+                    .environment(\.colorScheme, dark ? .dark : .light)
+            }
+            let host = UIHostingController(rootView: root(1))
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            host.overrideUserInterfaceStyle = dark ? .dark : .light
+            host.view.backgroundColor = dark ? .black : .white
+            host.view.frame = window.bounds
+            var heights: [Int: CGFloat] = [:]
+            for count in [1, 2, 3, 4, 6, 7, 9, 10, 12] {
+                host.rootView = root(count)
+                try await Task.sleep(for: .milliseconds(300))
+                host.view.layoutIfNeeded()
+                heights[count] = host.sizeThatFits(in: CGSize(width: 390, height: 1000)).height
+                if count == 9 {
+                    let image = UIGraphicsImageRenderer(size: host.view.bounds.size).image { _ in
+                        host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+                    }
+                    let attachment = XCTAttachment(image: image)
+                    attachment.name = dark ? "引用三列三行-夜间" : "引用三列三行-日间"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
+                }
+            }
+            XCTAssertEqual(heights[1]!, heights[2]!, accuracy: 1)
+            XCTAssertEqual(heights[2]!, heights[3]!, accuracy: 1)
+            XCTAssertGreaterThan(heights[4]!, heights[3]!)
+            XCTAssertEqual(heights[4]!, heights[6]!, accuracy: 1)
+            XCTAssertGreaterThan(heights[7]!, heights[6]!)
+            XCTAssertEqual(heights[7]!, heights[9]!, accuracy: 1)
+            XCTAssertEqual(heights[9]!, heights[10]!, accuracy: 1)
+            XCTAssertEqual(heights[10]!, heights[12]!, accuracy: 1)
+            try await Task.sleep(for: .milliseconds(250))
+            host.view.layoutIfNeeded()
+            func findScroll(in view: UIView) -> UIScrollView? {
+                if let scroll = view as? UIScrollView, !(scroll is UITextView) { return scroll }
+                return view.subviews.lazy.compactMap { findScroll(in: $0) }.first
+            }
+            let scroll = try XCTUnwrap(findScroll(in: host.view))
+            let editor = try XCTUnwrap(firstDescendant(of: UITextView.self, in: host.view))
+            XCTAssertTrue(editor.becomeFirstResponder())
+            XCTAssertTrue(scroll.isScrollEnabled)
+            XCTAssertGreaterThan(scroll.contentSize.height, scroll.bounds.height)
+            let originalHeight = scroll.bounds.height
+            scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentSize.height - scroll.bounds.height), animated: false)
+            XCTAssertGreaterThan(scroll.contentOffset.y, 0)
+            host.rootView = root(18)
+            try await Task.sleep(for: .milliseconds(300))
+            host.view.layoutIfNeeded()
+            // 聚焦会改变宿主的键盘安全区；引用上限应比较引用滚动区本身。
+            XCTAssertEqual(scroll.bounds.height, originalHeight, accuracy: 1)
+            XCTAssertTrue(scroll === findScroll(in: host.view))
+            XCTAssertTrue(editor === firstDescendant(of: UITextView.self, in: host.view))
+            XCTAssertTrue(editor.isFirstResponder)
+            XCTAssertEqual(editor.text, "正在编辑的正文")
+        }
+    }
+}
+
+private struct ComposerQuoteGridHarness: View {
+    let parts: [GatewayTextPart]
+    @State private var draft = "正在编辑的正文"
+    @State private var focused = false
+    var body: some View {
+        VStack(spacing: 12) {
+            ComposerReplyPreviews(parts: parts, onRemove: { _ in })
+            SlashCommandTextView(text: $draft, presentation: nil, placeholder: "消息", isFocused: $focused)
+                .frame(height: 38)
+        }
+    }
+}
+
+private struct CompactComposerHarness: View {
+    @State private var text = ""
+    @State private var focused = false
+    var body: some View {
+        VStack {
+            Spacer()
+            ComposerMorphLayout(expansion: focused ? 1 : 0) {
+                Image(systemName: "plus.circle").frame(width: 32, height: 32)
+                SlashCommandTextView(text: $text, presentation: nil, placeholder: "给 DSH 发消息…",
+                    isFocused: $focused, isCompact: !focused).frame(minHeight: 38)
+                Text("模型 · 权限 · 上下文").opacity(focused ? 1 : 0)
+                Image(systemName: "arrow.up.circle.fill").frame(width: 42, height: 42).opacity(focused ? 1 : 0)
+            }
+            .padding(14).background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24))
+            .animation(.easeOut(duration: 0.22), value: focused)
+        }.padding(14)
     }
 }
 
@@ -995,6 +1650,14 @@ private struct HistoryHeightProbe: UIViewRepresentable {
 }
 
 final class ConversationViewportLayoutTests: XCTestCase {
+    @MainActor
+    private func waitForLayout(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while !condition(), Date() < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(condition(), "会话布局未在超时前稳定", file: file, line: line)
+    }
     @MainActor
     func testWarmSessionRestoresReadingAnchorAndSearchDoesNotSnapBackToTail() async throws {
         ConversationViewportController.clearReusableHeights()
@@ -1829,8 +2492,11 @@ final class ConversationViewportLayoutTests: XCTestCase {
             showsCopyButton: true,
             imageData: { _ in nil }
         )
+        let measurementLayout = try XCTUnwrap(
+            firstDescendant(of: UICollectionView.self, in: controller.view)?.collectionViewLayout as? CollectionViewChatLayout
+        )
         let expectedResponseHeight = UIHostingController(rootView: responseView).sizeThatFits(
-            in: CGSize(width: 390, height: CGFloat.greatestFiniteMagnitude)
+            in: CGSize(width: measurementLayout.layoutFrame.width, height: CGFloat.greatestFiniteMagnitude)
         ).height
         let entries = [
             ConversationViewportEntry(
@@ -2136,6 +2802,175 @@ final class ConversationViewportLayoutTests: XCTestCase {
     }
 
     @MainActor
+    func testGoalProjectionKeepsLatestMessageAboveComposerInConversationView() async throws {
+        let suite = "GoalComposerLayout.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = UserDefaultsAppPreferences(userDefaults: defaults)
+        preferences.automaticallyConnect = false
+        let session = SessionSummary(id: suite, title: "持久目标滚动回归", lastActivity: Date(),
+            isRunning: false, hasUnread: false)
+        preferences.saveSessions([session])
+        let store = AppStore(preferences: preferences, gatewayLocalID: suite, chatHistoryCache: nil)
+        defer { store.deactivateGateway() }
+        let prepared = await store.prepareConversation(for: session)
+        XCTAssertTrue(prepared)
+        let timeline = store.conversationTimeline(for: session.id)
+        timeline.publish((0..<16).map { index in
+            ConversationItem(id: "goal-message-\(index)", kind: .assistant, title: "",
+                text: "消息 \(index)：\n" + String(repeating: "持久目标出现后仍应能读到最新内容。", count: 4),
+                isError: false, date: Date(timeIntervalSince1970: Double(index)))
+        })
+        let controller = UIHostingController(rootView: ConversationView(activeView: .constant(0)).environmentObject(store))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.frame = scene.coordinateSpace.bounds
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        try await waitForLayout {
+            guard let list = firstDescendant(of: UICollectionView.self, in: controller.view) else { return false }
+            return list.numberOfSections > 0 && list.numberOfItems(inSection: 0) >= 16
+                && !list.isHidden && list.layer.opacity == 1 && list.contentInset.bottom > 0
+        }
+        controller.view.layoutIfNeeded()
+        let list = try XCTUnwrap(firstDescendant(of: UICollectionView.self, in: controller.view))
+        let previousInset = list.contentInset.bottom
+        let revision = timeline.currentSnapshot.revision
+        var frame = GatewayFrame(kind: "goal-updated")
+        frame.sessionId = session.id
+        frame.asOfSeq = 1
+        frame.goal = GatewayGoalPayload(goal: GatewayGoalDefinition(id: "goal", revision: 1,
+            objective: "完成持久目标与权限显示回归验证", phase: "active"), roundsStarted: 1)
+        store.gateway.onFrame?(frame)
+        try await waitForLayout {
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
+            return store.selectedGoalProjection?.goal != nil && list.contentInset.bottom > previousInset + 40
+        }
+        controller.view.layoutIfNeeded()
+        XCTAssertNotNil(store.selectedGoalProjection?.goal)
+        XCTAssertEqual(timeline.currentSnapshot.revision, revision, "该场景只能改变目标面板，不能依赖新消息修正滚动")
+        XCTAssertGreaterThan(list.contentInset.bottom, previousInset + 40)
+        let bottom = max(-list.adjustedContentInset.top,
+            list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)
+        XCTAssertEqual(list.contentOffset.y, bottom, accuracy: 1)
+        let lastPath = IndexPath(item: list.numberOfItems(inSection: 0) - 1, section: 0)
+        let lastFrame = try XCTUnwrap(list.layoutAttributesForItem(at: lastPath)).frame
+        XCTAssertLessThanOrEqual(lastFrame.maxY - list.contentOffset.y,
+                                 list.bounds.height - list.contentInset.bottom + 1,
+                                 "最新消息必须完整位于底部目标与输入框上方")
+        let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "持久目标出现后最新消息完整可见"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
+    func testPinnedViewportFollowsBottomInsetChangesWithoutTimelineUpdate() async throws {
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 320)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.frame = controller.view.frame
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+
+        controller.view.layoutIfNeeded()
+        let timeline = ConversationTimeline()
+        let rows = (0..<12).map { index in
+            ConversationViewportEntry(
+                id: "bottom-inset-\(index)",
+                revision: 0,
+                content: AnyView(Text("消息 \(index)").frame(height: 90))
+            )
+        }
+        controller.configure(sessionID: rows[0].id, timeline: timeline, supplementalEntries: rows,
+                             makeEntries: { _ in [] }, bottomInset: 0)
+        let list = try XCTUnwrap(firstDescendant(of: UICollectionView.self, in: controller.view))
+        try await waitForLayout {
+            list.layoutIfNeeded()
+            return list.numberOfSections > 0 && list.numberOfItems(inSection: 0) == rows.count
+                && list.contentSize.height > list.bounds.height
+                && abs(list.contentOffset.y - (list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)) <= 1
+        }
+        list.layoutIfNeeded()
+        let oldBottom = list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom
+        XCTAssertEqual(list.contentOffset.y, oldBottom, accuracy: 1)
+
+        controller.configure(sessionID: rows[0].id, timeline: timeline, supplementalEntries: rows,
+                             makeEntries: { _ in [] }, bottomInset: 120)
+        try await waitForLayout { list.contentInset.bottom == 120 }
+        list.layoutIfNeeded()
+        let newBottom = list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom
+        XCTAssertGreaterThan(newBottom, oldBottom + 100)
+        XCTAssertEqual(list.contentOffset.y, newBottom, accuracy: 1,
+                       "底部目标面板出现时，贴底消息必须跟随新的覆盖层留白")
+    }
+
+    @MainActor
+    func testBottomInsetChangePreservesReadingPositionAfterUserLeavesTail() async throws {
+        let controller = ConversationViewportController(
+            onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in },
+            onBottomAlignmentCompleted: {},
+            onApproachingTop: {}
+        )
+        controller.loadViewIfNeeded()
+        controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 320)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.frame = controller.view.frame
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+
+        controller.view.layoutIfNeeded()
+        let timeline = ConversationTimeline()
+        let rows = (0..<18).map { index in
+            ConversationViewportEntry(
+                id: "reading-inset-\(index)",
+                revision: 0,
+                content: AnyView(Text("消息 \(index)").frame(height: 80))
+            )
+        }
+        controller.configure(sessionID: rows[0].id, timeline: timeline, supplementalEntries: rows,
+                             makeEntries: { _ in [] }, bottomInset: 0)
+        let list = try XCTUnwrap(firstDescendant(of: UICollectionView.self, in: controller.view))
+        try await waitForLayout {
+            list.layoutIfNeeded()
+            return list.numberOfSections > 0 && list.numberOfItems(inSection: 0) == rows.count
+                && list.contentSize.height > list.bounds.height
+                && abs(list.contentOffset.y - (list.contentSize.height - list.bounds.height + list.adjustedContentInset.bottom)) <= 1
+        }
+        controller.scrollViewWillBeginDragging(list)
+        list.setContentOffset(CGPoint(x: 0, y: 260), animated: false)
+        controller.scrollViewDidScroll(list)
+        controller.scrollViewDidEndDragging(list, willDecelerate: false)
+        let readingOffset = list.contentOffset.y
+        XCTAssertLessThan(readingOffset, list.contentSize.height - list.bounds.height - 28)
+
+        controller.configure(sessionID: rows[0].id, timeline: timeline, supplementalEntries: rows,
+                             makeEntries: { _ in [] }, bottomInset: 120)
+        try await waitForLayout { list.contentInset.bottom == 120 }
+        XCTAssertEqual(list.contentOffset.y, readingOffset, accuracy: 1,
+                       "用户离开底部后，目标面板变化不能抢夺阅读位置")
+    }
+
+    @MainActor
     func testLongSecondaryContextUsesBoundedScrollableViewport() {
         let item = ConversationItem(
             id: "long-context",
@@ -2412,6 +3247,129 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
+    func testAgentAttentionNotificationsWaitForBackgroundAndDeduplicateAcrossRestarts() throws {
+        let suite = "AgentNotifications.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var background = false
+        var notifications: [UNNotificationRequest] = []
+        func makeManager() -> AgentUserNotificationManager {
+            AgentUserNotificationManager(
+                defaults: defaults,
+                isInBackground: { background },
+                scheduleNotification: { notifications.append($0) }
+            )
+        }
+        func sendAttention(_ manager: AgentUserNotificationManager, gateway: String = "gateway-a") {
+            manager.notifyQuestionRequired(
+                gatewayID: gateway, requestID: "rpc-1", sessionID: "question-session",
+                sessionTitle: "Question session", prompt: "Choose a direction"
+            )
+            manager.notifyApprovalRequired(
+                gatewayID: gateway, requestID: "rpc-1", sessionID: "approval-session",
+                sessionTitle: "Approval session", detail: "Run command"
+            )
+        }
+        let manager = makeManager()
+        sendAttention(manager)
+        XCTAssertTrue(notifications.isEmpty)
+        manager.notifyExecutionEnded(
+            gatewayID: "gateway-a", eventID: "end-1", sessionID: "s1",
+            sessionTitle: "Session", failed: false
+        )
+        background = true
+        sendAttention(manager)
+        XCTAssertEqual(notifications.count, 2)
+        XCTAssertEqual(Set(notifications.compactMap { $0.content.userInfo["sessionID"] as? String }),
+                       ["question-session", "approval-session"])
+        XCTAssertTrue(notifications.allSatisfy { $0.content.userInfo["gatewayID"] as? String == "gateway-a" })
+        XCTAssertTrue(notifications.allSatisfy { $0.content.sound != nil && $0.trigger == nil })
+        XCTAssertTrue(notifications[0].content.body.contains("Choose a direction"))
+        sendAttention(manager)
+        sendAttention(makeManager())
+        manager.notifyExecutionEnded(
+            gatewayID: "gateway-a", eventID: "end-1", sessionID: "s1",
+            sessionTitle: "Session", failed: false
+        )
+        XCTAssertEqual(notifications.count, 2)
+        sendAttention(manager, gateway: "gateway-b")
+        XCTAssertEqual(notifications.count, 4)
+    }
+
+    @MainActor
+    func testAppStoreNotifiesPendingQuestionsAndApprovalsWhenEnteringBackground() async throws {
+        let suite = "AgentNotifications.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var background = false
+        var notifications: [UNNotificationRequest] = []
+        let manager = AgentUserNotificationManager(
+            defaults: defaults, isInBackground: { background },
+            scheduleNotification: { notifications.append($0) }
+        )
+        let store = AppStore(
+            preferences: AppPreferencesSpy(endpoint: "wss://injected.example/ws/mobile", selectedWorkspaceID: nil, sessions: []),
+            gatewayLocalID: "test-gateway", agentNotifications: manager
+        )
+        let question = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"question-requested","rpcId":"question-1","sessionId":"s1","questions":[{"id":"q1","question":"继续？","options":[{"label":"是"}]}]}"#.utf8
+        ))
+        let approval = try GatewayWireDecoder.decode(Data(
+            #"{"kind":"approval-requested","rpcId":"approval-1","sessionId":"s2","approvalId":"a1","toolName":"Bash","reason":"读取版本"}"#.utf8
+        ))
+        store.gateway.onFrame?(question)
+        store.gateway.onFrame?(approval)
+        XCTAssertTrue(notifications.isEmpty)
+        background = true
+        store.handleScenePhase(.background)
+        XCTAssertEqual(notifications.count, 2)
+        await flushDeferredKMPEvents(in: store)
+        store.handleScenePhase(.background)
+        store.gateway.onFrame?(question)
+        store.gateway.onFrame?(approval)
+        await flushDeferredKMPEvents(in: store)
+        XCTAssertEqual(notifications.count, 2)
+        XCTAssertEqual(Set(notifications.compactMap { $0.content.userInfo["sessionID"] as? String }), ["s1", "s2"])
+    }
+
+    @MainActor
+    func testAppStoreBackgroundFramesNotifyButResolvedForegroundRequestsDoNot() async throws {
+        let suite = "AgentNotifications.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var background = false
+        var notifications: [UNNotificationRequest] = []
+        let manager = AgentUserNotificationManager(
+            defaults: defaults, isInBackground: { background },
+            scheduleNotification: { notifications.append($0) }
+        )
+        let store = AppStore(
+            preferences: AppPreferencesSpy(endpoint: "wss://injected.example/ws/mobile", selectedWorkspaceID: nil, sessions: []),
+            agentNotifications: manager
+        )
+        for raw in [
+            #"{"kind":"question-requested","rpcId":"q1","sessionId":"s1","questions":[{"id":"q","question":"继续？"}]}"#,
+            #"{"kind":"approval-requested","rpcId":"a1","sessionId":"s1","approvalId":"a","toolName":"Bash"}"#,
+            #"{"kind":"question-resolved","rpcId":"q1","sessionId":"s1","outcome":"answered"}"#,
+            #"{"kind":"approval-resolved","rpcId":"a1","sessionId":"s1","outcome":"allowed-once"}"#
+        ] {
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(raw.utf8)))
+        }
+        await flushDeferredKMPEvents(in: store)
+        background = true
+        store.handleScenePhase(.background)
+        XCTAssertTrue(notifications.isEmpty)
+        for raw in [
+            #"{"kind":"question-requested","rpcId":"q2","sessionId":"s1","replay":true,"questions":[{"id":"q","question":"继续？"}]}"#,
+            #"{"kind":"approval-requested","rpcId":"a2","sessionId":"s1","approvalId":"a","toolName":"Bash","replay":true}"#
+        ] {
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(raw.utf8)))
+        }
+        await flushDeferredKMPEvents(in: store)
+        XCTAssertEqual(notifications.count, 2)
+    }
+
+    @MainActor
     private func flushDeferredKMPEvents(in store: AppStore) async {
         await store.awaitPendingKMPEventDeliveriesForTesting()
     }
@@ -2669,7 +3627,19 @@ final class GatewayProtocolTests: XCTestCase {
         XCTAssertTrue(store.historyLoadingSessionIds.contains("mask-session"), "迟到快照不能撤掉当前遮罩")
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"历史回复"}]}}}],"hasMore":true,"nextBeforeSeq":10}"#)
+        XCTAssertTrue(store.historyLoadingSessionIds.contains("mask-session"), "首屏自动补第二页")
+        XCTAssertTrue(store.historyLoadingOlderSessionIds.contains("mask-session"))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        XCTAssertTrue(store.conversationTimeline(for: "mask-session").currentSnapshot.items.isEmpty,
+            "第二页到达前不能先呈现尾窗，否则后续前插会与首屏贴底竞争")
+        XCTAssertTrue(store.isPreparingConversation("mask-session"))
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"history","sessionId":"mask-session","historyFormatVersion":3,"events":[{"type":"user/message","seq":9,"time":9,"data":{"content":[{"type":"text","text":"上一页的问题"}]}}],"hasMore":true,"nextBeforeSeq":9}"#)
+        for _ in 0..<200 where store.historyLoadingSessionIds.contains("mask-session") {
+            try await Task.sleep(for: .milliseconds(5))
+        }
         XCTAssertFalse(store.historyLoadingSessionIds.contains("mask-session"))
+        XCTAssertEqual(store.events["mask-session"]?.map(\.seq), [9, 10])
         XCTAssertEqual(store.historyHasMore["mask-session"], true)
         await store.awaitConversationProjectionForTesting(sessionID: "mask-session", expectedText: "历史回复")
         XCTAssertEqual(store.renderedConversationItems["mask-session"]?.last?.text, "历史回复")
@@ -2706,6 +3676,7 @@ final class GatewayProtocolTests: XCTestCase {
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
         try await deliverHistoryLoadingFrame(store, snapshot)
+        try await completeInitialHistoryPage(store)
         await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "已有历史")
         let revision = store.conversationTimeline(for: session.id).currentSnapshot.revision
         // 主动后台挂起后的 hello，没有先调用 onConnectionFailure。
@@ -2717,10 +3688,65 @@ final class GatewayProtocolTests: XCTestCase {
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
         try await deliverHistoryLoadingFrame(store, snapshot)
+        try await completeInitialHistoryPage(store)
         XCTAssertFalse(store.historyLoadingSessionIds.contains(session.id))
         XCTAssertEqual(store.conversationTimeline(for: session.id).currentSnapshot.revision, revision,
             "相同快照不应重建投影或重新发布 UIKit 列表")
         XCTAssertTrue(store.historyHasMore[session.id] == true)
+    }
+
+    @MainActor
+    func testWsHistorySurvivesRtcResyncAndRejectsOldSubscriptionAndDuplicateEvents() async throws {
+        let (store, session) = try await makeRc2HistoryLoadingStore()
+        defer { store.deactivateGateway() }
+        let oldSnapshot = #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"ws-sub","streamId":"ws-stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"WS已有历史"}]}}}],"hasMore":false}"#
+        try await deliverHistoryLoadingFrame(store, #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"ws-sub","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store, oldSnapshot)
+        await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "WS已有历史")
+        let delta = #"{"kind":"event","sessionId":"mask-session","subscriptionId":"ws-sub","streamId":"ws-stream","seq":11,"time":101,"event":{"type":"assistant/message","turn":2,"step":1,"text":"WS已同步增量"}}"#
+        try await deliverHistoryLoadingFrame(store, delta)
+        store.gateway.onConnectionInvalidated?()
+        XCTAssertEqual(store.events[session.id]?.map(\.seq), [10, 11], "切换期间保留已同步数据")
+        try await deliverHistoryLoadingFrame(store, #"{"kind":"hello","historyFormatVersion":3,"capabilities":["assistant-stream-v1"]}"#)
+        try await deliverHistoryLoadingFrame(store, #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"rtc-sub","assistantStream":true}"#)
+        let newSnapshot = #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"rtc-sub","streamId":"rtc-stream","historyFormatVersion":3,"cursor":11,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"WS已有历史"}]}}},{"type":"assistant/message","seq":11,"time":101,"data":{"turn":2,"step":1,"message":{"content":[{"type":"text","text":"WS已同步增量"}]}}}],"hasMore":false}"#
+        try await deliverHistoryLoadingFrame(store, newSnapshot)
+        let newDelta = #"{"kind":"event","sessionId":"mask-session","subscriptionId":"rtc-sub","streamId":"rtc-stream","seq":12,"time":102,"event":{"type":"assistant/message","turn":3,"step":1,"text":"RTC新增"}}"#
+        try await deliverHistoryLoadingFrame(store, newDelta)
+        try await deliverHistoryLoadingFrame(store, newDelta)
+        try await deliverHistoryLoadingFrame(store, oldSnapshot)
+        try await deliverHistoryLoadingFrame(store, delta)
+        await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "RTC新增")
+        XCTAssertEqual(store.events[session.id]?.map(\.seq), [10, 11, 12])
+        XCTAssertEqual(store.renderedConversationItems[session.id]?.filter { $0.text == "RTC新增" }.count, 1)
+        XCTAssertNil(store.lastError)
+    }
+
+    @MainActor
+    func testUnconfirmedWriteIsNotReplayedOnTransportChange() async throws {
+        let (store, _) = try await makeRc2HistoryLoadingStore()
+        defer { store.deactivateGateway() }
+        var writes: [String] = []
+        store.gateway.installConnectedTransportForTesting { payload in
+            if let frame = try? JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any],
+               frame["type"] as? String == "message" { writes.append(payload) }
+        }
+        XCTAssertTrue(store.send("切换前已提交但尚未确认"))
+        let deadline = ProcessInfo.processInfo.systemUptime + 1
+        while writes.isEmpty, ProcessInfo.processInfo.systemUptime < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertTrue(store.messageSubmissionPending)
+        store.gateway.onConnectionInvalidated?()
+        XCTAssertFalse(store.messageSubmissionPending)
+        XCTAssertNil(store.lastError, "切换连接时静默清理等待，不额外提示")
+        try await deliverHistoryLoadingFrame(store, #"{"kind":"hello","historyFormatVersion":3,"capabilities":["assistant-stream-v1"]}"#)
+        try await deliverHistoryLoadingFrame(store, #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"new","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store, #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"new","streamId":"new","historyFormatVersion":3,"cursor":0,"events":[],"hasMore":false}"#)
+        XCTAssertNil(store.lastError, "历史重同步不显示待确认提示")
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(writes.count, 1, "重连和重新同步只恢复读请求，不重放已提交的写操作")
     }
 
     @MainActor
@@ -2876,7 +3902,7 @@ final class GatewayProtocolTests: XCTestCase {
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"session-stream-reset","sessionId":"mask-session","subscriptionId":"sub","streamId":"opening","retrying":false,"message":"Host refuses this format v0 Session"}"#)
         XCTAssertFalse(store.isPreparingConversation(session.id))
-        XCTAssertEqual(store.historyLoadErrors[session.id], "Host refuses this format v0 Session")
+        XCTAssertEqual(store.historyLoadErrors[session.id], .hostRejectedFormat("Host refuses this format v0 Session"))
         _ = await store.prepareConversation(for: session)
         XCTAssertNil(store.historyLoadErrors[session.id])
         try await deliverHistoryLoadingFrame(store,
@@ -2893,6 +3919,7 @@ final class GatewayProtocolTests: XCTestCase {
             #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"existing"}]}}}],"hasMore":true,"nextBeforeSeq":10}"#)
+        try await completeInitialHistoryPage(store)
         await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "existing")
         let consumerID = UUID()
         var completed: [HistoryPresentationOutcome] = []
@@ -2942,6 +3969,7 @@ final class GatewayProtocolTests: XCTestCase {
             #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
         let snapshot = #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"existing"}]}}}],"hasMore":true,"nextBeforeSeq":10}"#
         try await deliverHistoryLoadingFrame(store, snapshot)
+        try await completeInitialHistoryPage(store)
         await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "existing")
         let consumerID = UUID()
         var completed: [HistoryPresentationOutcome] = []
@@ -3127,7 +4155,11 @@ final class GatewayProtocolTests: XCTestCase {
         store.conversationHistoryPreparationForTesting = nil
         await gate.release()
         await store.awaitPendingKMPEventDeliveriesForTesting()
-        await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "正文 81")
+        // 缓存也含末条 81；等待只存在于权威窗口中的首条，防止在第二次提交前提前断言。
+        for _ in 0..<200 {
+            if store.renderedConversationItems[session.id]?.first?.text == "正文 1" { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
         XCTAssertEqual(store.conversationHistoryReusedPreparationCountForTesting, 1)
         XCTAssertEqual(store.renderedConversationItems[session.id]?.count, 81)
         XCTAssertEqual(store.renderedConversationItems[session.id]?.first?.text, "正文 1")
@@ -3173,6 +4205,7 @@ final class GatewayProtocolTests: XCTestCase {
             #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
         try await deliverHistoryLoadingFrame(store,
             #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":100,"events":[{"type":"assistant/message","seq":100,"time":100,"data":{"message":{"content":[{"type":"text","text":"existing"}]}}}],"hasMore":true,"nextBeforeSeq":100}"#)
+        try await completeInitialHistoryPage(store)
         await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "existing")
         let consumer = UUID(), probe = HistoryReadingProbe()
         store.attachHistoryPresentationConsumer(sessionID: session.id, consumer: .init(id: consumer) { probe.receive($0) })
@@ -3288,6 +4321,16 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
+    private func completeInitialHistoryPage(_ store: AppStore) async throws {
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"history","sessionId":"mask-session","historyFormatVersion":3,"events":[],"hasMore":true,"nextBeforeSeq":9}"#)
+        for _ in 0..<200 where store.historyLoadingSessionIds.contains("mask-session") {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertFalse(store.historyLoadingSessionIds.contains("mask-session"))
+    }
+
+    @MainActor
     private func deliverHistoryLoadingFrame(_ store: AppStore, _ json: String) async throws {
         store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(json.utf8)))
         await flushDeferredKMPEvents(in: store)
@@ -3298,7 +4341,8 @@ final class GatewayProtocolTests: XCTestCase {
         let session = SessionSummary(id: "s", title: "Stream", lastActivity: Date(timeIntervalSince1970: 100),
             isRunning: true, hasUnread: false)
         let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://127.0.0.1:3080/ws/mobile",
-            selectedWorkspaceID: nil, sessions: [session]))
+            selectedWorkspaceID: nil, sessions: [session]), chatHistoryCache: nil)
+        store.gateway.installConnectedTransportForTesting()
         let prepared = await store.prepareConversation(for: session)
         XCTAssertTrue(prepared)
         func deliver(_ json: String) async throws {
@@ -3308,14 +4352,14 @@ final class GatewayProtocolTests: XCTestCase {
         try await deliver(#"{"kind":"hello","historyFormatVersion":3,"capabilities":["assistant-stream-v1"]}"#)
         try await deliver(#"{"kind":"subscribed","sessionId":"s","subscriptionId":"sub","assistantStream":true}"#)
         try await deliver(#"{"kind":"session-snapshot","sessionId":"s","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":41,"events":[],"hasMore":true,"nextBeforeSeq":20,"assistantStream":{"revision":2,"activeAttempt":{"attemptId":"s:1","turn":2,"step":3,"startedAfterSeq":41,"nextIndex":1,"stream":[{"type":"text-chunks","index":0,"time0":100,"texts":["Hello"],"dt":[]}]}}}"#)
-        await store.awaitConversationProjectionForTesting(sessionID: "s", expectedText: "Hello")
-        XCTAssertEqual(store.renderedConversationItems["s", default: []].last?.text, "Hello")
+        XCTAssertTrue(store.renderedConversationItems["s", default: []].isEmpty,
+            "生成前缀要与完整首屏一起呈现")
         XCTAssertTrue(store.events["s", default: []].isEmpty)
         let chunk = #"{"kind":"assistant-stream","sessionId":"s","subscriptionId":"sub","streamId":"stream","frame":{"type":"chunk","attemptId":"s:1","revision":3,"index":1,"time":101,"turn":2,"step":3,"chunk":{"type":"text-delta","index":0,"text":" world"}}}"#
         try await deliver(chunk)
         try await deliver(chunk)
-        await store.awaitConversationProjectionForTesting(sessionID: "s", expectedText: "Hello world")
-        XCTAssertEqual(store.renderedConversationItems["s", default: []].last?.text, "Hello world")
+        XCTAssertTrue(store.renderedConversationItems["s", default: []].isEmpty,
+            "补第二页期间实时增量继续归并，但不能提前发布半页")
         try await deliver(#"{"kind":"history","sessionId":"s","historyFormatVersion":3,"events":[],"hasMore":false}"#)
         await store.awaitConversationProjectionForTesting(sessionID: "s", expectedText: "Hello world")
         XCTAssertEqual(store.renderedConversationItems["s", default: []].last?.text, "Hello world")
@@ -4483,6 +5527,12 @@ final class GatewayProtocolTests: XCTestCase {
         ))
         let tasks = try XCTUnwrap(catalog.items).compactMap(ScheduledTask.init)
 
+        let paused = try XCTUnwrap(ScheduledTask(.object([
+            "id": .string("paused-1"), "status": .string("paused"), "title": .string("暂停新闻"),
+            "prompt": .string("金融新闻"), "kind": .string("daily")
+        ])))
+        XCTAssertEqual(filteredScheduledTasks(tasks + [paused], status: .paused, query: "新闻").map(\.id), ["paused-1"])
+        XCTAssertEqual(filteredScheduledTasks(tasks + [paused], status: .ended, query: "").map(\.id), ["ended-1"])
         XCTAssertEqual(filteredScheduledTasks(tasks, status: .all, query: "新闻").map(\.id), ["active-1"])
         XCTAssertEqual(filteredScheduledTasks(tasks, status: .active, query: " 金融 ").map(\.id), ["active-1"])
         XCTAssertEqual(filteredScheduledTasks(tasks, status: .ended, query: "检查").map(\.id), ["ended-1"])
@@ -8029,7 +9079,7 @@ private final class AppPreferencesSpy: AppPreferences {
 
 /// 使用本机真实 WebSocket 验证传输生命周期，不访问用户网关。
 private final class LocalRecoveryGateway: @unchecked Sendable {
-    enum Greeting { case hello, pairedOnly, silent, unauthorized, split }
+    enum Greeting { case hello, pairedOnly, pairedThenHello, rtcBootstrap, silent, unauthorized, split, stream }
     private let listener: NWListener
     private let queue = DispatchQueue(label: "test.gateway-recovery")
     private var connections: [NWConnection] = []
@@ -8041,10 +9091,11 @@ private final class LocalRecoveryGateway: @unchecked Sendable {
     private let pongDelay: TimeInterval
     private let respondsToStats: Bool
     private let respondsToControls: Bool
+    private let subscriptionAckStartingAt: Int?
 
     init(greeting: Greeting = .hello, repliesToPing: @escaping (String) -> Bool = { _ in false },
          handshakeReceived: (() -> Void)? = nil, pongDelay: TimeInterval = 0, respondsToStats: Bool = false,
-         respondsToControls: Bool = false) throws {
+         respondsToControls: Bool = false, subscriptionAckStartingAt: Int? = nil) throws {
         listener = try NWListener(using: .tcp, on: .any)
         self.greeting = greeting
         self.repliesToPing = repliesToPing
@@ -8052,6 +9103,7 @@ private final class LocalRecoveryGateway: @unchecked Sendable {
         self.pongDelay = pongDelay
         self.respondsToStats = respondsToStats
         self.respondsToControls = respondsToControls
+        self.subscriptionAckStartingAt = subscriptionAckStartingAt
     }
 
     func start() async throws -> String {
@@ -8080,6 +9132,16 @@ private final class LocalRecoveryGateway: @unchecked Sendable {
 
     var receivedHeaders: [[String: String]] { queue.sync { headers } }
     var receivedRequestKinds: [String] { queue.sync { requestKinds } }
+
+    func setGreeting(_ next: Greeting) { queue.sync { greeting = next } }
+
+    func broadcast(_ text: String) {
+        queue.sync {
+            for connection in connections {
+                connection.send(content: frame(Data(text.utf8)), completion: .contentProcessed { _ in })
+            }
+        }
+    }
 
     func dropConnections(nextGreeting: Greeting) {
         queue.sync {
@@ -8130,8 +9192,22 @@ private final class LocalRecoveryGateway: @unchecked Sendable {
                 response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true}"#.utf8))
             case .pairedOnly:
                 response += self.frame(Data(#"{"kind":"paired","token":"recovery-test-token"}"#.utf8))
+            case .pairedThenHello:
+                if header["authorization"] == nil {
+                    response += self.frame(Data(#"{"kind":"paired","token":"recovery-test-token","gatewayId":"d56a1098-8519-43a1-9dce-fb99863bf5bb"}"#.utf8))
+                }
+                response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true,"gatewayId":"d56a1098-8519-43a1-9dce-fb99863bf5bb"}"#.utf8))
+            case .rtcBootstrap:
+                if header["x-dsh-transport-intent"] == "negotiate-v1" {
+                    // 模拟 RTC 协商没有继续响应；普通 WS 仍能正常完成鉴权。
+                    response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true,"gatewayId":"d56a1098-8519-43a1-9dce-fb99863bf5bb","capabilities":["webrtc-upgrade-v1"],"transport":{"version":1,"bootstrap":true,"negotiateTimeoutMs":12000}}"#.utf8))
+                } else {
+                    response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true,"gatewayId":"d56a1098-8519-43a1-9dce-fb99863bf5bb"}"#.utf8))
+                }
             case .split:
                 response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true,"capabilities":["split-channels"]}"#.utf8))
+            case .stream:
+                response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true,"historyFormatVersion":3,"capabilities":["assistant-stream-v1"]}"#.utf8))
             case .silent, .unauthorized: break
             }
             connection.send(content: response, completion: .contentProcessed { _ in })
@@ -8177,6 +9253,12 @@ private final class LocalRecoveryGateway: @unchecked Sendable {
                    let request = try? JSONSerialization.jsonObject(with: Data(payload)) as? [String: Any],
                    let type = request["type"] as? String {
                     self.requestKinds.append(type)
+                    if type == "subscribe", let first = self.subscriptionAckStartingAt,
+                       self.requestKinds.filter({ $0 == "subscribe" }).count >= first {
+                        let reply: [String: Any] = ["kind": "subscribed", "sessionId": request["sessionId"] ?? NSNull()]
+                        let data = try! JSONSerialization.data(withJSONObject: reply)
+                        connection.send(content: self.frame(data), completion: .contentProcessed { _ in })
+                    }
                     if (type == "session-stats" && self.respondsToStats) ||
                         (self.respondsToControls && ["models", "permission-options", "context-usage"].contains(type)) {
                         var reply: [String: Any] = ["kind": type, "sessionId": request["sessionId"] as? String ?? ""]
@@ -8403,6 +9485,34 @@ private actor SuspendedFirstGatewayCredentials: GatewayCredentialStoring {
 }
 
 final class GatewayForegroundRecoveryTests: XCTestCase {
+    @MainActor
+    func testConversationRequestsWaitForCredentialPreparationAndHello() async throws {
+        let server = try LocalRecoveryGateway(repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let started = expectation(description: "会话通道仍在读取凭据，尚未创建 socket")
+        let release = DispatchSemaphore(value: 0)
+        let credentials = BlockingGatewayCredentials(readDeviceID: {
+            started.fulfill()
+            XCTAssertEqual(release.wait(timeout: .now() + 3), .success)
+            return "conversation-device"
+        })
+        let gateway = GatewayClient(channel: "conversation", credentials: credentials)
+        defer { release.signal(); gateway.disconnect() }
+        gateway.connect(to: endpoint)
+        await fulfillment(of: [started], timeout: 1)
+        gateway.subscribe(sessionId: "restored-session")
+        gateway.requestHistory(sessionId: "restored-session")
+        XCTAssertEqual(gateway.state, .connecting, "凭据准备期间的订阅不能被当作未连接而丢弃")
+        XCTAssertTrue(server.receivedRequestKinds.isEmpty)
+        release.signal()
+        for _ in 0..<200 {
+            if server.receivedRequestKinds.count >= 2 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(server.receivedRequestKinds, ["subscribe", "history"], "握手完成后应按顺序发送且不重复")
+    }
+
     @MainActor
     func testSlowCredentialReadDoesNotBlockMainActorOrReconnectAfterDisconnect() async throws {
         let server = try LocalRecoveryGateway(repliesToPing: { _ in true })
@@ -8678,6 +9788,52 @@ final class GatewayForegroundRecoveryTests: XCTestCase {
     }
 
     @MainActor
+    func testPairingReopensAuthenticatedControlForRtcNegotiationOnce() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        // RTC 协商契约在本机回环替身验证，生产入口策略另由下方内网测试覆盖。
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials(), rtcPolicy: { _ in true })
+        defer { gateway.disconnect() }
+        let connected = expectation(description: "配对后用长期凭据重建控制连接")
+        let subscription = gateway.$state.sink { if $0.isConnected { connected.fulfill() } }
+        defer { subscription.cancel() }
+        gateway.connectForPairing(GatewayPairingPayload(version: 2, publicUrl: endpoint,
+            pairingCode: "one-time-code", expiresAt: 4_102_444_800_000))
+        await fulfillment(of: [connected], timeout: 3)
+        XCTAssertEqual(server.receivedHeaders.count, 2)
+        XCTAssertNil(server.receivedHeaders.first?["x-dsh-transport-intent"])
+        XCTAssertEqual(server.receivedHeaders.last?["x-dsh-transport-intent"], "negotiate-v1")
+        XCTAssertEqual(server.receivedHeaders.last?["authorization"], "Bearer recovery-test-token")
+        XCTAssertEqual(server.receivedHeaders.last?["sec-websocket-protocol"], "dsh-mobile-v1")
+        // 替身没有 RTC 能力，仍可正常使用 WS，且不会循环重连或重用一次性配对码。
+        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
+    }
+
+    @MainActor
+    func testLanConnectionAndPairingNeverRequestRtcOrReopenForUpgrade() async throws {
+        for pairing in [false, true] {
+            let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+            let endpoint = try await server.start()
+            defer { server.stop() }
+            let gateway = GatewayClient(credentials: RecoveryTestCredentials())
+            gateway.expectedGatewayID = "d56a1098-8519-43a1-9dce-fb99863bf5bb"
+            defer { gateway.disconnect() }
+            let connected = expectation(description: "内网直接 WS，pairing=\(pairing)")
+            let subscription = gateway.$state.sink { if $0.isConnected { connected.fulfill() } }
+            defer { subscription.cancel() }
+            if pairing {
+                gateway.connectForPairing(GatewayPairingPayload(version: 2, publicUrl: endpoint,
+                    pairingCode: "one-time-code", expiresAt: 4_102_444_800_000))
+            } else { gateway.connect(to: endpoint) }
+            await fulfillment(of: [connected], timeout: 3)
+            XCTAssertEqual(server.receivedHeaders.count, 1)
+            XCTAssertNil(server.receivedHeaders.first?["x-dsh-transport-intent"])
+            XCTAssertEqual(gateway.connectionMethod, "WebSocket")
+        }
+    }
+
+    @MainActor
     func testForegroundDoesNotReplayInProgressOneTimePairing() async throws {
         let handshake = expectation(description: "一次性配对握手已发送")
         handshake.assertForOverFulfill = true
@@ -8734,6 +9890,440 @@ final class GatewayForegroundRecoveryTests: XCTestCase {
         XCTAssertNil(credentials.token)
         gateway.applicationDidBecomeActive()
         XCTAssertEqual(server.receivedHeaders.count, 1)
+    }
+}
+
+@MainActor
+private final class ForegroundRtcFixture: GatewayRtcConnection {
+    let isRtc = true
+    let maximumMessageBytes = 16 * 1024 * 1024
+    let elapsedMilliseconds: Int64 = 0
+    let probe = GatewayRtcHealthProbe()
+    var replies: Set<String> = ["control", "conversation"]
+    var sent: [String: String] = [:]
+    var closed = false
+    var didSend: (() -> Void)?
+    var sendOverride: ((String, String) async throws -> Void)?
+
+    var receivedSignaling: [Data] = []
+    func webSocket(_ data: Data) async throws { receivedSignaling.append(data) }
+    func send(_ text: String, channel: String) async throws {
+        if let sendOverride { return try await sendOverride(text, channel) }
+        sent[channel] = text
+        didSend?()
+        if replies.contains(channel) { pong(for: text, channel: channel) }
+    }
+    func pong(for request: String, channel: String) {
+        let frame = try! JSONSerialization.jsonObject(with: Data(request.utf8)) as! [String: String]
+        let pong = try! JSONSerialization.data(withJSONObject: ["kind": "pong", "requestId": frame["requestId"]!])
+        _ = probe.receive(String(decoding: pong, as: UTF8.self), channel: channel)
+    }
+    func checkHealth(timeout: Duration) async throws {
+        try await probe.check(timeout: timeout) { [weak self] text, channel in
+            guard let self else { throw CancellationError() }
+            try await self.send(text, channel: channel)
+        }
+    }
+    func close() { closed = true; probe.cancel() }
+}
+
+final class GatewayRtcForegroundRecoveryTests: XCTestCase {
+    @MainActor
+    func testNetworkNotificationsAndInitialActiveDoNotRestartHandshake() async throws {
+        let handshake = expectation(description: "握手已发送")
+        let server = try LocalRecoveryGateway(greeting: .silent, handshakeReceived: { handshake.fulfill() })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials())
+        defer { gateway.disconnect() }
+        gateway.connect(to: endpoint)
+        await fulfillment(of: [handshake], timeout: 2)
+        for _ in 0..<10 {
+            gateway.applicationDidBecomeActive()
+            gateway.recoverNetworkConnectionForTesting()
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(gateway.state, .connecting)
+        XCTAssertEqual(server.receivedHeaders.count, 1)
+    }
+
+    @MainActor
+    private func connectedGateway(_ server: LocalRecoveryGateway, endpoint: String,
+                                  foregroundRtcTimeout: Duration = .seconds(3),
+                                  rtcPolicy: @escaping (String) -> Bool = { _ in false }) async -> GatewayClient {
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials(token: "stored-token"),
+                                    probeTimeout: .milliseconds(80), foregroundRtcTimeout: foregroundRtcTimeout,
+                                    rtcPolicy: rtcPolicy)
+        let connected = expectation(description: "初次连接")
+        let observer = gateway.$state.sink { if $0.isConnected { connected.fulfill() } }
+        gateway.connect(to: endpoint)
+        await fulfillment(of: [connected], timeout: 3)
+        observer.cancel()
+        return gateway
+    }
+
+    @MainActor
+    func testHealthyDualRtcChannelsAreReusedAfterBackground() async throws {
+        let server = try LocalRecoveryGateway(repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let gateway = await connectedGateway(server, endpoint: endpoint)
+        defer { gateway.disconnect() }
+        let rtc = ForegroundRtcFixture()
+        gateway.installRtcConnectionForTesting(rtc)
+        let healthy = expectation(description: "两条 RTC 通道均已验证")
+        gateway.onConnectionReady = { healthy.fulfill() }
+        gateway.applicationDidEnterBackground()
+        gateway.applicationDidBecomeActive()
+        await fulfillment(of: [healthy], timeout: 1)
+        XCTAssertEqual(Set(rtc.sent.keys), ["control", "conversation"])
+        XCTAssertEqual(gateway.connectionMethod, "WebRTC")
+        XCTAssertFalse(rtc.closed)
+        XCTAssertEqual(server.receivedHeaders.count, 1)
+    }
+
+    @MainActor
+    func testMissingConversationPongRetriesRtcAtSuccessfulEndpointAndAcceptsLegacyWsFallback() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        var allowRtc = false
+        let gateway = await connectedGateway(server, endpoint: endpoint, rtcPolicy: { _ in allowRtc })
+        defer { gateway.disconnect() }
+        gateway.trustedEndpoints = [endpoint, "ws://127.0.0.1:9/ws/mobile"]
+        let rtc = ForegroundRtcFixture()
+        rtc.replies = ["control"]
+        gateway.installRtcConnectionForTesting(rtc)
+        allowRtc = true
+        let recovered = expectation(description: "2 秒退避前完成恢复")
+        gateway.onConnectionReady = { recovered.fulfill() }
+        gateway.applicationDidEnterBackground()
+        gateway.applicationDidBecomeActive()
+        await fulfillment(of: [recovered], timeout: 1.5)
+        XCTAssertTrue(rtc.closed)
+        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
+        XCTAssertEqual(gateway.connectedEndpoint, endpoint)
+        XCTAssertEqual(server.receivedHeaders.count, 2)
+        XCTAssertEqual(server.receivedHeaders.last?["x-dsh-transport-intent"], "negotiate-v1")
+        XCTAssertEqual(server.receivedHeaders.last?["authorization"], "Bearer stored-token")
+    }
+
+    @MainActor
+    func testManualDisconnectDuringRtcProbeCannotReconnect() async throws {
+        let server = try LocalRecoveryGateway(repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let gateway = await connectedGateway(server, endpoint: endpoint)
+        defer { gateway.disconnect() }
+        let rtc = ForegroundRtcFixture()
+        rtc.replies = []
+        let sent = expectation(description: "双通道探活已发出")
+        sent.expectedFulfillmentCount = 2
+        rtc.didSend = { sent.fulfill() }
+        gateway.installRtcConnectionForTesting(rtc)
+        gateway.applicationDidEnterBackground()
+        gateway.applicationDidBecomeActive()
+        await fulfillment(of: [sent], timeout: 1)
+        gateway.disconnect()
+        for (channel, text) in rtc.sent { rtc.pong(for: text, channel: channel) }
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(gateway.state, .disconnected)
+        XCTAssertFalse(gateway.recoveryStateForTesting.wantsConnection)
+        XCTAssertEqual(server.receivedHeaders.count, 1)
+    }
+
+    @MainActor
+    func testAlreadyDisconnectedInBackgroundRetriesRtcAtSuccessfulEndpointImmediately() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        var allowRtc = false
+        let gateway = await connectedGateway(server, endpoint: endpoint, rtcPolicy: { _ in allowRtc })
+        defer { gateway.disconnect() }
+        gateway.trustedEndpoints = [endpoint, "ws://127.0.0.1:9/ws/mobile"]
+        gateway.installRtcConnectionForTesting(ForegroundRtcFixture())
+        allowRtc = true
+        let failed = expectation(description: "后台连接丢失")
+        let observer = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
+        gateway.applicationDidEnterBackground()
+        server.dropConnections(nextGreeting: .pairedThenHello)
+        await fulfillment(of: [failed], timeout: 1)
+        observer.cancel()
+        let recovered = expectation(description: "回前台跳过后台退避")
+        gateway.onConnectionReady = { recovered.fulfill() }
+        gateway.applicationDidBecomeActive()
+        await fulfillment(of: [recovered], timeout: 1.5)
+        XCTAssertEqual(gateway.connectedEndpoint, endpoint)
+        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
+        XCTAssertEqual(server.receivedHeaders.count, 2)
+        XCTAssertEqual(server.receivedHeaders.last?["x-dsh-transport-intent"], "negotiate-v1")
+    }
+
+    @MainActor
+    func testAuthenticationFailureDuringFastRecoveryRemainsTerminal() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let gateway = await connectedGateway(server, endpoint: endpoint)
+        defer { gateway.disconnect() }
+        gateway.installRtcConnectionForTesting(ForegroundRtcFixture())
+        let failed = expectation(description: "后台连接丢失")
+        let observer = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
+        gateway.applicationDidEnterBackground()
+        server.dropConnections(nextGreeting: .unauthorized)
+        await fulfillment(of: [failed], timeout: 1)
+        observer.cancel()
+        let rejected = expectation(description: "快速恢复仍校验鉴权")
+        gateway.onConnectionFailure = { _ in rejected.fulfill() }
+        gateway.applicationDidBecomeActive()
+        await fulfillment(of: [rejected], timeout: 1.5)
+        XCTAssertFalse(gateway.recoveryStateForTesting.wantsConnection)
+        gateway.applicationDidBecomeActive()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(server.receivedHeaders.count, 2)
+    }
+
+    @MainActor
+    func testWsAlreadyRecoveredInBackgroundStillRetriesPreviousRtcOnForeground() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        var allowRtc = false
+        let gateway = await connectedGateway(server, endpoint: endpoint, rtcPolicy: { _ in allowRtc })
+        defer { gateway.disconnect() }
+        gateway.installRtcConnectionForTesting(ForegroundRtcFixture())
+        allowRtc = true
+        let failed = expectation(description: "后台 RTC 断开")
+        let failureObserver = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
+        gateway.applicationDidEnterBackground()
+        server.dropConnections(nextGreeting: .pairedThenHello)
+        await fulfillment(of: [failed], timeout: 1)
+        failureObserver.cancel()
+        let backgroundWs = expectation(description: "后台先自动恢复 WS")
+        let readyObserver = gateway.$state.sink { if $0.isConnected { backgroundWs.fulfill() } }
+        await fulfillment(of: [backgroundWs], timeout: 3)
+        readyObserver.cancel()
+        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
+        XCTAssertNil(server.receivedHeaders.last?["x-dsh-transport-intent"])
+        let foreground = expectation(description: "回前台仍重新尝试 RTC")
+        gateway.onConnectionReady = { foreground.fulfill() }
+        gateway.applicationDidBecomeActive()
+        await fulfillment(of: [foreground], timeout: 1)
+        XCTAssertEqual(server.receivedHeaders.count, 3)
+        XCTAssertEqual(server.receivedHeaders.last?["x-dsh-transport-intent"], "negotiate-v1")
+    }
+
+    @MainActor
+    func testRtcResumeTimeoutFallsBackImmediatelyWithoutRepeatedNegotiation() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        var allowRtc = false
+        let gateway = await connectedGateway(server, endpoint: endpoint, foregroundRtcTimeout: .milliseconds(100),
+                                             rtcPolicy: { _ in allowRtc })
+        defer { gateway.disconnect() }
+        gateway.trustedEndpoints = [endpoint, "ws://127.0.0.1:9/ws/mobile"]
+        let rtc = ForegroundRtcFixture()
+        rtc.replies = ["control"]
+        gateway.installRtcConnectionForTesting(rtc)
+        allowRtc = true
+        server.setGreeting(.rtcBootstrap)
+        let recovered = expectation(description: "限时尝试 RTC 后立即恢复 WS")
+        gateway.onConnectionReady = { recovered.fulfill() }
+        gateway.applicationDidEnterBackground()
+        gateway.applicationDidBecomeActive()
+        await fulfillment(of: [recovered], timeout: 1.5)
+        XCTAssertEqual(gateway.connectedEndpoint, endpoint)
+        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
+        let headers = server.receivedHeaders
+        XCTAssertEqual(headers.count, 3)
+        XCTAssertEqual(headers[1]["x-dsh-transport-intent"], "negotiate-v1")
+        XCTAssertNil(headers[2]["x-dsh-transport-intent"])
+        XCTAssertEqual(headers[2]["authorization"], "Bearer stored-token")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(server.receivedHeaders.count, 3, "回退成功后不能循环重试 RTC")
+    }
+
+    @MainActor
+    func testDisconnectDuringFreshRtcAttemptCancelsWsFallback() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        var allowRtc = false
+        let gateway = await connectedGateway(server, endpoint: endpoint, foregroundRtcTimeout: .milliseconds(200),
+                                             rtcPolicy: { _ in allowRtc })
+        defer { gateway.disconnect() }
+        gateway.installRtcConnectionForTesting(ForegroundRtcFixture())
+        allowRtc = true
+        let failed = expectation(description: "后台丢失连接")
+        let observer = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
+        gateway.applicationDidEnterBackground()
+        server.dropConnections(nextGreeting: .rtcBootstrap)
+        await fulfillment(of: [failed], timeout: 1)
+        observer.cancel()
+        gateway.applicationDidBecomeActive()
+        let deadline = ProcessInfo.processInfo.systemUptime + 1
+        while server.receivedHeaders.count < 2, ProcessInfo.processInfo.systemUptime < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(server.receivedHeaders.last?["x-dsh-transport-intent"], "negotiate-v1")
+        gateway.disconnect()
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(gateway.state, .disconnected)
+        XCTAssertFalse(gateway.recoveryStateForTesting.wantsConnection)
+        XCTAssertEqual(server.receivedHeaders.count, 2)
+    }
+
+    @MainActor
+    func testLanResumeSkipsRtcEvenIfPreviousTransportWasRtc() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let gateway = await connectedGateway(server, endpoint: endpoint)
+        defer { gateway.disconnect() }
+        gateway.installRtcConnectionForTesting(ForegroundRtcFixture())
+        let failed = expectation(description: "后台连接断开")
+        let observer = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
+        gateway.applicationDidEnterBackground()
+        server.dropConnections(nextGreeting: .pairedThenHello)
+        await fulfillment(of: [failed], timeout: 1)
+        observer.cancel()
+        let recovered = expectation(description: "内网仍直接使用 WS")
+        gateway.onConnectionReady = { recovered.fulfill() }
+        gateway.applicationDidBecomeActive()
+        await fulfillment(of: [recovered], timeout: 1)
+        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
+        XCTAssertEqual(server.receivedHeaders.count, 2)
+        XCTAssertNil(server.receivedHeaders.last?["x-dsh-transport-intent"])
+    }
+
+    @MainActor
+    func testProbeRejectsWrongChannelAndLatePongsFromPreviousGeneration() async throws {
+        let rtc = ForegroundRtcFixture()
+        rtc.replies = []
+        let first = expectation(description: "第一次探活")
+        first.expectedFulfillmentCount = 2
+        rtc.didSend = { first.fulfill() }
+        let old = Task { try await rtc.checkHealth(timeout: .seconds(2)) }
+        await fulfillment(of: [first], timeout: 1)
+        let previous = rtc.sent
+        old.cancel()
+        do { try await old.value; XCTFail("取消必须结束探活") } catch is CancellationError {} catch { XCTFail("\(error)") }
+        let second = expectation(description: "新一轮探活")
+        second.expectedFulfillmentCount = 2
+        rtc.didSend = { second.fulfill() }
+        var completed = false
+        let current = Task { try await rtc.checkHealth(timeout: .seconds(1)); completed = true }
+        await fulfillment(of: [second], timeout: 1)
+        for (channel, text) in previous { rtc.pong(for: text, channel: channel) }
+        rtc.pong(for: rtc.sent["conversation"]!, channel: "control")
+        rtc.pong(for: rtc.sent["control"]!, channel: "control")
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertFalse(completed)
+        rtc.pong(for: rtc.sent["conversation"]!, channel: "conversation")
+        try await current.value
+        XCTAssertTrue(completed)
+        XCTAssertFalse(rtc.probe.receive(#"{"kind":"pong","requestId":"network-check:other"}"#, channel: "control"))
+    }
+}
+
+final class GatewayTransportHandoffTests: XCTestCase {
+    @MainActor
+    private func connect(_ gateway: GatewayClient, endpoint: String) async {
+        let ready = expectation(description: "新连接鉴权完成")
+        gateway.onConnectionReady = { ready.fulfill() }
+        gateway.connect(to: endpoint)
+        await fulfillment(of: [ready], timeout: 2)
+        gateway.onConnectionReady = nil
+    }
+
+    @MainActor
+    func testOldWsReceiveCannotEnterReplacementRtcStateMachine() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials(token: "stored-token"))
+        defer { gateway.disconnect() }
+        await connect(gateway, endpoint: endpoint)
+        let paused = expectation(description: "旧 WS 帧在切换时仍等待处理")
+        var release: CheckedContinuation<Void, Never>?
+        defer { release?.resume() }
+        gateway.receivedFrameBarrierForTesting = { data in
+            if String(decoding: data, as: UTF8.self).contains("old-handoff-frame") {
+                await withCheckedContinuation { release = $0; paused.fulfill() }
+            }
+        }
+        server.broadcast(#"{"kind":"workspaces","items":[],"message":"old-handoff-frame"}"#)
+        await fulfillment(of: [paused], timeout: 1)
+        await connect(gateway, endpoint: endpoint)
+        let rtc = ForegroundRtcFixture()
+        gateway.installRtcConnectionForTesting(rtc)
+        release?.resume(); release = nil
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(rtc.receivedSignaling.isEmpty, "旧 WS 数据不能交给新 RTC 协商状态机")
+        XCTAssertTrue(gateway.state.isConnected)
+        XCTAssertEqual(gateway.connectionMethod, "WebRTC")
+    }
+
+    @MainActor
+    func testAlreadySubmittedRtcWriteAndItsLateFailureCannotReplayOrAffectNewWs() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials(token: "stored-token"))
+        defer { gateway.disconnect() }
+        await connect(gateway, endpoint: endpoint)
+        let submitted = expectation(description: "旧 RTC 已提交写操作，确认尚未返回")
+        var release: CheckedContinuation<Void, Never>?
+        defer { release?.resume() }
+        var executions = 0
+        let rtc = ForegroundRtcFixture()
+        rtc.sendOverride = { _, _ in
+            executions += 1
+            await withCheckedContinuation { release = $0; submitted.fulfill() }
+            throw GatewayMgwCodec.Failure.tooLarge
+        }
+        gateway.installRtcConnectionForTesting(rtc)
+        gateway.sendRequestPayload(#"{"type":"message","sessionId":"s","text":"write-once","requestId":"handoff-write"}"#)
+        await fulfillment(of: [submitted], timeout: 1)
+        await connect(gateway, endpoint: endpoint)
+        var errors = 0
+        gateway.onFrame = { if $0.kind == "error" { errors += 1 } }
+        release?.resume(); release = nil
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(executions, 1)
+        XCTAssertFalse(server.receivedRequestKinds.contains("message"), "旧连接已提交的写操作不能在新 WS 自动重放")
+        XCTAssertEqual(errors, 0, "旧写操作的迟到错误不能覆盖新连接状态")
+        XCTAssertTrue(gateway.state.isConnected)
+    }
+
+    @MainActor
+    func testLateDecodeFailureCannotPublishErrorIntoNewConnection() async throws {
+        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials(token: "stored-token"))
+        defer { gateway.disconnect() }
+        await connect(gateway, endpoint: endpoint)
+        let paused = expectation(description: "旧帧正在异步解码")
+        var release: CheckedContinuation<Void, Never>?
+        defer { release?.resume() }
+        gateway.incomingFrameDecoderForTesting = { data in
+            if String(decoding: data, as: UTF8.self).contains("late-decode-marker") {
+                await withCheckedContinuation { release = $0; paused.fulfill() }
+                throw URLError(.cannotDecodeRawData)
+            }
+            return try GatewayClient.decodeIncomingFrame(data)
+        }
+        server.broadcast(#"{"kind":"workspaces","items":[],"message":"late-decode-marker"}"#)
+        await fulfillment(of: [paused], timeout: 1)
+        await connect(gateway, endpoint: endpoint)
+        var errors: [String] = []
+        gateway.onFrame = { if $0.kind == "error" { errors.append($0.code ?? "error") } }
+        release?.resume(); release = nil
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(errors.isEmpty, "旧代次解码失败不得污染新连接 UI")
+        XCTAssertTrue(gateway.state.isConnected)
     }
 }
 
@@ -9382,6 +10972,89 @@ final class InterfaceStylePresentationTests: XCTestCase {
 
 @MainActor
 final class ScheduledTaskCardPresentationTests: XCTestCase {
+    @available(iOS 17.0, *)
+    func testFirstCardShadowBoundary() async throws {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-catalog","items":[{"id":"shadow","sessionId":"s1","status":"active","kind":"daily","title":"每日新闻汇总","prompt":"汇总科技和金融新闻","time":"08:00:00.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-01T00:00:00Z"}]}"#.utf8))
+        let task = try XCTUnwrap(frame.items?.first.flatMap(ScheduledTask.init))
+        func root(_ reserveShadow: Bool) -> some View {
+            List {
+                ScheduledTaskCard(task: task, sessionTitle: "新闻会话", expanded: false, onOpen: {}, onExpand: {})
+                    .background(ComposerFrameProbe(identifier: "shadow-card"))
+                    .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
+                    .listRowSeparator(.hidden).listRowBackground(Color.clear)
+            }
+            .listStyle(.plain).scrollContentBackground(.hidden)
+            .modifier(ScheduledTaskListShadowInset(enabled: reserveShadow))
+            .background(Color.white)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Color.white.frame(height: 48).background(ComposerFrameProbe(identifier: "shadow-header"))
+            }
+        }
+        let host = UIHostingController(rootView: root(false))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 650)
+        window.rootViewController = host; window.makeKeyAndVisible()
+        host.overrideUserInterfaceStyle = .light
+        defer { window.isHidden = true; window.rootViewController = nil }
+        func find(_ id: String, in view: UIView) -> UIView? {
+            if view.accessibilityIdentifier == id { return view }
+            return view.subviews.lazy.compactMap { find(id, in: $0) }.first
+        }
+        var edgeSteps: [Bool: Int] = [:]
+        for reserved in [false, true] {
+            host.rootView = root(reserved)
+            try await Task.sleep(for: .milliseconds(250))
+            let card = try XCTUnwrap(find("shadow-card", in: host.view))
+            let header = try XCTUnwrap(find("shadow-header", in: host.view))
+            let headerBottom = header.convert(header.bounds, to: window).maxY
+            if reserved {
+                XCTAssertGreaterThanOrEqual(card.convert(card.bounds, to: window).minY - headerBottom, 23)
+            }
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.preferredRange = .standard
+            let image = UIGraphicsImageRenderer(size: window.bounds.size, format: format).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            let cgImage = try XCTUnwrap(image.cgImage)
+            XCTAssertEqual(cgImage.bitsPerPixel, 32)
+            let data = try XCTUnwrap(cgImage.dataProvider?.data)
+            let pixels = try XCTUnwrap(CFDataGetBytePtr(data))
+            let boundary = Int(headerBottom.rounded())
+            func brightness(_ y: Int) -> Int {
+                let offset = y * cgImage.bytesPerRow + (cgImage.width / 2) * 4
+                return (Int(pixels[offset]) + Int(pixels[offset + 1]) + Int(pixels[offset + 2])) / 3
+            }
+            edgeSteps[reserved] = abs(brightness(boundary + 1) - brightness(boundary - 1))
+            let attachment = XCTAttachment(image: image)
+            attachment.name = reserved ? "首张卡片阴影-完整渐变" : "首张卡片阴影-原始截断"
+            attachment.lifetime = .keepAlways; add(attachment)
+        }
+        let fixed = try XCTUnwrap(edgeSteps[true])
+        XCTAssertLessThanOrEqual(fixed, 2, "筛选栏下沿不应出现阴影亮度的硬切线")
+        XCTAssertLessThan(fixed, try XCTUnwrap(edgeSteps[false]))
+    }
+
+    func testPausedCardParityInLightAndDark() throws {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-catalog","items":[{"id":"p1","sessionId":"s1","status":"paused","kind":"daily","title":"每日新闻汇总","prompt":"汇总科技和金融新闻","time":"08:00:37.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-31T00:00:00Z"}]}"#.utf8))
+        let task = try XCTUnwrap(frame.items?.first.flatMap(ScheduledTask.init))
+        for dark in [false, true] {
+            let controller = UIHostingController(rootView: ScheduledTaskCard(task: task, sessionTitle: "新闻会话",
+                expanded: true, onOpen: {}, onExpand: {}, onShowHistory: {}).padding(20)
+                .environment(\.locale, Locale(identifier: "zh_Hans")).preferredColorScheme(dark ? .dark : .light))
+            controller.overrideUserInterfaceStyle = dark ? .dark : .light
+            controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 650)
+            controller.view.layoutIfNeeded()
+            XCTAssertLessThanOrEqual(controller.sizeThatFits(in: CGSize(width: 390, height: 650)).width, 391)
+            let image = UIGraphicsImageRenderer(bounds: controller.view.bounds).image { _ in
+                controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = dark ? "paused-card-parity-dark" : "paused-card-parity-light"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
     func testRepeatedExpansionKeepsSummaryAtTheSamePosition() async throws {
         let catalog = try GatewayWireDecoder.decode(Data(
             #"{"kind":"schedule-catalog","items":[{"id":"task-1","sessionId":"s1","status":"active","kind":"daily","title":"每日新闻汇总（科技/金融/民生/体育）","prompt":"每日新闻汇总任务。请完整执行以下步骤：","time":"08:00:00.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-01T00:00:00.000Z"}]}"#.utf8
@@ -12308,7 +13981,263 @@ final class HistoryReadingBatchTests: XCTestCase {
 }
 
 @MainActor
+final class GatewaySubscriptionRecoveryTests: XCTestCase {
+    func testMissingAcknowledgementReconnectsAndCompletesSubscription() async throws {
+        let server = try LocalRecoveryGateway(repliesToPing: { _ in true }, subscriptionAckStartingAt: 2)
+        let endpoint = try await server.start()
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials(), subscriptionTimeoutInterval: .milliseconds(80))
+        defer { gateway.disconnect(); server.stop() }
+        let recovered = expectation(description: "新连接收到订阅确认")
+        var recoveries = 0
+        var generations: [String] = []
+        gateway.onFrame = { frame in
+            if frame.kind == "hello" {
+                generations.append(gateway.networkDiagnosticsConnectionKey)
+                gateway.subscribe(sessionId: "current")
+            } else if frame.code == "subscription-timeout" {
+                recoveries += 1
+                XCTAssertTrue(gateway.recoverSubscription(sessionID: "current"))
+            } else if frame.kind == "subscribed" {
+                XCTAssertTrue(gateway.acceptSubscriptionAck(sessionID: frame.sessionId))
+                recovered.fulfill()
+            }
+        }
+        gateway.connect(to: endpoint)
+        await fulfillment(of: [recovered], timeout: 4)
+        XCTAssertEqual(recoveries, 1)
+        XCTAssertEqual(Set(generations).count, 2, "重订阅必须换新连接代际，隔离旧响应")
+        XCTAssertEqual(server.receivedRequestKinds.filter { $0 == "subscribe" }.count, 2)
+        XCTAssertFalse(gateway.subscriptionRecoveryExhausted)
+    }
+
+    func testRecoveryStopsAfterTwoAttemptsAndNeverReplaysWrites() async throws {
+        let server = try LocalRecoveryGateway(repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials(), subscriptionTimeoutInterval: .milliseconds(80))
+        defer { gateway.disconnect(); server.stop() }
+        let exhausted = expectation(description: "两次自动恢复后停止")
+        var greetings = 0
+        var terminalErrors = 0
+        gateway.onFrame = { frame in
+            if frame.kind == "hello" {
+                greetings += 1
+                gateway.subscribe(sessionId: "current")
+                if greetings == 1 {
+                    gateway.sendRequestPayload(#"{"type":"message","sessionId":"current","text":"一次"}"#)
+                    gateway.sendRequestPayload(#"{"type":"question-answer","rpcId":"one","answers":[]}"#)
+                    gateway.sendRequestPayload(#"{"type":"approval-response","rpcId":"two","outcome":"allow"}"#)
+                }
+            } else if frame.code == "subscription-timeout", !gateway.recoverSubscription(sessionID: "current") {
+                terminalErrors += 1
+                exhausted.fulfill()
+            }
+        }
+        gateway.connect(to: endpoint)
+        await fulfillment(of: [exhausted], timeout: 4)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(greetings, 3, "首次连接加两次恢复，不能无限重连")
+        XCTAssertEqual(terminalErrors, 1)
+        XCTAssertTrue(gateway.subscriptionRecoveryExhausted)
+        for kind in ["message", "question-answer", "approval-response"] {
+            XCTAssertEqual(server.receivedRequestKinds.filter { $0 == kind }.count, 1, "写操作不能重放")
+        }
+        gateway.disconnect()
+        XCTAssertFalse(gateway.recoverSubscription(sessionID: "current"))
+    }
+
+    func testNavigationDuringRecoveryDoesNotRestoreOldSubscription() async throws {
+        for destination: String? in [nil, "new"] {
+            let server = try LocalRecoveryGateway(repliesToPing: { _ in true }, subscriptionAckStartingAt: 2)
+            let endpoint = try await server.start()
+            let gateway = GatewayClient(credentials: RecoveryTestCredentials(), subscriptionTimeoutInterval: .milliseconds(80))
+            defer { gateway.disconnect(); server.stop() }
+            let ready = expectation(description: "恢复连接使用最新导航目标")
+            var target: String? = "old"
+            var greetings = 0
+            gateway.onFrame = { frame in
+                if frame.kind == "hello" {
+                    greetings += 1
+                    if let target { gateway.subscribe(sessionId: target) }
+                    if greetings == 2, target == nil { ready.fulfill() }
+                } else if frame.code == "subscription-timeout" {
+                    XCTAssertEqual(greetings, 1, "退出或切换后不能再次超时恢复旧目标")
+                    XCTAssertTrue(gateway.recoverSubscription(sessionID: "old"))
+                    target = destination
+                    gateway.cancelSubscriptionRecovery()
+                } else if frame.kind == "subscribed" {
+                    XCTAssertEqual(frame.sessionId, destination)
+                    XCTAssertTrue(gateway.acceptSubscriptionAck(sessionID: frame.sessionId))
+                    ready.fulfill()
+                }
+            }
+            gateway.connect(to: endpoint)
+            await fulfillment(of: [ready], timeout: 4)
+            try await Task.sleep(for: .milliseconds(150))
+            XCTAssertFalse(gateway.recoverSubscription(sessionID: "old"))
+            XCTAssertEqual(server.receivedRequestKinds.filter { $0 == "subscribe" }.count, destination == nil ? 1 : 2)
+        }
+    }
+
+    func testStoreProvidesManualRetryAfterAutomaticRecoveryIsExhausted() async throws {
+        try await verifyStoreManualRetry(greeting: .stream)
+    }
+
+    func testLegacyStoreProvidesManualRetryAfterAutomaticRecoveryIsExhausted() async throws {
+        try await verifyStoreManualRetry(greeting: .hello)
+    }
+
+    private func verifyStoreManualRetry(greeting: LocalRecoveryGateway.Greeting) async throws {
+        let server = try LocalRecoveryGateway(greeting: greeting, repliesToPing: { _ in true },
+                                             respondsToControls: true, subscriptionAckStartingAt: 4)
+        let endpoint = try await server.start()
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials(), subscriptionTimeoutInterval: .milliseconds(250))
+        let session = SessionSummary(id: "current", title: "会话", lastActivity: .now, isRunning: false, hasUnread: false)
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: endpoint, selectedWorkspaceID: nil, sessions: [session]),
+                             gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.deactivateGateway(); server.stop() }
+        gateway.connect(to: endpoint)
+        for _ in 0..<200 {
+            if gateway.state.isConnected { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let prepared = await store.prepareConversation(for: session)
+        XCTAssertTrue(prepared)
+        await store.activatePreparedConversation(sessionID: session.id)
+        for _ in 0..<300 {
+            if store.historyLoadErrors[session.id] != nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(gateway.subscriptionRecoveryExhausted)
+        XCTAssertNotNil(store.historyLoadErrors[session.id], "最终失败应显示页面重试入口")
+        XCTAssertNil(store.lastError, "恢复期间和最终失败不能反复弹全局错误")
+        XCTAssertEqual(server.receivedRequestKinds.filter { $0 == "subscribe" }.count, 3)
+        store.loadHistory(for: session.id)
+        for _ in 0..<300 {
+            if server.receivedRequestKinds.filter({ $0 == "subscribe" }).count == 4,
+               !gateway.subscriptionRecoveryExhausted, store.historyLoadErrors[session.id] == nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(server.receivedRequestKinds.filter { $0 == "subscribe" }.count, 4)
+        XCTAssertFalse(gateway.subscriptionRecoveryExhausted)
+        XCTAssertNil(store.historyLoadErrors[session.id])
+    }
+}
+
+@MainActor
 final class GatewaySubscriptionLifecycleTests: XCTestCase {
+    func testBackgroundCancelsSubscriptionTimeoutAndStillAcceptsAcknowledgement() async throws {
+        let gateway = GatewayClient(subscriptionTimeoutInterval: .milliseconds(30))
+        defer { gateway.disconnect() }
+        gateway.installConnectedTransportForTesting()
+        var errors: [GatewayFrame] = []
+        gateway.onFrame = { if $0.code == "subscription-timeout" { errors.append($0) } }
+        gateway.subscribe(sessionId: "current")
+        gateway.applicationDidEnterBackground()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(errors.isEmpty, "进入后台后不能继续触发旧订阅超时")
+        XCTAssertFalse(gateway.acceptSubscriptionAck(sessionID: "other"), "后台仍须保留在途订阅的关联")
+        XCTAssertTrue(gateway.acceptSubscriptionAck(sessionID: "current"))
+        gateway.applicationDidBecomeActive()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(errors.isEmpty, "已在后台确认的订阅不能在回前台后重新计时")
+    }
+
+    func testBackgroundAcknowledgementDrainsLatestSelectionWithoutStartingTimeout() async throws {
+        let gateway = GatewayClient(subscriptionTimeoutInterval: .milliseconds(30))
+        defer { gateway.disconnect() }
+        var requests: [String] = []
+        gateway.installConnectedTransportForTesting { requests.append($0) }
+        var errors: [GatewayFrame] = []
+        gateway.onFrame = { if $0.code == "subscription-timeout" { errors.append($0) } }
+        gateway.subscribe(sessionId: "old")
+        gateway.subscribe(sessionId: "current")
+        gateway.applicationDidEnterBackground()
+        XCTAssertFalse(gateway.acceptSubscriptionAck(sessionID: "old"))
+        XCTAssertEqual(requests.count, 2, "取消计时不能丢失最后一次会话选择")
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(errors.isEmpty, "后台继续发出的订阅也不能启动超时计时")
+        XCTAssertFalse(gateway.acceptSubscriptionAck(sessionID: "old"))
+        XCTAssertTrue(gateway.acceptSubscriptionSnapshot(sessionID: "current"))
+    }
+
+    func testForegroundGivesPendingSubscriptionAFreshTimeoutWindow() async throws {
+        let gateway = GatewayClient(subscriptionTimeoutInterval: .milliseconds(200))
+        defer { gateway.disconnect() }
+        gateway.installConnectedTransportForTesting()
+        let timedOut = expectation(description: "回前台后尚未确认的订阅仍有正常等待期限")
+        var errors: [GatewayFrame] = []
+        gateway.onFrame = {
+            if $0.code == "subscription-timeout" { errors.append($0); timedOut.fulfill() }
+        }
+        gateway.subscribe(sessionId: "current")
+        gateway.applicationDidEnterBackground()
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(errors.isEmpty)
+        gateway.applicationDidBecomeActive()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(errors.isEmpty, "回前台不能立即补报后台期间的旧超时")
+        await fulfillment(of: [timedOut], timeout: 2)
+        XCTAssertEqual(errors.count, 1)
+        XCTAssertEqual(errors.first?.sessionId, "current")
+    }
+
+    func testSubscriptionStartedInBackgroundWaitsUntilForegroundToStartTimeout() async throws {
+        let gateway = GatewayClient(subscriptionTimeoutInterval: .milliseconds(30))
+        defer { gateway.disconnect() }
+        gateway.installConnectedTransportForTesting()
+        var errors: [GatewayFrame] = []
+        let timedOut = expectation(description: "后台发起的订阅回前台后开始计时")
+        gateway.onFrame = {
+            if $0.code == "subscription-timeout" { errors.append($0); timedOut.fulfill() }
+        }
+        gateway.applicationDidEnterBackground()
+        gateway.subscribe(sessionId: "current")
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(errors.isEmpty)
+        gateway.applicationDidBecomeActive()
+        await fulfillment(of: [timedOut], timeout: 2)
+        XCTAssertEqual(errors.count, 1)
+    }
+
+    func testValidatedSnapshotCompletesPendingSubscriptionWithoutTimeout() async throws {
+        let gateway = GatewayClient(subscriptionTimeoutInterval: .milliseconds(30))
+        defer { gateway.disconnect() }
+        gateway.installConnectedTransportForTesting()
+        var errors: [GatewayFrame] = []
+        gateway.onFrame = { errors.append($0) }
+        gateway.subscribe(sessionId: "current")
+        XCTAssertTrue(gateway.acceptSubscriptionSnapshot(sessionID: "current"))
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(errors.isEmpty)
+    }
+
+    func testSnapshotForAnotherSessionCannotHideCurrentSubscriptionTimeout() async throws {
+        let gateway = GatewayClient(subscriptionTimeoutInterval: .milliseconds(30))
+        defer { gateway.disconnect() }
+        gateway.installConnectedTransportForTesting()
+        let timedOut = expectation(description: "另一会话的快照不能取消当前超时")
+        gateway.onFrame = { if $0.code == "subscription-timeout" { timedOut.fulfill() } }
+        gateway.subscribe(sessionId: "current")
+        XCTAssertFalse(gateway.acceptSubscriptionSnapshot(sessionID: "old"))
+        await fulfillment(of: [timedOut], timeout: 1)
+    }
+
+    func testSnapshotForSupersededSubscriptionDrainsLatestSelection() async throws {
+        let gateway = GatewayClient(subscriptionTimeoutInterval: .milliseconds(30))
+        defer { gateway.disconnect() }
+        var requests: [String] = []
+        gateway.installConnectedTransportForTesting { requests.append($0) }
+        var errors: [GatewayFrame] = []
+        gateway.onFrame = { errors.append($0) }
+        gateway.subscribe(sessionId: "old")
+        gateway.subscribe(sessionId: "current")
+        XCTAssertFalse(gateway.acceptSubscriptionSnapshot(sessionID: "old"))
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertTrue(gateway.acceptSubscriptionAck(sessionID: "current"))
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(errors.isEmpty)
+    }
+
     func testTimedOutOldSubscriptionDrainsExitOrNewSelectionWithoutAlert() async throws {
         for latest: String? in [nil, "greeting"] {
             let gateway = GatewayClient(subscriptionTimeoutInterval: .milliseconds(100))
@@ -13544,7 +15473,6 @@ final class SentFileCardViewportTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         let preview = FileManager.default.temporaryDirectory.appendingPathComponent("sent-file-cards.png")
-        try image.pngData()?.write(to: preview)
         print("SENT_FILE_CARDS_PREVIEW=\(preview.path)")
         fixture.timeline.publish([item([], text: "仅文字的新消息")])
         try await wait { self.cards(fixture).isEmpty && self.texts(fixture).contains("仅文字的新消息") }
@@ -13767,5 +15695,865 @@ final class MarkdownTableRenderingTests: XCTestCase {
         attachment.name = "markdown-ten-column-table-ios"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+final class GatewayMgwCodecTests: XCTestCase {
+    private func bytes(_ hex: String) -> Data {
+        var result = Data()
+        var index = hex.startIndex
+        while index < hex.endIndex {
+            let end = hex.index(index, offsetBy: 2)
+            result.append(UInt8(hex[index..<end], radix: 16)!)
+            index = end
+        }
+        return result
+    }
+    func testGatewayGoldenVectorAndInvalidHeaders() throws {
+        let golden = bytes("4d475731010001000000000000000001000000000000000100000002000000027b7d")
+        XCTAssertEqual(try GatewayMgwCodec(channel: 1).encode("{}", frameLimit: 16384, messageLimit: 16777216), [golden])
+        XCTAssertEqual(try GatewayMgwCodec(channel: 1).receive(golden), "{}")
+        for offset in [0, 4, 5, 6, 7, 15, 19, 23, 27, 31] {
+            var invalid = golden; invalid[offset] ^= 3
+            XCTAssertThrowsError(try GatewayMgwCodec(channel: 1).receive(invalid), "offset=\(offset)")
+        }
+    }
+    func testUnicodeAndSixteenMiBRoundTrip() throws {
+        for text in ["{\"text\":\"你好😀\"}", String(repeating: "x", count: 16777216)] {
+            let frames = try GatewayMgwCodec(channel: 2).encode(text, frameLimit: 16384, messageLimit: 16777216)
+            let decoder = GatewayMgwCodec(channel: 2)
+            XCTAssertEqual(try frames.compactMap { try decoder.receive($0) }, [text])
+            XCTAssertTrue(frames.allSatisfy { $0.count <= 16384 })
+        }
+    }
+    func testDuplicateChunkTimeoutAndInvalidUtf8Fail() throws {
+        let encoder = GatewayMgwCodec(channel: 1)
+        let frames = try encoder.encode(String(repeating: "a", count: 16384), frameLimit: 16384, messageLimit: 16777216)
+        let decoder = GatewayMgwCodec(channel: 1)
+        XCTAssertNil(try decoder.receive(frames[0], now: 0))
+        XCTAssertThrowsError(try decoder.receive(frames[0], now: 1))
+        XCTAssertThrowsError(try decoder.checkIdle(now: 30))
+        var invalid = try GatewayMgwCodec(channel: 1).encode("x", frameLimit: 16384, messageLimit: 16777216)[0]
+        invalid[32] = 255
+        XCTAssertThrowsError(try GatewayMgwCodec(channel: 1).receive(invalid))
+    }
+}
+
+@MainActor
+private final class RtcFixtureCredentials: GatewayCredentialStoring {
+    let deviceID: String
+    var token: String?
+    init(deviceID: String, token: String) { self.deviceID = deviceID; self.token = token }
+    func loadToken(for endpoint: URL) -> String? { token }
+    func saveToken(_ token: String, for endpoint: URL) { self.token = token }
+    func deleteToken(for endpoint: URL) { token = nil }
+    func loadOrCreateDeviceID() -> String { deviceID }
+}
+
+@MainActor
+final class GatewayRtcInteropTests: XCTestCase {
+    func testForegroundRecoveryReestablishesNativeRtcBeforeWsFallback() async throws {
+        guard let base = ProcessInfo.processInfo.environment["DSH_RTC_RESUME_FIXTURE_URL"] else {
+            throw XCTSkip("显式设置 DSH_RTC_RESUME_FIXTURE_URL 后运行独立前台恢复协议替身")
+        }
+        struct Fixture: Decodable { let url: String; let gatewayId: String; let deviceId: String; let token: String }
+        let (data, _) = try await URLSession.shared.data(from: URL(string: base)!)
+        let fixture = try JSONDecoder().decode(Fixture.self, from: data)
+        let client = GatewayClient(credentials: RtcFixtureCredentials(deviceID: fixture.deviceId, token: fixture.token),
+                                   foregroundRtcTimeout: .seconds(2), rtcPolicy: { _ in true })
+        client.expectedGatewayID = fixture.gatewayId
+        client.trustedEndpoints = [fixture.url]
+        defer { client.disconnect() }
+        func waitFor(_ condition: () -> Bool) async throws {
+            let deadline = ProcessInfo.processInfo.systemUptime + 5
+            while !condition() {
+                guard ProcessInfo.processInfo.systemUptime < deadline else { throw URLError(.timedOut) }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+        }
+        client.connect(to: fixture.url)
+        try await waitFor { client.state.isConnected }
+        XCTAssertEqual(client.connectionMethod, "WebRTC")
+        client.applicationDidEnterBackground()
+        _ = try await URLSession.shared.data(from: URL(string: base + "/drop")!)
+        try await waitFor { !client.state.isConnected }
+        client.applicationDidBecomeActive()
+        try await waitFor { client.state.isConnected }
+        XCTAssertEqual(client.connectionMethod, "WebRTC", "回前台不应无条件改用 WS")
+        let pong = expectation(description: "恢复后的原生 RTC 可进行业务往返")
+        client.onFrame = { if $0.kind == "pong" { pong.fulfill() } }
+        client.ping()
+        await fulfillment(of: [pong], timeout: 1)
+        client.onFrame = nil
+        // 成功后恢复期限必须撤销，不能稍后又被旧超时任务降级。
+        try await Task.sleep(for: .milliseconds(2200))
+        XCTAssertTrue(client.state.isConnected)
+        XCTAssertEqual(client.connectionMethod, "WebRTC")
+        let (status, _) = try await URLSession.shared.data(from: URL(string: base + "/status")!)
+        let requestModes = try JSONSerialization.jsonObject(with: status) as? [String: [String]]
+        XCTAssertEqual(requestModes?["requests"], ["rtc", "rtc"])
+    }
+
+    func testNativeGatewayClientRtcLegacyAndFallback() async throws {
+        guard let base = ProcessInfo.processInfo.environment["DSH_RTC_FIXTURE_URL"] else {
+            throw XCTSkip("显式设置 DSH_RTC_FIXTURE_URL 后运行隔离网关实连")
+        }
+        struct Fixture: Decodable { let url: String; let gatewayId: String; let deviceId: String; let token: String }
+        for mode in ["rtc", "legacy", "fallback"] {
+            let (data, _) = try await URLSession.shared.data(from: URL(string: "\(base)/?mode=\(mode)")!)
+            let fixture = try JSONDecoder().decode(Fixture.self, from: data)
+            // 隔离 RTC 库互通测试显式启用 RTC，生产内网入口默认直接 WS。
+            let client = GatewayClient(credentials: RtcFixtureCredentials(deviceID: fixture.deviceId, token: fixture.token), rtcPolicy: { _ in true })
+            client.expectedGatewayID = fixture.gatewayId
+            client.trustedEndpoints = [fixture.url]
+            var received: [GatewayFrame] = []
+            var failure: String?
+            client.onFrame = { received.append($0) }
+            client.onConnectionFailure = { failure = $0 }
+            defer { client.disconnect() }
+            func waitFor(_ condition: () -> Bool) async throws {
+                let deadline = ProcessInfo.processInfo.systemUptime + 35
+                while !condition() {
+                    if let failure { XCTFail(failure); throw URLError(.cannotConnectToHost) }
+                    guard ProcessInfo.processInfo.systemUptime < deadline else { XCTFail("RTC interop timeout: \(mode)"); throw URLError(.timedOut) }
+                    try await Task.sleep(for: .milliseconds(10))
+                }
+            }
+            client.connect(to: fixture.url)
+            try await waitFor { client.state.isConnected }
+            if mode == "rtc" { XCTAssertTrue(client.connectionMethod.hasPrefix("WebRTC")) }
+            else { XCTAssertEqual(client.connectionMethod, "WebSocket") }
+            client.sendRequestPayload("{\"type\":\"workspaces\"}", decorate: false)
+            try await waitFor { received.contains { $0.kind == "workspaces" } }
+            client.sendRequestPayload("{\"type\":\"history\",\"sessionId\":\"interop-session\"}", decorate: false)
+            try await waitFor { received.contains { $0.kind == "history" } }
+            let monitor = GatewayNetworkDiagnosticsMonitor()
+            defer { monitor.stop() }
+            XCTAssertTrue(client.networkDiagnosticsSupported)
+            XCTAssertEqual(client.networkDiagnosticsObserverCountForTesting, 0)
+            monitor.start(client)
+            monitor.start(client)
+            XCTAssertEqual(client.networkDiagnosticsObserverCountForTesting, 1)
+            try await waitFor { monitor.snapshot.successfulProbes >= 2 }
+            XCTAssertGreaterThanOrEqual(monitor.snapshot.roundTripMs, 0)
+            XCTAssertEqual(monitor.snapshot.lossPercent, 0)
+            XCTAssertGreaterThan(monitor.snapshot.receivedBytesPerSecond, 0)
+            XCTAssertGreaterThan(monitor.snapshot.sentBytesPerSecond, 0)
+            XCTAssertFalse(received.contains { $0.kind == "pong" && ($0.requestId?.hasPrefix("network-check:") ?? false) })
+            monitor.stop()
+            XCTAssertFalse(monitor.snapshot.active)
+            XCTAssertEqual(client.networkDiagnosticsObserverCountForTesting, 0)
+            let completed = monitor.snapshot.successfulProbes
+            try await Task.sleep(for: .milliseconds(1200))
+            XCTAssertEqual(monitor.snapshot.successfulProbes, completed)
+            monitor.start(client)
+            try await waitFor { monitor.snapshot.successfulProbes >= 1 }
+            XCTAssertEqual(monitor.snapshot.timedOutProbes, 0)
+            monitor.stop()
+            if mode == "rtc" {
+                received.removeAll()
+                let overhead = "{\"type\":\"ping\",\"padding\":\"\"}".utf8.count
+                client.sendRequestPayload("{\"type\":\"ping\",\"padding\":\"\(String(repeating: "x", count: 16777216 - overhead))\"}", decorate: false)
+                try await waitFor { received.contains { $0.kind == "pong" } }
+                XCTAssertFalse(client.prepareMessageTransport(text: String(repeating: "x", count: 16777216), images: []))
+                try await waitFor { client.state.isConnected && client.connectionMethod == "WebSocket" }
+                received.removeAll()
+                client.sendRequestPayload("{\"type\":\"workspaces\"}", decorate: false)
+                try await waitFor { received.contains { $0.kind == "workspaces" } }
+            }
+        }
+    }
+}
+
+@MainActor
+final class AgentTurnTimingIntegrationTests: XCTestCase {
+    func testNewTurnUsesLifecycleStartEvenWithOldUserMessageAndServerClockOffset() async throws {
+        let session = SessionSummary(id: "timing", title: "Timing", lastActivity: .now, isRunning: false, hasUnread: false)
+        let gateway = GatewayClient()
+        gateway.installConnectedTransportForTesting()
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "", selectedWorkspaceID: nil, sessions: [session]),
+                             gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.deactivateGateway() }
+        _ = await store.prepareConversation(for: session)
+        for raw in [
+            #"{"kind":"event","sessionId":"timing","seq":1,"time":1000,"event":{"type":"user/message","text":"old"}}"#,
+            #"{"kind":"event","sessionId":"timing","seq":2,"time":2054,"event":{"type":"turn/start","turn":25}}"#
+        ] {
+            gateway.onFrame?(try GatewayWireDecoder.decode(Data(raw.utf8)))
+        }
+        // 双通道下 sent 确认可能晚于 turn/start；不能把已建立的本轮计时清空。
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"sent","sessionId":"timing"}"#.utf8
+        )))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        let timing = try XCTUnwrap(store.selectedTurnTiming)
+        XCTAssertEqual(timing.startSequence, 2)
+        XCTAssertLessThan(timing.elapsedSeconds(nowMonotonicSeconds: AgentTurnMonotonicClock.now), 2)
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"event","sessionId":"timing","seq":3,"time":2055,"event":{"type":"turn/end","turn":25}}"#.utf8
+        )))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        XCTAssertNil(store.selectedTurnTiming)
+    }
+
+    func testUserMessageWithoutTurnStartDoesNotInventAnElapsedTime() async throws {
+        let session = SessionSummary(id: "timing", title: "Timing", lastActivity: .now, isRunning: true, hasUnread: false)
+        let gateway = GatewayClient()
+        gateway.installConnectedTransportForTesting()
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "", selectedWorkspaceID: nil, sessions: [session]),
+                             gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.deactivateGateway() }
+        _ = await store.prepareConversation(for: session)
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"event","sessionId":"timing","seq":1,"time":1000,"event":{"type":"user/message","text":"old"}}"#.utf8
+        )))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        XCTAssertNil(store.selectedTurnTiming)
+    }
+}
+
+
+@MainActor
+private final class NetworkDiagnosticsSceneFixture: ObservableObject {
+    @Published var phase: ScenePhase = .active
+}
+
+@MainActor
+private struct NetworkDiagnosticsLifecycleFixtureView: View {
+    let gateway: GatewayClient
+    @ObservedObject var scene: NetworkDiagnosticsSceneFixture
+    var body: some View {
+        NavigationStack {
+            GatewayNetworkDiagnosticsView(gateway: gateway)
+                .environment(\.scenePhase, scene.phase)
+        }
+    }
+}
+
+@MainActor
+final class GatewayNetworkDiagnosticsLifecycleTests: XCTestCase {
+    func testVisiblePageRunsAndBackgroundOrDismissalUnregistersObservers() async throws {
+        let gateway = GatewayClient()
+        gateway.installConnectedTransportForTesting()
+        let scene = NetworkDiagnosticsSceneFixture()
+        let activationDeadline = ProcessInfo.processInfo.systemUptime + 5
+        while !UIApplication.shared.connectedScenes.contains(where: { $0.activationState == .foregroundActive }),
+              ProcessInfo.processInfo.systemUptime < activationDeadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let windowScene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = windowScene.windows.first(where: \.isKeyWindow)
+        let host = UIHostingController(rootView: NetworkDiagnosticsLifecycleFixtureView(gateway: gateway, scene: scene))
+        let window = UIWindow(windowScene: windowScene)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKeyAndVisible(); gateway.disconnect() }
+        func waitForCount(_ expected: Int) async throws {
+            let deadline = ProcessInfo.processInfo.systemUptime + 5
+            while gateway.networkDiagnosticsObserverCountForTesting != expected {
+                guard ProcessInfo.processInfo.systemUptime < deadline else {
+                    XCTFail("检测观察者：期望 \(expected)，实际 \(gateway.networkDiagnosticsObserverCountForTesting)")
+                    throw URLError(.timedOut)
+                }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        try await waitForCount(1)
+        scene.phase = .background
+        try await waitForCount(0)
+        scene.phase = .active
+        try await waitForCount(1)
+        window.rootViewController = UIViewController()
+        try await waitForCount(0)
+        scene.phase = .background
+        try await Task.sleep(for: .milliseconds(100))
+        scene.phase = .active
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(gateway.networkDiagnosticsObserverCountForTesting, 0)
+    }
+}
+
+@MainActor
+final class GatewayConnectionPathTests: XCTestCase {
+    func testBothChannelsKeepTheirOwnRouteAndIPv6EndpointsFitNarrowScreens() throws {
+        let control = RtcSelectedPath(kind: "local", protocol: "UDP", localEndpoint: "192.168.1.20:50000",
+                                      remoteEndpoint: "192.168.1.94:51000", localCandidateType: "host", remoteCandidateType: "host")
+        let conversation = RtcSelectedPath(kind: "relay", protocol: "UDP", localEndpoint: "[2001:db8:1234:5678::1]:50000",
+                                           remoteEndpoint: "[2001:db8:1234:5678::2]:51000", localCandidateType: "relay", remoteCandidateType: "host")
+        let host = UIHostingController(rootView: GatewayConnectionPathView(paths: ["control": control, "conversation": conversation]))
+        let size = host.sizeThatFits(in: CGSize(width: 280, height: 1000))
+        XCTAssertGreaterThan(size.height, 80)
+        XCTAssertLessThan(size.height, 320)
+        XCTAssertLessThanOrEqual(size.width, 280)
+        XCTAssertNotEqual(gatewayPathLabel(control.kind), gatewayPathLabel(conversation.kind))
+    }
+
+    func testMissingSelectionRendersPendingAndDisconnectKeepsNoRoute() {
+        let host = UIHostingController(rootView: GatewayConnectionPathView(paths: [:]))
+        XCTAssertGreaterThan(host.sizeThatFits(in: CGSize(width: 320, height: 1000)).height, 40)
+        XCTAssertNil(RtcPathInspector.shared.inspect(statsJson: "[]"))
+        let client = GatewayClient()
+        client.disconnect()
+        XCTAssertTrue(client.connectionPaths.isEmpty)
+    }
+}
+
+@MainActor
+final class GatewayRtcLoggingTests: XCTestCase {
+    private let identity = "d56a1098-8519-43a1-9dce-fb99863bf5bb"
+
+    func testLegacyHelloLogsWhyNoRtcUpgradeWasOffered() async throws {
+        var lines: [String] = []
+        let link = GatewayRtcLink(expectedGatewayID: identity, wsSend: { _ in }, deliver: { _, _ in },
+                                  selected: { _ in }, diagnostic: { lines.append($0) }, failure: { _ in XCTFail("不应失败") })
+        defer { link.close() }
+        try await link.webSocket(Data("{\"kind\":\"hello\",\"gatewayId\":\"\(identity)\"}".utf8))
+        XCTAssertTrue(lines.contains { $0.contains("event=upgrade-skipped reason=gateway-no-upgrade phase=initial") })
+        XCTAssertTrue(lines.contains { $0.contains("event=selected") && $0.contains("mode=websocket") })
+        XCTAssertFalse(lines.contains { $0.contains(identity) })
+    }
+
+    func testDeadlineLogsNegotiationTimeoutBeforeClosingTheMachine() async throws {
+        var lines: [String] = []
+        var failed = false
+        let link = GatewayRtcLink(expectedGatewayID: identity, wsSend: { _ in }, deliver: { _, _ in },
+                                  selected: { _ in }, diagnostic: { lines.append($0) }, failure: { failed = $0 })
+        defer { link.close() }
+        try await link.webSocket(Data("""
+        {"kind":"hello","gatewayId":"\(identity)","capabilities":["webrtc-upgrade-v1"],
+         "transport":{"version":1,"bootstrap":true,"negotiateTimeoutMs":100}}
+        """.utf8))
+        let deadline = ProcessInfo.processInfo.systemUptime + 1
+        while !failed && ProcessInfo.processInfo.systemUptime < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertTrue(failed)
+        XCTAssertTrue(lines.contains {
+            $0.contains("event=fallback-requested reason=negotiation-timeout phase=negotiating channel=group")
+        })
+    }
+}
+
+final class GeneratedToolImageTests: XCTestCase {
+    func testZoomPersistsAndBoundsPanningThenDoubleTapRestoresFit() {
+        let viewport = CGSize(width: 400, height: 800)
+        let image = CGSize(width: 1000, height: 1000)
+        var transform = ImagePreviewTransform()
+        transform.zoom(to: 2, viewport: viewport, image: image)
+        XCTAssertEqual(transform.scale, 2)
+        XCTAssertEqual(transform.bounded(CGSize(width: 900, height: 900), viewport: viewport, image: image),
+                       CGSize(width: 200, height: 0))
+        transform.zoom(to: 3, viewport: viewport, image: image, anchor: CGPoint(x: 100, y: 300))
+        XCTAssertEqual(transform.scale, 3)
+        XCTAssertEqual(transform.offset, CGSize(width: 50, height: 50))
+        transform.zoom(to: 1, viewport: viewport, image: image)
+        XCTAssertEqual(transform, ImagePreviewTransform())
+        transform.zoom(to: 100, viewport: viewport, image: image)
+        XCTAssertEqual(transform.scale, 5)
+    }
+
+    @MainActor
+    func testGeneratedImageHasRoundedVisibleCornersAndLeadingAlignment() async throws {
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 400)).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 400, height: 400))
+        }
+        let data = try XCTUnwrap(source.pngData())
+        let image = GatewayImageAttachment(attachmentId: "rounded", mediaType: "image/png", bytes: data.count, width: 400, height: 400)
+        let item = ConversationItem(id: "image", kind: .generatedImages, title: "", text: "", images: [image], isError: false, date: .now)
+        let host = UIHostingController(rootView: ConversationRow(item: item, showsCopyButton: false, imageData: { _ in data })
+            .frame(width: 390, height: 450, alignment: .topLeading).background(Color.white))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 450))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let rendered = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            host.view.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: rendered)
+        attachment.name = "聊天图片圆角与左对齐"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        let cgImage = try XCTUnwrap(rendered.cgImage)
+        let width = cgImage.width
+        let height = cgImage.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        func isRed(_ x: Int, _ y: Int) -> Bool {
+            let offset = (y * width + x) * 4
+            return pixels[offset] > 200 && pixels[offset + 1] < 50 && pixels[offset + 2] < 50
+        }
+        var minX = width, minY = height, maxX = 0, maxY = 0
+        for y in 0..<height {
+            for x in 0..<width where isRed(x, y) {
+                minX = min(minX, x); minY = min(minY, y)
+                maxX = max(maxX, x); maxY = max(maxY, y)
+            }
+        }
+        XCTAssertLessThan(minX, 4, "图片应贴齐回复左边缘")
+        XCTAssertGreaterThan(maxX - minX, Int(300 * rendered.scale))
+        XCTAssertFalse(isRed(minX, minY), "圆角应裁切可见图片而非外层留白")
+        XCTAssertFalse(isRed(maxX, maxY))
+    }
+
+    func testGeneratedImagesRemainOutsideToolProcess() {
+        let image = GatewayImageAttachment(attachmentId: "generated", mediaType: "image/png", bytes: 100, width: 1536, height: 1024)
+        let items = [
+            ConversationItem(id: "tool", kind: .tool, title: "generate", text: "", isError: false, date: .now),
+            ConversationItem(id: "image", kind: .generatedImages, title: "", text: "", images: [image], isError: false, date: .now)
+        ]
+        let entries = ConversationDisplayEntry.make(from: items)
+        XCTAssertEqual(entries.count, 2)
+        guard case .message(let item) = entries.last?.content else { return XCTFail("图片被折叠") }
+        XCTAssertEqual(item.images, [image])
+    }
+
+    private let imageJSON = #"{"attachmentId":"generated","mediaType":"image/png","bytes":100,"width":1536,"height":1024}"#
+
+    func testMalformedOptionalImageDoesNotDiscardAssistantText() throws {
+        let data = Data("{\"kind\":\"event\",\"sessionId\":\"s\",\"seq\":1,\"time\":1,\"event\":{\"type\":\"assistant/message\",\"text\":\"answer\",\"images\":[{},null,\(imageJSON)]}}".utf8)
+        let frame = try GatewayWireDecoder.decode(data)
+        XCTAssertEqual(frame.event?.text, "answer")
+        XCTAssertEqual(frame.event?.images?.count, 1)
+    }
+
+    func testRawToolAndPtcHistoryRestoreImageReferences() throws {
+        for type in ["tool/result", "tool/ptc-dispatch", "tool/code-dispatch"] {
+            let content = "[{\"type\":\"image\",\"attachment\":\(imageJSON)}]"
+            let payload = type == "tool/result" ? "{\"message\":{\"content\":\(content)}}" : "{\"content\":\(content)}"
+            let raw = try JSONDecoder().decode(RawSessionEvent.self, from: Data("{\"type\":\"\(type)\",\"seq\":1,\"time\":1,\"data\":\(payload)}".utf8))
+            XCTAssertEqual(raw.normalized(sessionId: "s").event.images?.first?.attachmentId, "generated")
+        }
+    }
+
+    func testFailedAndDuplicateToolImages() throws {
+        let data = try JSONDecoder().decode(JSONValue.self, from: Data("{\"images\":[\(imageJSON),\(imageJSON)]}".utf8))
+        XCTAssertEqual(toolImageReferences(data).count, 1)
+        let failed = try JSONDecoder().decode(JSONValue.self, from: Data("{\"isError\":true,\"images\":[\(imageJSON)]}".utf8))
+        XCTAssertTrue(toolImageReferences(failed).isEmpty)
+    }
+}
+
+final class Gateway022ProtocolTests: XCTestCase {
+    func testHostTaskWithoutSessionAndNextExecutionIsPreserved() throws {
+        let raw = try JSONDecoder().decode(JSONValue.self, from: Data(#"{"id":"task","title":"检查构建","prompt":"检查状态","kind":"every","every_seconds":3600,"status":"paused","target":{"kind":"new_once"},"updatedAt":"revision"}"#.utf8))
+        let task = try XCTUnwrap(ScheduledTask(raw))
+        XCTAssertEqual(task.sessionID, "")
+        XCTAssertEqual(task.status, "paused")
+        XCTAssertEqual(task.everySeconds, 3600)
+        XCTAssertEqual(task.raw["updatedAt"]?.stringValue, "revision")
+    }
+
+    func testFlatTaskAndCleanupResponsesDoNotConflictWithLegacyFields() throws {
+        let task = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-view","id":"task","target":{"kind":"new"}}"#.utf8))
+        XCTAssertEqual(task.schedule?["target"]?["kind"]?.stringValue, "new")
+        let cleanup = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-delete-inactive","deleted":3}"#.utf8))
+        XCTAssertEqual(cleanup.deletedCount, 3)
+        XCTAssertNil(cleanup.deleted)
+    }
+
+    func testHistoryQuoteAndRequestIDSurviveNormalization() throws {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"history","events":[{"type":"user/message","seq":1,"time":1,"data":{"content":[{"type":"text","text":"> 原文"}],"textParts":[{"type":"quote","text":"原文"}],"source":{"kind":"user","rpcId":"send"}}}]}"#.utf8))
+        let event = try XCTUnwrap(frame.events?.first).normalized(sessionId: "s").event
+        XCTAssertEqual(event.textParts, [GatewayTextPart(type: "quote", text: "原文")])
+        XCTAssertEqual(event.requestId, "send")
+    }
+}
+
+@MainActor
+final class ScheduledTaskHistoryTests: XCTestCase {
+    func testPagesAppendRetryAndIgnorePreviousTaskResponse() async throws {
+        let gateway = GatewayClient()
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+            selectedWorkspaceID: nil, sessions: []), gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.disconnect() }
+        var requests: [[String: Any]] = []
+        gateway.installConnectedTransportForTesting { text in
+            if let request = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+               request["type"] as? String == "schedule-history" { requests.append(request) }
+        }
+        let task = try XCTUnwrap(ScheduledTask(.object(["id": .string("task-a"), "sessionId": .string("session-a"),
+            "title": .string("每日新闻汇总"), "prompt": .string("汇总科技金融新闻"), "status": .string("active")])))
+        func deliver(_ payload: [String: Any]) async throws {
+            gateway.onFrame?(try GatewayWireDecoder.decode(JSONSerialization.data(withJSONObject: payload)))
+            await store.awaitPendingKMPEventDeliveriesForTesting()
+        }
+        store.loadScheduleHistory(task)
+        store.loadScheduleHistory(task)
+        XCTAssertEqual(requests.count, 1)
+        let firstID = try XCTUnwrap(requests.last?["requestId"] as? String)
+        let recent: [String: Any] = ["messageId": "m2", "scheduledAt": "2026-11-06T08:00:00Z"]
+        let older: [String: Any] = ["messageId": "m1", "scheduledAt": "2026-11-05T08:00:00Z"]
+        try await deliver(["kind": "schedule-history", "requestId": firstID, "records": [recent], "nextBefore": "m2"])
+        XCTAssertFalse(store.scheduleHistoryLoading)
+        store.loadScheduleHistory(task, before: "m2")
+        let secondID = try XCTUnwrap(requests.last?["requestId"] as? String)
+        try await deliver(["kind": "error", "requestType": "schedule-history", "requestId": secondID, "message": "暂时不可用"])
+        XCTAssertEqual(store.scheduleHistory?["records"]?.arrayValue?.count, 1)
+        XCTAssertNotNil(store.scheduleHistoryError)
+        store.loadScheduleHistory(task, before: "m2")
+        XCTAssertEqual(requests.last?["before"] as? String, "m2")
+        let retryID = try XCTUnwrap(requests.last?["requestId"] as? String)
+        try await deliver(["kind": "schedule-history", "requestId": retryID, "records": [recent, older]])
+        XCTAssertEqual(store.scheduleHistory?["records"]?.arrayValue?.count, 2)
+        XCTAssertNil(store.scheduleHistoryError)
+        let host = UIHostingController(rootView: ScheduledTaskHistorySheet(store: store, task: task, onOpenSession: { _ in })
+            .environment(\.locale, Locale(identifier: "zh_Hans")))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 650))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(200))
+        let screenshot = XCTAttachment(image: UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        })
+        screenshot.name = "任务运行轨迹列表"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        let other = try XCTUnwrap(ScheduledTask(.object(["id": .string("task-b"), "title": .string("其他任务"),
+            "prompt": .string("其他内容"), "status": .string("active")])))
+        store.loadScheduleHistory(other)
+        try await deliver(["kind": "schedule-history", "requestId": retryID, "records": [recent]])
+        XCTAssertNil(store.scheduleHistory)
+        let otherID = try XCTUnwrap(requests.last?["requestId"] as? String)
+        try await deliver(["kind": "schedule-history", "requestId": otherID, "records": []])
+        XCTAssertEqual(store.scheduleHistory?["records"]?.arrayValue?.count, 0)
+    }
+}
+
+@MainActor
+final class ScheduledTaskCreationTests: XCTestCase {
+    func testCreationUsesHostDefaultWorkspaceWithoutSendingAMessage() async throws {
+        let gateway = GatewayClient()
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+            selectedWorkspaceID: AppStore.allWorkspacesID, sessions: []), gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.disconnect() }
+        var requests: [[String: Any]] = []
+        gateway.installConnectedTransportForTesting { text in
+            guard let request = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else { return }
+            requests.append(request)
+            if request["type"] as? String == "session-create", let id = request["requestId"] as? String {
+                Task { @MainActor in
+                    _ = gateway.acceptSessionCreationFrame(GatewayFrame(kind: "session-created", sessionId: "automation-draft",
+                                                                         requestId: id))
+                }
+            }
+        }
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"hello","protocol":3,"capabilities":["session-create"]}"#.utf8)))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        store.selectAllWorkspaces()
+        let success = await store.prepareNewConversation(useDefaultWorkspace: true)
+        XCTAssertTrue(success)
+        XCTAssertEqual(store.selectedSessionId, "automation-draft")
+        let create = try XCTUnwrap(requests.first { $0["type"] as? String == "session-create" })
+        XCTAssertNil(create["workspaceId"], "创建任务不能带入当前工作区覆盖宿主默认工作区")
+        XCTAssertNil(create["cwd"])
+        let seed = "请根据需求创建一个自动化任务。"
+        let host = UIHostingController(rootView: ConversationView(activeView: .constant(0), initialDraft: seed)
+            .environmentObject(store).environment(\.locale, Locale(identifier: "zh_Hans")))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(300))
+        func findInput(_ view: UIView) -> UITextView? {
+            if let input = view as? UITextView, input.accessibilityIdentifier == "composer-input" { return input }
+            return view.subviews.lazy.compactMap(findInput).first
+        }
+        XCTAssertEqual(try XCTUnwrap(findInput(host.view)).text, seed)
+        XCTAssertFalse(requests.contains { $0["type"] as? String == "send" })
+    }
+}
+
+@MainActor
+final class SentReplyBubbleLayoutTests: XCTestCase {
+    func testAssistantFooterPlacesReplyBesideCopyInBothThemes() async throws {
+        let text = "这里是需要引用的回复。"
+        let enabled = UIHostingController(rootView: AssistantMessageActions(text: text, onReply: { _ in }))
+        let disabled = UIHostingController(rootView: AssistantMessageActions(text: text, onReply: nil))
+        XCTAssertGreaterThan(enabled.sizeThatFits(in: CGSize(width: 390, height: 100)).width,
+                             disabled.sizeThatFits(in: CGSize(width: 390, height: 100)).width,
+                             "支持引用时，复制右侧必须显示回复入口")
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            let dark = style == .dark
+            let host = UIHostingController(rootView: VStack(alignment: .leading, spacing: 7) {
+                Text(text).appFont(.body)
+                AssistantMessageActions(text: text, onReply: { _ in })
+            }
+                .padding(16)
+                .frame(width: 390, height: 160, alignment: .topLeading)
+                .background(dark ? Color.black : Color.white)
+                .environment(\.colorScheme, dark ? .dark : .light))
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 160))
+            window.overrideUserInterfaceStyle = style
+            window.rootViewController = host
+            window.isHidden = false
+            defer { window.isHidden = true; window.rootViewController = nil }
+            host.view.frame = window.bounds
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(200))
+            let screenshot = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: screenshot)
+            attachment.name = dark ? "消息底部回复按钮-夜间" : "消息底部回复按钮-日间"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
+    func testCompiledNightColorsRemainOpaque() throws {
+        let traits = UITraitCollection(userInterfaceStyle: .dark)
+        for name in ["SentReplyBubbleBackground", "SentReplyQuoteBackground", "SentReplyBubbleBorder"] {
+            let color = try XCTUnwrap(UIColor(named: name, in: .main, compatibleWith: traits))
+                .resolvedColor(with: traits)
+            XCTAssertEqual(color.cgColor.alpha, 1, accuracy: 0.001,
+                           "\(name) 编译后的夜间颜色必须不透明，防止资源中的整数透明度被按 0–255 解析")
+        }
+    }
+
+    func testReplyRowRendersBothBackgroundsInLightAndDarkModes() async throws {
+        let parts = [GatewayTextPart(type: "quote", text: "希望你今天一切顺利！"),
+                     GatewayTextPart(type: "text", text: "你说啥")]
+        let item = ConversationItem(id: "night-reply", kind: .user, title: "", text: "你说啥",
+                                    isError: false, date: .now, textParts: parts)
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            let dark = style == .dark
+            let host = UIHostingController(rootView:
+                ConversationRow(item: item, showsCopyButton: true, imageData: { _ in nil })
+                    .padding(16)
+                    .frame(width: 390, height: 260, alignment: .top)
+                    .background(dark ? Color.black : Color.white)
+                    .environment(\.colorScheme, dark ? .dark : .light))
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 260))
+            window.overrideUserInterfaceStyle = style
+            window.rootViewController = host
+            window.isHidden = false
+            defer { window.isHidden = true; window.rootViewController = nil }
+            host.view.frame = window.bounds
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(200))
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let screenshot = UIGraphicsImageRenderer(size: window.bounds.size, format: format).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: screenshot)
+            attachment.name = dark ? "引用回复-夜间背景" : "引用回复-日间背景"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            let image = try XCTUnwrap(screenshot.cgImage)
+            var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+            let context = try XCTUnwrap(CGContext(data: &pixels, width: image.width, height: image.height,
+                bitsPerComponent: 8, bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            // 检查实际页面的像素，避免只有资源存在、但视图未绘制背景时仍然通过。
+            let backgrounds: [[Int]] = dark ? [[23, 42, 70], [36, 63, 99]] : [[232, 239, 252], [212, 222, 242]]
+            for rgb in backgrounds {
+                let count = stride(from: 0, to: pixels.count, by: 4).filter { i in
+                    (0..<3).allSatisfy { abs(Int(pixels[i + $0]) - rgb[$0]) <= 3 }
+                }.count
+                XCTAssertGreaterThan(count, 100, "\(dark ? "夜间" : "日间")的外层与引用背景都必须实际可见")
+            }
+        }
+    }
+
+    private func size(quote: String, reply: String, width: CGFloat = 300) -> CGSize {
+        let parts = [GatewayTextPart(type: "quote", text: quote), GatewayTextPart(type: "text", text: reply)]
+        let host = UIHostingController(rootView: SentReplyBubble(textParts: parts))
+        return host.sizeThatFits(in: CGSize(width: width, height: 10_000))
+    }
+
+    func testShortContentShrinksAndLongReplyDeterminesWidth() {
+        let short = size(quote: "引用", reply: "嗯")
+        let long = size(quote: "引用", reply: String(repeating: "这是一段较长的回复内容。", count: 10))
+        XCTAssertLessThan(short.width, long.width)
+        XCTAssertLessThanOrEqual(long.width, 300)
+    }
+
+    func testLongQuoteRespectsPhoneWidthAndGrowsOnTabletOnlyToMaximum() {
+        let quote = String(repeating: "这是需要显示两行省略的引用。", count: 12)
+        let phone = size(quote: quote, reply: "可以的", width: 280)
+        let tablet = size(quote: quote, reply: "可以的", width: 900)
+        XCTAssertLessThanOrEqual(phone.width, 280)
+        XCTAssertLessThanOrEqual(tablet.width, 360)
+        XCTAssertGreaterThan(phone.height, 40)
+    }
+}
+
+@MainActor
+final class ScheduleTimingEditorTests: XCTestCase {
+    func testIntervalWheelMapsRowsToValuesWithoutAllocatingAllOptions() {
+        var value = 1
+        let wheel = ScheduleIntervalWheel(selection: Binding(get: { value }, set: { value = $0 }), unit: "天")
+        let delegate = wheel.makeCoordinator()
+        let picker = UIPickerView()
+        XCTAssertEqual(delegate.pickerView(picker, numberOfRowsInComponent: 0), 10_000)
+        XCTAssertEqual(delegate.pickerView(picker, titleForRow: 0, forComponent: 0), "1 天")
+        delegate.pickerView(picker, didSelectRow: 2, inComponent: 0)
+        XCTAssertEqual(value, 3)
+        delegate.pickerView(picker, didSelectRow: 9999, inComponent: 0)
+        XCTAssertEqual(value, 10_000)
+    }
+
+    func testOutsideTapDismissalPreservesInputSubviewsAndDetachesRecognizer() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 800))
+        let controller = UIViewController()
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        let scope = UIView(frame: window.bounds)
+        controller.view.addSubview(scope)
+        let field = UITextField(frame: CGRect(x: 20, y: 20, width: 200, height: 44))
+        let text = UITextView(frame: CGRect(x: 20, y: 80, width: 200, height: 100))
+        scope.addSubview(field); scope.addSubview(text)
+        let child = UIView(); text.addSubview(child)
+        let coordinator = ScheduleKeyboardDismissProbe.Coordinator()
+        let previousCount = window.gestureRecognizers?.count ?? 0
+        coordinator.attach(to: scope)
+        XCTAssertEqual(window.gestureRecognizers?.count, previousCount + 1)
+        XCTAssertFalse(window.gestureRecognizers!.last!.cancelsTouchesInView)
+        XCTAssertFalse(coordinator.isOutsideEditor(field))
+        XCTAssertFalse(coordinator.isOutsideEditor(child))
+        XCTAssertTrue(coordinator.isOutsideEditor(UIButton()))
+        XCTAssertTrue(field.becomeFirstResponder())
+        coordinator.dismissKeyboard()
+        XCTAssertFalse(field.isFirstResponder)
+        coordinator.detach()
+        XCTAssertEqual(window.gestureRecognizers?.count, previousCount)
+    }
+
+    private func task() throws -> ScheduledTask {
+        let frame = try GatewayWireDecoder.decode(Data(#"{"kind":"schedule-catalog","items":[{"id":"timing-test","sessionId":"s1","title":"新闻","prompt":"汇总新闻","kind":"daily","status":"active","time":"08:00:37.125","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-31T00:00:37.125Z","updatedAt":"2026-11-06T01:00:00.000Z"}]}"#.utf8))
+        return try XCTUnwrap(frame.items?.first.flatMap(ScheduledTask.init))
+    }
+    func testBridgeKeepsFractionalSecondsAndRejectsInvalidLocalDate() throws {
+        var form = ScheduleTimingForm(task: try task())
+        XCTAssertEqual(form.time, "08:00:37.125")
+        XCTAssertEqual(form.timeZone, "Asia/Shanghai")
+        XCTAssertNil(form.validationError)
+        form.frequency = "once"
+        form.date = "2099-02-29"
+        XCTAssertNotNil(form.validationError)
+        form.date = "2099-03-08"; form.time = "02:30:00"; form.timeZone = "America/New_York"
+        XCTAssertNotNil(form.validationError, "夏令时缺失的当地时刻不能静默顺延")
+    }
+    func testScheduleEditSendsTimingAndCASRevision() async throws {
+        let gateway = GatewayClient()
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+            selectedWorkspaceID: nil, sessions: []), gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.disconnect() }
+        var requests: [[String: Any]] = []
+        gateway.installConnectedTransportForTesting { text in
+            if let request = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] { requests.append(request) }
+        }
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(#"{"kind":"hello","protocol":3,"capabilities":["schedule-management-v2"]}"#.utf8)))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        let original = try task()
+        gateway.onFrame?(try GatewayWireDecoder.decode(JSONSerialization.data(withJSONObject:
+            ["kind": "schedule-catalog", "items": [original.raw.foundationValue]])))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        let originalForm = ScheduleTimingForm(task: original)
+        var form = originalForm
+        form.frequency = "monthly"; form.monthDay = "31"; form.time = "09:30:45"; form.timeZone = "Europe/Berlin"
+        let json = try XCTUnwrap(ScheduleTimingEditor.shared.changeJson(draft: form.shared, original: originalForm.shared))
+        let timing = try JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
+        XCTAssertNotNil(store.updateScheduledTask(original, title: original.title, prompt: original.prompt, change: timing))
+        let request = try XCTUnwrap(requests.last { $0["type"] as? String == "schedule-edit" })
+        XCTAssertEqual(request["expectedUpdatedAt"] as? String, "2026-11-06T01:00:00.000Z")
+        let patch = try XCTUnwrap(request["patch"] as? [String: Any])
+        let submitted = try XCTUnwrap(patch["timing"] as? [String: Any])
+        XCTAssertEqual(submitted["kind"] as? String, "rrule")
+        XCTAssertTrue((submitted["rrule"] as? String)?.contains("BYMONTHDAY=31,-1;BYSETPOS=1") == true)
+        XCTAssertTrue((submitted["rrule"] as? String)?.contains("TZID=Europe/Berlin") == true)
+    }
+    func testTimingControlsFitNarrowScreensInBothThemes() throws {
+        for dark in [false, true] {
+            var form = ScheduleTimingForm(task: try task())
+            form.frequency = "weekly"
+            let host = UIHostingController(rootView: ScrollView {
+                ScheduleTimingControls(form: .constant(form)).padding(20)
+            }.environment(\.locale, Locale(identifier: "zh_Hans")).preferredColorScheme(dark ? .dark : .light))
+            host.overrideUserInterfaceStyle = dark ? .dark : .light
+            host.view.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
+            host.view.layoutIfNeeded()
+            XCTAssertLessThanOrEqual(host.sizeThatFits(in: CGSize(width: 390, height: 800)).width, 391)
+            let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = dark ? "执行时间编辑-夜间" : "执行时间编辑-日间"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+    }
+
+    func testNewConversationTargetsSaveWorkspaceAndRoundTripWithoutChangingTiming() async throws {
+        for kind in ["new_once", "new"] {
+            let gateway = GatewayClient()
+            let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+                selectedWorkspaceID: nil, sessions: []), gatewayClient: gateway, chatHistoryCache: nil)
+            defer { store.disconnect() }
+            var requests: [[String: Any]] = []
+            gateway.installConnectedTransportForTesting { text in
+                if let request = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] { requests.append(request) }
+            }
+            gateway.onFrame?(try GatewayWireDecoder.decode(Data(#"{"kind":"hello","protocol":3,"capabilities":["schedule-management-v2"]}"#.utf8)))
+            await store.awaitPendingKMPEventDeliveriesForTesting()
+            let original = try task()
+            gateway.onFrame?(try GatewayWireDecoder.decode(JSONSerialization.data(withJSONObject:
+                ["kind": "schedule-catalog", "items": [original.raw.foundationValue]])))
+            await store.awaitPendingKMPEventDeliveriesForTesting()
+            var form = ScheduleTargetForm(task: original)
+            XCTAssertNil(form.change(task: original))
+            form.kind = kind; form.cwd = "/projects/中文 space"
+            let target = try XCTUnwrap(form.change(task: original))
+            XCTAssertNotNil(store.updateScheduledTask(original, title: original.title, prompt: original.prompt, change: nil, target: target))
+            let request = try XCTUnwrap(requests.last { $0["type"] as? String == "schedule-edit" })
+            XCTAssertEqual(request["expectedUpdatedAt"] as? String, "2026-11-06T01:00:00.000Z")
+            let patch = try XCTUnwrap(request["patch"] as? [String: Any])
+            XCTAssertNil(patch["timing"])
+            let submitted = try XCTUnwrap(patch["target"] as? [String: Any])
+            XCTAssertEqual(submitted["kind"] as? String, kind)
+            XCTAssertNil(submitted["sessionId"])
+            XCTAssertEqual((submitted["create"] as? [String: Any])?["cwd"] as? String, "/projects/中文 space")
+            var updated = try XCTUnwrap(original.raw.objectValue)
+            updated["target"] = target
+            let restored = ScheduleTargetForm(task: try XCTUnwrap(ScheduledTask(.object(updated))))
+            XCTAssertEqual(restored, form)
+            XCTAssertNil(restored.change(task: try XCTUnwrap(ScheduledTask(.object(updated)))))
+        }
+    }
+
+    func testDestinationControlsFitBothThemesWithLongWorkspaceNames() throws {
+        let workspace = GatewayWorkspace(workspaceId: "project-b", path: "/projects/中文 space",
+            title: "测试工作区：用于执行自动化任务", sessionIds: [], createdAt: "", updatedAt: "")
+        for dark in [false, true] {
+            var form = ScheduleTargetForm(task: try task())
+            form.kind = "new_once"; form.cwd = workspace.path
+            let host = UIHostingController(rootView: ScheduleTargetControls(form: .constant(form), task: try task(),
+                workspaces: [workspace]).padding(20).environment(\.locale, Locale(identifier: "zh_Hans"))
+                .preferredColorScheme(dark ? .dark : .light))
+            host.overrideUserInterfaceStyle = dark ? .dark : .light
+            host.view.frame = CGRect(x: 0, y: 0, width: 390, height: 300)
+            host.view.layoutIfNeeded()
+            XCTAssertLessThanOrEqual(host.sizeThatFits(in: CGSize(width: 390, height: 300)).width, 391)
+            let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = dark ? "执行位置与工作区-夜间" : "执行位置与工作区-日间"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 }

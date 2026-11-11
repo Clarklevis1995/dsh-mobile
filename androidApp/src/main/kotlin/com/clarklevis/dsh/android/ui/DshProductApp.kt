@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,6 +48,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -91,16 +93,21 @@ import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import java.util.Calendar
 import java.util.TimeZone
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val ROUTE_WORKSPACE = "workspace"
 private const val ROUTE_CONVERSATION = "conversation"
 private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_SETTINGS_NETWORK = "settings/network-diagnostics"
+private const val ROUTE_SETTINGS_LOGS = "settings/logs"
 private const val ROUTE_SETTINGS_STORAGE = "settings/storage"
 private const val ROUTE_SETTINGS_FONT_SIZE = "settings/font-size"
 private const val ROUTE_SETTINGS_AGENT_PRESETS = "settings/agent-presets"
 private const val ROUTE_SETTINGS_DEFAULT_MODEL = "settings/default-model"
+private const val ROUTE_SETTINGS_TUNNEL = "settings/tailscale-tunnel"
 private const val ROUTE_PLUGINS = "plugins"
 private const val ROUTE_PLUGIN_BUNDLE = "plugins/bundle/{bundleName}"
 private const val ROUTE_PLUGIN_OFFICIAL = "plugins/official/{pluginId}"
@@ -143,112 +150,142 @@ internal fun DshProductApp(
             isAppearanceLightNavigationBars = !systemDark
         }
     }
-    NavHost(
-        navController = navController,
-        startDestination = ROUTE_WORKSPACE,
-        enterTransition = {
-            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(260))
-        },
-        exitTransition = {
-            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(260))
-        },
-        popEnterTransition = {
-            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(260))
-        },
-        popExitTransition = {
-            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(260))
-        }
-    ) {
-        composable(ROUTE_WORKSPACE) {
-            val workspaceScope = rememberCoroutineScope()
-            WorkspaceScreen(
-                stateHolder = stateHolder,
-                onOpenSession = { id ->
-                    // 转场期间首页仍能收到点击，直接读取当前目的地以拦截重复事件。
-                    if (navController.currentDestination?.route == ROUTE_WORKSPACE) {
-                        stateHolder.selectSession(id)
+    DshLiquidGlassHost(background = { Box(it.fillMaxSize().background(MaterialTheme.colorScheme.background)) }) {
+        NavHost(
+            navController = navController,
+            startDestination = ROUTE_WORKSPACE,
+            enterTransition = {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(260))
+            },
+            exitTransition = {
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(260))
+            },
+            popEnterTransition = {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(260))
+            },
+            popExitTransition = {
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(260))
+            }
+        ) {
+            composable(ROUTE_WORKSPACE) {
+                val workspaceScope = rememberCoroutineScope()
+                WorkspaceScreen(
+                    stateHolder = stateHolder,
+                    onOpenSession = { id ->
+                        // 转场期间首页仍能收到点击，直接读取当前目的地以拦截重复事件。
+                        if (navController.currentDestination?.route == ROUTE_WORKSPACE) {
+                            stateHolder.selectSession(id)
+                            navController.navigate(ROUTE_CONVERSATION) {
+                                launchSingleTop = true
+                            }
+                        }
+                    },
+                    onNewSession = {
+                        workspaceScope.launch {
+                            if (stateHolder.prepareNewSession()) {
+                                navController.navigate(ROUTE_CONVERSATION)
+                            }
+                        }
+                    },
+                    onSettings = { navController.navigate(ROUTE_SETTINGS) },
+                    onPlugins = { navController.navigate(ROUTE_PLUGINS) },
+                    onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) }
+                )
+            }
+            composable(ROUTE_CONVERSATION) {
+                ConversationScreen(
+                    stateHolder, onPickImage, navController::popBackStack, onPickFile,
+                    onPlugins = { navController.navigate(ROUTE_PLUGINS) { launchSingleTop = true } },
+                    onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) { launchSingleTop = true } },
+                    onSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } }
+                )
+            }
+            composable(ROUTE_SETTINGS) {
+                SettingsScreen(
+                    updateModel = updateModel,
+                    stateHolder = stateHolder,
+                    onBack = navController::popBackStack,
+                    onOpenAgentPresets = { navController.navigate(ROUTE_SETTINGS_AGENT_PRESETS) },
+                    onOpenDefaultModel = { navController.navigate(ROUTE_SETTINGS_DEFAULT_MODEL) },
+                    onOpenFontSize = { navController.navigate(ROUTE_SETTINGS_FONT_SIZE) },
+                    onOpenLogs = { navController.navigate(ROUTE_SETTINGS_LOGS) },
+                    onOpenStorage = { navController.navigate(ROUTE_SETTINGS_STORAGE) },
+                    onOpenNetworkDiagnostics = { navController.navigate(ROUTE_SETTINGS_NETWORK) },
+                    onOpenTunnel = { navController.navigate(ROUTE_SETTINGS_TUNNEL) }
+                )
+            }
+            composable(ROUTE_SETTINGS_LOGS) {
+                LogExportScreen(navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_NETWORK) {
+                NetworkDiagnosticsScreen(stateHolder, navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_TUNNEL) {
+                TailscaleTunnelScreen(navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_STORAGE) {
+                StorageSpaceScreen(stateHolder, navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_FONT_SIZE) {
+                FontSizeSettingsScreen(navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_AGENT_PRESETS) {
+                AgentPresetSelectionScreen(stateHolder, navController::popBackStack)
+            }
+            composable(ROUTE_SETTINGS_DEFAULT_MODEL) {
+                DefaultModelSelectionScreen(stateHolder, navController::popBackStack)
+            }
+            composable(ROUTE_PLUGINS) {
+                PluginsScreen(
+                    stateHolder = stateHolder,
+                    onBack = navController::popBackStack,
+                    onOpenBundle = { navController.navigate("plugins/bundle/${Uri.encode(it)}") },
+                    onOpenOfficial = { navController.navigate("plugins/official/${Uri.encode(it)}") }
+                )
+            }
+            composable(ROUTE_PLUGIN_BUNDLE) { entry ->
+                PluginBundleDetailScreen(
+                    stateHolder = stateHolder,
+                    bundleName = entry.arguments?.getString("bundleName").orEmpty(),
+                    onBack = navController::popBackStack
+                )
+            }
+            composable(ROUTE_PLUGIN_OFFICIAL) { entry ->
+                OfficialPluginDetailScreen(
+                    stateHolder = stateHolder,
+                    pluginId = entry.arguments?.getString("pluginId").orEmpty(),
+                    onBack = navController::popBackStack
+                )
+            }
+            composable(ROUTE_SCHEDULED_TASKS) {
+                val scheduleScope = rememberCoroutineScope()
+                var creatingConversation by remember { mutableStateOf(false) }
+                ScheduledTasksScreen(
+                    stateHolder = stateHolder,
+                    onBack = navController::popBackStack,
+                    onOpenSession = { sessionId ->
+                        stateHolder.selectSession(sessionId)
                         navController.navigate(ROUTE_CONVERSATION) {
+                            popUpTo(ROUTE_WORKSPACE)
                             launchSingleTop = true
                         }
-                    }
-                },
-                onNewSession = {
-                    workspaceScope.launch {
-                        if (stateHolder.prepareNewSession()) {
-                            navController.navigate(ROUTE_CONVERSATION)
+                    },
+                    onCreateTask = {
+                        if (!creatingConversation) {
+                            creatingConversation = true
+                            scheduleScope.launch {
+                                try {
+                                    if (stateHolder.prepareScheduledTaskConversation()) {
+                                        navController.navigate(ROUTE_CONVERSATION) {
+                                            popUpTo(ROUTE_WORKSPACE)
+                                        }
+                                    }
+                                } finally { creatingConversation = false }
+                            }
                         }
                     }
-                },
-                onSettings = { navController.navigate(ROUTE_SETTINGS) },
-                onPlugins = { navController.navigate(ROUTE_PLUGINS) },
-                onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) }
-            )
-        }
-        composable(ROUTE_CONVERSATION) {
-            ConversationScreen(
-                stateHolder, onPickImage, navController::popBackStack, onPickFile,
-                onPlugins = { navController.navigate(ROUTE_PLUGINS) { launchSingleTop = true } },
-                onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) { launchSingleTop = true } },
-                onSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } }
-            )
-        }
-        composable(ROUTE_SETTINGS) {
-            SettingsScreen(
-                updateModel = updateModel,
-                stateHolder = stateHolder,
-                onBack = navController::popBackStack,
-                onOpenAgentPresets = { navController.navigate(ROUTE_SETTINGS_AGENT_PRESETS) },
-                onOpenDefaultModel = { navController.navigate(ROUTE_SETTINGS_DEFAULT_MODEL) },
-                onOpenFontSize = { navController.navigate(ROUTE_SETTINGS_FONT_SIZE) },
-                onOpenStorage = { navController.navigate(ROUTE_SETTINGS_STORAGE) }
-            )
-        }
-        composable(ROUTE_SETTINGS_STORAGE) {
-            StorageSpaceScreen(stateHolder, navController::popBackStack)
-        }
-        composable(ROUTE_SETTINGS_FONT_SIZE) {
-            FontSizeSettingsScreen(navController::popBackStack)
-        }
-        composable(ROUTE_SETTINGS_AGENT_PRESETS) {
-            AgentPresetSelectionScreen(stateHolder, navController::popBackStack)
-        }
-        composable(ROUTE_SETTINGS_DEFAULT_MODEL) {
-            DefaultModelSelectionScreen(stateHolder, navController::popBackStack)
-        }
-        composable(ROUTE_PLUGINS) {
-            PluginsScreen(
-                stateHolder = stateHolder,
-                onBack = navController::popBackStack,
-                onOpenBundle = { navController.navigate("plugins/bundle/${Uri.encode(it)}") },
-                onOpenOfficial = { navController.navigate("plugins/official/${Uri.encode(it)}") }
-            )
-        }
-        composable(ROUTE_PLUGIN_BUNDLE) { entry ->
-            PluginBundleDetailScreen(
-                stateHolder = stateHolder,
-                bundleName = entry.arguments?.getString("bundleName").orEmpty(),
-                onBack = navController::popBackStack
-            )
-        }
-        composable(ROUTE_PLUGIN_OFFICIAL) { entry ->
-            OfficialPluginDetailScreen(
-                stateHolder = stateHolder,
-                pluginId = entry.arguments?.getString("pluginId").orEmpty(),
-                onBack = navController::popBackStack
-            )
-        }
-        composable(ROUTE_SCHEDULED_TASKS) {
-            ScheduledTasksScreen(
-                stateHolder = stateHolder,
-                onBack = navController::popBackStack,
-                onOpenSession = { sessionId ->
-                    stateHolder.selectSession(sessionId)
-                    navController.navigate(ROUTE_CONVERSATION) {
-                        popUpTo(ROUTE_WORKSPACE)
-                        launchSingleTop = true
-                    }
-                }
-            )
+                )
+            }
         }
     }
     stateHolder.platformError?.let { error ->
@@ -311,6 +348,7 @@ internal fun WorkspaceScreen(
     var showQrScanner by rememberSaveable { mutableStateOf(false) }
     var showWorkspaceMenu by rememberSaveable { mutableStateOf(false) }
     var showDirectoryBrowser by rememberSaveable { mutableStateOf(false) }
+    var showWorkspaceRequiredAlert by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(stateHolder.gatewayState.connection) { stateHolder.refreshProductState() }
     LaunchedEffect(searchQuery) {
         if (searchQuery.isNotBlank()) delay(350)
@@ -319,11 +357,17 @@ internal fun WorkspaceScreen(
 
     val workspaces = stateHolder.availableWorkspaces
     val selectedWorkspace = stateHolder.activeWorkspace
-    // 2026-10-27（fork）：会话 → 所属工作区标题，供"全部会话"视图标注归属。
+    // 单工作区视图使用归属标签；同一索引也用于快速统计未分组会话。
     val sessionFolderLabels = remember(workspaces) {
         buildMap { workspaces.forEach { ws -> ws.sessionIds.forEach { sid -> put(sid, ws.title) } } }
     }
+    val ungroupedCount = remember(stateHolder.snapshot.sessions, stateHolder.childSessionIds, sessionFolderLabels) {
+        stateHolder.snapshot.sessions.count { session ->
+            session.isVisibleInHistory && session.id !in stateHolder.childSessionIds && session.id !in sessionFolderLabels
+        }
+    }
     val showingAllWorkspaces = stateHolder.selectedWorkspaceId == AndroidSharedStateHolder.ALL_WORKSPACES_ID
+    var expandedSectionIds by rememberSaveable(stateHolder.gatewayLocalId) { mutableStateOf(emptyList<String>()) }
     val ungroupedSelected = stateHolder.isUngroupedWorkspaceSelected
     val sessions = remember(
         stateHolder.snapshot.sessions,
@@ -356,6 +400,26 @@ internal fun WorkspaceScreen(
         }
     }
 
+    val sessionScopeId = stateHolder.selectedWorkspaceId.orEmpty()
+    // 分组排序与展开投影在后台执行；滚动只消费稳定 key 的扁平条目。
+    val sessionEntries by produceState(
+        initialValue = emptyList<WorkspaceSessionListEntry>(),
+        key1 = sessions,
+        key2 = workspaces,
+        key3 = Triple(showingAllWorkspaces, sessionScopeId, expandedSectionIds)
+    ) {
+        val expandedIds = expandedSectionIds.toSet()
+        value = withContext(Dispatchers.Default) {
+            if (showingAllWorkspaces) {
+                allWorkspaceSessionEntries(sessions, workspaces, expandedIds)
+            } else {
+                recentWorkspaceSessionEntries(
+                    sessions, sessionScopeId, expandedIds
+                )
+            }
+        }
+    }
+
     WorkspaceDrawer(onPlugins = onPlugins, onScheduledTasks = onScheduledTasks) { openDrawer, canScrollVertically ->
         val backgroundAnimationEnabled by remember(canScrollVertically, workspaceListState) {
             derivedStateOf { canScrollVertically && !workspaceListState.isScrollInProgress }
@@ -367,13 +431,13 @@ internal fun WorkspaceScreen(
             }
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().testTag("workspace-session-list"),
                 contentPadding = WindowInsets.safeDrawing.asPaddingValues(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 userScrollEnabled = canScrollVertically,
                 state = workspaceListState
             ) {
-                item {
+                item(key = "workspace-header", contentType = "header") {
                     AdaptiveWorkspaceContent(
                         window = window,
                         header = {
@@ -409,10 +473,7 @@ internal fun WorkspaceScreen(
                                 WorkspaceCard(
                                     workspace = selectedWorkspace,
                                     ungrouped = ungroupedSelected,
-                                    ungroupedCount = stateHolder.snapshot.sessions.count { session ->
-                                        session.isVisibleInHistory && session.id !in stateHolder.childSessionIds &&
-                                            workspaces.none { session.id in it.sessionIds }
-                                    },
+                                    ungroupedCount = ungroupedCount,
                                     allWorkspaces = showingAllWorkspaces,
                                     sessionCount = sessions.size,
                                     state = stateHolder.gatewayState,
@@ -433,31 +494,58 @@ internal fun WorkspaceScreen(
                                     onDismiss = { showWorkspaceMenu = false }
                                 )
                             }
-                            GlassActionButton("＋", appText("新建会话"), onNewSession)
+                            GlassActionButton("＋", appText("新建会话")) {
+                                if (showingAllWorkspaces) showWorkspaceRequiredAlert = true else onNewSession()
+                            }
                         },
                         recentSessions = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(appText("最近会话"), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                                Text(if (showingAllWorkspaces) appText("全部会话") else appText("最近会话"),
+                                    color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                                 Spacer(Modifier.weight(1f))
                                 ConnectionStatusText(stateHolder.gatewayState)
                             }
                             LocalChatSearchContent(stateHolder, searchQuery, { searchQuery = it }, onOpenSession)
                             if (sessions.isEmpty()) EmptySessions()
-                            else SessionList(sessions, { id ->
-                                if (searchQuery.isNotBlank()) stateHolder.localChatMatches.firstOrNull { it.sessionId == id }
-                                    ?.let(stateHolder::prepareLocalChatMatch)
-                                onOpenSession(id)
-                            }, stateHolder::renameSession, stateHolder::archiveSession,
-                                folderLabels = sessionFolderLabels,
-                                maxRows = if (showingAllWorkspaces) 200 else 12)
-                            Spacer(Modifier.height(24.dp))
                         }
                     )
                 }
+                items(sessionEntries, key = { it.key }, contentType = { it::class }) { entry ->
+                    AdaptiveWorkspaceSessionContent(window) {
+                        when (entry) {
+                            is WorkspaceSessionListEntry.Header -> WorkspaceSessionSectionHeader(entry)
+                            is WorkspaceSessionListEntry.Toggle -> WorkspaceSessionSectionToggle(entry) { id ->
+                                expandedSectionIds = if (id in expandedSectionIds) expandedSectionIds - id else expandedSectionIds + id
+                            }
+                            is WorkspaceSessionListEntry.Session -> SessionListItem(
+                                session = entry.session,
+                                folderLabel = if (showingAllWorkspaces) null else sessionFolderLabel(entry.session, sessionFolderLabels),
+                                onOpen = { id ->
+                                    if (searchQuery.isNotBlank()) stateHolder.localChatMatches.firstOrNull { it.sessionId == id }
+                                        ?.let(stateHolder::prepareLocalChatMatch)
+                                    onOpenSession(id)
+                                },
+                                onRename = stateHolder::renameSession,
+                                onArchive = stateHolder::archiveSession
+                            )
+                        }
+                    }
+                }
+                item(key = "workspace-sessions-footer", contentType = "footer") { Spacer(Modifier.height(24.dp)) }
             }
         }
     }
 
+    if (showWorkspaceRequiredAlert) {
+        DshAlertDialog(
+            onDismissRequest = { showWorkspaceRequiredAlert = false },
+            title = appText("请先选择工作区"),
+            message = appText("请先选择一个具体工作区，再创建新会话。"),
+            confirmLabel = appText("知道了"),
+            onConfirm = { showWorkspaceRequiredAlert = false },
+            modifier = Modifier.testTag("workspace-required-alert")
+        )
+    }
     if (showQrScanner) {
         GatewayQrScannerScreen(
             onCode = { payload ->
@@ -627,7 +715,8 @@ private fun GlassActionButton(icon: String, title: String, onClick: () -> Unit) 
     Row(
         Modifier.fillMaxWidth().height(52.dp)
             .dshLiquidGlass(RoundedCornerShape(18.dp), DshGlassStyle.ACTION)
-            .clickable(role = Role.Button, onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick)
+            .testTag("workspace-new-session"),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -650,9 +739,9 @@ internal fun LocalChatSearchContent(
     if (searchQuery.isBlank()) return
     Text(
         text = if (stateHolder.localSearchHasMore) {
-            "本地聊天内容（仅已缓存部分，显示前 50 条）。打开结果可定位对应消息。"
+            appText("本地聊天内容（仅已缓存部分，显示前 50 条）。打开结果可定位对应消息。")
         } else {
-            "本地聊天内容（仅已缓存部分）；联网时同时补充网关搜索。"
+            appText("本地聊天内容（仅已缓存部分）；联网时同时补充网关搜索。")
         },
         color = Color.White.copy(alpha = 0.7f),
         fontSize = 12.sp,
@@ -675,7 +764,7 @@ internal fun LocalChatSearchContent(
             }.padding(vertical = 10.dp)
         ) {
             Text(
-                stateHolder.snapshot.sessions.firstOrNull { it.id == match.sessionId }?.title ?: "已缓存会话",
+                stateHolder.snapshot.sessions.firstOrNull { it.id == match.sessionId }?.title ?: appText("已缓存会话"),
                 color = Color.White,
                 fontWeight = FontWeight.Medium
             )
@@ -741,67 +830,63 @@ private fun sessionFolderLabel(session: SessionSummary, folderLabels: Map<String
 }
 
 @Composable
-private fun SessionList(
-    sessions: List<SessionSummary>,
+private fun SessionListItem(
+    session: SessionSummary,
+    folderLabel: String?,
     onOpen: (String) -> Unit,
     onRename: (String, String) -> Unit,
-    onArchive: (String) -> Unit,
-    folderLabels: Map<String, String> = emptyMap(),
-    maxRows: Int = 12
+    onArchive: (String) -> Unit
 ) {
-    Column(Modifier.background(Color.Transparent)) {
-        sessions.take(maxRows).forEach { session ->
-            androidx.compose.runtime.key(session.id) {
-                var menuVisible by remember { mutableStateOf(false) }
-                var renaming by remember { mutableStateOf(false) }
-                var archiving by remember { mutableStateOf(false) }
-                var title by remember { mutableStateOf(session.title) }
-                Box {
-                    SessionRow(
-                        session,
-                        folderLabel = sessionFolderLabel(session, folderLabels),
-                        onClick = { onOpen(session.id) },
-                        onLongClick = { menuVisible = true })
-                    SessionContextMenu(
-                        expanded = menuVisible,
-                        onDismissRequest = { menuVisible = false },
-                        onRename = {
-                            title = session.title
-                            menuVisible = false
-                            renaming = true
-                        },
-                        onArchive = {
-                            menuVisible = false
-                            archiving = true
-                        }
-                    )
+    var menuVisible by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    var archiving by remember { mutableStateOf(false) }
+    var title by remember { mutableStateOf(session.title) }
+    Column {
+        Box {
+            SessionRow(
+                session,
+                folderLabel = folderLabel,
+                onClick = { onOpen(session.id) },
+                onLongClick = { menuVisible = true }
+            )
+            SessionContextMenu(
+                expanded = menuVisible,
+                onDismissRequest = { menuVisible = false },
+                onRename = {
+                    title = session.title
+                    menuVisible = false
+                    renaming = true
+                },
+                onArchive = {
+                    menuVisible = false
+                    archiving = true
                 }
-                if (renaming) RenameSessionDialog(
-                    title = title,
-                    onTitleChange = { title = it },
-                    onDismissRequest = { renaming = false },
-                    onSave = {
-                        onRename(session.id, title)
-                        renaming = false
-                    }
-                )
-                if (archiving) AlertDialog(
-                    onDismissRequest = { archiving = false },
-                    title = { Text(appText("删除会话？")) },
-                    text = { Text(appText("会话将被归档并从列表隐藏，历史记录会保留。")) },
-                    confirmButton = {
-                        TextButton(onClick = { onArchive(session.id); archiving = false }) { Text(appText("删除")) }
-                    },
-                    dismissButton = { TextButton(onClick = { archiving = false }) { Text(appText("取消")) } }
-                )
-            }
-            HorizontalDivider(
-                modifier = Modifier.padding(start = 18.dp),
-                thickness = 0.5.dp,
-                color = Color.White.copy(alpha = 0.10f)
             )
         }
+        HorizontalDivider(
+            modifier = Modifier.padding(start = 18.dp),
+            thickness = 0.5.dp,
+            color = Color.White.copy(alpha = 0.10f)
+        )
     }
+    if (renaming) RenameSessionDialog(
+        title = title,
+        onTitleChange = { title = it },
+        onDismissRequest = { renaming = false },
+        onSave = {
+            onRename(session.id, title)
+            renaming = false
+        }
+    )
+    if (archiving) AlertDialog(
+        onDismissRequest = { archiving = false },
+        title = { Text(appText("删除会话？")) },
+        text = { Text(appText("会话将被归档并从列表隐藏，历史记录会保留。")) },
+        confirmButton = {
+            TextButton(onClick = { onArchive(session.id); archiving = false }) { Text(appText("删除")) }
+        },
+        dismissButton = { TextButton(onClick = { archiving = false }) { Text(appText("取消")) } }
+    )
 }
 
 @Composable

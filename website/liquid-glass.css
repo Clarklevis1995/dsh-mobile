@@ -1,0 +1,110 @@
+/* Glasswork v1.1.0 material, tuned to Whaleness's existing cobalt palette. */
+:root {
+  --u: 1px;
+  --glass-base-tint: #071c31;
+  --glass-brightness: .98;
+  --glass-saturation: 1.15;
+  --glass-solid: #081e32;
+  --glass-floor: .32;
+  --glass-wash: rgb(2 15 29 / 12%);
+  --ambient-blue: 26 98 178;
+  --ambient-cyan: 18 142 166;
+  --ambient-silver: 39 76 144;
+  --ambient-opacity: .4;
+  --glass-sheen: rgb(170 220 255 / 4%);
+}
+
+/* A small photo poster is also the complete no-JS/static fallback. */
+body { isolation: isolate; }
+.ambient-background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+  background-color: #4e9dcd;
+  background-image: linear-gradient(rgba(1, 9, 22, .5), rgba(1, 9, 22, .5)), url('assets/ocean-surface-small-v1.webp');
+  background-blend-mode: normal, multiply;
+  background-size: cover;
+  background-position: 65% 0;
+}
+.ambient-canvas, .refraction-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.ambient-canvas, .refraction-canvas { display: none; }
+:root[data-refraction] .ambient-canvas,
+:root[data-refraction="webgl"] .refraction-canvas { display: block; }
+/* Refraction already contains the backdrop's optical tone. Filtering it again
+   would blur the caustics and make the material cloudy. */
+[data-webgl-glass] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+/* Keep original radii, typography, spacing and focus rings. The floor keeps
+   text readable against the moving ocean. */
+.glass {
+  --l-tint: var(--glass-base-tint);
+  --l-bri: var(--glass-brightness);
+  --l-sat: var(--glass-saturation);
+  --d-bri: var(--glass-brightness);
+  --d-sat: var(--glass-saturation);
+  --l-blur: .45;
+  --d-blur: .45;
+  --l-dense: .14;
+  --d-dense: .28;
+  --l-catch: 1.25;
+  --l-bevel: 1.35;
+  --d-catch: 1.2;
+  --d-bevel: 1.25;
+  --density: 1;
+  --floor: var(--glass-floor);
+  background: color-mix(in srgb, var(--m-tint) calc(var(--tint-a) * 100%), transparent);
+  color: var(--text);
+}
+/* The canvas and CSS backdrop share this bounded palette. A themed tint
+   preserves legibility without per-frame canvas pixel readback. */
+.glass[data-kind="dark"] { --m-tint: var(--glass-base-tint); }
+.header.glass { --floor: .5; }
+.showcase.glass, .setup-stage.glass, .download-grid .glass {
+  background: linear-gradient(125deg, var(--glass-sheen), transparent 24%, transparent 72%, var(--glass-sheen)), color-mix(in srgb, var(--m-tint) calc(var(--tint-a) * 100%), transparent);
+}
+.control-visual.glass { --floor: .16; }
+.showcase-visual { background: var(--glass-wash); }
+.hero-backdrop {
+  background: radial-gradient(ellipse, rgb(35 127 178 / 12%), transparent 70%);
+  box-shadow: none;
+}
+.support-dialog.glass, .screenshot-dialog.glass { --floor: .88; }
+
+/* A low-end fallback must be cheap as well as readable: no animated backdrop
+   filtering, complex shadows or replacement SVG displacement maps. */
+.header.glass { -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-render-quality="low"] .glass,
+:root[data-render-quality="static"] .glass {
+  background: rgb(7 28 49 / 90%) !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgb(170 220 255 / 12%), 0 6px 18px rgb(0 5 16 / 16%);
+}
+:root[data-render-quality="static"] .ambient-background > * { animation: none; }
+
+/* A fully opaque fallback for browsers without backdrop filters. */
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .glass { background: var(--glass-solid) !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient-background { animation: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass { background: var(--glass-solid) !important; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .ambient-background { background-image: none; background-color: var(--bg); }
+}
+@media (forced-colors: active) {
+  .ambient-background { display: none; }
+  .glass { background: Canvas !important; color: CanvasText; border: 1px solid CanvasText; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

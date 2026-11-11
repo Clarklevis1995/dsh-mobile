@@ -45,18 +45,19 @@ internal fun DshLiquidGlassHost(
     background: @Composable (Modifier) -> Unit,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val effectsReduced = LocalUiEffectsReduced.current
     val backdrop = rememberLayerBackdrop()
     val sheetBackdrop = rememberLayerBackdrop()
     val frameSignal = remember { mutableLongStateOf(0L) }
     CompositionLocalProvider(
-        LocalDshBackdrop provides backdrop,
-        LocalDshSheetBackdrop provides sheetBackdrop,
-        LocalDshGlassFrameSignal provides frameSignal
+        LocalDshBackdrop provides backdrop.takeUnless { effectsReduced },
+        LocalDshSheetBackdrop provides sheetBackdrop.takeUnless { effectsReduced },
+        LocalDshGlassFrameSignal provides frameSignal.takeUnless { effectsReduced }
     ) {
         // 弹层位于独立窗口，可采样整个页面；页面内的玻璃控件仍只采样背景。
-        Box(modifier.layerBackdrop(sheetBackdrop)) {
+        Box(if (effectsReduced) modifier else modifier.layerBackdrop(sheetBackdrop)) {
             background(
-                Modifier
+                if (effectsReduced) Modifier else Modifier
                     .drawWithContent {
                         frameSignal.longValue
                         drawContent()
@@ -88,10 +89,16 @@ internal enum class DshGlassStyle(
 @Composable
 internal fun Modifier.dshLiquidGlass(
     shape: Shape,
-    style: DshGlassStyle = DshGlassStyle.CARD
+    style: DshGlassStyle = DshGlassStyle.CARD,
+    shadowsEnabled: Boolean = true
 ): Modifier {
     val backdrop = LocalDshBackdrop.current
     val frameSignal = LocalDshGlassFrameSignal.current
+    if (LocalUiEffectsReduced.current) {
+        return clip(shape)
+            .background(Color(0xFF17304D).copy(alpha = 0.90f), shape)
+            .border(0.8.dp, Color.White.copy(alpha = style.borderAlpha), shape)
+    }
     if (backdrop == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
         return clip(shape)
             .background(Color.White.copy(alpha = style.surfaceAlpha), shape)
@@ -124,18 +131,12 @@ internal fun Modifier.dshLiquidGlass(
                 alpha = style.borderAlpha.coerceAtLeast(0.10f)
             )
         },
-        shadow = {
-            Shadow(
-                radius = style.shadowRadiusDp.dp,
-                color = Color.Black.copy(alpha = 0.09f)
-            )
-        },
-        innerShadow = {
-            InnerShadow.Default.copy(
-                radius = 4.dp,
-                alpha = style.borderAlpha * 0.22f
-            )
-        },
+        shadow = if (shadowsEnabled) {
+            { Shadow(radius = style.shadowRadiusDp.dp, color = Color.Black.copy(alpha = 0.09f)) }
+        } else null,
+        innerShadow = if (shadowsEnabled) {
+            { InnerShadow.Default.copy(radius = 4.dp, alpha = style.borderAlpha * 0.22f) }
+        } else null,
         onDrawSurface = {
             if (style.navyTintAlpha > 0f) {
                 drawRect(Color(0xFF031B3D).copy(alpha = style.navyTintAlpha), blendMode = BlendMode.SrcOver)
@@ -172,7 +173,7 @@ internal fun Modifier.dshFrostedSheet(shape: Shape): Modifier {
     val frameSignal = LocalDshGlassFrameSignal.current
     val dark = isSystemInDarkTheme()
     val tint = if (dark) Color(0xFF22252C) else Color(0xFFE8EDF5)
-    val surface = if (backdrop == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+    val surface = if (LocalUiEffectsReduced.current || backdrop == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
         background(tint.copy(alpha = 0.92f), shape)
     } else {
         drawWithContent {

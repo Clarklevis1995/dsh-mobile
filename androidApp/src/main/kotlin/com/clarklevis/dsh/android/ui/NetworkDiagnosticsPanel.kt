@@ -1,0 +1,324 @@
+// Compose 组件沿用项目 PascalCase；图表索引、颜色和尺寸是展示参数。
+@file:Suppress("FunctionNaming", "MagicNumber", "TooManyFunctions", "ktlint:standard:function-naming")
+
+package com.clarklevis.dsh.android.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import com.clarklevis.dsh.android.AndroidSharedStateHolder
+import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
+import com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSnapshot
+import com.clarklevis.dsh.shared.transport.RtcSelectedPath
+import kotlinx.coroutines.flow.Flow
+import java.util.Locale
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun NetworkDiagnosticsScreen(
+    stateHolder: AndroidSharedStateHolder,
+    onBack: () -> Unit,
+) {
+    val background = if (isSystemInDarkTheme()) Color.Black else Color(0xFFF2F2F7)
+    androidx.compose.material3.Scaffold(
+        containerColor = background,
+        topBar = {
+            androidx.compose.material3.CenterAlignedTopAppBar(
+                title = { Text(appText("网络检测"), style = SettingsTypography.title) },
+                navigationIcon = {
+                    TopBarCircleButton(
+                        iconRes = com.clarklevis.dsh.android.R.drawable.ic_back_chevron,
+                        description = appText("返回"),
+                        onClick = onBack,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                },
+                colors =
+                    androidx.compose.material3.TopAppBarDefaults
+                        .topAppBarColors(containerColor = background),
+            )
+        },
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(padding)
+                .adaptiveContentWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(Modifier.background(networkCardColor(), RoundedCornerShape(24.dp))) {
+                NetworkDiagnosticsPanel(stateHolder)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun NetworkDiagnosticsPanel(stateHolder: AndroidSharedStateHolder) {
+    val paths by stateHolder.connectionPaths.collectAsStateWithLifecycle()
+    NetworkDiagnosticsPanel(remember(stateHolder) { stateHolder::observeNetworkDiagnostics }, paths)
+}
+
+@Composable
+internal fun NetworkDiagnosticsPanel(
+    observe: () -> Flow<NetworkDiagnosticsSnapshot>,
+    paths: Map<String, RtcSelectedPath> = emptyMap(),
+) {
+    var snapshot by remember(observe) { mutableStateOf(NetworkDiagnosticsSnapshot()) }
+    val lifecycle = LocalLifecycleOwner.current
+    LaunchedEffect(observe, lifecycle) {
+        lifecycle.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            observe().collect { snapshot = it }
+        }
+    }
+    NetworkDiagnosticsContent(snapshot, paths)
+}
+
+@Composable
+internal fun NetworkDiagnosticsContent(
+    snapshot: NetworkDiagnosticsSnapshot,
+    paths: Map<String, RtcSelectedPath> = emptyMap(),
+) {
+    var selectedMetric by remember { mutableIntStateOf(0) }
+    val primary = MaterialTheme.colorScheme.primary
+    val orange = Color(0xFFD68A2E)
+    Column(Modifier.fillMaxWidth().padding(16.dp).testTag("network-diagnostics"), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        NetworkConnectionHeader(snapshot, primary)
+        if (snapshot.connected && snapshot.connectionMethod.startsWith("WebRTC")) RtcConnectionPathDetails(paths)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            NetworkMetric(appText("往返延迟"), networkNumber(snapshot.roundTripMs, " ms"), Modifier.weight(1f))
+            NetworkMetric(appText("探测丢包率"), networkNumber(snapshot.lossPercent, "%"), Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            NetworkMetric(appText("延迟抖动"), networkNumber(snapshot.jitterMs, " ms"), Modifier.weight(1f))
+            NetworkMetric(appText("接收速率"), networkRate(snapshot.receivedBytesPerSecond), Modifier.weight(1f))
+        }
+        NetworkMetricSelector(selectedMetric) { selectedMetric = it }
+        NetworkLineChart(snapshot.samples, selectedMetric, primary, orange)
+        NetworkChartLegend(selectedMetric, primary, orange)
+        Text(
+            appText(
+                "平均 %1\$s · P95 %2\$s",
+                networkNumber(snapshot.averageRoundTripMs, " ms"),
+                networkNumber(snapshot.p95RoundTripMs, " ms"),
+            ),
+            style = SettingsTypography.description,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            appText(
+                "发送 %1\$s · 成功 %2\$s / 超时 %3\$s",
+                networkRate(snapshot.sentBytesPerSecond),
+                snapshot.successfulProbes,
+                snapshot.timedOutProbes,
+            ),
+            style = SettingsTypography.description,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (snapshot.connected && !snapshot.supported) {
+            Text(
+                appText("请更新网关以启用可关联的网络探测；旧网关不会被误判为丢包。"),
+                style = SettingsTypography.description,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun RtcConnectionPathDetails(
+    paths: Map<String, RtcSelectedPath>,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth().testTag("gateway-connection-path"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(appText("传输路径"), style = SettingsTypography.item)
+        for (channel in listOf("control", "conversation")) {
+            val title = appText(if (channel == "control") "控制通道" else "会话通道")
+            val path = paths[channel]
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                if (path == null) {
+                    Text(appText("%1\$s：%2\$s", title, appText("正在确认路径")), style = SettingsTypography.description)
+                } else {
+                    val kind =
+                        when (path.kind) {
+                            "local" -> appTextKey("内网直连")
+                            "nat" -> appTextKey("NAT 穿透直连")
+                            "relay" -> appTextKey("TURN 中继")
+                            else -> appTextKey("直连")
+                        }
+                    Text(appText("%1\$s：%2\$s · %3\$s", title, appText(kind), path.protocol), style = SettingsTypography.description)
+                    Text("${path.localEndpoint} → ${path.remoteEndpoint}", style = SettingsTypography.description)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NetworkConnectionHeader(
+    snapshot: NetworkDiagnosticsSnapshot,
+    primary: Color,
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(
+            appText(
+                if (snapshot.connected) {
+                    snapshot.connectionMethod.ifEmpty {
+                        "未连接"
+                    }
+                } else {
+                    "未连接"
+                },
+            ),
+            style = SettingsTypography.item,
+            color = primary,
+        )
+        Text(
+            appText(
+                if (!snapshot.connected) {
+                    "等待连接"
+                } else if (!snapshot.supported) {
+                    "网关需更新"
+                } else {
+                    "每秒检测 · 最近 60 秒"
+                },
+            ),
+            style = SettingsTypography.description,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun NetworkChartLegend(
+    selectedMetric: Int,
+    primary: Color,
+    orange: Color,
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(appText("60 秒前"), style = SettingsTypography.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (selectedMetric == 3) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(appText("接收"), style = SettingsTypography.description, color = primary)
+                Text(appText("发送"), style = SettingsTypography.description, color = orange)
+                Text("KiB/s", style = SettingsTypography.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            Text(
+                appText(if (selectedMetric == 1) "探测超时 · %" else "毫秒 · ms"),
+                style = SettingsTypography.description,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(appText("现在"), style = SettingsTypography.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun NetworkMetricSelector(
+    selectedMetric: Int,
+    onSelect: (Int) -> Unit,
+) {
+    val titles = listOf(appTextKey("延迟"), appTextKey("丢包"), appTextKey("抖动"), appTextKey("流量"))
+    val track = if (isSystemInDarkTheme()) Color(0xFF38383A) else Color(0xFFEEEEF0)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(32.dp)
+            .clip(CircleShape)
+            .background(track)
+            .padding(2.dp)
+            .selectableGroup()
+            .testTag("network-metric-selector"),
+    ) {
+        titles.forEachIndexed { index, title ->
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(
+                        if (selectedMetric == index) {
+                            networkCardColor()
+                        } else {
+                            Color.Transparent
+                        },
+                        CircleShape,
+                    ).selectable(
+                        selected = selectedMetric == index,
+                        role = Role.Tab,
+                        onClick = { onSelect(index) },
+                    ).semantics { contentDescription = appText(title) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    appText(title),
+                    Modifier.padding(horizontal = 12.dp),
+                    style = SettingsTypography.description,
+                    fontWeight = if (selectedMetric == index) FontWeight.SemiBold else FontWeight.Normal,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NetworkMetric(
+    title: String,
+    value: String,
+    modifier: Modifier,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(title, style = SettingsTypography.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = SettingsTypography.item, maxLines = 1)
+    }
+}
+
+internal fun networkNumber(
+    value: Double,
+    unit: String,
+): String = if (value < 0 || !value.isFinite()) "—" else String.format(Locale.getDefault(), "%.1f%s", value, unit)
+
+internal fun networkRate(value: Double): String = networkNumber(value / 1024.0, " KiB/s")
+
+@Composable
+private fun networkCardColor(): Color = if (isSystemInDarkTheme()) Color(0xFF1C1C1E) else Color.White

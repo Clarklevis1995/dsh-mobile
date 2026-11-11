@@ -13,7 +13,8 @@ data class GatewayConnectionSpec(
     val bearerToken: String? = null,
     val pairingCode: String? = null,
     val channel: String? = null,
-    val expectedGatewayId: String? = null
+    val expectedGatewayId: String? = null,
+    val negotiateRtc: Boolean = false
 ) {
     override fun toString(): String =
         "GatewayConnectionSpec(generation=$generation, endpoint=<redacted>, deviceId=<redacted>, " +
@@ -69,6 +70,11 @@ interface GatewayTransport {
 interface GatewaySplitTransport : GatewayTransport {
     suspend fun confirmControlHandshake() {}
     val conversationEvents: Flow<GatewayTransportEvent>
+}
+
+/** 支持鉴权后 RTC 升级的平台传输；显式连接可以重新尝试 RTC。 */
+interface GatewayRtcTransport : GatewaySplitTransport {
+    fun resetRtcRecovery()
 }
 
 enum class GatewayNetworkState {

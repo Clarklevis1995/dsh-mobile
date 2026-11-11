@@ -167,3 +167,14 @@ internal fun AdaptiveWorkspaceContent(
         }
     }
 }
+
+/** 全部会话的各行直接进入外层 LazyColumn，保持与首页分栏相同的边距和右列位置。 */
+@Composable
+internal fun AdaptiveWorkspaceSessionContent(window: DpSize, content: @Composable () -> Unit) {
+    val columns = AdaptiveLayout.workspaceUsesColumns(window.width.value, window.height.value, LocalDensity.current.fontScale)
+    Box(
+        Modifier.adaptiveContentWidth(AdaptiveLayout.WorkspaceWidth)
+            .padding(horizontal = if (columns) 40.dp else 22.dp)
+            .padding(start = if (columns) minOf(440.dp, window.width * 0.38f) + 48.dp else 0.dp)
+    ) { content() }
+}

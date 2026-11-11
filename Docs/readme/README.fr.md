@@ -41,7 +41,7 @@ Les deux applications se connectent à Harness par WebSocket via [`dsh-plugin-mo
 
 - **iOS** : [Rejoindre la bêta TestFlight](https://testflight.apple.com/join/1Euwby6r). Compatible avec les iPhone et iPad sous iOS / iPadOS 16.1 ou version ultérieure.
 - **Android** : [Télécharger un APK depuis GitHub Releases](https://github.com/Clarklevis1995/dsh-mobile/releases). Android 7.0 (API 24) ou version ultérieure est requis. La recherche de mises à jour privilégie la source de téléchargement accélérée et vérifie les paquets téléchargés.
-- **Hôte de bureau** : lancez DeepSeek Harness avec **`dsh-plugin-mobile-gateway` 0.11.1 ou version ultérieure** installé et activé. [`AppRelease/release-info.json`](../../AppRelease/release-info.json) définit la version minimale requise.
+- **Hôte de bureau** : lancez DeepSeek Harness avec **`dsh-plugin-mobile-gateway` 0.11.2 ou version ultérieure** installé et activé. [`AppRelease/release-info.json`](../../AppRelease/release-info.json) définit la version minimale requise.
 - **Saisie vocale** : activez le plugin officiel de saisie vocale dans la section des plugins de l’hôte, terminez le téléchargement et l’initialisation du modèle, puis autorisez l’accès au microphone sur l’appareil mobile.
 
 ## Communauté bêta
@@ -49,10 +49,10 @@ Les deux applications se connectent à Harness par WebSocket via [`dsh-plugin-mo
 Rejoignez le groupe WeChat nº 2 de la bêta Whaleness pour partager votre expérience, signaler des problèmes et obtenir de l’aide. Scannez avec WeChat ou enregistrez l’image pour la reconnaître dans WeChat.
 
 <p align="center">
-  <a href="../../website/assets/support-wechat-2026-10-28.png"><img src="../../website/assets/support-wechat-2026-10-28.png" alt="Code QR du groupe WeChat nº 2 de la bêta Whaleness, valable avant le 4 novembre 2026" width="320"></a>
+  <a href="../../website/assets/support-wechat-2026-11-05.png"><img src="../../website/assets/support-wechat-2026-11-05.png" alt="Code QR du groupe WeChat nº 2 de la bêta Whaleness, valable avant le 12 novembre 2026" width="320"></a>
 </p>
 
-> Mis à jour le 28 octobre 2026. L’image d’origine indique que le code est valable avant le 4 novembre 2026. S’il a expiré, consultez la [page du produit](https://clarklevis1995.github.io/dsh-mobile/) pour obtenir le dernier code QR.
+> Mis à jour le 5 novembre 2026. L’image d’origine indique que le code est valable avant le 12 novembre 2026. S’il a expiré, consultez la [page du produit](https://clarklevis1995.github.io/dsh-mobile/) pour obtenir le dernier code QR.
 
 ## État des plateformes
 
@@ -355,7 +355,7 @@ Chaque plateforme gère le stockage sécurisé, les images, les fichiers tempora
 ### Prérequis communs
 
 - Java 17.
-- DeepSeek Harness avec `dsh-plugin-mobile-gateway` 0.11.1 ou version ultérieure activé.
+- DeepSeek Harness avec `dsh-plugin-mobile-gateway` 0.11.2 ou version ultérieure activé.
 - Un simulateur, émulateur ou appareil physique pouvant accéder à Mobile Gateway.
 
 ### Android
@@ -416,7 +416,7 @@ Il n’est pas nécessaire de compiler le framework manuellement au préalable. 
 
 ## Connexion et appairage
 
-1. Installez ou mettez à jour `dsh-plugin-mobile-gateway` dans DeepSeek Harness (minimum 0.11.1), puis quittez complètement `dsh web` et relancez-le :
+1. Installez ou mettez à jour `dsh-plugin-mobile-gateway` dans DeepSeek Harness (minimum 0.11.2), puis quittez complètement `dsh web` et relancez-le :
 
    ```bash
    dsh plugin --profile web add dsh-plugin-mobile-gateway@latest

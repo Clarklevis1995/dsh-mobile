@@ -6,8 +6,9 @@ import com.clarklevis.dsh.android.ui.InterfaceStyle
 import com.clarklevis.dsh.android.ui.ScheduledTaskStatusFilter
 import com.clarklevis.dsh.android.ui.agentPresetDisplayName
 import com.clarklevis.dsh.android.ui.appLocale
-import com.clarklevis.dsh.android.ui.localizedToolActivitySummary
 import com.clarklevis.dsh.android.ui.relativeTime
+import com.clarklevis.dsh.android.ui.toolActivityTitle
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.projection.ToolActivitySummaryFormatter
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import java.util.Locale
@@ -20,6 +21,21 @@ import org.junit.Test
 
 class AndroidStringsTest {
     @get:Rule val locale = LocaleTestRule(Locale.ENGLISH)
+
+    @Test
+    fun allWorkspaceAndCreationReminderCopySupportsBothLanguagesAndSingularCounts() {
+        assertEquals("All sessions", appText("全部会话"))
+        assertEquals("Select a workspace first", appText("请先选择工作区"))
+        assertEquals("Select a specific workspace before creating a new session.", appText("请先选择一个具体工作区，再创建新会话。"))
+        assertEquals("1 session", appText("%1\$s 个会话", 1))
+        assertEquals("95 sessions", appText("%1\$s 个会话", 95))
+        assertEquals("Show 1 more session", appText("展开其余 %1\$s 个会话", 1))
+        assertEquals("Show 95 more sessions", appText("展开其余 %1\$s 个会话", 95))
+        assertEquals("Workspace 移动端工程, 7 sessions", appText("工作区 %1\$s，%2\$s 个会话", "移动端工程", 7))
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+        assertEquals("请先选择一个具体工作区，再创建新会话。", appText("请先选择一个具体工作区，再创建新会话。"))
+        assertEquals("展开其余 95 个会话", appText("展开其余 %1\$s 个会话", 95))
+    }
 
     @Test
     fun screenshotChromeAndComposerAreFullyEnglish() {
@@ -42,7 +58,7 @@ class AndroidStringsTest {
             assertFalse("Untranslated copy: $source", english.any { it in '\u4e00'..'\u9fff' })
             assertEquals(
                 "Translation arguments: $source",
-                argument.findAll(source).map { it.groupValues[1] }.toSet(),
+                argument.findAll(AndroidStrings.chinese[source] ?: source).map { it.groupValues[1] }.toSet(),
                 argument.findAll(english).map { it.groupValues[1] }.toSet()
             )
         }
@@ -79,6 +95,9 @@ class AndroidStringsTest {
         assertEquals("Active", ScheduledTaskStatusFilter.ACTIVE.title)
         assertEquals("Standard mode", agentPresetDisplayName("standard"))
         assertEquals("团队预设", agentPresetDisplayName("team", "团队预设"))
+        assertEquals("Run history · Daily", appText("执行记录 · %1\$s", "Daily"))
+        assertEquals("Uploading 40%", appText("上传中 %1\$s%", 40))
+        assertEquals("Lead session", appText("Lead 会话"))
         Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
         assertEquals("浅色", InterfaceStyle.LIGHT.title)
         assertEquals("已开启", ScheduledTaskStatusFilter.ACTIVE.title)
@@ -103,11 +122,22 @@ class AndroidStringsTest {
 
     @Test
     fun toolSummaryTranslatesLabelsAndCountsWhilePreservingPaths() {
-        val summary = localizedToolActivitySummary(ToolActivitySummaryFormatter.summarize(
+        val summary = ToolActivitySummaryFormatter.summarize(
             "write_file", """{"path":"项目/中文.kt","content":"one\ntwo"}"""
-        ))
-        assertEquals("Write", summary.label)
-        assertEquals("2 lines", summary.annotation)
+        )
+        assertEquals("Write · 2 lines", toolActivityTitle(summary))
         assertEquals("项目/中文.kt", summary.detail)
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+        assertEquals("写入 · 2 行", toolActivityTitle(summary))
+    }
+
+    @Test
+    fun uiMessageResolvesSemanticKeysAndKeepsRawTextVerbatim() {
+        assertEquals("Unsupported pairing protocol version 3", appText(UiMessage("pairing.unsupportedVersion", listOf("3"))))
+        assertEquals("1 line", appText(UiMessage("tool.lines", listOf("1"))))
+        assertEquals("主机原文", appText(UiMessage.raw("主机原文")))
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+        assertEquals("不支持的配对协议版本 3", appText(UiMessage("pairing.unsupportedVersion", listOf("3"))))
+        assertEquals("voice.hint", appText(UiMessage.raw("voice.hint")))
     }
 }

@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.shared
 
 import com.clarklevis.dsh.shared.facade.SharedSessionAgentPresetStore
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import kotlin.test.Test
@@ -39,7 +40,7 @@ class SharedSessionAgentPresetStoreTest {
         store.accept(GatewayFrame(kind = "session-agent-preset", sessionId = "s1", requestId = query.correlationId, agentPreset = "standard", locked = false))
         assertTrue(store.snapshot().canSelect)
         store.beginMessage()
-        val recovery = store.requestFailed("command-execute", "s1", null, "timeout")
+        val recovery = store.requestFailed("command-execute", "s1", null, UiMessage.raw("timeout"))
         assertEquals("session-agent-preset", recovery.requests.single().requestType)
         assertFalse(store.snapshot().canSelect)
     }
@@ -81,7 +82,7 @@ class SharedSessionAgentPresetStoreTest {
         // 查询未完成时不能发送，先完成该次查询。
         store.accept(GatewayFrame(kind = "session-agent-preset", sessionId = "s1", requestId = oldQuery.correlationId, agentPreset = "standard", locked = false))
         store.beginMessage()
-        val recovery = store.requestFailed("message", "s1", null, "network").requests.single()
+        val recovery = store.requestFailed("message", "s1", null, UiMessage.raw("network")).requests.single()
         assertFalse(store.snapshot().canSelect)
         store.accept(GatewayFrame(kind = "session-agent-preset", sessionId = "s1", requestId = oldQuery.correlationId, agentPreset = "standard", locked = false))
         assertFalse(store.snapshot().canSelect)
@@ -133,7 +134,7 @@ class SharedSessionAgentPresetStoreTest {
         assertFalse(store.snapshot().canSelect)
         assertTrue(store.snapshot().blocksSending)
         val retry = store.query().requests.single()
-        store.requestFailed("session-agent-preset", "s1", retry.correlationId, "timeout")
+        store.requestFailed("session-agent-preset", "s1", retry.correlationId, UiMessage.raw("timeout"))
         assertFalse(store.snapshot().loading)
         assertFalse(store.snapshot().canSelect)
         assertTrue(store.query().requests.isNotEmpty())
@@ -146,7 +147,7 @@ class SharedSessionAgentPresetStoreTest {
             val failed = store.accept(GatewayFrame(kind = "error", sessionId = "s1", requestId = request.correlationId, requestType = "select-agent-preset", code = code, message = "不可用"))
             assertEquals("standard", store.snapshot().agentPreset)
             assertEquals("agent-presets", failed.requests.single().requestType)
-            assertEquals("不可用", failed.error)
+            assertEquals(UiMessage.raw("不可用"), failed.error)
             assertTrue(store.snapshot().canSelect)
         }
     }
@@ -154,7 +155,7 @@ class SharedSessionAgentPresetStoreTest {
     @Test fun selectionTimeoutQueriesInsteadOfRepeatingMutation() {
         val store = ready()
         val request = store.select("minimal").requests.single()
-        val recovery = store.requestFailed("select-agent-preset", "s1", request.correlationId, "timeout")
+        val recovery = store.requestFailed("select-agent-preset", "s1", request.correlationId, UiMessage.raw("timeout"))
         assertEquals("session-agent-preset", recovery.requests.single().requestType)
         assertEquals("standard", store.snapshot().agentPreset)
         assertTrue(store.snapshot().blocksSending)

@@ -33,6 +33,9 @@ captures/
 .externalNativeBuild/
 .cxx/
 
+# 本地生成产物与验证截图
+/output/
+
 # Local environment files
 .env
 .env.*
@@ -50,3 +53,7 @@ oh_modules/
 *.p7b
 *.cer
 /harmonyApp/entry/src/main/cpp/generated/
+# tsnet 内嵌节点：本地状态与 gomobile 生成产物（不签入，由 :androidApp:buildTsnetAar 生成）
+tsnetgo/.state/
+tsnetgo/*.aar
+tsnetgo/*.sources.jar

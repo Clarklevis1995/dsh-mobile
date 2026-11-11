@@ -3,10 +3,13 @@ package com.clarklevis.dsh.android.ui
 import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
@@ -18,8 +21,12 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -46,6 +53,71 @@ class AppearanceSettingsDeviceTest {
 
     @After fun restoreTestLocale() { Locale.setDefault(originalTestLocale) }
 
+
+    @Test fun uiEffectsSwitchAppliesImmediatelyAndPersistsBothWays() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences("ui-effects-test", Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        val appearance = AppearanceSettings(preferences)
+        try {
+            compose.setContent {
+                DshTheme(appearance) {
+                    Column {
+                        UiEffectsSettingsRow()
+                        Text(if (LocalUiEffectsReduced.current) "reduced-effects" else "full-effects")
+                    }
+                }
+            }
+            val toggle = compose.onNodeWithTag("ui-effects-reduced-switch")
+            toggle.assertIsOff()
+            compose.onNodeWithText("full-effects").assertIsDisplayed()
+            toggle.performClick()
+            toggle.assertIsOn()
+            compose.onNodeWithText("reduced-effects").assertIsDisplayed()
+            compose.runOnIdle { assertTrue(AppearanceSettings(preferences).uiEffectsReduced) }
+            toggle.performClick()
+            toggle.assertIsOff()
+            compose.onNodeWithText("full-effects").assertIsDisplayed()
+            compose.runOnIdle { assertFalse(AppearanceSettings(preferences).uiEffectsReduced) }
+        } finally {
+            preferences.edit().clear().commit()
+        }
+    }
+
+    @Test fun reducingEffectsStopsHomeFramesAndDisablingResumesThem() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences("ui-effects-animation-test", Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        val appearance = AppearanceSettings(preferences)
+        val frameSignal = mutableLongStateOf(0L)
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.setContent {
+                DshTheme(appearance) {
+                    Column {
+                        UiEffectsSettingsRow()
+                        CompositionLocalProvider(LocalDshGlassFrameSignal provides frameSignal) {
+                            Box(Modifier.size(160.dp)) { HarnessAnimatedBackground() }
+                        }
+                    }
+                }
+            }
+            compose.mainClock.advanceTimeBy(1000)
+            compose.runOnIdle { assertTrue("主页应正常播放", frameSignal.longValue > 0L) }
+            compose.onNodeWithTag("ui-effects-reduced-switch").performClick()
+            compose.mainClock.advanceTimeBy(100)
+            var pausedFrame = 0L
+            compose.runOnIdle { pausedFrame = frameSignal.longValue }
+            compose.mainClock.advanceTimeBy(1000)
+            compose.runOnIdle { assertEquals("降级后不应再产生背景帧", pausedFrame, frameSignal.longValue) }
+            compose.onNodeWithTag("ui-effects-reduced-switch").performClick()
+            compose.mainClock.advanceTimeBy(1000)
+            compose.runOnIdle { assertTrue("关闭降级后应恢复播放", frameSignal.longValue > pausedFrame) }
+        } finally {
+            compose.mainClock.autoAdvance = true
+            preferences.edit().clear().commit()
+        }
+    }
 
     @Test fun fontSliderKeepsDraggingAcrossLiveFontScaleChanges() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

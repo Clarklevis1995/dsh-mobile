@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.facade.SharedUploadDraft
+import com.clarklevis.dsh.shared.i18n.UiMessage
 
 /** 与 iOS 待发送文件卡片共用视觉规格，避免受 Material 默认容器色和字号影响。 */
 @Composable
@@ -51,10 +52,10 @@ internal fun PendingFileCard(
     val status = when (file.status) {
         "waiting" -> appText("等待上传")
         "opening" -> appText("开始上传…")
-        "uploading" -> "${appText("上传中")} ${if (file.size > 0) file.confirmedBytes * 100 / file.size else 0}%"
+        "uploading" -> appText("上传中 %1\$s%", if (file.size > 0) file.confirmedBytes * 100 / file.size else 0)
         "committing" -> appText("处理中…")
-        "ready" -> "${appText("可发送")} · ${android.text.format.Formatter.formatShortFileSize(LocalContext.current, file.size)}"
-        else -> appText(file.error ?: "上传失败")
+        "ready" -> appText("可发送 · %1\$s", android.text.format.Formatter.formatShortFileSize(LocalContext.current, file.size))
+        else -> appText(file.error ?: UiMessage("upload.failed"))
     }
     Row(
         Modifier.width(240.dp).heightIn(min = 56.dp)

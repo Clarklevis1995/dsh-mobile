@@ -14,6 +14,57 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
+/** 引用保存所选纯文本快照，顺序和换行由协议原样传递。 */
+object GatewayQuoteTextParts {
+    private val fencePattern = Regex("^ {0,3}(`{3,}|~{3,})(.*)$")
+    /** 仅识别顶层块引用，围栏代码中的 > 保持正文。 */
+    fun parse(text: String): List<GatewayTextPart>? {
+        val parts = mutableListOf<GatewayTextPart>()
+        var fence: String? = null
+        text.replace("\r\n", "\n").replace('\r', '\n').split("\n").forEach { line ->
+            val marker = fencePattern.matchEntire(line)
+            val quoted = fence == null && line.startsWith("> ")
+            val type = if (quoted) "quote" else "text"
+            val value = if (quoted) line.drop(2) else line
+            val previous = parts.lastOrNull()
+            if (previous?.type == type) parts[parts.lastIndex] = previous.copy(text = previous.text + "\n" + value)
+            else parts += GatewayTextPart(type, value)
+            if (marker != null && !quoted) {
+                val run = marker.groupValues[1]
+                val opened = fence
+                if (opened == null) fence = run
+                else if (run.first() == opened.first() && run.length >= opened.length && marker.groupValues[2].isBlank()) fence = null
+            }
+        }
+        // 空块引用仍可作为普通 Markdown 发送，避免提交无效的 quote。
+        if (parts.any { it.type == "quote" && it.text.isBlank() }) return null
+        return parts.takeIf { it.size <= 100 && it.any { part -> part.type == "quote" } }
+    }
+
+    fun removeQuote(text: String, index: Int): String = parse(text)?.filterIndexed { partIndex, part ->
+        partIndex != index || part.type != "quote"
+    }?.joinToString("\n") { part ->
+        if (part.type == "quote") part.text.split("\n").joinToString("\n") { "> $it" } else part.text
+    } ?: text
+
+    fun parseJson(text: String): String? = parse(text)?.let { wireJson.encodeToString(kotlinx.serialization.builtins.ListSerializer(GatewayTextPart.serializer()), it) }
+}
+
+@Serializable
+data class GatewayTextPart(val type: String, val text: String) {
+    companion object {
+        fun validate(parts: List<GatewayTextPart>) {
+            require(parts.size in 1..100)
+            require(parts.all { it.type == "text" || (it.type == "quote" && it.text.isNotBlank()) })
+        }
+        fun from(value: JsonValue?): List<GatewayTextPart>? = value?.arrayValue?.mapNotNull {
+            val type = it["type"]?.stringValue ?: return@mapNotNull null
+            val text = it["text"]?.stringValue ?: return@mapNotNull null
+            if (type in setOf("text", "quote")) GatewayTextPart(type, text) else null
+        }?.takeIf { it.isNotEmpty() }
+    }
+}
+
 @Serializable
 data class GatewayFrame(
     val kind: String,
@@ -46,6 +97,7 @@ data class GatewayFrame(
     val event: GatewayEvent? = null,
     val code: String? = null,
     val message: String? = null,
+    val text: String? = null,
     val mode: String? = null,
     val command: JsonValue? = null,
     val line: String? = null,
@@ -61,6 +113,12 @@ data class GatewayFrame(
     val id: String? = null,
     val record: JsonValue? = null,
     val records: List<JsonValue>? = null,
+    val shown: Int? = null,
+    val total: Int? = null,
+    val limit: Int? = null,
+    val deletedCount: Int? = null,
+    val step: String? = null,
+    val schedule: JsonValue? = null,
     val updated: Boolean? = null,
     val deleted: Boolean? = null,
     val earlierRecordsUnavailable: Boolean? = null,
@@ -584,7 +642,9 @@ data class GatewayEvent(
     val maxRetries: Int? = null,
     val delayMs: Double? = null,
     val failure: JsonValue? = null,
-    val files: List<PresentedFile>? = null
+    val files: List<PresentedFile>? = null,
+    val textParts: List<GatewayTextPart>? = null,
+    val requestId: String? = null
 ) {
     override fun toString(): String =
         "GatewayEvent(type=$type, turn=$turn, step=$step, text=<redacted>, tool=<redacted>, " +
@@ -619,6 +679,8 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
             "user/message" -> GatewayEvent(
                 type = type,
                 text = textBlocks(data["content"]),
+                textParts = GatewayTextPart.from(data["textParts"]),
+                requestId = data["source"]?.get("rpcId")?.stringValue,
                 source = data["source"]?.get("kind")?.stringValue,
                 images = imageBlocks(data["content"]),
                 files = fileBlocks(data["content"]),
@@ -680,7 +742,7 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
                 type,
                 turn,
                 step,
-                callId = data["message"]?.get("toolCallId")?.stringValue
+                callId = data["callId"]?.stringValue ?: data["message"]?.get("toolCallId")?.stringValue
                     ?: data["message"]?.get("source")?.get("callId")?.stringValue,
                 isError = (data["error"] != null && data["error"] != JsonValue.NullValue &&
                     data["error"] != JsonValue.BooleanValue(false)) ||
@@ -689,17 +751,22 @@ data class RawSessionEvent(val type: String, val seq: Int, val time: Double, val
                         it["type"]?.stringValue == "tool-result" && it["isError"]?.booleanValue == true
                     },
                 preview = toolResultText(data["message"]),
+                images = toolImageReferences(data),
                 output = data["output"]?.stringValue,
                 outputTruncated = data["outputTruncated"]?.booleanValue,
                 error = failureText(data["error"]),
                 raw = data
             )
-            "tool/code-dispatch-start", "tool/code-dispatch" -> GatewayEvent(
+            "tool/code-dispatch-start", "tool/code-dispatch", "tool/ptc-dispatch" -> GatewayEvent(
                 type = type,
                 name = data["name"]?.stringValue,
                 arguments = data["arguments"],
                 isError = data["isError"]?.booleanValue,
                 preview = textBlocks(data["content"]),
+                images = toolImageReferences(data),
+                output = data["output"]?.stringValue,
+                outputTruncated = data["outputTruncated"]?.booleanValue,
+                error = failureText(data["error"]),
                 rootCallId = data["rootCallId"]?.stringValue,
                 parentCallId = data["parentCallId"]?.stringValue,
                 subCallId = data["subCallId"]?.stringValue,

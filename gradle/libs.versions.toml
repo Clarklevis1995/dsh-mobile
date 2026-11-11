@@ -1,7 +1,7 @@
 [versions]
-androidGradlePlugin = "9.0.1"
+androidGradlePlugin = "9.1.1"
 androidxActivity = "1.13.0"
-androidxComposeBom = "2026.03.01"
+androidxComposeBom = "2026.09.00"
 androidxCore = "1.18.0"
 androidxDataStore = "1.2.1"
 androidxExifInterface = "1.4.1"

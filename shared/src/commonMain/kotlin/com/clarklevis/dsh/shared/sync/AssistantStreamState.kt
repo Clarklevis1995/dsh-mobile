@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.shared.sync
 
+import com.clarklevis.dsh.shared.i18n.UiMessage
 import com.clarklevis.dsh.shared.projection.ConversationItemKind
 import com.clarklevis.dsh.shared.projection.ConversationProjector
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
@@ -29,7 +30,7 @@ data class AssistantStreamUpdate(
     val invalidatedSessionIds: List<String> = emptyList(),
     val chunksJson: String = "[]",
     val attemptId: String? = null,
-    val error: String? = null,
+    val error: UiMessage? = null,
     val resubscribe: Boolean = false
 )
 
@@ -110,12 +111,14 @@ class AssistantStreamState {
 
     fun acceptJson(json: String): AssistantStreamUpdate = runCatching {
         accept(GatewayWireDecoder.decode(json))
-    }.getOrElse { fail(selectedSessionId, "实时协议解析失败，正在重新订阅") }
+    }.getOrElse { fail(selectedSessionId, UiMessage("stream.decodeFailed")) }
 
     fun accept(frame: GatewayFrame): AssistantStreamUpdate = when (frame.kind) {
         "hello" -> acceptHello(frame)
         "subscribed" -> acceptSubscription(frame)
-        "error" -> if (frame.resetRequired == true && frame.sessionId != null) invalidateHistory(frame) else passThrough(frame)
+        "error" -> if (frame.resetRequired == true && frame.sessionId != null) {
+            invalidateHistory(frame, frame.message?.let { UiMessage.raw(it) })
+        } else passThrough(frame)
         "history" -> if (frame.sessionId != null) acceptHistory(frame) else passThrough(frame)
         "session-snapshot", "assistant-stream", "session-stream-reset" -> acceptScoped(frame)
         "event" -> if (enabled || frame.subscriptionId != null) acceptScoped(frame) else passThrough(frame)
@@ -155,7 +158,7 @@ class AssistantStreamState {
         retiredSubscriptions.clear()
         return AssistantStreamUpdate(true, selectedSessionId, true, invalid)
     }
-    private fun invalidateHistory(frame: GatewayFrame): AssistantStreamUpdate {
+    private fun invalidateHistory(frame: GatewayFrame, error: UiMessage?): AssistantStreamUpdate {
         val id = requireNotNull(frame.sessionId)
         formats.remove(id)
         cursors.remove(id)
@@ -165,7 +168,7 @@ class AssistantStreamState {
             id,
             true,
             listOf(id),
-            error = frame.message,
+            error = error,
             resubscribe = id == selectedSessionId
         )
     }
@@ -175,7 +178,7 @@ class AssistantStreamState {
         val invalidResponse = enabled && (version == null || version != helloFormat)
         val invalidCache = formats.containsKey(id) && formats[id] != version
         if (invalidResponse || invalidCache) {
-            return invalidateHistory(frame.copy(message = "历史格式已变化，正在重新加载会话"))
+            return invalidateHistory(frame, UiMessage("stream.historyFormatChanged"))
         }
         formats[id] = version
         return AssistantStreamUpdate(true, id)
@@ -194,10 +197,10 @@ class AssistantStreamState {
     @Suppress("ReturnCount")
     private fun acceptSnapshot(frame: GatewayFrame): AssistantStreamUpdate {
         val id = frame.sessionId
-        val version = frame.historyFormatVersion ?: return fail(id, "快照缺少历史格式版本")
-        val cursor = frame.cursor ?: return fail(id, "快照缺少持久流水位")
+        val version = frame.historyFormatVersion ?: return fail(id, UiMessage("stream.snapshotMissingFormat"))
+        val cursor = frame.cursor ?: return fail(id, UiMessage("stream.snapshotMissingCursor"))
         if (version != helloFormat || cursor < 0 || frame.streamId.isNullOrBlank()) {
-            return fail(id, "会话快照格式无效")
+            return fail(id, UiMessage("stream.snapshotInvalid"))
         }
         val prefix = frame.assistantStream?.toJsonElement() as? JsonObject
         val active = prefix?.get("activeAttempt") as? JsonObject
@@ -226,7 +229,7 @@ class AssistantStreamState {
             true,
             id,
             true,
-            error = if (frame.retrying == false) frame.message ?: "会话实时流已停止" else null
+            error = if (frame.retrying == false) frame.message?.let { UiMessage.raw(it) } ?: UiMessage("stream.stopped") else null
         )
     }
 
@@ -253,11 +256,11 @@ class AssistantStreamState {
     @Suppress("ReturnCount")
     private fun acceptStream(frame: GatewayFrame): AssistantStreamUpdate {
         val id = frame.sessionId
-        val value = frame.frame?.toJsonElement() as? JsonObject ?: return fail(id, "流帧缺少内容")
-        val incomingRevision = value.long("revision") ?: return fail(id, "流帧缺少 revision")
+        val value = frame.frame?.toJsonElement() as? JsonObject ?: return fail(id, UiMessage("stream.frameMissingContent"))
+        val incomingRevision = value.long("revision") ?: return fail(id, UiMessage("stream.frameMissingRevision"))
         if (incomingRevision <= revision) return AssistantStreamUpdate()
-        if (incomingRevision != revision + 1) return fail(id, "实时流 revision 断档，正在重新订阅")
-        val incomingAttempt = value.string("attemptId") ?: return fail(id, "流帧缺少 attemptId")
+        if (incomingRevision != revision + 1) return fail(id, UiMessage("stream.revisionGap"))
+        val incomingAttempt = value.string("attemptId") ?: return fail(id, UiMessage("stream.frameMissingAttempt"))
         when (value.string("type")) {
             "start" -> {
                 clearAttempt()
@@ -266,29 +269,29 @@ class AssistantStreamState {
                 return AssistantStreamUpdate(true, id, true, attemptId = incomingAttempt)
             }
             "chunk", "end" -> return acceptChunkOrEnd(id, value, incomingAttempt, incomingRevision)
-            else -> return fail(id, "未知实时流帧")
+            else -> return fail(id, UiMessage("stream.unknownFrame"))
         }
     }
 
     // 协议校验使用提前返回，拒绝坏帧后不会继续修改状态。
     @Suppress("ReturnCount")
     private fun acceptChunkOrEnd(id: String?, value: JsonObject, incomingAttempt: String, incomingRevision: Long): AssistantStreamUpdate {
-        if (incomingAttempt != activeAttemptId()) return fail(id, "实时流 attempt 不匹配")
-        val index = value.long("index") ?: return fail(id, "流帧缺少 index")
+        if (incomingAttempt != activeAttemptId()) return fail(id, UiMessage("stream.attemptMismatch"))
+        val index = value.long("index") ?: return fail(id, UiMessage("stream.frameMissingIndex"))
         if (index < nextIndex) return AssistantStreamUpdate()
-        if (index != nextIndex) return fail(id, "实时流 index 断档，正在重新订阅")
+        if (index != nextIndex) return fail(id, UiMessage("stream.indexGap"))
         revision = incomingRevision
         if (value.string("type") == "end") {
-            val outcome = value["outcome"] as? JsonObject ?: return fail(id, "流结算缺少 outcome")
+            val outcome = value["outcome"] as? JsonObject ?: return fail(id, UiMessage("stream.endMissingOutcome"))
             if (outcome.string("kind") == "committed" &&
                 committed != (outcome.string("eventType") to outcome.long("seq")?.toInt())
             ) {
-                return fail(id, "流结算缺少对应的持久消息，正在重新订阅")
+                return fail(id, UiMessage("stream.endMissingMessage"))
             }
             clearAttempt()
             return AssistantStreamUpdate(true, id, true)
         }
-        val chunk = value["chunk"] as? JsonObject ?: return fail(id, "流帧缺少 chunk")
+        val chunk = value["chunk"] as? JsonObject ?: return fail(id, UiMessage("stream.frameMissingChunk"))
         val entry = AssistantChunk(value.double("time") ?: 0.0, chunk)
         chunks += entry
         nextIndex++
@@ -307,7 +310,7 @@ class AssistantStreamState {
         committed = null
     }
 
-    private fun fail(id: String?, message: String): AssistantStreamUpdate {
+    private fun fail(id: String?, message: UiMessage): AssistantStreamUpdate {
         streamId = null
         clearAttempt()
         return AssistantStreamUpdate(false, id, true, error = message, resubscribe = true)

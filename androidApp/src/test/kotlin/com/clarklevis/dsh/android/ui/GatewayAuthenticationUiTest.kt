@@ -1,10 +1,14 @@
 package com.clarklevis.dsh.android.ui
 
+import com.clarklevis.dsh.android.localization.LocaleTestRule
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import org.junit.Assert.assertEquals
+import org.junit.Rule
 import org.junit.Test
 
 class GatewayAuthenticationUiTest {
+    @get:Rule val locale = LocaleTestRule()
+
     @Test
     fun connectionStateUsesTheSameLocalizedLabelsAsAuthenticationUi() {
         val expected = mapOf(
