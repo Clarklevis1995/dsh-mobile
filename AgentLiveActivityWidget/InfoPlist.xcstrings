@@ -15,6 +15,12 @@
             "state" : "translated",
             "value" : "Agent 活动"
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent アクティビティ"
+          }
         }
       }
     },
