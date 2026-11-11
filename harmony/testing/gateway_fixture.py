@@ -99,7 +99,9 @@ def feature_request(client, request, identifier):
             time.sleep(.5); value['agentPreset'] = request['agentPreset']; client.send(dict(kind=kind, sessionId=identifier, requestId=request['requestId'], **value))
     elif kind == 'default-model': client.send(dict(kind=kind, selection=DEFAULT_MODEL))
     elif kind == 'save-default-model':
-        DEFAULT_MODEL = {key: request[key] for key in ['provider', 'model', 'reasoningEffort'] if key in request}; client.send(dict(kind=kind, saved=DEFAULT_MODEL))
+        if request['model'] == 'fail': client.send(dict(kind='error', requestType=kind, message='测试默认模型暂不可用'))
+        else:
+            DEFAULT_MODEL = {key: request[key] for key in ['provider', 'model', 'reasoningEffort'] if key in request}; client.send(dict(kind=kind, saved=DEFAULT_MODEL))
     elif kind == 'defaults': client.send(dict(kind=kind, agentPresetDefault=DEFAULTS['agent-preset'], permissionDefault=DEFAULTS['permission'], permissionDefaultOptions=PERMISSION_OPTIONS))
     elif kind == 'set-default':
         DEFAULTS[request['target']] = request['value']; client.send(dict(kind=kind, applied=True, target=request['target'], value=request['value']))

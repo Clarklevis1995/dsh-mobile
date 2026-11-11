@@ -145,6 +145,17 @@ async function stop() {
       else if (route === '/history') { const s = scoped(args.id); result = { records: [...s.records.values()].sort((a, b) => a.seq - b.seq), audit: audit.filter(a => a.sessionId === args.id) }; }
       else if (route === '/pending') result = [...pending.values()].filter(f => own.has(f.sessionId));
       else if (route === '/options') { scoped(args.id); const answer = wait('permission-options', f => f.sessionId === args.id); send(control, { type: 'permission-options', sessionId: args.id }); result = await answer; }
+      else if (route === '/default-configuration') {
+        // 部署配置查询仅用于本轮专属Host，拒绝默认3080或任何用户主机。
+        const ownedRoot=path.resolve(process.env.HARMONY_OWNED_REAL_ROOT || '.');
+        if (!path.basename(ownedRoot).startsWith('harmony-p7-owned-host-') || base!=='http://127.0.0.1:18897') throw new Error('部署配置仅限本轮专属Host');
+        const scope=JSON.parse(fs.readFileSync(path.join(ownedRoot,'owned-processes.json'),'utf8'));
+        if (path.resolve(scope.root)!==ownedRoot || scope.port!==18897 || path.dirname(path.resolve(scope.workspace))!==ownedRoot) throw new Error('专属Host归属不匹配');
+        const models=wait('models',f=>!f.sessionId);send(control,{type:'models'});const catalog=await models;
+        const model=wait('default-model');send(control,{type:'default-model'});const selection=await model;
+        const defaults=wait('defaults');send(control,{type:'defaults'});const values=await defaults;
+        result={models:catalog.groups,selection:selection.selection,permission:values.permissionDefault,permissionOptions:values.permissionDefaultOptions,agent:values.agentPresetDefault};
+      }
       else if (route === '/permission') { scoped(args.id); const answer = wait('permission', f => f.sessionId === args.id); send(control, { type: 'permission', sessionId: args.id, name: args.name }); result = await answer; }
       else if (route === '/question') { const item = pending.get(args.rpcId); if (!item || !own.has(item.sessionId) || item.kind !== 'question-requested') throw new Error('本轮问题已失效'); send(control, { type: 'question-answer', sessionId: item.sessionId, rpcId: item.rpcId, answers: args.answers }); result = { sent: true }; }
       else if (route === '/approval') { const item = pending.get(args.rpcId); if (!item || !own.has(item.sessionId) || item.kind !== 'approval-requested') throw new Error('本轮审批已失效'); if (!['allowed-once', 'rejected'].includes(args.outcome)) throw new Error('审批选项无效'); send(control, { type: 'approval-response', sessionId: item.sessionId, rpcId: item.rpcId, approvalId: item.approvalId, outcome: args.outcome }); result = { sent: true }; }

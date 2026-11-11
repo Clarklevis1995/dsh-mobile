@@ -4,7 +4,11 @@ import path from 'node:path';
 if (!process.env.HARMONY_DSH_NODE_MODULES) throw new Error('需要 HARMONY_DSH_NODE_MODULES');
 const { LlmAdapter } = await import(pathToFileURL(path.join(process.env.HARMONY_DSH_NODE_MODULES, '@deepseek-ai/dsh-llm/lib/index.js')).href);
 class ControlledAdapter extends LlmAdapter {
-  async listModels(provider) { return [{ provider, id: 'harmony-controlled', name: 'Harmony controlled upstream' }]; }
+  async listModels(provider) {
+    const rows = [{ provider, id: 'harmony-controlled', name: 'Harmony controlled upstream' }];
+    if (process.env.HARMONY_CONFIGURATION_CATALOG === '1') rows.push({ provider, id: 'harmony-controlled-alt', name: 'Harmony controlled alternate' });
+    return rows;
+  }
   async resolveModel(provider, model) { return { provider, id: model, name: 'Harmony controlled upstream', context: { contextWindow: 65536 } }; }
   async *stream(options) {
     const prompt = options.messages.filter(message => message.role === 'user').map(message => typeof message.content === 'string' ? message.content : message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')).join('\n');

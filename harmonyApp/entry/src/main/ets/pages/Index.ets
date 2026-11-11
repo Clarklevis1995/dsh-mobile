@@ -1,3 +1,4 @@
+import { DefaultModelPage } from './DefaultModelPage';
 import { ReleasePage } from './ReleasePage';
 import { SettingsData } from '../core/SettingsData';
 import { TrajectoryPage } from './TrajectoryPage';
@@ -472,6 +473,26 @@ struct Index {
     const host = this.activeId; const session = this.shared.selectedSessionId; const goal = this.goalTasks.goal?.goal; if (!goal) { return; }
     this.confirm('删除目标？', goal.objective, '删除', () => { if (host !== this.activeId || session !== this.shared.selectedSessionId) { return; } const c = new Command('goal-clear'); c.sessionId = session; c.itemId = goal.id; c.draftRevision = goal.revision; this.action(c); });
   }
+  private defaultModel(provider: string, model: string, effort?: string): void {
+    const host = this.activeId; const data = this.controlData;
+    const group = data.models?.groups.find(row => row.id === provider); const item = group?.models.find(row => row.id === model);
+    if (!this.shared.connected || data.sessionId || !group || !item || data.loading.includes('save-default-model')) { return; }
+    if (effort !== undefined && !item.reasoning?.efforts.some(row => row.id === effort)) { return; }
+    const effortName = item.reasoning?.efforts.find(row => row.id === effort)?.name;
+    const summary = [group.name, item.name, effortName].filter(value => value).join(' · ');
+    this.confirm(this.a.english ? 'Change default model?' : '修改默认模型？', this.a.english ? 'Use “' + summary + '” for new conversations? This updates deployment settings shared with WebUI.' : '将新会话的默认模型改为“' + summary + '”。这会更新部署级设置，并同步影响 WebUI。', this.a.english ? 'Confirm change' : '确认修改', () => {
+      if (host !== this.activeId || !this.shared.connected) { return; }
+      const command = new Command('controls-save-model'); command.provider = provider; command.model = model; command.reasoningEffort = effort; this.action(command);
+    });
+  }
+  private defaultPermission(value: string): void {
+    const host = this.activeId; const data = this.controlData; const option = data.permissionDefaultOptions.find(row => row.value === value);
+    if (!this.shared.connected || !option || data.permissionDefault === value || data.loading.includes('set-default')) { return; }
+    this.confirm(this.a.english ? 'Change default permission?' : '修改默认权限？', this.a.english ? 'Use “' + option.name + '” for new conversations? This updates deployment settings shared with WebUI.' : '将新会话的默认权限改为“' + option.name + '”。这会更新部署级设置，并同步影响 WebUI。', this.a.english ? 'Confirm change' : '确认修改', () => {
+      if (host !== this.activeId || !this.shared.connected) { return; }
+      const command = new Command('controls-default'); command.target = 'permission'; command.value = value; this.action(command);
+    });
+  }
   private defaultAgent(id: string): void {
     const host = this.activeId; const preset = this.controlData.presets.find(row => row.id === id);
     if (!preset || preset.broken || this.controlData.agentPresetDefault === id) { return; }
@@ -685,8 +706,10 @@ struct Index {
           onOfficial: value => { this.pluginOfficial = value; this.nav.push(AppRoute.PluginOfficial); } })
       } else if (name === AppRoute.Trajectory) {
         TrajectoryPage({ a: this.a, state: this.shared, data: this.trajectory, active: this.nav.current === AppRoute.Trajectory, standalone: true, onBack: () => this.back(), onAction: command => this.action(command) })
-      } else if (name === AppRoute.Controls || name === AppRoute.Defaults) {
-        SessionControlPage({ onPresetChange: id => this.defaultAgent(id), a: this.a, features: this.sessionFeatures, state: this.shared, data: this.controlData, isDefault: name === AppRoute.Defaults, onBack: () => this.back(), onAction: command => this.action(command) })
+      } else if (name === AppRoute.Defaults) {
+        DefaultModelPage({ a: this.a, data: this.controlData, connected: this.shared.connected, onBack: () => this.back(), onAction: c => this.action(c), onChoose: (provider: string, model: string, effort?: string) => this.defaultModel(provider, model, effort) })
+      } else if (name === AppRoute.Controls) {
+        SessionControlPage({ onPresetChange: id => this.defaultAgent(id), a: this.a, features: this.sessionFeatures, state: this.shared, data: this.controlData, isDefault: false, onBack: () => this.back(), onAction: command => this.action(command) })
       } else if (name === AppRoute.Content) {
         ContentPreviewPage({ a: this.a, content: this.previewContent, table: this.previewTable, heading: this.previewHeading, onBack: () => this.back(), onLink: url => this.openLink(url), onExport: csv => this.exportTable(csv) })
       } else if (name === AppRoute.Inbox) {
@@ -705,7 +728,7 @@ struct Index {
       } else if (name.startsWith('settings')) {
         SettingsPage({ notificationsEnabled: this.notificationsEnabled, notificationStatus: this.notificationStatus, onNotifications: (enabled: boolean) => this.notifications?.setEnabled(enabled), a: this.a, section: name === AppRoute.Settings ? 'root' : name.substring('settings/'.length),
           active: this.active && this.nav.current === name, version: this.version, buildCode: this.buildCode, snapshot: this.settingsData, gatewayVersion: this.shared.connected && this.pluginData.fresh ? this.pluginData.bundles.find(row => row.gateway)?.version || '' : '',
-          onLink: url => this.openLink(url), onNotes: () => this.nav.push(AppRoute.ReleaseNotes),
+          onPermission: value => this.defaultPermission(value), onLink: url => this.openLink(url), onNotes: () => this.nav.push(AppRoute.ReleaseNotes),
           onAction: command => this.action(command), onConnection: () => { if (this.shared.connected) { this.runtime?.client.disconnect(); } else if (this.activeId) { this.reconnect(); } else { this.showHosts(); } }, onPing: () => this.pingGateway(),
           onAgents: () => this.nav.push(AppRoute.AgentPresets), onSchedules: () => this.nav.push(AppRoute.Schedules), onPlugins: () => this.nav.push(AppRoute.Plugins), onDefaults: () => this.nav.push(AppRoute.Defaults), onBack: () => this.back(), onHosts: () => this.showHosts(),
           onOpenSection: section => this.nav.push(('settings/' + section) as AppRoute),

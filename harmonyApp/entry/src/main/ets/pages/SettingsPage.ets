@@ -33,6 +33,7 @@ export struct SettingsPage {
   onPlugins: () => void = () => {};
   onAgents: () => void = () => {};
   onDefaults: () => void = () => {};
+  onPermission: (value: string) => void = () => {};
   onHosts: () => void = () => {};
   onForgetAll: () => void = () => {};
   onChange: (value: AppearanceData) => void = () => {};
@@ -81,7 +82,7 @@ export struct SettingsPage {
               Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'model', controlId: 'settings-defaults', onPress: this.onDefaults })
               Divider().strokeWidth(.5).color(this.a.fg).opacity(.12).margin({ left: 16, right: 16 })
-              SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'permission', controlId: 'settings-default-permission', onPress: this.onDefaults })
+              SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'permission', controlId: 'settings-default-permission', onPermission: this.onPermission })
             }
             SettingsSection({ a: this.a, title: 'Mobile Gateway' }) {
               SettingsGatewayRow({ a: this.a, snapshot: this.snapshot, kind: 'endpoint', controlId: 'settings-hosts', onPress: this.onHosts })

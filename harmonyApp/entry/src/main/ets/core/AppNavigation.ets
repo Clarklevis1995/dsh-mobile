@@ -17,7 +17,7 @@ export enum AppRoute {
   GoalEdit = 'goal/edit',
   Controls = 'session-controls',
   Trajectory = 'conversation/trajectory',
-  Defaults = 'default-controls',
+  Defaults = 'settings/default-model',
   AgentPresets = 'settings/agent-presets',
   Storage = 'settings/storage',
   OfflineSearch = 'offline-search',

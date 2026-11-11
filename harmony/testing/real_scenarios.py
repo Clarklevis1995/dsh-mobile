@@ -31,7 +31,7 @@ def run(ui,m,folder,passed):
         seed=json.loads(Path(os.environ['HARMONY_HISTORY_SEED_JSON']).read_text());assert Path(seed['root']).resolve()==owned and seed['complete']
         session=next(r for r in state['sessions'] if r['id']==seed['sessionId'])
     else:
-        session = call('/create',{'label':'P7-'+os.environ['HARMONY_REAL_SCOPE']+'-'+uuid.uuid4().hex[:6]}) if os.environ.get('HARMONY_REAL_SCOPE') in ['approval','questions','resilience','transport','matrix','generation-network'] else next((row for row in state['sessions'] if row['name'].endswith('P7-daily')),None) or call('/create',{'label':'P7-daily'})
+        session = call('/create',{'label':'P7-'+os.environ['HARMONY_REAL_SCOPE']+'-'+uuid.uuid4().hex[:6]}) if os.environ.get('HARMONY_REAL_SCOPE') in ['approval','questions','resilience','transport','matrix','generation-network','configuration'] else next((row for row in state['sessions'] if row['name'].endswith('P7-daily')),None) or call('/create',{'label':'P7-daily'})
     call('/subscribe',{'id':session['id']})
     if not any(kind(row)=='user/message' for row in history()):call('/message',{'id':session['id'],'text':'HARMONY_REAL_SETUP'})
     wait(lambda:any(kind(row)=='assistant/message' for row in history()))
@@ -46,6 +46,9 @@ def run(ui,m,folder,passed):
     assert isinstance(payload,str)
     ui.input('gateway-payload',payload);ui.click('gateway-connect');ui.text('已连接',timeout=45)
     ui.click('session-'+session['id']);ui.wait('message-draft')
+    if os.environ.get('HARMONY_REAL_SCOPE') == 'configuration':
+        from real_default_configuration_scenarios import run as configuration
+        configuration(ui,m,folder,passed,call,session,owned);return
     if os.environ.get('HARMONY_REAL_SCOPE') == 'cache':
         from real_cache_scenarios import run as caching
         caching(ui,m,folder,passed,call,session);return

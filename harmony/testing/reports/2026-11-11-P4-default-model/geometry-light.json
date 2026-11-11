@@ -1,0 +1,65 @@
+{
+  "scope": "同源静态夹具相同模型/默认值、376逻辑宽/100%字号；只比较10个共有标签纵向中心，非整个页面或原生触摸框V，不移动截图",
+  "checks": [
+    {
+      "text": "默认模型",
+      "occurrence": 0,
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "text": "默认模型",
+      "occurrence": 1,
+      "differenceVp": -0.1429,
+      "passed": true
+    },
+    {
+      "text": "共享模型",
+      "occurrence": 0,
+      "differenceVp": -0.4286,
+      "passed": true
+    },
+    {
+      "text": "读取模型",
+      "occurrence": 0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "text": "当前使用",
+      "occurrence": 0,
+      "differenceVp": 0.1429,
+      "passed": true
+    },
+    {
+      "text": "推理模型",
+      "occurrence": 0,
+      "differenceVp": 0.2857,
+      "passed": true
+    },
+    {
+      "text": "思考等级",
+      "occurrence": 0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "text": "低",
+      "occurrence": 0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "text": "高",
+      "occurrence": 0,
+      "differenceVp": 0.0,
+      "passed": true
+    },
+    {
+      "text": "不可用模型",
+      "occurrence": 0,
+      "differenceVp": 0.2857,
+      "passed": true
+    }
+  ]
+}

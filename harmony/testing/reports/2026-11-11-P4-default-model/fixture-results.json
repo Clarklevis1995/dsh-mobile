@@ -1,0 +1,13 @@
+{
+  "scope": "原生UI和真实Native共享Store；隔离协议夹具F，V单独对照",
+  "modelCancelNoRequest": true,
+  "permissionCancelNoRequest": true,
+  "modelFailureRollback": true,
+  "confirmedDefaultsPersist": true,
+  "permissionNativeMenu": true,
+  "restoredFixtureDefaults": true,
+  "themes": [
+    "light",
+    "dark"
+  ]
+}

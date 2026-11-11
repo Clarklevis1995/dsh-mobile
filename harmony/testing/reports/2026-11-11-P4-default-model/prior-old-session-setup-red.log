@@ -1,0 +1,20 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-noggxvop
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 session-session-215962fc-7530-4398-bc57-065c82859245
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 422, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 335, in main
+    run(ui, m, folder, passed)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/real_scenarios.py", line 48, in run
+    ui.click('session-'+session['id']);ui.wait('message-draft')
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 105, in click
+    row, x, y = self.control(value, key, scroll)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 85, in control
+    row = self.wait(value, key)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 67, in wait
+    raise AssertionError('未找到控件：' + value)
+AssertionError: 未找到控件：session-session-215962fc-7530-4398-bc57-065c82859245

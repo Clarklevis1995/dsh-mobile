@@ -100,10 +100,11 @@ def run(ui, m, folder, passed):
     passed('P4-agent-lock-F', '首条消息确认后锁定 Agent，禁止继续切换通过')
 
     ui.navigate('conversation-back', 'home-settings'); ui.navigate('home-settings', 'settings-defaults')
-    ui.click('settings-defaults'); ui.wait('control-model-fixture-read'); ui.text('✓ 读取模型')
-    ui.click('control-model-fixture-reason'); ui.text('✓ 推理模型')
-    ui.click('control-effort-high'); ui.text('✓ 高')
-    ui.click('control-permission-workspace-write', scroll=True); ui.text('✓ 工作区写入')
-    ui.click('control-preset-read', scroll=True); ui.wait('confirmation-accept'); ui.click('confirmation-accept'); ui.text('✓ 阅读 Agent'); ui.screenshot('global-defaults-confirmed')
-    ui.navigate('page-back', 'settings-defaults'); ui.click('settings-defaults'); ui.text('✓ 推理模型'); ui.text('✓ 高')
+    ui.click('settings-defaults'); ui.wait('default-model-current-fixture-read')
+    ui.click('control-model-fixture-reason'); ui.wait('confirmation-accept'); ui.click('confirmation-accept'); ui.wait('default-model-current-fixture-reason')
+    ui.click('default-effort-fixture-reason-high'); ui.wait('confirmation-accept'); ui.click('confirmation-accept')
+    ui.navigate('page-back','settings-default-permission');ui.click('settings-default-permission');ui.wait('default-permission-workspace-write');ui.click('default-permission-workspace-write');ui.wait('confirmation-accept');ui.click('confirmation-accept');ui.text('工作区写入')
+    ui.click('settings-agent-presets');ui.wait('agent-preset-card-read');ui.click('agent-preset-card-read');ui.wait('confirmation-accept');ui.click('confirmation-accept');ui.wait('agent-preset-current-read');ui.screenshot('global-defaults-confirmed')
+    ui.navigate('page-back','settings-defaults');ui.click('settings-defaults');ui.wait('default-model-current-fixture-reason')
+    assert ui.wait('default-effort-fixture-reason-high')['backgroundColor']=='#FF0E131A'
     passed('P4-defaults-F', '默认模型／思考强度、默认权限和默认 Agent 确认后保存并重开恢复，与会话配置区分通过')

@@ -1,3 +1,4 @@
+import { PermissionOption } from '../core/Models';
 import { Appearance, iconTint } from '../core/Appearance';
 import { SettingsData } from '../core/SettingsData';
 
@@ -9,6 +10,7 @@ export struct SettingsGatewayRow {
   @Prop kind: string = '';
   @Prop controlId: string = '';
   onPress: () => void = () => {};
+  onPermission: (value: string) => void = () => {};
   private title(): string {
     if (this.kind === 'host-version') { return this.a.t('版本'); }
     if (this.kind === 'host-sessions') { return this.a.t('已连接会话'); }
@@ -33,15 +35,33 @@ export struct SettingsGatewayRow {
     if (this.kind === 'permission') { return data.permissionDefaultOptions.find(row => row.value === data.permissionDefault)?.name ?? data.permissionDefault ?? this.a.t('未读取'); }
     return '';
   }
-  private canPress(): boolean { return !['agent', 'model', 'permission', 'ping'].includes(this.kind) || this.snapshot.connected; }
-  build() {
-    Button({ type: ButtonType.Normal }) {
+  private canPress(): boolean {
+    if (this.kind === 'permission') { return this.snapshot.connected && this.snapshot.controls.permissionDefaultOptions.length > 0 && !this.snapshot.controls.loading.includes('set-default'); }
+    return !['agent', 'model', 'ping'].includes(this.kind) || this.snapshot.connected;
+  }
+  @Builder private rowContent() {
       Row({ space: this.kind === 'status' ? 10 : 8 }) {
         if (this.kind === 'status') { Circle().id('settings-status-dot').width(9).height(9).fill(this.snapshot.connected ? '#2EB85C' : this.a.muted).accessibilityLevel('no') }
         Text(this.title()).fontSize(this.a.font(16)).fontColor(['connection', 'ping'].includes(this.kind) ? this.a.accent : this.a.fg).layoutWeight(1).textAlign(TextAlign.Start)
         if (this.detail()) { Text(this.detail()).fontSize(this.a.font(14)).fontColor(this.a.fg).opacity(.52).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }
         if (!['status', 'connection', 'ping', 'host-version', 'host-sessions', 'host-cwd'].includes(this.kind)) { Image($rawfile('icons/chevron_right.svg')).width(12).height(12).colorFilter(iconTint(this.a.fg)).opacity(.3) }
       }.padding({ left: 16, right: 16, top: 15, bottom: 15 }).width('100%').constraintSize({ minHeight: 54 })
-    }.padding(0).width('100%').backgroundColor(this.a.surface).borderRadius(0).id(this.controlId).opacity(this.canPress() ? 1 : .4).enabled(this.canPress()).onClick(this.onPress)
+  }
+  @Builder private permissionOptions() {
+    Menu() {
+      ForEach(this.snapshot.controls.permissionDefaultOptions, (option: PermissionOption) => {
+        MenuItem({ content: option.name }).id('default-permission-' + option.value).selected(option.value === this.snapshot.controls.permissionDefault).selectIcon(true)
+          .contentFont({ size: this.a.font(15) }).contentFontColor(this.a.fg).onClick(() => this.onPermission(option.value))
+      }, (option: PermissionOption) => option.value)
+    }.width(208).backgroundColor(this.a.surface).borderRadius(26)
+  }
+  build() {
+    if (this.kind === 'permission') {
+      Button({ type: ButtonType.Normal }) { this.rowContent() }
+        .padding(0).width('100%').backgroundColor(this.a.surface).borderRadius(0).id(this.controlId).opacity(this.canPress() ? 1 : .4).enabled(this.canPress()).bindMenu(this.permissionOptions)
+    } else {
+      Button({ type: ButtonType.Normal }) { this.rowContent() }
+        .padding(0).width('100%').backgroundColor(this.a.surface).borderRadius(0).id(this.controlId).opacity(this.canPress() ? 1 : .4).enabled(this.canPress()).onClick(this.onPress)
+    }
   }
 }
