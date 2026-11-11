@@ -548,3 +548,7 @@ P4-03d通过G：真实0.12.0网关与DSH0.2.2-rc.1的Agent预设服务，默认s
 ### E76 · 无探针候选v6与原位升级（2026-11-11）
 
 独立preview202611110401从v5升级v6，源码b19fa28c；身份/历史/草稿保留，原有Host集合保持，仅移除本轮新建Host。生产源码/Native库逐字比对及无探针检查通过。HAP的SHA256、大小和路径见[版本记录](../harmony/testing/reports/2026-11-11-candidate-v6/result.json)，[升级报告](../harmony/testing/reports/2026-11-11-candidate-v6/README.md)。Android参考显示恢复1080×2424/420dpi，本轮18786视觉夹具/映射和独立参考包资料已清理。全部P7/短时PSS/真机/用户签收仍保持待办。
+
+### E77 · 短时PSS系统分类诊断（2026-11-11，未关闭门禁）
+
+只读分类显示第二轮后台恢复后PSS约226.7MiB，较初始增长主要在匿名其他映射47.2→86.9MiB；30秒匿名其他降至22.2MiB，总PSS约174.3MiB。分类采样每组约4秒改变原3秒相位，原runner虽算术PASS也不作为验收通过；后续诊断模式明确acceptanceEligible=false/DIAGNOSTIC_ONLY，正常阈值与Worker/GC配置不变。P7-06b仍未勾选，继续定位Native分配/回收。证据：[诊断报告](../harmony/testing/reports/2026-11-11-P7-memory-categories/README.md)。

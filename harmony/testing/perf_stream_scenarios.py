@@ -1,13 +1,17 @@
 # coding: utf-8
 """沿用既有冻结门禁，测量千条历史下两轮长代码/表格流式、编辑和前后台。"""
-import json,time,re
+import json,time,re,os
 from long_stream_fixture import content,digest
 
 def run(ui,m,folder,passed):
-    gates=json.loads((m.ROOT/'harmony/testing/baseline/p7-performance-gates.json').read_text());samples=[];anchors=[];expected=digest(content())
+    gates=json.loads((m.ROOT/'harmony/testing/baseline/p7-performance-gates.json').read_text());samples=[];anchors=[];expected=digest(content());diagnostic=any(os.environ.get(key)=='1' for key in ['HARMONY_PERF_MEMORY_DETAIL','HARMONY_PERF_NATIVE_MEMORY'])
     def sample(label):
         assert not ui.find('内容解析失败','text'), '生产Markdown解析失败'
-        value=json.loads(ui.wait('test-p7-stats')['text']);value['label']=label;samples.append(value);(folder/'long-stream-performance.json').write_text(json.dumps(dict(gates=gates,expectedProjection=expected,samples=samples,scope='实际SDK PSS与JS桥/镜像/编辑/后台解析回调，非GPU帧时间；F夹具千行代码+160行表格，未闭合语法逐段到达'),ensure_ascii=False,indent=2));return value
+        value=json.loads(ui.wait('test-p7-stats')['text']);value['label']=label;value['sampledAtMonotonicSeconds']=time.monotonic();samples.append(value);(folder/'long-stream-performance.json').write_text(json.dumps(dict(gates=gates,expectedProjection=expected,samples=samples,acceptanceEligible=not diagnostic,scope='实际SDK PSS与JS桥/镜像/编辑/后台解析回调，非GPU帧时间；F夹具千行代码+160行表格，未闭合语法逐段到达'),ensure_ascii=False,indent=2))
+        if os.environ.get('HARMONY_PERF_MEMORY_DETAIL')=='1' and label in ['1005-initial','after-background-1','final-idle-3s','final-idle-30s']:
+            from memory_detail_probe import record
+            record(m,folder,label)
+        return value
     def wait(fn,timeout=100):
         end=time.monotonic()+timeout
         while time.monotonic()<end:
@@ -57,5 +61,8 @@ def run(ui,m,folder,passed):
         ('1秒取样PSS峰值',max(int(x.get('sampledPeakPssKiB',x['pssKiB'])) for x in samples)/1024<=gates['processPssMiBMaximum']),
         ('短时3秒空闲PSS增量',(int(next(x for x in samples if x['label']=='final-idle-3s')['pssKiB'])-int(first['pssKiB']))/1024<=gates['scrollIdlePssGrowthMiBMaximum']),
         ('空闲PSS增量',(int(final['pssKiB'])-int(first['pssKiB']))/1024<=gates['scrollIdlePssGrowthMiBMaximum'])]
-    (folder/'long-stream-gates.json').write_text(json.dumps(dict(checks=[dict(label=k,passed=v) for k,v in checks],completedMessageIds=ids,expectedProjection=expected),ensure_ascii=False,indent=2));assert all(v for _,v in checks),checks
+    (folder/'long-stream-gates.json').write_text(json.dumps(dict(checks=[dict(label=k,passed=v) for k,v in checks],completedMessageIds=ids,expectedProjection=expected,acceptanceEligible=not diagnostic),ensure_ascii=False,indent=2))
+    if diagnostic:
+        print('DIAGNOSTIC_ONLY: functional assertions completed; memory instrumentation timings are not acceptance evidence',flush=True);return
+    assert all(v for _,v in checks),checks
     passed('P7-long-code-table-stream-F','1005历史下两轮千行代码/160行表格持续流，Native正文UTF16长度/FNV与源样本一致、终标记可见、期间编辑和上滑及前后台草稿保留；既有冻结门禁通过')

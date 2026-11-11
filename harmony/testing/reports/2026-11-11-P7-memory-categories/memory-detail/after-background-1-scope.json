@@ -1,0 +1,20 @@
+{
+  "pid": 15498,
+  "bundle": "com.clarklevis.whaleness.harmony.smoke",
+  "elapsedSeconds": 4.924,
+  "commands": {
+    "categories": {
+      "bytes": 4155,
+      "file": "after-background-1-categories.txt"
+    },
+    "smaps": {
+      "bytes": 245835,
+      "file": "after-background-1-smaps.txt"
+    },
+    "threads": {
+      "bytes": 2044,
+      "file": "after-background-1-threads.txt"
+    }
+  },
+  "method": "只读hidumper内存分类/smaps与线程表；无heap dump/GC/pressure；诊断采样有额外耗时，不能作优化收益结论"
+}

@@ -1,0 +1,42 @@
+{
+  "acceptanceEligible": false,
+  "reason": "每组系统分类/smaps/线程采样约4秒，改变闲置相位；不能使用本轮脚本PASS关闭原3秒门禁",
+  "samples": [
+    {
+      "label": "1005-initial",
+      "categoriesMiB": {
+        "ark ts heap": 36.979,
+        "native heap": 59.947,
+        "AnonPage other": 47.166,
+        "Total": 175.873
+      }
+    },
+    {
+      "label": "after-background-1",
+      "categoriesMiB": {
+        "ark ts heap": 32.686,
+        "native heap": 72.979,
+        "AnonPage other": 86.945,
+        "Total": 226.746
+      }
+    },
+    {
+      "label": "final-idle-30s",
+      "categoriesMiB": {
+        "ark ts heap": 42.279,
+        "native heap": 76.226,
+        "AnonPage other": 22.188,
+        "Total": 174.319
+      }
+    },
+    {
+      "label": "final-idle-3s",
+      "categoriesMiB": {
+        "ark ts heap": 36.135,
+        "native heap": 73.819,
+        "AnonPage other": 52.051,
+        "Total": 196.141
+      }
+    }
+  ]
+}
