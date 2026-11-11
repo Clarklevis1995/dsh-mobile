@@ -1,0 +1,19 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-njl5cgdm
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 session-session-fbd864db-f78a-4435-bcde-433d0940b670
+操作 history-older
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 370, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 314, in main
+    run(ui, m, folder, passed)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/real_scenarios.py", line 51, in run
+    pagination(ui,m,folder,passed,call,session);return
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/real_history_scenarios.py", line 32, in run
+    ui.click('history-older');wait(lambda:len(current_markers())>before and not probe()['loading']);after=ui.wait(anchor_id);after_y=int(re.findall(r'-?\d+',after['bounds'])[1]);assert abs(before_y-after_y)<=5,(before_y,after_y)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 67, in wait
+    raise AssertionError('未找到控件：' + value)
+AssertionError: 未找到控件：message-body-session-fbd864db-f78a-4435-bcde-433d0940b670-user-0b54ecb4-6f7d-4afb-bf83-779b0c3bb0dc

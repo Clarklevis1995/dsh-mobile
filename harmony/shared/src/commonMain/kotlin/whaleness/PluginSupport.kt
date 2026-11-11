@@ -187,7 +187,8 @@ internal class PluginSupport {
                 error = if (value.managementAvailable == true) null else "当前 Host 不支持插件管理"
             }
 
-            value.kind in setOf("plugin-bundle-set-enabled", "plugin-entry-set-enabled") && value.requestId != null &&
+            value.kind in setOf("plugin-bundle-set-enabled", "plugin-entry-set-enabled") &&
+                value.requestId != null &&
                 value.requestId == mutation?.correlationId -> {
                 notice =
                     when (value.result?.get("application")?.stringValue) {
@@ -222,7 +223,9 @@ internal class PluginSupport {
                 error = value.message?.take(240) ?: "插件目录读取失败"
             }
 
-            value.kind == "error" && value.requestType == mutation?.requestType && value.requestId != null &&
+            value.kind == "error" &&
+                value.requestType == mutation?.requestType &&
+                value.requestId != null &&
                 value.requestId == mutation?.correlationId -> {
                 mutation = null
                 pendingName = null

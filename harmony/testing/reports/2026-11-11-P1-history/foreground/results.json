@@ -1,0 +1,6 @@
+[
+  {
+    "task": "P1-real-history-foreground-append-G",
+    "detail": "长历史阅读时Home后台另一端追加，前台同步保留原消息位置≤5px，主动回到底部后新增消息真实可见"
+  }
+]

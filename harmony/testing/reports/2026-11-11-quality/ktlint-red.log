@@ -1,0 +1,20 @@
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/TeamSupport.kt:126:36: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/GoalSupport.kt:9:1: Unused import (standard:no-unused-imports)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/PluginSupport.kt:190:93: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/PluginSupport.kt:225:38: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/PluginSupport.kt:225:84: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/AttachmentSupport.kt:43:73: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/AttachmentSupport.kt:43:92: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/AttachmentSupport.kt:56:43: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/AttachmentSupport.kt:63:38: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/ScheduleSupport.kt:138:62: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/ScheduleSupport.kt:138:93: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/ScheduleSupport.kt:225:74: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/ScheduleSupport.kt:225:113: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/ScheduleSupport.kt:243:38: Newline expected before operand in multiline condition (standard:condition-wrapping)
+/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/shared/src/commonMain/kotlin/whaleness/ScheduleSupport.kt:243:84: Newline expected before operand in multiline condition (standard:condition-wrapping)
+15:45:21.512 [main] WARN com.pinterest.ktlint.cli.internal.KtlintCommandLine -- Lint has found errors than can be autocorrected using 'ktlint --format'
+
+Summary error count (descending) by rule:
+  standard:condition-wrapping: 14
+  standard:no-unused-imports: 1

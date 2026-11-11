@@ -123,7 +123,8 @@ internal class TeamSupport {
         val changed = store.acceptFrameJson(raw)
         if (profile || frame.kind in setOf("agent-team", "subagents", "error")) {
             val request = pending[frame.requestId]
-            if (request != null && frame.sessionId == request.targetSessionId &&
+            if (request != null &&
+                frame.sessionId == request.targetSessionId &&
                 (frame.kind == request.responseKind || (frame.kind == "error" && frame.requestType == request.requestType))
             ) {
                 pending.remove(frame.requestId)

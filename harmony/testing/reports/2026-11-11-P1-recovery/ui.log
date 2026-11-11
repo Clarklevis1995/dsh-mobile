@@ -1,0 +1,36 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-mxteg7hp
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 session-session-834346bf-cf27-49fc-8bda-9991bf22c71e
+输入 message-draft
+操作 message-send
+输入 message-draft
+PASS P1-generation-network-during-stream-G 真实生成中断开连接后补齐200段精确终帧；用户消息及原发送请求唯一，草稿保持且不自动重发
+输入 message-draft
+操作 message-send
+输入 message-draft
+输入 message-draft
+操作 message-send
+PASS P1-generation-host-during-stream-G 真实生成中重启专属Host后能继续新一轮；用户消息及原发送请求唯一，草稿保持且不自动重发
+输入 message-draft
+操作 message-send
+输入 message-draft
+输入 message-draft
+操作 message-send
+PASS P1-generation-host-during-confirmation-G 真实Host接受但移动端未收到sent时重启，旧消息不重发，确认前新草稿保留且后续发送可用
+输入 message-draft
+操作 message-send
+操作 interaction-inbox
+操作 conversation-overflow
+操作 page-back
+输入 message-draft
+操作 message-send
+PASS P1-generation-host-during-approval-G 待审批重启专属Host，与服务端实际待办同步且不自动决定，目标文件不存在，随后可继续聊天
+操作 conversation-back
+操作 home-settings
+操作 settings-connection
+操作 settings-connection
+PASS P1-generation-explicit-disconnect-G 真实设置主动断开8秒内没有重连或新hello，手动连接后恢复，保持原设置页面
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-mxteg7hp

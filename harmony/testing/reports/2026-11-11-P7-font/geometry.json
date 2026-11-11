@@ -1,0 +1,100 @@
+{
+  "scope": "仅字号页5个静态标签纵向中心；top扣返回中心、bottom扣内容安全区底部；同1316x2832/3.5 density/100%应用字号；非全页像素相似度",
+  "frozenCommit": "9e13dde3",
+  "androidVersion": "1.7.12 (33)",
+  "androidContentBottomPx": 2748,
+  "harmonyContentBottomPx": 2734,
+  "checks": [
+    {
+      "theme": "light",
+      "text": "预览文字大小",
+      "anchor": "top",
+      "android": 106.143,
+      "harmony": 105.857,
+      "difference": -0.286,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "text": "你可以拖动滑块来调整字体大小。",
+      "anchor": "top",
+      "android": 174.286,
+      "harmony": 173.857,
+      "difference": -0.429,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "text": "跟随系统",
+      "anchor": "bottom",
+      "android": 226.857,
+      "harmony": 226.0,
+      "difference": -0.857,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "text": "标准",
+      "anchor": "bottom",
+      "android": 144.857,
+      "harmony": 144.714,
+      "difference": -0.143,
+      "passed": true
+    },
+    {
+      "theme": "light",
+      "text": "恢复默认",
+      "anchor": "bottom",
+      "android": 44.0,
+      "harmony": 44.0,
+      "difference": 0.0,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "text": "预览文字大小",
+      "anchor": "top",
+      "android": 106.143,
+      "harmony": 105.857,
+      "difference": -0.286,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "text": "你可以拖动滑块来调整字体大小。",
+      "anchor": "top",
+      "android": 174.286,
+      "harmony": 173.857,
+      "difference": -0.429,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "text": "跟随系统",
+      "anchor": "bottom",
+      "android": 226.857,
+      "harmony": 226.0,
+      "difference": -0.857,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "text": "标准",
+      "anchor": "bottom",
+      "android": 144.857,
+      "harmony": 144.714,
+      "difference": -0.143,
+      "passed": true
+    },
+    {
+      "theme": "dark",
+      "text": "恢复默认",
+      "anchor": "bottom",
+      "android": 44.0,
+      "harmony": 44.0,
+      "difference": 0.0,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

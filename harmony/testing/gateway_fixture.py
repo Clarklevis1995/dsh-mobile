@@ -253,6 +253,7 @@ class Handler(socketserver.StreamRequestHandler):
         with LOCK:
             CLIENTS.add(self)
             if paired:
+                print('fixture-pair-accepted', self.channel, flush=True)
                 self.send(dict(kind='paired', token='fixture-token', gatewayId=GATEWAY_ID))
             self.send(dict(kind='hello', protocol=3, authenticated=True, gatewayId=GATEWAY_ID,
                 historyFormatVersion=3, capabilities=(['speech-input-v1'] if VOICE_TEST else []) + ['split-channels', 'assistant-stream-v1', 'session-create', 'session-cancel'] + (['session-agent-preset', 'queue-control'] if FEATURES else []) + (['commands'] if SLASH else []) + (['agent-team-v1', 'subagent-conversations-v1', 'tasks', 'goals'] if PRODUCTS else []) + (['file-upload-v1'] if UPLOAD_TEST else []) + (['file-downloads', 'file-references-v1'] if FILES_TEST else [])))
@@ -339,6 +340,10 @@ class Handler(socketserver.StreamRequestHandler):
                         APPROVALS.pop(rpc)
                         broadcast(dict(kind='approval-resolved', rpcId=rpc, sessionId=identifier))
                 event(identifier, dict(type='assistant/message', text='过期审批已移除'))
+            elif mode == 'notice-approval':
+                threading.Timer(12, pending_approval, args=(identifier, 'approval')).start()
+            elif mode == 'notice-ended':
+                threading.Timer(12, event, args=(identifier, dict(type='turn/end', reason='completed'))).start()
             elif mode.startswith('question'):
                 pending_question(identifier)
             elif mode.startswith('approval'):

@@ -40,7 +40,9 @@ internal class AttachmentSupport {
         check(pending == null) { "请等待当前图片读取完成" }
         val image = items.asSequence().flatMap { it.images.asSequence() }.firstOrNull { it.attachmentId == id } ?: error("图片引用已失效，请刷新会话")
         require(
-            image.bytes in 1..GatewayAttachmentPayload.MAXIMUM_BYTES && image.width > 0 && image.height > 0 &&
+            image.bytes in 1..GatewayAttachmentPayload.MAXIMUM_BYTES &&
+                image.width > 0 &&
+                image.height > 0 &&
                 image.width.toLong() * image.height <= 100_000_000L,
         ) { "图片大小或尺寸超出预览范围" }
         require(image.mediaType in setOf("image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif", "image/bmp")) {
@@ -53,14 +55,16 @@ internal class AttachmentSupport {
 
     fun accept(frame: GatewayFrame): AttachmentChange? {
         val target = pending ?: return null
-        if (frame.kind == "attachment" && frame.sessionId == target.sessionId &&
+        if (frame.kind == "attachment" &&
+            frame.sessionId == target.sessionId &&
             frame.attachment?.attachmentId == target.image.attachmentId
         ) {
             pending = null
             val valid = frame.attachment == target.image && GatewayAttachmentPayload.validatedBytes(frame) != null
             return AttachmentChange(target.copy(status = if (valid) "ready" else "error", error = if (valid) null else "图片校验失败，请重试"))
         }
-        if (frame.kind == "error" && frame.requestType == "attachment" &&
+        if (frame.kind == "error" &&
+            frame.requestType == "attachment" &&
             (frame.sessionId == null || frame.sessionId == target.sessionId)
         ) {
             pending = null

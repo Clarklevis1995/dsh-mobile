@@ -27,12 +27,16 @@ def run(ui,m,folder,passed):
         return event.get('text') or ''.join(block.get('text','') for block in blocks if block.get('type')=='text')
     state=call('/status');assert state['gatewayVersion']==meta['gatewayVersion']=='0.12.0'
     time.sleep(2);ui.screenshot('real-home-empty-dark')
-    session = call('/create',{'label':'P7-'+os.environ['HARMONY_REAL_SCOPE']+'-'+uuid.uuid4().hex[:6]}) if os.environ.get('HARMONY_REAL_SCOPE') in ['approval','questions','resilience','transport','matrix','generation-network'] else next((row for row in state['sessions'] if row['name'].endswith('P7-daily')),None) or call('/create',{'label':'P7-daily'})
+    if os.environ.get('HARMONY_REAL_SCOPE') in ['history','history-restore','cache']:
+        seed=json.loads(Path(os.environ['HARMONY_HISTORY_SEED_JSON']).read_text());assert Path(seed['root']).resolve()==owned and seed['complete']
+        session=next(r for r in state['sessions'] if r['id']==seed['sessionId'])
+    else:
+        session = call('/create',{'label':'P7-'+os.environ['HARMONY_REAL_SCOPE']+'-'+uuid.uuid4().hex[:6]}) if os.environ.get('HARMONY_REAL_SCOPE') in ['approval','questions','resilience','transport','matrix','generation-network'] else next((row for row in state['sessions'] if row['name'].endswith('P7-daily')),None) or call('/create',{'label':'P7-daily'})
     call('/subscribe',{'id':session['id']})
     if not any(kind(row)=='user/message' for row in history()):call('/message',{'id':session['id'],'text':'HARMONY_REAL_SETUP'})
     wait(lambda:any(kind(row)=='assistant/message' for row in history()))
     ui.navigate('home-auth','host-add');ui.navigate('host-add','gateway-payload')
-    if os.environ.get('HARMONY_REAL_SCOPE') in ['transport','generation-network']:
+    if os.environ.get('HARMONY_REAL_SCOPE') in ['transport','generation-network','history','history-restore','cache']:
         req=urllib.request.Request('http://127.0.0.1:18897/mgw/pair',json.dumps({'publicUrl':'ws://127.0.0.1:18907/ws/mobile'}).encode(),{'Content-Type':'application/json'})
         import base64
         issued=json.load(urllib.request.urlopen(req,timeout=10))['payload']
@@ -42,6 +46,15 @@ def run(ui,m,folder,passed):
     assert isinstance(payload,str)
     ui.input('gateway-payload',payload);ui.click('gateway-connect');ui.text('已连接',timeout=45)
     ui.click('session-'+session['id']);ui.wait('message-draft')
+    if os.environ.get('HARMONY_REAL_SCOPE') == 'cache':
+        from real_cache_scenarios import run as caching
+        caching(ui,m,folder,passed,call,session);return
+    if os.environ.get('HARMONY_REAL_SCOPE') == 'history-restore':
+        from real_history_restore_scenarios import run as restore
+        restore(ui,m,folder,passed,call,session);return
+    if os.environ.get('HARMONY_REAL_SCOPE') == 'history':
+        from real_history_scenarios import run as pagination
+        pagination(ui,m,folder,passed,call,session);return
     if os.environ.get('HARMONY_REAL_SCOPE') == 'generation-network':
         from real_generation_scenarios import run as generation
         generation(ui,m,folder,passed,call,session,owned);return

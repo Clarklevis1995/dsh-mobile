@@ -227,7 +227,7 @@ struct Index {
     const brand = this.nav.current === AppRoute.Home && !this.drawerOpen;
     const dark = brand || this.a.dark;
     const chat = [AppRoute.Conversation, AppRoute.ChildConversation, AppRoute.SearchConversation].includes(this.nav.current as AppRoute);
-    const color = brand ? '#06172B' : chat ? this.a.surface : this.nav.current.startsWith('settings') ? this.a.settingsBg : this.a.bg;
+    const color = brand ? '#06172B' : chat ? this.a.surface : this.nav.current.startsWith('settings') ? (this.nav.current === AppRoute.Font && !this.a.dark ? '#F7F7F8' : this.a.settingsBg) : this.a.bg;
     try { this.hostWindow?.setWindowBackgroundColor(color); } catch (_) {}
     this.hostWindow?.setWindowSystemBarProperties({ statusBarColor: color, navigationBarColor: color,
       statusBarContentColor: dark ? '#FFFFFF' : '#0E131A', navigationBarContentColor: dark ? '#FFFFFF' : '#0E131A' }).catch(() => {});

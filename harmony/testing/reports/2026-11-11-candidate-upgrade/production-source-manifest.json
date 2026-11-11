@@ -1,0 +1,354 @@
+{
+  "comparedFiles": 87,
+  "files": [
+    {
+      "path": "entry/src/main/cpp/bridge.cpp",
+      "sha256": "6c879b09dddca0cd548e4dcca2363b7c522a88a5fa592b148ae05f58dedeac87"
+    },
+    {
+      "path": "entry/src/main/cpp/generated/arm64-v8a/libwhaleness.so",
+      "sha256": "64df29f0b507f8a8dd9200c1c3f5dc454bbe0ad0b5df8914cdbf7ddf4adc9753"
+    },
+    {
+      "path": "entry/src/main/cpp/generated/arm64-v8a/libwhaleness_api.h",
+      "sha256": "af574cfdf18a9cfb9cf99e4fd152754d7f2fc06b80aa7c7bd0ff73e52837e195"
+    },
+    {
+      "path": "entry/src/main/ets/entryability/EntryAbility.ets",
+      "sha256": "0dd8af19427c7547b9f4662465db86531dcef79c680fecc3a8f92950ae81bfcb"
+    },
+    {
+      "path": "entry/src/main/ets/core/ContentTypes.ets",
+      "sha256": "00ffdd5ffba02e7e4a363929357b3509e665d0c68b16590fa0011f91c9ec9d78"
+    },
+    {
+      "path": "entry/src/main/ets/core/UiMessages.ets",
+      "sha256": "cc209ae43d12286b41a042ca6f22e5a93dd843b8149b2fdd5f233b31794d247e"
+    },
+    {
+      "path": "entry/src/main/ets/core/FileWorker.ets",
+      "sha256": "578913b3dc38f949faa40be17f312c9fbfc7318512301e69ff92b4d73d84cf9b"
+    },
+    {
+      "path": "entry/src/main/ets/core/MessageDataSource.ets",
+      "sha256": "6fe2876ebb4168ae5b9f445c5fc3b0d455d5eb36415dc99ce8c22f253b0514d7"
+    },
+    {
+      "path": "entry/src/main/ets/core/ImageCache.ets",
+      "sha256": "df61b0ec03a216c274827207ab01246f15421daad37c52b01447c8c945fd1f83"
+    },
+    {
+      "path": "entry/src/main/ets/core/VoiceController.ets",
+      "sha256": "0a68e08a25337e7c0db1c3408b43a190eee85b8caf534228446be6f9ae575f08"
+    },
+    {
+      "path": "entry/src/main/ets/core/PhotoWorker.ets",
+      "sha256": "900ec75cc1c11be0ebf17f709d6ed0fa549d2aa2eac1d405c4516e46d9913988"
+    },
+    {
+      "path": "entry/src/main/ets/core/WorkspaceController.ets",
+      "sha256": "785f24bb4c8c56f2ffb68bf63ba28226844bf3fe762206c309d649c8e9ba8739"
+    },
+    {
+      "path": "entry/src/main/ets/core/PreferenceStore.ets",
+      "sha256": "cd6c45b624f4398f9521dd790611499da0331e072a673ef9fba602856e1b5df1"
+    },
+    {
+      "path": "entry/src/main/ets/core/ScheduleDates.ets",
+      "sha256": "7ce2e32c3dad7dd28eb0b123f6efe8e2b5c90cebd231b39f5abc0c28bc18cf16"
+    },
+    {
+      "path": "entry/src/main/ets/core/CacheController.ets",
+      "sha256": "ab4b1331a0d29676cd6051b252b5f2b74f033fdf0197a4c70aa31b5f86c96133"
+    },
+    {
+      "path": "entry/src/main/ets/core/MarkdownBlock.ets",
+      "sha256": "bcff7beae979bb1139b2377415fac4690ebd5c6a7053330c58914da333b513df"
+    },
+    {
+      "path": "entry/src/main/ets/core/ContentActions.ets",
+      "sha256": "99f07e69a0157d7cff20596cdaed8f26ea3e1a053a8f5521fc11365737513d87"
+    },
+    {
+      "path": "entry/src/main/ets/core/VoiceEncodeWorker.ets",
+      "sha256": "af3dd65c390b4fcec421ef1cc56fe27b3d905ad6ac8351799a993c728815fc13"
+    },
+    {
+      "path": "entry/src/main/ets/core/Appearance.ets",
+      "sha256": "48d49aab309bab1f00a804010903083fc553898a6465d2ed5cbb4f36eaa61f1e"
+    },
+    {
+      "path": "entry/src/main/ets/core/BrandPixels.ets",
+      "sha256": "a86794bfaeeff098159292c61c6a468b5b52ecaf789f39c7f3176f8827fa42cc"
+    },
+    {
+      "path": "entry/src/main/ets/core/NotificationTarget.ets",
+      "sha256": "6d17546b6e71d8454307b57adcfcaa525ba73d87bf328a736817bd6d8fed6de5"
+    },
+    {
+      "path": "entry/src/main/ets/core/MarkdownWorker.ets",
+      "sha256": "26442f20ab1d9566d38af665258362075cfd83b2d45b0ee14127cc3c7f76e5c1"
+    },
+    {
+      "path": "entry/src/main/ets/core/BrandFlowWorker.ets",
+      "sha256": "8fa139329072235adb5e229f37ebe6488b8b41b4f2a433a82571d60b96fb9923"
+    },
+    {
+      "path": "entry/src/main/ets/core/CredentialStore.ets",
+      "sha256": "765511c69ae6b3ff0c17a6fa3ca3ba7c86d1c474e8ee5c923327204ff1b247a4"
+    },
+    {
+      "path": "entry/src/main/ets/core/NotificationTypes.ets",
+      "sha256": "45769ab139ccd74c5b420cfd29ce5bde440bf793057f34a461d2e32df6da599a"
+    },
+    {
+      "path": "entry/src/main/ets/core/FileController.ets",
+      "sha256": "64250402b850c759cf7a0ed9591aec3e0b0b46f24f9490d27c11a11d635189b4"
+    },
+    {
+      "path": "entry/src/main/ets/core/AgentNotifications.ets",
+      "sha256": "8209f54c2f875608ab2722fe186eb963d0647f024f661b7a08f44069fc1728de"
+    },
+    {
+      "path": "entry/src/main/ets/core/HostRuntime.ets",
+      "sha256": "0a3bb9f901d2bae293a4b176e357dae5e902122cfb515085d6046e97d71e0683"
+    },
+    {
+      "path": "entry/src/main/ets/core/DraftStore.ets",
+      "sha256": "96894e1f24fc2da5e4223d545829acce7410519f97ad6b82d7b7771a71a6f6f4"
+    },
+    {
+      "path": "entry/src/main/ets/core/Models.ets",
+      "sha256": "0ea71b09441d4aedb514837243b1b4599052efca2ed7f132bad7267110cc0e3b"
+    },
+    {
+      "path": "entry/src/main/ets/core/MarkdownModel.ets",
+      "sha256": "a998f3ec07bd45259020f0d06fc5512e8ba12f6b92996e49a6c06346b80dce85"
+    },
+    {
+      "path": "entry/src/main/ets/core/BrandFlow.ets",
+      "sha256": "bdd87dc1f3153cdef1b251e31348799b72c6e65539faac0d0757b175807f100e"
+    },
+    {
+      "path": "entry/src/main/ets/core/AppNavigation.ets",
+      "sha256": "05b565111d813d25ecbcfc2b22d3d3965d40b1b2313d3fae702cf47bdf185d58"
+    },
+    {
+      "path": "entry/src/main/ets/core/VoiceTypes.ets",
+      "sha256": "119be1746c456046a3529f0b926f759d8b7c7442bb46113928e9b6253a0c82b3"
+    },
+    {
+      "path": "entry/src/main/ets/core/SettingsData.ets",
+      "sha256": "19f1f62ae775730e3522d812ed1b1c4e4ae94109f661dad8fec0232ebd66a164"
+    },
+    {
+      "path": "entry/src/main/ets/core/ContentWorker.ets",
+      "sha256": "19a5b30c39b625a306cf45e35f55897a785f3eb3e7eeaea412f57bbf6fc4081d"
+    },
+    {
+      "path": "entry/src/main/ets/core/HostRepository.ets",
+      "sha256": "348620409e13b5eac986650cad7b5d3d2afe65e653d73bbf05e6adabc5975274"
+    },
+    {
+      "path": "entry/src/main/ets/core/GatewayClient.ets",
+      "sha256": "346de0853f5cb77d82a85d15c6eac19beff83d3001405ebbf0ae0a53af160a65"
+    },
+    {
+      "path": "entry/src/main/ets/core/LocalDatabase.ets",
+      "sha256": "cae7ec65ebc7d83355a3d12a89d060668f3eb8ae55d45051d07584de858ecb63"
+    },
+    {
+      "path": "entry/src/main/ets/core/ImageOrientation.ets",
+      "sha256": "f5abf4275213d033c7f9d7abc1aa6ac0fdd08fc1172a43d773a35fe82c7c5650"
+    },
+    {
+      "path": "entry/src/main/ets/components/MessageAttachments.ets",
+      "sha256": "75b3a8c58f5ffad43fa20db4340522147de902c6be234f7069fcb00ff366631b"
+    },
+    {
+      "path": "entry/src/main/ets/components/DesignSystem.ets",
+      "sha256": "988237697fcceb1adfb630671e8944bcefee43275702d790d2ba40715c4373ed"
+    },
+    {
+      "path": "entry/src/main/ets/components/RemoteSwitch.ets",
+      "sha256": "6317066e9985d0e7caa42ad67ea168d9e18812d11b7d54a94b764a47111bfd39"
+    },
+    {
+      "path": "entry/src/main/ets/components/MarkdownBody.ets",
+      "sha256": "a595bbe0db09ac9a20c9d0bacb60ea16f0c9a6fe62c3e380fe9bf06bd18b3220"
+    },
+    {
+      "path": "entry/src/main/ets/components/QueueDock.ets",
+      "sha256": "2babeebc3243c15d365e80b04535c803b96c7f8d4c93fd0539dc917232e530a2"
+    },
+    {
+      "path": "entry/src/main/ets/components/UploadDock.ets",
+      "sha256": "8888fcb5be84cb058acceef9b71b42ec139dbb352b9329b7d288e203a1446dae"
+    },
+    {
+      "path": "entry/src/main/ets/components/MarkdownTable.ets",
+      "sha256": "800a0f925c8f8b750dce5b3dcd287b36e8a14a867f3f7136b8165981625277ca"
+    },
+    {
+      "path": "entry/src/main/ets/components/SlashSuggestions.ets",
+      "sha256": "1df826714a6a3bf5fe658f53b4f04a1b99d104ca8355da32a2087c3ebf50fcad"
+    },
+    {
+      "path": "entry/src/main/ets/components/MarkdownCode.ets",
+      "sha256": "949b05b32936055bb29caa58d6775d7b33f9e90b71a40abbaf68d13e36fd3b15"
+    },
+    {
+      "path": "entry/src/main/ets/components/TableReader.ets",
+      "sha256": "5347b1665841336e690779433982fa3c15c70920c36dd779dadfe5b29d437dd3"
+    },
+    {
+      "path": "entry/src/main/ets/components/RenameDialog.ets",
+      "sha256": "6c3af101098d390340d1edaefc714ade7ca8df8395d10e5a3e4c3f5f5ae68e18"
+    },
+    {
+      "path": "entry/src/main/ets/components/MessageCard.ets",
+      "sha256": "e8b7d785bc851a108f10d6adb0fb7ed6784d430f7fbb519b0c6d390b63e50abd"
+    },
+    {
+      "path": "entry/src/main/ets/components/SettingsSection.ets",
+      "sha256": "c3e3f0de263519b050e40e7b538f239a9bc6a191d661f1efc4f0b97b1333bca1"
+    },
+    {
+      "path": "entry/src/main/ets/components/ConfirmDialog.ets",
+      "sha256": "e0e5a61e8e2810381f41bf4693c0f98d19e46e2d7f8e7d0ae77b63e2d5f2efbc"
+    },
+    {
+      "path": "entry/src/main/ets/components/PreferenceMenuRow.ets",
+      "sha256": "8fe830cad53c5f4ffa85fb256646eb19cf5292ccd0fba10b26e4a0f662c63572"
+    },
+    {
+      "path": "entry/src/main/ets/components/TrajectoryNodeCard.ets",
+      "sha256": "85a0d477f66157109d06458ca82e0321e2f639249440a238e6e448755ea2f7b8"
+    },
+    {
+      "path": "entry/src/main/ets/components/MarkdownText.ets",
+      "sha256": "cd4286fe8d7fb72c6e331256722e37136bec16638039be17290bdbb31fb4d317"
+    },
+    {
+      "path": "entry/src/main/ets/components/VoiceInput.ets",
+      "sha256": "34c7e9d994a74c35b0f8fd0b25e14f8f779d7bab43646cf9c2d9eb5d4b734ca5"
+    },
+    {
+      "path": "entry/src/main/ets/components/SessionTile.ets",
+      "sha256": "0c0c053445325b843e24f7370a3f0605969d4a4ff3788e3af3aa9ec140791dfc"
+    },
+    {
+      "path": "entry/src/main/ets/components/GoalDock.ets",
+      "sha256": "787294d5e031e68518c45fc09ef8cbf50a013b0a6a1459179e49d7e40df1798e"
+    },
+    {
+      "path": "entry/src/main/ets/components/SettingsGatewayRow.ets",
+      "sha256": "7a8c72de8c5d39af7ed996ad98dbc3e8c4f8b7f7bdb43cc7847896ea8dad0de8"
+    },
+    {
+      "path": "entry/src/main/ets/components/FontSizePanel.ets",
+      "sha256": "8e82d98e22c8290e0eb9a810b69ad281931b39f24e26ff88d26a7e2a43ac8177"
+    },
+    {
+      "path": "entry/src/main/ets/components/ViewModels.ets",
+      "sha256": "a902e33b2ff5bba9bf059fe44ff7dc86c1eeb0fecc4ecc7bf2ff1f79251684b1"
+    },
+    {
+      "path": "entry/src/main/ets/components/BrandBackground.ets",
+      "sha256": "20e11e8d1e89f3c25df95dd5d00e4c9f802da0906a3ccbb038219073d7c4b040"
+    },
+    {
+      "path": "entry/src/main/ets/components/InteractionCards.ets",
+      "sha256": "92661947ae9d0d91803ecdcaf2bf750cb16da7de790577164862a8b1849d37e6"
+    },
+    {
+      "path": "entry/src/main/ets/pages/TeamPage.ets",
+      "sha256": "b2f4b440a4bdb514563d79d209357e7a542ea1f4472f494b5af07306bc51ef58"
+    },
+    {
+      "path": "entry/src/main/ets/pages/ConversationPage.ets",
+      "sha256": "fde66f036de2576d599fe07ea36175c51bd5297a53315d3a9d182a70611d0caa"
+    },
+    {
+      "path": "entry/src/main/ets/pages/StoragePage.ets",
+      "sha256": "f5c2afd3862b1913259acbe0a24797ee95600f9e279048d7881587a91a9e93ad"
+    },
+    {
+      "path": "entry/src/main/ets/pages/ScheduleEditorPage.ets",
+      "sha256": "9755709ef1212cbd912254545cae57be8cb832925c039e15f6be478208e8228d"
+    },
+    {
+      "path": "entry/src/main/ets/pages/FilePreviewPage.ets",
+      "sha256": "0bc2889f1c90c5a70c1351334ff1115dfa005b11e04922609b6310fc077b5f64"
+    },
+    {
+      "path": "entry/src/main/ets/pages/WorkspacePicker.ets",
+      "sha256": "71d0dcafca4b89fa8697a62265ec3df4b811788e604799daf05b20eb05e74991"
+    },
+    {
+      "path": "entry/src/main/ets/pages/TrajectoryPage.ets",
+      "sha256": "0f5cd98862febf5df22e377c5ea5a23dfc5634f781c94203780eecb183dff73b"
+    },
+    {
+      "path": "entry/src/main/ets/pages/HostPage.ets",
+      "sha256": "42ca2f3ee7b72887b7a2cb5cce06a2b16ada94942ef67a43612b79e22401a72d"
+    },
+    {
+      "path": "entry/src/main/ets/pages/Index.ets",
+      "sha256": "753d3ed783609add5f9d1cdc8c619684b3e8eb4ecaab0474fd1b1aa809f502f4"
+    },
+    {
+      "path": "entry/src/main/ets/pages/InteractionPage.ets",
+      "sha256": "7100c03c5171000c18781ebf1d8f5989ea4f93f897e0a61928ed530fe07e53c4"
+    },
+    {
+      "path": "entry/src/main/ets/pages/PluginsPage.ets",
+      "sha256": "87fd28d90c7f15f0bd4e5d60608ea6df6f3dca4e36efe5188ae4c73059425d40"
+    },
+    {
+      "path": "entry/src/main/ets/pages/SettingsPage.ets",
+      "sha256": "3a15410d672ee4cef583e80ce00c25f32f9a2b86877e0d6115df9b55c7cd49b9"
+    },
+    {
+      "path": "entry/src/main/ets/pages/OfflineSearchPage.ets",
+      "sha256": "19cddf923fe2f37958e7a88164aeba696fda5ed2bb9d124786e2ae77de0b84cb"
+    },
+    {
+      "path": "entry/src/main/ets/pages/WorkspaceFilesPage.ets",
+      "sha256": "efa07db8c8e605a92b4500660ee62e2c8bd8dda24089acfa22144a6fce8697a8"
+    },
+    {
+      "path": "entry/src/main/ets/pages/WorkspacePage.ets",
+      "sha256": "68694e3a49a7ccb3debc77f5a70c336cfbcfa245861e5c2d622b00020c57f3d3"
+    },
+    {
+      "path": "entry/src/main/ets/pages/ContentPreviewPage.ets",
+      "sha256": "864970d6a44fc7fd1a8380e5d328ee3efb741a5faa3807402a9f681e1109c1d6"
+    },
+    {
+      "path": "entry/src/main/ets/pages/GoalEditorPage.ets",
+      "sha256": "fbd0c94a1cc4e512cc973a7f985515a62daf95b66a0340cf5d61f3963a1567f2"
+    },
+    {
+      "path": "entry/src/main/ets/pages/SessionSidebar.ets",
+      "sha256": "2df971ff40c8d008d69d74dd7219d450cb99da921d1805fb6d92a6a56a1d68c3"
+    },
+    {
+      "path": "entry/src/main/ets/pages/SessionControlPage.ets",
+      "sha256": "7a913f762be179d40345f889807a54f88d0c70bec3c4638c784acb3760297084"
+    },
+    {
+      "path": "entry/src/main/ets/pages/AgentPresetsPage.ets",
+      "sha256": "89e6f16926a35737375dae9bcae71a556573108168b6dd45b4c40ba04dc73a49"
+    },
+    {
+      "path": "entry/src/main/ets/pages/PhotoPreviewPage.ets",
+      "sha256": "79aec0698ae4cc11e54becf15742347d1f51f39568fc8f33b3678190cc8032b8"
+    },
+    {
+      "path": "entry/src/main/ets/pages/SchedulesPage.ets",
+      "sha256": "a39f90a5fb74a3ad3e2c82ea021cbbc765f238d462cc2bbead65a9aa8d4fe25a"
+    }
+  ],
+  "scope": "entry生产ArkTS/C++/头文件/Native动态库与本轮候选逐字相等；仅AppScope bundle/label/version不同"
+}

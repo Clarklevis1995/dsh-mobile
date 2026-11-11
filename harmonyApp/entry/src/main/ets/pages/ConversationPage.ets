@@ -54,8 +54,8 @@ export struct ConversationPage {
   @Prop draft: string = '';
   @Prop status: string = '';
   @Prop showSidebarButton: boolean = true;
-  @Prop savedAnchor: string = '';
-  @Prop savedInset: number = 0;
+  @Prop @Watch('savedAnchorChanged') savedAnchor: string = '';
+  @Prop @Watch('savedAnchorChanged') savedInset: number = 0;
   onSearchHandled: () => void = () => {};
   @Prop @Watch('searchChanged') searchTarget: string = '';
   onAnchor: (scope: string, session: string, message: string, inset: number) => void = () => {};
@@ -63,8 +63,11 @@ export struct ConversationPage {
   private anchorTarget: string = '';
   private anchorInset: number = 0;
   private anchorTries: number = 0;
+  private restoringPage: boolean = false;
+  private anchorPages: number = 0;
+  private anchorPageRevision: number = -1;
   private visibleStart: number = 0;
-  @Prop savedScrollY: number = -1;
+  @Prop @Watch('savedAnchorChanged') savedScrollY: number = -1;
   @Prop @Watch('jumpToTail') tailRevision: number = 0;
   onLink: (url: string) => void = () => {};
   onPreview: (source: string, table: boolean) => void = () => {};
@@ -124,20 +127,31 @@ export struct ConversationPage {
     const key = this.scope + ':' + (this.state.selectedSessionId ?? '');
     if (key !== this.conversationKey) {
       this.conversationKey = key; this.voiceRequested = false; clearTimeout(this.composerCooldownTimer); this.composerModeLocked = false; this.sendMode = 'queue'; this.renderedIds.clear(); this.unread = false; this.lastTail = '';
+      this.restoringPage = false; this.anchorPages = 0; this.anchorPageRevision = -1;
       this.anchorTarget = this.searchTarget || this.savedAnchor; this.anchorInset = this.searchTarget ? 0 : this.savedInset; this.anchorTries = 0;
       this.followTail = !this.anchorTarget && this.savedScrollY < 0; this.atTail = this.followTail; this.restoreY = this.anchorTarget ? -1 : this.savedScrollY;
       this.scopeChanged = true;
     }
     this.changed();
   }
+  private savedAnchorChanged(): void {
+    if (!this.scopeChanged || this.searchTarget) { return; }
+    this.anchorTarget = this.savedAnchor; this.anchorInset = this.savedInset; this.anchorTries = 0;
+    this.followTail = !this.anchorTarget && this.savedScrollY < 0; this.atTail = this.followTail;
+    this.restoreY = this.anchorTarget ? -1 : this.savedScrollY;
+    this.changed();
+  }
   private changed(): void {
     if (this.timer >= 0) { return; }
     this.timer = setTimeout(() => {
       this.timer = -1;
+      this.preserveVisibleAnchor();
       if (this.dataSource.update(this.messages, this.conversationKey)) { this.changed(); return; }
       if (!this.active || this.trajectoryOpen || this.state.loadingHistory && !this.messages.length) { return; }
       const tail = this.messages[this.messages.length - 1]; const stamp = tail ? tail.id + ':' + tail.text.length : '';
       if (!this.followTail && this.lastTail && stamp !== this.lastTail) { this.unread = true; } if (stamp !== this.lastTail) { this.tailTries = 0; } this.lastTail = stamp;
+      if (this.restoringPage && this.state.loadingHistory) { return; }
+      this.restoringPage = false;
       if (this.anchorTarget) { this.restoreAnchor(); return; }
       this.scopeChanged = false;
       if (this.restoreY >= 0) { this.scroller.scrollTo({ xOffset: 0, yOffset: this.restoreY, animation: false }); this.restoreY = -1; }
@@ -150,11 +164,26 @@ export struct ConversationPage {
       }
     }, 50);
   }
+  private preserveVisibleAnchor(): void {
+    if (this.followTail || this.userScrolling || this.scopeChanged || this.anchorTarget || !this.dataSource.totalCount()) { return; }
+    const index = Math.max(0, Math.min(this.dataSource.totalCount() - 1, this.visibleStart - 1));
+    const old = this.dataSource.getData(index); const first = this.dataSource.getData(0);
+    const nextIndex = this.messages.findIndex(message => message.id === old.id);
+    // 尾部追加不影响上方阅读；替换/前插窗口才需要在修改旧数据源前保留几何。
+    if (nextIndex === index && first.id === this.messages[0]?.id) { return; }
+    const rectangle = this.scroller.getItemRect(index + 1);
+    this.anchorTarget = rectangle.height > 0 ? old.id : this.savedAnchor;
+    this.anchorInset = rectangle.height > 0 ? rectangle.y : this.savedInset;
+    this.anchorTries = 0; this.anchorPages = 0; this.anchorPageRevision = -1;
+  }
   private restoreAnchor(): void {
     const index = this.messages.findIndex(message => message.id === this.anchorTarget);
     if (index < 0) {
       if (this.state.loadingHistory) { return; }
-      // 搜索只索引磁盘窗口；若网络已经删除该条目，不能假造定位成功。
+      if (this.state.connected && this.state.hasMore && this.anchorPages < 32 && this.anchorPageRevision !== this.state.historyRevision) {
+        this.anchorPages++; this.anchorPageRevision = this.state.historyRevision; this.older(); return;
+      }
+      // 只沿共享层给出的游标有界查找；没有该消息时不能伪造定位成功。
       if (this.searchTarget && this.anchorTries === 0) { this.getUIContext().getPromptAction().showToast({ message: this.a.t('该内容不在当前历史窗口中，可加载更早消息后查看') }); }
       this.anchorTarget = ''; this.scopeChanged = false; return;
     }
@@ -174,7 +203,17 @@ export struct ConversationPage {
     this.onOffset(this.scope, this.state.selectedSessionId ?? '', this.followTail ? -1 : this.scroller.currentOffset().yOffset);
   }
   private jumpToTail(): void { this.userScrolling = false; this.tailTries = 0; this.anchorTarget = ''; this.scopeChanged = false; this.restoreY = -1; this.unread = false; this.atTail = true; this.followTail = true; this.changed(); }
-  private older(): void { this.followTail = false; this.onAction(new Command('older')); }
+  private older(): void {
+    this.followTail = false;
+    if (!this.anchorTarget) {
+      const index = Math.max(0, Math.min(this.messages.length - 1, this.visibleStart - 1)); const message = this.messages[index];
+      if (message) {
+        const rectangle = this.scroller.getItemRect(index + 1);
+        if (rectangle.height > 0) { this.anchorTarget = message.id; this.anchorInset = rectangle.y; this.anchorTries = 0; }
+      }
+    }
+    this.restoringPage = true; this.onAction(new Command('older'));
+  }
   private rendered(scope: string, id: string): void {
     if (scope !== this.conversationKey) { return; }
     this.renderedIds.add(id); if (this.renderedIds.size > 64) { const oldest = this.renderedIds.keys().next().value as string; this.renderedIds.delete(oldest); } this.changed();

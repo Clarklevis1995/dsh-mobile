@@ -1,0 +1,21 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-na5k5chb
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 conversation-back
+操作 home-settings
+操作 settings-font
+操作 font-follow-system
+操作 page-back
+操作 page-back
+操作 session-harmony-smoke
+输入 message-draft
+输入 message-draft
+操作 message-send
+操作 approval-details-a-2
+操作 approval-reject-a-2
+PASS P7-system-font-max-F 系统设置字体最大5档（非应用字号），跟随系统预览实际放大，长中英文草稿完整、审批参数可展开且拒绝按钮完整可点击
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-na5k5chb

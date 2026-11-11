@@ -1,0 +1,16 @@
+{
+  "path": "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/entry/build/default/outputs/default/entry-default-unsigned.hap",
+  "sha256": "9bc91468e8abdcebebe3a9d309cf5e07a5fa91babb1b6222d8322be9fc70259f",
+  "bytes": 40438151,
+  "signed": false,
+  "jvm": 106,
+  "node": 58,
+  "ktlint": true,
+  "detekt": {
+    "version": "1.23.8",
+    "input": "harmony/shared/src/commonMain/kotlin",
+    "config": "默认规则，无baseline/覆盖配置",
+    "weightedIssues": 235,
+    "exitCode": 2
+  }
+}

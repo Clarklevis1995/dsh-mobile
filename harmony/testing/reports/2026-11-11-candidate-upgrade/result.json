@@ -1,0 +1,17 @@
+{
+  "bundle": "com.clarklevis.whaleness.harmony.preview202611110401",
+  "target": "127.0.0.1:5557",
+  "versionCode": 2,
+  "versionName": "0.1.0-preview",
+  "signed": false,
+  "path": "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmonyApp/build/acceptance/com.clarklevis.whaleness.harmony.preview202611110401-unsigned.hap",
+  "sha256": "c002dba0bd2a269d98e5dd2c1cc625842d5e939eaa99c7debff3fc3896df70ed",
+  "bytes": 40438256,
+  "productionSourceWithoutHooks": true,
+  "firstInstall": true,
+  "inPlaceUpdate": true,
+  "assetIdentityRetained": true,
+  "draftHistoryAndPreferencesRetained": true,
+  "ownedTestHostRemoved": true,
+  "scope": "同一生产实现vCode1→2，验证系统包更新保留数据；不替代旧schema/旧Native兼容和真机签名"
+}

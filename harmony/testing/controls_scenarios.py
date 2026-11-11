@@ -5,6 +5,12 @@ import os
 
 def run(ui, m, folder, passed):
     m.connect(ui)
+    if os.environ.get('HARMONY_CONTROL_START') == 'system-font':
+        from system_font_scenarios import run as system_fonts
+        system_fonts(ui,m,folder,passed);return
+    if os.environ.get('HARMONY_CONTROL_START') == 'notifications':
+        from notification_product_scenarios import run as notices
+        return notices(ui,m,folder,passed,connected=True)
     if os.environ.get('HARMONY_CONTROL_START') == 'font':
         from font_visual_scenarios import run as fonts
         fonts(ui,m,folder,passed);return

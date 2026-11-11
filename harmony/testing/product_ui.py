@@ -250,8 +250,17 @@ def main():
         shutil.copytree(ROOT / 'harmonyApp', app, ignore=shutil.ignore_patterns('build', '.hvigor', 'oh_modules', '.idea'))
         p = app / 'AppScope/app.json5'; value = json.loads(p.read_text()); value['app']['bundleName'] = m.BUNDLE; p.write_text(json.dumps(value, indent=2))
     assert json.loads((app / 'AppScope/app.json5').read_text())['app']['bundleName'] == m.BUNDLE
+    if args.scenario == 'real' and os.environ.get('HARMONY_REAL_SCOPE') in ['history','history-restore','cache']:
+        from history_probe import instrument
+        instrument(app)
     if args.scenario == 'files' and os.environ.get('HARMONY_FILES_SAVE') == '1':
         from file_actions_probe import instrument
+        instrument(app)
+    if args.scenario == 'scan' and os.environ.get('HARMONY_SCAN_GALLERY') == '1':
+        from scan_gallery_probe import instrument
+        instrument(app)
+    if args.scenario == 'controls' and os.environ.get('HARMONY_CONTROL_START') == 'notifications':
+        from notification_product_probe import instrument
         instrument(app)
     if args.scenario == 'photos':
         from photo_probe import instrument
@@ -281,7 +290,7 @@ def main():
         fixtures = [(18783, '', 'a56a1098-8519-43a1-9dce-fb99863bf5bb'), (18784, 'B ', 'b56a1098-8519-43a1-9dce-fb99863bf5bb')]
         if args.scenario == 'real':
             fixtures = []; route = 'tcp:18897'
-            if os.environ.get('HARMONY_REAL_SCOPE') in ['transport','generation-network']:
+            if os.environ.get('HARMONY_REAL_SCOPE') in ['transport','generation-network','history','history-restore','cache']:
                 import urllib.request,socket
                 for proxyPort in [18907,18908]:
                     with socket.socket() as guard:guard.bind(('127.0.0.1',proxyPort))

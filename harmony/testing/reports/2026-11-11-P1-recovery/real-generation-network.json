@@ -1,0 +1,35 @@
+{
+  "gatewayVersion": "0.12.0",
+  "checks": [
+    {
+      "case": "network-during-stream",
+      "userMessages": 1,
+      "originalClientRequests": 1,
+      "draftPreserved": true
+    },
+    {
+      "case": "host-during-stream",
+      "userMessages": 1,
+      "originalClientRequests": 1,
+      "draftPreserved": true
+    },
+    {
+      "case": "host-during-confirmation",
+      "userMessages": 1,
+      "originalClientRequests": 1,
+      "draftPreserved": true
+    },
+    {
+      "case": "host-during-approval",
+      "rpcId": "12f40547-3cb4-4c82-969f-1086587acb50",
+      "serverResolution": "Host canceled interrupted request on restart",
+      "fileExists": false,
+      "automaticDecisions": 0
+    },
+    {
+      "case": "explicit-disconnect",
+      "automaticReconnects": 0
+    }
+  ],
+  "method": "real owned Host with controlled local upstream and transparent local transport fault; API21 simulator, not lock/background D"
+}

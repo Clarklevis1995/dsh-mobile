@@ -1,0 +1,316 @@
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:jvmProcessResources NO-SOURCE
+> Task :shared:jvmTestProcessResources NO-SOURCE
+
+> Task :shared:compileKotlinJvm
+w: file:///Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/protocol/JsonValue.kt:105:5 This declaration needs opt-in. Its usage should be marked with '@kotlinx.serialization.ExperimentalSerializationApi' or '@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)'
+w: file:///Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/protocol/JsonValue.kt:111:5 This declaration needs opt-in. Its usage should be marked with '@kotlinx.serialization.ExperimentalSerializationApi' or '@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)'
+
+> Task :shared:jvmMainClasses
+> Task :shared:jvmJar
+> Task :shared:compileTestKotlinJvm
+> Task :shared:jvmTestClasses
+> Task :shared:jvmTest
+
+BUILD SUCCESSFUL in 6s
+4 actionable tasks: 4 executed
+TAP version 13
+# Subtest: 迟到磁盘草稿不覆盖用户已经修改的文字，恢复不是编辑事件
+ok 1 - 迟到磁盘草稿不覆盖用户已经修改的文字，恢复不是编辑事件
+  ---
+  duration_ms: 4.506209
+  ...
+# Subtest: 清理时仍在等待初始化的旧历史导出不能用新 epoch 写回
+ok 2 - 清理时仍在等待初始化的旧历史导出不能用新 epoch 写回
+  ---
+  duration_ms: 0.3775
+  ...
+# Subtest: 清理期间迟到窗口不导入 Native，完成后的读取任务不常驻内存
+ok 3 - 清理期间迟到窗口不导入 Native，完成后的读取任务不常驻内存
+  ---
+  duration_ms: 1.175
+  ...
+# Subtest: 恢复草稿可被淘汰后重载，未确认提交和未落盘项保留
+ok 4 - 恢复草稿可被淘汰后重载，未确认提交和未落盘项保留
+  ---
+  duration_ms: 2.619708
+  ...
+# Subtest: 千行分页前插只产生一个批量插入事件，稳定对象的流式更新不重载
+ok 5 - 千行分页前插只产生一个批量插入事件，稳定对象的流式更新不重载
+  ---
+  duration_ms: 3.283375
+  ...
+# Subtest: 同名消息跨主机重载，同主机同ID新对象重新绑定
+ok 6 - 同名消息跨主机重载，同主机同ID新对象重新绑定
+  ---
+  duration_ms: 0.102333
+  ...
+# Subtest: 写入异常保留尚未落盘草稿，重新编辑可恢复写入且不让旧失败覆盖新稿
+ok 7 - 写入异常保留尚未落盘草稿，重新编辑可恢复写入且不让旧失败覆盖新稿
+  ---
+  duration_ms: 4.130333
+  ...
+# Subtest: 明确清空草稿期间的旧写入异常不复活已删除文字
+ok 8 - 明确清空草稿期间的旧写入异常不复活已删除文字
+  ---
+  duration_ms: 0.461375
+  ...
+# Subtest: 根页销毁时将尚在内存队列中的其他草稿交给持久化队列
+ok 9 - 根页销毁时将尚在内存队列中的其他草稿交给持久化队列
+  ---
+  duration_ms: 0.824
+  ...
+# Subtest: 消息数据源不能保留调用方可变数组：原地追加、前插和删除仍须通知列表
+ok 10 - 消息数据源不能保留调用方可变数组：原地追加、前插和删除仍须通知列表
+  ---
+  duration_ms: 0.437084
+  ...
+# Subtest: 空聊天数据源不会无限请求下一次布局
+ok 11 - 空聊天数据源不会无限请求下一次布局
+  ---
+  duration_ms: 0.091875
+  ...
+# Subtest: 旧凭据迁移在元信息写入失败时保留原 Asset，重试只产生一台主机
+ok 12 - 旧凭据迁移在元信息写入失败时保留原 Asset，重试只产生一台主机
+  ---
+  duration_ms: 148.822084
+  ...
+# Subtest: 迁移完成标志防止清空资料后旧 Asset 复活
+ok 13 - 迁移完成标志防止清空资料后旧 Asset 复活
+  ---
+  duration_ms: 82.603375
+  ...
+# Subtest: 两个主机的资料、当前选择及 Asset 独立，移除 A 不清 B
+ok 14 - 两个主机的资料、当前选择及 Asset 独立，移除 A 不清 B
+  ---
+  duration_ms: 44.454625
+  ...
+# Subtest: 资料写失败不会发布未保存快照，随后操作仍可成功
+ok 15 - 资料写失败不会发布未保存快照，随后操作仍可成功
+  ---
+  duration_ms: 41.638041
+  ...
+# Subtest: 并发主机写入排队，不丢失其他资料；外观设置可重新加载
+ok 16 - 并发主机写入排队，不丢失其他资料；外观设置可重新加载
+  ---
+  duration_ms: 36.065666
+  ...
+# Subtest: 相同会话 ID 的两台主机使用独立消息视图、问题和草稿
+ok 17 - 相同会话 ID 的两台主机使用独立消息视图、问题和草稿
+  ---
+  duration_ms: 34.752375
+  ...
+# Subtest: 审批经空快照和同rpc重放继续更新原Observed对象
+ok 18 - 审批经空快照和同rpc重放继续更新原Observed对象
+  ---
+  duration_ms: 130.653125
+  ...
+# Subtest: 问题经握手空快照重放仍更新原对象，移除项不留在可见列表
+ok 19 - 问题经握手空快照重放仍更新原对象，移除项不留在可见列表
+  ---
+  duration_ms: 63.089625
+  ...
+# Subtest: 失效交互对象缓存有界，不影响新的可见项
+ok 20 - 失效交互对象缓存有界，不影响新的可见项
+  ---
+  duration_ms: 45.378333
+  ...
+# Subtest: 代码围栏保护 TAB 与 CRLF，正文不改写且与私用字符不碰撞
+ok 21 - 代码围栏保护 TAB 与 CRLF，正文不改写且与私用字符不碰撞
+  ---
+  duration_ms: 82.279208
+  ...
+# Subtest: 长围栏中的短围栏不会提前解除代码保护，未闭合流式围栏也可保留
+ok 22 - 长围栏中的短围栏不会提前解除代码保护，未闭合流式围栏也可保留
+  ---
+  duration_ms: 28.982
+  ...
+# Subtest: 原生行内投影保留嵌套强调和链接语义，不执行 HTML
+ok 23 - 原生行内投影保留嵌套强调和链接语义，不执行 HTML
+  ---
+  duration_ms: 23.406709
+  ...
+# Subtest: 稳定块对象也会接收同原文的引用链接补全
+ok 24 - 稳定块对象也会接收同原文的引用链接补全
+  ---
+  duration_ms: 12.526416
+  ...
+# Subtest: 表格沿用词法树列对齐，包括未复制 align 属性的单元格
+ok 25 - 表格沿用词法树列对齐，包括未复制 align 属性的单元格
+  ---
+  duration_ms: 27.113708
+  ...
+# Subtest: 设置进入主机编辑后按真实来源逐级返回
+ok 26 - 设置进入主机编辑后按真实来源逐级返回
+  ---
+  duration_ms: 54.253041
+  ...
+# Subtest: 字号和目录分别成为独立目的页面
+ok 27 - 字号和目录分别成为独立目的页面
+  ---
+  duration_ms: 12.4395
+  ...
+# Subtest: 切换会话复用唯一聊天目的页并返回待处理入口
+ok 28 - 切换会话复用唯一聊天目的页并返回待处理入口
+  ---
+  duration_ms: 12.472083
+  ...
+# Subtest: 取消原生返回不清理认证，完成出栈只清理一次
+ok 29 - 取消原生返回不清理认证，完成出栈只清理一次
+  ---
+  duration_ms: 8.767917
+  ...
+# Subtest: 切换主机清空整个旧路径而不是留下可返回的旧上下文
+ok 30 - 切换主机清空整个旧路径而不是留下可返回的旧上下文
+  ---
+  duration_ms: 7.850709
+  ...
+# Subtest: 轨迹与内容详情逐级系统返回到原始聊天来源
+ok 31 - 轨迹与内容详情逐级系统返回到原始聊天来源
+  ---
+  duration_ms: 9.127542
+  ...
+# Subtest: 前台抑制、跨主机隔离与冷启持久去重
+ok 32 - 前台抑制、跨主机隔离与冷启持久去重
+  ---
+  duration_ms: 106.018958
+  ...
+# Subtest: 系统授权等待期间关闭，不发布迟到提醒
+ok 33 - 系统授权等待期间关闭，不发布迟到提醒
+  ---
+  duration_ms: 22.665167
+  ...
+# Subtest: WantAgent 准备期间移除主机，不复活该主机通知
+ok 34 - WantAgent 准备期间移除主机，不复活该主机通知
+  ---
+  duration_ms: 27.813333
+  ...
+# Subtest: 未获系统权限保持禁用，外部导航只接受有界标识
+ok 35 - 未获系统权限保持禁用，外部导航只接受有界标识
+  ---
+  duration_ms: 33.283834
+  ...
+# Subtest: 日期选择拒绝非法日，不将 2 月 29 日静默改为 3 月
+ok 36 - 日期选择拒绝非法日，不将 2 月 29 日静默改为 3 月
+  ---
+  duration_ms: 3.06175
+  ...
+# Subtest: 设备本地时间拒绝 DST 缺失小时，重复小时使用较早时刻
+ok 37 - 设备本地时间拒绝 DST 缺失小时，重复小时使用较早时刻
+  ---
+  duration_ms: 35.325792
+  ...
+# Subtest: 断开时尚未返回的 Asset 读取不能重新打开连接
+ok 38 - 断开时尚未返回的 Asset 读取不能重新打开连接
+  ---
+  duration_ms: 170.958
+  ...
+# Subtest: 旧连接回调不会污染新一代连接，主动断开不会重连
+ok 39 - 旧连接回调不会污染新一代连接，主动断开不会重连
+  ---
+  duration_ms: 79.115083
+  ...
+# Subtest: 无关错误不会撤销另一个请求的超时
+ok 40 - 无关错误不会撤销另一个请求的超时
+  ---
+  duration_ms: 56.323375
+  ...
+# Subtest: 前台恢复复用健康连接，无响应则重连而不重发消息
+ok 41 - 前台恢复复用健康连接，无响应则重连而不重发消息
+  ---
+  duration_ms: 43.218459
+  ...
+# Subtest: socket.send 返回 false 会关闭坏连接并安排重连
+ok 42 - socket.send 返回 false 会关闭坏连接并安排重连
+  ---
+  duration_ms: 39.833708
+  ...
+# Subtest: 草稿按会话保留，迟到确认只清原文且保留新输入
+ok 43 - 草稿按会话保留，迟到确认只清原文且保留新输入
+  ---
+  duration_ms: 33.030166
+  ...
+# Subtest: 身份校验失败后立即禁用业务操作并禁止自动重连
+ok 44 - 身份校验失败后立即禁用业务操作并禁止自动重连
+  ---
+  duration_ms: 32.089
+  ...
+# Subtest: 底层 connect 未返回时握手超时仍会关闭连接
+ok 45 - 底层 connect 未返回时握手超时仍会关闭连接
+  ---
+  duration_ms: 30.172625
+  ...
+# Subtest: 旧 ACK 不清除改成新文后又改回原文的草稿
+ok 46 - 旧 ACK 不清除改成新文后又改回原文的草稿
+  ---
+  duration_ms: 28.784916
+  ...
+# Subtest: 非致命错误执行 Native 状态重查，不重发消息；致命错误不发送任何恢复请求
+ok 47 - 非致命错误执行 Native 状态重查，不重发消息；致命错误不发送任何恢复请求
+  ---
+  duration_ms: 35.834875
+  ...
+# Subtest: 队列确认回填追加原文，保持另一会话与确认前的新输入，并使旧发送 ACK 失效
+ok 48 - 队列确认回填追加原文，保持另一会话与确认前的新输入，并使旧发送 ACK 失效
+  ---
+  duration_ms: 29.096875
+  ...
+# Subtest: 迟到命令替换同时校验文本和编辑版本，不能清除新稿或相同文本的再次输入
+ok 49 - 迟到命令替换同时校验文本和编辑版本，不能清除新稿或相同文本的再次输入
+  ---
+  duration_ms: 26.500875
+  ...
+# Subtest: 程序填充后的同值输入回调不再作为真实编辑，不会重新解释已选命令
+ok 50 - 程序填充后的同值输入回调不再作为真实编辑，不会重新解释已选命令
+  ---
+  duration_ms: 25.895917
+  ...
+# Subtest: 手动 Ping 必须等待经过共享校验的控制 pong，发送成功不能冒充响应
+ok 51 - 手动 Ping 必须等待经过共享校验的控制 pong，发送成功不能冒充响应
+  ---
+  duration_ms: 27.179958
+  ...
+# Subtest: Ping 无回包超时、发送失败及中途断开均不能返回成功
+ok 52 - Ping 无回包超时、发送失败及中途断开均不能返回成功
+  ---
+  duration_ms: 28.043667
+  ...
+# Subtest: 保留语义文案后切换语言即时重新解析
+ok 53 - 保留语义文案后切换语言即时重新解析
+  ---
+  duration_ms: 0.470125
+  ...
+# Subtest: 主机原文不按本地文案或占位符二次解释
+ok 54 - 主机原文不按本地文案或占位符二次解释
+  ---
+  duration_ms: 0.066666
+  ...
+# Subtest: 主干已使用的共享语义 key 均有鸿蒙中英翻译
+ok 55 - 主干已使用的共享语义 key 均有鸿蒙中英翻译
+  ---
+  duration_ms: 4.273
+  ...
+# Subtest: 参数中的占位符和百分号不被递归替换
+ok 56 - 参数中的占位符和百分号不被递归替换
+  ---
+  duration_ms: 0.120917
+  ...
+# Subtest: 导出租约在预览释放、预算淘汰和主机销毁后仍保护文件，最后一个租约仅删除一次
+ok 57 - 导出租约在预览释放、预算淘汰和主机销毁后仍保护文件，最后一个租约仅删除一次
+  ---
+  duration_ms: 110.792791
+  ...
+# Subtest: 已完成视图在预算内保留，淘汰后的传输不能重新获得租约
+ok 58 - 已完成视图在预算内保留，淘汰后的传输不能重新获得租约
+  ---
+  duration_ms: 41.10575
+  ...
+1..58
+# tests 58
+# suites 0
+# pass 58
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 829.177958

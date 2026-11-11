@@ -1,0 +1,10 @@
+[
+  {
+    "task": "P5-notification-routing-F",
+    "detail": "实际系统审批提醒隐私内容、A/B同sessionID点击回A正确会话、B草稿隔离、冷启重放无重复通知通过"
+  },
+  {
+    "task": "P5-notification-ended-disabled-F",
+    "detail": "实际任务结束通知点击定位，关闭通知撤销本应用提醒，后续后台审批不再发布通过"
+  }
+]

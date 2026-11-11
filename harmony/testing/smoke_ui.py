@@ -26,7 +26,7 @@ class UI:
     def __init__(self, folder):
         self.folder = folder
 
-    def nodes(self, system=False):
+    def nodes(self, system=False, include_offscreen=False):
         remote = '/data/local/tmp/whaleness-system.json' if system else '/data/local/tmp/whaleness-smoke.json'
         args = ['shell', 'uitest', 'dumpLayout', '-p', remote]
         if not system: args += ['-b', BUNDLE]
@@ -45,6 +45,7 @@ class UI:
                 for child in node:
                     walk(child)
         walk(json.loads(destination.read_text()))
+        if include_offscreen: return result
         visible = []
         for row in result:
             box = list(map(int, re.findall(r'-?\d+', row.get('bounds', ''))))
@@ -92,7 +93,11 @@ class UI:
                     return row, (bounds[0] + bounds[2]) // 2, (bounds[1] + bounds[3]) // 2
             if not scroll:
                 break
-            self.scroll(True)
+            hidden = next((r for r in reversed(self.nodes(include_offscreen=True)) if r.get(key) == value), None)
+            viewport = next((r for r in self.nodes() if r.get('type') in ['Scroll','List']), None)
+            original = list(map(int,re.findall(r'-?\d+', hidden.get('origBounds',hidden.get('bounds',''))))) if hidden else []
+            bounds = list(map(int,re.findall(r'-?\d+',viewport.get('bounds','')))) if viewport else []
+            self.scroll(not (len(original)==4 and len(bounds)==4 and original[1]<bounds[1]))
         raise AssertionError('控件不可点击：' + value)
 
     def click(self, value, key='id', scroll=False):
@@ -114,7 +119,7 @@ class UI:
                 if ready.startswith('settings-'): return self.control(ready, scroll=True)[0]
                 return self.wait(ready, timeout=3)
             except AssertionError:
-                if attempt or not self.find(value):
+                if attempt or value in ['page-back','conversation-back'] or not self.find(value):
                     raise
                 print('导航帧未就绪，重新确认原入口后再点击：' + value, flush=True)
                 time.sleep(0.8)

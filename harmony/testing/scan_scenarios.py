@@ -1,7 +1,10 @@
 """系统默认扫码入口的打开/取消；图像识码与Native校验由ScanProbe独立验证。"""
-import json,time
+import json,time,os
 
 def run(ui,m,folder,passed):
+    if os.environ.get('HARMONY_SCAN_GALLERY') == '1':
+        from scan_gallery_scenarios import run as gallery
+        return gallery(ui,m,folder,passed)
     ui.wait('home-settings');ui.navigate('home-auth','host-add');ui.navigate('host-add','gateway-payload')
     ui.input('gateway-endpoint','ws://127.0.0.1:18783/ws/mobile')
     ui.input('gateway-payload','scan-cancel-preserves-edit')

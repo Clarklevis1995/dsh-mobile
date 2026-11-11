@@ -1,0 +1,19 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-rdykn3by
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 session-session-fbd864db-f78a-4435-bcde-433d0940b670
+操作 history-older
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 370, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 314, in main
+    run(ui, m, folder, passed)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/real_scenarios.py", line 51, in run
+    restore(ui,m,folder,passed,call,session);return
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/real_history_restore_scenarios.py", line 29, in run
+    try:row=ui.wait(anchor_id,timeout=35)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/smoke_ui.py", line 67, in wait
+    raise AssertionError('未找到控件：' + value)
+AssertionError: 未找到控件：message-body-session-fbd864db-f78a-4435-bcde-433d0940b670-user-5d01c88d-b6f4-4ada-9bbd-af4baef85748

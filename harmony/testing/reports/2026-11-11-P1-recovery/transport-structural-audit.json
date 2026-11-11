@@ -1,0 +1,4452 @@
+[
+  {
+    "direction": "response",
+    "kind": "paired",
+    "channel": "control",
+    "time": 1794379502110
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "control",
+    "time": 1794379502110
+  },
+  {
+    "direction": "response",
+    "kind": "session-archives",
+    "channel": "control",
+    "time": 1794379502110
+  },
+  {
+    "direction": "response",
+    "kind": "session-queues",
+    "channel": "control",
+    "time": 1794379502110
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794379502110
+  },
+  {
+    "direction": "request",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379502125
+  },
+  {
+    "direction": "request",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379502125
+  },
+  {
+    "direction": "request",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379502125
+  },
+  {
+    "direction": "response",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379502127
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "conversation",
+    "time": 1794379502130
+  },
+  {
+    "direction": "response",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379502138
+  },
+  {
+    "direction": "response",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379502140
+  },
+  {
+    "direction": "request",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503987
+  },
+  {
+    "direction": "response",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503989
+  },
+  {
+    "direction": "request",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503992
+  },
+  {
+    "direction": "request",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-1",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503992
+  },
+  {
+    "direction": "request",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379503992
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-1",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503992
+  },
+  {
+    "direction": "request",
+    "kind": "subagents",
+    "requestId": "team-2",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503992
+  },
+  {
+    "direction": "request",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-1",
+    "channel": "control",
+    "time": 1794379503992
+  },
+  {
+    "direction": "request",
+    "kind": "speech-subscribe",
+    "requestId": "voice-c51a8653b1f3b552-2",
+    "channel": "control",
+    "time": 1794379503992
+  },
+  {
+    "direction": "request",
+    "kind": "subscribe",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379503992
+  },
+  {
+    "direction": "response",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503993
+  },
+  {
+    "direction": "response",
+    "kind": "speech-subscribed",
+    "requestId": "voice-c51a8653b1f3b552-2",
+    "channel": "control",
+    "time": 1794379503994
+  },
+  {
+    "direction": "response",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-1",
+    "channel": "control",
+    "time": 1794379503995
+  },
+  {
+    "direction": "response",
+    "kind": "error",
+    "requestId": "voice-c51a8653b1f3b552-2",
+    "channel": "control",
+    "time": 1794379503995
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-1",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503996
+  },
+  {
+    "direction": "response",
+    "kind": "subagents",
+    "requestId": "team-2",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503996
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-1",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503996
+  },
+  {
+    "direction": "response",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379503997
+  },
+  {
+    "direction": "response",
+    "kind": "subscribed",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379503997
+  },
+  {
+    "direction": "response",
+    "kind": "session-snapshot",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379503998
+  },
+  {
+    "direction": "request",
+    "kind": "models",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379503999
+  },
+  {
+    "direction": "response",
+    "kind": "models",
+    "channel": "control",
+    "time": 1794379504000
+  },
+  {
+    "direction": "request",
+    "kind": "permission-options",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379504015
+  },
+  {
+    "direction": "request",
+    "kind": "commands",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379504021
+  },
+  {
+    "direction": "request",
+    "kind": "context-usage",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379504021
+  },
+  {
+    "direction": "request",
+    "kind": "session-stats",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379504029
+  },
+  {
+    "direction": "response",
+    "kind": "permission-options",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379504029
+  },
+  {
+    "direction": "response",
+    "kind": "context-usage",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379504030
+  },
+  {
+    "direction": "response",
+    "kind": "session-stats",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379504030
+  },
+  {
+    "direction": "response",
+    "kind": "commands",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379504031
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-3",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512088
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379512089
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379512089
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512091
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379512092
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-3",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512092
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512092
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512092
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379512092
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379512092
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379512092
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512101
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512101
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512101
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379512101
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512105
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512307
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512508
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512709
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379512911
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379513112
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379513312
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379513514
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379513714
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379513916
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379514116
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379514318
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379514520
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379514720
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379514922
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379515122
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379515324
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379515525
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379515725
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379515927
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379516127
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379516329
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379516529
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379516731
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379516932
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379517133
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379517335
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379517536
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379517737
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379517938
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379518140
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379518342
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379518542
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "control",
+    "time": 1794379519569
+  },
+  {
+    "direction": "response",
+    "kind": "session-archives",
+    "channel": "control",
+    "time": 1794379519569
+  },
+  {
+    "direction": "response",
+    "kind": "session-queues",
+    "channel": "control",
+    "time": 1794379519569
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794379519570
+  },
+  {
+    "direction": "request",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379519578
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-3",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519578
+  },
+  {
+    "direction": "request",
+    "kind": "subagents",
+    "requestId": "team-4",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519579
+  },
+  {
+    "direction": "request",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379519579
+  },
+  {
+    "direction": "request",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379519579
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-3",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519580
+  },
+  {
+    "direction": "response",
+    "kind": "subagents",
+    "requestId": "team-4",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519580
+  },
+  {
+    "direction": "response",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379519581
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "conversation",
+    "time": 1794379519583
+  },
+  {
+    "direction": "response",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379519588
+  },
+  {
+    "direction": "response",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379519590
+  },
+  {
+    "direction": "request",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519593
+  },
+  {
+    "direction": "request",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519593
+  },
+  {
+    "direction": "request",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-2",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519593
+  },
+  {
+    "direction": "request",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379519593
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-5",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519593
+  },
+  {
+    "direction": "request",
+    "kind": "subscribe",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379519594
+  },
+  {
+    "direction": "response",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519596
+  },
+  {
+    "direction": "response",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519596
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-2",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519596
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-5",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379519596
+  },
+  {
+    "direction": "response",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379519597
+  },
+  {
+    "direction": "response",
+    "kind": "subscribed",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379519597
+  },
+  {
+    "direction": "response",
+    "kind": "session-snapshot",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379519598
+  },
+  {
+    "direction": "request",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-3",
+    "channel": "control",
+    "time": 1794379519606
+  },
+  {
+    "direction": "request",
+    "kind": "speech-subscribe",
+    "requestId": "voice-c51a8653b1f3b552-4",
+    "channel": "control",
+    "time": 1794379519606
+  },
+  {
+    "direction": "response",
+    "kind": "speech-subscribed",
+    "requestId": "voice-c51a8653b1f3b552-4",
+    "channel": "control",
+    "time": 1794379519607
+  },
+  {
+    "direction": "response",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-3",
+    "channel": "control",
+    "time": 1794379519607
+  },
+  {
+    "direction": "response",
+    "kind": "error",
+    "requestId": "voice-c51a8653b1f3b552-4",
+    "channel": "control",
+    "time": 1794379519607
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379519748
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379519949
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379520149
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379520350
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379520552
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379520752
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379520954
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379521155
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379521355
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379521557
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379521757
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379521959
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379522160
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379522360
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379522561
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379522761
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379522961
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379523163
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379523364
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379523566
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379523766
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379523967
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379524169
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379524370
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379524571
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379524771
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379524973
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379525174
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379525375
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379525576
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379525776
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379525978
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379526178
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379526380
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379526581
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379526783
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379526984
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379527184
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379527386
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379527587
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379527788
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379527990
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379528190
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379528392
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379528592
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379528794
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379528995
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379529197
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379529397
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379529599
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379529799
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379530001
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379530202
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379530402
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379530603
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379530805
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379531005
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379531207
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379531408
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379531610
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379531812
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379532012
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379532214
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379532414
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379532615
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379532817
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379533016
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379533218
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379533419
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379533619
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379533820
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379534020
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379534220
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379534421
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379534622
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379534823
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379535023
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379535224
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379535426
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379535626
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379535828
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379536029
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379536231
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379536432
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379536633
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379536835
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379537036
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379537237
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379537437
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379537639
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379537841
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379538041
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379538243
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379538445
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379538645
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379538847
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379539048
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379539250
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379539451
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "control",
+    "time": 1794379539606
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "conversation",
+    "time": 1794379539607
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "control",
+    "time": 1794379539607
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "conversation",
+    "time": 1794379539607
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379539653
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379539853
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379540055
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379540256
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379540457
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379540658
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379540860
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379541061
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379541261
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379541462
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379541663
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379541863
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379542065
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379542265
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379542467
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379542669
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379542870
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379543070
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379543271
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379543471
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379543672
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379543872
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379544074
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379544276
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379544477
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379544679
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379544880
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379545081
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379545281
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379545482
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379545683
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379545884
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379546084
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379546285
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379546486
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379546687
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379546889
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379547088
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379547290
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379547492
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379547693
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379547895
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379548095
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379548297
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379548497
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379548698
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379548899
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379549100
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379549300
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379549502
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379549702
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379549904
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379550105
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379550305
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379550506
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379550708
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379550908
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379551110
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379551311
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379551513
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379551713
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379551914
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379552114
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379552314
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379552314
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379552315
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379552316
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379552316
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379552316
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379552316
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379552316
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379552316
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379552316
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "control",
+    "time": 1794379559647
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "conversation",
+    "time": 1794379559647
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "control",
+    "time": 1794379559647
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "conversation",
+    "time": 1794379559647
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-6",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560165
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379560167
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379560167
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560168
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379560170
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-6",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560170
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560170
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560170
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379560170
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379560170
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379560170
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560179
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560180
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560180
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379560180
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560186
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560388
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560589
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560790
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379560991
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379561192
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379561392
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379561594
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379561795
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379561996
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379562197
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379562397
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379562598
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379562800
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379563001
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379563203
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379563404
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379563605
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379563807
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379564008
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379564209
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379564410
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379564611
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379564812
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379565013
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379565214
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379565415
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379565617
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379565817
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379566019
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379566220
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379566420
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379566622
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379566823
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379567023
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379567225
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "control",
+    "time": 1794379570373
+  },
+  {
+    "direction": "response",
+    "kind": "session-archives",
+    "channel": "control",
+    "time": 1794379570373
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794379570373
+  },
+  {
+    "direction": "request",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379570380
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-6",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379570380
+  },
+  {
+    "direction": "request",
+    "kind": "subagents",
+    "requestId": "team-7",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379570380
+  },
+  {
+    "direction": "request",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379570385
+  },
+  {
+    "direction": "request",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379570385
+  },
+  {
+    "direction": "response",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379570387
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "conversation",
+    "time": 1794379570390
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-6",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379570392
+  },
+  {
+    "direction": "response",
+    "kind": "subagents",
+    "requestId": "team-7",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379570392
+  },
+  {
+    "direction": "response",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379570398
+  },
+  {
+    "direction": "request",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379570401
+  },
+  {
+    "direction": "request",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379570401
+  },
+  {
+    "direction": "request",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-3",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379570401
+  },
+  {
+    "direction": "request",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379570401
+  },
+  {
+    "direction": "request",
+    "kind": "subscribe",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379570401
+  },
+  {
+    "direction": "response",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379570403
+  },
+  {
+    "direction": "response",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379570406
+  },
+  {
+    "direction": "response",
+    "kind": "subscribed",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379570406
+  },
+  {
+    "direction": "response",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379570409
+  },
+  {
+    "direction": "response",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379570410
+  },
+  {
+    "direction": "request",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-5",
+    "channel": "control",
+    "time": 1794379570411
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-3",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379570412
+  },
+  {
+    "direction": "response",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-5",
+    "channel": "control",
+    "time": 1794379570413
+  },
+  {
+    "direction": "response",
+    "kind": "session-snapshot",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379570414
+  },
+  {
+    "direction": "request",
+    "kind": "speech-subscribe",
+    "requestId": "voice-c51a8653b1f3b552-6",
+    "channel": "control",
+    "time": 1794379570418
+  },
+  {
+    "direction": "response",
+    "kind": "speech-subscribed",
+    "requestId": "voice-c51a8653b1f3b552-6",
+    "channel": "control",
+    "time": 1794379570419
+  },
+  {
+    "direction": "response",
+    "kind": "error",
+    "requestId": "voice-c51a8653b1f3b552-6",
+    "channel": "control",
+    "time": 1794379570419
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794379570484
+  },
+  {
+    "direction": "response",
+    "kind": "session-queues",
+    "channel": "control",
+    "time": 1794379570485
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-9",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379578984
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379578997
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379578998
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379578999
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379579000
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379579001
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579001
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379579004
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-9",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579004
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579004
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579004
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379579004
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379579004
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379579004
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579023
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579023
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579023
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379579023
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579023
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579028
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579028
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579029
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579029
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379579030
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579030
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579030
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579030
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379579030
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379579030
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379579030
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-10",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588197
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379588198
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379588199
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588200
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379588201
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-10",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588201
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588201
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588201
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379588201
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379588201
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379588201
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588210
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588210
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588210
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379588210
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588215
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588215
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588215
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588215
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379588216
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588216
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588216
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588216
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379588216
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379588216
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379588216
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "control",
+    "time": 1794379590417
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "conversation",
+    "time": 1794379590417
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "control",
+    "time": 1794379590417
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "conversation",
+    "time": 1794379590417
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "control",
+    "time": 1794379597065
+  },
+  {
+    "direction": "response",
+    "kind": "session-archives",
+    "channel": "control",
+    "time": 1794379597065
+  },
+  {
+    "direction": "response",
+    "kind": "session-queues",
+    "channel": "control",
+    "time": 1794379597065
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794379597065
+  },
+  {
+    "direction": "request",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379597080
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-8",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379597080
+  },
+  {
+    "direction": "request",
+    "kind": "subagents",
+    "requestId": "team-9",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379597080
+  },
+  {
+    "direction": "request",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379597080
+  },
+  {
+    "direction": "request",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379597080
+  },
+  {
+    "direction": "response",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379597084
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "conversation",
+    "time": 1794379597085
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-8",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379597088
+  },
+  {
+    "direction": "response",
+    "kind": "subagents",
+    "requestId": "team-9",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379597088
+  },
+  {
+    "direction": "response",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379597094
+  },
+  {
+    "direction": "response",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379597096
+  },
+  {
+    "direction": "request",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379597100
+  },
+  {
+    "direction": "request",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379597100
+  },
+  {
+    "direction": "request",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-4",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379597100
+  },
+  {
+    "direction": "request",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379597100
+  },
+  {
+    "direction": "request",
+    "kind": "subscribe",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379597100
+  },
+  {
+    "direction": "response",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379597103
+  },
+  {
+    "direction": "response",
+    "kind": "subscribed",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379597103
+  },
+  {
+    "direction": "response",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379597105
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-4",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379597105
+  },
+  {
+    "direction": "response",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379597105
+  },
+  {
+    "direction": "request",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-7",
+    "channel": "control",
+    "time": 1794379597106
+  },
+  {
+    "direction": "response",
+    "kind": "session-snapshot",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379597106
+  },
+  {
+    "direction": "response",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-7",
+    "channel": "control",
+    "time": 1794379597107
+  },
+  {
+    "direction": "request",
+    "kind": "speech-subscribe",
+    "requestId": "voice-c51a8653b1f3b552-8",
+    "channel": "control",
+    "time": 1794379597110
+  },
+  {
+    "direction": "response",
+    "kind": "speech-subscribed",
+    "requestId": "voice-c51a8653b1f3b552-8",
+    "channel": "control",
+    "time": 1794379597111
+  },
+  {
+    "direction": "response",
+    "kind": "error",
+    "requestId": "voice-c51a8653b1f3b552-8",
+    "channel": "control",
+    "time": 1794379597111
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-13",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606415
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606429
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606430
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606431
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606432
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606433
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606434
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606436
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-13",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606436
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606436
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606436
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606436
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606437
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606437
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606456
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606456
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606456
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606456
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606457
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606461
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606461
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606462
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606462
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606463
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606463
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606463
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606463
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379606463
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606463
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379606463
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379608316
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379608316
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379608316
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379608317
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-14",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615478
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379615479
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379615479
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615480
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379615481
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-14",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615482
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615482
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615482
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379615482
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379615482
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379615482
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615490
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615490
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615490
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379615490
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615490
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615494
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615494
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615495
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615496
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615496
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615496
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615496
+  },
+  {
+    "direction": "response",
+    "kind": "approval-requested",
+    "rpcId": "12f40547-3cb4-4c82-969f-1086587acb50",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379615501
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379615502
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "control",
+    "time": 1794379617108
+  },
+  {
+    "direction": "request",
+    "kind": "ping",
+    "channel": "conversation",
+    "time": 1794379617108
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "control",
+    "time": 1794379617109
+  },
+  {
+    "direction": "response",
+    "kind": "pong",
+    "channel": "conversation",
+    "time": 1794379617109
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "control",
+    "time": 1794379626793
+  },
+  {
+    "direction": "response",
+    "kind": "session-archives",
+    "channel": "control",
+    "time": 1794379626793
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794379626793
+  },
+  {
+    "direction": "request",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379626802
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-10",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379626802
+  },
+  {
+    "direction": "request",
+    "kind": "subagents",
+    "requestId": "team-11",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379626802
+  },
+  {
+    "direction": "request",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379626802
+  },
+  {
+    "direction": "request",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379626802
+  },
+  {
+    "direction": "response",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379626807
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "conversation",
+    "time": 1794379626809
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-10",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379626812
+  },
+  {
+    "direction": "response",
+    "kind": "subagents",
+    "requestId": "team-11",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379626813
+  },
+  {
+    "direction": "request",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379626818
+  },
+  {
+    "direction": "response",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379626820
+  },
+  {
+    "direction": "response",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379626823
+  },
+  {
+    "direction": "response",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379626824
+  },
+  {
+    "direction": "request",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379626828
+  },
+  {
+    "direction": "request",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-5",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379626828
+  },
+  {
+    "direction": "request",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379626828
+  },
+  {
+    "direction": "request",
+    "kind": "subscribe",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379626828
+  },
+  {
+    "direction": "response",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379626831
+  },
+  {
+    "direction": "response",
+    "kind": "subscribed",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379626831
+  },
+  {
+    "direction": "response",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379626833
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-5",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379626833
+  },
+  {
+    "direction": "response",
+    "kind": "session-snapshot",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379626834
+  },
+  {
+    "direction": "request",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-9",
+    "channel": "control",
+    "time": 1794379626842
+  },
+  {
+    "direction": "response",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-9",
+    "channel": "control",
+    "time": 1794379626843
+  },
+  {
+    "direction": "request",
+    "kind": "speech-subscribe",
+    "requestId": "voice-c51a8653b1f3b552-10",
+    "channel": "control",
+    "time": 1794379626877
+  },
+  {
+    "direction": "response",
+    "kind": "speech-subscribed",
+    "requestId": "voice-c51a8653b1f3b552-10",
+    "channel": "control",
+    "time": 1794379626879
+  },
+  {
+    "direction": "response",
+    "kind": "error",
+    "requestId": "voice-c51a8653b1f3b552-10",
+    "channel": "control",
+    "time": 1794379626879
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794379626906
+  },
+  {
+    "direction": "response",
+    "kind": "session-queues",
+    "channel": "control",
+    "time": 1794379626906
+  },
+  {
+    "direction": "request",
+    "kind": "message",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-17",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636332
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636346
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636347
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636348
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636349
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636350
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636351
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636353
+  },
+  {
+    "direction": "response",
+    "kind": "sent",
+    "requestId": "harmony-45a94e9ab2df166a75b835c8d006a894-17",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636353
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636353
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636353
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636353
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636353
+  },
+  {
+    "direction": "response",
+    "kind": "session-queue",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636353
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636373
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636374
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636374
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636374
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636374
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636380
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636380
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636380
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636380
+  },
+  {
+    "direction": "response",
+    "kind": "session-status",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636381
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636381
+  },
+  {
+    "direction": "response",
+    "kind": "assistant-stream",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636381
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636381
+  },
+  {
+    "direction": "response",
+    "kind": "event",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379636381
+  },
+  {
+    "direction": "response",
+    "kind": "turn-outline-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636382
+  },
+  {
+    "direction": "response",
+    "kind": "subagent-timing-updated",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379636382
+  },
+  {
+    "direction": "request",
+    "kind": "models",
+    "channel": "control",
+    "time": 1794379641083
+  },
+  {
+    "direction": "response",
+    "kind": "models",
+    "channel": "control",
+    "time": 1794379641085
+  },
+  {
+    "direction": "request",
+    "kind": "defaults",
+    "channel": "control",
+    "time": 1794379641097
+  },
+  {
+    "direction": "request",
+    "kind": "default-model",
+    "channel": "control",
+    "time": 1794379641097
+  },
+  {
+    "direction": "request",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379641097
+  },
+  {
+    "direction": "response",
+    "kind": "defaults",
+    "channel": "control",
+    "time": 1794379641099
+  },
+  {
+    "direction": "response",
+    "kind": "default-model",
+    "channel": "control",
+    "time": 1794379641099
+  },
+  {
+    "direction": "response",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379641100
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "control",
+    "time": 1794379655999
+  },
+  {
+    "direction": "response",
+    "kind": "session-archives",
+    "channel": "control",
+    "time": 1794379655999
+  },
+  {
+    "direction": "response",
+    "kind": "session-queues",
+    "channel": "control",
+    "time": 1794379655999
+  },
+  {
+    "direction": "response",
+    "kind": "projection-baseline",
+    "channel": "control",
+    "time": 1794379655999
+  },
+  {
+    "direction": "request",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379656006
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-12",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656009
+  },
+  {
+    "direction": "request",
+    "kind": "subagents",
+    "requestId": "team-13",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656009
+  },
+  {
+    "direction": "request",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379656009
+  },
+  {
+    "direction": "request",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379656009
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-12",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656010
+  },
+  {
+    "direction": "response",
+    "kind": "subagents",
+    "requestId": "team-13",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656010
+  },
+  {
+    "direction": "response",
+    "kind": "workspaces",
+    "channel": "control",
+    "time": 1794379656010
+  },
+  {
+    "direction": "response",
+    "kind": "hello",
+    "channel": "conversation",
+    "time": 1794379656011
+  },
+  {
+    "direction": "response",
+    "kind": "host",
+    "channel": "control",
+    "time": 1794379656013
+  },
+  {
+    "direction": "response",
+    "kind": "sessions",
+    "channel": "control",
+    "time": 1794379656016
+  },
+  {
+    "direction": "request",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656018
+  },
+  {
+    "direction": "request",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656018
+  },
+  {
+    "direction": "request",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-6",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656018
+  },
+  {
+    "direction": "request",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379656018
+  },
+  {
+    "direction": "request",
+    "kind": "agent-team",
+    "requestId": "team-14",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656018
+  },
+  {
+    "direction": "response",
+    "kind": "tasks",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656020
+  },
+  {
+    "direction": "response",
+    "kind": "goal",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656020
+  },
+  {
+    "direction": "request",
+    "kind": "subscribe",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379656020
+  },
+  {
+    "direction": "response",
+    "kind": "agent-team",
+    "requestId": "team-14",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656021
+  },
+  {
+    "direction": "response",
+    "kind": "session-agent-preset",
+    "requestId": "preset-state-6",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "control",
+    "time": 1794379656021
+  },
+  {
+    "direction": "response",
+    "kind": "agent-presets",
+    "channel": "control",
+    "time": 1794379656022
+  },
+  {
+    "direction": "response",
+    "kind": "subscribed",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379656022
+  },
+  {
+    "direction": "response",
+    "kind": "session-snapshot",
+    "sessionId": "session-834346bf-cf27-49fc-8bda-9991bf22c71e",
+    "channel": "conversation",
+    "time": 1794379656023
+  },
+  {
+    "direction": "request",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-11",
+    "channel": "control",
+    "time": 1794379656025
+  },
+  {
+    "direction": "response",
+    "kind": "speech-catalog",
+    "requestId": "voice-c51a8653b1f3b552-11",
+    "channel": "control",
+    "time": 1794379656026
+  },
+  {
+    "direction": "request",
+    "kind": "speech-subscribe",
+    "requestId": "voice-c51a8653b1f3b552-12",
+    "channel": "control",
+    "time": 1794379656035
+  },
+  {
+    "direction": "response",
+    "kind": "speech-subscribed",
+    "requestId": "voice-c51a8653b1f3b552-12",
+    "channel": "control",
+    "time": 1794379656036
+  },
+  {
+    "direction": "response",
+    "kind": "error",
+    "requestId": "voice-c51a8653b1f3b552-12",
+    "channel": "control",
+    "time": 1794379656036
+  }
+]

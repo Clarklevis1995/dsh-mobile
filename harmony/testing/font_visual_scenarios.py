@@ -9,7 +9,9 @@ def run(ui,m,folder,passed):
         ui.navigate('settings-style','appearance-'+theme);ui.choose('appearance-'+theme)
         ui.navigate('settings-font','font-follow-system');ui.text('代码');time.sleep(.4)
         name='font-'+theme+'-verified';ui.screenshot(name);rows=ui.nodes();(folder/(name+'-layout.json')).write_text(json.dumps(rows,ensure_ascii=False,indent=2))
-        image=Image.open(folder/(name+'.png')).convert('RGB');expected=(73,69,79) if theme=='light' else (202,196,208)
+        image=Image.open(folder/(name+'.png')).convert('RGB');background=(247,247,248) if theme=='light' else (13,17,24)
+        assert image.getpixel((20,50))==background and image.getpixel((20,image.height-70))==background,'字号页系统栏底色不匹配'
+        expected=(73,69,79) if theme=='light' else (202,196,208)
         for key in ['font-scale-value','font-scale-reset']:
             row=next(r for r in rows if r.get('id')==key);box=tuple(map(int,re.findall(r'-?\d+',row['bounds'])));colors=Counter(image.crop(box).getdata());assert colors[expected]>15,(theme,key,colors.most_common(5))
         row=next(r for r in rows if r.get('id')=='font-scale');box=tuple(map(int,re.findall(r'-?\d+',row['bounds'])));colors=Counter(image.crop(box).getdata());assert colors[(10,89,247)]<15,'滑块选中色仍被系统默认蓝覆盖'

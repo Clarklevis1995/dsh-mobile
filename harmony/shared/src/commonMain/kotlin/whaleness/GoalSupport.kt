@@ -6,7 +6,6 @@ import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import com.clarklevis.dsh.shared.protocol.GatewayGoalSnapshot
 import com.clarklevis.dsh.shared.protocol.GatewayTask
-import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put

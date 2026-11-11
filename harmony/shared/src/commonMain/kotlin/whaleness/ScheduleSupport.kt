@@ -135,7 +135,9 @@ internal class ScheduleSupport {
                     val editing = requireNotNull(editor) { "编辑已失效，请重新打开" }
                     require(command.requestKey == editing.first && key == editing.second && raw == editing.third) { "任务已变化，请返回列表后重新编辑" }
                     require(
-                        command.title.trim().isNotEmpty() && command.title.length <= 120 && command.text.trim().isNotEmpty() &&
+                        command.title.trim().isNotEmpty() &&
+                            command.title.length <= 120 &&
+                            command.text.trim().isNotEmpty() &&
                             command.text.length <= 100_000,
                     ) { "标题或任务内容为空或过长" }
                     GatewayRequests.scheduleUpdate(
@@ -222,7 +224,9 @@ internal class ScheduleSupport {
                 error = frame.message?.take(240) ?: "计划任务读取失败"
             }
 
-            frame.kind in setOf("schedule-update", "schedule-delete") && frame.kind == mutation?.requestType && frame.requestId != null &&
+            frame.kind in setOf("schedule-update", "schedule-delete") &&
+                frame.kind == mutation?.requestType &&
+                frame.requestId != null &&
                 frame.requestId == mutation?.correlationId -> {
                 if (frame.sessionId != null && frame.sessionId != mutationTask?.first) return null
                 val success = if (frame.kind == "schedule-update") frame.updated == true else frame.deleted == true
@@ -240,7 +244,9 @@ internal class ScheduleSupport {
                 return if (connected) refresh(true) else changed()
             }
 
-            frame.kind == "error" && frame.requestType == mutation?.requestType && frame.requestId != null &&
+            frame.kind == "error" &&
+                frame.requestType == mutation?.requestType &&
+                frame.requestId != null &&
                 frame.requestId == mutation?.correlationId -> {
                 editorError = frame.message?.take(240) ?: "计划任务操作失败"
                 notice = editorError
