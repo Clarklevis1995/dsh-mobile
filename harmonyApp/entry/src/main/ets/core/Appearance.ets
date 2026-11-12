@@ -89,6 +89,7 @@ export class Appearance {
   data: AppearanceData = new AppearanceData();
   systemDark: boolean = false;
   systemEnglish: boolean = false;
+  systemFontScale: number = 1;
   get english(): boolean { return this.data.language === 'en' || (this.data.language === 'system' && this.systemEnglish); }
   get dark(): boolean { return this.data.style === 'dark' || (this.data.style === 'system' && this.systemDark); }
   get bg(): string { return this.dark ? '#090D13' : '#F9FAFC'; }

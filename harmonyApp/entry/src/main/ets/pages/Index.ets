@@ -155,7 +155,6 @@ struct Index {
   private busy: boolean = false;
   private viewportWidth: number = 0;
   private viewportHeight: number = 0;
-  private systemFontScale: number = 1;
   private searchTimer: number = -1;
   private context?: common.UIAbilityContext;
   private appContext?: common.ApplicationContext;
@@ -219,7 +218,7 @@ struct Index {
   private configure(config: Configuration): void {
     this.a.systemDark = config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
     this.a.systemEnglish = i18n.System.getSystemLanguage().startsWith('en');
-    this.systemFontScale = config.fontSizeScale ?? 1; this.resize(); this.updateBars();
+    this.a.systemFontScale = config.fontSizeScale ?? 1; this.resize(); this.updateBars();
   }
   private applyColorMode(): void {
     // 应用级外观同步给原生菜单／对话框；不修改设备系统设置。
@@ -238,7 +237,7 @@ struct Index {
       statusBarContentColor: dark ? '#FFFFFF' : '#0E131A', navigationBarContentColor: dark ? '#FFFFFF' : '#0E131A' }).catch(() => {});
   }
   private resize(): void {
-    const scale = this.a.data.fontFollowsSystem ? this.systemFontScale : this.a.data.fontScale;
+    const scale = this.a.data.fontFollowsSystem ? this.a.systemFontScale : this.a.data.fontScale;
     this.wide = this.viewportWidth >= 900 && this.viewportHeight >= 500 && scale < 1.5;
   }
   private async initialize(): Promise<void> {

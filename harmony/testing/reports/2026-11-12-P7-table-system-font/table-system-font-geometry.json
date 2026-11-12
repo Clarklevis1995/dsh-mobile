@@ -1,0 +1,93 @@
+{
+  "standard": {
+    "名称": {
+      "width": 250,
+      "height": 82
+    },
+    "数量": {
+      "width": 250,
+      "height": 82
+    },
+    "鲸鱼": {
+      "width": 250,
+      "height": 84
+    },
+    "2": {
+      "width": 250,
+      "height": 70
+    },
+    "海豚": {
+      "width": 250,
+      "height": 82
+    },
+    "3": {
+      "width": 250,
+      "height": 70
+    },
+    "中文与 long_table_cell_that_wraps": {
+      "width": 824,
+      "height": 166
+    }
+  },
+  "hot": {
+    "名称": {
+      "width": 250,
+      "height": 120
+    },
+    "数量": {
+      "width": 250,
+      "height": 120
+    },
+    "鲸鱼": {
+      "width": 250,
+      "height": 122
+    },
+    "2": {
+      "width": 250,
+      "height": 101
+    },
+    "海豚": {
+      "width": 250,
+      "height": 120
+    },
+    "3": {
+      "width": 250,
+      "height": 101
+    },
+    "中文与 long_table_cell_that_wraps": {
+      "width": 824,
+      "height": 364
+    }
+  },
+  "fresh": {
+    "名称": {
+      "width": 250,
+      "height": 120
+    },
+    "数量": {
+      "width": 250,
+      "height": 120
+    },
+    "鲸鱼": {
+      "width": 250,
+      "height": 122
+    },
+    "2": {
+      "width": 250,
+      "height": 101
+    },
+    "海豚": {
+      "width": 250,
+      "height": 120
+    },
+    "3": {
+      "width": 250,
+      "height": 101
+    },
+    "中文与 long_table_cell_that_wraps": {
+      "width": 824,
+      "height": 364
+    }
+  },
+  "sameProcess": true
+}

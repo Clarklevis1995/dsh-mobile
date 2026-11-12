@@ -7,7 +7,7 @@ import { MarkdownText } from './MarkdownText';
 
 @Component
 export struct MarkdownTable {
-  @ObjectLink a: Appearance;
+  @ObjectLink @Watch('measure') a: Appearance;
   @ObjectLink @Watch('measure') block: MarkdownBlock;
   @Prop prefix: string = '';
   @Prop preview: boolean = false;

@@ -37,7 +37,8 @@ function rowHeight(a: Appearance, ui: UIContext, cells: MarkdownCell[], widths: 
   let height = 0;
   cells.forEach((cell, index) => {
     const size = ui.getMeasureUtils().measureTextSize({ textContent: cell.text || ' ', fontSize: a.font(17),
-      fontWeight: header ? FontWeight.Bold : FontWeight.Normal, lineHeight: a.font(24),
+      // MeasureOptions数值行高与Text的fp行框不同；显式fp以跟随真实系统字号。
+      fontWeight: header ? FontWeight.Bold : FontWeight.Normal, lineHeight: a.data.fontFollowsSystem ? '24fp' : a.font(24),
       constraintWidth: Math.max(1, (widths[index] ?? 96) - 24).toString() + 'vp' });
     height = Math.max(height, ui.px2vp(Number(size.height)));
   });
@@ -79,7 +80,7 @@ export struct TableCells {
 /** 横滚容器与惰性行共享列宽；只测量短表总高度，长表保持原生List虚拟化。 */
 @Component
 export struct TableReader {
-  @ObjectLink a: Appearance;
+  @ObjectLink @Watch('measure') a: Appearance;
   @Prop @Watch('load') source: string = '';
   @State private header: MarkdownCell[] = [];
   @State private naturalWidths: number[] = [];
@@ -131,6 +132,9 @@ export struct TableReader {
       this.data.reset(table.rows); this.count = table.rows.length;
     } catch (_) { if (this.alive && ticket === this.revision) { this.error = this.a.t('表格解析失败，可返回复制原文'); } }
     finally { if (this.alive && ticket === this.revision) { this.loading = false; } }
+  }
+  private measure(): void {
+    if (this.alive) { this.naturalWidths = tableWidths(this.a, this.getUIContext(), this.header, this.rows); }
   }
   private widths(): number[] { return fitTableWidths(this.naturalWidths, this.availableWidth); }
   private gridHeight(): number {

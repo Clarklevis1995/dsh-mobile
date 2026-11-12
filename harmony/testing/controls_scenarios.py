@@ -5,6 +5,9 @@ import os
 
 def run(ui, m, folder, passed):
     m.connect(ui)
+    if os.environ.get('HARMONY_CONTROL_START') == 'table-system-font':
+        from table_system_font_scenarios import run as table_fonts
+        return table_fonts(ui, m, folder, passed)
     if os.environ.get('HARMONY_CONTROL_START') == 'system-font':
         from system_font_scenarios import run as system_fonts
         system_fonts(ui,m,folder,passed);return

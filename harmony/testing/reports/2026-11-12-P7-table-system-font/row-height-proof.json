@@ -1,0 +1,22 @@
+{
+  "standard-before": [
+    168,
+    252,
+    168
+  ],
+  "maximum-hot": [
+    206,
+    450,
+    206
+  ],
+  "maximum-fresh": [
+    206,
+    450,
+    206
+  ],
+  "standard-restored": [
+    168,
+    252,
+    168
+  ]
+}

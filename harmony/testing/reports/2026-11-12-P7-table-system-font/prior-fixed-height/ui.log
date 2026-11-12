@@ -1,0 +1,28 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-3b2244ku
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 conversation-back
+操作 home-settings
+操作 settings-font
+操作 font-follow-system
+操作 page-back
+操作 page-back
+操作 session-harmony-rich
+输入 message-draft
+操作 message-body-harmony-rich-3-table-preview-0:table
+操作 page-back
+操作 message-body-harmony-rich-3-table-preview-0:table
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 440, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/product_ui.py", line 383, in main
+    run(ui, m, folder, passed)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/controls_scenarios.py", line 10, in run
+    return table_fonts(ui, m, folder, passed)
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/table_system_font_scenarios.py", line 130, in run
+    assert fresh['名称']['height']>baseline['名称']['height'], '最大字号表头高度没有放大'
+AssertionError: 最大字号表头高度没有放大
