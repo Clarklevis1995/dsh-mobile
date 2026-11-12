@@ -1,9 +1,7 @@
 package com.clarklevis.dsh.android.platform.devicetools
 
 import android.content.Context
-import android.content.Intent
 import android.location.Geocoder
-import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -12,7 +10,7 @@ import java.time.Instant
 import java.util.Locale
 import java.util.UUID
 
-internal class AndroidMapConnector(private val context: Context, private val storage: AndroidConnectorStorage, private val handoffs: AndroidConnectorHandoffs = AndroidConnectorHandoffs(context)) {
+internal class AndroidMapConnector(private val context: Context, private val storage: AndroidConnectorStorage) {
     suspend fun geocode(tool: String, args: JSONObject): JSONObject = withContext(Dispatchers.IO) {
         if (!Geocoder.isPresent()) throw ConnectorFailure("geocoder_unavailable")
         val coder = Geocoder(context, Locale.getDefault())
@@ -27,20 +25,16 @@ internal class AndroidMapConnector(private val context: Context, private val sto
         })).put("source", "android-geocoder").put("truncated", false)
     }
 
-    suspend fun open(request: JSONObject): JSONObject {
+    fun open(request: JSONObject): JSONObject {
         val args = request.getJSONObject("arguments")
         val (latitude, longitude) = args.coordinates()
         val name = if (args.has("name")) args.text("name", 200) else ""
         val mode = args.optString("mode", "show"); val transport = args.optString("transport", "driving")
         require(mode in listOf("show", "directions") && transport in listOf("driving", "walking", "transit"))
-        val uri = if (mode == "directions") Uri.Builder().scheme("https").authority("www.google.com").path("/maps/dir/")
-            .appendQueryParameter("api", "1").appendQueryParameter("destination", "$latitude,$longitude").appendQueryParameter("travelmode", transport).build()
-        else Uri.parse("geo:$latitude,$longitude?q=${Uri.encode("$latitude,$longitude($name)")}")
-        return storage.once(request) {
-            handoffs.prepare(request, Intent(Intent.ACTION_VIEW, uri), "map_app_unavailable")
-            JSONObject().put("status", "handoff-requested").put("latitude", latitude).put("longitude", longitude).put("name", name).put("mode", mode)
-                .also { if (mode == "directions") it.put("transport", transport) }
-        }
+        // 工具只准备地点数据；外部应用只能由用户点击聊天卡片后选择打开。
+        // 不读取旧跳转回执，避免把历史 handoff-requested 当作本次已安排跳转。
+        return JSONObject().put("status", "ready").put("latitude", latitude).put("longitude", longitude).put("name", name).put("mode", mode)
+            .also { if (mode == "directions") it.put("transport", transport) }
     }
 
     suspend fun markers(request: JSONObject): JSONObject {

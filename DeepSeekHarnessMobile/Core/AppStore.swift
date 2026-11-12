@@ -3035,10 +3035,7 @@ final class AppStore: ObservableObject {
             lastError = String(localized: "当前 Mobile Gateway 不支持图片，请升级并重启 dsh web。")
             return false
         }
-        guard gateway.prepareMessageTransport(text: trimmed, images: images) else {
-            lastError = String(localized: "正在切换到 WebSocket 以发送大消息，草稿已保留，请连接后重新发送。")
-            return false
-        }
+
         guard !sessionAgentPreset.blocksSending else { return false }
         if isShowingSearchContext { clearSearchContext(); conversationSearchTarget = nil }
         if !isViewingTeamMember, let command = kmpSlashCommandStore.commandExecutionForInput(text: trimmed) {
@@ -3882,6 +3879,11 @@ final class AppStore: ObservableObject {
 
     private func workspaceFileErrorMessage(_ code: String) -> String {
         switch code {
+        case "file-not-allowed": String(localized: "DSH 未允许读取此文件，请检查桌面端的文件访问权限。")
+        case "file-not-found": String(localized: "找不到此文件，可能已被移动或删除。")
+        case "file-changed": String(localized: "下载期间文件发生变化，请重新打开。")
+        case "file-too-large": String(localized: "文件超过网关允许的下载大小。")
+        case "file-unreadable": String(localized: "DSH 无法读取此文件，请检查桌面端文件是否可访问。")
         case "file-references-upgrade-required": String(localized: "此文件需要新版网关解析，请升级 Mobile Gateway。")
         case "file-download-integrity-failed": String(localized: "文件完整性校验失败，请重新下载。")
         case "download-busy": String(localized: "已有文件正在下载，请稍后再试。")

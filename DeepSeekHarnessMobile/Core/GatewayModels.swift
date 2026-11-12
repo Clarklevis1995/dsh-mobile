@@ -823,7 +823,7 @@ struct WorkspaceFilePreviewRequest: Identifiable, Equatable {
     let id = UUID()
     let sessionID: String
     let path: String
-    var name: String { (path as NSString).lastPathComponent }
+    var name: String { (path.replacingOccurrences(of: "\\", with: "/") as NSString).lastPathComponent }
 }
 
 struct WorkspaceLocalFile: Identifiable, Equatable {

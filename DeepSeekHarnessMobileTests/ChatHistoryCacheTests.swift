@@ -3,6 +3,31 @@ import DeepSeekHarnessShared
 @testable import DeepSeekHarnessMobile
 
 final class ChatHistoryCacheTests: XCTestCase {
+    func testLazyRoomOpenFailureCrossesSwiftBoundaryWithoutTerminatingProcess() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // 工厂可以返回惰性 Room 实例；直到第一次查询才发现数据库路径是目录。
+        let service = try IosChatHistoryCacheFactory().create(path: directory.path,
+            maximumBytes: 2 * 1024 * 1024, targetBytes: 1024 * 1024)
+        do {
+            _ = try await service.statistics()
+            XCTFail("目录不能被作为 SQLite 数据库打开")
+        } catch {
+            XCTAssertNotNil(error as NSError)
+        }
+        do {
+            try await service.clear(gatewayId: nil)
+            XCTFail("清理操作的数据库打开错误必须传递给 Swift")
+        } catch {
+            XCTAssertNotNil(error as NSError)
+        }
+        try await service.close()
+        let cache = ChatHistoryCache(url: directory)
+        let statistics = await cache.statistics()
+        XCTAssertNil(statistics, "缓存不可用时平台降级，不能结束进程")
+        await cache.close()
+    }
+
     @MainActor
     func testSubscriptionAndEmptyQueueDoNotForceCachedHistoryOntoMainThread() async throws {
         let directory = try makeDirectory()

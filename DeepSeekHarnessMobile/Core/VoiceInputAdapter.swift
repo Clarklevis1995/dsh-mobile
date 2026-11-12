@@ -267,9 +267,10 @@ final class IOSVoiceRecorder: VoiceAudioCapturing, @unchecked Sendable {
             self.requestedAt = requestedAt
         }
     }
-    private let engine: AVAudioEngine
+    private var engine: AVAudioEngine
+    private var tapInstalled = false
     private var capture: Capture?
-    private var notification: NSObjectProtocol?
+    private var captureObservers: [NSObjectProtocol] = []
     private let sessionStateLock = NSLock()
     private var sessionPrepared = false
     private var sessionObservers: [NSObjectProtocol] = []
@@ -283,7 +284,9 @@ final class IOSVoiceRecorder: VoiceAudioCapturing, @unchecked Sendable {
         }
     }
 
-    deinit { for observer in sessionObservers { NotificationCenter.default.removeObserver(observer) } }
+    deinit {
+        for observer in sessionObservers + captureObservers { NotificationCenter.default.removeObserver(observer) }
+    }
 
     private func invalidateSessionPreparation() {
         sessionStateLock.lock(); sessionPrepared = false; sessionStateLock.unlock()
@@ -306,33 +309,49 @@ final class IOSVoiceRecorder: VoiceAudioCapturing, @unchecked Sendable {
 
     func prepare() throws {
         guard capture == nil else { return }
-        do { try prepareSession() }
-        catch { release(); throw error }
-        // I/O 节点按需创建；空引擎 prepare 会抛出 Swift try? 无法捕获的 NSException。
-        let input = engine.inputNode
-        let hardwareFormat = input.inputFormat(forBus: 0)
-        guard hardwareFormat.sampleRate > 0, hardwareFormat.channelCount > 0 else { release(); return }
-        engine.prepare()
+        do {
+            try prepareSession()
+            try performVoiceAudioOperation {
+                let input = engine.inputNode
+                let hardwareFormat = input.inputFormat(forBus: 0)
+                guard hardwareFormat.sampleRate > 0, hardwareFormat.channelCount > 0 else {
+                    throw NSError(domain: "VoiceRecorder", code: 1)
+                }
+                engine.prepare()
+            }
+        } catch { release(); engine = AVAudioEngine(); throw error }
     }
 
     func release() {
         if let old = capture { _ = try? stop(id: old.id, discard: true) }
-        engine.stop()
-        engine.reset()
+        try? performVoiceAudioOperation { engine.stop(); engine.reset() }
         // 切回文字输入或离开页面后，让系统听写和其他音频会话恢复。
         invalidateSessionPreparation()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     func start(id: String, ready: @escaping @Sendable () -> Void, level: @escaping @Sendable (Float) -> Void, failure: @escaping @Sendable () -> Void) throws {
+        do {
+            try startCapture(id: id, ready: ready, level: level, failure: failure)
+        } catch {
+            release()
+            // 安装失败后系统音频图可能只配置了一半，不能继续复用。
+            engine = AVAudioEngine()
+            throw error
+        }
+    }
+
+    private func startCapture(id: String, ready: @escaping @Sendable () -> Void, level: @escaping @Sendable (Float) -> Void, failure: @escaping @Sendable () -> Void) throws {
         let requestedAt = ProcessInfo.processInfo.systemUptime
         if let old = capture { _ = try? stop(id: old.id, discard: true) }
         let session = AVAudioSession.sharedInstance()
         do { try prepareSession() }
         catch { release(); throw error }
-        let input = engine.inputNode
-        let source = input.outputFormat(forBus: 0)
+        let input = try performVoiceAudioOperation { engine.inputNode }
+        let source = try performVoiceAudioOperation { input.outputFormat(forBus: 0) }
+        let hardware = try performVoiceAudioOperation { input.inputFormat(forBus: 0) }
         guard source.sampleRate > 0, source.channelCount > 0,
+              source.sampleRate == hardware.sampleRate, source.channelCount == hardware.channelCount,
               let target = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true),
               let converter = AVAudioConverter(from: source, to: target) else {
             invalidateSessionPreparation()
@@ -341,39 +360,50 @@ final class IOSVoiceRecorder: VoiceAudioCapturing, @unchecked Sendable {
         }
         let current = Capture(id: id, converter: converter, format: target, requestedAt: requestedAt)
         capture = current
-        input.installTap(onBus: 0, bufferSize: AVAudioFrameCount(max(128, source.sampleRate * Double(VoiceInputInteraction.shared.CAPTURE_WINDOW_MILLISECONDS) / 1000)), format: source) { buffer, _ in
-            current.lock.lock()
-            defer { current.lock.unlock() }
-            guard !current.stopped else { return }
-            let capacity = AVAudioFrameCount(ceil(Double(buffer.frameLength) * 16000 / source.sampleRate) + 64)
-            guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { failure(); return }
-            var supplied = false
-            var error: NSError?
-            let status = converter.convert(to: output, error: &error) { _, inputStatus in
-                if supplied { inputStatus.pointee = .noDataNow; return nil }
-                supplied = true; inputStatus.pointee = .haveData; return buffer
+        try performVoiceAudioOperation {
+            input.installTap(onBus: 0, bufferSize: AVAudioFrameCount(max(128, source.sampleRate * Double(VoiceInputInteraction.shared.CAPTURE_WINDOW_MILLISECONDS) / 1000)), format: source) { buffer, _ in
+                current.lock.lock()
+                defer { current.lock.unlock() }
+                guard !current.stopped else { return }
+                let capacity = AVAudioFrameCount(ceil(Double(buffer.frameLength) * 16000 / source.sampleRate) + 64)
+                guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { failure(); return }
+                var supplied = false
+                var error: NSError?
+                let status = converter.convert(to: output, error: &error) { _, inputStatus in
+                    if supplied { inputStatus.pointee = .noDataNow; return nil }
+                    supplied = true; inputStatus.pointee = .haveData; return buffer
+                }
+                guard status != .error, error == nil, let samples = output.int16ChannelData?[0] else { failure(); return }
+                let count = Int(output.frameLength)
+                guard count > 0 else { return }
+                // 定时停止与末尾采样可能交错；保留上限内的音频，不丢弃整段录音。
+                let retainedBytes = min(count * 2, Int(VoiceAudioFormat.shared.MAX_CAPTURE_BYTES) - current.bytes.count)
+                current.bytes.append(UnsafeRawPointer(samples).assumingMemoryBound(to: UInt8.self), count: retainedBytes)
+                if !current.reportedReady {
+                    current.reportedReady = true
+                    traceVoiceInputLatency("first-pcm", since: current.requestedAt)
+                }
+                var energy: Double = 0
+                for index in 0..<count { let value = Double(samples[index]) / 32768; energy += value * value }
+                level(Float(sqrt(energy / Double(count))))
             }
-            guard status != .error, error == nil, let samples = output.int16ChannelData?[0] else { failure(); return }
-            let count = Int(output.frameLength)
-            guard count > 0 else { return }
-            // 定时停止与末尾采样可能交错；保留上限内的音频，不丢弃整段录音。
-            let retainedBytes = min(count * 2, Int(VoiceAudioFormat.shared.MAX_CAPTURE_BYTES) - current.bytes.count)
-            current.bytes.append(UnsafeRawPointer(samples).assumingMemoryBound(to: UInt8.self), count: retainedBytes)
-            if !current.reportedReady {
-                current.reportedReady = true
-                traceVoiceInputLatency("first-pcm", since: current.requestedAt)
-            }
-            var energy: Double = 0
-            for index in 0..<count { let value = Double(samples[index]) / 32768; energy += value * value }
-            level(Float(sqrt(energy / Double(count))))
         }
-        notification = NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { _ in failure() }
+        tapInstalled = true
+        for name in [AVAudioSession.interruptionNotification, AVAudioSession.routeChangeNotification,
+                     AVAudioSession.mediaServicesWereResetNotification] {
+            captureObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: nil) { _ in
+                current.lock.lock()
+                let active = !current.stopped
+                current.lock.unlock()
+                if active { failure() }
+            })
+        }
         do {
             let prepareStartedAt = ProcessInfo.processInfo.systemUptime
-            engine.prepare()
+            try performVoiceAudioOperation { engine.prepare() }
             traceVoiceInputLatency("engine-prepare", since: prepareStartedAt)
             let engineStartedAt = ProcessInfo.processInfo.systemUptime
-            try engine.start()
+            try performVoiceAudioOperation { try engine.start() }
             guard engine.isRunning else { throw NSError(domain: "VoiceRecorder", code: 6) }
             traceVoiceInputLatency("engine-start", since: engineStartedAt)
             // start 成功后音频已流入 tap 的系统缓冲；不用等第一批 PCM 或转换器输出才反馈。
@@ -385,9 +415,18 @@ final class IOSVoiceRecorder: VoiceAudioCapturing, @unchecked Sendable {
         guard let current = capture, current.id == id else { return nil }
         capture = nil
         current.lock.lock(); current.stopped = true; current.lock.unlock()
-        engine.inputNode.removeTap(onBus: 0); engine.stop()
-        if let notification { NotificationCenter.default.removeObserver(notification) }
-        notification = nil
+        // 清理不能依赖安装是否成功；失败也必须移除 observer 并释放 session。
+        var cleanupError: Error?
+        if tapInstalled {
+            do { try performVoiceAudioOperation { engine.inputNode.removeTap(onBus: 0) } }
+            catch { cleanupError = error }
+        }
+        tapInstalled = false
+        do { try performVoiceAudioOperation { engine.stop() } }
+        catch { cleanupError = cleanupError ?? error }
+        if cleanupError != nil { engine = AVAudioEngine() }
+        captureObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        captureObservers.removeAll()
         // 停止后即释放音频会话；转换失败、取消也必须执行。
         defer {
             invalidateSessionPreparation()
@@ -395,11 +434,21 @@ final class IOSVoiceRecorder: VoiceAudioCapturing, @unchecked Sendable {
         }
         current.lock.lock(); defer { current.lock.unlock() }
         guard !discard else { return nil }
+        if let cleanupError { throw cleanupError }
         let tail = try finishVoicePCMConversion(current.converter, format: current.format)
         let remainingBytes = Int(VoiceAudioFormat.shared.MAX_CAPTURE_BYTES) - current.bytes.count
         current.bytes.append(tail.prefix(remainingBytes))
         return current.bytes
     }
+}
+
+/// 仅包围音频系统调用；同时保留 Swift Error 和 Objective-C NSException 的失败语义。
+func performVoiceAudioOperation<T>(_ operation: () throws -> T) throws -> T {
+    var result: Result<T, Error>?
+    if let exception = DSHCatchVoiceAudioException({ result = Result { try operation() } }) {
+        throw exception
+    }
+    return try result!.get()
 }
 
 

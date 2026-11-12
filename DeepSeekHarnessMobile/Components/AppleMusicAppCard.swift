@@ -111,13 +111,31 @@ struct AppLinkCard: View {
                 Image(systemName: "arrow.up.right").font(.body.weight(.medium)).foregroundStyle(.secondary)
             }
             .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(uiColor: .secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color(uiColor: .separator).opacity(0.35), lineWidth: 0.5))
+            .modifier(AppLinkCardSurface())
             .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text([name, detail, secondaryDetail, subtitle].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "，")))
+    }
+}
+
+/// iOS 26 使用原生交互玻璃；旧系统及“降低透明度”保留清晰的中性底色。
+private struct AppLinkCardSurface: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        if #available(iOS 26.0, *), !reduceTransparency {
+            content
+                .glassEffect(
+                    .regular.tint(Color(uiColor: .secondarySystemBackground).opacity(0.45)).interactive(),
+                    in: shape
+                )
+        } else {
+            content
+                .background(Color(uiColor: .secondarySystemBackground), in: shape)
+                .overlay(shape.strokeBorder(Color(uiColor: .separator).opacity(0.35), lineWidth: 0.5))
+        }
     }
 }

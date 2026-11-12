@@ -1,0 +1,35 @@
+<?xml version='1.0' encoding='utf-8'?>
+<vector xmlns:aapt="http://schemas.android.com/aapt" xmlns:android="http://schemas.android.com/apk/res/android" android:width="38dp" android:height="38dp" android:viewportWidth="256" android:viewportHeight="256">
+  <group>
+    <group>
+      <clip-path android:pathData="M198 0H58C25.9675 0 0 25.9675 0 58V198C0 230.033 25.9675 256 58 256H198C230.033 256 256 230.033 256 198V58C256 25.9675 230.033 0 198 0Z" />
+      <path android:pathData="M198 0H58C25.9675 0 0 25.9675 0 58V198C0 230.033 25.9675 256 58 256H198C230.033 256 256 230.033 256 198V58C256 25.9675 230.033 0 198 0Z">
+        <aapt:attr name="android:fillColor">
+          <gradient android:type="linear" android:startX="30" android:startY="-1.53109e-06" android:endX="220" android:endY="256">
+            <item android:offset="0" android:color="#FFFAFBF5" />
+            <item android:offset="1" android:color="#FFEAEDE4" />
+          </gradient>
+        </aapt:attr>
+      </path>
+      <path android:pathData="M0 0H91V83H0V0Z" android:fillColor="#FFC6DEB1" />
+      <path android:pathData="M0 174H66V256H0V174Z" android:fillColor="#FFC0DCA9" />
+      <path android:pathData="M111 183H161V256H111V183Z" android:fillColor="#FFD3E5BD" />
+      <path android:pathData="M204 0H256V256H190C178 229 180 207 191 181C204 150 213 131 204 102C193 68 188 34 204 0Z" android:fillColor="#FFB7DFF0" />
+      <path android:pathData="M204 0C188 34 193 68 204 102C213 131 204 150 191 181C180 207 178 229 190 256" android:fillColor="#00000000" android:strokeColor="#FFDCEEF1" android:strokeWidth="5" android:strokeLineCap="butt" android:strokeLineJoin="miter" />
+      <path android:pathData="M98 0V115M98 144V256" android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="14" android:strokeLineCap="butt" android:strokeLineJoin="miter" />
+      <path android:pathData="M0 89H199M0 178H192" android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="12" android:strokeLineCap="butt" android:strokeLineJoin="miter" />
+      <path android:pathData="M-9 237L265 27" android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="17" android:strokeLineCap="butt" android:strokeLineJoin="miter" />
+      <path android:pathData="M128 174C152.301 174 172 154.301 172 130C172 105.699 152.301 86 128 86C103.699 86 84 105.699 84 130C84 154.301 103.699 174 128 174Z" android:fillColor="#FF527B91" android:fillAlpha="0.13" />
+      <path android:pathData="M128 169C150.644 169 169 150.644 169 128C169 105.356 150.644 87 128 87C105.356 87 87 105.356 87 128C87 150.644 105.356 169 128 169Z" android:strokeColor="#FFFFFFFF" android:strokeWidth="4" android:strokeLineCap="butt" android:strokeLineJoin="miter">
+        <aapt:attr name="android:fillColor">
+          <gradient android:type="linear" android:startX="128" android:startY="87" android:endX="128" android:endY="169">
+            <item android:offset="0" android:color="#FF248BFA" />
+            <item android:offset="1" android:color="#FF0874E8" />
+          </gradient>
+        </aapt:attr>
+      </path>
+      <path android:pathData="M128 102C128.7 102 129.3 102.5 129.7 103.5L148 148C148.8 150 147.2 151.3 145.5 150.3L128 140L110.5 150.3C108.8 151.3 107.2 150 108 148L126.3 103.5C126.7 102.5 127.3 102 128 102Z" android:fillColor="#FFFFFFFF" />
+      <path android:pathData="M198 1H58C26.5198 1 1 26.5198 1 58V198C1 229.48 26.5198 255 58 255H198C229.48 255 255 229.48 255 198V58C255 26.5198 229.48 1 198 1Z" android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeAlpha="0.6" android:strokeWidth="2" android:strokeLineCap="butt" android:strokeLineJoin="miter" />
+    </group>
+  </group>
+</vector>

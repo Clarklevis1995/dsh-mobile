@@ -202,6 +202,60 @@ internal fun prepareMarkdownMath(source: String, forSelection: Boolean = false):
     return result.toString()
 }
 
+/** 保留公式编号与颜色语义；兼容 iOS 字符别名，不删除未知指令。 */
+internal fun compatibleMathLatex(source: String): String {
+    fun argument(at: Int): Pair<String, Int>? {
+        var start = at
+        while (start < source.length && source[start].isWhitespace()) start++
+        if (start >= source.length || source[start] != '{') return null
+        var depth = 1
+        var end = start + 1
+        while (end < source.length) {
+            if (source[end] == '\\') { end += 2; continue }
+            if (source[end] == '{') depth++
+            if (source[end] == '}' && --depth == 0) return source.substring(start + 1, end) to end + 1
+            end++
+        }
+        return null
+    }
+    val aliases = mapOf("angstrom" to "Å", "cc" to "ç", "CC" to "Ç", "lbar" to "ƛ", "upquote" to "'")
+    val body = StringBuilder()
+    val tags = StringBuilder()
+    var index = 0
+    while (index < source.length) {
+        if (source[index] != '\\') { body.append(source[index++]); continue }
+        if (source.startsWith("\\>", index)) { body.append("\\:"); index += 2; continue }
+        var end = index + 1
+        while (end < source.length && source[end].isLetter()) end++
+        val command = source.substring(index + 1, end)
+        val commandAlias = mapOf("bm" to "boldsymbol", "mathbfit" to "boldsymbol", "mit" to "mathit")[command]
+        if (commandAlias != null) { body.append('\\').append(commandAlias); index = end; continue }
+        if (command == "tag") {
+            val starred = end < source.length && source[end] == '*'
+            val arg = argument(end + if (starred) 1 else 0)
+            if (arg != null) {
+                tags.append("\\qquad\\mathrm{").append(if (starred) arg.first else "(${arg.first})").append('}')
+                index = arg.second
+                continue
+            }
+        }
+        val alias = aliases[command]
+        if (alias != null) { body.append("\\text{").append(alias).append('}'); index = end; continue }
+        if (command == "color") {
+            val color = argument(end)
+            if (color != null && argument(color.second) != null) {
+                body.append("\\textcolor")
+                index = end
+                continue
+            }
+        }
+        if (end == index + 1) end = minOf(end + 1, source.length)
+        body.append(source, index, end)
+        index = end
+    }
+    return body.append(tags).toString()
+}
+
 internal data class DshMathImage(val bitmap: Bitmap, val baseline: Float)
 private data class MathImageKey(val formula: DshMathFormula, val size: Float, val color: Int)
 private data class MathImageResult(val image: DshMathImage?)
@@ -222,7 +276,7 @@ internal object DshMathRenderer {
         val key = MathImageKey(formula, size, color)
         cache.get(key)?.let { return it.image }
         val image = runCatching {
-            val latex = formula.latex.replace('｛', '{').replace('｝', '}')
+            val latex = compatibleMathLatex(formula.latex.replace('｛', '{').replace('｝', '}'))
             val icon = TeXFormula(latex).TeXIconBuilder().setSize(size)
                 .setStyle(if (formula.display) TeXConstants.STYLE_DISPLAY else TeXConstants.STYLE_TEXT)
                 .setFGColor(Color(color)).build()

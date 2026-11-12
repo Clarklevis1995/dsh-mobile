@@ -47,7 +47,7 @@ struct RootView: View {
         let entries = store.sessions.filter { $0.isVisibleInHistory && !store.isSubagentSession($0.id) }.map { session in
             let workspace = store.workspaces.first { $0.sessionIds.contains(session.id) }
             return SharedConversation(gatewayID: store.gatewayLocalID, sessionID: session.id,
-                title: session.title, workspace: workspace.map { $0.title.isEmpty ? $0.path : $0.title } ?? "未分组",
+                title: session.title, workspace: workspace.map { $0.title.isEmpty ? $0.path : $0.title } ?? String(localized: "未分组"),
                 workspaceID: workspace?.id)
         }
         ShareInbox.updateCatalog(gatewayID: store.gatewayLocalID, conversations: entries)
@@ -206,7 +206,7 @@ private struct RootNavigationHost: View, Equatable {
             guard await store.prepareNewConversation(useDefaultWorkspace: true), !Task.isCancelled,
                   let sessionID = store.selectedSessionId else { return }
             let target = SharedConversation(gatewayID: store.gatewayLocalID, sessionID: sessionID,
-                title: "新会话", workspace: "默认工作区")
+                title: String(localized: "新会话"), workspace: String(localized: "默认工作区"))
             do { try shares.resolveNewConversation(draft, to: target) }
             catch { store.lastError = error.localizedDescription; return }
             routedShareID = draft.id

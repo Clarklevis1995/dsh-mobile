@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.graphics.shadow.Shadow as ComposeShadow
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -83,7 +85,32 @@ internal enum class DshGlassStyle(
     CARD(5f, 14f, 23f, 0.005f, 0.20f, 20f, saturation = 0.72f),
     ACTION(5f, 16f, 26f, 0.012f, 0.26f, 22f, saturation = 0.74f, navyTintAlpha = 0.06f),
     FIELD(5f, 10f, 16f, 0.060f, 0.10f, 14f, saturation = 0.72f),
-    SUBTLE(4f, 8f, 13f, 0.040f, 0.10f, 12f, saturation = 0.72f)
+    SUBTLE(4f, 8f, 13f, 0.040f, 0.10f, 12f, saturation = 0.72f),
+    APP_CARD(8f, 3f, 5f, 0.020f, 0.20f, 6f, saturation = 1f)
+}
+
+/** 聊天应用卡片使用中性着色和轻折射，避免首页的深蓝底色影响正文。 */
+@Composable
+internal fun Modifier.dshAppCardGlass(shape: Shape, dark: Boolean): Modifier {
+    val surface = if (dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
+    val rim = Color(0xFF8E8E93)
+    if (LocalUiEffectsReduced.current) {
+        return background(surface, shape)
+            .border(0.5.dp, rim.copy(alpha = 0.30f), shape)
+            .clip(shape)
+    }
+    return dshOuterShadow(shape, ComposeShadow(
+        radius = 6.dp, color = Color.Black.copy(alpha = if (dark) 0.20f else 0.07f),
+        offset = DpOffset(0.dp, 2.dp)
+    ))
+        .dshLiquidGlass(shape, DshGlassStyle.APP_CARD, shadowsEnabled = false)
+        .background(surface.copy(alpha = 0.72f), shape)
+        .border(0.5.dp, Brush.verticalGradient(listOf(
+            Color.White.copy(alpha = if (dark) 0.24f else 0.95f),
+            rim.copy(alpha = if (dark) 0.26f else 0.20f),
+            rim.copy(alpha = if (dark) 0.36f else 0.32f)
+        )), shape)
+        .clip(shape)
 }
 
 @Composable

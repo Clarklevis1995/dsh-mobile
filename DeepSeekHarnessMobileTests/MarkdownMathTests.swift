@@ -10,6 +10,32 @@ import MarkdownUI
 
 @MainActor
 final class MarkdownMathTests: XCTestCase {
+    func testCompleteRegisteredSymbolAndStructuralCorpus() throws {
+        struct Case: Decodable { let id: String; let latex: String; let category: String }
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "latex-math", withExtension: "json"))
+        let cases = try JSONDecoder().decode([Case].self, from: Data(contentsOf: url))
+        var failed = Set<String>()
+        for item in cases {
+            for display in [false, true] {
+                for color in [UIColor.black, UIColor.white] {
+                    guard let image = MarkdownMathRenderer.image(for: .init(latex: item.latex, display: display), fontSize: 20, color: color),
+                          try paintedPixels(image) > 0 else { failed.insert("\(item.id) \(item.latex)"); continue }
+                }
+            }
+        }
+        print("LATEX-AUDIT cases=\(cases.count) failures=\(failed.sorted())")
+        XCTAssertTrue(failed.isEmpty, failed.sorted().joined(separator: "\n"))
+    }
+
+    func testExplicitFractionStylesAndEquationTagPlacement() throws {
+        let display = try XCTUnwrap(MarkdownMathRenderer.image(for: .init(latex: #"\dfrac{1}{2}"#, display: false), fontSize: 24, color: .black))
+        let text = try XCTUnwrap(MarkdownMathRenderer.image(for: .init(latex: #"\tfrac{1}{2}"#, display: false), fontSize: 24, color: .black))
+        XCTAssertGreaterThan(display.size.height, text.size.height)
+        let before = try XCTUnwrap(MarkdownMathRenderer.image(for: .init(latex: #"\tag{A}x=y"#, display: true), fontSize: 24, color: .black))
+        let after = try XCTUnwrap(MarkdownMathRenderer.image(for: .init(latex: #"x=y\tag{A}"#, display: true), fontSize: 24, color: .black))
+        XCTAssertEqual(before.pngData(), after.pngData(), "编号不随 tag 指令在源文本中的位置移动")
+    }
+
     private let recurrence = #"I_n=\begin{cases}1,&n=1,\\[2pt]6,&n=2,\\[2pt]\left\lfloor I_{n-1}\cdot E\right\rceil,&n\ge3,\end{cases}\quad E\leftarrow\max\!\Bigl(1.3,\;E+0.1-(5-q)\bigl(0.08+0.02(5-q)\bigr)\Bigr)"#
 
     func testFourDelimitersPreserveFormulaBeforeCommonMarkEscapes() {
@@ -195,6 +221,28 @@ final class MarkdownMathTests: XCTestCase {
             add(attachment)
             try image.pngData()?.write(to: URL(fileURLWithPath: "/private/tmp/dsh-latex-\(Int(width)).png"))
             window.isHidden = true
+        }
+    }
+
+    func testCarlemanScreenshotRendersIndexedRootsFractionsAndNumberedBox() async throws {
+        let source = "对分子用 AM–GM 不等式：\n\n\\[\\sqrt[n]{b_1\\cdots b_n}\\le\\dfrac{b_1+\\cdots+b_n}{n}\\]\n\n得到：\n\n\\[\\boxed{G_n\\;\\le\\;\\frac{1}{n\\,C_n}\\sum_{k=1}^{n}c_k a_k}\\tag{1}\\]\n\n行内 \\(\\sqrt[n]{a_1a_2\\cdots a_n}\\) 也正常显示。"
+        for scheme in [ColorScheme.light, .dark] {
+            let host = UIHostingController(rootView: DeepSeekHarnessMobile.MarkdownContent(source)
+                .environment(\.colorScheme, scheme).padding(20).frame(width: 390, alignment: .leading))
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 420))
+            window.rootViewController = host
+            window.isHidden = false
+            defer { window.isHidden = true }
+            host.view.frame = window.bounds
+            host.view.backgroundColor = scheme == .dark ? .black : .white
+            try await Task.sleep(for: .milliseconds(300))
+            host.view.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+                host.view.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "Carleman-\(scheme)"; attachment.lifetime = .keepAlways; add(attachment)
+            try image.pngData()?.write(to: URL(fileURLWithPath: "/tmp/dsh-carleman-\(scheme).png"))
         }
     }
 

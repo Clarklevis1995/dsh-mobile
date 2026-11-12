@@ -49,6 +49,37 @@ class ConversationKeyboardDeviceTest {
     val compose = createComposeRule()
 
     @Test
+    fun varyingImeInsetsKeepCompactDraftActionAboveKeyboard() {
+        val fixture = showConversation()
+        val root = fixture.view.rootView
+        val original = requireNotNull(ViewCompat.getRootWindowInsets(root))
+        try {
+            compose.runOnIdle { fixture.holder.messageDraft = "九宫格、候选栏和表情面板切换后保留草稿" }
+            compose.waitForIdle()
+            val density = root.resources.displayMetrics.density
+            for (heightDp in listOf(240, 420, 560, 84, 0)) {
+                val height = (heightDp * density).toInt()
+                compose.runOnIdle {
+                    ViewCompat.dispatchApplyWindowInsets(root, WindowInsetsCompat.Builder(original)
+                        .setInsets(WindowInsetsCompat.Type.ime(), androidx.core.graphics.Insets.of(0, 0, 0, height))
+                        .setVisible(WindowInsetsCompat.Type.ime(), height > 0).build())
+                }
+                compose.waitForIdle()
+                val send = compose.onNodeWithTag("composer-action")
+                send.assertIsDisplayed().assertContentDescriptionEquals("发送")
+                val location = IntArray(2)
+                compose.runOnIdle { fixture.view.getLocationOnScreen(location) }
+                assertTrue("发送按钮必须避让完整输入法高度 $heightDp", send.fetchSemanticsNode().boundsInRoot.bottom + location[1] <= root.height - height + 2)
+                compose.onNodeWithTag("composer-input").assertIsNotFocused()
+                    .assertTextContains("九宫格、候选栏和表情面板切换后保留草稿")
+            }
+        } finally {
+            compose.runOnIdle { ViewCompat.dispatchApplyWindowInsets(root, original) }
+            fixture.holder.close()
+        }
+    }
+
+    @Test
     fun compactComposerExpandsAndCollapsesWithoutReplacingEditorOrLosingDraft() {
         val fixture = showConversation()
         try {
@@ -80,7 +111,9 @@ class ConversationKeyboardDeviceTest {
             compose.onNodeWithTag("composer-compact-preview", useUnmergedTree = true)
                 .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             assertTrue(layouts.single().lineCount == 1 && layouts.single().isLineEllipsized(0))
-            compose.onNodeWithTag("composer-action").assertIsNotDisplayed()
+            val compactSend = compose.onNodeWithTag("composer-action")
+            compactSend.assertIsDisplayed().assertContentDescriptionEquals("发送")
+            assertTrue(editor.fetchSemanticsNode().boundsInRoot.right < compactSend.fetchSemanticsNode().boundsInRoot.left)
             assertTrue(kotlin.math.abs(composer.fetchSemanticsNode().boundsInRoot.height - compactHeight) < 2f)
             assertTrue(editor.fetchSemanticsNode().id == originalEditorID)
             editor.performTouchInput { click() }
@@ -95,7 +128,7 @@ class ConversationKeyboardDeviceTest {
         try {
             val editor = compose.onNodeWithTag("composer-input")
             val hint = compose.onNodeWithTag("composer-placeholder", useUnmergedTree = true)
-            val card = compose.onNodeWithTag("conversation-composer-column")
+            val card = compose.onNodeWithTag("composer-card")
             fun hintPosition(): Offset {
                 val bounds = hint.fetchSemanticsNode().boundsInRoot
                 val container = card.fetchSemanticsNode().boundsInRoot
@@ -166,11 +199,13 @@ class ConversationKeyboardDeviceTest {
             compose.mainClock.advanceTimeByFrame()
             compose.mainClock.advanceTimeByFrame()
             val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+            val navigationBefore = ViewCompat.getRootWindowInsets(fixture.view)?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
             var intermediate = false
             repeat(18) {
                 val morphHeight = compose.onNodeWithTag("composer-morph-layout").fetchSemanticsNode().boundsInRoot.height
                 val progress = ((morphHeight / density - 42f) / 60f).coerceIn(0f, 1f)
-                val growth = card.fetchSemanticsNode().boundsInRoot.height - compactHeight
+                val imeUp = ViewCompat.getRootWindowInsets(fixture.view)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                val growth = card.fetchSemanticsNode().boundsInRoot.height - compactHeight + if (imeUp) navigationBefore else 0
                 org.junit.Assert.assertEquals("图片占位与输入框展开必须同一进度", 143f * density * progress, growth, 3f)
                 if (progress > 0.05f && progress < 0.95f) intermediate = true
                 compose.mainClock.advanceTimeByFrame()
@@ -242,7 +277,7 @@ class ConversationKeyboardDeviceTest {
         compose.onNodeWithTag("composer-input").performClick().assertIsFocused()
         waitForIme(fixture.view, visible = true)
         compose.waitUntil(timeoutMillis = 5_000) {
-            latestMessage.fetchSemanticsNode().boundsInRoot.top < messageTopBeforeIme - 100f
+            runCatching { latestMessage.fetchSemanticsNode().boundsInRoot.top < messageTopBeforeIme - 100f }.getOrDefault(false)
         }
 
         compose.onNodeWithTag("conversation-timeline").performTouchInput {

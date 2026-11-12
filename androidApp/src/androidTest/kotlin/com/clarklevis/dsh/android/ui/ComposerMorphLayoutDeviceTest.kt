@@ -61,6 +61,31 @@ class ComposerMorphLayoutDeviceTest {
         assertEquals(compactHeight, compose.onNodeWithTag("layout").fetchSemanticsNode().boundsInRoot.height, 1f)
     }
 
+    @Test fun compactDraftCanSendWithoutExpandingAndClearsActionAfterSending() {
+        var draft by mutableStateOf("收起后直接发送")
+        var sends = 0
+        compose.setContent {
+            DshTheme {
+                ComposerMorphLayout(false, Modifier.testTag("layout"), keepActionWhenCollapsed = draft.isNotBlank(),
+                    leading = { Text("+", Modifier.size(32.dp)) },
+                    editor = { Text(draft, Modifier.fillMaxWidth().height(38.dp).testTag("editor")) },
+                    tools = { Text("工具", Modifier.testTag("tools")) },
+                    action = { Text("发送", Modifier.size(42.dp).testTag("send").clickable { sends++; draft = "" }) })
+            }
+        }
+        val editor = compose.onNodeWithTag("editor")
+        val before = editor.fetchSemanticsNode().boundsInRoot
+        val send = compose.onNodeWithTag("send")
+        send.assertIsDisplayed()
+        assertTrue(before.right < send.fetchSemanticsNode().boundsInRoot.left)
+        compose.onNodeWithTag("tools").assertIsNotDisplayed()
+        send.performClick()
+        assertEquals(1, sends)
+        assertEquals("", draft)
+        send.assertIsNotDisplayed()
+        assertTrue(editor.fetchSemanticsNode().boundsInRoot.width > before.width)
+    }
+
     @Test fun editorMovesThroughIntermediatePositionsAndToolsHideWhenCollapsed() {
         var expanded by mutableStateOf(false)
         var editorCompositions = 0

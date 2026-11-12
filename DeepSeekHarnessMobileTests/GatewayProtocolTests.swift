@@ -2,8 +2,6 @@ import XCTest
 import SQLite3
 import CoreLocation
 import class DeepSeekHarnessShared.ScheduleTimingEditor
-import class DeepSeekHarnessShared.RtcSelectedPath
-import class DeepSeekHarnessShared.RtcPathInspector
 import UserNotifications
 import Network
 import CryptoKit
@@ -3777,7 +3775,7 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testWsHistorySurvivesRtcResyncAndRejectsOldSubscriptionAndDuplicateEvents() async throws {
+    func testHistorySurvivesResubscriptionAndRejectsOldSubscriptionAndDuplicateEvents() async throws {
         let (store, session) = try await makeRc2HistoryLoadingStore()
         defer { store.deactivateGateway() }
         let oldSnapshot = #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"ws-sub","streamId":"ws-stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"WS已有历史"}]}}}],"hasMore":false}"#
@@ -3789,17 +3787,17 @@ final class GatewayProtocolTests: XCTestCase {
         store.gateway.onConnectionInvalidated?()
         XCTAssertEqual(store.events[session.id]?.map(\.seq), [10, 11], "切换期间保留已同步数据")
         try await deliverHistoryLoadingFrame(store, #"{"kind":"hello","historyFormatVersion":3,"capabilities":["assistant-stream-v1"]}"#)
-        try await deliverHistoryLoadingFrame(store, #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"rtc-sub","assistantStream":true}"#)
-        let newSnapshot = #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"rtc-sub","streamId":"rtc-stream","historyFormatVersion":3,"cursor":11,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"WS已有历史"}]}}},{"type":"assistant/message","seq":11,"time":101,"data":{"turn":2,"step":1,"message":{"content":[{"type":"text","text":"WS已同步增量"}]}}}],"hasMore":false}"#
+        try await deliverHistoryLoadingFrame(store, #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"new-sub","assistantStream":true}"#)
+        let newSnapshot = #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"new-sub","streamId":"new-stream","historyFormatVersion":3,"cursor":11,"events":[{"type":"assistant/message","seq":10,"time":100,"data":{"message":{"content":[{"type":"text","text":"WS已有历史"}]}}},{"type":"assistant/message","seq":11,"time":101,"data":{"turn":2,"step":1,"message":{"content":[{"type":"text","text":"WS已同步增量"}]}}}],"hasMore":false}"#
         try await deliverHistoryLoadingFrame(store, newSnapshot)
-        let newDelta = #"{"kind":"event","sessionId":"mask-session","subscriptionId":"rtc-sub","streamId":"rtc-stream","seq":12,"time":102,"event":{"type":"assistant/message","turn":3,"step":1,"text":"RTC新增"}}"#
+        let newDelta = #"{"kind":"event","sessionId":"mask-session","subscriptionId":"new-sub","streamId":"new-stream","seq":12,"time":102,"event":{"type":"assistant/message","turn":3,"step":1,"text":"重订阅新增"}}"#
         try await deliverHistoryLoadingFrame(store, newDelta)
         try await deliverHistoryLoadingFrame(store, newDelta)
         try await deliverHistoryLoadingFrame(store, oldSnapshot)
         try await deliverHistoryLoadingFrame(store, delta)
-        await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "RTC新增")
+        await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "重订阅新增")
         XCTAssertEqual(store.events[session.id]?.map(\.seq), [10, 11, 12])
-        XCTAssertEqual(store.renderedConversationItems[session.id]?.filter { $0.text == "RTC新增" }.count, 1)
+        XCTAssertEqual(store.renderedConversationItems[session.id]?.filter { $0.text == "重订阅新增" }.count, 1)
         XCTAssertNil(store.lastError)
     }
 
@@ -9160,7 +9158,7 @@ private final class AppPreferencesSpy: AppPreferences {
 
 /// 使用本机真实 WebSocket 验证传输生命周期，不访问用户网关。
 private final class LocalRecoveryGateway: @unchecked Sendable {
-    enum Greeting { case hello, pairedOnly, pairedThenHello, rtcBootstrap, silent, unauthorized, split, stream }
+    enum Greeting { case hello, pairedOnly, pairedThenHello, legacyUpgradeAdvertisement, silent, unauthorized, split, stream }
     private let listener: NWListener
     private let queue = DispatchQueue(label: "test.gateway-recovery")
     private var connections: [NWConnection] = []
@@ -9284,13 +9282,8 @@ private final class LocalRecoveryGateway: @unchecked Sendable {
                     response += self.frame(Data(#"{"kind":"paired","token":"recovery-test-token","gatewayId":"d56a1098-8519-43a1-9dce-fb99863bf5bb"}"#.utf8))
                 }
                 response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true,"gatewayId":"d56a1098-8519-43a1-9dce-fb99863bf5bb"}"#.utf8))
-            case .rtcBootstrap:
-                if header["x-dsh-transport-intent"] == "negotiate-v1" {
-                    // 模拟 RTC 协商没有继续响应；普通 WS 仍能正常完成鉴权。
-                    response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true,"gatewayId":"d56a1098-8519-43a1-9dce-fb99863bf5bb","capabilities":["webrtc-upgrade-v1"],"transport":{"version":1,"bootstrap":true,"negotiateTimeoutMs":12000}}"#.utf8))
-                } else {
-                    response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true,"gatewayId":"d56a1098-8519-43a1-9dce-fb99863bf5bb"}"#.utf8))
-                }
+            case .legacyUpgradeAdvertisement:
+                response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true,"gatewayId":"d56a1098-8519-43a1-9dce-fb99863bf5bb","capabilities":["webrtc-upgrade-v1"]}"#.utf8))
             case .split:
                 response += self.frame(Data(#"{"kind":"hello","protocol":3,"authenticated":true,"capabilities":["split-channels"]}"#.utf8))
             case .stream:
@@ -9970,30 +9963,41 @@ final class GatewayForegroundRecoveryTests: XCTestCase {
     }
 
     @MainActor
-    func testPairingReopensAuthenticatedControlForRtcNegotiationOnce() async throws {
+    func testPairingKeepsAuthenticatedWebSocketWithoutNegotiationOrReopen() async throws {
         let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
         let endpoint = try await server.start()
         defer { server.stop() }
-        // RTC 协商契约在本机回环替身验证，生产入口策略另由下方内网测试覆盖。
-        let gateway = GatewayClient(credentials: RecoveryTestCredentials(), rtcPolicy: { _ in true })
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials())
         defer { gateway.disconnect() }
-        let connected = expectation(description: "配对后用长期凭据重建控制连接")
+        let connected = expectation(description: "配对后直接使用原 WebSocket")
         let subscription = gateway.$state.sink { if $0.isConnected { connected.fulfill() } }
         defer { subscription.cancel() }
         gateway.connectForPairing(GatewayPairingPayload(version: 2, publicUrl: endpoint,
             pairingCode: "one-time-code", expiresAt: 4_102_444_800_000))
         await fulfillment(of: [connected], timeout: 3)
-        XCTAssertEqual(server.receivedHeaders.count, 2)
+        XCTAssertEqual(server.receivedHeaders.count, 1)
         XCTAssertNil(server.receivedHeaders.first?["x-dsh-transport-intent"])
-        XCTAssertEqual(server.receivedHeaders.last?["x-dsh-transport-intent"], "negotiate-v1")
-        XCTAssertEqual(server.receivedHeaders.last?["authorization"], "Bearer recovery-test-token")
-        XCTAssertEqual(server.receivedHeaders.last?["sec-websocket-protocol"], "dsh-mobile-v1")
-        // 替身没有 RTC 能力，仍可正常使用 WS，且不会循环重连或重用一次性配对码。
         XCTAssertEqual(gateway.connectionMethod, "WebSocket")
     }
 
     @MainActor
-    func testLanConnectionAndPairingNeverRequestRtcOrReopenForUpgrade() async throws {
+    func testLegacyGatewayUpgradeAdvertisementStaysOnWebSocket() async throws {
+        let server = try LocalRecoveryGateway(greeting: .legacyUpgradeAdvertisement, repliesToPing: { _ in true })
+        let endpoint = try await server.start()
+        defer { server.stop() }
+        let gateway = GatewayClient(credentials: RecoveryTestCredentials(token: "stored-token"))
+        defer { gateway.disconnect() }
+        let connected = expectation(description: "忽略旧网关升级能力并完成 WebSocket 鉴权")
+        gateway.onConnectionReady = { connected.fulfill() }
+        gateway.connect(to: endpoint)
+        await fulfillment(of: [connected], timeout: 3)
+        XCTAssertEqual(server.receivedHeaders.count, 1)
+        XCTAssertNil(server.receivedHeaders.first?["x-dsh-transport-intent"])
+        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
+    }
+
+    @MainActor
+    func testLanConnectionAndPairingUseWebSocketWithoutReopening() async throws {
         for pairing in [false, true] {
             let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
             let endpoint = try await server.start()
@@ -10075,340 +10079,6 @@ final class GatewayForegroundRecoveryTests: XCTestCase {
     }
 }
 
-@MainActor
-private final class ForegroundRtcFixture: GatewayRtcConnection {
-    let isRtc = true
-    let maximumMessageBytes = 16 * 1024 * 1024
-    let elapsedMilliseconds: Int64 = 0
-    let probe = GatewayRtcHealthProbe()
-    var replies: Set<String> = ["control", "conversation"]
-    var sent: [String: String] = [:]
-    var closed = false
-    var didSend: (() -> Void)?
-    var sendOverride: ((String, String) async throws -> Void)?
-
-    var receivedSignaling: [Data] = []
-    func webSocket(_ data: Data) async throws { receivedSignaling.append(data) }
-    func send(_ text: String, channel: String) async throws {
-        if let sendOverride { return try await sendOverride(text, channel) }
-        sent[channel] = text
-        didSend?()
-        if replies.contains(channel) { pong(for: text, channel: channel) }
-    }
-    func pong(for request: String, channel: String) {
-        let frame = try! JSONSerialization.jsonObject(with: Data(request.utf8)) as! [String: String]
-        let pong = try! JSONSerialization.data(withJSONObject: ["kind": "pong", "requestId": frame["requestId"]!])
-        _ = probe.receive(String(decoding: pong, as: UTF8.self), channel: channel)
-    }
-    func checkHealth(timeout: Duration) async throws {
-        try await probe.check(timeout: timeout) { [weak self] text, channel in
-            guard let self else { throw CancellationError() }
-            try await self.send(text, channel: channel)
-        }
-    }
-    func close() { closed = true; probe.cancel() }
-}
-
-final class GatewayRtcForegroundRecoveryTests: XCTestCase {
-    @MainActor
-    func testNetworkNotificationsAndInitialActiveDoNotRestartHandshake() async throws {
-        let handshake = expectation(description: "握手已发送")
-        let server = try LocalRecoveryGateway(greeting: .silent, handshakeReceived: { handshake.fulfill() })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        let gateway = GatewayClient(credentials: RecoveryTestCredentials())
-        defer { gateway.disconnect() }
-        gateway.connect(to: endpoint)
-        await fulfillment(of: [handshake], timeout: 2)
-        for _ in 0..<10 {
-            gateway.applicationDidBecomeActive()
-            gateway.recoverNetworkConnectionForTesting()
-        }
-        try await Task.sleep(for: .milliseconds(100))
-        XCTAssertEqual(gateway.state, .connecting)
-        XCTAssertEqual(server.receivedHeaders.count, 1)
-    }
-
-    @MainActor
-    private func connectedGateway(_ server: LocalRecoveryGateway, endpoint: String,
-                                  foregroundRtcTimeout: Duration = .seconds(3),
-                                  rtcPolicy: @escaping (String) -> Bool = { _ in false }) async -> GatewayClient {
-        let gateway = GatewayClient(credentials: RecoveryTestCredentials(token: "stored-token"),
-                                    probeTimeout: .milliseconds(80), foregroundRtcTimeout: foregroundRtcTimeout,
-                                    rtcPolicy: rtcPolicy)
-        let connected = expectation(description: "初次连接")
-        let observer = gateway.$state.sink { if $0.isConnected { connected.fulfill() } }
-        gateway.connect(to: endpoint)
-        await fulfillment(of: [connected], timeout: 3)
-        observer.cancel()
-        return gateway
-    }
-
-    @MainActor
-    func testHealthyDualRtcChannelsAreReusedAfterBackground() async throws {
-        let server = try LocalRecoveryGateway(repliesToPing: { _ in true })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        let gateway = await connectedGateway(server, endpoint: endpoint)
-        defer { gateway.disconnect() }
-        let rtc = ForegroundRtcFixture()
-        gateway.installRtcConnectionForTesting(rtc)
-        let healthy = expectation(description: "两条 RTC 通道均已验证")
-        gateway.onConnectionReady = { healthy.fulfill() }
-        gateway.applicationDidEnterBackground()
-        gateway.applicationDidBecomeActive()
-        await fulfillment(of: [healthy], timeout: 1)
-        XCTAssertEqual(Set(rtc.sent.keys), ["control", "conversation"])
-        XCTAssertEqual(gateway.connectionMethod, "WebRTC")
-        XCTAssertFalse(rtc.closed)
-        XCTAssertEqual(server.receivedHeaders.count, 1)
-    }
-
-    @MainActor
-    func testMissingConversationPongRetriesRtcAtSuccessfulEndpointAndAcceptsLegacyWsFallback() async throws {
-        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        var allowRtc = false
-        let gateway = await connectedGateway(server, endpoint: endpoint, rtcPolicy: { _ in allowRtc })
-        defer { gateway.disconnect() }
-        gateway.trustedEndpoints = [endpoint, "ws://127.0.0.1:9/ws/mobile"]
-        let rtc = ForegroundRtcFixture()
-        rtc.replies = ["control"]
-        gateway.installRtcConnectionForTesting(rtc)
-        allowRtc = true
-        let recovered = expectation(description: "2 秒退避前完成恢复")
-        gateway.onConnectionReady = { recovered.fulfill() }
-        gateway.applicationDidEnterBackground()
-        gateway.applicationDidBecomeActive()
-        await fulfillment(of: [recovered], timeout: 1.5)
-        XCTAssertTrue(rtc.closed)
-        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
-        XCTAssertEqual(gateway.connectedEndpoint, endpoint)
-        XCTAssertEqual(server.receivedHeaders.count, 2)
-        XCTAssertEqual(server.receivedHeaders.last?["x-dsh-transport-intent"], "negotiate-v1")
-        XCTAssertEqual(server.receivedHeaders.last?["authorization"], "Bearer stored-token")
-    }
-
-    @MainActor
-    func testManualDisconnectDuringRtcProbeCannotReconnect() async throws {
-        let server = try LocalRecoveryGateway(repliesToPing: { _ in true })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        let gateway = await connectedGateway(server, endpoint: endpoint)
-        defer { gateway.disconnect() }
-        let rtc = ForegroundRtcFixture()
-        rtc.replies = []
-        let sent = expectation(description: "双通道探活已发出")
-        sent.expectedFulfillmentCount = 2
-        rtc.didSend = { sent.fulfill() }
-        gateway.installRtcConnectionForTesting(rtc)
-        gateway.applicationDidEnterBackground()
-        gateway.applicationDidBecomeActive()
-        await fulfillment(of: [sent], timeout: 1)
-        gateway.disconnect()
-        for (channel, text) in rtc.sent { rtc.pong(for: text, channel: channel) }
-        try await Task.sleep(for: .milliseconds(150))
-        XCTAssertEqual(gateway.state, .disconnected)
-        XCTAssertFalse(gateway.recoveryStateForTesting.wantsConnection)
-        XCTAssertEqual(server.receivedHeaders.count, 1)
-    }
-
-    @MainActor
-    func testAlreadyDisconnectedInBackgroundRetriesRtcAtSuccessfulEndpointImmediately() async throws {
-        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        var allowRtc = false
-        let gateway = await connectedGateway(server, endpoint: endpoint, rtcPolicy: { _ in allowRtc })
-        defer { gateway.disconnect() }
-        gateway.trustedEndpoints = [endpoint, "ws://127.0.0.1:9/ws/mobile"]
-        gateway.installRtcConnectionForTesting(ForegroundRtcFixture())
-        allowRtc = true
-        let failed = expectation(description: "后台连接丢失")
-        let observer = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
-        gateway.applicationDidEnterBackground()
-        server.dropConnections(nextGreeting: .pairedThenHello)
-        await fulfillment(of: [failed], timeout: 1)
-        observer.cancel()
-        let recovered = expectation(description: "回前台跳过后台退避")
-        gateway.onConnectionReady = { recovered.fulfill() }
-        gateway.applicationDidBecomeActive()
-        await fulfillment(of: [recovered], timeout: 1.5)
-        XCTAssertEqual(gateway.connectedEndpoint, endpoint)
-        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
-        XCTAssertEqual(server.receivedHeaders.count, 2)
-        XCTAssertEqual(server.receivedHeaders.last?["x-dsh-transport-intent"], "negotiate-v1")
-    }
-
-    @MainActor
-    func testAuthenticationFailureDuringFastRecoveryRemainsTerminal() async throws {
-        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        let gateway = await connectedGateway(server, endpoint: endpoint)
-        defer { gateway.disconnect() }
-        gateway.installRtcConnectionForTesting(ForegroundRtcFixture())
-        let failed = expectation(description: "后台连接丢失")
-        let observer = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
-        gateway.applicationDidEnterBackground()
-        server.dropConnections(nextGreeting: .unauthorized)
-        await fulfillment(of: [failed], timeout: 1)
-        observer.cancel()
-        let rejected = expectation(description: "快速恢复仍校验鉴权")
-        gateway.onConnectionFailure = { _ in rejected.fulfill() }
-        gateway.applicationDidBecomeActive()
-        await fulfillment(of: [rejected], timeout: 1.5)
-        XCTAssertFalse(gateway.recoveryStateForTesting.wantsConnection)
-        gateway.applicationDidBecomeActive()
-        try await Task.sleep(for: .milliseconds(100))
-        XCTAssertEqual(server.receivedHeaders.count, 2)
-    }
-
-    @MainActor
-    func testWsAlreadyRecoveredInBackgroundStillRetriesPreviousRtcOnForeground() async throws {
-        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        var allowRtc = false
-        let gateway = await connectedGateway(server, endpoint: endpoint, rtcPolicy: { _ in allowRtc })
-        defer { gateway.disconnect() }
-        gateway.installRtcConnectionForTesting(ForegroundRtcFixture())
-        allowRtc = true
-        let failed = expectation(description: "后台 RTC 断开")
-        let failureObserver = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
-        gateway.applicationDidEnterBackground()
-        server.dropConnections(nextGreeting: .pairedThenHello)
-        await fulfillment(of: [failed], timeout: 1)
-        failureObserver.cancel()
-        let backgroundWs = expectation(description: "后台先自动恢复 WS")
-        let readyObserver = gateway.$state.sink { if $0.isConnected { backgroundWs.fulfill() } }
-        await fulfillment(of: [backgroundWs], timeout: 3)
-        readyObserver.cancel()
-        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
-        XCTAssertNil(server.receivedHeaders.last?["x-dsh-transport-intent"])
-        let foreground = expectation(description: "回前台仍重新尝试 RTC")
-        gateway.onConnectionReady = { foreground.fulfill() }
-        gateway.applicationDidBecomeActive()
-        await fulfillment(of: [foreground], timeout: 1)
-        XCTAssertEqual(server.receivedHeaders.count, 3)
-        XCTAssertEqual(server.receivedHeaders.last?["x-dsh-transport-intent"], "negotiate-v1")
-    }
-
-    @MainActor
-    func testRtcResumeTimeoutFallsBackImmediatelyWithoutRepeatedNegotiation() async throws {
-        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        var allowRtc = false
-        let gateway = await connectedGateway(server, endpoint: endpoint, foregroundRtcTimeout: .milliseconds(100),
-                                             rtcPolicy: { _ in allowRtc })
-        defer { gateway.disconnect() }
-        gateway.trustedEndpoints = [endpoint, "ws://127.0.0.1:9/ws/mobile"]
-        let rtc = ForegroundRtcFixture()
-        rtc.replies = ["control"]
-        gateway.installRtcConnectionForTesting(rtc)
-        allowRtc = true
-        server.setGreeting(.rtcBootstrap)
-        let recovered = expectation(description: "限时尝试 RTC 后立即恢复 WS")
-        gateway.onConnectionReady = { recovered.fulfill() }
-        gateway.applicationDidEnterBackground()
-        gateway.applicationDidBecomeActive()
-        await fulfillment(of: [recovered], timeout: 1.5)
-        XCTAssertEqual(gateway.connectedEndpoint, endpoint)
-        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
-        let headers = server.receivedHeaders
-        XCTAssertEqual(headers.count, 3)
-        XCTAssertEqual(headers[1]["x-dsh-transport-intent"], "negotiate-v1")
-        XCTAssertNil(headers[2]["x-dsh-transport-intent"])
-        XCTAssertEqual(headers[2]["authorization"], "Bearer stored-token")
-        try await Task.sleep(for: .milliseconds(150))
-        XCTAssertEqual(server.receivedHeaders.count, 3, "回退成功后不能循环重试 RTC")
-    }
-
-    @MainActor
-    func testDisconnectDuringFreshRtcAttemptCancelsWsFallback() async throws {
-        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        var allowRtc = false
-        let gateway = await connectedGateway(server, endpoint: endpoint, foregroundRtcTimeout: .milliseconds(200),
-                                             rtcPolicy: { _ in allowRtc })
-        defer { gateway.disconnect() }
-        gateway.installRtcConnectionForTesting(ForegroundRtcFixture())
-        allowRtc = true
-        let failed = expectation(description: "后台丢失连接")
-        let observer = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
-        gateway.applicationDidEnterBackground()
-        server.dropConnections(nextGreeting: .rtcBootstrap)
-        await fulfillment(of: [failed], timeout: 1)
-        observer.cancel()
-        gateway.applicationDidBecomeActive()
-        let deadline = ProcessInfo.processInfo.systemUptime + 1
-        while server.receivedHeaders.count < 2, ProcessInfo.processInfo.systemUptime < deadline {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        XCTAssertEqual(server.receivedHeaders.last?["x-dsh-transport-intent"], "negotiate-v1")
-        gateway.disconnect()
-        try await Task.sleep(for: .milliseconds(300))
-        XCTAssertEqual(gateway.state, .disconnected)
-        XCTAssertFalse(gateway.recoveryStateForTesting.wantsConnection)
-        XCTAssertEqual(server.receivedHeaders.count, 2)
-    }
-
-    @MainActor
-    func testLanResumeSkipsRtcEvenIfPreviousTransportWasRtc() async throws {
-        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        let gateway = await connectedGateway(server, endpoint: endpoint)
-        defer { gateway.disconnect() }
-        gateway.installRtcConnectionForTesting(ForegroundRtcFixture())
-        let failed = expectation(description: "后台连接断开")
-        let observer = gateway.$state.sink { if case .failed = $0 { failed.fulfill() } }
-        gateway.applicationDidEnterBackground()
-        server.dropConnections(nextGreeting: .pairedThenHello)
-        await fulfillment(of: [failed], timeout: 1)
-        observer.cancel()
-        let recovered = expectation(description: "内网仍直接使用 WS")
-        gateway.onConnectionReady = { recovered.fulfill() }
-        gateway.applicationDidBecomeActive()
-        await fulfillment(of: [recovered], timeout: 1)
-        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
-        XCTAssertEqual(server.receivedHeaders.count, 2)
-        XCTAssertNil(server.receivedHeaders.last?["x-dsh-transport-intent"])
-    }
-
-    @MainActor
-    func testProbeRejectsWrongChannelAndLatePongsFromPreviousGeneration() async throws {
-        let rtc = ForegroundRtcFixture()
-        rtc.replies = []
-        let first = expectation(description: "第一次探活")
-        first.expectedFulfillmentCount = 2
-        rtc.didSend = { first.fulfill() }
-        let old = Task { try await rtc.checkHealth(timeout: .seconds(2)) }
-        await fulfillment(of: [first], timeout: 1)
-        let previous = rtc.sent
-        old.cancel()
-        do { try await old.value; XCTFail("取消必须结束探活") } catch is CancellationError {} catch { XCTFail("\(error)") }
-        let second = expectation(description: "新一轮探活")
-        second.expectedFulfillmentCount = 2
-        rtc.didSend = { second.fulfill() }
-        var completed = false
-        let current = Task { try await rtc.checkHealth(timeout: .seconds(1)); completed = true }
-        await fulfillment(of: [second], timeout: 1)
-        for (channel, text) in previous { rtc.pong(for: text, channel: channel) }
-        rtc.pong(for: rtc.sent["conversation"]!, channel: "control")
-        rtc.pong(for: rtc.sent["control"]!, channel: "control")
-        try await Task.sleep(for: .milliseconds(30))
-        XCTAssertFalse(completed)
-        rtc.pong(for: rtc.sent["conversation"]!, channel: "conversation")
-        try await current.value
-        XCTAssertTrue(completed)
-        XCTAssertFalse(rtc.probe.receive(#"{"kind":"pong","requestId":"network-check:other"}"#, channel: "control"))
-    }
-}
-
 final class GatewayTransportHandoffTests: XCTestCase {
     @MainActor
     private func connect(_ gateway: GatewayClient, endpoint: String) async {
@@ -10420,7 +10090,7 @@ final class GatewayTransportHandoffTests: XCTestCase {
     }
 
     @MainActor
-    func testOldWsReceiveCannotEnterReplacementRtcStateMachine() async throws {
+    func testOldWsReceiveCannotEnterReplacementWebSocket() async throws {
         let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
         let endpoint = try await server.start()
         defer { server.stop() }
@@ -10438,45 +10108,13 @@ final class GatewayTransportHandoffTests: XCTestCase {
         server.broadcast(#"{"kind":"workspaces","items":[],"message":"old-handoff-frame"}"#)
         await fulfillment(of: [paused], timeout: 1)
         await connect(gateway, endpoint: endpoint)
-        let rtc = ForegroundRtcFixture()
-        gateway.installRtcConnectionForTesting(rtc)
+        var deliveredOldFrame = false
+        gateway.onFrame = { if $0.message == "old-handoff-frame" { deliveredOldFrame = true } }
         release?.resume(); release = nil
         try await Task.sleep(for: .milliseconds(50))
-        XCTAssertTrue(rtc.receivedSignaling.isEmpty, "旧 WS 数据不能交给新 RTC 协商状态机")
+        XCTAssertFalse(deliveredOldFrame, "旧连接的消息不能进入新连接")
         XCTAssertTrue(gateway.state.isConnected)
-        XCTAssertEqual(gateway.connectionMethod, "WebRTC")
-    }
-
-    @MainActor
-    func testAlreadySubmittedRtcWriteAndItsLateFailureCannotReplayOrAffectNewWs() async throws {
-        let server = try LocalRecoveryGateway(greeting: .pairedThenHello, repliesToPing: { _ in true })
-        let endpoint = try await server.start()
-        defer { server.stop() }
-        let gateway = GatewayClient(credentials: RecoveryTestCredentials(token: "stored-token"))
-        defer { gateway.disconnect() }
-        await connect(gateway, endpoint: endpoint)
-        let submitted = expectation(description: "旧 RTC 已提交写操作，确认尚未返回")
-        var release: CheckedContinuation<Void, Never>?
-        defer { release?.resume() }
-        var executions = 0
-        let rtc = ForegroundRtcFixture()
-        rtc.sendOverride = { _, _ in
-            executions += 1
-            await withCheckedContinuation { release = $0; submitted.fulfill() }
-            throw GatewayMgwCodec.Failure.tooLarge
-        }
-        gateway.installRtcConnectionForTesting(rtc)
-        gateway.sendRequestPayload(#"{"type":"message","sessionId":"s","text":"write-once","requestId":"handoff-write"}"#)
-        await fulfillment(of: [submitted], timeout: 1)
-        await connect(gateway, endpoint: endpoint)
-        var errors = 0
-        gateway.onFrame = { if $0.kind == "error" { errors += 1 } }
-        release?.resume(); release = nil
-        try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(executions, 1)
-        XCTAssertFalse(server.receivedRequestKinds.contains("message"), "旧连接已提交的写操作不能在新 WS 自动重放")
-        XCTAssertEqual(errors, 0, "旧写操作的迟到错误不能覆盖新连接状态")
-        XCTAssertTrue(gateway.state.isConnected)
+        XCTAssertEqual(gateway.connectionMethod, "WebSocket")
     }
 
     @MainActor
@@ -11794,6 +11432,50 @@ final class ConversationFileReferencesTests: XCTestCase {
 
 @MainActor
 final class WorkspaceFilePreviewPresentationTests: XCTestCase {
+    func testExternalWindowsAndPosixFilesDownloadIntoLocalPreview() async throws {
+        for (input, canonical) in [(#"D:\DSH\04-临时\deliver\前 后.txt"#, "D:/DSH/04-临时/deliver/前 后.txt"),
+                                   ("/tmp/deliver/前 后.txt", "/tmp/deliver/前 后.txt")] {
+            let store = await makeStore()
+            defer { store.deactivateGateway() }
+            try deliver(store, #"{"kind":"hello","protocol":3,"capabilities":["file-downloads","file-references-v1"]}"#)
+            store.openConversationFile(gatewayID: store.gatewayLocalID, sessionID: "preview-session", path: input)
+            let request = try XCTUnwrap(store.workspaceFilePreviewRequest)
+            XCTAssertEqual(request.name, "前 后.txt")
+            let pathJSON = String(decoding: try JSONEncoder().encode(canonical), as: UTF8.self)
+            try deliver(store, """
+                {"kind":"file-resolved","requestId":"\(request.id.uuidString)","sessionId":"preview-session","path":\(pathJSON),"name":"前 后.txt","size":5}
+                """)
+            try deliver(store, """
+                {"kind":"file-download-opened","requestId":"\(request.id.uuidString)-download","transferId":"t1","sessionId":"preview-session","path":\(pathJSON),"name":"前 后.txt","size":5,"chunkBytes":100}
+                """)
+            try deliver(store, """
+                {"kind":"file-download-chunk","transferId":"t1","offset":0,"data":"aGVsbG8=","eof":true,"sha256":"\(digest)"}
+                """)
+            try await waitForCompletion(store)
+            let file = try XCTUnwrap(store.completedWorkspaceFile)
+            XCTAssertEqual(file.remotePath, canonical)
+            XCTAssertEqual(try Data(contentsOf: file.url), Data("hello".utf8))
+            XCTAssertNil(store.workspaceFilePreviewError)
+            XCTAssertNil(store.lastError)
+            store.cancelWorkspaceFileDownload()
+        }
+    }
+
+    func testExternalFilePermissionFailureStaysInPreview() async throws {
+        let store = await makeStore()
+        defer { store.deactivateGateway() }
+        try deliver(store, #"{"kind":"hello","protocol":3,"capabilities":["file-downloads","file-references-v1"]}"#)
+        store.openConversationFile(gatewayID: store.gatewayLocalID, sessionID: "preview-session", path: "/tmp/output.txt")
+        let request = try XCTUnwrap(store.workspaceFilePreviewRequest)
+        try deliver(store, """
+            {"kind":"error","requestType":"file-resolve","requestId":"\(request.id.uuidString)","sessionId":"preview-session","code":"file-not-allowed","message":"file-not-allowed"}
+            """)
+        XCTAssertNotNil(store.workspaceFilePreviewError)
+        XCTAssertNil(store.lastError)
+        XCTAssertFalse(store.conversationFileIsOpening)
+        XCTAssertEqual(store.workspaceFilePreviewRequest?.id, request.id)
+    }
+
     func testConversationFilePresentsBeforeAnyResolveResponse() async throws {
         let store = await makeStore()
         defer { store.deactivateGateway() }
@@ -16525,173 +16207,6 @@ final class MarkdownTableRenderingTests: XCTestCase {
     }
 }
 
-final class GatewayMgwCodecTests: XCTestCase {
-    private func bytes(_ hex: String) -> Data {
-        var result = Data()
-        var index = hex.startIndex
-        while index < hex.endIndex {
-            let end = hex.index(index, offsetBy: 2)
-            result.append(UInt8(hex[index..<end], radix: 16)!)
-            index = end
-        }
-        return result
-    }
-    func testGatewayGoldenVectorAndInvalidHeaders() throws {
-        let golden = bytes("4d475731010001000000000000000001000000000000000100000002000000027b7d")
-        XCTAssertEqual(try GatewayMgwCodec(channel: 1).encode("{}", frameLimit: 16384, messageLimit: 16777216), [golden])
-        XCTAssertEqual(try GatewayMgwCodec(channel: 1).receive(golden), "{}")
-        for offset in [0, 4, 5, 6, 7, 15, 19, 23, 27, 31] {
-            var invalid = golden; invalid[offset] ^= 3
-            XCTAssertThrowsError(try GatewayMgwCodec(channel: 1).receive(invalid), "offset=\(offset)")
-        }
-    }
-    func testUnicodeAndSixteenMiBRoundTrip() throws {
-        for text in ["{\"text\":\"你好😀\"}", String(repeating: "x", count: 16777216)] {
-            let frames = try GatewayMgwCodec(channel: 2).encode(text, frameLimit: 16384, messageLimit: 16777216)
-            let decoder = GatewayMgwCodec(channel: 2)
-            XCTAssertEqual(try frames.compactMap { try decoder.receive($0) }, [text])
-            XCTAssertTrue(frames.allSatisfy { $0.count <= 16384 })
-        }
-    }
-    func testDuplicateChunkTimeoutAndInvalidUtf8Fail() throws {
-        let encoder = GatewayMgwCodec(channel: 1)
-        let frames = try encoder.encode(String(repeating: "a", count: 16384), frameLimit: 16384, messageLimit: 16777216)
-        let decoder = GatewayMgwCodec(channel: 1)
-        XCTAssertNil(try decoder.receive(frames[0], now: 0))
-        XCTAssertThrowsError(try decoder.receive(frames[0], now: 1))
-        XCTAssertThrowsError(try decoder.checkIdle(now: 30))
-        var invalid = try GatewayMgwCodec(channel: 1).encode("x", frameLimit: 16384, messageLimit: 16777216)[0]
-        invalid[32] = 255
-        XCTAssertThrowsError(try GatewayMgwCodec(channel: 1).receive(invalid))
-    }
-}
-
-@MainActor
-private final class RtcFixtureCredentials: GatewayCredentialStoring {
-    let deviceID: String
-    var token: String?
-    init(deviceID: String, token: String) { self.deviceID = deviceID; self.token = token }
-    func loadToken(for endpoint: URL) -> String? { token }
-    func saveToken(_ token: String, for endpoint: URL) { self.token = token }
-    func deleteToken(for endpoint: URL) { token = nil }
-    func loadOrCreateDeviceID() -> String { deviceID }
-}
-
-@MainActor
-final class GatewayRtcInteropTests: XCTestCase {
-    func testForegroundRecoveryReestablishesNativeRtcBeforeWsFallback() async throws {
-        guard let base = ProcessInfo.processInfo.environment["DSH_RTC_RESUME_FIXTURE_URL"] else {
-            throw XCTSkip("显式设置 DSH_RTC_RESUME_FIXTURE_URL 后运行独立前台恢复协议替身")
-        }
-        struct Fixture: Decodable { let url: String; let gatewayId: String; let deviceId: String; let token: String }
-        let (data, _) = try await URLSession.shared.data(from: URL(string: base)!)
-        let fixture = try JSONDecoder().decode(Fixture.self, from: data)
-        let client = GatewayClient(credentials: RtcFixtureCredentials(deviceID: fixture.deviceId, token: fixture.token),
-                                   foregroundRtcTimeout: .seconds(2), rtcPolicy: { _ in true })
-        client.expectedGatewayID = fixture.gatewayId
-        client.trustedEndpoints = [fixture.url]
-        defer { client.disconnect() }
-        func waitFor(_ condition: () -> Bool) async throws {
-            let deadline = ProcessInfo.processInfo.systemUptime + 5
-            while !condition() {
-                guard ProcessInfo.processInfo.systemUptime < deadline else { throw URLError(.timedOut) }
-                try await Task.sleep(for: .milliseconds(5))
-            }
-        }
-        client.connect(to: fixture.url)
-        try await waitFor { client.state.isConnected }
-        XCTAssertEqual(client.connectionMethod, "WebRTC")
-        client.applicationDidEnterBackground()
-        _ = try await URLSession.shared.data(from: URL(string: base + "/drop")!)
-        try await waitFor { !client.state.isConnected }
-        client.applicationDidBecomeActive()
-        try await waitFor { client.state.isConnected }
-        XCTAssertEqual(client.connectionMethod, "WebRTC", "回前台不应无条件改用 WS")
-        let pong = expectation(description: "恢复后的原生 RTC 可进行业务往返")
-        client.onFrame = { if $0.kind == "pong" { pong.fulfill() } }
-        client.ping()
-        await fulfillment(of: [pong], timeout: 1)
-        client.onFrame = nil
-        // 成功后恢复期限必须撤销，不能稍后又被旧超时任务降级。
-        try await Task.sleep(for: .milliseconds(2200))
-        XCTAssertTrue(client.state.isConnected)
-        XCTAssertEqual(client.connectionMethod, "WebRTC")
-        let (status, _) = try await URLSession.shared.data(from: URL(string: base + "/status")!)
-        let requestModes = try JSONSerialization.jsonObject(with: status) as? [String: [String]]
-        XCTAssertEqual(requestModes?["requests"], ["rtc", "rtc"])
-    }
-
-    func testNativeGatewayClientRtcLegacyAndFallback() async throws {
-        guard let base = ProcessInfo.processInfo.environment["DSH_RTC_FIXTURE_URL"] else {
-            throw XCTSkip("显式设置 DSH_RTC_FIXTURE_URL 后运行隔离网关实连")
-        }
-        struct Fixture: Decodable { let url: String; let gatewayId: String; let deviceId: String; let token: String }
-        for mode in ["rtc", "legacy", "fallback"] {
-            let (data, _) = try await URLSession.shared.data(from: URL(string: "\(base)/?mode=\(mode)")!)
-            let fixture = try JSONDecoder().decode(Fixture.self, from: data)
-            // 隔离 RTC 库互通测试显式启用 RTC，生产内网入口默认直接 WS。
-            let client = GatewayClient(credentials: RtcFixtureCredentials(deviceID: fixture.deviceId, token: fixture.token), rtcPolicy: { _ in true })
-            client.expectedGatewayID = fixture.gatewayId
-            client.trustedEndpoints = [fixture.url]
-            var received: [GatewayFrame] = []
-            var failure: String?
-            client.onFrame = { received.append($0) }
-            client.onConnectionFailure = { failure = $0 }
-            defer { client.disconnect() }
-            func waitFor(_ condition: () -> Bool) async throws {
-                let deadline = ProcessInfo.processInfo.systemUptime + 35
-                while !condition() {
-                    if let failure { XCTFail(failure); throw URLError(.cannotConnectToHost) }
-                    guard ProcessInfo.processInfo.systemUptime < deadline else { XCTFail("RTC interop timeout: \(mode)"); throw URLError(.timedOut) }
-                    try await Task.sleep(for: .milliseconds(10))
-                }
-            }
-            client.connect(to: fixture.url)
-            try await waitFor { client.state.isConnected }
-            if mode == "rtc" { XCTAssertTrue(client.connectionMethod.hasPrefix("WebRTC")) }
-            else { XCTAssertEqual(client.connectionMethod, "WebSocket") }
-            client.sendRequestPayload("{\"type\":\"workspaces\"}", decorate: false)
-            try await waitFor { received.contains { $0.kind == "workspaces" } }
-            client.sendRequestPayload("{\"type\":\"history\",\"sessionId\":\"interop-session\"}", decorate: false)
-            try await waitFor { received.contains { $0.kind == "history" } }
-            let monitor = GatewayNetworkDiagnosticsMonitor()
-            defer { monitor.stop() }
-            XCTAssertTrue(client.networkDiagnosticsSupported)
-            XCTAssertEqual(client.networkDiagnosticsObserverCountForTesting, 0)
-            monitor.start(client)
-            monitor.start(client)
-            XCTAssertEqual(client.networkDiagnosticsObserverCountForTesting, 1)
-            try await waitFor { monitor.snapshot.successfulProbes >= 2 }
-            XCTAssertGreaterThanOrEqual(monitor.snapshot.roundTripMs, 0)
-            XCTAssertEqual(monitor.snapshot.lossPercent, 0)
-            XCTAssertGreaterThan(monitor.snapshot.receivedBytesPerSecond, 0)
-            XCTAssertGreaterThan(monitor.snapshot.sentBytesPerSecond, 0)
-            XCTAssertFalse(received.contains { $0.kind == "pong" && ($0.requestId?.hasPrefix("network-check:") ?? false) })
-            monitor.stop()
-            XCTAssertFalse(monitor.snapshot.active)
-            XCTAssertEqual(client.networkDiagnosticsObserverCountForTesting, 0)
-            let completed = monitor.snapshot.successfulProbes
-            try await Task.sleep(for: .milliseconds(1200))
-            XCTAssertEqual(monitor.snapshot.successfulProbes, completed)
-            monitor.start(client)
-            try await waitFor { monitor.snapshot.successfulProbes >= 1 }
-            XCTAssertEqual(monitor.snapshot.timedOutProbes, 0)
-            monitor.stop()
-            if mode == "rtc" {
-                received.removeAll()
-                let overhead = "{\"type\":\"ping\",\"padding\":\"\"}".utf8.count
-                client.sendRequestPayload("{\"type\":\"ping\",\"padding\":\"\(String(repeating: "x", count: 16777216 - overhead))\"}", decorate: false)
-                try await waitFor { received.contains { $0.kind == "pong" } }
-                XCTAssertFalse(client.prepareMessageTransport(text: String(repeating: "x", count: 16777216), images: []))
-                try await waitFor { client.state.isConnected && client.connectionMethod == "WebSocket" }
-                received.removeAll()
-                client.sendRequestPayload("{\"type\":\"workspaces\"}", decorate: false)
-                try await waitFor { received.contains { $0.kind == "workspaces" } }
-            }
-        }
-    }
-}
-
 @MainActor
 final class AgentTurnTimingIntegrationTests: XCTestCase {
     func testNewTurnUsesLifecycleStartEvenWithOldUserMessageAndServerClockOffset() async throws {
@@ -16797,65 +16312,6 @@ final class GatewayNetworkDiagnosticsLifecycleTests: XCTestCase {
         scene.phase = .active
         try await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(gateway.networkDiagnosticsObserverCountForTesting, 0)
-    }
-}
-
-@MainActor
-final class GatewayConnectionPathTests: XCTestCase {
-    func testBothChannelsKeepTheirOwnRouteAndIPv6EndpointsFitNarrowScreens() throws {
-        let control = RtcSelectedPath(kind: "local", protocol: "UDP", localEndpoint: "192.168.1.20:50000",
-                                      remoteEndpoint: "192.168.1.94:51000", localCandidateType: "host", remoteCandidateType: "host")
-        let conversation = RtcSelectedPath(kind: "relay", protocol: "UDP", localEndpoint: "[2001:db8:1234:5678::1]:50000",
-                                           remoteEndpoint: "[2001:db8:1234:5678::2]:51000", localCandidateType: "relay", remoteCandidateType: "host")
-        let host = UIHostingController(rootView: GatewayConnectionPathView(paths: ["control": control, "conversation": conversation]))
-        let size = host.sizeThatFits(in: CGSize(width: 280, height: 1000))
-        XCTAssertGreaterThan(size.height, 80)
-        XCTAssertLessThan(size.height, 320)
-        XCTAssertLessThanOrEqual(size.width, 280)
-        XCTAssertNotEqual(gatewayPathLabel(control.kind), gatewayPathLabel(conversation.kind))
-    }
-
-    func testMissingSelectionRendersPendingAndDisconnectKeepsNoRoute() {
-        let host = UIHostingController(rootView: GatewayConnectionPathView(paths: [:]))
-        XCTAssertGreaterThan(host.sizeThatFits(in: CGSize(width: 320, height: 1000)).height, 40)
-        XCTAssertNil(RtcPathInspector.shared.inspect(statsJson: "[]"))
-        let client = GatewayClient()
-        client.disconnect()
-        XCTAssertTrue(client.connectionPaths.isEmpty)
-    }
-}
-
-@MainActor
-final class GatewayRtcLoggingTests: XCTestCase {
-    private let identity = "d56a1098-8519-43a1-9dce-fb99863bf5bb"
-
-    func testLegacyHelloLogsWhyNoRtcUpgradeWasOffered() async throws {
-        var lines: [String] = []
-        let link = GatewayRtcLink(expectedGatewayID: identity, wsSend: { _ in }, deliver: { _, _ in },
-                                  selected: { _ in }, diagnostic: { lines.append($0) }, failure: { _ in XCTFail("不应失败") })
-        defer { link.close() }
-        try await link.webSocket(Data("{\"kind\":\"hello\",\"gatewayId\":\"\(identity)\"}".utf8))
-        XCTAssertTrue(lines.contains { $0.contains("event=upgrade-skipped reason=gateway-no-upgrade phase=initial") })
-        XCTAssertTrue(lines.contains { $0.contains("event=selected") && $0.contains("mode=websocket") })
-        XCTAssertFalse(lines.contains { $0.contains(identity) })
-    }
-
-    func testDeadlineLogsNegotiationTimeoutBeforeClosingTheMachine() async throws {
-        var lines: [String] = []
-        var failed = false
-        let link = GatewayRtcLink(expectedGatewayID: identity, wsSend: { _ in }, deliver: { _, _ in },
-                                  selected: { _ in }, diagnostic: { lines.append($0) }, failure: { failed = $0 })
-        defer { link.close() }
-        try await link.webSocket(Data("""
-        {"kind":"hello","gatewayId":"\(identity)","capabilities":["webrtc-upgrade-v1"],
-         "transport":{"version":1,"bootstrap":true,"negotiateTimeoutMs":100}}
-        """.utf8))
-        let deadline = ProcessInfo.processInfo.systemUptime + 1
-        while !failed && ProcessInfo.processInfo.systemUptime < deadline { try await Task.sleep(for: .milliseconds(5)) }
-        XCTAssertTrue(failed)
-        XCTAssertTrue(lines.contains {
-            $0.contains("event=fallback-requested reason=negotiation-timeout phase=negotiating channel=group")
-        })
     }
 }
 
@@ -18104,6 +17560,57 @@ final class PhoneConnectorRegistrationTests: XCTestCase {
             attachment.lifetime = .keepAlways; add(attachment)
         }
     }
+
+    func testPresentedCapabilitiesListAndMusicDetailsUseLiveGatewaySnapshot() async throws {
+        let f = Fixture(statusWait: .seconds(10)); defer { f.close() }
+        f.model.connected(["device-tools-v1"])
+        let music = ["music.search", "music.state", "music.play", "music.pause", "music.seek", "music.library", "music.play-library", "music.catalog-search"]
+        let tools: [String: [String]] = [
+            "calendar": ["calendar.busy", "calendar.create"],
+            "reminders": ["reminders.list", "reminders.create"],
+            "location": ["location.current", "location.precise", "maps.search", "maps.geocode", "maps.reverse-geocode", "maps.directions", "maps.open", "maps.markers.create", "maps.markers.list", "maps.markers.update", "maps.markers.delete"],
+            "photos": ["photos.select"], "music": music, "health": ["health.daily-summary"],
+            "alarms": ["alarms.create", "alarms.list", "alarms.cancel"]
+        ]
+        try f.acknowledge(modules: IOSDeviceConnectors.modules.map {
+            ["id": $0.id, "enabled": $0.id == "music", "available": true, "tools": tools[$0.id] ?? []]
+        })
+        XCTAssertEqual(f.model.registeredToolCount, 28)
+        XCTAssertEqual(f.model.registeredModules.count, 7)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        for selection in [nil, "music"] as [String?] {
+            let host = UIHostingController(rootView: Color(.systemGroupedBackground).sheet(isPresented: .constant(true)) {
+                ConnectorCapabilitiesSheet(model: f.model, selectedModuleID: selection)
+                    .environment(\.locale, Locale(identifier: "zh_Hans"))
+            })
+            window.rootViewController = host; window.overrideUserInterfaceStyle = .light; window.makeKeyAndVisible()
+            for _ in 0..<100 where host.presentedViewController == nil { try await Task.sleep(for: .milliseconds(20)) }
+            let sheet = try XCTUnwrap(host.presentedViewController)
+            try await Task.sleep(for: .milliseconds(650))
+            let view = try XCTUnwrap(sheet.presentationController?.presentedView)
+            XCTAssertGreaterThan(view.bounds.height, selection == nil ? 500 : 550)
+            XCTAssertLessThan(view.bounds.height, window.bounds.height * 0.85, "应按内容高度展示，不占满屏幕")
+            let name = selection == nil ? "ios-capabilities-list" : "ios-capabilities-detail"
+            func capture(_ suffix: String = "") {
+                let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
+                let attachment = XCTAttachment(image: image); attachment.name = name + suffix; attachment.lifetime = .keepAlways; add(attachment)
+                if let data = image.pngData() { try? data.write(to: FileManager.default.temporaryDirectory.appendingPathComponent(name + suffix + ".png")) }
+            }
+            capture()
+            if selection != nil {
+                try f.receive(["kind": "device-tools-permissions", "version": 1, "connectionLeaseId": "lease", "permissions": ["music": false]])
+                XCTAssertFalse(f.model.isRegisteredModuleAllowed(try XCTUnwrap(f.model.registeredModules.first { $0.id == "music" })))
+                try await Task.sleep(for: .milliseconds(100)); capture("-revoked")
+                window.overrideUserInterfaceStyle = .dark
+                try await Task.sleep(for: .milliseconds(150)); capture("-dark")
+            }
+            host.dismiss(animated: false)
+            try await Task.sleep(for: .milliseconds(100))
+        }
+    }
 }
 
 @MainActor
@@ -18601,6 +18108,110 @@ final class AppleMapsAppCardTests: XCTestCase {
         }
     }
 
+    func testNeutralCardsAndInstalledMapPlugins() throws {
+        let link = "whaleness-map://place?v=1&latitude=31.2&longitude=121.5&coordinateSystem=wgs84&name=Cafe&mode=directions&transport=transit"
+        let destination = try XCTUnwrap(AppleMapsCardDestination(link: link, title: "咖啡馆"))
+        XCTAssertEqual(destination.transport, "r")
+        XCTAssertEqual(destination.name, "咖啡馆")
+        let installed = IOSMapAppPlugin.installed { ["iosamap", "baidumap"].contains($0.scheme ?? "") }
+        XCTAssertEqual(installed.map(\.id), ["amap", "baidu"])
+        XCTAssertTrue(IOSMapAppPlugin.installed { _ in false }.isEmpty)
+        XCTAssertEqual(IOSMapAppPlugin.all.map(\.id), ["apple", "amap", "baidu", "google"])
+        let place = try XCTUnwrap(AppleMapsCardDestination(link: "https://maps.apple.com/?ll=31.2,121.5&q=Cafe", title: "咖啡馆"))
+        XCTAssertNil(place.transport)
+        XCTAssertEqual(place.navigation.mode, "directions")
+        XCTAssertEqual(place.navigation.transport, "driving")
+        let amapRoute = try XCTUnwrap(IOSMapAppPlugin.all.first { $0.id == "amap" }?.url(for: place))
+        XCTAssertEqual(amapRoute.host, "path")
+        XCTAssertEqual(URLComponents(url: amapRoute, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "t" }?.value, "0")
+        let urls = try installed.map { try XCTUnwrap($0.url(for: destination)) }
+        XCTAssertEqual(urls[0].scheme, "iosamap")
+        XCTAssertEqual(urls[1].scheme, "baidumap")
+        XCTAssertTrue(urls[1].absoluteString.contains("coord_type=wgs84"))
+        XCTAssertNotNil(AppleMapsCardDestination(link: "https://www.google.com/maps/search/?api=1&query=31.2,121.5", title: "历史 Android 地点"))
+    }
+
+    func testMapPickerUsesOfficialAssetsAndMatchesSheetLayout() throws {
+        let destination = try XCTUnwrap(AppleMapsCardDestination(link: "https://maps.apple.com/?ll=31.2,121.5", title: "上海博物馆"))
+        for plugin in IOSMapAppPlugin.all {
+            let image = try XCTUnwrap(UIImage(named: plugin.iconAsset), plugin.id)
+            XCTAssertEqual(image.size.width, 512)
+            XCTAssertEqual(image.size.height, 512)
+        }
+        for (name, scheme) in [("light", ColorScheme.light), ("dark", ColorScheme.dark)] {
+            let content = MapApplicationPickerContent(destination: destination, apps: IOSMapAppPlugin.all,
+                onClose: {}, onApp: { _ in }, onWeb: {}).environment(\.colorScheme, scheme)
+            let controller = UIHostingController(rootView: content)
+            if #available(iOS 16.4, *) { controller.safeAreaRegions = [] }
+            let size = controller.sizeThatFits(in: CGSize(width: 402, height: 1000))
+            XCTAssertGreaterThan(size.height, 470)
+            XCTAssertLessThan(size.height, 540)
+            controller.view.frame = CGRect(origin: .zero, size: CGSize(width: 402, height: size.height))
+            controller.view.backgroundColor = scheme == .dark ? .black : .systemGroupedBackground
+            controller.view.setNeedsLayout(); controller.view.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(size: controller.view.bounds.size).image { _ in
+                controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "map-picker-replica-" + name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            let path = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("map-picker-replica-" + name + ".png")
+            try image.pngData()?.write(to: path)
+        }
+    }
+
+    func testPresentedMapPickerFitsOneInstalledAppWithoutLargeBottomGap() async throws {
+        try await assertPresentedMapPickerFits(apps: Array(IOSMapAppPlugin.all.prefix(1)), name: "仅苹果地图")
+    }
+
+    func testPresentedMapPickerFitsAllInstalledApps() async throws {
+        try await assertPresentedMapPickerFits(apps: IOSMapAppPlugin.all, name: "四个地图应用")
+    }
+
+    func testPresentedMapPickerFitsWebFallbackWithoutInstalledApps() async throws {
+        try await assertPresentedMapPickerFits(apps: [], name: "仅网页入口")
+    }
+
+    private func assertPresentedMapPickerFits(apps: [IOSMapAppPlugin], name: String) async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        let destination = try XCTUnwrap(AppleMapsCardDestination(link: "https://maps.apple.com/?ll=38.01573,114.473655", title: "石家庄站(火车站)"))
+        let host = UIHostingController(rootView: Color.white.sheet(isPresented: .constant(true)) {
+            MapApplicationPicker(destination: destination, installedApps: { apps })
+        })
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            host.dismiss(animated: false)
+            window.isHidden = true
+            window.rootViewController = nil
+            previous?.makeKeyAndVisible()
+        }
+        for _ in 0..<100 where host.presentedViewController == nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let sheet = try XCTUnwrap(host.presentedViewController)
+        try await Task.sleep(for: .milliseconds(650))
+        let view = try XCTUnwrap(sheet.presentationController?.presentedView)
+        let natural = UIHostingController(rootView: MapApplicationPickerContent(destination: destination, apps: apps,
+            onClose: {}, onApp: { _ in }, onWeb: {}))
+        if #available(iOS 16.4, *) { natural.safeAreaRegions = [] }
+        let expected = natural.sizeThatFits(in: CGSize(width: view.bounds.width, height: 2000)).height
+        XCTAssertGreaterThan(view.bounds.height, expected - 2)
+        XCTAssertLessThanOrEqual(view.bounds.height, expected + view.safeAreaInsets.bottom + 24,
+                                 "真实弹出的面板应贴合内容，不能停在默认高度而留下大片空白")
+        let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "地图选择面板-\(name)-自适应高度"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     func testCardRendersInNormalMarkdownAtPhoneWidth() throws {
         let controller = UIHostingController(rootView: DeepSeekHarnessMobile.MarkdownContent("[上海博物馆](https://maps.apple.com/?ll=31.2304,121.4737&q=Museum)").padding())
         controller.view.frame = CGRect(x: 0, y: 0, width: 390, height: 180)
@@ -18875,4 +18486,92 @@ extension ComposerAttachmentPasteTests {
             fileOptions: .openInPlace, visibility: .all) { _ in nil }
         XCTAssertTrue(ComposerPasteLoader.isAttachment(provider))
     }
+}
+
+@MainActor
+final class ComposerKeyboardAvoidanceTests: XCTestCase {
+    func testCompensatesOnlyOcclusionNotAlreadyAvoidedBySwiftUI() {
+        let keyboard = CGRect(x: 0, y: 500, width: 390, height: 344)
+        for (bottom, expected): (CGFloat, CGFloat) in [(844, 344), (560, 60), (500, 0), (480, 0)] {
+            XCTAssertEqual(ComposerKeyboardAvoidance.additionalInset(
+                viewFrame: CGRect(x: 0, y: 0, width: 390, height: bottom), keyboardFrame: keyboard, bottomSafeArea: 34
+            ), expected)
+        }
+    }
+
+    func testHiddenFloatingAndHardwareKeyboardRegions() {
+        let view = CGRect(x: 0, y: 0, width: 390, height: 844)
+        for keyboard in [CGRect(x: 0, y: 810, width: 390, height: 34),
+                         CGRect(x: 80, y: 400, width: 230, height: 260),
+                         CGRect(x: 0, y: 844, width: 390, height: 0)] {
+            XCTAssertEqual(ComposerKeyboardAvoidance.additionalInset(viewFrame: view, keyboardFrame: keyboard, bottomSafeArea: 34), 0)
+        }
+        XCTAssertEqual(ComposerKeyboardAvoidance.additionalInset(viewFrame: view,
+            keyboardFrame: CGRect(x: 0, y: 760, width: 390, height: 84), bottomSafeArea: 34), 84)
+    }
+
+    func testFollowsKeyboardFrameChangesWhenGuideIsNotYetAvailable() async throws {
+        let model = KeyboardAvoidanceTestModel()
+        let host = UIHostingController(rootView: KeyboardAvoidanceTestHarness(model: model))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        try await Task.sleep(for: .milliseconds(150))
+        func find(_ id: String, in view: UIView) -> UIView? {
+            if view.accessibilityIdentifier == id { return view }
+            return view.subviews.lazy.compactMap { find(id, in: $0) }.first
+        }
+        let action = try XCTUnwrap(find("keyboard-send-probe", in: host.view))
+        for height: CGFloat in [360, 480, 240, 84, 0] {
+            let frame = CGRect(x: 0, y: window.bounds.maxY - height, width: window.bounds.width, height: height)
+            NotificationCenter.default.post(name: UIResponder.keyboardWillChangeFrameNotification, object: nil, userInfo: [
+                UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: window.convert(frame, to: window.screen.coordinateSpace)),
+                UIResponder.keyboardIsLocalUserInfoKey: true
+            ])
+            try await Task.sleep(for: .milliseconds(100))
+            host.view.layoutIfNeeded()
+            XCTAssertEqual(model.inset, height, accuracy: 1)
+            XCTAssertLessThanOrEqual(action.convert(action.bounds, to: window).maxY, frame.minY + 1)
+        }
+    }
+
+}
+
+private final class KeyboardAvoidanceTestModel: ObservableObject {
+    @Published var inset: CGFloat = 0
+}
+
+private struct KeyboardAvoidanceTestHarness: View {
+    @ObservedObject var model: KeyboardAvoidanceTestModel
+    @State private var bottom: CGFloat = 0
+    @State private var height: CGFloat = 0
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            VStack {
+                KeyboardAvoidanceTestInput().frame(height: 40)
+                Text("发送").frame(height: 42)
+                    .background(ComposerFrameProbe(identifier: "keyboard-send-probe"))
+            }
+            .padding(.bottom, model.inset)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        // 模拟自动避让不足：探针必须独立识别实际系统键盘区域。
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .ignoresSafeArea(.container, edges: .bottom)
+        .background(WindowBottomSafeAreaReader(bottomInset: $bottom, windowHeight: $height, keyboardInset: $model.inset)
+            .ignoresSafeArea(.container, edges: .bottom))
+    }
+}
+
+private struct KeyboardAvoidanceTestInput: UIViewRepresentable {
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.text = "草稿不丢失"
+        view.accessibilityIdentifier = "composer-input"
+        return view
+    }
+    func updateUIView(_ uiView: UITextView, context: Context) {}
 }

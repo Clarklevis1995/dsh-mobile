@@ -191,7 +191,6 @@ class GatewayRuntime(
     private var reconnectBlocked = false
     /** 手动配对码是一次性的；失败后绝不能在后台反复重连。 */
     private var isManualPairingAttempt = false
-    private var upgradeAfterPairing = false
     private var pairingCode: String? = null
     private var endpoint: String? = null
     private var subscribedSessionId: String? = null
@@ -234,8 +233,6 @@ class GatewayRuntime(
     }
 
     suspend fun connect(endpoint: String) = serialized {
-        upgradeAfterPairing = false
-        (transport as? com.clarklevis.dsh.shared.platform.GatewayRtcTransport)?.resetRtcRecovery()
         requireWebSocketEndpoint(endpoint)
         if (trustedEndpoints.isNotEmpty() && endpoint !in trustedEndpoints) {
             throw GatewayPairingPayloadException(UiMessage("gateway.endpointUntrusted"), "Address not confirmed by this host")
@@ -256,7 +253,6 @@ class GatewayRuntime(
     }
 
     suspend fun pair(encodedPayload: String) = serialized {
-        upgradeAfterPairing = false
         val payload = GatewayPairingPayloadParser.parse(encodedPayload, clock.nowEpochMilliseconds())
         GatewayIdentity.validate(expectedGatewayId, payload.gatewayId)
         cancelForegroundResumeLocked()
@@ -322,7 +318,6 @@ class GatewayRuntime(
     suspend fun retireConnection() = serialized { disconnectLocked(persistDisconnected = false) }
 
     private suspend fun disconnectLocked(persistDisconnected: Boolean) {
-        upgradeAfterPairing = false
         desiredConnection = false
         reconnectBlocked = false
         pairingCode = null
@@ -556,11 +551,11 @@ class GatewayRuntime(
                 if (diagnosticsStore.isActive) diagnosticsStore.recordTraffic(request.payload.encodeToByteArray().size.toLong(), 0)
                 true
             },
-            onFailure = { error ->
+            onFailure = { _ ->
                 pendingLanes.remove(request.responseKind)?.active?.timeoutJob?.cancel()
                 rejectLocked(
                     request.requestType,
-                    if (error.message == "transport/ws-required") "transport/ws-required" else ERROR_SEND_FAILED,
+                    ERROR_SEND_FAILED,
                     request.targetSessionId,
                     request.correlationId,
                     request.isBackgroundHistory
@@ -776,15 +771,6 @@ class GatewayRuntime(
                 return null
             }
             pairingCode = null
-            upgradeAfterPairing = transport is com.clarklevis.dsh.shared.platform.GatewayRtcTransport &&
-                com.clarklevis.dsh.shared.transport.GatewayTransportPolicy.allowsRtc(target)
-        }
-        if (frame.kind == "hello" && upgradeAfterPairing) {
-            // 长期凭据已提交成功；换新鉴权连接协商，旧配对连接不执行业务。
-            upgradeAfterPairing = false
-            isManualPairingAttempt = false
-            openTransportLocked(preserveTurns = false)
-            return null
         }
         if (frame.kind == "hello") {
             try {

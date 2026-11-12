@@ -6,6 +6,20 @@ import DeepSeekHarnessShared
 @testable import DeepSeekHarnessMobile
 
 final class VoiceInputTests: XCTestCase {
+    func testAudioSystemExceptionBecomesRecoverableErrorAndNextOperationSucceeds() throws {
+        XCTAssertThrowsError(try performVoiceAudioOperation {
+            NSException(name: .internalInconsistencyException, reason: "模拟路由变化后的 installTap 断言").raise()
+        }) { error in
+            XCTAssertEqual((error as NSError).domain, "VoiceAudioEngine")
+        }
+        XCTAssertEqual(try performVoiceAudioOperation { 42 }, 42)
+        let original = NSError(domain: "SwiftAudioFailure", code: 7)
+        XCTAssertThrowsError(try performVoiceAudioOperation { throw original }) { error in
+            XCTAssertEqual((error as NSError).domain, original.domain)
+            XCTAssertEqual((error as NSError).code, original.code)
+        }
+    }
+
     func testNativeAudioSessionEnablesHapticsForColdCachedAndReopenedPreparation() throws {
         let session = AVAudioSession.sharedInstance()
         let originalPermission = session.allowHapticsAndSystemSoundsDuringRecording

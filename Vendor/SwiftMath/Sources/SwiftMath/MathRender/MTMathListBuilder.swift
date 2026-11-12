@@ -71,6 +71,7 @@ public struct MTMathListBuilder {
     var currentInnerAtom: MTInner?
     var currentEnv: MTEnvProperties?
     var currentFontStyle:MTFontStyle
+    var equationTag: MTMathAtom? = nil
     var spacesAllowed:Bool
     
     /** Contains any error that occurred during parsing. */
@@ -148,6 +149,7 @@ public struct MTMathListBuilder {
         if error != nil {
             return nil
         }
+        if let equationTag { list?.add(equationTag) }
         return list
     }
     
@@ -517,7 +519,56 @@ public struct MTMathListBuilder {
         return ""
     }
     
+    /// 常见 AMS 数学命令；保持显式分式字号、运算符间距及公式编号内容。
+    mutating func extendedMathCommand(_ command: String) -> MTMathAtom? {
+        if ["dfrac", "tfrac", "dbinom", "tbinom"].contains(command) {
+            let fraction = MTFraction(hasRule: command.hasSuffix("frac"))
+            fraction.numerator = buildInternal(true)
+            fraction.denominator = buildInternal(true)
+            if command.hasSuffix("binom") {
+                fraction.leftDelimiter = "("
+                fraction.rightDelimiter = ")"
+            }
+            let inner = MTInner()
+            inner.innerList = MTMathList(atoms: [MTMathStyle(style: command.hasPrefix("d") ? .display : .text), fraction])
+            return inner
+        }
+        if command == "tag" || command == "operatorname" {
+            var starred = false
+            if hasCharacters {
+                if getNextCharacter() == "*" { starred = true } else { unlookCharacter() }
+            }
+            let previousStyle = currentFontStyle
+            if command == "tag" { currentFontStyle = .roman }
+            let argument = buildInternal(true)
+            currentFontStyle = previousStyle
+            if command == "operatorname" {
+                return MTLargeOperator(value: argument?.atoms.map { $0.nucleus }.joined() ?? "", limits: starred)
+            }
+            let inner = MTInner()
+            let atoms = MTMathList(atoms: [MTMathSpace(space: 18)])
+            if !starred { atoms.add(MTMathAtom(type: .ordinary, value: "(")) }
+            for atom in argument?.atoms ?? [] { atoms.add(atom) }
+            if !starred { atoms.add(MTMathAtom(type: .ordinary, value: ")")) }
+            inner.innerList = atoms
+            equationTag = inner
+            return MTMathSpace(space: 0)
+        }
+        if command == "iint" || command == "iiint" {
+            let inner = MTInner()
+            let atoms = MTMathList()
+            for index in 0..<(command == "iint" ? 2 : 3) {
+                if index > 0 { atoms.add(MTMathSpace(space: -3)) }
+                atoms.add(MTMathAtomFactory.atom(forLatexSymbol: "int"))
+            }
+            inner.innerList = atoms
+            return inner
+        }
+        return nil
+    }
+
     mutating func atomForCommand(_ command:String) -> MTMathAtom? {
+        if let extended = extendedMathCommand(command) { return extended }
         if let atom = MTMathAtomFactory.atom(forLatexSymbol: command) {
             return atom
         }
@@ -784,6 +835,7 @@ public struct MTMathListBuilder {
     }
     
     mutating func atom(forCommand command: String) -> MTMathAtom? {
+        if let extended = extendedMathCommand(command) { return extended }
         if let atom = MTMathAtomFactory.atom(forLatexSymbol: command) {
             return atom
         }

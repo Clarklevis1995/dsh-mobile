@@ -6,11 +6,10 @@ import android.util.Log
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.platform.GatewayTransportState
-import com.clarklevis.dsh.shared.transport.RtcDiagnostics
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Gateway 和 RTC 固定字段诊断同时写入控制台与本地文件，支持发布包导出。
+ * Gateway 固定字段诊断同时写入控制台与本地文件，支持发布包导出。
  *
  * API 刻意不接收 endpoint、凭据、消息正文、Session ID、附件 ID 或 Base64，避免调用方误打敏感值。
  */
@@ -48,9 +47,6 @@ internal class AndroidGatewayDiagnostics private constructor(
     }
 
     @Suppress("LongParameterList")
-    fun rtc(event: String, reason: String, phase: String, channel: String, mode: String, elapsedMs: Long) {
-        writer(Log.INFO, TAG, RtcDiagnostics.message(event, reason, phase, channel, mode, elapsedMs))
-    }
 
     fun chatPrefetch(stage: String, count: Int) {
         val safeStage = stage.takeIf {

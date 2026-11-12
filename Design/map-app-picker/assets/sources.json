@@ -1,0 +1,34 @@
+[
+  {
+    "id": "amap",
+    "name": "高德地图-高德打车,导航公交地铁出行",
+    "seller": "AutoNavi Information Technology Co. Ltd.",
+    "source": "https://apps.apple.com/cn/app/%E9%AB%98%E5%BE%B7%E5%9C%B0%E5%9B%BE-%E9%AB%98%E5%BE%B7%E6%89%93%E8%BD%A6-%E5%AF%BC%E8%88%AA%E5%85%AC%E4%BA%A4%E5%9C%B0%E9%93%81%E5%87%BA%E8%A1%8C/id461703208?uo=4",
+    "imageURL": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/47/36/74/4736744e-e536-3313-1981-d3879684d2a9/AppIcon-0-0-1x_U007epad-0-1-0-85-220.png/512x512bb.jpg",
+    "bytes": 27207
+  },
+  {
+    "id": "baidu",
+    "name": "百度地图-想出门，先问百度地图",
+    "seller": "Beijing Baidu Netcom Science & Technology Co.,Ltd",
+    "source": "https://apps.apple.com/cn/app/%E7%99%BE%E5%BA%A6%E5%9C%B0%E5%9B%BE-%E6%83%B3%E5%87%BA%E9%97%A8-%E5%85%88%E9%97%AE%E7%99%BE%E5%BA%A6%E5%9C%B0%E5%9B%BE/id452186370?uo=4",
+    "imageURL": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/be/7c/ca/be7cca11-dd80-af01-9da8-534f8c7c3c9d/appIconLiquid-0-0-1x_U007epad-0-1-0-0-sRGB-85-220.png/512x512bb.jpg",
+    "bytes": 25111
+  },
+  {
+    "id": "google",
+    "name": "Google Maps",
+    "seller": "Google LLC",
+    "source": "https://apps.apple.com/us/app/google-maps/id585027354?uo=4",
+    "imageURL": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/95/a7/0f/95a70f0b-2bf2-d364-43b0-5c808c66b8ed/maps_2025-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-0-0-85-220.png/512x512bb.jpg",
+    "bytes": 23350
+  },
+  {
+    "id": "apple",
+    "name": "Apple Maps",
+    "seller": "Apple Inc.",
+    "source": "https://apps.apple.com/us/app/apple-maps/id915056765?uo=4",
+    "imageURL": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/98/53/2e/98532ed4-879d-02f7-5021-84082f28593e/mapsCalistoga-0-0-1x_U007epad-0-1-0-85-220.png/512x512bb.jpg",
+    "bytes": 39697
+  }
+]

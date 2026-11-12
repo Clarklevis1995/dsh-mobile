@@ -61,24 +61,11 @@ class AndroidAppGraph(
     private val routeClientProvider: () -> okhttp3.OkHttpClient = {
         (application as? DshAndroidApplication)?.routeClient() ?: com.clarklevis.dsh.android.platform.OkHttpGatewayTransport.defaultClient()
     }
-    private val routeAllowsRtc: (String) -> Boolean = { endpoint ->
-        // 经节点时不尝试 RTC：节点的 CONNECT 出口只带 TCP，WebRTC 的 socket 会绕过它。
-        (application as? DshAndroidApplication)?.tunnel?.proxyForRoute() == null &&
-            com.clarklevis.dsh.shared.transport.GatewayTransportPolicy.allowsRtc(endpoint)
-    }
-    val transport: GatewayTransport = transportOverride ?: com.clarklevis.dsh.android.platform.RtcGatewayTransport(
-        application,
-        gatewayScope,
-        diagnostics,
-        rtcPolicy = routeAllowsRtc,
-        clientProvider = routeClientProvider
+    val transport: GatewayTransport = transportOverride ?: com.clarklevis.dsh.shared.gateway.SplitGatewayTransport(
+        com.clarklevis.dsh.android.platform.OkHttpGatewayTransport(routeClientProvider, diagnostics),
+        com.clarklevis.dsh.android.platform.OkHttpGatewayTransport(routeClientProvider, diagnostics)
     )
-    internal val connectionMethod: kotlinx.coroutines.flow.StateFlow<String>
-        get() = (transport as? com.clarklevis.dsh.android.platform.RtcGatewayTransport)?.connectionMethod
-            ?: kotlinx.coroutines.flow.MutableStateFlow("WebSocket")
-    internal val connectionPaths
-        get() = (transport as? com.clarklevis.dsh.android.platform.RtcGatewayTransport)?.connectionPaths
-            ?: kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, com.clarklevis.dsh.shared.transport.RtcSelectedPath>())
+    internal val connectionMethod = kotlinx.coroutines.flow.MutableStateFlow("WebSocket")
     val gatewayRuntime = GatewayRuntime(
         transport = transport,
         preferences = preferences,

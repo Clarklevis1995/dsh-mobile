@@ -467,44 +467,13 @@ class GatewayRuntimeIntegrationTest {
     }
 
     @Test
-    fun rtcPairingReopensWithPersistedCredentialsBeforeAnyBusinessHello() = runTest {
-        val raw = FakeTransport()
-        val upgraded = object : com.clarklevis.dsh.shared.platform.GatewayRtcTransport, GatewayTransport by raw {
-            override val conversationEvents: Flow<GatewayTransportEvent> = kotlinx.coroutines.flow.emptyFlow()
-            override fun resetRtcRecovery() = Unit
-        }
-        val credentials = FakeCredentials()
-        val runtime = GatewayRuntime(upgraded, FakePreferences(), credentials, FakeAttachmentCache(),
-            FakeNetworkMonitor(), FakeClock(0), backgroundScope)
-        runCurrent()
-        runtime.pair(encodeBase64Url(
-            """{"version":2,"publicUrl":"wss://gateway.example/ws/mobile","pairingCode":"pair-code","expiresAt":60000}"""
-        ))
-        raw.opened()
-        raw.receive("""{"kind":"paired","token":"saved-token"}""")
-        runCurrent()
-        assertEquals("saved-token", credentials.tokens["wss://gateway.example/ws/mobile"])
-        raw.receive("""{"kind":"hello","protocol":3}""")
-        runCurrent()
-        assertEquals(2, raw.connectionSpecs.size)
-        assertEquals("saved-token", raw.connectionSpecs.last().bearerToken)
-        assertNull(raw.connectionSpecs.last().pairingCode)
-        assertTrue(raw.sentPayloads.isEmpty())
-        assertFalse(runtime.state.value.connection == GatewayConnectionState.CONNECTED)
-        raw.opened()
-        raw.receive("""{"kind":"hello","protocol":3}""")
-        runCurrent()
-        assertEquals(GatewayConnectionState.CONNECTED, runtime.state.value.connection)
-    }
-
-    @Test
-    fun lanAndTailscalePairingKeepOriginalWebSocketWithoutRtcReopen() = runTest {
-        for (host in listOf("192.168.1.94", "100.100.1.19")) {
-            val endpoint = "ws://$host:3081/ws/mobile"
+    fun allEndpointsKeepOriginalWebSocketAfterPairing() = runTest {
+        for (host in listOf("192.168.1.94", "100.100.1.19", "gateway.example")) {
+            val scheme = if (host == "gateway.example") "wss" else "ws"
+            val endpoint = "$scheme://$host:3081/ws/mobile"
             val raw = FakeTransport()
-            val transport = object : com.clarklevis.dsh.shared.platform.GatewayRtcTransport, GatewayTransport by raw {
+            val transport = object : com.clarklevis.dsh.shared.platform.GatewaySplitTransport, GatewayTransport by raw {
                 override val conversationEvents: Flow<GatewayTransportEvent> = kotlinx.coroutines.flow.emptyFlow()
-                override fun resetRtcRecovery() = Unit
             }
             val credentials = FakeCredentials()
             val runtime = GatewayRuntime(transport, FakePreferences(), credentials, FakeAttachmentCache(),

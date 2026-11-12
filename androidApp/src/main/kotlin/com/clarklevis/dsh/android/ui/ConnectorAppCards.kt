@@ -16,7 +16,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -34,6 +36,8 @@ import org.commonmark.node.Link
 import org.commonmark.node.Paragraph
 import org.commonmark.node.Text as MarkdownText
 import org.json.JSONObject
+import com.clarklevis.dsh.shared.facade.SharedMapDestination
+import com.clarklevis.dsh.shared.facade.SharedMapLinks
 import java.net.URI
 import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
@@ -46,24 +50,14 @@ internal data class ConnectorAppCard(
 ) {
     val isMap get() = latitude != null && longitude != null
     fun open(context: Context) {
-        val target = when {
-            isMap && transport != null -> Uri.Builder().scheme("https").authority("www.google.com").path("/maps/dir/")
-                .appendQueryParameter("api", "1").appendQueryParameter("destination", "$latitude,$longitude")
-                .appendQueryParameter("travelmode", transport).build()
-            isMap -> Uri.parse("geo:$latitude,$longitude?q=${Uri.encode("$latitude,$longitude($title)")}")
-            platform == "local" -> ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, URI(url).path.substringAfterLast('/').toLong())
-            else -> Uri.parse(url)
-        }
+        check(!isMap) { "map_picker_required" }
+        val target = if (platform == "local") ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            URI(url).path.substringAfterLast('/').toLong()) else Uri.parse(url)
         val intent = Intent(Intent.ACTION_VIEW, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (platform == "local") intent.setDataAndType(target, "audio/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        try { context.startActivity(intent) }
-        catch (failure: android.content.ActivityNotFoundException) {
-            if (!isMap) throw failure
-            val fallback = Uri.Builder().scheme("https").authority("www.google.com").path("/maps/search/")
-                .appendQueryParameter("api", "1").appendQueryParameter("query", "$latitude,$longitude").build()
-            context.startActivity(Intent(Intent.ACTION_VIEW, fallback).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
+        context.startActivity(intent)
     }
+
 }
 
 private fun queryPairs(query: String?): Map<String, String>? {
@@ -90,30 +84,9 @@ internal fun connectorAppCard(link: String, title: String): ConnectorAppCard? = 
     if (link.length > 12288 || title.length > 1000) return null
     val original = URI(link)
     if (original.userInfo != null || original.port != -1) return null
-    if (original.scheme == "https" && original.host == "www.google.com" && original.path == "/maps/search/") {
-        if (original.fragment != null) return null
-        val query = queryPairs(original.rawQuery) ?: return null
-        if (query.keys != setOf("api", "query") || query["api"] != "1") return null
-        val pair = query["query"]?.split(',') ?: return null
-        if (pair.size != 2) return null
-        val latitude = pair[0].toDoubleOrNull() ?: return null; val longitude = pair[1].toDoubleOrNull() ?: return null
-        if (!latitude.isFinite() || !longitude.isFinite() || latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
-        return ConnectorAppCard(link, title.trim().takeIf { it.isNotEmpty() && it != link } ?: appText("地图地点"), "maps", latitude = latitude, longitude = longitude)
-    }
-    if (original.host?.lowercase() == "maps.apple.com" && original.scheme in listOf("https", "maps")) {
-        if (original.path !in listOf("", "/") || original.fragment != null) return null
-        val query = queryPairs(original.rawQuery) ?: return null
-        if (query.keys.any { it !in listOf("ll", "q", "daddr", "dirflg") }) return null
-        if (query.containsKey("ll") && query.containsKey("daddr")) return null
-        val route = query.containsKey("daddr")
-        if (!route && query.containsKey("dirflg")) return null
-        val coords = query[if (route) "daddr" else "ll"]?.split(',') ?: return null
-        if (coords.size != 2) return null
-        val latitude = coords[0].toDoubleOrNull() ?: return null; val longitude = coords[1].toDoubleOrNull() ?: return null
-        if (!latitude.isFinite() || !longitude.isFinite() || latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
-        val transport = if (route) when (query["dirflg"] ?: "d") { "d" -> "driving"; "w" -> "walking"; "r" -> "transit"; else -> return null } else null
-        return ConnectorAppCard(link, title.trim().takeIf { it.isNotEmpty() && it != link } ?: query["q"].orEmpty().ifEmpty { appText("地图地点") },
-            "maps", latitude = latitude, longitude = longitude, transport = transport)
+    SharedMapLinks().parse(link, title)?.let { map ->
+        return ConnectorAppCard(link, map.name.ifBlank { appText("地图地点") }, "maps", latitude = map.latitude,
+            longitude = map.longitude, transport = map.transport.takeIf { map.mode == "directions" })
     }
     var metadata: JSONObject? = null
     var target = original
@@ -206,7 +179,13 @@ private fun java.io.InputStream.readArtwork(): ByteArray {
 @Composable
 internal fun ConnectorAppCardView(card: ConnectorAppCard) {
     val context = LocalContext.current
+    // 文字和玻璃着色保持中性，不继承 Material 默认带紫色的容器色。
+    val dark = MaterialTheme.colorScheme.background.luminance() < .5f
+    val foreground = if (dark) Color(0xFFF2F2F7) else Color(0xFF171A20)
+    val secondary = if (dark) Color(0xFF98989F) else Color(0xFF747880)
+    val shape = RoundedCornerShape(16.dp)
     var failed by remember(card) { mutableStateOf(false) }
+    var choosingMap by remember(card) { mutableStateOf(false) }
     val image by produceState<ImageBitmap?>(null, card.artwork) {
         value = card.artwork?.let { url -> withContext(Dispatchers.IO) {
             runCatching {
@@ -227,23 +206,27 @@ internal fun ConnectorAppCardView(card: ConnectorAppCard) {
             }.getOrNull()
         } }
     }
-    Surface(onClick = { failed = runCatching { card.open(context) }.isFailure }, shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth().testTag(if (card.isMap) "maps-app-card" else "music-app-card")) {
+    Surface(onClick = { if (card.isMap) choosingMap = true else failed = runCatching { card.open(context) }.isFailure }, shape = shape,
+        color = Color.Transparent, contentColor = foreground, tonalElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth().dshAppCardGlass(shape, dark)
+            .testTag(if (card.isMap) "maps-app-card" else "music-app-card")) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            val icon = if (card.isMap) R.drawable.ic_connector_location else R.drawable.ic_connector_music
+            val icon = if (card.isMap) R.drawable.connector_app_location else R.drawable.connector_app_music
             if (image != null) Image(image!!, null, Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
-            else Icon(painterResource(icon), null, Modifier.size(if (card.isMap) 48.dp else 64.dp).padding(8.dp), tint = DshColors.Ocean)
+            else Image(painterResource(icon), null, Modifier.size(if (card.isMap) 48.dp else 64.dp).clip(RoundedCornerShape(11.dp)))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(card.title, style = MaterialTheme.typography.titleSmall, maxLines = 2)
-                card.artist?.takeIf(String::isNotEmpty)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+                card.artist?.takeIf(String::isNotEmpty)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, color = secondary) }
                 val details = listOfNotNull(card.album?.takeIf(String::isNotEmpty), card.duration?.let { seconds -> "%d:%02d".format(seconds.toInt() / 60, seconds.toInt() % 60) })
-                if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall, maxLines = 1, color = secondary)
                 Text(if (card.isMap) appText("在地图应用中打开") else if (card.platform == "local") appText("在音乐应用中打开") else appText("在 %1\$s 中打开", musicPlatformTitle(card.platform)),
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    style = MaterialTheme.typography.labelSmall, color = secondary)
             }
-            Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp), tint = secondary)
         }
     }
+    if (choosingMap && card.isMap) MapAppPicker(SharedMapDestination(card.latitude!!, card.longitude!!, card.title,
+        if (card.transport == null) "show" else "directions", card.transport ?: "driving")) { choosingMap = false }
     if (failed) AlertDialog(onDismissRequest = { failed = false }, title = { Text(appText("无法打开应用")) },
         text = { Text(appText("请检查是否已安装对应应用并允许访问。")) }, confirmButton = { TextButton(onClick = { failed = false }) { Text(appText("好")) } })
 }

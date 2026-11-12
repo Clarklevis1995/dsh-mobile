@@ -151,9 +151,10 @@ final class CompactComposerUITests: XCTestCase {
         let viewport = app.collectionViews["conversation-history-viewport"]
         XCTAssertTrue(viewport.exists)
         viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).tap()
-        XCTAssertTrue(NSPredicate { _, _ in !action.isHittable }.evaluateAfterWaiting(timeout: 5))
+        XCTAssertTrue(NSPredicate { _, _ in action.isHittable && !app.keyboards.firstMatch.exists }.evaluateAfterWaiting(timeout: 5))
         XCTAssertEqual(input.value as? String, draft)
-        XCTAssertEqual(input.frame.width, compactFrame.width, accuracy: 1)
+        XCTAssertEqual(input.frame.width, compactFrame.width - 48, accuracy: 1)
+        XCTAssertLessThan(input.frame.maxX, action.frame.minX)
         attach(app, name: "会话输入框-收紧并保留草稿")
     }
 
@@ -1131,5 +1132,85 @@ final class PhoneConnectorsUITests: XCTestCase {
         XCTAssertEqual(app.switches.matching(NSPredicate(format: "label CONTAINS %@ OR label CONTAINS %@", "联系人", "通讯录")).count, 0)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "连接器本机能力"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+}
+
+final class TabletWindowControlsUITests: XCTestCase {
+    func testWindowControlsStayAboveNavigationWhenResizedAndTiled() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "需要 iPad 模拟器")
+        guard #available(iOS 26.0, *) else { throw XCTSkip("需要 iPadOS 26 窗口模式") }
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let system = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let alert = system.alerts.firstMatch
+        if alert.waitForExistence(timeout: 2) {
+            let deny = alert.buttons.matching(NSPredicate(format: "label CONTAINS '不允许' OR label BEGINSWITH 'Don'")).firstMatch
+            if deny.exists { deny.tap() }
+        }
+        XCTAssertTrue(app.buttons["设置"].waitForExistence(timeout: 10))
+        app.buttons["设置"].tap()
+        let bar = app.navigationBars["设置"]
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+        let screenWidth = system.windows.firstMatch.frame.width
+        if app.windows.firstMatch.frame.width > screenWidth * 0.9 {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.995, dy: 0.995)).press(forDuration: 0.3,
+                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.8)))
+        }
+        let controls = system.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH 'window-controls:' AND label CONTAINS 'Whaleness'"
+        )).firstMatch
+        XCTAssertTrue(controls.waitForExistence(timeout: 5), "需要启用 iPad 窗口模式")
+        func assertTopPlacement() {
+            let window = app.windows.firstMatch.frame
+            XCTAssertGreaterThanOrEqual(controls.frame.minY, window.minY)
+            XCTAssertLessThan(controls.frame.minY - window.minY, 12)
+            XCTAssertLessThanOrEqual(controls.frame.maxY, bar.frame.minY)
+            XCTAssertTrue(bar.buttons["返回"].isHittable)
+            print("iPad 窗口 \(window)，窗口控件 \(controls.frame)，导航栏 \(bar.frame)")
+        }
+        assertTopPlacement()
+        controls.tap()
+        system.buttons["Zoom-button"].press(forDuration: 1)
+        let tileRight = system.buttons["右"]
+        XCTAssertTrue(tileRight.waitForExistence(timeout: 3))
+        tileRight.tap()
+        app.activate()
+        XCTAssertTrue(NSPredicate { _, _ in
+            let frame = app.windows.firstMatch.frame
+            return frame.width > screenWidth * 0.45 && frame.width < screenWidth * 0.55
+                && frame.minX > screenWidth * 0.4
+        }.evaluateAfterWaiting(timeout: 15), "应平铺到屏幕右半边；实际窗口 \(app.windows.firstMatch.frame)，屏幕宽度 \(screenWidth)")
+        bar.staticTexts["设置"].tap()
+        XCTAssertTrue(controls.waitForExistence(timeout: 3))
+        assertTopPlacement()
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "iPad-window-controls-tiled-right"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+}
+
+final class GatewayHostRowHitTargetUITests: XCTestCase {
+    func testHostRowIncludesIconStatusAndBlankPadding() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        if app.alerts.firstMatch.waitForExistence(timeout: 2) { app.alerts.firstMatch.buttons.firstMatch.tap() }
+        let switcher = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "，切换主机")).firstMatch
+        try XCTSkipUnless(switcher.waitForExistence(timeout: 10), "需要已保存的主机验证切换列表")
+        let positions: [CGVector] = [.init(dx: 0.02, dy: 0.5), .init(dx: 0.98, dy: 0.5),
+                                     .init(dx: 0.5, dy: 0.02), .init(dx: 0.5, dy: 0.98), .init(dx: 0.75, dy: 0.5)]
+        for position in positions {
+            switcher.tap()
+            let current = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "gateway-host-row-")).firstMatch
+            XCTAssertTrue(current.waitForExistence(timeout: 5))
+            current.coordinate(withNormalizedOffset: position).tap()
+            XCTAssertTrue(NSPredicate { _, _ in !current.exists }.evaluateAfterWaiting(timeout: 5), "点击主机 Item 的图标、状态点和留白都应选中并关闭列表")
+        }
     }
 }

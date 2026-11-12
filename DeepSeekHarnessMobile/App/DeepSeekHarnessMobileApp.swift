@@ -2,6 +2,21 @@ import SwiftUI
 import DeepSeekHarnessShared
 
 private final class AgentNotificationAppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        // 不回传已有配置，其中可能包含 SwiftUI 自身的委托，重复包装会导致递归。
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        if #available(iOS 26.0, *),
+           UIDevice.current.userInterfaceIdiom == .pad,
+           connectingSceneSession.role == .windowApplication {
+            configuration.delegateClass = AppWindowSceneDelegate.self
+        }
+        return configuration
+    }
+
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         AppInterfaceOrientationPolicy.orientations
     }
@@ -24,6 +39,14 @@ private final class AgentNotificationAppDelegate: NSObject, UIApplicationDelegat
         // 只有「开着」且「这台设备登录过」才自动恢复，其它情况保持关闭。
         TailscaleTunnelController.shared.autostartIfNeeded()
         return true
+    }
+}
+
+/// 让 iPad 窗口控件独立停靠在窗口顶边，导航栏继续遵循系统安全区域。
+private final class AppWindowSceneDelegate: NSObject, UIWindowSceneDelegate {
+    @available(iOS 26.0, *)
+    func preferredWindowingControlStyle(for windowScene: UIWindowScene) -> UIWindowScene.WindowingControlStyle {
+        .minimal
     }
 }
 

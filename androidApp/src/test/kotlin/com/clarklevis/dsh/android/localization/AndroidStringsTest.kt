@@ -23,6 +23,18 @@ class AndroidStringsTest {
     @get:Rule val locale = LocaleTestRule(Locale.ENGLISH)
 
     @Test
+    fun attachmentPreparationFailuresUseTheActiveLanguage() {
+        assertEquals("Unable to read the pasted attachment.", appText("无法读取粘贴的附件"))
+        assertEquals("This conversation or gateway does not support this type of attachment.",
+            appText("当前会话或网关不支持此类附件"))
+        assertEquals("You can add up to 20 attachments. Wait for the existing attachments to finish preparing.",
+            appText("一次最多添加 20 个附件，请等待已有附件准备完成"))
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+        assertEquals("无法读取粘贴的附件", appText("无法读取粘贴的附件"))
+        assertEquals("当前会话或网关不支持此类附件", appText("当前会话或网关不支持此类附件"))
+    }
+
+    @Test
     fun allWorkspaceAndCreationReminderCopySupportsBothLanguagesAndSingularCounts() {
         assertEquals("All sessions", appText("全部会话"))
         assertEquals("Select a workspace first", appText("请先选择工作区"))

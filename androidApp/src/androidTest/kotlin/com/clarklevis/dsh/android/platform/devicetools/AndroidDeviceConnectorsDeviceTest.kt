@@ -224,6 +224,37 @@ class AndroidDeviceConnectorsDeviceTest {
         assertEquals(1, opened)
     }
 
+    @Test fun mapsOpenOnlyPreparesCardDataAndNeverLaunchesAnExternalActivity() = runBlocking {
+        var opened = 0
+        val wrapper = object : android.content.ContextWrapper(context) {
+            override fun checkPermission(permission: String, pid: Int, uid: Int) = android.content.pm.PackageManager.PERMISSION_GRANTED
+            override fun startActivity(intent: android.content.Intent) { opened++ }
+        }
+        val services = AndroidConnectorServices(wrapper, "map-card-" + UUID.randomUUID())
+        for (mode in listOf("show", "directions")) for (transport in listOf("driving", "walking", "transit")) {
+            val id = "$mode-$transport"
+            val args = JSONObject().put("latitude", 38.01573).put("longitude", 114.473655)
+                .put("name", "石家庄站 & 入口").put("mode", mode)
+                .also { if (mode == "directions") it.put("transport", transport) }
+            val request = JSONObject().put("invocationId", id).put("sessionId", "map-session").put("toolCallId", id)
+                .put("tool", "maps.open").put("arguments", args)
+            repeat(2) {
+                val result = services.execute(request)
+                assertEquals("ready", result.getString("status"))
+                assertEquals(args.getString("name"), result.getString("name"))
+                assertEquals(args.getDouble("latitude"), result.getDouble("latitude"), 0.0)
+                assertEquals(args.getDouble("longitude"), result.getDouble("longitude"), 0.0)
+                assertEquals(mode, result.getString("mode"))
+                if (mode == "directions") assertEquals(transport, result.getString("transport"))
+                else assertFalse(result.has("transport"))
+                // 模拟回执发送成功后的生命周期，仍不能安排浏览器或地图跳转。
+                services.completeHandoff(id)
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+                assertEquals(0, opened)
+            }
+        }
+    }
+
     @Test fun writeReceiptsSurviveRecreationAndSeparateHostsSessionsAndArguments() = runBlocking {
         val host = "ledger-" + UUID.randomUUID(); val operation = UUID.randomUUID().toString()
         val request = JSONObject().put("sessionId", "s").put("tool", "calendar.create")

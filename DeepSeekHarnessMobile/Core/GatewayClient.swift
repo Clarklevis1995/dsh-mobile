@@ -48,7 +48,6 @@ final class GatewayClient: ObservableObject {
               let endpoint else { return false }
         subscriptionRecoveryAttempts += 1
         traceLifecycle("subscription-recovery attempt=\(subscriptionRecoveryAttempts)")
-        forceNextWebsocket = true
         beginConnection(to: endpoint.absoluteString, pairingCode: nil, resetReportedFailure: false)
         return true
     }
@@ -127,9 +126,7 @@ final class GatewayClient: ObservableObject {
     private let credentials: any GatewayCredentialStoring
     private let heartbeatInterval: Duration
     private let probeTimeout: Duration
-    private let foregroundRtcTimeout: Duration
     private let subscriptionTimeoutInterval: Duration
-    private let rtcPolicy: (String) -> Bool
     private let prepareTunnel: (String) async -> Bool
     private let tunnelForwarder: (String) async -> TsnetNodeClient.Forward?
 
@@ -138,9 +135,7 @@ final class GatewayClient: ObservableObject {
         credentials: (any GatewayCredentialStoring)? = nil,
         heartbeatInterval: Duration = .seconds(30),
         probeTimeout: Duration = .seconds(5),
-        foregroundRtcTimeout: Duration = .seconds(3),
         subscriptionTimeoutInterval: Duration = .seconds(15),
-        rtcPolicy: @escaping (String) -> Bool = { GatewayTransportPolicy.shared.allowsRtc(endpoint: $0) },
         prepareTunnel: @escaping (String) async -> Bool = { await TailscaleTunnelController.shared.prepareForConnection(to: $0) },
         tunnelForwarder: @escaping (String) async -> TsnetNodeClient.Forward? = { await TailscaleTunnelController.shared.forwarder(for: $0) }
     ) {
@@ -148,9 +143,7 @@ final class GatewayClient: ObservableObject {
         self.credentials = credentials ?? SystemGatewayCredentialStore.shared
         self.heartbeatInterval = heartbeatInterval
         self.probeTimeout = probeTimeout
-        self.foregroundRtcTimeout = foregroundRtcTimeout
         self.subscriptionTimeoutInterval = subscriptionTimeoutInterval
-        self.rtcPolicy = rtcPolicy
         self.prepareTunnel = prepareTunnel
         self.tunnelForwarder = tunnelForwarder
     }
@@ -169,11 +162,6 @@ final class GatewayClient: ObservableObject {
         isReadyForSessionCreation = true
     }
 
-    func installRtcConnectionForTesting(_ connection: any GatewayRtcConnection) {
-        rtcLink = connection
-        connectionMethod = "WebRTC"
-        lastSuccessfulConnectionWasRtc = true
-    }
 
     func recoverNetworkConnectionForTesting() { recoverNetworkConnection() }
 #endif
@@ -227,17 +215,12 @@ final class GatewayClient: ObservableObject {
         let data = try JSONSerialization.data(withJSONObject: ["type": "ping", "requestId": requestID])
         let payload = String(decoding: data, as: UTF8.self)
         let generation = connectionGeneration
-        if let rtcLink, rtcLink.isRtc { try await rtcLink.send(payload, channel: "control") }
-        else { try await socket.send(.string(payload)) }
+        try await socket.send(.string(payload))
         guard connectionGeneration == generation, self.socket === socket else { throw CancellationError() }
         recordNetworkSent(payload)
     }
 
     @Published private(set) var connectionMethod = ""
-    @Published private(set) var connectionPaths: [String: RtcSelectedPath] = [:]
-    private var rtcLink: (any GatewayRtcConnection)?
-    private var forceNextWebsocket = false
-    private var upgradeAfterPairing = false
 
     @Published private(set) var serverPort: Int?
     @Published private(set) var clientCount: Int?
@@ -320,11 +303,7 @@ final class GatewayClient: ObservableObject {
     var connectedEndpoint: String? { endpoint?.absoluteString }
     private var endpoint: URL?
     private var lastSuccessfulEndpoint: URL?
-    private var lastSuccessfulConnectionWasRtc = false
-    private var backgroundConnectionWasRtc = false
     private var foregroundFastRetryAvailable = false
-    private var foregroundRtcRetryAvailable = false
-    private var foregroundRtcTimeoutTask: Task<Void, Never>?
     private var foregroundRecoveryStartedAt: TimeInterval?
     private var wantsConnection = false
     private var pairingCode: String?
@@ -347,7 +326,6 @@ final class GatewayClient: ObservableObject {
         reconnectTask?.cancel()
         connectionTimeoutTask?.cancel()
         foregroundProbeTask?.cancel()
-        foregroundRtcTimeoutTask?.cancel()
         heartbeatTask?.cancel()
         socket?.cancel(with: .goingAway, reason: nil)
         transportSession.invalidateAndCancel()
@@ -356,12 +334,8 @@ final class GatewayClient: ObservableObject {
     func connect(to rawEndpoint: String) {
         cancelSubscriptionRecovery()
         lastSuccessfulEndpoint = nil
-        lastSuccessfulConnectionWasRtc = false
-        backgroundConnectionWasRtc = false
         foregroundFastRetryAvailable = false
-        foregroundRtcRetryAvailable = false
         foregroundRecoveryStartedAt = nil
-        forceNextWebsocket = false
         isRecoveringFromBackground = false
         isManualPairingAttempt = false
         beginConnection(to: rawEndpoint, pairingCode: nil, resetReportedFailure: true)
@@ -381,10 +355,7 @@ final class GatewayClient: ObservableObject {
     func connectForPairing(_ payload: GatewayPairingPayload) {
         cancelSubscriptionRecovery()
         lastSuccessfulEndpoint = nil
-        lastSuccessfulConnectionWasRtc = false
-        backgroundConnectionWasRtc = false
         foregroundFastRetryAvailable = false
-        foregroundRtcRetryAvailable = false
         foregroundRecoveryStartedAt = nil
         isRecoveringFromBackground = false
         isManualPairingAttempt = true
@@ -396,9 +367,6 @@ final class GatewayClient: ObservableObject {
     func applicationDidEnterBackground() {
         isReadyForSessionCreation = false
         networkRecovery.cancel()
-        if !isApplicationInBackground { backgroundConnectionWasRtc = lastSuccessfulConnectionWasRtc }
-        foregroundRtcTimeoutTask?.cancel()
-        foregroundRtcTimeoutTask = nil
         // 保留在途订阅和最后一次选择，仅取消前台等待期限。
         subscriptionTimeout?.cancel()
         subscriptionTimeout = nil
@@ -425,19 +393,10 @@ final class GatewayClient: ObservableObject {
         guard wasInBackground || state != .connecting else { return }
         if wasInBackground {
             foregroundFastRetryAvailable = lastSuccessfulEndpoint != nil
-            foregroundRtcRetryAvailable = backgroundConnectionWasRtc
-            backgroundConnectionWasRtc = false
             foregroundRecoveryStartedAt = ProcessInfo.processInfo.systemUptime
         }
         reconnectAttempt = 0
         if state.isConnected {
-            // 后台可能已经先恢复了 WS；保留进入后台时的 RTC 偏好。
-            if wasInBackground, foregroundRtcRetryAvailable, rtcLink?.isRtc != true,
-               let endpoint = lastSuccessfulEndpoint ?? endpoint, rtcPolicy(endpoint.absoluteString),
-               expectedGatewayID != nil, channel == "control" {
-                reconnectForegroundTransport(to: endpoint)
-                return
-            }
             conversationClient?.applicationDidBecomeActive()
             probeForegroundConnection()
             return
@@ -456,24 +415,14 @@ final class GatewayClient: ObservableObject {
         )
     }
 
-    /// 前台恢复最多尝试一次新的 RTC；限时失败后立即改用 WS，避免循环协商。
+    /// 回到前台后直接恢复已鉴权的 WebSocket 连接。
     private func reconnectForegroundTransport(to endpoint: URL) {
-        let retryRtc = foregroundRtcRetryAvailable && rtcPolicy(endpoint.absoluteString) &&
-            expectedGatewayID != nil && channel == "control"
-        foregroundRtcRetryAvailable = false
-        forceNextWebsocket = !retryRtc
-        if retryRtc {
-            traceLifecycle("foreground-fast-reconnect transport=webrtc")
-        } else {
-            foregroundFastRetryAvailable = false
-            traceLifecycle("foreground-fast-reconnect transport=websocket")
-        }
-        beginConnection(to: endpoint.absoluteString, pairingCode: nil, resetReportedFailure: false,
-                        rtcRecoveryTimeout: retryRtc ? foregroundRtcTimeout : nil)
+        foregroundFastRetryAvailable = false
+        traceLifecycle("foreground-fast-reconnect transport=websocket")
+        beginConnection(to: endpoint.absoluteString, pairingCode: nil, resetReportedFailure: false)
     }
 
-    private func beginConnection(to rawEndpoint: String, pairingCode: String?, resetReportedFailure: Bool,
-                                 rtcRecoveryTimeout: Duration? = nil) {
+    private func beginConnection(to rawEndpoint: String, pairingCode: String?, resetReportedFailure: Bool) {
         traceLifecycle("begin-connection")
         disconnectTransport(reconnect: false)
         guard let url = URL(string: rawEndpoint), ["ws", "wss"].contains(url.scheme?.lowercased() ?? "") else {
@@ -540,83 +489,26 @@ final class GatewayClient: ObservableObject {
                 request.url = local
                 TunnelDiagnostics.transport("route=node target=\(forward.target) local=\(forward.localPort)")
             }
-            // 经节点时不试 RTC：WebRTC 用的是自己的 socket，绕过这个入口（安卓实测过它不会走节点）。
-            let rtcAllowed = self.rtcPolicy(url.absoluteString) && forward == nil
-            let negotiate = self.channel == "control" && !self.probeOnly && token?.isEmpty == false &&
-                pairingCode == nil && self.expectedGatewayID != nil && !self.forceNextWebsocket && rtcAllowed
-            if self.channel == "control", !self.probeOnly, !negotiate {
-                let reason: String
-                if forward != nil { reason = "node-websocket" }
-                else if !rtcAllowed { reason = "lan-websocket" }
-                else if pairingCode != nil { reason = "pairing" }
-                else if token?.isEmpty != false { reason = "no-credential" }
-                else if self.expectedGatewayID == nil { reason = "no-gateway-identity" }
-                else { reason = "websocket-recovery" }
-                GatewayRtcLog.write(RtcDiagnostics.shared.message(event: "upgrade-skipped", reason: reason,
-                    phase: "connecting", channel: "control", mode: "websocket", elapsedMs: 0))
-            }
-            self.forceNextWebsocket = false
-            if negotiate { request.setValue("negotiate-v1", forHTTPHeaderField: "X-DSH-Transport-Intent") }
-            self.connectionPreparationTask = nil
             let socket = self.transportSession.webSocketTask(with: request)
             socket.maximumMessageSize = Self.maximumIncomingMessageSize
             self.socket = socket
-            if negotiate, let gatewayID = self.expectedGatewayID {
-                self.rtcLink = GatewayRtcLink(expectedGatewayID: gatewayID, wsSend: { [weak self, weak socket] text in
-                    guard let self, let socket, self.socket === socket else { throw URLError(.cancelled) }
-                    try await socket.send(.string(text))
-                }, deliver: { [weak self, weak socket] channel, data in
-                    guard let self, let socket, self.socket === socket else { return }
-                    if channel == "control" { await self.receiveBusinessData(data, socket: socket) }
-                    else { await self.receiveRtcConversation(data, socket: socket) }
-                }, selected: { [weak self, weak socket] method in
-                    guard let self, let socket, self.socket === socket else { return }
-                    self.connectionMethod = method
-                }, pathChanged: { [weak self, weak socket] paths in
-                    guard let self, let socket, self.socket === socket else { return }
-                    self.connectionPaths = paths
-                }, failure: { [weak self, weak socket] recoverable in
-                    guard let self, let socket, self.socket === socket else { return }
-                    self.forceNextWebsocket = recoverable
-                    self.fail(recoverable ? String(localized: "RTC 连接已中断，正在使用 WebSocket 重新连接。") : String(localized: "RTC 身份或传输校验失败，请重新连接。"),
-                              shouldReconnect: recoverable)
-                })
-            }
             socket.resume()
             self.startConnectionTimeout(for: socket)
-            if negotiate, let rtcRecoveryTimeout {
-                self.foregroundRtcTimeoutTask = Task { [weak self, weak socket] in
-                    do { try await Task.sleep(for: rtcRecoveryTimeout) } catch { return }
-                    guard let self, let socket, self.socket === socket,
-                          self.connectionGeneration == generation, !self.state.isConnected,
-                          !self.isApplicationInBackground else { return }
-                    self.traceLifecycle("foreground-rtc-recovery-timeout fallback=websocket")
-                    self.fail(String(localized: "RTC 恢复超时，正在使用 WebSocket 恢复连接。"), shouldReconnect: true, reportFailure: false)
-                }
-            }
             self.receiveTask = Task { [weak self] in await self?.receiveLoop(socket) }
         }
     }
 
     func disconnect(reconnect: Bool = false) {
         cancelSubscriptionRecovery()
-        backgroundConnectionWasRtc = false
-        foregroundRtcRetryAvailable = false
         foregroundFastRetryAvailable = false
         disconnectTransport(reconnect: reconnect)
     }
 
     private func disconnectTransport(reconnect: Bool) {
         isReadyForSessionCreation = false
-        foregroundRtcTimeoutTask?.cancel()
-        foregroundRtcTimeoutTask = nil
         connectionGeneration = UUID()
-        rtcLink?.close()
-        rtcLink = nil
         connectionMethod = ""
-        connectionPaths = [:]
         diagnosticsCapabilities.removeAll()
-        upgradeAfterPairing = false
         connectionPreparationTask?.cancel()
         connectionPreparationTask = nil
         onConnectionInvalidated?()
@@ -881,26 +773,6 @@ final class GatewayClient: ObservableObject {
         send(payload)
     }
 
-    /// 在 UI 清空草稿前决定承载。给 JSON 转义和协议元数据保留上界，避免编码大型 Base64 阻塞主线程。
-    func prepareMessageTransport(text: String, images: [GatewayOutgoingImage]) -> Bool {
-        guard let rtcLink, rtcLink.isRtc else { return true }
-        var upperBound = 65536
-        for scalar in text.unicodeScalars {
-            switch scalar.value {
-            case 0...31: upperBound += 6
-            case 34, 47, 92: upperBound += 2
-            default: upperBound += scalar.utf8.count
-            }
-        }
-        for image in images { upperBound += ((image.data.count + 2) / 3) * 8 + (image.name?.utf8.count ?? 0) * 6 }
-        guard upperBound > rtcLink.maximumMessageBytes else { return true }
-        GatewayRtcLog.write(RtcDiagnostics.shared.message(event: "fallback-requested", reason: "message-too-large",
-            phase: "active", channel: "group", mode: "webrtc", elapsedMs: rtcLink.elapsedMilliseconds))
-        // 确认尚未发送，换新 owner；由用户保留草稿并重新提交，不重放任何写操作。
-        forceNextWebsocket = true
-        if let endpoint { beginConnection(to: endpoint.absoluteString, pairingCode: nil, resetReportedFailure: false) }
-        return false
-    }
 
     func sendMessage(
         text: String,
@@ -1044,29 +916,6 @@ final class GatewayClient: ObservableObject {
             return
         }
 #endif
-        if let rtcLink, rtcLink.isRtc {
-            let type = (try? JSONDecoder().decode(RequestEnvelope.self, from: Data(payload.utf8)).type) ?? ""
-            let target = Self.usesConversationChannel(type) ? "conversation" : "control"
-            Task { [weak self, weak rtcLink] in
-                guard let self, let rtcLink, self.rtcLink === rtcLink else { return }
-                do {
-                    try await rtcLink.send(payload, channel: target)
-                    if self.rtcLink === rtcLink { self.recordNetworkSent(payload) }
-                }
-                catch GatewayMgwCodec.Failure.tooLarge {
-                    guard !Task.isCancelled, self.rtcLink === rtcLink else { return }
-                    let envelope = (try? JSONSerialization.jsonObject(with: Data(payload.utf8))) as? [String: Any]
-                    self.onFrame?(GatewayFrame(kind: "error", code: "transport/ws-required",
-                        message: String(localized: "消息超过 RTC 传输上限，请使用 WebSocket 连接后重新提交。"), requestType: type,
-                        requestId: envelope?["requestId"] as? String))
-                } catch {
-                    guard self.rtcLink === rtcLink else { return }
-                    self.forceNextWebsocket = true
-                    self.fail(String(localized: "RTC 发送中断，请确认操作状态后重试。"), shouldReconnect: true)
-                }
-            }
-            return
-        }
         if let conversationClient,
            let type = try? JSONDecoder().decode(RequestEnvelope.self, from: Data(payload.utf8)).type,
            Self.usesConversationChannel(type) {
@@ -1156,10 +1005,9 @@ final class GatewayClient: ObservableObject {
 #if DEBUG
                 await receivedFrameBarrierForTesting?(data)
 #endif
-                // receive 的等待可以跨越 WS/RTC 切换；旧帧不能交给新连接的状态机。
+                // 旧连接尚未处理完的帧不能进入替换后的连接。
                 guard !Task.isCancelled, self.socket === socket, connectionGeneration == generation else { return }
-                if let rtcLink { try await rtcLink.webSocket(data) }
-                else { await receiveBusinessData(data, socket: socket) }
+                await receiveBusinessData(data, socket: socket)
             }
         } catch is CancellationError {
             return
@@ -1225,7 +1073,6 @@ final class GatewayClient: ObservableObject {
                     try await credentials.saveToken(token, for: credentialURL(endpoint))
                     guard !Task.isCancelled, self.socket === socket else { return }
                     pairingCode = nil
-                    upgradeAfterPairing = channel == "control" && !probeOnly && expectedGatewayID != nil && rtcPolicy(endpoint.absoluteString)
                     // 一次性配对已完成；hello 前断线也应使用长期 token 自动恢复。
                     isManualPairingAttempt = false
                     startMonitoringNetworkChanges()
@@ -1236,27 +1083,18 @@ final class GatewayClient: ObservableObject {
                 }
             } else if frame.kind == "hello" {
                 diagnosticsCapabilities = Set(frame.capabilities ?? [])
-                if upgradeAfterPairing, let endpoint {
-                    upgradeAfterPairing = false
-                    beginConnection(to: endpoint.absoluteString, pairingCode: nil, resetReportedFailure: false)
-                    return
-                }
-                if channel == "control", !probeOnly, rtcLink?.isRtc != true, frame.capabilities?.contains("split-channels") == true {
+                if channel == "control", !probeOnly, frame.capabilities?.contains("split-channels") == true {
                     openConversationChannel()
                 }
                 // `hello` is the protocol's authentication boundary.
                 // Debug mode may explicitly return authenticated=false.
                 connectionTimeoutTask?.cancel()
                 connectionTimeoutTask = nil
-                foregroundRtcTimeoutTask?.cancel()
-                foregroundRtcTimeoutTask = nil
                 isManualPairingAttempt = false
                 startMonitoringNetworkChanges()
                 reconnectAttempt = 0
                 lastSuccessfulEndpoint = endpoint
-                lastSuccessfulConnectionWasRtc = rtcLink?.isRtc == true
                 foregroundFastRetryAvailable = false
-                foregroundRtcRetryAvailable = false
                 if let started = foregroundRecoveryStartedAt {
                     let elapsed = Int((ProcessInfo.processInfo.systemUptime - started) * 1000)
                     traceLifecycle("foreground-recovered elapsedMs=\(elapsed)")
@@ -1287,21 +1125,6 @@ final class GatewayClient: ObservableObject {
     }
 
 
-    private func receiveRtcConversation(_ data: Data, socket: URLSessionWebSocketTask) async {
-        guard self.socket === socket else { return }
-        recordNetworkTraffic(received: data.count)
-        do {
-            let decoded = try await decodeBusinessFrame(data)
-            guard !Task.isCancelled, self.socket === socket, state.isConnected else { return }
-            if let speech = decoded.1 { deliverAuxiliaryFrame(speech); return }
-            guard let frame = decoded.0, frame.kind != "hello", frame.kind != "paired" else { return }
-            deliverApplicationFrame(frame, data: data)
-        } catch {
-            guard !Task.isCancelled, self.socket === socket else { return }
-            forceNextWebsocket = true
-            fail(String(localized: "RTC 业务消息格式校验失败。"), shouldReconnect: false)
-        }
-    }
 
     private func openConversationChannel() {
         guard conversationClient == nil, let endpoint else { return }
@@ -1434,20 +1257,9 @@ final class GatewayClient: ObservableObject {
 
     private func fail(_ detail: String, shouldReconnect: Bool, reportFailure: Bool = true) {
         isReadyForSessionCreation = false
-        foregroundRtcTimeoutTask?.cancel()
-        foregroundRtcTimeoutTask = nil
-        if let rtcLink, rtcLink.isRtc {
-            forceNextWebsocket = true
-            GatewayRtcLog.write(RtcDiagnostics.shared.message(event: shouldReconnect ? "fallback-requested" : "blocked",
-                reason: "connection-lost", phase: "active", channel: channel, mode: "webrtc", elapsedMs: rtcLink.elapsedMilliseconds))
-        }
         connectionGeneration = UUID()
-        rtcLink?.close()
-        rtcLink = nil
         connectionMethod = ""
-        connectionPaths = [:]
         diagnosticsCapabilities.removeAll()
-        upgradeAfterPairing = false
         connectionPreparationTask?.cancel()
         connectionPreparationTask = nil
         traceLifecycle("failure-cleanup reconnect=\(shouldReconnect) report=\(reportFailure)")
@@ -1522,7 +1334,7 @@ final class GatewayClient: ObservableObject {
 
     private func recoverNetworkConnection() {
         traceLifecycle("network-path-recovery")
-        // RTC 协商本身会带来多次路径通知；正在连接时保留原有超时，避免不断推倒重来。
+        // 正在连接时保留原有超时，避免路径通知反复打断握手。
         guard state != .connecting else {
             traceLifecycle("network-path-recovery-deferred reason=handshake-in-progress")
             return
@@ -1546,35 +1358,6 @@ final class GatewayClient: ObservableObject {
         onConnectionCheckStarted?()
         foregroundProbeSequence += 1
         let sequence = foregroundProbeSequence
-        if let rtcLink, rtcLink.isRtc {
-            traceLifecycle("foreground-rtc-probe-ping channels=control,conversation")
-            foregroundProbeTask = Task { [weak self, weak socket] in
-                do {
-                    try await rtcLink.checkHealth(timeout: min(self?.probeTimeout ?? .seconds(2), .seconds(2)))
-                    guard let self, let socket, self.socket === socket,
-                          !self.isApplicationInBackground, self.foregroundProbeSequence == sequence else { return }
-                    self.foregroundProbeTask = nil
-                    self.foregroundFastRetryAvailable = false
-                    self.foregroundRtcRetryAvailable = false
-                    self.foregroundRecoveryStartedAt = nil
-                    self.isRecoveringFromBackground = false
-                    self.traceLifecycle("foreground-rtc-probe-pong channels=control,conversation")
-                    self.refreshSessionCreationReadiness()
-                    self.onConnectionReady?()
-                } catch {
-                    guard !Task.isCancelled, let self, let socket, self.socket === socket,
-                          !self.isApplicationInBackground, self.foregroundProbeSequence == sequence else { return }
-                    self.foregroundProbeTask = nil
-                    if case let GatewayRtcHealthProbe.Failure.timeout(channels) = error {
-                        self.traceLifecycle("foreground-rtc-probe-failed reason=pong-timeout channels=\(channels.joined(separator: ","))")
-                    } else {
-                        self.traceLifecycle("foreground-rtc-probe-failed reason=business-channel-send-failed")
-                    }
-                    self.fail(String(localized: "RTC 业务通道未响应，正在恢复连接。"), shouldReconnect: true, reportFailure: false)
-                }
-            }
-            return
-        }
         traceLifecycle("foreground-probe-ping")
         foregroundProbeTask = Task { [weak self, weak socket] in
             do { try await Task.sleep(for: self?.probeTimeout ?? .seconds(5)) } catch { return }
@@ -1594,7 +1377,6 @@ final class GatewayClient: ObservableObject {
                 } else {
                     self.traceLifecycle("foreground-probe-pong")
                     self.foregroundFastRetryAvailable = false
-                    self.foregroundRtcRetryAvailable = false
                     self.foregroundRecoveryStartedAt = nil
                     self.isRecoveringFromBackground = false
                     self.refreshSessionCreationReadiness()

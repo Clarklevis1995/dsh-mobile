@@ -344,9 +344,6 @@ class AndroidSharedStateHolder(
 
     internal val connectionMethod get() = graph?.connectionMethod
         ?: kotlinx.coroutines.flow.MutableStateFlow("WebSocket")
-    internal val connectionPaths get() = graph?.connectionPaths
-        ?: kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, com.clarklevis.dsh.shared.transport.RtcSelectedPath>())
-
     var gatewayState: GatewayRuntimeState by mutableStateOf(GatewayRuntimeState())
         private set
     var scheduledTasks: List<MobileScheduledTask> by mutableStateOf(emptyList())
@@ -417,6 +414,8 @@ class AndroidSharedStateHolder(
     var conversationFileIsOpening: Boolean by mutableStateOf(false)
         private set
     var workspaceFilePreviewProgress: Float by mutableStateOf(0f)
+        private set
+    var workspaceFilePreviewError: String? by mutableStateOf(null)
         private set
     var workspaceFilePreviewRequest: AndroidWorkspaceFilePreviewRequest? by mutableStateOf(null)
         private set
@@ -1384,6 +1383,7 @@ class AndroidSharedStateHolder(
         val previewsFile = purpose == "preview" && !entry.name.endsWith(".apk", ignoreCase = true)
         if (previewsFile) {
             platformError = null
+            workspaceFilePreviewError = null
             conversationFileIsOpening = true
             workspaceFilePreviewProgress = 0f
             workspaceFilePreviewRequest = AndroidWorkspaceFilePreviewRequest(sessionId, entry.path, entry.name)
@@ -1432,7 +1432,8 @@ class AndroidSharedStateHolder(
         conversationFileIsOpening = true
         platformError = null
         workspaceFilePreviewProgress = 0f
-        workspaceFilePreviewRequest = AndroidWorkspaceFilePreviewRequest(sessionId, path, path.substringAfterLast('/'))
+        workspaceFilePreviewRequest = AndroidWorkspaceFilePreviewRequest(sessionId, path, path.replace('\\', '/').substringAfterLast('/'))
+        workspaceFilePreviewError = null
         val operationId = UUID.randomUUID().also {
             workspaceFileOperationId = it
             workspaceFileCacheEpoch = cacheStorage?.categoryEpoch(AndroidCacheDiskManager.PREVIEWS) ?: 0
@@ -1459,6 +1460,7 @@ class AndroidSharedStateHolder(
         conversationFileIsOpening = false
         workspaceFilePreviewRequest = null
         workspaceFilePreviewProgress = 0f
+        workspaceFilePreviewError = null
         if (completedWorkspaceFile == null || completedWorkspaceFile?.purpose == "preview") releaseCompletedWorkspaceFile()
         val appGraph = graph ?: return
         appGraph.gatewayScope.launch {
@@ -2842,7 +2844,7 @@ class AndroidSharedStateHolder(
                     workspaceFileDownloadProgress = null
                     workspaceFileDownloadPath = null
                     workspaceFileDownloadPurpose = null
-                    platformError = appText("写入下载文件失败")
+                    setWorkspaceFileError(appText("写入下载文件失败"))
                     conversationFileIsOpening = false
                 }
                 cancelled.request?.let { request ->
@@ -2942,7 +2944,7 @@ class AndroidSharedStateHolder(
                 workspaceFileDownloadPath = snapshot.activeDownload?.path
                 workspaceFileDownloadPurpose = snapshot.activeDownload?.purpose
                 snapshot.lastError?.let {
-                    platformError = workspaceFileErrorMessage(it)
+                    setWorkspaceFileError(workspaceFileErrorMessage(it))
                     conversationFileIsOpening = false
                 }
                 completed?.let {
@@ -3011,7 +3013,17 @@ class AndroidSharedStateHolder(
         }
     }
 
+    private fun setWorkspaceFileError(message: String) {
+        if (workspaceFilePreviewRequest != null) workspaceFilePreviewError = message
+        else platformError = message
+    }
+
     private fun workspaceFileErrorMessage(code: String): String = when (code) {
+        "file-not-allowed" -> appText("DSH 未允许读取此文件，请检查桌面端的文件访问权限。")
+        "file-not-found" -> appText("找不到此文件，可能已被移动或删除。")
+        "file-changed" -> appText("下载期间文件发生变化，请重新打开。")
+        "file-too-large" -> appText("文件超过网关允许的下载大小。")
+        "file-unreadable" -> appText("DSH 无法读取此文件，请检查桌面端文件是否可访问。")
         "file-references-upgrade-required" -> appText("此文件需要新版网关解析，请升级 Mobile Gateway。")
         "file-download-integrity-failed" -> appText("文件完整性校验失败，请重新下载。")
         "download-busy" -> appText("已有文件正在下载，请稍后再试。")
@@ -3789,9 +3801,7 @@ class AndroidSharedStateHolder(
                                         defaultConfigurationLoadingKinds =
                                             defaultConfigurationLoadingKinds - event.requestType
                                         clearWorkspaceRequestLoading(event.requestType)
-                                        platformError = if (event.reason == "transport/ws-required") {
-                                            appText("正在切换到 WebSocket 以发送大消息，草稿已保留，请连接后重新发送。")
-                                        } else "${event.requestType}: ${event.reason}"
+                                        platformError = "${event.requestType}: ${event.reason}"
                                         if (event.requestType == "history") {
                                             event.targetSessionId?.let {
                                                 historyPagingSessionIds = historyPagingSessionIds - it

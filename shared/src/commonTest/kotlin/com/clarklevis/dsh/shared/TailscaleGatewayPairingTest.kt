@@ -3,7 +3,6 @@ package com.clarklevis.dsh.shared
 import com.clarklevis.dsh.shared.gateway.GatewayIdentity
 import com.clarklevis.dsh.shared.gateway.GatewayPairingPayloadParser
 import com.clarklevis.dsh.shared.protocol.GatewayPairingPayload
-import com.clarklevis.dsh.shared.transport.GatewayTransportPolicy
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,17 +16,15 @@ class TailscaleGatewayPairingTest {
     private val lan = "ws://192.168.1.19:3081/ws/mobile"
     private val tailscale = "ws://100.100.1.19:3081/ws/mobile"
 
-    @Test fun tailscaleIPv4RangeAcceptsBothBoundariesAndUsesWebSocket() {
+    @Test fun tailscaleIPv4RangeAcceptsBothBoundaries() {
         for (host in listOf("100.64.0.0", "100.100.1.19", "100.127.255.255")) {
             assertTrue(GatewayIdentity.isLocal(host), host)
             for (scheme in listOf("ws", "wss")) {
                 val endpoint = "$scheme://$host:3081/ws/mobile"
                 GatewayIdentity.validateEndpoint(endpoint)
-                assertFalse(GatewayTransportPolicy.allowsRtc(endpoint), endpoint)
             }
         }
         GatewayIdentity.validateEndpoint("ws://[fd7a:115c:a1e0::1]:3081/ws/mobile")
-        assertFalse(GatewayTransportPolicy.allowsRtc("wss://[fd7a:115c:a1e0::1]:3081/ws/mobile"))
     }
 
     @Test fun neighboringPublicAddressesAndMalformedHostsRemainRejected() {
@@ -36,9 +33,6 @@ class TailscaleGatewayPairingTest {
             assertFailsWith<IllegalArgumentException>(host) {
                 GatewayIdentity.validateEndpoint("ws://$host:3081/ws/mobile")
             }
-        }
-        for (host in listOf("100.63.255.255", "100.128.0.0")) {
-            assertTrue(GatewayTransportPolicy.allowsRtc("wss://$host:3081/ws/mobile"))
         }
         for (endpoint in listOf("$tailscale?token=secret", "$tailscale#fragment", "ws://user:pass@100.100.1.19:3081/ws/mobile")) {
             assertFailsWith<IllegalArgumentException> { GatewayIdentity.validateEndpoint(endpoint) }

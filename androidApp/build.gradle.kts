@@ -58,6 +58,7 @@ android {
     }
 
     sourceSets.getByName("main").assets.srcDir(rootProject.file("AppRelease"))
+    sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("Tests/Fixtures"))
 
     packaging {
         resources {
@@ -182,7 +183,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
-    implementation("io.github.webrtc-sdk:android:144.7559.15")
     implementation(libs.backdrop)
     implementation(libs.markwon.core)
     implementation("ru.noties:jlatexmath-android:0.2.0")

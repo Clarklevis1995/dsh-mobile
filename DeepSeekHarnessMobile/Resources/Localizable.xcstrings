@@ -1,6 +1,106 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "iOS · %d 个连接器 · %d 项能力" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iOS · %d connectors · %d capabilities"
+          }
+        }
+      }
+    },
+    "已登记的控制能力" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registered controls"
+          }
+        }
+      }
+    },
+    "返回能力列表" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to capabilities"
+          }
+        }
+      }
+    },
+    "能力详情" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capability details"
+          }
+        }
+      }
+    },
+    "已登记的能力" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registered capabilities"
+          }
+        }
+      }
+    },
+    "%d 个连接器" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d connectors"
+          }
+        }
+      }
+    },
+    "从当前位置出发 · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From your location · %@"
+          }
+        }
+      }
+    },
+    "公交" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transit"
+          }
+        }
+      }
+    },
+    "步行" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Walking"
+          }
+        }
+      }
+    },
+    "驾车" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Driving"
+          }
+        }
+      }
+    },
     " 等工具" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -4239,29 +4339,6 @@
         }
       }
     },
-    "NAT 穿透直连" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "NAT traversal direct"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "NAT 穿透直连"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "NAT トラバーサル直結"
-          }
-        }
-      }
-    },
     "notice.command.executed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5968,108 +6045,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ターン · ステップ"
-          }
-        }
-      }
-    },
-    "RTC 业务消息格式校验失败。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RTC message format validation failed."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RTC メッセージの形式検証に失敗しました。"
-          }
-        }
-      }
-    },
-    "RTC 业务通道未响应，正在恢复连接。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The RTC channel isn’t responding. Recovering the connection."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RTC チャネルが応答していません。接続を復旧しています。"
-          }
-        }
-      }
-    },
-    "RTC 发送中断，请确认操作状态后重试。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RTC sending was interrupted. Check the action’s status and try again."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RTC の送信が中断されました。操作状態を確認してから再試行してください。"
-          }
-        }
-      }
-    },
-    "RTC 恢复超时，正在使用 WebSocket 恢复连接。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RTC recovery timed out. Recovering over WebSocket."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RTC の復旧がタイムアウトしました。WebSocket で接続を復旧しています。"
-          }
-        }
-      }
-    },
-    "RTC 身份或传输校验失败，请重新连接。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RTC identity or transport verification failed. Reconnect."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RTC の識別情報または転送の検証に失敗しました。再接続してください。"
-          }
-        }
-      }
-    },
-    "RTC 连接已中断，正在使用 WebSocket 重新连接。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The RTC connection was interrupted. Reconnecting over WebSocket."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RTC 接続が中断されました。WebSocket で再接続しています。"
           }
         }
       }
@@ -8420,29 +8395,6 @@
         }
       }
     },
-    "TURN 中继" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TURN relay"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TURN 中继"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TURN リレー"
-          }
-        }
-      }
-    },
     "upload.failed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9404,29 +9356,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "このゲートウェイはまだ音声入力に対応していません。デスクトップ側で Mobile Gateway をアップグレードし、「プラグイン」で公式の音声入力プラグインを有効にしてモデルのセットアップを完了してから、ゲートウェイを再接続してください。"
-          }
-        }
-      }
-    },
-    "WebRTC，路径待确认" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "WebRTC, path unconfirmed"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "WebRTC，路径待确认"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "WebRTC、経路は未確認"
           }
         }
       }
@@ -11054,29 +10983,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "セッションのページ"
-          }
-        }
-      }
-    },
-    "传输路径" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Transport path"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "传输路径"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "通信経路"
           }
         }
       }
@@ -22835,29 +22741,6 @@
         }
       }
     },
-    "正在确认路径" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Checking path"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在确认路径"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "パスを確認中"
-          }
-        }
-      }
-    },
     "正在等待下一步" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23836,23 +23719,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "メッセージを送信しました"
-          }
-        }
-      }
-    },
-    "消息超过 RTC 传输上限，请使用 WebSocket 连接后重新提交。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The message exceeds the RTC transfer limit. Connect over WebSocket and submit it again."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メッセージが RTC の転送上限を超えています。WebSocket で接続し直してから再送信してください。"
           }
         }
       }
@@ -30496,6 +30362,865 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@，%@"
+          }
+        }
+      }
+    },
+    "DSH 无法读取此文件，请检查桌面端文件是否可访问。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DSH cannot read this file. Check that it is accessible on the desktop."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DSH がこのファイルを読み取れません。デスクトップ側でファイルにアクセスできるか確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DSH 无法读取此文件，请检查桌面端文件是否可访问。"
+          }
+        }
+      }
+    },
+    "DSH 未允许读取此文件，请检查桌面端的文件访问权限。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DSH did not allow this file to be read. Check file access permissions on the desktop."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DSH によるこのファイルの読み取りが許可されていません。デスクトップ側のファイルアクセス権限を確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DSH 未允许读取此文件，请检查桌面端的文件访问权限。"
+          }
+        }
+      }
+    },
+    "一次最多添加 20 个附件" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can add up to 20 attachments at a time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一度に追加できる添付ファイルは20件までです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一次最多添加 20 个附件"
+          }
+        }
+      }
+    },
+    "下载期间文件发生变化，请重新打开。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file changed during download. Open it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダウンロード中にファイルが変更されました。もう一度開いてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载期间文件发生变化，请重新打开。"
+          }
+        }
+      }
+    },
+    "主机权限同步失败，请检查连接后重试。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host permission synchronization failed. Check the connection and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ホストの権限を同期できませんでした。接続を確認してもう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机权限同步失败，请检查连接后重试。"
+          }
+        }
+      }
+    },
+    "位置" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Location"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置情報"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置"
+          }
+        }
+      }
+    },
+    "使用网页地图" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open web map"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用网页地图"
+          }
+        }
+      }
+    },
+    "停止" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止"
+          }
+        }
+      }
+    },
+    "健康" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Health"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ヘルスケア"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "健康"
+          }
+        }
+      }
+    },
+    "分享图片超出单条消息附件限制，请先处理已有附件。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The shared images exceed the attachment limit for one message. Finish preparing the existing attachments first."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有する画像が1件のメッセージの添付上限を超えています。既存の添付ファイルを先に処理してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享图片超出单条消息附件限制，请先处理已有附件。"
+          }
+        }
+      }
+    },
+    "分享文件需要连接支持文件上传的网关，内容已保留，请连接后重新打开会话。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sharing files requires a gateway that supports file uploads. Your content has been kept. Connect and reopen the conversation."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルを共有するには、ファイルのアップロードに対応したゲートウェイへの接続が必要です。内容は保持されています。接続後に会話を開き直してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享文件需要连接支持文件上传的网关，内容已保留，请连接后重新打开会话。"
+          }
+        }
+      }
+    },
+    "当前会话或网关不支持此类附件" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This conversation or gateway does not support this type of attachment."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この会話またはゲートウェイは、この種類の添付ファイルに対応していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前会话或网关不支持此类附件"
+          }
+        }
+      }
+    },
+    "当前网关不支持手机同步权限，请更新网关。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This gateway does not support permission synchronization from your phone. Update the gateway."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このゲートウェイはスマートフォンからの権限の同期に対応していません。ゲートウェイを更新してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前网关不支持手机同步权限，请更新网关。"
+          }
+        }
+      }
+    },
+    "打开系统权限设置" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open system permission settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システムの権限設定を開く"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开系统权限设置"
+          }
+        }
+      }
+    },
+    "找不到此文件，可能已被移动或删除。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file could not be found. It may have been moved or deleted."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルが見つかりません。移動または削除された可能性があります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到此文件，可能已被移动或删除。"
+          }
+        }
+      }
+    },
+    "提醒事项" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reminders"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リマインダー"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提醒事项"
+          }
+        }
+      }
+    },
+    "文件超过网关允许的下载大小。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file exceeds the gateway download size limit."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルがゲートウェイのダウンロードサイズ上限を超えています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件超过网关允许的下载大小。"
+          }
+        }
+      }
+    },
+    "无法取得系统权限，请在设置中检查。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to obtain system permission. Check Settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システムの権限を取得できません。設定を確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法取得系统权限，请在设置中检查。"
+          }
+        }
+      }
+    },
+    "无法打开地图，请重新选择" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to open map. Please choose again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开地图，请重新选择"
+          }
+        }
+      }
+    },
+    "无法打开苹果地图，请稍后重试。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to open Apple Maps. Try again later."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple マップを開けません。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开苹果地图，请稍后重试。"
+          }
+        }
+      }
+    },
+    "无法读取粘贴的附件：%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to read the pasted attachment: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "貼り付けた添付ファイルを読み取れません：%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取粘贴的附件：%@"
+          }
+        }
+      }
+    },
+    "日历" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calendar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カレンダー"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日历"
+          }
+        }
+      }
+    },
+    "未检测到可用地图应用" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No compatible map apps installed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未检测到可用地图应用"
+          }
+        }
+      }
+    },
+    "本机能力" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Device capabilities"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デバイスの機能"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本机能力"
+          }
+        }
+      }
+    },
+    "照片" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "写真"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "照片"
+          }
+        }
+      }
+    },
+    "百度地图" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Baidu Maps"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "百度地图"
+          }
+        }
+      }
+    },
+    "目的地" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destination"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目的地"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目的地"
+          }
+        }
+      }
+    },
+    "系统权限未允许，请在设置中检查。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System permission was not granted. Check Settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システムの権限が許可されていません。設定を確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统权限未允许，请在设置中检查。"
+          }
+        }
+      }
+    },
+    "苹果地图" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Maps"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "苹果地图"
+          }
+        }
+      }
+    },
+    "请先处理已有附件后重新打开会话，分享内容已保留。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish preparing the existing attachments, then reopen the conversation. Your shared content has been kept."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "既存の添付ファイルの準備を終えてから会話を開き直してください。共有内容は保持されています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先处理已有附件后重新打开会话，分享内容已保留。"
+          }
+        }
+      }
+    },
+    "请等待已有附件准备完成后再粘贴" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wait for the existing attachments to finish preparing before pasting."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "既存の添付ファイルの準備が完了してから貼り付けてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请等待已有附件准备完成后再粘贴"
+          }
+        }
+      }
+    },
+    "谷歌地图" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Maps"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "谷歌地图"
+          }
+        }
+      }
+    },
+    "连接中断，权限同步尚未确认，请重连后检查开关。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection lost before permission synchronization was confirmed. Reconnect and check the switches."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接続が切れ、権限の同期が確認できませんでした。再接続してスイッチを確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接中断，权限同步尚未确认，请重连后检查开关。"
+          }
+        }
+      }
+    },
+    "连接器" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connectors"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コネクタ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接器"
+          }
+        }
+      }
+    },
+    "连接器权限同步超时，请检查连接后重试。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connector permission synchronization timed out. Check the connection and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コネクタの権限の同期がタイムアウトしました。接続を確認してもう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接器权限同步超时，请检查连接后重试。"
+          }
+        }
+      }
+    },
+    "连接器正在执行任务，请完成后重试。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A connector task is running. Try again when it finishes."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コネクタがタスクを実行中です。完了後にもう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接器正在执行任务，请完成后重试。"
+          }
+        }
+      }
+    },
+    "连接器注册失败，可能与网关版本不兼容。请更新并重启主机端 DSH，然后重新连接。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connector registration failed, possibly due to an incompatible gateway version. Update and restart DSH on the host, then reconnect."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コネクタを登録できませんでした。ゲートウェイのバージョンに互換性がない可能性があります。ホスト側の DSH を更新して再起動し、再接続してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接器注册失败，可能与网关版本不兼容。请更新并重启主机端 DSH，然后重新连接。"
+          }
+        }
+      }
+    },
+    "选择地图应用" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a map app"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择地图应用"
+          }
+        }
+      }
+    },
+    "音乐" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Music"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ミュージック"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音乐"
+          }
+        }
+      }
+    },
+    "高德地图" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amap"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高德地图"
           }
         }
       }

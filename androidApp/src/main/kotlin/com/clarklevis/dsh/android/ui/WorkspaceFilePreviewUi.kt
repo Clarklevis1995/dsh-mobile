@@ -128,7 +128,7 @@ internal fun WorkspaceFilePreviewHost(stateHolder: AndroidSharedStateHolder) {
         if (file == null) {
             WorkspaceFilePreviewLoadingContent(
                 stateHolder.conversationFileIsOpening,
-                stateHolder.platformError,
+                stateHolder.workspaceFilePreviewError ?: stateHolder.platformError,
                 contentPadding,
                 stateHolder.workspaceFilePreviewProgress
             )

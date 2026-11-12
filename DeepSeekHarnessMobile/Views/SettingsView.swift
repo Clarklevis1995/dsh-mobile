@@ -65,7 +65,6 @@ struct SettingsView: View {
     @State private var pendingPermission: DefaultPermissionChoice?
     @State private var observedGatewayState: ConnectionState?
     @State private var observedConnectionMethod = ""
-    @State private var observedConnectionPaths: [String: RtcSelectedPath] = [:]
     @State private var showsPrivacyPolicy = false
     @State private var showsReleaseNotes = false
     @AppStorage(AppFontScale.key) private var fontScale = 1.0
@@ -227,9 +226,6 @@ struct SettingsView: View {
                 LabeledContent(LocalizedStringKey("连接方式"), value: gatewayState.isConnected
                     ? (observedConnectionMethod.isEmpty ? "WebSocket" : String(localized: String.LocalizationValue(observedConnectionMethod))) : String(localized: "未连接"))
                     .accessibilityIdentifier("gateway-connection-method")
-                if gatewayState.isConnected && observedConnectionMethod == "WebRTC" {
-                    GatewayConnectionPathView(paths: observedConnectionPaths)
-                }
                 SettingsNavigationButton(.networkDiagnostics, open: open) {
                     LabeledContent(LocalizedStringKey("网络检测"), value: String(localized: "实时延迟与丢包"))
                 }
@@ -354,7 +350,6 @@ struct SettingsView: View {
             if gatewayState.isConnected { store.refreshPlugins() }
         }
         .onReceive(store.gateway.$connectionMethod) { observedConnectionMethod = $0 }
-        .onReceive(store.gateway.$connectionPaths) { observedConnectionPaths = $0 }
         .onReceive(store.gateway.$state) { state in
             let wasConnected = observedGatewayState?.isConnected ?? state.isConnected
             observedGatewayState = state

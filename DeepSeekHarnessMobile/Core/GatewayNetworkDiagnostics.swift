@@ -3,43 +3,6 @@ import SwiftUI
 import Charts
 import DeepSeekHarnessShared
 
-func gatewayPathLabel(_ kind: String) -> String {
-    switch kind {
-    case "local": return String(localized: "内网直连")
-    case "nat": return String(localized: "NAT 穿透直连")
-    case "relay": return String(localized: "TURN 中继")
-    default: return String(localized: "直连")
-    }
-}
-
-struct GatewayConnectionPathView: View {
-    let paths: [String: RtcSelectedPath]
-    private let channels = ["control", "conversation"]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("传输路径").appFont(SettingsTypography.item)
-            ForEach(channels, id: \.self) { channel in
-                VStack(alignment: .leading, spacing: 3) {
-                    let title = channel == "control" ? String(localized: "控制通道") : String(localized: "会话通道")
-                    if let path = paths[channel] {
-                        Text("\(title)：\(gatewayPathLabel(path.kind)) · \(path.protocol)")
-                            .appFont(SettingsTypography.description)
-                        Text(verbatim: "\(path.localEndpoint) → \(path.remoteEndpoint)")
-                            .appFont(SettingsTypography.description.monospaced())
-                            .textSelection(.enabled)
-                    } else {
-                        Text("\(title)：\(String(localized: "正在确认路径"))").appFont(SettingsTypography.description)
-                    }
-                }
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .accessibilityIdentifier("gateway-connection-path")
-    }
-}
-
 @MainActor
 final class GatewayNetworkDiagnosticsMonitor: ObservableObject {
     @Published private(set) var snapshot: NetworkDiagnosticsSnapshot
@@ -124,9 +87,6 @@ struct GatewayNetworkDiagnosticsView: View {
                         Text(!gateway.state.isConnected ? String(localized: "等待连接") : !gateway.networkDiagnosticsSupported
                              ? String(localized: "网关需更新") : String(localized: "每秒检测 · 最近 60 秒"))
                             .appFont(SettingsTypography.description).foregroundStyle(.secondary)
-                    }
-                    if gateway.state.isConnected && gateway.connectionMethod == "WebRTC" {
-                        GatewayConnectionPathView(paths: gateway.connectionPaths)
                     }
                     HStack {
                         metric(LocalizedStringKey("往返延迟"), number(snapshot.roundTripMs, unit: " ms"))

@@ -52,21 +52,7 @@ struct GatewaySwitcherSheet: View {
             List {
                 Section {
                     ForEach(displayedProfiles) { profile in
-                        HStack(spacing: 12) {
-                            if editMode.isEditing {
-                                Button { toggleSelection(profile.id) } label: {
-                                    Image(systemName: selectedIDs.contains(profile.id) ? "circle.inset.filled" : "circle")
-                                        .appFont(.system(size: 20, weight: .medium))
-                                        .frame(width: 28, height: 44)
-                                }
-                                .buttonStyle(.borderless)
-                                .accessibilityLabel(selectedIDs.contains(profile.id)
-                                    ? String(localized: "host.deselect", defaultValue: "取消选择 \(profile.displayName)")
-                                    : String(localized: "host.select", defaultValue: "选择 \(profile.displayName)"))
-                                .transition(.move(edge: .leading).combined(with: .opacity))
-                            }
-                            Image(systemName: profile.deviceKind)
-                                .appFont(.title3).frame(width: 26)
+                        ZStack(alignment: .trailing) {
                             Button {
                                 if editMode.isEditing {
                                     toggleSelection(profile.id)
@@ -75,23 +61,38 @@ struct GatewaySwitcherSheet: View {
                                     dismiss()
                                 }
                             } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(profile.displayName).foregroundStyle(Color(uiColor: .label)).lineLimit(1)
-                                    Text(hosts.activeID == profile.id ? String(localized: "当前主机") : String(localized: "点击连接"))
-                                        .appFont(.caption)
-                                        .foregroundStyle(
-                                            hosts.activeID == profile.id
-                                                ? Color.accentColor
-                                                : Color(uiColor: .secondaryLabel)
-                                        )
+                                HStack(spacing: 12) {
+                                    if editMode.isEditing {
+                                        Image(systemName: selectedIDs.contains(profile.id) ? "circle.inset.filled" : "circle")
+                                            .appFont(.system(size: 20, weight: .medium))
+                                            .frame(width: 28, height: 44)
+                                            .accessibilityHidden(true)
+                                            .transition(.move(edge: .leading).combined(with: .opacity))
+                                    }
+                                    Image(systemName: profile.deviceKind)
+                                        .appFont(.title3).frame(width: 26)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(profile.displayName).foregroundStyle(Color(uiColor: .label)).lineLimit(1)
+                                        Text(hosts.activeID == profile.id ? String(localized: "当前主机") : String(localized: "点击连接"))
+                                            .appFont(.caption)
+                                            .foregroundStyle(hosts.activeID == profile.id
+                                                ? Color.accentColor : Color(uiColor: .secondaryLabel))
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    Circle().fill(hosts.onlineIDs.contains(profile.id) ? Color.green : Color.gray.opacity(0.45))
+                                        .frame(width: 8, height: 8)
+                                        .accessibilityLabel(hosts.onlineIDs.contains(profile.id)
+                                            ? String(localized: "在线") : String(localized: "未连接或不可用"))
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.trailing, editMode.isEditing ? 56 : 0)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity, minHeight: 68)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            Circle().fill(hosts.onlineIDs.contains(profile.id) ? Color.green : Color.gray.opacity(0.45))
-                                .frame(width: 8, height: 8)
-                                .accessibilityLabel(hosts.onlineIDs.contains(profile.id)
-                                    ? String(localized: "在线") : String(localized: "未连接或不可用"))
+                            .accessibilityIdentifier("gateway-host-row-\(profile.id)")
+                            .accessibilityAddTraits(editMode.isEditing && selectedIDs.contains(profile.id) ? .isSelected : [])
                             if editMode.isEditing {
                                 Button {
                                     alias = profile.alias ?? ""
@@ -104,11 +105,12 @@ struct GatewaySwitcherSheet: View {
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.borderless)
+                                .padding(.trailing, 16)
                                 .accessibilityLabel("编辑 \(profile.displayName)")
                                 .transition(.move(edge: .trailing).combined(with: .opacity))
                             }
                         }
-                        .padding(.vertical, 2)
+                        .listRowInsets(EdgeInsets())
                         .animation(.easeInOut(duration: 0.2), value: editMode.isEditing)
                     }
                 } header: { Text("我的主机").foregroundStyle(Color(uiColor: .secondaryLabel)) }

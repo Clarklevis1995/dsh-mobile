@@ -7,6 +7,25 @@ import SwiftUI
 /// tables must exist, stay populated, and keep placeholder arguments intact,
 /// so the UI never exposes localization identifiers to users.
 final class LocalizationCatalogTests: XCTestCase {
+    func testConnectorAndAttachmentCopyResolvesInBothLanguagesWithoutChangingErrorDetails() throws {
+        for language in ["zh-Hans", "en"] {
+            let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))
+            let bundle = try XCTUnwrap(Bundle(path: path))
+            for (key, english) in [
+                ("连接器", "Connectors"), ("本机能力", "Device capabilities"),
+                ("查询日历忙闲", "Check calendar availability"),
+                ("当前会话或网关不支持此类附件", "This conversation or gateway does not support this type of attachment.")
+            ] {
+                XCTAssertEqual(bundle.localizedString(forKey: key, value: nil, table: "Localizable"),
+                    language == "en" ? english : key)
+            }
+            let detail = "report %@ $1 中文.txt"
+            let message = String(localized: "无法读取粘贴的附件：\(detail)", bundle: bundle)
+            XCTAssertEqual(message, language == "en"
+                ? "Unable to read the pasted attachment: \(detail)" : "无法读取粘贴的附件：\(detail)")
+        }
+    }
+
     func testAllWorkspaceCopyShipsInBothLanguagesAndPreservesCountsAndWorkspaceNames() throws {
         let english = try englishTable("Localizable")
         let chinese = try localizedTable("Localizable", localization: "zh-Hans")

@@ -29,15 +29,17 @@ enum PhoneConnectorRegistrationState: Equatable {
 /// 每个主机独立保存开关。连接器开启即持续授权当前主机，网关租约、主机权限、本机开关及系统权限共同约束执行。
 @MainActor
 final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDelegate, PHPickerViewControllerDelegate {
-    static let modules = [
-        PhoneConnectorModule(id: "calendar", title: "日历"),
-        PhoneConnectorModule(id: "reminders", title: "提醒事项"),
-        PhoneConnectorModule(id: "location", title: "位置"),
-        PhoneConnectorModule(id: "photos", title: "照片"),
-        PhoneConnectorModule(id: "music", title: "音乐"),
-        PhoneConnectorModule(id: "health", title: "健康"),
-        PhoneConnectorModule(id: "alarms", title: "闹钟")
-    ]
+    static var modules: [PhoneConnectorModule] {
+        [
+            PhoneConnectorModule(id: "calendar", title: String(localized: "日历")),
+            PhoneConnectorModule(id: "reminders", title: String(localized: "提醒事项")),
+            PhoneConnectorModule(id: "location", title: String(localized: "位置")),
+            PhoneConnectorModule(id: "photos", title: String(localized: "照片")),
+            PhoneConnectorModule(id: "music", title: String(localized: "音乐")),
+            PhoneConnectorModule(id: "health", title: String(localized: "健康")),
+            PhoneConnectorModule(id: "alarms", title: String(localized: "闹钟"))
+        ]
+    }
     @Published private(set) var enabled: [String: Bool]
     @Published private(set) var permissions: [String: Bool] = [:]
     @Published private(set) var authorizing = false
@@ -132,8 +134,8 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
             authorizing = true
             defer { authorizing = false }
             do {
-                guard try await authorize(id) else { notice = "系统权限未允许，请在设置中检查。"; return }
-            } catch { notice = "无法取得系统权限，请在设置中检查。"; return }
+                guard try await authorize(id) else { notice = String(localized: "系统权限未允许，请在设置中检查。"); return }
+            } catch { notice = String(localized: "无法取得系统权限，请在设置中检查。"); return }
         }
         enabled[id] = value
         queuedPermissionChanges[id] = value
@@ -150,7 +152,7 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
     }
     func disconnected(discardPendingChanges: Bool = false) {
         cancelPending(code: "device_disconnected")
-        if syncing { notice = "连接中断，权限同步尚未确认，请重连后检查开关。" }
+        if syncing { notice = String(localized: "连接中断，权限同步尚未确认，请重连后检查开关。") }
         registrationTimeout?.cancel(); registrationTimeout = nil
         registrationChanges = [:]; syncing = false; permissionSyncSupported = nil
         if discardPendingChanges { queuedPermissionChanges = [:] }
@@ -168,7 +170,7 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
     }
     func retryRegistration() {
         guard canRetryRegistration else { return }
-        guard pending == nil else { notice = "连接器正在执行任务，请完成后重试。"; return }
+        guard pending == nil else { notice = String(localized: "连接器正在执行任务，请完成后重试。"); return }
         register()
     }
     /// 只读查询当前控制连接的登记，不更换租约、不取消调用、不重新授权。
@@ -246,7 +248,7 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
             do { try await Task.sleep(for: wait) } catch { return }
             guard let self, self.registration == request else { return }
             self.registration = nil; self.registrationChanges = [:]; self.syncing = false
-            self.notice = "连接器权限同步超时，请检查连接后重试。"
+            self.notice = String(localized: "连接器权限同步超时，请检查连接后重试。")
             self.registrationState = .timedOut
             if !changes.isEmpty { self.register() } // 只重新读取状态，不重发开启补丁。
         }
@@ -266,9 +268,9 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
             registration = nil; registrationChanges = [:]; syncing = false
             clearRegistrationSnapshot(); registrationState = .failed
             if ["invalid_request", "unsupported-version", "unsupported_version"].contains(object["code"] as? String ?? "") {
-                notice = "连接器注册失败，可能与网关版本不兼容。请更新并重启主机端 DSH，然后重新连接。"
+                notice = String(localized: "连接器注册失败，可能与网关版本不兼容。请更新并重启主机端 DSH，然后重新连接。")
             } else {
-                notice = "主机权限同步失败，请检查连接后重试。"
+                notice = String(localized: "主机权限同步失败，请检查连接后重试。")
             }
             if attemptedSync { register() }
             return
@@ -285,7 +287,7 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
             statusQuerySupported = object["statusQuery"] as? Bool == true
             registrationState = acceptRegistrationSnapshot(object) ? .registered : .unverified
             if registrationState != .registered { clearRegistrationSnapshot() }
-            notice = attemptedSync && permissionSyncSupported != true ? "当前网关不支持手机同步权限，请更新网关。" : nil
+            notice = attemptedSync && permissionSyncSupported != true ? String(localized: "当前网关不支持手机同步权限，请更新网关。") : nil
             return
         }
         if kind == "device-tools-status" {
@@ -371,7 +373,7 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
                         do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
                         guard let self, self.lease == current, self.enabled["location"] == true,
                               self.permissions["location"] == true, UIApplication.shared.applicationState == .active else { return }
-                        if !IOSMapConnector.open(args) { self.notice = "无法打开苹果地图，请稍后重试。" }
+                        if !IOSMapConnector.open(args) { self.notice = String(localized: "无法打开苹果地图，请稍后重试。") }
                     }
                 }
             } catch is CancellationError { }
@@ -589,7 +591,7 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
             let title = args["title"] as! String
             let presentation: AlarmPresentation.Alert
             if #available(iOS 26.1, *) { presentation = .init(title: LocalizedStringResource(stringLiteral: title)) }
-            else { presentation = .init(title: LocalizedStringResource(stringLiteral: title), stopButton: AlarmButton(text: "停止", textColor: .white, systemImageName: "stop.fill")) }
+            else { presentation = .init(title: LocalizedStringResource(stringLiteral: title), stopButton: AlarmButton(text: LocalizedStringResource("停止"), textColor: .white, systemImageName: "stop.fill")) }
             let attributes = AlarmAttributes<PhoneAlarmMetadata>(presentation: AlarmPresentation(alert: presentation), metadata: PhoneAlarmMetadata(), tintColor: .blue)
             let id = writes.alarmIdentifier(sessionID: sessionID, operationID: args["operationId"] as! String)
             try Task.checkCancellation()

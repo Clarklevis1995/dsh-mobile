@@ -87,6 +87,7 @@ class ConversationProjector(
     private val transientKeys = mutableSetOf<String>()
     private val steeringMessages = linkedMapOf<String, SessionEvent>()
     private val committedUserMessageIds = mutableSetOf<String>()
+    private val questionAnswers = QuestionAnswerProjection()
 
     val items: List<ConversationItem> get() = mutableItems.toList()
     val hasAssistantChunks: Boolean get() = transientKeys.isNotEmpty()
@@ -109,6 +110,7 @@ class ConversationProjector(
         retryKeys.clear()
         steeringMessages.clear()
         committedUserMessageIds.clear()
+        questionAnswers.reset()
         lastSequence = -1
     }
 
@@ -220,7 +222,10 @@ class ConversationProjector(
         val event = record.event
         val key = "${event.turn ?: -1}-${event.step ?: -1}"
         val date = normalizeEpoch(record.time)
+        val questionAnswer = questionAnswers.fold(record)
         when {
+            // 延迟回答由问答气泡替代，避免再次作为 JSON 上下文展示。
+            questionAnswer?.replacesUserMessage == true -> Unit
             event.type == "user/message" && (event.source == null || event.source == "user") -> {
                 imageWindowBySession[record.sessionId] = record.seq
                 if (!event.text.isNullOrEmpty() || !event.images.isNullOrEmpty() || !event.files.isNullOrEmpty()) {
@@ -421,6 +426,10 @@ class ConversationProjector(
             event.type == "compaction/summary" -> compactionSummarized(record, date, operations)
             event.type == "compaction/end" -> compactionEnded(record, date, operations)
             event.type == "command/done" -> commandFinished(record, date, operations)
+        }
+        questionAnswer?.text?.let { text ->
+            insert(ConversationItem("${eventId(record)}-answer", ConversationItemKind.USER,
+                labels.userMessage, text, epochSeconds = date), operations)
         }
     }
 

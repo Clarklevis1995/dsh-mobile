@@ -47,7 +47,7 @@ class NetworkDiagnosticsStoreTest {
         assertEquals(0, store.tick(10000.0).timedOutProbes)
         assertNull(store.nextProbe(10000.0))
         store.start("second-run", 10000.0)
-        store.connection("generation-2", "WebRTC", true, true, 10000.0)
+        store.connection("generation-2", "WebSocket", true, true, 10000.0)
         val newId = assertNotNull(store.nextProbe(10000.0))
         assertFalse(store.acceptPong(id, 10020.0))
         assertTrue(store.acceptPong(newId, 10025.0))

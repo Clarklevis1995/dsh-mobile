@@ -26,6 +26,9 @@
         android:required="false" />
 
     <queries>
+        <package android:name="com.autonavi.minimap" />
+        <package android:name="com.baidu.BaiduMap" />
+        <package android:name="com.google.android.apps.maps" />
         <provider android:authorities="com.android.calendar" />
         <intent><action android:name="android.intent.action.SET_ALARM" /></intent>
         <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="geo" /></intent>

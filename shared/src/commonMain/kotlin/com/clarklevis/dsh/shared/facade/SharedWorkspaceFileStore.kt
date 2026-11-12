@@ -54,7 +54,7 @@ data class SharedWorkspaceDirectory(val sessionId: String, val path: String)
 /**
  * 平台文件 I/O 之外的工作区文件状态机。
  *
- * commonMain 负责请求关联、相对路径边界、分块偏移、Base64、长度与 SHA-256；
+ * commonMain 负责请求关联、目录边界、文件路径校验、分块偏移、Base64、长度与 SHA-256；
  * iOS/Android 只把 [appendBase64Data] 追加到当前临时文件，并在 [completion]
  * 出现后原子提交或交给系统预览/另存为。
  */
@@ -224,7 +224,7 @@ class SharedWorkspaceFileStore {
         requireIdentifier(sessionId, "sessionId")
         requireIdentifier(requestId, "requestId")
         require(purpose in PURPOSES) { "purpose-invalid" }
-        val normalizedPath = normalizeRelativePath(path, allowRoot = false)
+        val normalizedPath = normalizeFilePath(path)
         if (isBusy()) return fail("download-busy")
         pendingOpen = PendingOpen(requestId, sessionId, normalizedPath, purpose, workspaceSessionId)
         state = state.copy(lastError = null)
@@ -317,7 +317,7 @@ class SharedWorkspaceFileStore {
         "file-download-cancelled" -> acceptCancelled(frame)
         "error" -> resolveDirectoryError(frame) ?: frame.requestType
             ?.takeIf { it in REQUEST_TYPES }
-            ?.let { requestFailed(it, frame.message ?: frame.code, frame.requestId ?: frame.transferId) }
+            ?.let { requestFailed(it, frame.code ?: frame.message, frame.requestId ?: frame.transferId) }
             ?: SharedWorkspaceFileTransition(state)
         else -> SharedWorkspaceFileTransition(state)
     }
@@ -337,7 +337,7 @@ class SharedWorkspaceFileStore {
         if (frame.requestId != pending.requestId) return SharedWorkspaceFileTransition(state)
         if (frame.sessionId != pending.workspaceSessionId) return SharedWorkspaceFileTransition(state)
         pendingResolve = null
-        val path = runCatching { normalizeRelativePath(frame.path, allowRoot = false) }
+        val path = runCatching { normalizeFilePath(frame.path) }
             .getOrElse { return fail("file-resolve-invalid") }
         if (frame.path.isNullOrBlank() || frame.name.isNullOrBlank() ||
             frame.size == null || frame.size < 0L || frame.size > MAXIMUM_FILE_BYTES) {
@@ -398,7 +398,7 @@ class SharedWorkspaceFileStore {
         val transferId = frame.transferId
         val size = frame.size
         val chunkBytes = frame.chunkBytes
-        val path = runCatching { normalizeRelativePath(frame.path, allowRoot = false) }
+        val path = runCatching { normalizeFilePath(frame.path) }
             .getOrElse { return fail("file-download-path-invalid") }
         if (
             frame.requestId != pending.requestId || frame.sessionId != pending.workspaceSessionId ||
@@ -573,6 +573,23 @@ private fun normalizeRelativePath(value: String?, allowRoot: Boolean): String {
     require('\u0000' !in normalized && '\\' !in normalized && !Regex("^[A-Za-z]:/").containsMatchIn(normalized)) { "path-invalid" }
     val segments = normalized.split('/')
     require(segments.none { it.isEmpty() || it == "." || it == ".." }) { "path-segment-invalid" }
+    return normalized
+}
+
+/** 文件引用可由 Host 授权到工作区外；目录浏览仍只使用 normalizeRelativePath。 */
+private fun normalizeFilePath(value: String?): String {
+    val trimmed = value?.trim().orEmpty()
+    val windowsAbsolute = Regex("^[A-Za-z]:[/\\\\]").containsMatchIn(trimmed)
+    val uncAbsolute = trimmed.startsWith("\\\\") || trimmed.startsWith("//")
+    if (!windowsAbsolute && !uncAbsolute && !trimmed.startsWith('/')) {
+        return normalizeRelativePath(trimmed, allowRoot = false)
+    }
+    require('\u0000' !in trimmed) { "path-invalid" }
+    val normalized = if (windowsAbsolute || uncAbsolute) trimmed.replace('\\', '/') else trimmed
+    require('\\' !in normalized) { "path-invalid" }
+    val tail = normalized.drop(if (windowsAbsolute) 3 else if (uncAbsolute) 2 else 1)
+    require(tail.split('/').none { it.isEmpty() || it == "." || it == ".." }) { "path-segment-invalid" }
+    require(!uncAbsolute || tail.split('/').size >= 3) { "path-segment-invalid" }
     return normalized
 }
 

@@ -593,6 +593,7 @@ struct ConversationView: View {
     @State private var viewportHasConversationContent = false
     @State private var viewportContentSessionID: String?
     @State private var bottomSafeAreaInset: CGFloat = 0
+    @State private var additionalKeyboardInset: CGFloat = 0
     @State private var voiceWindowHeight: CGFloat = 0
     @State private var teamHeaderHeight: CGFloat = 0
     // 输入主体是 UIKit UITextView，不需要 SwiftUI FocusState 参与焦点仲裁。
@@ -655,7 +656,9 @@ struct ConversationView: View {
         }
         .ignoresSafeArea(.container, edges: .bottom)
         .background {
-            WindowBottomSafeAreaReader(bottomInset: $bottomSafeAreaInset, windowHeight: $voiceWindowHeight)
+            WindowBottomSafeAreaReader(bottomInset: $bottomSafeAreaInset, windowHeight: $voiceWindowHeight,
+                                       keyboardInset: $additionalKeyboardInset)
+                .ignoresSafeArea(.container, edges: .bottom)
         }
         .foregroundStyle(.primary)
         .onChangeCompat(of: activeView) { _, view in
@@ -711,7 +714,9 @@ struct ConversationView: View {
     private var chat: some View {
         GeometryReader { geometry in
             // 使用避让键盘后的页面高度，给输入框和聊天内容保留空间。
-            chatContent(taskListMaximumHeight: min(280, max(0, geometry.size.height - pageTopInset) * 0.3))
+            let extraInset = min(additionalKeyboardInset, max(0, geometry.size.height - 1))
+            chatContent(taskListMaximumHeight: min(280, max(0, geometry.size.height - extraInset - pageTopInset) * 0.3))
+                .padding(.bottom, extraInset)
         }
     }
 
@@ -1398,11 +1403,11 @@ struct ConversationView: View {
         let urls = ShareInbox.fileURLs(share)
         let files = urls.filter { UTType(filenameExtension: $0.pathExtension)?.conforms(to: .image) != true }
         guard files.isEmpty || (store.fileUploads.supported && store.gateway.state.isConnected) else {
-            store.lastError = "分享文件需要连接支持文件上传的网关，内容已保留，请连接后重新打开会话。"
+            store.lastError = String(localized: "分享文件需要连接支持文件上传的网关，内容已保留，请连接后重新打开会话。")
             return
         }
         guard store.fileUploads.drafts.count + files.count <= 20, !store.fileUploads.preparing else {
-            store.lastError = "请先处理已有附件后重新打开会话，分享内容已保留。"
+            store.lastError = String(localized: "请先处理已有附件后重新打开会话，分享内容已保留。")
             return
         }
         importingShareID = share.id
@@ -1418,7 +1423,7 @@ struct ConversationView: View {
             guard store.selectedSessionId == share.target.sessionID, !Task.isCancelled else { return }
             guard pendingImages.count + images.count <= 20,
                   (pendingImages + images).reduce(0, { $0 + $1.data.count }) <= 100 * 1024 * 1024 else {
-                store.lastError = "分享图片超出单条消息附件限制，请先处理已有附件。"
+                store.lastError = String(localized: "分享图片超出单条消息附件限制，请先处理已有附件。")
                 return
             }
             if !files.isEmpty {
@@ -1553,7 +1558,7 @@ struct ConversationView: View {
             } content: {
                 VStack(alignment: .leading, spacing: 12) {
                     ComposerMorphLayout(expansion: composerExpanded ? 1 : 0,
-                                        keepActionWhenCollapsed: showsSessionStopButton) {
+                                        keepActionWhenCollapsed: showsSessionStopButton || composerHasContent) {
                         attachmentMenu
                         VoiceComposerTextInput(
                             text: composerTextBinding,
@@ -1577,7 +1582,7 @@ struct ConversationView: View {
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         ZStack {
-                            if composerExpanded || showsSessionStopButton { composerAction.transition(.opacity) }
+                            if composerExpanded || showsSessionStopButton || composerHasContent { composerAction.transition(.opacity) }
                         }
                         .frame(width: 42, height: 42)
                     }
@@ -2006,11 +2011,11 @@ struct ConversationView: View {
     private func importPastedAttachments(_ providers: [NSItemProvider], targetSessionID: String?) async {
         guard store.selectedMemberCanSend else { return }
         guard !isImportingImages, !store.fileUploads.preparing else {
-            store.lastError = "请等待已有附件准备完成后再粘贴"
+            store.lastError = String(localized: "请等待已有附件准备完成后再粘贴")
             return
         }
         guard providers.count + pendingImages.count + store.fileUploads.drafts.count <= 20 else {
-            store.lastError = "一次最多添加 20 个附件"
+            store.lastError = String(localized: "一次最多添加 20 个附件")
             return
         }
         isImportingImages = true
@@ -2036,7 +2041,7 @@ struct ConversationView: View {
             guard store.selectedSessionId == targetSessionID, !Task.isCancelled else { return }
             guard images.isEmpty || store.supportsImages,
                   files.isEmpty || store.fileUploads.supported && !store.isViewingTeamMember else {
-                store.lastError = "当前会话或网关不支持此类附件"
+                store.lastError = String(localized: "当前会话或网关不支持此类附件")
                 return
             }
             guard (pendingImages + images).reduce(0, { $0 + $1.data.count }) <= 100 * 1024 * 1024 else {
@@ -2052,7 +2057,7 @@ struct ConversationView: View {
             pendingImages.append(contentsOf: images)
             store.voiceInput.setVoiceMode(false)
             composerIsFocused = true
-        } catch { store.lastError = "无法读取粘贴的附件：\(error.localizedDescription)" }
+        } catch { store.lastError = String(localized: "无法读取粘贴的附件：\(error.localizedDescription)") }
     }
 
     @MainActor
@@ -3565,20 +3570,35 @@ private struct ComposerHeightPreferenceKey: PreferenceKey {
 /// deliberately draws through the container safe area. This keeps glass and
 /// shadows continuous while the interactive composer still avoids the Home
 /// Indicator on every device shape.
-private struct WindowBottomSafeAreaReader: UIViewRepresentable {
+/// 只补偿 SwiftUI 尚未避让的底部遮挡，避免重复叠加完整键盘高度。
+enum ComposerKeyboardAvoidance {
+    static func additionalInset(viewFrame: CGRect, keyboardFrame: CGRect, bottomSafeArea: CGFloat) -> CGFloat {
+        guard !viewFrame.isEmpty, !viewFrame.isInfinite, !keyboardFrame.isNull, !keyboardFrame.isInfinite,
+              keyboardFrame.height > bottomSafeArea + 0.5,
+              keyboardFrame.minX <= viewFrame.minX + 1,
+              keyboardFrame.maxX >= viewFrame.maxX - 1,
+              keyboardFrame.maxY >= viewFrame.maxY - 1 else { return 0 }
+        return min(viewFrame.height, max(0, viewFrame.maxY - keyboardFrame.minY))
+    }
+}
+
+struct WindowBottomSafeAreaReader: UIViewRepresentable {
     @Binding var bottomInset: CGFloat
     @Binding var windowHeight: CGFloat
+    @Binding var keyboardInset: CGFloat
 
     func makeUIView(context: Context) -> SafeAreaReportingView {
         let view = SafeAreaReportingView()
         view.onBottomInsetChange = publish
         view.onWindowHeightChange = publishHeight
+        view.onKeyboardInsetChange = publishKeyboardInset
         return view
     }
 
     func updateUIView(_ view: SafeAreaReportingView, context: Context) {
         view.onBottomInsetChange = publish
         view.onWindowHeightChange = publishHeight
+        view.onKeyboardInsetChange = publishKeyboardInset
         view.publishBottomInset()
     }
 
@@ -3594,9 +3614,49 @@ private struct WindowBottomSafeAreaReader: UIViewRepresentable {
         DispatchQueue.main.async { windowHeight = height }
     }
 
+    private func publishKeyboardInset(_ inset: CGFloat) {
+        guard abs(keyboardInset - inset) > 0.5 else { return }
+        DispatchQueue.main.async { keyboardInset = inset }
+    }
+
     final class SafeAreaReportingView: UIView {
         var onBottomInsetChange: ((CGFloat) -> Void)?
         var onWindowHeightChange: ((CGFloat) -> Void)?
+        var onKeyboardInsetChange: ((CGFloat) -> Void)?
+        private var keyboardScreenFrame: CGRect?
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            isUserInteractionEnabled = false
+            // 用约束让布局随系统键盘区域更新，包括候选栏和输入法高度变化。
+            // 浮动键盘不应把整页顶起，保留 followsUndockedKeyboard 的默认 false。
+            let marker = UIView()
+            marker.isUserInteractionEnabled = false
+            marker.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(marker)
+            NSLayoutConstraint.activate([
+                marker.topAnchor.constraint(equalTo: keyboardLayoutGuide.topAnchor),
+                marker.leadingAnchor.constraint(equalTo: leadingAnchor),
+                marker.widthAnchor.constraint(equalToConstant: 0),
+                marker.heightAnchor.constraint(equalToConstant: 0)
+            ])
+            // 部分输入法切换时，通知先于布局指南更新；用系统给出的窗口区域过渡。
+            for name in [UIResponder.keyboardWillChangeFrameNotification,
+                         UIResponder.keyboardDidChangeFrameNotification,
+                         UIResponder.keyboardDidHideNotification] {
+                NotificationCenter.default.addObserver(self, selector: #selector(keyboardChanged(_:)), name: name, object: nil)
+            }
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        deinit { NotificationCenter.default.removeObserver(self) }
+
+        @objc private func keyboardChanged(_ notification: Notification) {
+            guard window != nil, notification.userInfo?[UIResponder.keyboardIsLocalUserInfoKey] as? Bool != false else { return }
+            keyboardScreenFrame = notification.name == UIResponder.keyboardDidHideNotification ? nil
+                : (notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+            publishBottomInset()
+        }
 
         override func layoutSubviews() {
             super.layoutSubviews()
@@ -3605,6 +3665,7 @@ private struct WindowBottomSafeAreaReader: UIViewRepresentable {
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
+            if window == nil { keyboardScreenFrame = nil }
             publishBottomInset()
         }
 
@@ -3617,6 +3678,14 @@ private struct WindowBottomSafeAreaReader: UIViewRepresentable {
             let inset = window?.safeAreaInsets.bottom ?? safeAreaInsets.bottom
             onBottomInsetChange?(inset)
             if let height = window?.bounds.height { onWindowHeightChange?(height) }
+            var keyboardFrame = keyboardLayoutGuide.layoutFrame
+            if keyboardFrame.height <= inset + 0.5, let screenFrame = keyboardScreenFrame, let window {
+                let windowFrame = window.convert(screenFrame, from: window.screen.coordinateSpace)
+                keyboardFrame = convert(windowFrame, from: window)
+            }
+            onKeyboardInsetChange?(ComposerKeyboardAvoidance.additionalInset(
+                viewFrame: bounds, keyboardFrame: keyboardFrame, bottomSafeArea: inset
+            ))
         }
     }
 }

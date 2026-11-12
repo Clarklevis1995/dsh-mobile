@@ -258,9 +258,8 @@ class AndroidGatewayRuntimeIntegrationTest {
     fun tailscaleQrPairingAuthenticatesAndConnectsWithoutReopeningTransport() = runTest {
         val endpoint = "ws://100.100.1.19:3081/ws/mobile"
         val raw = FakeTransport()
-        val transport = object : com.clarklevis.dsh.shared.platform.GatewayRtcTransport, GatewayTransport by raw {
+        val transport = object : com.clarklevis.dsh.shared.platform.GatewaySplitTransport, GatewayTransport by raw {
             override val conversationEvents: Flow<GatewayTransportEvent> = kotlinx.coroutines.flow.emptyFlow()
-            override fun resetRtcRecovery() = Unit
         }
         var savedToken: String? = null
         val credentials = object : GatewayCredentialStore by FakeCredentials() {

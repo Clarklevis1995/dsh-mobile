@@ -635,10 +635,11 @@ private fun ConversationPage(
         ConversationComposerChrome(
             Modifier
                 .align(Alignment.BottomCenter)
-                .adaptiveContentWidth().testTag("conversation-composer-column")
+                .adaptiveContentWidth()
                 .graphicsLayer { alpha = if (stateHolder.voiceInput.state.overlayVisible) 0f else 1f }
                 .imePadding(),
             composerModifier = Modifier
+                .testTag("conversation-composer-column")
                 .onSizeChanged { size ->
                     bottomContentHeight.value = with(density) { size.height.toDp() }
                 }
@@ -1660,9 +1661,17 @@ private fun Composer(
         previousFileCount = fileCount
     }
     var previouslyVisibleIme by remember { mutableStateOf(false) }
-    LaunchedEffect(imeVisible) {
-        if (previouslyVisibleIme && !imeVisible && !voice.state.voiceMode) focusManager.clearFocus(force = true)
-        previouslyVisibleIme = imeVisible
+    LaunchedEffect(imeVisible, inputIsFocused, voice.state.voiceMode) {
+        when {
+            imeVisible -> previouslyVisibleIme = true
+            !inputIsFocused || voice.state.voiceMode -> previouslyVisibleIme = false
+            previouslyVisibleIme -> {
+                // 切换输入法/候选面板时 IME 可能短暂消失，不能立刻清掉原生焦点。
+                kotlinx.coroutines.delay(250)
+                focusManager.clearFocus(force = true)
+                previouslyVisibleIme = false
+            }
+        }
     }
 
     var observedSuccessfulSendCount by remember(stateHolder) {
@@ -1706,7 +1715,7 @@ private fun Composer(
             QueueDock(stateHolder)
         }
         Surface(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().testTag("composer-card")
                 .dropShadow(
                     shape = shape,
                     shadow = Shadow(
@@ -1763,7 +1772,7 @@ private fun Composer(
                 ) {
                     ComposerMorphLayout(
                         expanded = composerExpanded,
-                        keepActionWhenCollapsed = stateHolder.showsSessionStopButton,
+                        keepActionWhenCollapsed = stateHolder.showsSessionStopButton || composerHasContent,
                         modifier = Modifier.testTag("composer-morph-layout"),
                         leading = {
                             Box {

@@ -15,32 +15,25 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.Locale
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AndroidSharedStateHolderTest {
     @Test
-    fun allScopeRejectsCreationWithLocalizedPromptBeforeRequiringGateway() = runTest {
-        val previous = Locale.getDefault()
+    fun allScopeKeepsDefaultWorkspaceAndDoesNotReportObsoleteCreationRestriction() = runTest {
+        val holder = AndroidSharedStateHolder()
         try {
-            for ((locale, message) in listOf(
-                Locale.SIMPLIFIED_CHINESE to "请先选择一个具体工作区，再创建新会话。",
-                Locale.ENGLISH to "Select a specific workspace before creating a new session."
-            )) {
-                Locale.setDefault(locale)
-                val holder = AndroidSharedStateHolder()
-                try {
-                    holder.selectWorkspace(AndroidSharedStateHolder.ALL_WORKSPACES_ID)
-                    val selected = holder.snapshot.selectedSessionId
-                    assertFalse(holder.prepareNewSession())
-                    assertEquals(message, holder.platformError)
-                    assertEquals(selected, holder.snapshot.selectedSessionId)
-                } finally { holder.close() }
-            }
-        } finally { Locale.setDefault(previous) }
+            holder.selectWorkspace(AndroidSharedStateHolder.ALL_WORKSPACES_ID)
+            val selected = holder.snapshot.selectedSessionId
+            assertNull("全部会话没有隐式选中的具体工作区", holder.activeWorkspace)
+            assertFalse("没有网关时不应创建会话", holder.prepareNewSession())
+            assertNull("不能恢复已移除的必须先选择工作区限制", holder.platformError)
+            assertEquals(selected, holder.snapshot.selectedSessionId)
+            assertEquals(AndroidSharedStateHolder.ALL_WORKSPACES_ID, holder.selectedWorkspaceId)
+        } finally { holder.close() }
     }
 
     // StateHolder 的平台适配器依赖 Main dispatcher；JVM 测试不使用 Android Looper。

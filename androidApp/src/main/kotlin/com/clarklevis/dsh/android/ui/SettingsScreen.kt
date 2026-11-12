@@ -104,7 +104,6 @@ internal fun SettingsScreen(
 ) {
     val updateState by updateModel.state.collectAsStateWithLifecycle()
     val connectionMethod by stateHolder.connectionMethod.collectAsStateWithLifecycle()
-    val connectionPaths by stateHolder.connectionPaths.collectAsStateWithLifecycle()
     var showPermissionPicker by remember { mutableStateOf(false) }
     var pendingPermission by remember { mutableStateOf<String?>(null) }
     var showPrivacyPolicy by remember { mutableStateOf(false) }
@@ -220,9 +219,6 @@ internal fun SettingsScreen(
                                 if (isConnected(stateHolder)) appText(connectionMethod.ifEmpty { "WebSocket" }) else appText("未连接"),
                                 modifier = Modifier.testTag("gateway-connection-method")
                             )
-                            if (isConnected(stateHolder) && connectionMethod == "WebRTC") {
-                                RtcConnectionPathDetails(connectionPaths, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-                            }
                             SettingsDivider()
                             SettingsValueRow(
                                 appText("网络检测"),

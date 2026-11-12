@@ -1,0 +1,45 @@
+{
+  "fileKey": "0qYyEvoG07J77OKPPnseTp",
+  "sessionId": "0d43cf70-0a89-48e1-a42c-bed7756f32f0",
+  "pageId": "22:30",
+  "boardId": "23:977",
+  "focusId": "24:318",
+  "screenGroups": {
+    "ios": [
+      "23:987",
+      "23:1030",
+      "23:1073"
+    ],
+    "android": [
+      "23:1425",
+      "23:1468",
+      "23:1511"
+    ]
+  },
+  "typeCounts": {
+    "FRAME": 265,
+    "TEXT": 160,
+    "VECTOR": 110,
+    "RECTANGLE": 67,
+    "INSTANCE": 58,
+    "GROUP": 24
+  },
+  "fontFamilies": [
+    "SF Pro",
+    "Noto Sans SC"
+  ],
+  "imagesAreOnlyLogos": true,
+  "registeredCapabilitiesIcon": {
+    "name": "模块网格与勾选",
+    "sessionId": "9e49aa79-dfe0-42fb-88b5-34f035c96292",
+    "svg": "registered-capabilities.svg",
+    "entryNodeIds": [
+      "23:1016",
+      "23:1059",
+      "23:1102",
+      "23:1454",
+      "23:1497",
+      "23:1540"
+    ]
+  }
+}

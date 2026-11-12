@@ -1,0 +1,1607 @@
+[
+  {
+    "id": "symbol:square",
+    "latex": "\\square{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:alpha",
+    "latex": "\\alpha{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:beta",
+    "latex": "\\beta{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:gamma",
+    "latex": "\\gamma{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:delta",
+    "latex": "\\delta{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:varepsilon",
+    "latex": "\\varepsilon{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:zeta",
+    "latex": "\\zeta{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:eta",
+    "latex": "\\eta{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:theta",
+    "latex": "\\theta{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:iota",
+    "latex": "\\iota{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:kappa",
+    "latex": "\\kappa{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:lambda",
+    "latex": "\\lambda{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:mu",
+    "latex": "\\mu{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:nu",
+    "latex": "\\nu{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:xi",
+    "latex": "\\xi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:omicron",
+    "latex": "\\omicron{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:pi",
+    "latex": "\\pi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:rho",
+    "latex": "\\rho{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:varsigma",
+    "latex": "\\varsigma{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sigma",
+    "latex": "\\sigma{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:tau",
+    "latex": "\\tau{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:upsilon",
+    "latex": "\\upsilon{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:varphi",
+    "latex": "\\varphi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:chi",
+    "latex": "\\chi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:psi",
+    "latex": "\\psi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:omega",
+    "latex": "\\omega{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:epsilon",
+    "latex": "\\epsilon{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:vartheta",
+    "latex": "\\vartheta{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:phi",
+    "latex": "\\phi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:varrho",
+    "latex": "\\varrho{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:varpi",
+    "latex": "\\varpi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Gamma",
+    "latex": "\\Gamma{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Delta",
+    "latex": "\\Delta{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Theta",
+    "latex": "\\Theta{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Lambda",
+    "latex": "\\Lambda{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Xi",
+    "latex": "\\Xi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Pi",
+    "latex": "\\Pi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Sigma",
+    "latex": "\\Sigma{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Upsilon",
+    "latex": "\\Upsilon{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Phi",
+    "latex": "\\Phi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Psi",
+    "latex": "\\Psi{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Omega",
+    "latex": "\\Omega{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:lceil",
+    "latex": "\\lceil{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:lfloor",
+    "latex": "\\lfloor{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:langle",
+    "latex": "\\langle{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:lgroup",
+    "latex": "\\lgroup{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:rceil",
+    "latex": "\\rceil{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:rfloor",
+    "latex": "\\rfloor{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:rangle",
+    "latex": "\\rangle{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:rgroup",
+    "latex": "\\rgroup{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:leftarrow",
+    "latex": "\\leftarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:uparrow",
+    "latex": "\\uparrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:rightarrow",
+    "latex": "\\rightarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:downarrow",
+    "latex": "\\downarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:leftrightarrow",
+    "latex": "\\leftrightarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:updownarrow",
+    "latex": "\\updownarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:nwarrow",
+    "latex": "\\nwarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:nearrow",
+    "latex": "\\nearrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:searrow",
+    "latex": "\\searrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:swarrow",
+    "latex": "\\swarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:mapsto",
+    "latex": "\\mapsto{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Leftarrow",
+    "latex": "\\Leftarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Uparrow",
+    "latex": "\\Uparrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Rightarrow",
+    "latex": "\\Rightarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Downarrow",
+    "latex": "\\Downarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Leftrightarrow",
+    "latex": "\\Leftrightarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Updownarrow",
+    "latex": "\\Updownarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:longleftarrow",
+    "latex": "\\longleftarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:longrightarrow",
+    "latex": "\\longrightarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:longleftrightarrow",
+    "latex": "\\longleftrightarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Longleftarrow",
+    "latex": "\\Longleftarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Longrightarrow",
+    "latex": "\\Longrightarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Longleftrightarrow",
+    "latex": "\\Longleftrightarrow{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:leq",
+    "latex": "\\leq{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:geq",
+    "latex": "\\geq{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:neq",
+    "latex": "\\neq{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:in",
+    "latex": "\\in{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:notin",
+    "latex": "\\notin{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ni",
+    "latex": "\\ni{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:propto",
+    "latex": "\\propto{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:mid",
+    "latex": "\\mid{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:parallel",
+    "latex": "\\parallel{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sim",
+    "latex": "\\sim{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:simeq",
+    "latex": "\\simeq{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:cong",
+    "latex": "\\cong{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:approx",
+    "latex": "\\approx{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:asymp",
+    "latex": "\\asymp{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:doteq",
+    "latex": "\\doteq{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:equiv",
+    "latex": "\\equiv{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:gg",
+    "latex": "\\gg{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ll",
+    "latex": "\\ll{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:prec",
+    "latex": "\\prec{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:succ",
+    "latex": "\\succ{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:subset",
+    "latex": "\\subset{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:supset",
+    "latex": "\\supset{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:subseteq",
+    "latex": "\\subseteq{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:supseteq",
+    "latex": "\\supseteq{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sqsubset",
+    "latex": "\\sqsubset{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sqsupset",
+    "latex": "\\sqsupset{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sqsubseteq",
+    "latex": "\\sqsubseteq{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sqsupseteq",
+    "latex": "\\sqsupseteq{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:models",
+    "latex": "\\models{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:perp",
+    "latex": "\\perp{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:times",
+    "latex": "\\times{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:div",
+    "latex": "\\div{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:pm",
+    "latex": "\\pm{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:dagger",
+    "latex": "\\dagger{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ddagger",
+    "latex": "\\ddagger{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:mp",
+    "latex": "\\mp{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:setminus",
+    "latex": "\\setminus{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ast",
+    "latex": "\\ast{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:circ",
+    "latex": "\\circ{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:bullet",
+    "latex": "\\bullet{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:wedge",
+    "latex": "\\wedge{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:vee",
+    "latex": "\\vee{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:cap",
+    "latex": "\\cap{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:cup",
+    "latex": "\\cup{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:wr",
+    "latex": "\\wr{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:uplus",
+    "latex": "\\uplus{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sqcap",
+    "latex": "\\sqcap{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sqcup",
+    "latex": "\\sqcup{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:oplus",
+    "latex": "\\oplus{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ominus",
+    "latex": "\\ominus{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:otimes",
+    "latex": "\\otimes{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:oslash",
+    "latex": "\\oslash{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:odot",
+    "latex": "\\odot{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:star",
+    "latex": "\\star{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:cdot",
+    "latex": "\\cdot{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:amalg",
+    "latex": "\\amalg{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:log",
+    "latex": "\\log{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:lg",
+    "latex": "\\lg{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ln",
+    "latex": "\\ln{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sin",
+    "latex": "\\sin{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:arcsin",
+    "latex": "\\arcsin{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sinh",
+    "latex": "\\sinh{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:cos",
+    "latex": "\\cos{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:arccos",
+    "latex": "\\arccos{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:cosh",
+    "latex": "\\cosh{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:tan",
+    "latex": "\\tan{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:arctan",
+    "latex": "\\arctan{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:tanh",
+    "latex": "\\tanh{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:cot",
+    "latex": "\\cot{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:coth",
+    "latex": "\\coth{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sec",
+    "latex": "\\sec{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:csc",
+    "latex": "\\csc{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:arg",
+    "latex": "\\arg{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ker",
+    "latex": "\\ker{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:dim",
+    "latex": "\\dim{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:hom",
+    "latex": "\\hom{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:exp",
+    "latex": "\\exp{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:deg",
+    "latex": "\\deg{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:lim",
+    "latex": "\\lim{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:limsup",
+    "latex": "\\limsup{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:liminf",
+    "latex": "\\liminf{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:max",
+    "latex": "\\max{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:min",
+    "latex": "\\min{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sup",
+    "latex": "\\sup{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:inf",
+    "latex": "\\inf{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:det",
+    "latex": "\\det{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Pr",
+    "latex": "\\Pr{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:gcd",
+    "latex": "\\gcd{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:prod",
+    "latex": "\\prod{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:coprod",
+    "latex": "\\coprod{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:sum",
+    "latex": "\\sum{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:int",
+    "latex": "\\int{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:oint",
+    "latex": "\\oint{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:bigwedge",
+    "latex": "\\bigwedge{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:bigvee",
+    "latex": "\\bigvee{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:bigcap",
+    "latex": "\\bigcap{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:bigcup",
+    "latex": "\\bigcup{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:bigodot",
+    "latex": "\\bigodot{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:bigoplus",
+    "latex": "\\bigoplus{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:bigotimes",
+    "latex": "\\bigotimes{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:biguplus",
+    "latex": "\\biguplus{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:bigsqcup",
+    "latex": "\\bigsqcup{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:backslash",
+    "latex": "\\backslash{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:colon",
+    "latex": "\\colon{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:cdotp",
+    "latex": "\\cdotp{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:degree",
+    "latex": "\\degree{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:neg",
+    "latex": "\\neg{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:angstrom",
+    "latex": "\\angstrom{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:aa",
+    "latex": "\\aa{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ae",
+    "latex": "\\ae{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:o",
+    "latex": "\\o{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:oe",
+    "latex": "\\oe{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ss",
+    "latex": "\\ss{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:cc",
+    "latex": "\\cc{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:CC",
+    "latex": "\\CC{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:O",
+    "latex": "\\O{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:AE",
+    "latex": "\\AE{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:OE",
+    "latex": "\\OE{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:vert",
+    "latex": "\\vert{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ldots",
+    "latex": "\\ldots{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:prime",
+    "latex": "\\prime{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:hbar",
+    "latex": "\\hbar{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:lbar",
+    "latex": "\\lbar{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Im",
+    "latex": "\\Im{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ell",
+    "latex": "\\ell{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:wp",
+    "latex": "\\wp{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:Re",
+    "latex": "\\Re{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:mho",
+    "latex": "\\mho{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:aleph",
+    "latex": "\\aleph{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:forall",
+    "latex": "\\forall{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:exists",
+    "latex": "\\exists{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:emptyset",
+    "latex": "\\emptyset{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:nabla",
+    "latex": "\\nabla{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:infty",
+    "latex": "\\infty{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:angle",
+    "latex": "\\angle{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:top",
+    "latex": "\\top{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:bot",
+    "latex": "\\bot{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:vdots",
+    "latex": "\\vdots{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:cdots",
+    "latex": "\\cdots{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:ddots",
+    "latex": "\\ddots{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:triangle",
+    "latex": "\\triangle{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:imath",
+    "latex": "\\imath{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:jmath",
+    "latex": "\\jmath{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:upquote",
+    "latex": "\\upquote{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:partial",
+    "latex": "\\partial{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:quad",
+    "latex": "\\quad{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:qquad",
+    "latex": "\\qquad{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:displaystyle",
+    "latex": "\\displaystyle{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:textstyle",
+    "latex": "\\textstyle{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:scriptstyle",
+    "latex": "\\scriptstyle{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "symbol:scriptscriptstyle",
+    "latex": "\\scriptscriptstyle{x}",
+    "category": "symbol"
+  },
+  {
+    "id": "structure:0",
+    "latex": "\\sqrt{x}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:1",
+    "latex": "\\sqrt[n]{b_1\\cdots b_n}\\le\\dfrac{b_1+\\cdots+b_n}{n}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:2",
+    "latex": "\\boxed{G_n\\;\\le\\;\\frac{1}{n\\,C_n}\\sum_{k=1}^{n}c_k a_k}\\tag{1}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:3",
+    "latex": "\\sqrt[3]{\\frac{1+\\sqrt{x}}{y}}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:4",
+    "latex": "\\frac{a}{b}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:5",
+    "latex": "\\dfrac{a}{b}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:6",
+    "latex": "\\tfrac{a}{b}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:7",
+    "latex": "\\binom{n}{k}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:8",
+    "latex": "\\dbinom{n}{k}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:9",
+    "latex": "\\tbinom{n}{k}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:10",
+    "latex": "\\overline{AB}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:11",
+    "latex": "\\underline{x}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:12",
+    "latex": "\\widehat{ABC}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:13",
+    "latex": "\\vec{x}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:14",
+    "latex": "\\hat{x}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:15",
+    "latex": "\\tilde{x}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:16",
+    "latex": "\\dot{x}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:17",
+    "latex": "\\ddot{x}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:18",
+    "latex": "\\boxed{\\boxed{x^2}}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:19",
+    "latex": "\\left\\langle x,y\\right\\rangle",
+    "category": "structure"
+  },
+  {
+    "id": "structure:20",
+    "latex": "\\Bigl(\\frac{x}{y}\\Bigr)",
+    "category": "structure"
+  },
+  {
+    "id": "structure:21",
+    "latex": "\\sum_{k=1}^n k",
+    "category": "structure"
+  },
+  {
+    "id": "structure:22",
+    "latex": "\\prod_{k=1}^n k",
+    "category": "structure"
+  },
+  {
+    "id": "structure:23",
+    "latex": "\\int_0^1 x\\,dx",
+    "category": "structure"
+  },
+  {
+    "id": "structure:24",
+    "latex": "\\iint_D f\\,dxdy",
+    "category": "structure"
+  },
+  {
+    "id": "structure:25",
+    "latex": "\\lim_{x\\to0}\\frac{\\sin x}{x}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:26",
+    "latex": "\\log_2 x",
+    "category": "structure"
+  },
+  {
+    "id": "structure:27",
+    "latex": "\\sin^2x+\\cos^2x=1",
+    "category": "structure"
+  },
+  {
+    "id": "structure:28",
+    "latex": "\\operatorname{rank}(A)",
+    "category": "structure"
+  },
+  {
+    "id": "structure:29",
+    "latex": "\\mathbb{R}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:30",
+    "latex": "\\mathbf{x}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:31",
+    "latex": "\\mathcal{F}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:32",
+    "latex": "\\mathrm{AM-GM}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:33",
+    "latex": "\\text{AM-GM}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:34",
+    "latex": "\\begin{matrix}a&b\\\\c&d\\end{matrix}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:35",
+    "latex": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:36",
+    "latex": "\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:37",
+    "latex": "\\begin{cases}x&x>0\\\\0&x\\le0\\end{cases}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:38",
+    "latex": "\\begin{aligned}a&=b+c\\\\d&=e\\end{aligned}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:39",
+    "latex": "\\color{red}{x}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:40",
+    "latex": "\\tag{A}x=y",
+    "category": "structure"
+  },
+  {
+    "id": "structure:41",
+    "latex": "x=y\\tag*{A}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:42",
+    "latex": "{\\displaystyle\\frac{x}{y}}+{\\textstyle\\frac{x}{y}}",
+    "category": "structure"
+  },
+  {
+    "id": "structure:43",
+    "latex": "\\sqrt[n]{\\frac{(c_1a_1)(c_2a_2)\\cdots(c_na_n)}{c_1c_2\\cdots c_n}}",
+    "category": "structure"
+  },
+  {
+    "id": "alias:lnot",
+    "latex": "\\lnot{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:land",
+    "latex": "\\land{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:lor",
+    "latex": "\\lor{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:ne",
+    "latex": "\\ne{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:le",
+    "latex": "\\le{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:ge",
+    "latex": "\\ge{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:lbrace",
+    "latex": "\\lbrace{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:rbrace",
+    "latex": "\\rbrace{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:Vert",
+    "latex": "\\Vert{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:gets",
+    "latex": "\\gets{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:to",
+    "latex": "\\to{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:iff",
+    "latex": "\\iff{x}",
+    "category": "alias"
+  },
+  {
+    "id": "alias:AA",
+    "latex": "\\AA{x}",
+    "category": "alias"
+  },
+  {
+    "id": "accent:grave",
+    "latex": "\\grave{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:acute",
+    "latex": "\\acute{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:hat",
+    "latex": "\\hat{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:tilde",
+    "latex": "\\tilde{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:bar",
+    "latex": "\\bar{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:breve",
+    "latex": "\\breve{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:dot",
+    "latex": "\\dot{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:ddot",
+    "latex": "\\ddot{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:check",
+    "latex": "\\check{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:vec",
+    "latex": "\\vec{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:widehat",
+    "latex": "\\widehat{x}",
+    "category": "accent"
+  },
+  {
+    "id": "accent:widetilde",
+    "latex": "\\widetilde{x}",
+    "category": "accent"
+  },
+  {
+    "id": "font:mathnormal",
+    "latex": "\\mathnormal{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:mathrm",
+    "latex": "\\mathrm{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:textrm",
+    "latex": "\\textrm{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:rm",
+    "latex": "\\rm{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:mathbf",
+    "latex": "\\mathbf{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:bf",
+    "latex": "\\bf{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:textbf",
+    "latex": "\\textbf{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:mathcal",
+    "latex": "\\mathcal{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:cal",
+    "latex": "\\cal{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:mathtt",
+    "latex": "\\mathtt{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:texttt",
+    "latex": "\\texttt{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:mathit",
+    "latex": "\\mathit{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:textit",
+    "latex": "\\textit{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:mit",
+    "latex": "\\mit{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:mathsf",
+    "latex": "\\mathsf{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:textsf",
+    "latex": "\\textsf{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:mathfrak",
+    "latex": "\\mathfrak{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:frak",
+    "latex": "\\frak{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:mathbb",
+    "latex": "\\mathbb{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:mathbfit",
+    "latex": "\\mathbfit{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:bm",
+    "latex": "\\bm{x}",
+    "category": "font"
+  },
+  {
+    "id": "font:text",
+    "latex": "\\text{x}",
+    "category": "font"
+  },
+  {
+    "id": "spacing:,",
+    "latex": "a\\, b",
+    "category": "spacing"
+  },
+  {
+    "id": "spacing:>",
+    "latex": "a\\> b",
+    "category": "spacing"
+  },
+  {
+    "id": "spacing:;",
+    "latex": "a\\; b",
+    "category": "spacing"
+  },
+  {
+    "id": "spacing:!",
+    "latex": "a\\! b",
+    "category": "spacing"
+  },
+  {
+    "id": "spacing:quad",
+    "latex": "a\\quad b",
+    "category": "spacing"
+  },
+  {
+    "id": "spacing:qquad",
+    "latex": "a\\qquad b",
+    "category": "spacing"
+  }
+]

@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>maps</string>
+        <string>iosamap</string>
+        <string>baidumap</string>
+        <string>comgooglemaps</string>
+    </array>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>按你的明确指令创建和管理 Whaleness 闹钟，由系统在指定时间响铃；可随时关闭闹钟连接器。</string>
 	<key>NSAppleMusicUsageDescription</key>

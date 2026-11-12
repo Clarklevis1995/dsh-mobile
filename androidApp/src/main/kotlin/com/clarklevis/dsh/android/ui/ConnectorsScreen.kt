@@ -10,6 +10,7 @@ import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -28,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.Lifecycle
@@ -65,10 +67,10 @@ internal fun ConnectorsContent(
     ConnectorRegistrationPolling(connectors)
     ConnectorPage(appText("连接器"), onBack, "connectors-screen") {
         ConnectorGroup {
-            Row(Modifier.fillMaxWidth().clickable(onClick = onOpenStatus).padding(18.dp)
+            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(onClick = onOpenStatus).padding(horizontal = 16.dp, vertical = 12.dp)
                 .testTag("connector-registration-link").semantics { stateDescription = registrationTitle(connectors?.registrationState ?: ConnectorRegistrationState.DISCONNECTED) },
                 verticalAlignment = Alignment.CenterVertically) {
-                Text(appText("连接器状态"), Modifier.weight(1f))
+                Text(appText("连接器状态"), Modifier.weight(1f), style = SettingsTypography.item)
                 StatusIndicatorDot(registrationColor(connectors?.registrationState), Modifier.size(8.dp))
                 Spacer(Modifier.width(12.dp))
                 Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -77,11 +79,11 @@ internal fun ConnectorsContent(
         Text(appText("本机能力"), Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         ConnectorGroup {
             (connectors?.modules ?: listOf("calendar", "reminders", "location", "photos", "music", "alarms")).forEachIndexed { index, module ->
-                if (index > 0) HorizontalDivider(Modifier.padding(start = 66.dp, end = 18.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                Row(Modifier.fillMaxWidth().heightIn(min = 76.dp).padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (index > 0) HorizontalDivider(Modifier.padding(start = 66.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     ConnectorIcon(module)
-                    Spacer(Modifier.width(14.dp))
-                    Text(connectorModuleTitle(module), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.width(12.dp))
+                    Text(connectorModuleTitle(module), Modifier.weight(1f), style = SettingsTypography.item)
                     DshSwitch(checked = connectors?.isOn(module) == true, enabled = connectors?.supported(module) == true && !connectors.syncing && enabling == null,
                         onCheckedChange = { value ->
                             if (connectors != null) {
@@ -96,12 +98,12 @@ internal fun ConnectorsContent(
             }
         }
         ConnectorGroup {
-            TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }, Modifier.fillMaxWidth()) {
-                Text(appText("打开系统权限设置"), Modifier.fillMaxWidth().padding(8.dp))
-            }
-            HorizontalDivider(Modifier.padding(horizontal = 18.dp))
-            TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, Modifier.fillMaxWidth()) {
-                Text(appText("音乐播放控制"), Modifier.fillMaxWidth().padding(8.dp))
+            TextButton(
+                onClick = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(appText("打开系统权限设置"), Modifier.fillMaxWidth(), style = SettingsTypography.item)
             }
         }
     }
@@ -144,7 +146,7 @@ private fun ConnectorPage(
                 }
                 Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).navigationBarsPadding(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Spacer(Modifier.height(4.dp))
                     content()
@@ -167,18 +169,16 @@ internal fun connectorModuleTitle(module: String) = appText(when (module) {
 })
 
 @Composable
-private fun ConnectorIcon(module: String) {
-    val (icon, color) = when (module) {
-        "calendar" -> R.drawable.ic_connector_calendar to Color(0xFFE34D59)
-        "reminders" -> R.drawable.ic_connector_reminders to DshColors.Ocean
-        "location" -> R.drawable.ic_connector_location to Color(0xFF34A853)
-        "photos" -> R.drawable.ic_connector_photos to DshColors.Orange
-        "music" -> R.drawable.ic_connector_music to Color(0xFFDE4162)
-        else -> R.drawable.ic_connector_alarm to DshColors.Orange
+internal fun ConnectorIcon(module: String, size: androidx.compose.ui.unit.Dp = 38.dp) {
+    val icon = when (module) {
+        "calendar" -> R.drawable.connector_app_calendar
+        "reminders" -> R.drawable.connector_app_reminders
+        "location" -> R.drawable.connector_app_location
+        "photos" -> R.drawable.connector_app_photos
+        "music" -> R.drawable.connector_app_music
+        else -> R.drawable.connector_app_alarms
     }
-    Surface(shape = RoundedCornerShape(9.dp), color = color.copy(alpha = 0.1f)) {
-        Icon(painterResource(icon), null, Modifier.padding(6.dp).size(26.dp), tint = color)
-    }
+    Image(painterResource(icon), null, Modifier.size(size).testTag("connector-icon-$module"))
 }
 
 private fun registrationColor(state: ConnectorRegistrationState?): Color = when (state) {
@@ -208,14 +208,11 @@ private fun ConnectorRegistrationContent(connectors: AndroidDeviceConnectors?) {
             Spacer(Modifier.width(10.dp)); Text(registrationTitle(state), Modifier.weight(1f))
             if (connectors?.checkingRegistration == true || state == ConnectorRegistrationState.REGISTERING) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
         }
+        HorizontalDivider(Modifier.padding(horizontal = 18.dp), thickness = .5.dp,
+            color = mapPickerPalette(isSystemInDarkTheme()).separator)
         if (state == ConnectorRegistrationState.REGISTERED && connectors != null) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)) {
                 Text(appText("网关已确认"), Modifier.weight(1f)); Text(appText("%1\$s 项能力", connectors.registeredToolCount))
-            }
-            connectors.registrationConfirmedAt?.let { at ->
-                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)) {
-                    Text(appText("最近确认"), Modifier.weight(1f)); Text(DateFormat.getTimeInstance().format(Date(at)), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
             }
         } else {
             val message = appText(when (state) {
@@ -227,6 +224,36 @@ private fun ConnectorRegistrationContent(connectors: AndroidDeviceConnectors?) {
             })
             Text(message, Modifier.padding(horizontal = 18.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+    if (state == ConnectorRegistrationState.REGISTERED && connectors != null) {
+        connectors.registrationConfirmedAt?.let { at ->
+            Row(Modifier.padding(horizontal = 18.dp).testTag("connector-last-confirmed"),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(appText("最近确认"), style = SettingsTypography.description.copy(fontSize = 13.sp, lineHeight = 18.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(at)), style = SettingsTypography.description.copy(fontSize = 13.sp, lineHeight = 18.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        var showingCapabilities by rememberSaveable { mutableStateOf(false) }
+        ConnectorGroup {
+            Row(Modifier.fillMaxWidth().clickable { showingCapabilities = true }
+                .padding(horizontal = 16.dp, vertical = 16.dp).testTag("connector-registered-capabilities"),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Surface(shape = RoundedCornerShape(11.dp), color = DshColors.Ocean.copy(alpha = .08f)) {
+                    Icon(painterResource(R.drawable.ic_registered_capabilities), null, Modifier.padding(8.dp).size(24.dp), tint = DshColors.Ocean)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(appText("网关已登记的能力"), style = SettingsTypography.item)
+                    Text(appText("%1\$s 个连接器", connectors.registeredModules.size), style = SettingsTypography.description,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (showingCapabilities) ConnectorCapabilitiesSheet(connectors) { showingCapabilities = false }
+    }
+    ConnectorGroup {
         Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = { connectors?.refreshRegistrationStatus() }, enabled = connectors?.canCheckRegistration == true && !connectors.checkingRegistration,
                 modifier = Modifier.testTag("connector-refresh-registration")) { Text(appText("刷新状态")) }
@@ -234,31 +261,7 @@ private fun ConnectorRegistrationContent(connectors: AndroidDeviceConnectors?) {
                 modifier = Modifier.testTag("connector-retry-registration")) { Text(appText("重新注册")) }
         }
     }
-    if (state == ConnectorRegistrationState.REGISTERED && connectors != null) {
-        Spacer(Modifier.height(12.dp))
-        Text(appText("网关已登记的能力"), Modifier.padding(start = 16.dp, bottom = 10.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        ConnectorGroup {
-            connectors.registeredModules.forEachIndexed { index, module ->
-                var expanded by rememberSaveable(module.id) { mutableStateOf(false) }
-                if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 18.dp))
-                Row(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(18.dp).testTag("connector-registered-module-${module.id}"),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Text(connectorModuleTitle(module.id), Modifier.weight(1f))
-                    Text(appText(when {
-                        !module.available -> "设备未授权或不支持"
-                        !module.enabled || connectors.enabled[module.id] != true -> "手机未开启"
-                        connectors.hostPermissions[module.id] != true -> "主机未允许"
-                        module.tools.isEmpty() -> "网关未接入"
-                        else -> "已允许"
-                    }), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Icon(painterResource(if (expanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_right), null, Modifier.padding(start = 8.dp).size(18.dp))
-                }
-                if (expanded) module.tools.forEach { tool ->
-                    Text(connectorCapabilityTitle(tool), Modifier.padding(start = 20.dp, end = 18.dp, bottom = 12.dp), style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
-    }
+
 }
 
 internal fun connectorCapabilityTitle(tool: String): String = appText(when (tool) {

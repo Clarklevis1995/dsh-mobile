@@ -303,7 +303,7 @@ class AndroidDeviceConnectors(
 
     fun clearPending(code: String = "cancelled") {
         val request = pending
-        val outcome = if (executing != null && request?.optString("tool") in setOf("calendar.create", "reminders.create", "alarms.open-create", "maps.markers.create", "maps.markers.update", "maps.markers.delete", "maps.open", "music.play", "music.pause", "music.seek", "music.play-library") && code in setOf("cancelled", "user_action_required", "device_disconnected", "tool_disabled", "stale_lease", "invocation_timeout")) "outcome_unknown" else code
+        val outcome = if (executing != null && request?.optString("tool") in setOf("calendar.create", "reminders.create", "alarms.open-create", "maps.markers.create", "maps.markers.update", "maps.markers.delete", "music.play", "music.pause", "music.seek", "music.play-library") && code in setOf("cancelled", "user_action_required", "device_disconnected", "tool_disabled", "stale_lease", "invocation_timeout")) "outcome_unknown" else code
         pending = null; selectingPhoto = false; selectedPhotoResult = null
         deadline?.cancel(); deadline = null; executing?.cancel(); executing = null
         if (request != null) { platform.cancelHandoff(request.optString("invocationId")); remember(request); reply(request, outcome) }

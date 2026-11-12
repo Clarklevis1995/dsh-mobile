@@ -199,8 +199,9 @@ internal fun GatewaySwitcherBar() {
                                     key = { _, profile -> profile.localId }
                                 ) { index, profile ->
                                     GatewayHostRow(
-                                        hosts = hosts,
                                         profile = profile,
+                                        active = profile.localId == hosts.activeId,
+                                        online = profile.localId in hosts.onlineIds,
                                         managing = managing,
                                         selected = profile.localId in selectedIds,
                                         onSelect = {
@@ -263,16 +264,18 @@ internal fun GatewaySwitcherBar() {
 }
 
 @Composable
-private fun GatewayHostRow(
-    hosts: AndroidMultiGatewayStore,
+internal fun GatewayHostRow(
     profile: GatewayProfile,
+    active: Boolean,
+    online: Boolean,
     managing: Boolean,
     selected: Boolean,
     onSelect: () -> Unit,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 68.dp).clickable(onClick = onSelect)
+        modifier.fillMaxWidth().heightIn(min = 68.dp).clickable(onClick = onSelect)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -315,16 +318,14 @@ private fun GatewayHostRow(
                 style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
             )
             Text(
-                if (profile.localId ==
-                    hosts.activeId
-                ) {
+                if (active) {
                     appText("当前主机")
                 } else {
                     appText("点击连接")
                 },
                 fontSize = 12.sp,
                 lineHeight = 15.sp,
-                color = if (profile.localId == hosts.activeId) {
+                color = if (active) {
                     DshColors.Ocean
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -332,7 +333,6 @@ private fun GatewayHostRow(
                 style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
             )
         }
-        val online = profile.localId in hosts.onlineIds
         StatusIndicatorDot(
             color = if (online) DshColors.Success else Color.Red,
             modifier = Modifier.size(8.dp),

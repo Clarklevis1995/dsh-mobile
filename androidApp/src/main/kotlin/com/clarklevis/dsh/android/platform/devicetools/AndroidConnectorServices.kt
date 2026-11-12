@@ -27,7 +27,7 @@ class AndroidConnectorServices(private val context: Context, hostId: String) : A
     private val handoffs = AndroidConnectorHandoffs(context)
     private val calendar = AndroidCalendarConnector(context, storage)
     private val reminders = AndroidReminderConnector(context, storage, hostId)
-    private val maps = AndroidMapConnector(context, storage, handoffs)
+    private val maps = AndroidMapConnector(context, storage)
     private val music = AndroidMusicConnector(context, storage, handoffs)
     private fun granted(permission: String) = ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 

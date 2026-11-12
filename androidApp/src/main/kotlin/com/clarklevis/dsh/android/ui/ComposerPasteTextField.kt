@@ -20,6 +20,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 
 /** 富内容走附件草稿，未消费的文字继续由原生编辑器插入选区。 */
 @OptIn(ExperimentalFoundationApi::class)
@@ -49,7 +50,8 @@ internal fun ComposerPasteTextField(
     }
     LaunchedEffect(state) {
         snapshotFlow { TextFieldValue(state.text.toString(), state.selection) }
-            .distinctUntilChanged().collect { changed(it) }
+            // 初始值来自父级，不是用户编辑；回传它会覆盖刚回填的语音或外部草稿。
+            .drop(1).distinctUntilChanged().collect { changed(it) }
     }
     BasicTextField(
         state = state,

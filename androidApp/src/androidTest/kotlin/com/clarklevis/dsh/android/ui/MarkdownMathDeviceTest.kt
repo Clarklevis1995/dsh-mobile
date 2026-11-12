@@ -32,6 +32,24 @@ class MarkdownMathDeviceTest {
         1, 8, Color.LTGRAY, 8f, 6f, 2f
     )
 
+    @Test fun completeRegisteredSymbolAndStructuralCorpus() {
+        val cases = org.json.JSONArray(InstrumentationRegistry.getInstrumentation().context.assets
+            .open("latex-math.json").bufferedReader().use { it.readText() })
+        val failed = sortedSetOf<String>()
+        for (index in 0 until cases.length()) {
+            val item = cases.getJSONObject(index)
+            val latex = item.getString("latex")
+            for (display in listOf(false, true)) for (color in listOf(Color.BLACK, Color.WHITE)) {
+                val image = DshMathRenderer.image(DshMathFormula(latex, display), 42f, color)
+                if (image == null || !(0 until image.bitmap.height).any { y ->
+                    (0 until image.bitmap.width).any { x -> Color.alpha(image.bitmap.getPixel(x, y)) > 0 }
+                }) failed += "${item.getString("id")} $latex"
+            }
+        }
+        println("LATEX-AUDIT cases=${cases.length()} failures=$failed")
+        assertTrue(failed.joinToString("\n"), failed.isEmpty())
+    }
+
     @Test fun delimitersCodeLinksPricesAndIncompleteStreamingAreHandled() {
         val renderer = buildDshMarkwon(context, palette(), interactiveTables = true)
         val source = "正文 \\(x_n=b\\)，以及 ${'$'}E=mc^2${'$'}。\n\n" +
@@ -133,8 +151,8 @@ class MarkdownMathDeviceTest {
 
     @Test fun readingViewDisplaysRealFormulasAndCodeInLightAndDark() {
         val dark = mutableStateOf(false)
-        val source = "普通公式\n\n\\[\\left(\\frac{1}{b-a}\\int_a^b f(x)^n\\,dx\\right)^{1/n}\\]\n\n" +
-            "因此\n\n\\[\\boxed{\\lim_{n\\to\\infty}x_n=b}\\]\n\n正文 \\(\\boxed{x=2}\\) 正文。\n\n" +
+        val source = "普通公式\n\n\\[\\sqrt[n]{b_1\\cdots b_n}\\le\\dfrac{b_1+\\cdots+b_n}{n}\\]\n\n" +
+            "因此\n\n\\[\\boxed{G_n\\le\\frac{1}{n C_n}\\sum_{k=1}^n c_k a_k}\\tag{1}\\]\n\n正文 \\(\\boxed{x=2}\\) 正文。\n\n" +
             "```tex\n\\boxed{code_example}\n```"
         compose.setContent {
             DshTheme {
@@ -150,8 +168,8 @@ class MarkdownMathDeviceTest {
         }
         for (isDark in listOf(false, true)) {
             compose.runOnIdle { dark.value = isDark }
-            compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("\\boxed{\\lim_{n\\to\\infty}x_n=b}").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithContentDescription("\\boxed{\\lim_{n\\to\\infty}x_n=b}").assertIsDisplayed()
+            compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("\\boxed{G_n\\le\\frac{1}{n C_n}\\sum_{k=1}^n c_k a_k}\\tag{1}").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithContentDescription("\\boxed{G_n\\le\\frac{1}{n C_n}\\sum_{k=1}^n c_k a_k}\\tag{1}").assertIsDisplayed()
             compose.onNodeWithTag("markdown-code-card").assertIsDisplayed()
             val bitmap = compose.onNodeWithTag("math-fixture").captureToImage().asAndroidBitmap()
             File(context.filesDir, "android-math-${if (isDark) "dark" else "light"}.png").outputStream().use {

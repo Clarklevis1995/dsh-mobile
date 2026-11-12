@@ -96,6 +96,7 @@ class SharedChatHistoryCache internal constructor(
     }
 
     /** 在平台捕获目录快照时获取；clear/forget 后旧快照不能重新落盘。 */
+    @Throws(Exception::class)
     suspend fun offlineCatalogTicket(gatewayId: String): String = metadata.withLock {
         if (closed || !ChatPrefetchPolicy.validIdentifier(gatewayId)) return@withLock ""
         rollMetadataIfNeeded()
@@ -105,6 +106,7 @@ class SharedChatHistoryCache internal constructor(
         wireJson.encodeToString(ChatPrefetchTicket(gatewayId, CATALOG_KEY, cacheEpoch, revision))
     }
 
+    @Throws(Exception::class)
     suspend fun saveOfflineCatalog(gatewayId: String, catalogJson: String, ticket: String): Boolean =
         recover("catalog-save", TimeSource.Monotonic.markNow(), false) {
             val canonical = SharedOfflineCatalogCodec().normalize(catalogJson) ?: return@recover false
@@ -122,6 +124,7 @@ class SharedChatHistoryCache internal constructor(
             }
         }
 
+    @Throws(Exception::class)
     suspend fun loadOfflineCatalog(gatewayId: String): String? = recover("catalog-load", TimeSource.Monotonic.markNow(), null) {
         if (!ChatPrefetchPolicy.validIdentifier(gatewayId)) return@recover null
         val startingEpoch = metadata.withLock { cacheEpoch }
@@ -135,6 +138,7 @@ class SharedChatHistoryCache internal constructor(
     }
 
     /** 忘记网关必须同时调用 clear(gatewayId) 与此方法；普通清正文缓存保留导航。 */
+    @Throws(Exception::class)
     suspend fun forgetOfflineCatalog(gatewayId: String) = writer.withLock {
         metadata.withLock { cacheEpoch += 1 }
         try {
@@ -145,9 +149,11 @@ class SharedChatHistoryCache internal constructor(
         chatCacheLog("catalog-forgotten")
     }
 
+    @Throws(Exception::class)
     suspend fun epoch(): Long = metadata.withLock { cacheEpoch }
 
     /** 仅由用户实际进入会话的入口调用，预加载、恢复和后台查询不得调用。 */
+    @Throws(Exception::class)
     suspend fun recordSessionOpen(gatewayId: String, sessionId: String) =
         recordSessionOpenAt(gatewayId, sessionId, Clock.System.now().toEpochMilliseconds() / 1000.0)
 
@@ -163,6 +169,7 @@ class SharedChatHistoryCache internal constructor(
         }
     }
 
+    @Throws(Exception::class)
     suspend fun planPrefetch(gatewayId: String, candidatesJson: String, selectedSessionId: String?): String =
         planPrefetchAt(gatewayId, candidatesJson, selectedSessionId, Clock.System.now().toEpochMilliseconds() / 1000.0)
 
@@ -182,6 +189,7 @@ class SharedChatHistoryCache internal constructor(
             wireJson.encodeToString(result)
         }
 
+    @Throws(Exception::class)
     suspend fun prefetchTicket(gatewayId: String, sessionId: String): String = metadata.withLock {
         if (closed || !ChatPrefetchPolicy.validIdentifier(gatewayId) || !ChatPrefetchPolicy.validIdentifier(sessionId)) return@withLock ""
         rollMetadataIfNeeded()
@@ -192,6 +200,7 @@ class SharedChatHistoryCache internal constructor(
         wireJson.encodeToString(ChatPrefetchTicket(gatewayId, sessionId, cacheEpoch, revision))
     }
 
+    @Throws(Exception::class)
     suspend fun cancelPrefetch(gatewayId: String, sessionId: String, ticket: String) {
         val decoded = runCatching { wireJson.decodeFromString<ChatPrefetchTicket>(ticket) }.getOrNull() ?: return
         if (decoded.gatewayId != gatewayId || decoded.sessionId != sessionId) return
@@ -204,6 +213,7 @@ class SharedChatHistoryCache internal constructor(
     }
 
     /** 隔离的最新页：不接入正常历史基线、不建立订阅、不占 L1，不从后台访问增加用户热度。 */
+    @Throws(Exception::class)
     suspend fun acceptPrefetchHistory(gatewayId: String, sessionId: String, rawJson: String, ticket: String): Boolean =
         withContext(Dispatchers.Default) {
             recover("prefetch-accept", TimeSource.Monotonic.markNow(), false) {
@@ -243,19 +253,23 @@ class SharedChatHistoryCache internal constructor(
             }
         }
 
+    @Throws(Exception::class)
     suspend fun protect(gatewayId: String, sessionIds: List<String>) = metadata.withLock {
         if (sessionIds.isEmpty()) protected.remove(gatewayId) else protected[gatewayId] = sessionIds.toSet()
         chatCacheLog("protection-changed", "sessions=${sessionIds.size}")
     }
 
+    @Throws(Exception::class)
     suspend fun load(gatewayId: String, sessionId: String): String? = loadWindow(gatewayId, sessionId)?.let { wireJson.encodeToString(it) }
 
     /** 端上须在自己的 history actor/主线程上调用，避免热路径的窗口 JSON encode/decode。 */
+    @Throws(Exception::class)
     suspend fun hydrateToStore(gatewayId: String, sessionId: String, store: SharedHistoryStore): SharedMviDispatchResult? {
         val window = loadWindow(gatewayId, sessionId) ?: return null
         return store.hydrateTypedCachedWindow(sessionId, window)
     }
 
+    @Throws(Exception::class)
     suspend fun loadTypedWindow(gatewayId: String, sessionId: String): CachedHistoryWindow? = loadWindow(gatewayId, sessionId)
 
     // 将 single-flight 的登记、读与提交校验放在一起，便于核对取消/epoch/revision 的完整生命周期。
@@ -340,12 +354,14 @@ class SharedChatHistoryCache internal constructor(
         }
     }
 
+    @Throws(Exception::class)
     suspend fun save(gatewayId: String, sessionId: String, json: String, generation: Long): Boolean =
         saveAtEpoch(gatewayId, sessionId, json, generation, epoch())
 
     /** 在安排 debounce/后台快照时取得 epoch，清缓存前排队的旧快照不能重新落盘。 */
     // 预处理在锁外，提交和 finally 失效必须保持可见的连续事务边界。
     @Suppress("LongMethod", "CyclomaticComplexMethod")
+    @Throws(Exception::class)
     suspend fun saveAtEpoch(gatewayId: String, sessionId: String, json: String, generation: Long, expectedEpoch: Long): Boolean =
         saveWindowAtEpoch(gatewayId, sessionId, json, generation, expectedEpoch)
 
@@ -447,10 +463,12 @@ class SharedChatHistoryCache internal constructor(
     }
 
     /** 最近一页按 seq 返回，hasMore 同时反映本地剩余页和网关历史缺口。 */
+    @Throws(Exception::class)
     suspend fun loadPage(gatewayId: String, sessionId: String, beforeSequence: Int?, limit: Int): String? =
         loadTypedPage(gatewayId, sessionId, beforeSequence, limit)?.let { wireJson.encodeToString(it) }
 
     @Suppress("CyclomaticComplexMethod")
+    @Throws(Exception::class)
     suspend fun loadTypedPage(gatewayId: String, sessionId: String, beforeSequence: Int?, limit: Int): CachedHistoryWindow? =
         recover("load-page", TimeSource.Monotonic.markNow(), null) {
             if (metadata.withLock { closed }) return@recover null
@@ -509,6 +527,7 @@ class SharedChatHistoryCache internal constructor(
         }
 
     /** 三字符及以上走索引候选；一/二字符保留包含语义。所有用户输入均通过 Room 参数绑定。 */
+    @Throws(Exception::class)
     suspend fun search(gatewayId: String, query: String, sessionId: String?, limit: Int): String =
         recover("search", TimeSource.Monotonic.markNow(), wireJson.encodeToString(ChatSearchResponse())) {
             val ticket = epoch()
@@ -572,6 +591,7 @@ class SharedChatHistoryCache internal constructor(
         }
     }
 
+    @Throws(Exception::class)
     suspend fun statistics(): String = writer.withLock {
         val bytes = dao.totalBytes()
         val sessions = dao.sessionCount()
@@ -587,6 +607,7 @@ class SharedChatHistoryCache internal constructor(
     }
 
     /** OS 内存压力只释放可重建 L1；隔离已在读的旧回填，也不允许进行中的写再次暖入 L1。 */
+    @Throws(Exception::class)
     suspend fun trimMemory() = metadata.withLock {
         memory.clear()
         readRevision += 1
@@ -595,6 +616,7 @@ class SharedChatHistoryCache internal constructor(
         chatCacheLog("memory-trimmed", "reason=pressure")
     }
 
+    @Throws(Exception::class)
     suspend fun clear(gatewayId: String?) = writer.withLock {
         metadata.withLock {
             cacheEpoch += 1
@@ -618,6 +640,7 @@ class SharedChatHistoryCache internal constructor(
         chatCacheLog("clear-completed", "scope=${if (gatewayId == null) "all" else "gateway"}")
     }
 
+    @Throws(Exception::class)
     suspend fun trimToBytes(targetBytes: Long): Long = writer.withLock {
         val protection = metadata.withLock { protected.toMap() }
         flushPendingTouches()
@@ -643,6 +666,7 @@ class SharedChatHistoryCache internal constructor(
         reclaimed
     }
 
+    @Throws(Exception::class)
     suspend fun remove(gatewayId: String, sessionId: String, generation: Long) = writer.withLock {
         val key = ChatCacheKey(gatewayId, sessionId)
         val allowed = metadata.withLock {
@@ -673,6 +697,7 @@ class SharedChatHistoryCache internal constructor(
         }
     }
 
+    @Throws(Exception::class)
     suspend fun close() = writer.withLock {
         metadata.withLock {
             closed = true
@@ -731,7 +756,9 @@ class SharedChatHistoryCache internal constructor(
         }
         if (!shouldTouch) return
         maintenance.launch {
-            writer.withLock { flushPendingTouches() }
+            recover("maintenance", TimeSource.Monotonic.markNow(), Unit) {
+                writer.withLock { flushPendingTouches() }
+            }
         }
     }
 

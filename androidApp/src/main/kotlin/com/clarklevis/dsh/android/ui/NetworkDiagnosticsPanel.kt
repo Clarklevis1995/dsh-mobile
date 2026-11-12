@@ -46,7 +46,6 @@ import com.clarklevis.dsh.android.AndroidSharedStateHolder
 import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.android.localization.appTextKey
 import com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSnapshot
-import com.clarklevis.dsh.shared.transport.RtcSelectedPath
 import kotlinx.coroutines.flow.Flow
 import java.util.Locale
 
@@ -94,14 +93,12 @@ internal fun NetworkDiagnosticsScreen(
 
 @Composable
 internal fun NetworkDiagnosticsPanel(stateHolder: AndroidSharedStateHolder) {
-    val paths by stateHolder.connectionPaths.collectAsStateWithLifecycle()
-    NetworkDiagnosticsPanel(remember(stateHolder) { stateHolder::observeNetworkDiagnostics }, paths)
+    NetworkDiagnosticsPanel(remember(stateHolder) { stateHolder::observeNetworkDiagnostics })
 }
 
 @Composable
 internal fun NetworkDiagnosticsPanel(
     observe: () -> Flow<NetworkDiagnosticsSnapshot>,
-    paths: Map<String, RtcSelectedPath> = emptyMap(),
 ) {
     var snapshot by remember(observe) { mutableStateOf(NetworkDiagnosticsSnapshot()) }
     val lifecycle = LocalLifecycleOwner.current
@@ -110,20 +107,18 @@ internal fun NetworkDiagnosticsPanel(
             observe().collect { snapshot = it }
         }
     }
-    NetworkDiagnosticsContent(snapshot, paths)
+    NetworkDiagnosticsContent(snapshot)
 }
 
 @Composable
 internal fun NetworkDiagnosticsContent(
     snapshot: NetworkDiagnosticsSnapshot,
-    paths: Map<String, RtcSelectedPath> = emptyMap(),
 ) {
     var selectedMetric by remember { mutableIntStateOf(0) }
     val primary = MaterialTheme.colorScheme.primary
     val orange = Color(0xFFD68A2E)
     Column(Modifier.fillMaxWidth().padding(16.dp).testTag("network-diagnostics"), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         NetworkConnectionHeader(snapshot, primary)
-        if (snapshot.connected && snapshot.connectionMethod.startsWith("WebRTC")) RtcConnectionPathDetails(paths)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             NetworkMetric(appText("往返延迟"), networkNumber(snapshot.roundTripMs, " ms"), Modifier.weight(1f))
             NetworkMetric(appText("探测丢包率"), networkNumber(snapshot.lossPercent, "%"), Modifier.weight(1f))
@@ -160,35 +155,6 @@ internal fun NetworkDiagnosticsContent(
                 style = SettingsTypography.description,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-    }
-}
-
-@Composable
-internal fun RtcConnectionPathDetails(
-    paths: Map<String, RtcSelectedPath>,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier.fillMaxWidth().testTag("gateway-connection-path"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(appText("传输路径"), style = SettingsTypography.item)
-        for (channel in listOf("control", "conversation")) {
-            val title = appText(if (channel == "control") "控制通道" else "会话通道")
-            val path = paths[channel]
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                if (path == null) {
-                    Text(appText("%1\$s：%2\$s", title, appText("正在确认路径")), style = SettingsTypography.description)
-                } else {
-                    val kind =
-                        when (path.kind) {
-                            "local" -> appTextKey("内网直连")
-                            "nat" -> appTextKey("NAT 穿透直连")
-                            "relay" -> appTextKey("TURN 中继")
-                            else -> appTextKey("直连")
-                        }
-                    Text(appText("%1\$s：%2\$s · %3\$s", title, appText(kind), path.protocol), style = SettingsTypography.description)
-                    Text("${path.localEndpoint} → ${path.remoteEndpoint}", style = SettingsTypography.description)
-                }
-            }
         }
     }
 }

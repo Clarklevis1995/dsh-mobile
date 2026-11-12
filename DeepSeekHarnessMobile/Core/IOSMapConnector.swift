@@ -132,14 +132,14 @@ enum IOSMapConnector {
     }
     static func handoffReceipt(_ args: [String: Any]) throws -> [String: Any] {
         try validate("maps.open", args)
-        var result: [String: Any] = ["status": "handoff-requested", "latitude": args["latitude"]!, "longitude": args["longitude"]!, "name": args["name"] as? String ?? "目的地", "mode": args["mode"] as? String ?? "show"]
+        var result: [String: Any] = ["status": "handoff-requested", "latitude": args["latitude"]!, "longitude": args["longitude"]!, "name": args["name"] as? String ?? String(localized: "目的地"), "mode": args["mode"] as? String ?? "show"]
         if result["mode"] as? String == "directions" { result["transport"] = args["transport"] as? String ?? "driving" }
         return result
     }
     /// 回执先交给控制连接，再调用此方法，避免跳出 App 被误报为调用失败。
     static func open(_ args: [String: Any]) -> Bool {
         guard (try? validate("maps.open", args)) != nil, let coordinate = try? coordinate(args) else { return false }
-        let destination = MKMapItem(placemark: MKPlacemark(coordinate: coordinate)); destination.name = args["name"] as? String ?? "目的地"
+        let destination = MKMapItem(placemark: MKPlacemark(coordinate: coordinate)); destination.name = args["name"] as? String ?? String(localized: "目的地")
         var launch: [String: Any] = [:]
         if args["mode"] as? String == "directions" {
             launch[MKLaunchOptionsDirectionsModeKey] = ["driving": MKLaunchOptionsDirectionsModeDriving, "walking": MKLaunchOptionsDirectionsModeWalking, "transit": MKLaunchOptionsDirectionsModeTransit][args["transport"] as? String ?? "driving"]!

@@ -4,7 +4,6 @@ import kotlinx.serialization.json.*
 
 /** 手机能力固定白名单；通讯录不属于连接器能力。 */
 class SharedDeviceConnectors {
-    fun catalogJson(): String = """[{"id":"calendar","title":"日历"},{"id":"reminders","title":"提醒事项"},{"id":"location","title":"位置"},{"id":"photos","title":"照片"},{"id":"music","title":"音乐"},{"id":"health","title":"健康"},{"id":"alarms","title":"闹钟"}]"""
 
     fun toolModule(tool: String): String? = when (tool) {
         "calendar.busy", "calendar.create" -> "calendar"

@@ -19,7 +19,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.platform.app.InstrumentationRegistry
 import com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSample
 import com.clarklevis.dsh.shared.diagnostics.NetworkDiagnosticsSnapshot
-import com.clarklevis.dsh.shared.transport.RtcSelectedPath
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.delay
@@ -30,28 +29,6 @@ import org.junit.Test
 
 class NetworkDiagnosticsDeviceTest {
     @get:Rule val compose = createComposeRule()
-
-    @Test fun selectedRoutesShowBothChannelsAndDoNotRetainOldEndpoints() {
-        val original = Locale.getDefault()
-        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
-        var paths by mutableStateOf(
-            mapOf(
-                "control" to RtcSelectedPath("local", "UDP", "192.168.1.20:50000", "192.168.1.94:51000", "host", "host"),
-                "conversation" to RtcSelectedPath("relay", "UDP", "203.0.113.1:50000", "203.0.113.2:51000", "relay", "host"),
-            ),
-        )
-        try {
-            compose.setContent { DshTheme { RtcConnectionPathDetails(paths) } }
-            compose.onNodeWithText("控制通道：内网直连 · UDP").assertIsDisplayed()
-            compose.onNodeWithText("会话通道：TURN 中继 · UDP").assertIsDisplayed()
-            compose.onNodeWithText("192.168.1.20:50000 → 192.168.1.94:51000").assertIsDisplayed()
-            compose.runOnUiThread { paths = emptyMap() }
-            compose.onNodeWithText("控制通道：正在确认路径").assertIsDisplayed()
-            compose.onNodeWithText("192.168.1.20:50000 → 192.168.1.94:51000").assertDoesNotExist()
-        } finally {
-            Locale.setDefault(original)
-        }
-    }
 
     @Test fun backgroundAndPageExitCancelProbesAndForegroundRestartsExactlyOnce() {
         val original = Locale.getDefault()
