@@ -1,5 +1,5 @@
 """正式原生消息组件的隔离网关回归，不注入替代渲染器。"""
-import time,json,re
+import time,json,re,os
 from PIL import Image
 from collections import Counter
 
@@ -35,9 +35,19 @@ def run(ui, m, folder, passed):
     ui.text('中文与 long_table_cell_that_wraps'); ui.screenshot('rich-table')
     ui.click(table + '-table-copy-0:table')
     paste('名称\t数量\t备注\n鲸鱼\t2\t中文与 long_table_cell_that_wraps\n海豚\t3\t粗体')
+    if os.environ.get('HARMONY_TABLE_EXPORT') == '1':
+        ui.input('message-draft', 'CSV 导出期间草稿 中文😀')
     ui.click(table + '-table-preview-0:table'); ui.wait('table-reader-copy'); ui.text('2 行'); ui.click('table-reader-copy'); ui.screenshot('rich-table-preview')
-    ui.navigate('page-back', 'message-draft')
+    if os.environ.get('HARMONY_TABLE_EXPORT') == '1':
+        from table_export_scenarios import run as table_export
+        table_export(ui, m, folder, passed)
+        assert ui.find('message-draft')['text'] == 'CSV 导出期间草稿 中文😀'
+        ui.input('message-draft', '')
+    else:
+        ui.navigate('page-back', 'message-draft')
     passed('P3-table-F', '原生表格内容、中文长单元格、复制纯文本矩阵和原生预览返回通过')
+    if os.environ.get('HARMONY_RICH_SCOPE') == 'table':
+        return
 
     locate(code + '-code-copy-0:code')
     header=ui.find(code+'-code-copy-0:code');viewport=ui.find('conversation-list');h=list(map(int,re.findall(r'-?\d+',header['bounds'])));v=list(map(int,re.findall(r'-?\d+',viewport['bounds'])))

@@ -1,0 +1,23 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-vnmie4cy
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 conversation-back
+操作 富文本验收
+操作 message-body-harmony-rich-3-table-copy-0:table
+输入 message-draft
+操作 message-draft
+输入 message-draft
+输入 message-draft
+操作 message-body-harmony-rich-3-table-preview-0:table
+操作 table-reader-copy
+操作 table-reader-export
+操作 table-reader-export
+操作 page-back
+PASS P3-table-horizontal-csv-F 原生表头/数据列坐标一致，横滚同步；真实系统CSV取消和保存，UTF-8 BOM/CRLF/中文逐字一致，仅清理本轮导出文件
+输入 message-draft
+PASS P3-table-F 原生表格内容、中文长单元格、复制纯文本矩阵和原生预览返回通过
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-vnmie4cy

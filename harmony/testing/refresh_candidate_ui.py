@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+import zipfile
 import smoke_ui as m
 
 
@@ -24,6 +25,7 @@ def main():
     previous = json.loads(args.previous_result.read_text())
     m.BUNDLE = previous['bundle']
     assert re.fullmatch(r'com\.clarklevis\.whaleness\.harmony\.preview[0-9a-f]+', m.BUNDLE)
+    m.require_device()
     assert args.version_code > previous['versionCode']
     assert os.environ.get('HARMONY_TEST_TARGET') == previous['target']
     def version():
@@ -59,6 +61,19 @@ def main():
     with (folder / 'build.log').open('w') as log:
         subprocess.run([str(m.DEVECO / 'tools/ohpm/bin/ohpm'), 'install', '--all'], cwd=app, env=env, stdout=log, stderr=log, check=True)
         subprocess.run([str(m.DEVECO / 'tools/node/bin/node'), str(m.DEVECO / 'tools/hvigor/bin/hvigorw.js'), '--mode', 'module', '-p', 'module=entry@default', '-p', 'product=default', '-p', 'buildMode=debug', 'assembleHap', '--no-daemon'], cwd=app, env=env, stdout=log, stderr=log, check=True)
+    # HAP默认去符号，因此打包库不能直接与含符号的源码产物比较哈希。
+    # 在临时副本应用SDK同一步骤后逐字比较，确认安装的确为本轮Native。
+    native_source = app / 'entry/src/main/cpp/generated/arm64-v8a/libwhaleness.so'
+    stripped = folder / 'expected-packaged-native.so'
+    shutil.copy2(native_source, stripped)
+    subprocess.run([str(m.DEVECO / 'sdk/default/openharmony/native/llvm/bin/llvm-strip'), '--strip-all', str(stripped)], check=True)
+    with zipfile.ZipFile(app / 'entry/build/default/outputs/default/entry-default-unsigned.hap') as archive:
+        packaged_native = archive.read('libs/arm64-v8a/libwhaleness.so')
+    assert packaged_native == stripped.read_bytes(), 'HAP内Native与本轮生产库不一致'
+    native_proof = dict(sourceSha256=hashlib.sha256(native_source.read_bytes()).hexdigest(),
+                        packagedSha256=hashlib.sha256(packaged_native).hexdigest(),
+                        sdkStripAllByteExact=True)
+    (folder / 'packaged-native-proof.json').write_text(json.dumps(native_proof, indent=2))
     ui = m.UI(folder)
     log = (folder / 'fixture.log').open('w')
     server = subprocess.Popen([os.sys.executable, str(m.ROOT / 'harmony/testing/gateway_fixture.py')], env=dict(os.environ, HARMONY_FIXTURE_PORT='18783', HARMONY_FIXTURE_ID=str(uuid.uuid4())), stdout=log, stderr=log)
@@ -102,6 +117,7 @@ def main():
         assert not final.exists(), '禁止覆盖已有历史产物'
         shutil.copy2(app / 'entry/build/default/outputs/default/entry-default-unsigned.hap', final)
         result = dict(bundle=m.BUNDLE, target=m.TARGET, previousVersionCode=previous['versionCode'], versionCode=args.version_code, versionName='0.1.0-preview', path=str(final), sha256=hashlib.sha256(final.read_bytes()).hexdigest(), bytes=final.stat().st_size, productionSourceWithoutHooks=True, sourceCheckpoint=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=m.ROOT, text=True).strip(), inPlaceSourceUpdate=True, assetIdentityRetained=True, draftHistoryRetained=True, ownedTestHostRemoved=True, existingProfilesUntouched=True, signed=False)
+        result['nativeProof'] = native_proof
         (folder / 'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2))
         (folder / 'source-manifest.json').write_text(json.dumps(dict(comparedFiles=len(manifest), files=manifest), indent=2))
         print('PASS CANDIDATE_REFRESH', m.BUNDLE, flush=True)
