@@ -1,0 +1,8 @@
+{
+  "hdcZeroExitFailureRejected": true,
+  "disconnectedTargetPreflightRejected": true,
+  "connectedTargetPreflightAccepted": true,
+  "reuseAddressStillRejectsLiveListener": true,
+  "initialDeviceFailureWasBeforeBusinessAssertions": true,
+  "proxyFailureHadNoListener": true
+}

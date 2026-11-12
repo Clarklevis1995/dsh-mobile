@@ -1,0 +1,10 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-h8qkf0gp
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 session-session-f89d4c21-6a48-4644-83c8-d0c8777ea3ca
+操作 history-older
+操作 conversation-latest
+PASS P1-real-history-foreground-append-G 长历史阅读时Home后台另一端追加，前台同步保留原消息位置≤5px，主动回到底部后新增消息真实可见
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-h8qkf0gp

@@ -1,0 +1,24 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-xvzu7qf6
+操作 home-auth
+操作 host-add
+输入 gateway-payload
+操作 gateway-connect
+操作 session-session-f89d4c21-6a48-4644-83c8-d0c8777ea3ca
+操作 history-older
+PASS P1-real-history-prepend-G 真实服务器分页前插新增标记，旧可见消息位置偏差不超过5px
+操作 history-older
+操作 conversation-sidebar
+操作 session-session-c7b11772-b51c-497a-b40a-9cd2838a735d
+输入 message-draft
+PASS P1-real-history-late-page-isolation-G A真实历史页延迟，切B后释放迟到页面不出现A标记，B草稿和原生内容正确
+操作 conversation-sidebar
+操作 session-session-f89d4c21-6a48-4644-83c8-d0c8777ea3ca
+PASS P1-real-history-switch-anchor-G A→B→A保留旧历史阅读锚点
+操作 history-older
+操作 history-older
+操作 history-older
+操作 history-older
+操作 history-older
+操作 history-older
+PASS P1-real-history-complete-G 1033条真实源历史的用户/助手消息经快照/分页完整收到，128条用户标记顺序和投影ID唯一且不漏
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-xvzu7qf6

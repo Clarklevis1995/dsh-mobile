@@ -1,0 +1,17 @@
+{
+  "ownedHostPorts": [
+    18897,
+    18899
+  ],
+  "configurationBaselineRestored": true,
+  "observerStoppedAndDeviceRevoked": true,
+  "ownedProcessesStopped": true,
+  "sensitiveTemporaryHomeRemoved": true,
+  "removedOwnedHdcMappings": [],
+  "userGatewaysUntouched": [
+    3080,
+    3081,
+    3082
+  ],
+  "formalHarmonyBundleUntouched": true
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "task": "P1-real-history-prepend-G",
+    "detail": "真实服务器分页前插新增标记，旧可见消息位置偏差不超过5px"
+  },
+  {
+    "task": "P1-real-history-late-page-isolation-G",
+    "detail": "A真实历史页延迟，切B后释放迟到页面不出现A标记，B草稿和原生内容正确"
+  },
+  {
+    "task": "P1-real-history-switch-anchor-G",
+    "detail": "A→B→A保留旧历史阅读锚点"
+  },
+  {
+    "task": "P1-real-history-complete-G",
+    "detail": "1033条真实源历史的用户/助手消息经快照/分页完整收到，128条用户标记顺序和投影ID唯一且不漏"
+  }
+]

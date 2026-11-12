@@ -19,7 +19,18 @@ TARGET = os.environ.get('HARMONY_TEST_TARGET', '127.0.0.1:5559')
 
 
 def hdc(*args):
-    return subprocess.check_output([HDC, '-t', TARGET, *args], text=True)
+    command = [HDC, '-t', TARGET, *args]
+    output = subprocess.check_output(command, text=True)
+    # HDC 在设备离线等失败时仍可能返回 0；不能继续读取上次遗留的布局。
+    if re.search(r'^\[Fail\]', output, re.MULTILINE):
+        raise subprocess.CalledProcessError(1, command, output=output)
+    return output
+
+
+def require_device():
+    targets = subprocess.check_output([HDC, 'list', 'targets'], text=True).splitlines()
+    if TARGET not in {line.strip() for line in targets}:
+        raise RuntimeError('验收设备未连接：' + TARGET + '；先恢复原模拟器，再重跑，不计为业务验收结果')
 
 
 class UI:

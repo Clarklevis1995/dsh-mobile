@@ -244,6 +244,7 @@ def test_workspace_and_catalog():
 
 def main():
     parser = argparse.ArgumentParser(); parser.add_argument('--scenario', choices=['all', 'hosts', 'settings', 'navigation', 'catalog', 'native-navigation', 'richtext', 'controls', 'slash', 'products', 'uploads', 'cache', 'files', 'goals', 'perf', 'voice', 'reading', 'adaptation', 'photos', 'scan', 'real', 'menus', 'host-reset', 'home-visual', 'brand', 'home-rows', 'settings-visual', 'release', 'default-model', 'default-visual', 'model-matrix', 'model-session-matrix', 'agent-presets'], default='all'); parser.add_argument('--app-dir', type=Path); parser.add_argument('--keep-app', action='store_true'); args = parser.parse_args()
+    m.require_device()
     print('REPORT_DIR', folder, flush=True)
     app = args.app_dir or folder / 'app'
     if not args.app_dir:
@@ -311,7 +312,10 @@ def main():
             if os.environ.get('HARMONY_REAL_SCOPE') in ['transport','generation-network','history','history-restore','cache']:
                 import urllib.request,socket
                 for proxyPort in [18907,18908]:
-                    with socket.socket() as guard:guard.bind(('127.0.0.1',proxyPort))
+                    with socket.socket() as guard:
+                        # 前一场景的正常TCP关闭可能仍有TIME_WAIT；运行中的监听仍必须拒绝。
+                        guard.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+                        guard.bind(('127.0.0.1',proxyPort))
                 proxyLog=(folder/'owned-proxy.log').open('w');logs.append(proxyLog)
                 proxy=subprocess.Popen(['/Users/lichaofan/.nvm/versions/node/v24.20.0/bin/node',str(ROOT/'harmony/testing/owned_transport_proxy.cjs')],env=os.environ.copy(),stdout=proxyLog,stderr=proxyLog);servers.append(proxy)
                 end=time.monotonic()+10

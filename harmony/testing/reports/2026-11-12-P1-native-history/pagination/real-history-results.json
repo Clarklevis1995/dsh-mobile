@@ -1,0 +1,29 @@
+{
+  "sourceEvents": 1033,
+  "sourceSession": "session-f89d4c21-6a48-4644-83c8-d0c8777ea3ca",
+  "checks": [
+    {
+      "case": "prepend",
+      "before": 6,
+      "after": 26,
+      "anchor": "message-body-session-f89d4c21-6a48-4644-83c8-d0c8777ea3ca-user-4e8d7cbb-76ee-4657-bb73-597fbf49495f",
+      "beforeY": 723,
+      "afterY": 723
+    },
+    {
+      "case": "late-page-isolation",
+      "currentSession": "session-c7b11772-b51c-497a-b40a-9cd2838a735d",
+      "foreignMarkers": 0
+    },
+    {
+      "case": "switch-anchor",
+      "beforeY": 723,
+      "afterY": 723
+    },
+    {
+      "case": "complete",
+      "projectedUsers": 128,
+      "sourceEvents": 1033
+    }
+  ]
+}

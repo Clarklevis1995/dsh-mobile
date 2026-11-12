@@ -1,0 +1,9 @@
+{
+  "harmony/shared/src/commonMain/kotlin/whaleness/HarmonyEngine.kt": "dfb9d15be79db55ca2239b3869822039eec3d6f8b801f838aa2b3d70ce3fb08c",
+  "shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/SharedHistoryStore.kt": "8e3631edb8f586013ef37a16e414cab26f268e8acbf48a31e5d8948494db8e27",
+  "shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/SharedConversationStore.kt": "a407f1158027fc4588a5ee48cad1ea40539b954a2fba230e015e8249cb8027ba",
+  "shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/SharedMviEvents.kt": "937dcc9b43f789f88e11606bfb478aecb24096c9633eddf2d6266666c7935b54",
+  "shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/WorkspaceCodePreviewSupport.kt": "767c156e41eea653098a86dac2779faa67156064ff8eeeb3b2fb3f5c334b1d7c",
+  "harmonyApp/entry/src/main/cpp/generated/arm64-v8a/libwhaleness.so": "494208cd229ec243f830a93029d297a92905be145db1a8a624d8d618f64b24c6",
+  "harmonyApp/entry/src/main/ets/core/MarkdownParser.ets": "0189c23ab1f335f2f854edc9dfee1ec96fea7f6b5d6b382cbdbd8858b0df6a57"
+}
