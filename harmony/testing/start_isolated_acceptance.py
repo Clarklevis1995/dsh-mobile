@@ -70,9 +70,14 @@ def main():
         request=urllib.request.Request('http://127.0.0.1:'+str(PORT)+'/mgw/cloudflare',json.dumps({'enabled':False}).encode(),{'Content-Type':'application/json'})
         with urllib.request.urlopen(request,timeout=15) as response:json.load(response)
         with (home/'observer.log').open('w') as log:
-            observer=subprocess.Popen([str(NODE),str(ROOT/'harmony/testing/live_gateway_control.cjs')],cwd=workspace,env=dict(environment,HARMONY_GATEWAY_PACKAGE=str(GATEWAY),HARMONY_LIVE_HTTP='http://127.0.0.1:'+str(PORT),HARMONY_LIVE_PORT=str(OBSERVER_PORT)),stdout=log,stderr=log,start_new_session=True)
+            observer=subprocess.Popen([str(NODE),str(ROOT/'harmony/testing/live_gateway_control.cjs')],cwd=workspace,env=dict(environment,HARMONY_OWNED_REAL_ROOT=str(home),HARMONY_GATEWAY_PACKAGE=str(GATEWAY),HARMONY_LIVE_HTTP='http://127.0.0.1:'+str(PORT),HARMONY_LIVE_PORT=str(OBSERVER_PORT)),stdout=log,stderr=log,start_new_session=True)
         processes['observerPid']=observer.pid;processes['gatewayVersion']=state.get('version');(home/'owned-processes.json').write_text(json.dumps(processes,indent=2))
-        wait('http://127.0.0.1:'+str(OBSERVER_PORT)+'/status');print('OWNED_REAL_HOST',home,flush=True)
+        wait('http://127.0.0.1:'+str(OBSERVER_PORT)+'/status')
+        # 仅专属Host的权威配置基线，供G验收结束核对；不包含配对凭据。
+        with urllib.request.urlopen('http://127.0.0.1:'+str(OBSERVER_PORT)+'/default-configuration',timeout=30) as response:
+            baseline=json.load(response)
+        (home/'configuration-initial.json').write_text(json.dumps(baseline,ensure_ascii=False,indent=2))
+        print('OWNED_REAL_HOST',home,flush=True)
     except Exception:
         import signal
         for key in ['observerPid','hostPid','redactorPid']:

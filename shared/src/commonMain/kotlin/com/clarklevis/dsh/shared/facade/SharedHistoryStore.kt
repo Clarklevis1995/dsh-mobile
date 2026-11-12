@@ -168,6 +168,24 @@ class SharedHistoryStore(
         sessionId, byteCount, hasMore, nextBeforeSequence, remoteActivityTimestamp, false
     ) { wireJson.decodeFromString<List<SessionEvent>>(eventsJson) }
 
+    /** 同模块已解码记录仍通过同一分页校验、合并与事务。 */
+    internal fun pageReceivedTyped(
+        sessionId: String,
+        records: List<SessionEvent>,
+        byteCount: Int,
+        hasMore: Boolean,
+        nextBeforeSequence: Int?,
+        remoteActivityTimestamp: Double?,
+    ): SharedMviDispatchResult =
+        receivePage(
+            sessionId,
+            byteCount,
+            hasMore,
+            nextBeforeSequence,
+            remoteActivityTimestamp,
+            false,
+        ) { records }
+
     /** iOS 已持有输入及上一事务镜像，只传 KMP 合并指令，避免回传全部正文。 */
     fun pageReceivedWithEventReferences(
         sessionId: String,
@@ -285,98 +303,131 @@ class SharedHistoryStore(
         }
     }
 
-    fun liveEventReceived(eventJson: String): SharedMviDispatchResult = dispatch("live", null) {
-        val record = wireJson.decodeFromString<SessionEvent>(eventJson)
-        require(record.sessionId.isNotBlank()) { "sessionId must not be blank" }
-        require(record.time.isFinite()) { "event time must be finite" }
-        val oldEvents = eventsBySession[record.sessionId].orEmpty()
-        val merged = HistoryEventMerger.merge(record, oldEvents)
-        val index = merged.events.binarySearchBy(record.seq) { it.seq }
-        check(index >= 0) { "merged event missing" }
-        // Whether this record continues a live assistant row is decided from the
-        // record that occupied the sequence BEFORE the merge. Reading it back out
-        // of `merged.events` would compare the incoming record with itself and
-        // make the predicate meaningless. A non-null `previousEvent` is exactly
-        // "the record superseded a sequence that already existed" — which is why
-        // the merge result needs no extra flag for this decision.
-        val previousIndex = oldEvents.binarySearchBy(record.seq) { it.seq }
-        val previousEvent = if (previousIndex >= 0) oldEvents[previousIndex].event else null
-        // A same-sequence record is a live delta only when it supersedes another
-        // transient chunk of the SAME turn and step. Anything else — the
-        // authoritative `assistant/message`, a chunk from another turn or step, or
-        // a gap fill — must keep the full rebaseline path. `chunkType` is
-        // deliberately not compared: reasoning, text, tool, block, usage and
-        // finish frames legitimately transition while sharing turn, step and seq.
-        // Duplicate delivery is still indistinguishable from a legitimately
-        // repeated fragment; that needs the host's per-chunk identity and is out of
-        // scope here.
-        val streamDelta = previousEvent != null &&
-            previousEvent.type == "assistant/chunk" &&
-            record.event.type == "assistant/chunk" &&
-            previousEvent.turn == record.event.turn &&
-            previousEvent.step == record.event.step
-        val reduction = HistoryReducer.reduce(
-            state,
-            HistoryAction.LiveEventReceived(record.sessionId, record.time),
-            configuration
-        )
-        Transition(
-            state = reduction.state,
-            eventsBySession = eventsBySession + (record.sessionId to merged.events),
-            cacheSequences = cachedSequences[record.sessionId]?.let {
-                cachedSequences + (record.sessionId to (it - record.seq))
-            } ?: cachedSequences,
-            eventPatch = SharedHistoryEventPatch(
-                // `replacedOrInsertedOutOfOrder` means the merge was not a plain
-                // append. A record that landed on its OWN sequence is the ordinary
-                // shape of a live turn — DSH gives every chunk of a turn the same
-                // `session.seq` — so it is published as an upsert. A record
-                // inserted at a position it did not occupy is a gap fill. The
-                // `streamDelta` marker is what tells the platform this particular
-                // upsert continues a live assistant row and may be folded into it
-                // instead of triggering a rebaseline.
-                kind = if (merged.replacedOrInsertedOutOfOrder) "upsert" else "append",
-                record = record,
-                index = index,
-                streamDelta = streamDelta
-            ),
-            result = reduction.result,
-            sessionId = record.sessionId
-        )
-    }
+    fun liveEventReceived(eventJson: String): SharedMviDispatchResult =
+        receiveLiveRecord {
+            wireJson.decodeFromString<SessionEvent>(eventJson)
+        }
+
+    internal fun liveTypedEventReceived(record: SessionEvent): SharedMviDispatchResult = receiveLiveRecord { record }
+
+    private fun receiveLiveRecord(recordSource: () -> SessionEvent): SharedMviDispatchResult =
+        dispatch("live", null) {
+            val record = recordSource()
+            require(record.sessionId.isNotBlank()) { "sessionId must not be blank" }
+            require(record.time.isFinite()) { "event time must be finite" }
+            val oldEvents = eventsBySession[record.sessionId].orEmpty()
+            val merged = HistoryEventMerger.merge(record, oldEvents)
+            val index = merged.events.binarySearchBy(record.seq) { it.seq }
+            check(index >= 0) { "merged event missing" }
+            // Whether this record continues a live assistant row is decided from the
+            // record that occupied the sequence BEFORE the merge. Reading it back out
+            // of `merged.events` would compare the incoming record with itself and
+            // make the predicate meaningless. A non-null `previousEvent` is exactly
+            // "the record superseded a sequence that already existed" — which is why
+            // the merge result needs no extra flag for this decision.
+            val previousIndex = oldEvents.binarySearchBy(record.seq) { it.seq }
+            val previousEvent = if (previousIndex >= 0) oldEvents[previousIndex].event else null
+            // A same-sequence record is a live delta only when it supersedes another
+            // transient chunk of the SAME turn and step. Anything else — the
+            // authoritative `assistant/message`, a chunk from another turn or step, or
+            // a gap fill — must keep the full rebaseline path. `chunkType` is
+            // deliberately not compared: reasoning, text, tool, block, usage and
+            // finish frames legitimately transition while sharing turn, step and seq.
+            // Duplicate delivery is still indistinguishable from a legitimately
+            // repeated fragment; that needs the host's per-chunk identity and is out of
+            // scope here.
+            val streamDelta = previousEvent != null &&
+                previousEvent.type == "assistant/chunk" &&
+                record.event.type == "assistant/chunk" &&
+                previousEvent.turn == record.event.turn &&
+                previousEvent.step == record.event.step
+            val reduction = HistoryReducer.reduce(
+                state,
+                HistoryAction.LiveEventReceived(record.sessionId, record.time),
+                configuration
+            )
+            Transition(
+                state = reduction.state,
+                eventsBySession = eventsBySession + (record.sessionId to merged.events),
+                cacheSequences = cachedSequences[record.sessionId]?.let {
+                    cachedSequences + (record.sessionId to (it - record.seq))
+                } ?: cachedSequences,
+                eventPatch = SharedHistoryEventPatch(
+                    // `replacedOrInsertedOutOfOrder` means the merge was not a plain
+                    // append. A record that landed on its OWN sequence is the ordinary
+                    // shape of a live turn — DSH gives every chunk of a turn the same
+                    // `session.seq` — so it is published as an upsert. A record
+                    // inserted at a position it did not occupy is a gap fill. The
+                    // `streamDelta` marker is what tells the platform this particular
+                    // upsert continues a live assistant row and may be folded into it
+                    // instead of triggering a rebaseline.
+                    kind = if (merged.replacedOrInsertedOutOfOrder) "upsert" else "append",
+                    record = record,
+                    index = index,
+                    streamDelta = streamDelta
+                ),
+                result = reduction.result,
+                sessionId = record.sessionId
+            )
+        }
 
     /** 原子安装订阅窗口。显式 cursor 属于独立流状态，不能从精简 events 推导。 */
-    fun installSnapshot(sessionId: String, eventsJson: String, hasMore: Boolean,
-        nextBeforeSequence: Int?, loadRecentPages: Boolean = false): SharedMviDispatchResult = dispatch("snapshot", sessionId) {
-        val records = wireJson.decodeFromString<List<SessionEvent>>(eventsJson)
-        require(records.all { it.sessionId == sessionId })
-        val normalized = records.associateBy(SessionEvent::seq).values.sortedBy(SessionEvent::seq)
-        val unchanged = eventsBySession[sessionId] == normalized
-        chatCacheLog("snapshot-installed", "events=${normalized.size} unchanged=$unchanged")
-        val baseline = state.copy(
-            sessions = state.sessions + (sessionId to HistorySessionState(
-                hasMore = hasMore, nextBeforeSequence = nextBeforeSequence
-            )),
-            pendingSessionId = state.pendingSessionId?.takeUnless { it == sessionId }
-        )
-        val recentPages = if (loadRecentPages && configuration.pagesPerBatch > 1 &&
-            hasMore && nextBeforeSequence != null) {
-            HistoryReducer.reduce(baseline, HistoryAction.Start(
-                sessionId, older = true, hasLocalEvents = normalized.isNotEmpty(), earliestLocalSequence = null
-            ), configuration).let { reduction ->
-                // 订阅快照计为第一页，沿显式游标补齐剩余页，保持实时 tail。
-                val loading = reduction.state.sessions.getValue(sessionId).copy(pageCount = 1)
-                reduction.copy(state = reduction.state.copy(sessions = reduction.state.sessions + (sessionId to loading)))
-            }
-        } else null
-        Transition(
-            state = recentPages?.state ?: baseline,
-            eventsBySession = if (unchanged) eventsBySession else eventsBySession + (sessionId to normalized),
-            eventPatch = if (unchanged) null else SharedHistoryEventPatch("replace", replacementEvents = normalized),
-            result = recentPages?.result ?: HistoryResult.None,
-            cacheSequences = cachedSequences - sessionId
-        )
-    }
+    fun installSnapshot(
+        sessionId: String,
+        eventsJson: String,
+        hasMore: Boolean,
+        nextBeforeSequence: Int?,
+        loadRecentPages: Boolean = false,
+    ): SharedMviDispatchResult =
+        installRecords(sessionId, hasMore, nextBeforeSequence, loadRecentPages) {
+            wireJson.decodeFromString<List<SessionEvent>>(eventsJson)
+        }
+
+    internal fun installTypedSnapshot(
+        sessionId: String,
+        records: List<SessionEvent>,
+        hasMore: Boolean,
+        nextBeforeSequence: Int?,
+        loadRecentPages: Boolean = false,
+    ): SharedMviDispatchResult = installRecords(sessionId, hasMore, nextBeforeSequence, loadRecentPages) { records }
+
+    private fun installRecords(
+        sessionId: String,
+        hasMore: Boolean,
+        nextBeforeSequence: Int?,
+        loadRecentPages: Boolean,
+        recordSource: () -> List<SessionEvent>,
+    ): SharedMviDispatchResult =
+        dispatch("snapshot", sessionId) {
+            val records = recordSource()
+            require(records.all { it.sessionId == sessionId })
+            val normalized = records.associateBy(SessionEvent::seq).values.sortedBy(SessionEvent::seq)
+            val unchanged = eventsBySession[sessionId] == normalized
+            chatCacheLog("snapshot-installed", "events=${normalized.size} unchanged=$unchanged")
+            val baseline = state.copy(
+                sessions = state.sessions + (sessionId to HistorySessionState(
+                    hasMore = hasMore, nextBeforeSequence = nextBeforeSequence
+                )),
+                pendingSessionId = state.pendingSessionId?.takeUnless { it == sessionId }
+            )
+            val recentPages = if (loadRecentPages && configuration.pagesPerBatch > 1 &&
+                hasMore && nextBeforeSequence != null) {
+                HistoryReducer.reduce(baseline, HistoryAction.Start(
+                    sessionId, older = true, hasLocalEvents = normalized.isNotEmpty(), earliestLocalSequence = null
+                ), configuration).let { reduction ->
+                    // 订阅快照计为第一页，沿显式游标补齐剩余页，保持实时 tail。
+                    val loading = reduction.state.sessions.getValue(sessionId).copy(pageCount = 1)
+                    reduction.copy(state = reduction.state.copy(sessions = reduction.state.sessions + (sessionId to loading)))
+                }
+            } else null
+            Transition(
+                state = recentPages?.state ?: baseline,
+                eventsBySession = if (unchanged) eventsBySession else eventsBySession + (sessionId to normalized),
+                eventPatch = if (unchanged) null else SharedHistoryEventPatch("replace", replacementEvents = normalized),
+                result = recentPages?.result ?: HistoryResult.None,
+                cacheSequences = cachedSequences - sessionId
+            )
+        }
 
     /** 缓存只恢复显示内容，不建立网络 baseline，也不恢复请求/订阅状态。 */
     fun hydrateCachedWindow(sessionId: String, windowJson: String): SharedMviDispatchResult = dispatch("cache", sessionId) {

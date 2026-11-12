@@ -97,10 +97,15 @@ object WorkspaceCodePreviewSupport {
             }
         }
 
-        fun addGroupMatches(regex: Regex, groupIndex: Int, kind: WorkspaceCodeTokenKind) {
+        // 三个表达式的唯一捕获组均在完整匹配末尾；MatchGroup.range不在common源集API中。
+        fun addTrailingGroupMatches(
+            regex: Regex,
+            kind: WorkspaceCodeTokenKind,
+        ) {
             regex.findAll(text).forEach { match ->
-                val range = match.groups[groupIndex]?.range ?: return@forEach
-                addRange(range.first, range.last + 1, kind)
+                val value = match.groups[1]?.value ?: return@forEach
+                val end = match.range.last + 1
+                addRange(end - value.length, end, kind)
             }
         }
 
@@ -109,11 +114,11 @@ object WorkspaceCodePreviewSupport {
         }
 
         if (language == "css") {
-            addGroupMatches(CSS_PROPERTY_PATTERN, 1, WorkspaceCodeTokenKind.ATTRIBUTE)
-            addGroupMatches(CSS_SELECTOR_PATTERN, 1, WorkspaceCodeTokenKind.TAG)
+            addTrailingGroupMatches(CSS_PROPERTY_PATTERN, WorkspaceCodeTokenKind.ATTRIBUTE)
+            addTrailingGroupMatches(CSS_SELECTOR_PATTERN, WorkspaceCodeTokenKind.TAG)
         }
         if (language in setOf("yaml", "toml", "properties")) {
-            addGroupMatches(CONFIG_KEY_PATTERN, 1, WorkspaceCodeTokenKind.ATTRIBUTE)
+            addTrailingGroupMatches(CONFIG_KEY_PATTERN, WorkspaceCodeTokenKind.ATTRIBUTE)
         }
         if (language == "shell") {
             addMatches(SHELL_VARIABLE_PATTERN, WorkspaceCodeTokenKind.ATTRIBUTE)

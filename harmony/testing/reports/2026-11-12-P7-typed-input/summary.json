@@ -1,0 +1,20 @@
+[
+  {
+    "run": "first",
+    "initialMiB": 167.9814453125,
+    "idle3sMiB": 196.578125,
+    "growth3sMiB": 28.5966796875,
+    "idle30sMiB": 167.7802734375,
+    "peakMiB": 249.8193359375,
+    "allGatesPassed": true
+  },
+  {
+    "run": "repeat",
+    "initialMiB": 169.078125,
+    "idle3sMiB": 166.5390625,
+    "growth3sMiB": -2.5390625,
+    "idle30sMiB": 173.4345703125,
+    "peakMiB": 242.0478515625,
+    "allGatesPassed": true
+  }
+]

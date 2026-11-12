@@ -1,0 +1,31 @@
+Starting a Gradle Daemon, 3 incompatible Daemons could not be reused, use --status for details
+Calculating task graph as no cached configuration is available for tasks: :shared:compileCommonMainKotlinMetadata
+
+> Configure project :androidApp
+w: file:///Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/androidApp/build.gradle.kts:59:41: 'fun srcDir(srcDir: Any): Any' is deprecated. Use `directories` mutable set instead.
+
+> Task :shared:kmpPartiallyResolvedDependenciesChecker
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:transformCommonMainDependenciesMetadata
+> Task :shared:kspCommonMainKotlinMetadata SKIPPED
+> Task :shared:copyRoomSchemas NO-SOURCE
+
+> Task :shared:compileCommonMainKotlinMetadata FAILED
+e: file:///Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/WorkspaceCodePreviewSupport.kt:102:55 Unresolved reference 'range'.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':shared:compileCommonMainKotlinMetadata'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 26s
+3 actionable tasks: 3 executed
+Configuration cache entry stored.

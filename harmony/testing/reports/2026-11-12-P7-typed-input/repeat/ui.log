@@ -1,0 +1,19 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-jfpr2tvq
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+输入 message-draft
+操作 message-send
+输入 message-draft
+输入 message-draft
+操作 conversation-latest
+输入 message-draft
+操作 message-send
+输入 message-draft
+输入 message-draft
+操作 conversation-latest
+PASS P7-long-code-table-stream-F 1005历史下两轮千行代码/160行表格持续流，Native正文UTF16长度/FNV与源样本一致、终标记可见、期间编辑和上滑及前后台草稿保留；既有冻结门禁通过
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-jfpr2tvq

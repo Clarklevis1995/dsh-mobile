@@ -103,24 +103,32 @@ class SharedConversationStore(
         )
     }
 
-    fun receiveEvent(eventJson: String): SharedMviDispatchResult = dispatch("event") {
-        val record = wireJson.decodeFromString<SessionEvent>(eventJson)
-        require(record.sessionId.isNotBlank()) { "sessionId must not be blank" }
-        invalidatePreparation(record.sessionId)
-        val projector = projectors.getOrPut(record.sessionId) { ConversationProjector(labels) }
-        require(record.seq > projector.lastSequence) {
-            "event sequence ${record.seq} is not newer than ${projector.lastSequence}; replace baseline first"
+    fun receiveEvent(eventJson: String): SharedMviDispatchResult =
+        receiveRecord {
+            wireJson.decodeFromString<SessionEvent>(eventJson)
         }
-        val operations = projector.foldWithOperations(listOf(record))
-        projectionRecords[record.sessionId]?.add(record)
-        // 不可见持久事件仍会推进流水位，必须发布给平台镜像。
-        // 否则后续独立流携带正确水位时，iOS 会因镜像滞后而误判协议错误。
-        SharedConversationPatch(
-            sessionId = record.sessionId,
-            operations = operations,
-            lastSequence = projector.lastSequence
-        )
-    }
+
+    internal fun receiveTypedEvent(record: SessionEvent): SharedMviDispatchResult = receiveRecord { record }
+
+    private fun receiveRecord(recordSource: () -> SessionEvent): SharedMviDispatchResult =
+        dispatch("event") {
+            val record = recordSource()
+            require(record.sessionId.isNotBlank()) { "sessionId must not be blank" }
+            invalidatePreparation(record.sessionId)
+            val projector = projectors.getOrPut(record.sessionId) { ConversationProjector(labels) }
+            require(record.seq > projector.lastSequence) {
+                "event sequence ${record.seq} is not newer than ${projector.lastSequence}; replace baseline first"
+            }
+            val operations = projector.foldWithOperations(listOf(record))
+            projectionRecords[record.sessionId]?.add(record)
+            // 不可见持久事件仍会推进流水位，必须发布给平台镜像。
+            // 否则后续独立流携带正确水位时，iOS 会因镜像滞后而误判协议错误。
+            SharedConversationPatch(
+                sessionId = record.sessionId,
+                operations = operations,
+                lastSequence = projector.lastSequence
+            )
+        }
 
     /**
      * 单个 streaming 增量。DSH 的 `session.seq` 是 turn 级 journal watermark，同一 turn
@@ -130,23 +138,31 @@ class SharedConversationStore(
      * 也不重新序列化整个事件列表。缺少已建立基线的 projector 时 fail closed——
      * 平台据此回退到 [replaceSession]，绝不静默丢弃内容。
      */
-    fun receiveStreamDelta(eventJson: String): SharedMviDispatchResult = dispatch("stream") {
-        val record = wireJson.decodeFromString<SessionEvent>(eventJson)
-        require(record.sessionId.isNotBlank()) { "sessionId must not be blank" }
-        invalidatePreparation(record.sessionId)
-        val projector = projectors[record.sessionId]
-            ?: error("no conversation baseline for session ${record.sessionId}; replace baseline first")
-        val previousSequence = projector.lastSequence
-        // 同 seq 流式变更不能证明旧基线仍是持久历史的严格前缀。
-        projectionRecords.remove(record.sessionId)
-        val operations = projector.foldWithOperations(listOf(record))
-        if (operations.isEmpty() && projector.lastSequence == previousSequence) return@dispatch null
-        SharedConversationPatch(
-            sessionId = record.sessionId,
-            operations = operations,
-            lastSequence = projector.lastSequence
-        )
-    }
+    fun receiveStreamDelta(eventJson: String): SharedMviDispatchResult =
+        receiveStreamRecord {
+            wireJson.decodeFromString<SessionEvent>(eventJson)
+        }
+
+    internal fun receiveTypedStreamDelta(record: SessionEvent): SharedMviDispatchResult = receiveStreamRecord { record }
+
+    private fun receiveStreamRecord(recordSource: () -> SessionEvent): SharedMviDispatchResult =
+        dispatch("stream") {
+            val record = recordSource()
+            require(record.sessionId.isNotBlank()) { "sessionId must not be blank" }
+            invalidatePreparation(record.sessionId)
+            val projector = projectors[record.sessionId]
+                ?: error("no conversation baseline for session ${record.sessionId}; replace baseline first")
+            val previousSequence = projector.lastSequence
+            // 同 seq 流式变更不能证明旧基线仍是持久历史的严格前缀。
+            projectionRecords.remove(record.sessionId)
+            val operations = projector.foldWithOperations(listOf(record))
+            if (operations.isEmpty() && projector.lastSequence == previousSequence) return@dispatch null
+            SharedConversationPatch(
+                sessionId = record.sessionId,
+                operations = operations,
+                lastSequence = projector.lastSequence
+            )
+        }
 
     /** 平台用它决定能否走 streaming 行内路径，否则回退到 baseline。 */
     /** 只读附件引用查询，不复制会话投影。 */

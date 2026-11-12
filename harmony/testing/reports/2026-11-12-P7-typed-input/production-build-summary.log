@@ -1,0 +1,8 @@
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:compileKotlinOhosArm64
+> Task :shared:xcodeVersion UP-TO-DATE
+> Task :shared:linkReleaseSharedOhosArm64
+5994 warnings generated.
+> Task :shared:publishNative
+BUILD SUCCESSFUL in 1m 22s
+> hvigor [32mBUILD SUCCESSFUL in 2 s 626 ms [39m

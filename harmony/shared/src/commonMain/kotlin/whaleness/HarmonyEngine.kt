@@ -292,11 +292,11 @@ class HarmonyEngine {
             val result =
                 when {
                     change.streamDelta && change.record != null && conversation.hasProjection(patch.sessionId) -> {
-                        conversation.receiveStreamDelta(wireJson.encodeToString(change.record))
+                        conversation.receiveTypedStreamDelta(change.record)
                     }
 
                     change.kind == "append" && change.record != null && conversation.hasProjection(patch.sessionId) -> {
-                        conversation.receiveEvent(wireJson.encodeToString(change.record))
+                        conversation.receiveTypedEvent(change.record)
                     }
 
                     else -> {
@@ -1194,7 +1194,7 @@ class HarmonyEngine {
                 if (id != null) {
                     val records = frame.events.orEmpty().map { it.normalized(id) }
                     records.forEach(interactions::capture)
-                    history.installSnapshot(id, wireJson.encodeToString(records), frame.hasMore == true, frame.nextBeforeSeq)
+                    history.installTypedSnapshot(id, records, frame.hasMore == true, frame.nextBeforeSeq)
                     more[id] = frame.hasMore == true
                     cursors[id] = frame.nextBeforeSeq
                     loading -= id
@@ -1208,9 +1208,9 @@ class HarmonyEngine {
                     if (id !in loading) return
                     val records = frame.events.orEmpty().map { it.normalized(id) }
                     records.forEach(interactions::capture)
-                    history.pageReceived(
+                    history.pageReceivedTyped(
                         id,
-                        wireJson.encodeToString(records),
+                        records,
                         frame.bytes ?: command.frame.length,
                         frame.hasMore == true,
                         frame.nextBeforeSeq,
@@ -1233,7 +1233,7 @@ class HarmonyEngine {
                             sessions,
                             SessionListAction.EventReceived(record, command.nowMillis / 1000.0),
                         )
-                    val accepted = history.liveEventReceived(wireJson.encodeToString(record))
+                    val accepted = history.liveTypedEventReceived(record)
                     check(accepted.accepted) { "实时事件更新失败" }
                 }
             }

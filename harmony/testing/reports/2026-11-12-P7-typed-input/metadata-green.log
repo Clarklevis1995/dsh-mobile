@@ -1,0 +1,14 @@
+Reusing configuration cache.
+> Task :shared:kmpPartiallyResolvedDependenciesChecker
+> Task :shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shared:transformCommonMainDependenciesMetadata UP-TO-DATE
+> Task :shared:kspCommonMainKotlinMetadata SKIPPED
+> Task :shared:copyRoomSchemas NO-SOURCE
+
+> Task :shared:compileCommonMainKotlinMetadata
+w: file:///Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/cache/ChatCacheDatabase.kt:381:10 'expect'/'actual' classes (including interfaces, objects, annotations, enums, and 'actual' typealiases) are in Beta. Consider using the '-Xexpect-actual-classes' flag to suppress this warning. Also see: https://youtrack.jetbrains.com/issue/KT-61573
+w: file:///Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/shared/src/commonMain/kotlin/com/clarklevis/dsh/shared/facade/SharedAgentNotificationStore.kt:38:45 Elvis operator (?:) always returns the left operand of non-nullable type 'GatewayEvent'.
+
+BUILD SUCCESSFUL in 1s
+3 actionable tasks: 2 executed, 1 up-to-date
+Configuration cache entry reused.
