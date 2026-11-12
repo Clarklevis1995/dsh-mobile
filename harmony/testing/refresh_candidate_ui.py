@@ -35,6 +35,8 @@ def main():
         return int(info['versionCode'])
     assert version() == previous['versionCode'], '候选版本已变化，必须先核对新证据'
     with socket.socket() as guard:
+        # 与夹具相同地允许上轮TIME_WAIT；已有TCP监听仍必须拒绝。
+        guard.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         guard.bind(('127.0.0.1', 18783))
     folder = Path(tempfile.mkdtemp(prefix='harmony-candidate-refresh-'))
     print('REPORT_DIR', folder, flush=True)

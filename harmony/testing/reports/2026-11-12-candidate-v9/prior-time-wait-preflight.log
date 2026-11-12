@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/refresh_candidate_ui.py", line 132, in <module>
+    if __name__ == '__main__': main()
+  File "/Users/lichaofan/.codex/worktrees/harmonyos-kuiklybase/dsh-mobile/harmony/testing/refresh_candidate_ui.py", line 38, in main
+    guard.bind(('127.0.0.1', 18783))
+OSError: [Errno 48] Address already in use
