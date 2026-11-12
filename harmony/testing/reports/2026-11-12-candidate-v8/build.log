@@ -1,0 +1,361 @@
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[90mohpm DEBUG: CaseSensitive the current system is not a Windows system or "case_sensitive_check "is set to false, so case sensitivity checks for paths are ignored.[39m
+[32minstall completed in 0s 527ms[39m
+> hvigor [32mFinished :entry:clean... after 20 ms [39m
+> hvigor [33mWARN: The version number of the 'entry' module does not comply with the SemVer specification.
+               This will affect the installation and publication by ohpm.
+               Make sure the value of version in the oh-package.json5 file of the module complies with the SemVer specification.[39m
+> hvigor [32mFinished :entry:default@PreBuild... after 87 ms [39m
+> hvigor [32mFinished :entry:default@CreateModuleInfo... after 1 ms [39m
+> hvigor [32mFinished :entry:default@GenerateMetadata... after 3 ms [39m
+> hvigor [32mFinished :entry:default@ConfigureCmake... after 19 ms [39m
+> hvigor [32mFinished :entry:default@MergeProfile... after 5 ms [39m
+> hvigor [32mFinished :entry:default@CreateBuildProfile... after 1 ms [39m
+> hvigor [32mFinished :entry:default@PreCheckSyscap... after 1 ms [39m
+> hvigor [32mFinished :entry:default@ProcessIntegratedHsp... after 1 ms [39m
+> hvigor [32mFinished :entry:default@MakePackInfo... after 6 ms [39m
+> hvigor [32mFinished :entry:default@SyscapTransform... after 1 ms [39m
+> hvigor [32mFinished :entry:default@BuildNativeWithCmake... after 906 ms [39m
+> hvigor [32mFinished :entry:default@GeneratePkgContextInfo... after 11 ms [39m
+> hvigor [32mFinished :entry:default@ProcessProfile... after 67 ms [39m
+> hvigor [32mFinished :entry:default@ProcessRouterMap... after 2 ms [39m
+> hvigor [32mFinished :entry:default@ProcessShareConfig... after 2 ms [39m
+> hvigor [32mFinished :entry:default@ProcessStartupConfig... after 6 ms [39m
+> hvigor [32mFinished :entry:default@ProcessResource... after 3 ms [39m
+> hvigor [32mFinished :entry:default@GenerateLoaderJson... after 9 ms [39m
+> hvigor [32mFinished :entry:default@CompileResource... after 148 ms [39m
+> hvigor [32mFinished :entry:default@BuildJS... after 1 ms [39m
+> hvigor [32mFinished :entry:default@BuildNativeWithNinja... after 643 ms [39m
+> hvigor [32mFinished :entry:default@ProcessLibs... after 231 ms [39m
+> hvigor [32mFinished :entry:default@DoNativeStrip... after 1 s 208 ms [39m
+> hvigor [32mFinished :entry:default@CacheNativeLibs... after 12 ms [39m
+> hvigor [33mWARN: [33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/entryability/EntryAbility.ets:16:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/CredentialStore.ets:45:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/LocalDatabase.ets:21:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/LocalDatabase.ets:22:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/LocalDatabase.ets:41:68
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/LocalDatabase.ets:48:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/LocalDatabase.ets:49:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/LocalDatabase.ets:49:43
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/LocalDatabase.ets:49:74
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/LocalDatabase.ets:49:111
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/LocalDatabase.ets:141:58
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:9:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:11:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:26:37
+ 'packing' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:28:64
+ 'packing' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:31:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:32:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:32:120
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:33:66
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:33:108
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:34:32
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PhotoWorker.ets:39:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:9:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:11:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:12:10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:13:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:14:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:15:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:17:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:18:10
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:19:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:21:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:23:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:25:26
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:28:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:34:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:36:27
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:37:59
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:40:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:49:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:50:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:51:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:58:49
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:58:133
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:59:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:61:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:65:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:66:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:68:60
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:70:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:75:16
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:77:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:78:53
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:79:51
+ 'decodeWithStream' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:81:15
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:86:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:87:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:87:92
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:87:131
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:87:168
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/FileWorker.ets:88:13
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/ContentActions.ets:17:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/ContentActions.ets:29:22
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/ContentActions.ets:33:27
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/ContentActions.ets:36:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/components/MarkdownCode.ets:52:17
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/components/TableReader.ets:148:17
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/components/MarkdownTable.ets:23:17
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/ScheduleEditorPage.ets:44:22
+ 'show' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/ScheduleEditorPage.ets:47:22
+ 'show' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/ContentPreviewPage.ets:24:17
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PreferenceStore.ets:21:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PreferenceStore.ets:25:25
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PreferenceStore.ets:35:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/core/PreferenceStore.ets:36:11
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/components/VoiceInput.ets:61:76
+ 'screenY' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/components/VoiceInput.ets:62:117
+ 'screenY' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/components/MessageCard.ets:36:37
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/ConversationPage.ets:179:23
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/ConversationPage.ets:192:58
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/ConversationPage.ets:195:23
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/ConversationPage.ets:211:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/ConversationPage.ets:214:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/ConversationPage.ets:232:27
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/HostPage.ets:40:69
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/HostPage.ets:44:28
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/HostPage.ets:44:40
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/HostPage.ets:46:19
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/HostPage.ets:46:43
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/HostPage.ets:48:70
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/HostPage.ets:52:72
+ The API is not supported on all devices. Use the canIUse condition to determine whether the API is supported.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/HostPage.ets:56:9
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/Index.ets:228:5
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/Index.ets:410:104
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/Index.ets:593:44
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/Index.ets:659:21
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/Index.ets:665:17
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/DefaultModelPage.ets:75:67
+ The current component id "control-refresh" is duplicate with /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/DefaultModelPage.ets:68:36.[39m[39m
+[33mWARN: [33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/TrajectoryPage.ets:59:45
+ The 'regular' property 'node' cannot be assigned to the '@ObjectLink' property 'node'.[39m[39m
+[33mWARN: [33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/SessionControlPage.ets:53:66
+ The current component id "control-error" is duplicate with /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/DefaultModelPage.ets:67:40.[39m[39m
+[33mWARN: [33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/SessionControlPage.ets:54:66
+ The current component id "control-loading" is duplicate with /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/DefaultModelPage.ets:70:66.[39m[39m
+[33mWARN: [33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/SessionControlPage.ets:120:34
+ The current component id "control-refresh" is duplicate with /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/DefaultModelPage.ets:68:36.[39m[39m
+[33mWARN: [33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/ConversationPage.ets:256:46
+ The current component id "interaction-inbox" is duplicate with /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/WorkspacePage.ets:115:100.[39m[39m
+[33mWARN: [33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/InteractionPage.ets:18:30
+ The current component id "interaction-inbox" is duplicate with /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/pages/WorkspacePage.ets:115:100.[39m[39m
+[33mWARN: [33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/components/MarkdownBody.ets:68:39
+ The 'regular' property 'block' cannot be assigned to the '@ObjectLink' property 'block'.[39m[39m
+[33mWARN: [33mArkTS:WARN File: /private/var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-9ocsjxux/app/entry/src/main/ets/components/MarkdownBody.ets:70:40
+ The 'regular' property 'block' cannot be assigned to the '@ObjectLink' property 'block'.[39m[39m
+[33mWARN: [33m[33m[39m [33mArkTS:WARN Property 'sourceMapsPath' not found in '@cangjie-tpc/formula_hybrid'.[39m [33m[39m[39m[39m
+[39m
+> hvigor [32mFinished :entry:default@CompileArkTS... after 8 s 506 ms [39m
+> hvigor [32mFinished :entry:default@GeneratePkgModuleJson... after 2 ms [39m
+> hvigor [32mFinished :entry:default@ProcessCompiledResources... after 1 ms [39m
+> hvigor [33mWARN: WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::arrayBaseOffset has been called by com.alibaba.fastjson2.util.JDKUtils (file:/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/lib/app_packing_tool.jar)
+WARNING: Please consider reporting this to the maintainers of class com.alibaba.fastjson2.util.JDKUtils
+WARNING: sun.misc.Unsafe::arrayBaseOffset will be removed in a future release
+[39m
+> hvigor [32mFinished :entry:default@PackageHap... after 316 ms [39m
+> hvigor [32mFinished :entry:default@PackingCheck... after 4 ms [39m
+> hvigor [33mWARN: No signingConfig found for product default[39m
+> hvigor [32mFinished :entry:default@SignHap... after 1 ms [39m
+> hvigor [32mFinished :entry:default@CollectDebugSymbol... after 1 ms [39m
+> hvigor [32mFinished :entry:assembleHap... after 1 ms [39m
+> hvigor [32mBUILD SUCCESSFUL in 13 s 20 ms [39m
