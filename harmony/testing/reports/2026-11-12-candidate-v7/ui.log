@@ -1,0 +1,20 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-yij9n36g
+操作 home-auth
+操作 page-back
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+输入 message-draft
+操作 conversation-back
+操作 home-auth
+操作 session-harmony-smoke
+操作 conversation-back
+操作 home-auth
+操作 host-remove-eee16a29-3428-4fa3-8c62-085de4c643c6
+操作 confirmation-accept
+操作 page-back
+PASS CANDIDATE_REFRESH com.clarklevis.whaleness.harmony.preview202611110401
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-candidate-refresh-yij9n36g
