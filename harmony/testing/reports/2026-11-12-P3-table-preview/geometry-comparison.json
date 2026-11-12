@@ -1,0 +1,928 @@
+[
+  {
+    "theme": "light",
+    "sourceViewportDp": 376,
+    "harmonyViewportVp": 376,
+    "topSystemDifferencePx": 46.0,
+    "geometry": [
+      {
+        "name": "表格中心X",
+        "expectedPx": 658.5,
+        "actualPx": 658.5,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "表格相对中心Y",
+        "expectedPx": 0.5,
+        "actualPx": 0.0,
+        "errorVp": 0.14285714285714285,
+        "passed": true
+      },
+      {
+        "name": "关闭中心X",
+        "expectedPx": 182.0,
+        "actualPx": 182.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "关闭相对中心Y",
+        "expectedPx": 0.0,
+        "actualPx": 0.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "旋转屏幕中心X",
+        "expectedPx": 861.0,
+        "actualPx": 861.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "旋转屏幕相对中心Y",
+        "expectedPx": 0.0,
+        "actualPx": 0.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "复制表格中心X",
+        "expectedPx": 1015.0,
+        "actualPx": 1015.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "复制表格相对中心Y",
+        "expectedPx": 0.0,
+        "actualPx": 0.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "下载 CSV中心X",
+        "expectedPx": 1169.0,
+        "actualPx": 1169.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "下载 CSV相对中心Y",
+        "expectedPx": 0.0,
+        "actualPx": 0.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "网格左缘",
+        "expectedPx": 70,
+        "actualPx": 70,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "网格右缘",
+        "expectedPx": 1246,
+        "actualPx": 1246,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "网格相对顶部",
+        "expectedPx": 147.0,
+        "actualPx": 147.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "网格高度",
+        "expectedPx": 588,
+        "actualPx": 588,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "第0行顶部",
+        "expectedPx": 147.0,
+        "actualPx": 148.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "第0行高度",
+        "expectedPx": 169,
+        "actualPx": 168,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "第1行顶部",
+        "expectedPx": 316.0,
+        "actualPx": 316.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "第1行高度",
+        "expectedPx": 250,
+        "actualPx": 252,
+        "errorVp": 0.5714285714285714,
+        "passed": true
+      },
+      {
+        "name": "第2行顶部",
+        "expectedPx": 566.0,
+        "actualPx": 568.0,
+        "errorVp": 0.5714285714285714,
+        "passed": true
+      },
+      {
+        "name": "第2行高度",
+        "expectedPx": 169,
+        "actualPx": 168,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "首列自然宽",
+        "expectedPx": 336,
+        "actualPx": 336,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "末列自然宽",
+        "expectedPx": 910,
+        "actualPx": 910,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "名称字形顶部",
+        "expectedPx": 207.0,
+        "actualPx": 208.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "名称字形底部",
+        "expectedPx": 262.0,
+        "actualPx": 262.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "鲸鱼字形顶部",
+        "expectedPx": 376.0,
+        "actualPx": 376.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "鲸鱼字形底部",
+        "expectedPx": 430.0,
+        "actualPx": 429.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "海豚字形顶部",
+        "expectedPx": 627.0,
+        "actualPx": 628.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "海豚字形底部",
+        "expectedPx": 681.0,
+        "actualPx": 682.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "2字形顶部",
+        "expectedPx": 370.0,
+        "actualPx": 370.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "2字形底部",
+        "expectedPx": 413.0,
+        "actualPx": 414.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "3字形顶部",
+        "expectedPx": 620.0,
+        "actualPx": 622.0,
+        "errorVp": 0.5714285714285714,
+        "passed": true
+      },
+      {
+        "name": "3字形底部",
+        "expectedPx": 663.0,
+        "actualPx": 666.0,
+        "errorVp": 0.8571428571428571,
+        "passed": true
+      }
+    ],
+    "colors": [
+      {
+        "name": "header",
+        "expected": [
+          239,
+          239,
+          240
+        ],
+        "android": [
+          239,
+          239,
+          240
+        ],
+        "harmony": [
+          239,
+          239,
+          240
+        ],
+        "passed": true
+      },
+      {
+        "name": "background",
+        "expected": [
+          255,
+          255,
+          255
+        ],
+        "android": [
+          255,
+          255,
+          255
+        ],
+        "harmony": [
+          255,
+          255,
+          255
+        ],
+        "passed": true
+      },
+      {
+        "name": "alternate",
+        "expected": [
+          248,
+          248,
+          250
+        ],
+        "android": [
+          248,
+          248,
+          250
+        ],
+        "harmony": [
+          248,
+          248,
+          250
+        ],
+        "passed": true
+      },
+      {
+        "name": "document",
+        "expected": [
+          255,
+          255,
+          255
+        ],
+        "android": [
+          255,
+          255,
+          255
+        ],
+        "harmony": [
+          255,
+          255,
+          255
+        ],
+        "passed": true
+      },
+      {
+        "name": "close",
+        "expected": [
+          245,
+          245,
+          247
+        ],
+        "android": [
+          245,
+          245,
+          247
+        ],
+        "harmony": [
+          245,
+          245,
+          247
+        ],
+        "passed": true
+      },
+      {
+        "name": "旋转屏幕图标色",
+        "expected": [
+          101,
+          101,
+          107
+        ],
+        "androidPixels": 723,
+        "harmonyPixels": 726,
+        "passed": true
+      },
+      {
+        "name": "复制表格图标色",
+        "expected": [
+          101,
+          101,
+          107
+        ],
+        "androidPixels": 956,
+        "harmonyPixels": 957,
+        "passed": true
+      },
+      {
+        "name": "下载 CSV图标色",
+        "expected": [
+          101,
+          101,
+          107
+        ],
+        "androidPixels": 582,
+        "harmonyPixels": 582,
+        "passed": true
+      },
+      {
+        "name": "border",
+        "expected": [
+          218,
+          218,
+          221
+        ],
+        "androidPixels": 13692,
+        "harmonyPixels": 11644,
+        "passed": true
+      }
+    ],
+    "glyphs": [
+      {
+        "text": "名称",
+        "android": [
+          115,
+          494,
+          228,
+          549
+        ],
+        "harmony": [
+          117,
+          449,
+          231,
+          503
+        ],
+        "heightErrorFp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "text": "鲸鱼",
+        "android": [
+          115,
+          663,
+          227,
+          717
+        ],
+        "harmony": [
+          116,
+          617,
+          229,
+          670
+        ],
+        "heightErrorFp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "text": "海豚",
+        "android": [
+          116,
+          914,
+          228,
+          968
+        ],
+        "harmony": [
+          117,
+          869,
+          230,
+          923
+        ],
+        "heightErrorFp": 0.0,
+        "passed": true
+      },
+      {
+        "text": "2",
+        "android": [
+          670,
+          657,
+          698,
+          700
+        ],
+        "harmony": [
+          669,
+          611,
+          696,
+          655
+        ],
+        "heightErrorFp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "text": "3",
+        "android": [
+          670,
+          907,
+          696,
+          950
+        ],
+        "harmony": [
+          670,
+          863,
+          696,
+          907
+        ],
+        "heightErrorFp": 0.2857142857142857,
+        "passed": true
+      }
+    ],
+    "fontSizeDeclaredSpFp": 17,
+    "passed": true,
+    "scope": "手机竖屏预览布局/配色；系统状态栏、字形及横屏不同安全区不按整屏像素相似度计分"
+  },
+  {
+    "theme": "dark",
+    "sourceViewportDp": 376,
+    "harmonyViewportVp": 376,
+    "topSystemDifferencePx": 46.0,
+    "geometry": [
+      {
+        "name": "表格中心X",
+        "expectedPx": 658.5,
+        "actualPx": 658.5,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "表格相对中心Y",
+        "expectedPx": 0.5,
+        "actualPx": 0.0,
+        "errorVp": 0.14285714285714285,
+        "passed": true
+      },
+      {
+        "name": "关闭中心X",
+        "expectedPx": 182.0,
+        "actualPx": 182.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "关闭相对中心Y",
+        "expectedPx": 0.0,
+        "actualPx": 0.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "旋转屏幕中心X",
+        "expectedPx": 861.0,
+        "actualPx": 861.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "旋转屏幕相对中心Y",
+        "expectedPx": 0.0,
+        "actualPx": 0.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "复制表格中心X",
+        "expectedPx": 1015.0,
+        "actualPx": 1015.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "复制表格相对中心Y",
+        "expectedPx": 0.0,
+        "actualPx": 0.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "下载 CSV中心X",
+        "expectedPx": 1169.0,
+        "actualPx": 1169.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "下载 CSV相对中心Y",
+        "expectedPx": 0.0,
+        "actualPx": 0.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "网格左缘",
+        "expectedPx": 70,
+        "actualPx": 70,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "网格右缘",
+        "expectedPx": 1246,
+        "actualPx": 1246,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "网格相对顶部",
+        "expectedPx": 147.0,
+        "actualPx": 147.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "网格高度",
+        "expectedPx": 588,
+        "actualPx": 588,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "第0行顶部",
+        "expectedPx": 147.0,
+        "actualPx": 148.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "第0行高度",
+        "expectedPx": 169,
+        "actualPx": 168,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "第1行顶部",
+        "expectedPx": 316.0,
+        "actualPx": 316.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "第1行高度",
+        "expectedPx": 250,
+        "actualPx": 252,
+        "errorVp": 0.5714285714285714,
+        "passed": true
+      },
+      {
+        "name": "第2行顶部",
+        "expectedPx": 566.0,
+        "actualPx": 568.0,
+        "errorVp": 0.5714285714285714,
+        "passed": true
+      },
+      {
+        "name": "第2行高度",
+        "expectedPx": 169,
+        "actualPx": 168,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "首列自然宽",
+        "expectedPx": 336,
+        "actualPx": 336,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "末列自然宽",
+        "expectedPx": 910,
+        "actualPx": 910,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "名称字形顶部",
+        "expectedPx": 207.0,
+        "actualPx": 208.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "名称字形底部",
+        "expectedPx": 262.0,
+        "actualPx": 262.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "鲸鱼字形顶部",
+        "expectedPx": 376.0,
+        "actualPx": 376.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "鲸鱼字形底部",
+        "expectedPx": 430.0,
+        "actualPx": 429.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "海豚字形顶部",
+        "expectedPx": 627.0,
+        "actualPx": 628.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "海豚字形底部",
+        "expectedPx": 681.0,
+        "actualPx": 682.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "2字形顶部",
+        "expectedPx": 370.0,
+        "actualPx": 370.0,
+        "errorVp": 0.0,
+        "passed": true
+      },
+      {
+        "name": "2字形底部",
+        "expectedPx": 413.0,
+        "actualPx": 414.0,
+        "errorVp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "name": "3字形顶部",
+        "expectedPx": 620.0,
+        "actualPx": 622.0,
+        "errorVp": 0.5714285714285714,
+        "passed": true
+      },
+      {
+        "name": "3字形底部",
+        "expectedPx": 663.0,
+        "actualPx": 666.0,
+        "errorVp": 0.8571428571428571,
+        "passed": true
+      }
+    ],
+    "colors": [
+      {
+        "name": "header",
+        "expected": [
+          37,
+          37,
+          39
+        ],
+        "android": [
+          37,
+          37,
+          39
+        ],
+        "harmony": [
+          37,
+          37,
+          39
+        ],
+        "passed": true
+      },
+      {
+        "name": "background",
+        "expected": [
+          0,
+          0,
+          0
+        ],
+        "android": [
+          0,
+          0,
+          0
+        ],
+        "harmony": [
+          0,
+          0,
+          0
+        ],
+        "passed": true
+      },
+      {
+        "name": "alternate",
+        "expected": [
+          17,
+          17,
+          19
+        ],
+        "android": [
+          17,
+          17,
+          19
+        ],
+        "harmony": [
+          17,
+          17,
+          19
+        ],
+        "passed": true
+      },
+      {
+        "name": "document",
+        "expected": [
+          0,
+          0,
+          0
+        ],
+        "android": [
+          0,
+          0,
+          0
+        ],
+        "harmony": [
+          0,
+          0,
+          0
+        ],
+        "passed": true
+      },
+      {
+        "name": "close",
+        "expected": [
+          37,
+          37,
+          40
+        ],
+        "android": [
+          37,
+          37,
+          40
+        ],
+        "harmony": [
+          37,
+          37,
+          40
+        ],
+        "passed": true
+      },
+      {
+        "name": "旋转屏幕图标色",
+        "expected": [
+          170,
+          170,
+          176
+        ],
+        "androidPixels": 723,
+        "harmonyPixels": 726,
+        "passed": true
+      },
+      {
+        "name": "复制表格图标色",
+        "expected": [
+          170,
+          170,
+          176
+        ],
+        "androidPixels": 956,
+        "harmonyPixels": 957,
+        "passed": true
+      },
+      {
+        "name": "下载 CSV图标色",
+        "expected": [
+          170,
+          170,
+          176
+        ],
+        "androidPixels": 582,
+        "harmonyPixels": 582,
+        "passed": true
+      },
+      {
+        "name": "border",
+        "expected": [
+          53,
+          53,
+          56
+        ],
+        "androidPixels": 13689,
+        "harmonyPixels": 11638,
+        "passed": true
+      }
+    ],
+    "glyphs": [
+      {
+        "text": "名称",
+        "android": [
+          115,
+          494,
+          228,
+          549
+        ],
+        "harmony": [
+          117,
+          449,
+          231,
+          503
+        ],
+        "heightErrorFp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "text": "鲸鱼",
+        "android": [
+          115,
+          663,
+          227,
+          717
+        ],
+        "harmony": [
+          116,
+          617,
+          229,
+          670
+        ],
+        "heightErrorFp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "text": "海豚",
+        "android": [
+          116,
+          914,
+          228,
+          968
+        ],
+        "harmony": [
+          117,
+          869,
+          230,
+          923
+        ],
+        "heightErrorFp": 0.0,
+        "passed": true
+      },
+      {
+        "text": "2",
+        "android": [
+          670,
+          657,
+          698,
+          700
+        ],
+        "harmony": [
+          669,
+          611,
+          696,
+          655
+        ],
+        "heightErrorFp": 0.2857142857142857,
+        "passed": true
+      },
+      {
+        "text": "3",
+        "android": [
+          670,
+          907,
+          696,
+          950
+        ],
+        "harmony": [
+          670,
+          863,
+          696,
+          907
+        ],
+        "heightErrorFp": 0.2857142857142857,
+        "passed": true
+      }
+    ],
+    "fontSizeDeclaredSpFp": 17,
+    "passed": true,
+    "scope": "手机竖屏预览布局/配色；系统状态栏、字形及横屏不同安全区不按整屏像素相似度计分"
+  }
+]

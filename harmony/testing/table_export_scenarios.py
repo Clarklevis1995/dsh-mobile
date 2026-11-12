@@ -55,7 +55,7 @@ def run(ui, m, folder, passed):
     ui.screenshot('table-csv-save-cancel')
     m.hdc('shell', 'uitest', 'uiInput', 'keyEvent', 'Back')
     ui.wait('table-reader-export')
-    ui.text('2 行')
+    count = ui.wait('2 行', key='description'); assert count['id'] == 'table-reader-list'
 
     name = 'harmony-table-' + uuid.uuid4().hex + '.csv'
     ui.click('table-reader-export')

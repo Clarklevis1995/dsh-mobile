@@ -1,0 +1,11 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-8whafxng
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 message-body-harmony-smoke-1004-table-all-0:table
+操作 page-back
+PASS P3-long-table-preview-F 生产TableReader无障碍行数160、惰性滚动至真实第159行与原生返回聊天通过
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-8whafxng

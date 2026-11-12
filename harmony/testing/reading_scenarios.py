@@ -1,6 +1,7 @@
 """长表格实际惰性阅读与长代码展开／重入；不冒充 GPU 基准。"""
 import re
 import time
+import os
 
 
 def run(ui,m,folder,passed):
@@ -9,12 +10,16 @@ def run(ui,m,folder,passed):
         m.hdc('shell','uitest','uiInput','swipe',str(x),str(c if down else a),str(x),str(a if down else c),'5000' if identifier == 'table-reader-list' else '650');time.sleep(.3)
     m.connect(ui);ui.wait('message-draft');ui.text('一千条历史加载完成',timeout=25)
     row=next(row for row in ui.nodes() if 'table-all-' in row.get('id',''))
-    ui.navigate(row['id'],'table-reader-list');ui.text('长表格 第0行'); assert ui.wait('table-reader-count').get('text') == '160 行';ui.screenshot('long-table-first')
+    ui.navigate(row['id'],'table-reader-list');ui.text('长表格 第0行')
+    count=ui.wait('160 行',key='description');assert count['id']=='table-reader-list';ui.screenshot('long-table-first')
     last=False
     for index in range(28):
         if any('长表格 第159行' in row.get('text','') for row in ui.nodes()):last=True;break
         swipe_list('table-reader-list')
     assert last,'完整表格末行无法到达';ui.screenshot('long-table-last');ui.navigate('page-back','message-draft')
+    if os.environ.get('HARMONY_READING_SCOPE') == 'table':
+        passed('P3-long-table-preview-F','生产TableReader无障碍行数160、惰性滚动至真实第159行与原生返回聊天通过')
+        return
     for index in range(24):
         rows = ui.nodes(); found = next((row for row in rows if 'message-body-harmony-smoke-1003-code-expand-' in row.get('id','')),None)
         if found:break

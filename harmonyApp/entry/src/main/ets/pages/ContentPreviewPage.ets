@@ -1,4 +1,5 @@
 import { TableReader } from '../components/TableReader';
+import { DocumentPalette } from '../components/DocumentHeader';
 import { Appearance } from '../core/Appearance';
 import { MarkdownBody } from '../components/MarkdownBody';
 import { PageHeader } from '../components/DesignSystem';
@@ -24,7 +25,7 @@ export struct ContentPreviewPage {
   }
   build() {
     Column() {
-      PageHeader({ a: this.a, title: this.a.t(this.heading || (this.table ? '预览表格' : '选择文字')), onBack: this.onBack })
+      if (!this.table) { PageHeader({ a: this.a, title: this.a.t(this.heading || '选择文字'), onBack: this.onBack }) }
       if (!this.table) {
         Row({ space: 12 }) {
           Button(this.a.t('全选')).id('content-select-all').height(44).fontColor(this.a.accent).backgroundColor(this.a.surface)
@@ -32,7 +33,7 @@ export struct ContentPreviewPage {
           Button(this.a.t('复制')).id('content-copy').height(44).fontColor(this.a.accent).backgroundColor(this.a.surface).onClick(() => this.copy())
         }.padding({ left: 16, right: 16, bottom: 8 }).width('100%').justifyContent(FlexAlign.End)
       }
-      if (this.table) { TableReader({ a: this.a, source: this.content, onLink: this.onLink, onExport: this.onExport }).layoutWeight(1) }
+      if (this.table) { TableReader({ a: this.a, source: this.content, onBack: this.onBack, onLink: this.onLink, onExport: this.onExport }).layoutWeight(1) }
       else {
       Scroll() {
           Text(this.content).id('content-selection').fontSize(this.a.font(16)).lineHeight(this.a.font(25)).fontColor(this.a.fg)
@@ -41,6 +42,6 @@ export struct ContentPreviewPage {
             .width('100%').padding(16)
       }.layoutWeight(1).width('100%').align(Alignment.Top)
       }
-    }.width('100%').height('100%').backgroundColor(this.a.bg)
+    }.width('100%').height('100%').backgroundColor(this.table ? new DocumentPalette(this.a.dark).background : this.a.bg)
   }
 }

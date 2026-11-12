@@ -1,0 +1,46 @@
+REPORT_DIR /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-wc10j6zf
+操作 home-auth
+操作 host-add
+输入 gateway-endpoint
+输入 gateway-pairing-code
+操作 gateway-connect
+操作 鸿蒙原生会话验证
+操作 conversation-back
+操作 富文本验收
+操作 message-body-harmony-rich-3-table-copy-0:table
+输入 message-draft
+操作 message-draft
+输入 message-draft
+操作 message-body-harmony-rich-3-table-preview-0:table
+操作 table-reader-copy
+操作 page-back
+PASS P3-table-F 原生表格内容、中文长单元格、复制纯文本矩阵和原生预览返回通过
+操作 message-body-harmony-rich-2-code-copy-0:code
+输入 message-draft
+操作 message-draft
+输入 message-draft
+PASS P3-code-copy-F 代码原文复制与中文、emoji、TAB、长行一致，未混入装饰或行号
+操作 message-body-harmony-rich-2-code-expand-0:code
+操作 message-body-harmony-rich-2-code-expand-0:code
+PASS P3-code-F Kotlin 高亮代码卡片、展开收起、中文/emoji/制表符/长行原文复制一致
+操作 message-menu-harmony-rich-1
+操作 message-select-harmony-rich-1
+操作 content-select-all
+操作 content-copy
+操作 page-back
+输入 message-draft
+操作 message-draft
+输入 message-draft
+PASS P3-text-selection-F 标题、行内样式、列表/任务列表、引用、分隔线原生渲染；跨段落选择页及全选复制可操作
+输入 message-draft
+操作 message-send
+操作 conversation-tab-trajectory
+操作 conversation-overflow
+操作 trajectory-node-request-1-1
+操作 page-back
+操作 trajectory-tools
+操作 trajectory-requests
+操作 page-back
+PASS P3-trajectory-F 共享真实事件投影、对话/轨迹切换、模型/工具过滤与原生详情返回通过
+PASS P3-native-stream-F 正式 Native 协议到原生 Markdown Worker 的连续增量与终帧显示通过
+DONE /var/folders/84/lsf89f9j40j093bj249pzz2h0000gn/T/harmony-product-p2-wc10j6zf

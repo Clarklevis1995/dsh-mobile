@@ -1,0 +1,51 @@
+{
+  "portraitGeometryChecks": 64,
+  "maximumErrorVp": 0.8571428571428571,
+  "glyphSizeComparisons": 10,
+  "maximumGlyphSizeErrorFp": 0.2857142857142857,
+  "paletteChecks": 18,
+  "allPortraitVisualChecksPassed": true,
+  "rotationCases": [
+    {
+      "case": "P3-table-horizontal-csv-F",
+      "detail": "原生表头/数据列坐标一致，横滚同步；真实系统CSV取消和保存，UTF-8 BOM/CRLF/中文逐字一致，仅清理本轮导出文件"
+    },
+    {
+      "case": "landscape-edge-back",
+      "portraitRestored": true,
+      "draftRetained": true
+    },
+    {
+      "case": "rotate-twice-close",
+      "portraitRestored": true,
+      "draftRetained": true
+    },
+    {
+      "case": "rotate-immediate-back",
+      "portraitRestored": true,
+      "draftRetained": true,
+      "elapsedSeconds": 2.346667249999996
+    },
+    {
+      "case": "dark-rotate-close",
+      "portraitRestored": true,
+      "draftRetained": true,
+      "originalDraftRestored": true
+    }
+  ],
+  "final160RowsReachable": true,
+  "fullRichTextRegressionPassed": true,
+  "formalLongStream": {
+    "acceptanceEligible": true,
+    "passedGates": 8,
+    "initialPssMiB": 180.5625,
+    "idle3sPssMiB": 201.4384765625,
+    "idle3sGrowthMiB": 20.8759765625,
+    "idle30sPssMiB": 177.1337890625,
+    "sampledPeakPssMiB": 253.39453125,
+    "bodyProjection": {
+      "length": 55274,
+      "hash": "3682621544"
+    }
+  }
+}

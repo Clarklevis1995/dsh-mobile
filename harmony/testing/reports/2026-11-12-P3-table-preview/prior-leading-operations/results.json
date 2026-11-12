@@ -1,0 +1,10 @@
+[
+  {
+    "task": "P3-table-horizontal-csv-F",
+    "detail": "原生表头/数据列坐标一致，横滚同步；真实系统CSV取消和保存，UTF-8 BOM/CRLF/中文逐字一致，仅清理本轮导出文件"
+  },
+  {
+    "task": "P3-table-F",
+    "detail": "原生表格内容、中文长单元格、复制纯文本矩阵和原生预览返回通过"
+  }
+]

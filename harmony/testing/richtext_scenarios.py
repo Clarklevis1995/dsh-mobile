@@ -37,7 +37,9 @@ def run(ui, m, folder, passed):
     paste('名称\t数量\t备注\n鲸鱼\t2\t中文与 long_table_cell_that_wraps\n海豚\t3\t粗体')
     if os.environ.get('HARMONY_TABLE_EXPORT') == '1':
         ui.input('message-draft', 'CSV 导出期间草稿 中文😀')
-    ui.click(table + '-table-preview-0:table'); ui.wait('table-reader-copy'); ui.text('2 行'); ui.click('table-reader-copy'); ui.screenshot('rich-table-preview')
+    ui.click(table + '-table-preview-0:table'); ui.wait('table-reader-copy')
+    count = ui.wait('2 行', key='description'); assert count['id'] == 'table-reader-list'
+    ui.click('table-reader-copy'); ui.screenshot('rich-table-preview')
     if os.environ.get('HARMONY_TABLE_EXPORT') == '1':
         from table_export_scenarios import run as table_export
         table_export(ui, m, folder, passed)

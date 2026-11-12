@@ -16,7 +16,7 @@ export struct MarkdownTable {
   onExport: (csv: string) => void = () => {};
   @State private widths: number[] = [];
   aboutToAppear(): void { this.measure(); }
-  private measure(): void { this.widths = tableWidths(this.block.header, this.block.rows); }
+  private measure(): void { this.widths = tableWidths(this.a, this.getUIContext(), this.block.header, this.block.rows); }
   private matrix(): string[][] { return [this.block.header].concat(this.block.rows.map(row => row.cells)).map(row => row.map(cell => cell.text)); }
   private async copy(): Promise<void> {
     try { await copyContent(contentAction('render-table', '', '', this.matrix()).plainText); this.getUIContext().getPromptAction().showToast({ message: this.a.t('已复制') }); }

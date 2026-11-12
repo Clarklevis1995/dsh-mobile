@@ -1,0 +1,121 @@
+{
+  "topSystemDifferencePx": 46,
+  "measurement": "原图精确黑色核心像素；固定布局裁区/同内容；字号均17，变化为行框和行间距",
+  "results": [
+    {
+      "text": "名称",
+      "android": [
+        115,
+        494,
+        228,
+        549
+      ],
+      "fixedLine": [
+        117,
+        449,
+        231,
+        503
+      ],
+      "naturalLine": [
+        117,
+        437,
+        231,
+        491
+      ],
+      "fixedTopDifferenceVp": 0.2857142857142857,
+      "naturalTopDifferenceVp": -3.142857142857143
+    },
+    {
+      "text": "鲸鱼",
+      "android": [
+        115,
+        663,
+        227,
+        717
+      ],
+      "fixedLine": [
+        116,
+        617,
+        229,
+        670
+      ],
+      "naturalLine": [
+        116,
+        605,
+        229,
+        658
+      ],
+      "fixedTopDifferenceVp": 0.0,
+      "naturalTopDifferenceVp": -3.4285714285714284
+    },
+    {
+      "text": "海豚",
+      "android": [
+        116,
+        914,
+        228,
+        968
+      ],
+      "fixedLine": [
+        117,
+        869,
+        230,
+        923
+      ],
+      "naturalLine": [
+        117,
+        857,
+        230,
+        911
+      ],
+      "fixedTopDifferenceVp": 0.2857142857142857,
+      "naturalTopDifferenceVp": -3.142857142857143
+    },
+    {
+      "text": "2",
+      "android": [
+        670,
+        657,
+        698,
+        700
+      ],
+      "fixedLine": [
+        669,
+        623,
+        696,
+        667
+      ],
+      "naturalLine": [
+        669,
+        611,
+        696,
+        655
+      ],
+      "fixedTopDifferenceVp": 3.4285714285714284,
+      "naturalTopDifferenceVp": 0.0
+    },
+    {
+      "text": "3",
+      "android": [
+        670,
+        907,
+        696,
+        950
+      ],
+      "fixedLine": [
+        670,
+        875,
+        696,
+        919
+      ],
+      "naturalLine": [
+        670,
+        863,
+        696,
+        907
+      ],
+      "fixedTopDifferenceVp": 4.0,
+      "naturalTopDifferenceVp": 0.5714285714285714
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+[
+  {
+    "case": "landscape-edge-back",
+    "portraitRestored": true,
+    "draftRetained": true
+  },
+  {
+    "case": "rotate-twice-close",
+    "portraitRestored": true,
+    "draftRetained": true
+  },
+  {
+    "case": "rotate-immediate-back",
+    "portraitRestored": true,
+    "draftRetained": true,
+    "elapsedSeconds": 2.3576475839999986
+  },
+  {
+    "case": "dark-rotate-close",
+    "portraitRestored": true,
+    "draftRetained": true,
+    "originalDraftRestored": true
+  }
+]

@@ -3,6 +3,7 @@ import { drawing } from '@kit.ArkGraphics2D';
 import { AppearanceData } from './Models';
 
 const EN: Map<string, string> = new Map([
+  ['表格','Table'],['行','rows'],['旋转屏幕','Rotate screen'],['下载 CSV','Download CSV'],['无法旋转屏幕','Could not rotate screen'],
   ["需要你的回答","Your answer is needed"],
   ["网关已接收，等待会话继续…","Received. Waiting for the conversation\u2026"],
   ["取消回答","Cancel answers"],

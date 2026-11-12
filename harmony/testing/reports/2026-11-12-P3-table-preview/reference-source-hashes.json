@@ -1,0 +1,14 @@
+{
+  "sourceCheckpoint": "9e13dde3",
+  "androidApkVersion": "1.7.12(33)",
+  "bundle": "com.clarklevis.dsh.android.harmonyv1111",
+  "files": {
+    "androidApp/src/main/kotlin/com/clarklevis/dsh/android/ui/DshMarkdownTable.kt": "018d412005cb36070b7126fcd61e3a756e8557e7ee05b1e5b745e2d998c3a868",
+    "androidApp/src/main/kotlin/com/clarklevis/dsh/android/ui/DshMarkdownTablePreviewActivity.kt": "0af4f120a910f7e46f2df9949518803a1667c1d7ae41d60b2f281412456c1985",
+    "androidApp/src/main/kotlin/com/clarklevis/dsh/android/ui/DshDocumentPageHeader.kt": "274fb1a6a434bba4332ecc2c62b16d1d3caba4a3f9e028850eea87e84bf99f6b",
+    "androidApp/src/main/res/drawable/ic_table_copy.xml": "b55634faa6025be19a272ded4b03cc623fafd92ac6b4df18e0971fea8069f666",
+    "androidApp/src/main/res/drawable/ic_table_download.xml": "727d8b35b53f9627ddae650126c31f8c13d571644e5cfe6f83e3c97168b080dd",
+    "androidApp/src/main/res/drawable/ic_table_expand.xml": "9544986bf560be6f845659a5f19af687045922b0fa5529b311fa567e6c7b17b5",
+    "androidApp/src/main/res/drawable/ic_table_rotate.xml": "3ce53d980eb6ed6e29dcf5282916885a41934db50105ae3fe850369a84886b4e"
+  }
+}
