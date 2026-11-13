@@ -1,6 +1,38 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "conversation.time.date": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "M月d日 H:mm"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MMM d, H:mm"
+          }
+        }
+      }
+    },
+    "conversation.time.yearDate": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yyyy年M月d日 H:mm"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MMM d, yyyy H:mm"
+          }
+        }
+      }
+    },
     "iOS · %d 个连接器 · %d 项能力" : {
       "localizations" : {
         "en" : {
@@ -31214,7 +31246,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Amap"
+            "value" : "AMap Global"
           }
         },
         "zh-Hans" : {

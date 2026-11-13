@@ -20,6 +20,11 @@ internal sealed interface ConversationDisplayEntry {
         }
     }
 
+    data class TimeSeparator(val messageId: String, val epochSeconds: Double) : ConversationDisplayEntry {
+        override val id: String = "time-$messageId"
+        override val contentType = ConversationDisplayContentType.TIME_SEPARATOR
+    }
+
     data class Process(val group: ConversationProcessGroup) : ConversationDisplayEntry {
         override val id: String = group.id
         override val contentType: ConversationDisplayContentType =
@@ -28,6 +33,7 @@ internal sealed interface ConversationDisplayEntry {
 }
 
 internal enum class ConversationDisplayContentType {
+    TIME_SEPARATOR,
     USER,
     ASSISTANT,
     ASSISTANT_HEADER,
@@ -311,6 +317,7 @@ internal fun makeConversationDisplayEntries(
 ): List<ConversationDisplayEntry> {
     val result = mutableListOf<ConversationDisplayEntry>()
     val processItems = mutableListOf<ConversationItem>()
+    var previousMessageTime: Double? = null
 
     fun flushProcess() {
         val first = processItems.firstOrNull() ?: return
@@ -343,6 +350,15 @@ internal fun makeConversationDisplayEntries(
             ConversationItemKind.ASSISTANT,
             ConversationItemKind.SYSTEM -> {
                 flushProcess()
+                // 只比较正式对话消息，工具和状态事件不影响半小时间隔。
+                if (item.kind != ConversationItemKind.SYSTEM && item.epochSeconds.isFinite() && item.epochSeconds > 0) {
+                    previousMessageTime?.let { previous ->
+                        if (item.epochSeconds - previous > 30 * 60) {
+                            result += ConversationDisplayEntry.TimeSeparator(item.id, item.epochSeconds)
+                        }
+                    }
+                    previousMessageTime = item.epochSeconds
+                }
                 result += ConversationDisplayEntry.Message(item)
             }
         }

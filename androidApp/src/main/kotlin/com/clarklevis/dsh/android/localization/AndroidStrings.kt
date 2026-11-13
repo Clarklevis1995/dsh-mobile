@@ -79,6 +79,8 @@ internal object AndroidStrings {
      * Chinese-source keys need no entry: on a zh locale they render as the key itself.
      */
     internal val chinese: Map<String, String> = mapOf(
+        "conversation.time.date" to "M月d日 H:mm",
+        "conversation.time.yearDate" to "yyyy年M月d日 H:mm",
         "voice.hint" to "描述你想要构建的内容",
         "voice.status.releaseToCancel" to "松手取消",
         "voice.status.authorizing" to "正在获取麦克风权限",
@@ -183,13 +185,16 @@ internal object AndroidStrings {
     )
 
     internal val english: Map<String, String> = mapOf(
+        "conversation.time.date" to "MMM d, H:mm",
+        "conversation.time.yearDate" to "MMM d, yyyy H:mm",
         "一次最多添加 20 个附件，请等待已有附件准备完成" to "You can add up to 20 attachments. Wait for the existing attachments to finish preparing.",
         "当前会话或网关不支持此类附件" to "This conversation or gateway does not support this type of attachment.",
         "无法读取粘贴的附件" to "Unable to read the pasted attachment.",
     "苹果地图" to "Apple Maps",
     "谷歌地图" to "Google Maps",
     "百度地图" to "Baidu Maps",
-    "高德地图" to "Amap",
+    "高德地图" to "AMap Global",
+    "网关注册" to "Gateway registration",
     "无法打开地图，请重新选择" to "Unable to open map. Please choose again.",
     "使用网页地图" to "Open web map",
     "未检测到可用地图应用" to "No compatible map apps installed",

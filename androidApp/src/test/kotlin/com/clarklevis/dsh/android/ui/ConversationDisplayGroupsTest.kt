@@ -20,6 +20,35 @@ class ConversationDisplayGroupsTest {
     @get:Rule val locale = LocaleTestRule()
 
     @Test
+    fun timeSeparatorsRequireMoreThanThirtyMinutesBetweenConversationalMessages() {
+        val entries = makeConversationDisplayEntries(listOf(
+            item("first", ConversationItemKind.USER).copy(epochSeconds = 1_000.0),
+            item("exact", ConversationItemKind.ASSISTANT).copy(epochSeconds = 2_800.0),
+            item("tool", ConversationItemKind.TOOL).copy(epochSeconds = 4_600.0),
+            item("status", ConversationItemKind.SYSTEM).copy(epochSeconds = 4_600.5),
+            item("later", ConversationItemKind.USER).copy(epochSeconds = 4_601.0),
+            item("reply", ConversationItemKind.ASSISTANT).copy(epochSeconds = 4_602.0)
+        ))
+        val separator = entries.filterIsInstance<ConversationDisplayEntry.TimeSeparator>().single()
+        assertEquals("time-later", separator.id)
+        assertEquals(4_601.0, separator.epochSeconds, 0.0)
+        assertTrue(entries[entries.indexOf(separator) + 1] is ConversationDisplayEntry.Message)
+        assertEquals(1, makeConversationTimelineEntries(entries).count { it.id == separator.id })
+    }
+
+    @Test
+    fun timeLabelsUseDeviceDateAndIncludeYearOnlyWhenNeeded() {
+        val zone = java.time.ZoneId.of("Asia/Shanghai")
+        val now = java.time.Instant.parse("2026-11-13T02:00:00Z")
+        fun label(value: String) = conversationTimeLabel(java.time.Instant.parse(value).epochSecond.toDouble(), now, zone)
+        assertEquals("9:48", label("2026-11-13T01:48:00Z"))
+        assertEquals("11月12日 8:14", label("2026-11-12T00:14:00Z"))
+        assertEquals("2025年11月12日 8:14", label("2025-11-12T00:14:00Z"))
+        assertEquals("11月12日 23:59", label("2026-11-12T15:59:00Z"))
+        assertEquals("0:00", label("2026-11-12T16:00:00Z"))
+    }
+
+    @Test
     fun toolImageCardsAreHiddenWhileAssistantBodyAndUserUploadsRemain() {
         val image = com.clarklevis.dsh.shared.protocol.GatewayImageAttachment("image", "image/png", 10, 100, 80)
         val generated = item("result-images", ConversationItemKind.GENERATED_IMAGES, text = "").copy(images = listOf(image))

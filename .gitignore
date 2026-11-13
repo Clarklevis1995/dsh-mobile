@@ -48,3 +48,6 @@ captures/
 tsnetgo/.state/
 tsnetgo/*.aar
 tsnetgo/*.sources.jar
+
+# OneTake 本地工程入口，不应提交绝对路径软链接或纳入 Pages 构建。
+/promo/onetake-whaleness

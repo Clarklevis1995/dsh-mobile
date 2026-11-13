@@ -23,6 +23,16 @@ class AndroidStringsTest {
     @get:Rule val locale = LocaleTestRule(Locale.ENGLISH)
 
     @Test
+    fun mapPluginNamesFollowTheActiveLanguageAndOfficialBrandNames() {
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+        val plugins = com.clarklevis.dsh.android.ui.androidMapPlugins
+        assertEquals(listOf("高德地图", "百度地图", "谷歌地图"), plugins.map { appText(it.title) })
+        Locale.setDefault(Locale.ENGLISH)
+        assertEquals(listOf("AMap Global", "Baidu Maps", "Google Maps"), plugins.map { appText(it.title) })
+        assertEquals("Gateway registration", appText("网关注册"))
+    }
+
+    @Test
     fun attachmentPreparationFailuresUseTheActiveLanguage() {
         assertEquals("Unable to read the pasted attachment.", appText("无法读取粘贴的附件"))
         assertEquals("This conversation or gateway does not support this type of attachment.",

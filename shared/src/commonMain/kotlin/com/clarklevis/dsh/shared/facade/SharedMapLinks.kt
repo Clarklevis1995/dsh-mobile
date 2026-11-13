@@ -85,7 +85,7 @@ class SharedMapLinks {
             }
             "baidu" -> url("baidumap://map/" + if (route) "direction" else "marker", linkedMapOf(
                 "coord_type" to "wgs84", "src" to "${if (platform == "ios") "ios" else "andr"}.whaleness.app").apply {
-                if (route) { put("origin", "我的位置"); put("destination", "latlng:$pair|name:${d.name.replace('|', ' ')}"); put("mode", d.transport) }
+                if (route) { put("origin", "我的位置"); put("destination", "latlng:$pair|name:${d.name.replace('|', ' ')}"); put("mode", d.transport) } // i18n-ignore: 百度 URI 当前定位起点的协议值，不是界面文案，必须保持原值。
                 else { put("location", pair); put("title", d.name); put("content", d.name) }
             })
             else -> null

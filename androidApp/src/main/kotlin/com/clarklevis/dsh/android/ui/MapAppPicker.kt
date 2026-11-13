@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.localization.appTextKey
 import com.clarklevis.dsh.shared.facade.SharedMapDestination
 import com.clarklevis.dsh.shared.facade.SharedMapLinks
 
@@ -44,9 +45,9 @@ internal data class AndroidMapAppPlugin(val id: String, val packageName: String,
 }
 
 internal val androidMapPlugins = listOf(
-    AndroidMapAppPlugin("amap", "com.autonavi.minimap", "高德地图"),
-    AndroidMapAppPlugin("baidu", "com.baidu.BaiduMap", "百度地图"),
-    AndroidMapAppPlugin("google", "com.google.android.apps.maps", "谷歌地图")
+    AndroidMapAppPlugin("amap", "com.autonavi.minimap", appTextKey("高德地图")),
+    AndroidMapAppPlugin("baidu", "com.baidu.BaiduMap", appTextKey("百度地图")),
+    AndroidMapAppPlugin("google", "com.google.android.apps.maps", appTextKey("谷歌地图"))
 )
 
 /** Figma 的中性系统色，不继承 Material 的 surface tint。 */

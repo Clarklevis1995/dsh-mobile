@@ -1271,6 +1271,14 @@ private fun ConversationTimeline(
                                     onPreviewImages = onPreviewImages
                                 )
                                 is ConversationDisplayEntry.Process -> ConversationProcessRow(display.group)
+                                is ConversationDisplayEntry.TimeSeparator -> Text(
+                                    text = conversationTimeLabel(display.epochSeconds),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+                                        .testTag("conversation-time-separator")
+                                )
                             }
                             is ConversationTimelineEntry.AssistantHeader -> AssistantMessageHeader(
                                 item = entry.item,

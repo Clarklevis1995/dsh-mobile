@@ -16482,6 +16482,41 @@ final class GeneratedToolImageTests: XCTestCase {
         XCTAssertFalse(isRed(maxX, maxY))
     }
 
+    func testConversationTimeSeparatorsRequireMoreThanThirtyMinutes() {
+        func item(_ id: String, _ kind: ConversationItem.Kind, _ seconds: Double) -> ConversationItem {
+            ConversationItem(id: id, kind: kind, title: "", text: "test", isError: false,
+                             date: Date(timeIntervalSince1970: seconds))
+        }
+        let entries = ConversationDisplayEntry.make(from: [
+            item("first", .user, 1_000), item("exact", .assistant, 2_800),
+            item("tool", .tool, 4_600), item("status", .system, 4_600.5),
+            item("later", .user, 4_601), item("reply", .assistant, 4_602)
+        ])
+        let separators = entries.filter { if case .timeSeparator = $0.content { return true }; return false }
+        XCTAssertEqual(separators.map(\.id), ["time-later"])
+        guard case .timeSeparator(let date) = separators.first?.content else { return XCTFail("缺少时间分隔") }
+        XCTAssertEqual(date.timeIntervalSince1970, 4_601)
+        let index = entries.firstIndex { $0.id == "time-later" }!
+        XCTAssertEqual(entries[index + 1].id, "message-later")
+    }
+
+    func testConversationTimeLabelsUseLocalDateAndConditionalYear() throws {
+        let parser = ISO8601DateFormatter()
+        let now = try XCTUnwrap(parser.date(from: "2026-11-13T02:00:00Z"))
+        let zone = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
+        let fixtures = [
+            ("2026-11-13T01:48:00Z", "9:48"),
+            ("2026-11-12T00:14:00Z", "11月12日 8:14"),
+            ("2025-11-12T00:14:00Z", "2025年11月12日 8:14"),
+            ("2026-11-12T15:59:00Z", "11月12日 23:59"),
+            ("2026-11-12T16:00:00Z", "0:00")
+        ]
+        for (input, expected) in fixtures {
+            let date = try XCTUnwrap(parser.date(from: input))
+            XCTAssertEqual(ConversationTimeLabel.text(for: date, now: now, timeZone: zone, locale: Locale(identifier: "zh-Hans")), expected)
+        }
+    }
+
     func testOnlyAssistantBodyImagesRemainWhileUserUploadsAndToolDetailsArePreserved() {
         let image = GatewayImageAttachment(attachmentId: "generated", mediaType: "image/png", bytes: 100, width: 1536, height: 1024)
         let body = "已生成。\n\n![风景](/workspace/image.png)"
