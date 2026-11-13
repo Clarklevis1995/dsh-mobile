@@ -1092,6 +1092,54 @@ final class LogExportUITests: XCTestCase {
 }
 
 final class PhoneConnectorsUITests: XCTestCase {
+    func testCapabilityDetailsOpenFromRealRowTapsAndReopenAfterDismissal() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_CONNECTOR_SHEET_UI_TEST"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        if app.alerts.firstMatch.waitForExistence(timeout: 2) { app.alerts.firstMatch.buttons.firstMatch.tap() }
+        let entry = app.buttons["connector-registered-capabilities"]
+        XCTAssertTrue(entry.waitForExistence(timeout: 8))
+        entry.tap()
+        let listHeader = app.buttons["connector-capabilities-close"]
+        let calendar = app.buttons["connector-registered-module-calendar"]
+        XCTAssertTrue(calendar.waitForExistence(timeout: 5))
+        for module in ["calendar", "photos", "music", "location", "calendar"] {
+            let row = app.buttons["connector-registered-module-\(module)"]
+            for _ in 0..<3 where !row.isHittable { app.swipeUp() }
+            let listTop = listHeader.frame.minY
+            row.tap()
+            let close = app.buttons["connector-capabilities-detail-close"]
+            XCTAssertTrue(close.waitForExistence(timeout: 5), "实际点击 \(module) 必须弹出详情")
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "native-glass-detail-\(module)"; screenshot.lifetime = .keepAlways; add(screenshot)
+            if module == "location" {
+                let mediumTop = close.frame.minY
+                let handle = try XCTUnwrap(app.buttons.matching(NSPredicate(format: "label == %@", "表单控制柄")).allElementsBoundByIndex.last)
+                XCTAssertTrue(handle.exists)
+                handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)))
+                XCTAssertLessThan(close.frame.minY, mediumTop - 100, "位置详情支持原生手势上拉展开")
+                let expanded = XCTAttachment(screenshot: app.screenshot())
+                expanded.name = "native-glass-location-expanded"; expanded.lifetime = .keepAlways; add(expanded)
+                // 在长列表中滚动到末项，不要求默认高度容纳全部工具。
+                for _ in 0..<3 where !app.staticTexts["删除应用内地点"].isHittable { app.swipeUp() }
+                XCTAssertTrue(app.staticTexts["删除应用内地点"].isHittable)
+                close.tap()
+            } else if module == "photos" {
+                close.swipeDown()
+            } else { close.tap() }
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            XCTAssertTrue(row.isHittable, "详情关闭后能力列表应可交互")
+            XCTAssertEqual(listHeader.frame.minY, listTop, accuracy: 2)
+        }
+        app.buttons["connector-capabilities-close"].tap()
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.tap()
+        app.buttons["connector-registered-module-calendar"].tap()
+        XCTAssertTrue(app.buttons["connector-capabilities-detail-close"].waitForExistence(timeout: 5))
+    }
+
     func testDrawerOpensLocalConnectors() throws {
         continueAfterFailure = false
         let app = XCUIApplication()

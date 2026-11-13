@@ -17426,6 +17426,20 @@ final class NewConversationWorkspaceTests: XCTestCase {
 
 @MainActor
 final class PhoneConnectorRegistrationTests: XCTestCase {
+    private final class SheetRoute: ObservableObject {
+        @Published var selectedID: String?
+        init(_ id: String?) { selectedID = id }
+    }
+    private struct SheetHost: View {
+        let model: IOSDeviceConnectors
+        @ObservedObject var route: SheetRoute
+        var body: some View {
+            Color(.systemGroupedBackground).sheet(isPresented: .constant(true)) {
+                ConnectorCapabilitiesSheet(model: model, selectedID: $route.selectedID)
+                    .environment(\.locale, Locale(identifier: "zh_Hans"))
+            }
+        }
+    }
     @MainActor
     private final class Fixture {
         let host = "registration-snapshot-\(UUID().uuidString)"
@@ -17553,6 +17567,25 @@ final class PhoneConnectorRegistrationTests: XCTestCase {
             if !confirmed { f.model.refreshRegistrationStatus(); try f.status("not-registered") }
             try await Task.sleep(for: .milliseconds(200))
             controller.view.layoutIfNeeded()
+            if confirmed {
+                func collect(_ view: UIView) -> UICollectionView? {
+                    if let list = view as? UICollectionView { return list }
+                    return view.subviews.compactMap { collect($0) }.first
+                }
+                if let list = collect(controller.view) {
+                    let cells = list.indexPathsForVisibleItems.sorted().compactMap { index -> [String: Any]? in
+                        guard let cell = list.cellForItem(at: index) else { return nil }
+                        let frame = cell.convert(cell.bounds, to: window)
+                        return ["section": index.section, "item": index.item, "x": frame.minX, "y": frame.minY,
+                                "width": frame.width, "height": frame.height]
+                    }
+                    let data = try JSONSerialization.data(withJSONObject: ["screenWidth": window.bounds.width, "screenHeight": window.bounds.height,
+                                                                          "safeTop": window.safeAreaInsets.top, "cells": cells], options: .prettyPrinted)
+                    let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+                    attachment.name = "ios-connector-status-geometry"; attachment.lifetime = .keepAlways; add(attachment)
+                    try data.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("ios-connector-status-geometry.json"))
+                }
+            }
             let attachment = XCTAttachment(image: UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
                 window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
             })
@@ -17581,26 +17614,86 @@ final class PhoneConnectorRegistrationTests: XCTestCase {
         let previous = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
-        for selection in [nil, "music"] as [String?] {
-            let host = UIHostingController(rootView: Color(.systemGroupedBackground).sheet(isPresented: .constant(true)) {
-                ConnectorCapabilitiesSheet(model: f.model, selectedModuleID: selection)
-                    .environment(\.locale, Locale(identifier: "zh_Hans"))
-            })
+        for selection in [nil, "photos", "music", "calendar", "location"] as [String?] {
+            let route = SheetRoute(nil)
+            let host = UIHostingController(rootView: SheetHost(model: f.model, route: route))
             window.rootViewController = host; window.overrideUserInterfaceStyle = .light; window.makeKeyAndVisible()
             for _ in 0..<100 where host.presentedViewController == nil { try await Task.sleep(for: .milliseconds(20)) }
-            let sheet = try XCTUnwrap(host.presentedViewController)
+            let listSheet = try XCTUnwrap(host.presentedViewController)
             try await Task.sleep(for: .milliseconds(650))
+            func findCollection(_ view: UIView) -> UICollectionView? {
+                if let collection = view as? UICollectionView { return collection }
+                return view.subviews.compactMap { findCollection($0) }.first
+            }
+            let parentList = try XCTUnwrap(findCollection(listSheet.view))
+            let savedOffset = parentList.contentOffset
+            let originalListHeight = try XCTUnwrap(listSheet.presentationController?.presentedView).bounds.height
+            func assertListHeightPreserved() throws {
+                let parentView = try XCTUnwrap(listSheet.presentationController?.presentedView)
+                XCTAssertEqual(parentView.bounds.height, originalListHeight, accuracy: 2,
+                               "关闭详情后，外层能力列表必须恢复原来的高度")
+            }
+            func presentedDetail() async throws -> UIViewController {
+                for _ in 0..<100 {
+                    if let detail = listSheet.presentedViewController { return detail }
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+                return try XCTUnwrap(listSheet.presentedViewController)
+            }
+            if let selection { route.selectedID = selection }
+            if selection != nil {
+                _ = try await presentedDetail()
+                try await Task.sleep(for: .milliseconds(650))
+            }
+            let sheet = try XCTUnwrap(selection == nil ? listSheet : listSheet.presentedViewController)
             let view = try XCTUnwrap(sheet.presentationController?.presentedView)
-            XCTAssertGreaterThan(view.bounds.height, selection == nil ? 500 : 550)
+            XCTAssertGreaterThan(view.bounds.height, 300)
+            XCTAssertEqual(sheet.sheetPresentationController?.selectedDetentIdentifier, .medium, "每个面板默认半屏")
             XCTAssertLessThan(view.bounds.height, window.bounds.height * 0.85, "应按内容高度展示，不占满屏幕")
-            let name = selection == nil ? "ios-capabilities-list" : "ios-capabilities-detail"
+            if selection != nil {
+                XCTAssertFalse(sheet === listSheet, "能力详情必须是新弹出的独立Sheet")
+                XCTAssertTrue(host.presentedViewController === listSheet, "详情下方应保留能力列表")
+            }
+            let name = selection == nil ? "ios-capabilities-list" : "ios-capabilities-\(selection!)-detail"
             func capture(_ suffix: String = "") {
                 let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
                 let attachment = XCTAttachment(image: image); attachment.name = name + suffix; attachment.lifetime = .keepAlways; add(attachment)
                 if let data = image.pngData() { try? data.write(to: FileManager.default.temporaryDirectory.appendingPathComponent(name + suffix + ".png")) }
             }
+            func assertBottomGutter(_ view: UIView) throws {
+                let list = try XCTUnwrap(findCollection(view))
+                let bottom = try XCTUnwrap(list.visibleCells.map { $0.convert($0.bounds, to: window).maxY }.max())
+                let frame = view.convert(view.bounds, to: window)
+                XCTAssertGreaterThanOrEqual(frame.maxY - view.safeAreaInsets.bottom - bottom, 30,
+                                          "能力详情末行下方需保留至少32点内容留白，再由系统处理安全区")
+            }
             capture()
-            if selection != nil {
+            if selection == nil {
+                route.selectedID = "calendar"
+                let detail = try await presentedDetail()
+                XCTAssertFalse(detail === listSheet)
+                try await Task.sleep(for: .milliseconds(650)); capture("-stacked-calendar")
+                try assertBottomGutter(try XCTUnwrap(detail.presentationController?.presentedView))
+                route.selectedID = nil
+                try await Task.sleep(for: .milliseconds(650))
+                XCTAssertNil(listSheet.presentedViewController, "关闭详情只收起顶层Sheet")
+                XCTAssertTrue(host.presentedViewController === listSheet)
+                XCTAssertEqual(parentList.contentOffset, savedOffset, "详情关闭后保留能力列表滚动位置")
+                try assertListHeightPreserved()
+                capture("-restored")
+            } else if selection != "location", selection != "music" { try assertBottomGutter(view) }
+            if selection == "location" {
+                let mediumHeight = view.bounds.height
+                let presentation = try XCTUnwrap(sheet.sheetPresentationController)
+                presentation.animateChanges { presentation.selectedDetentIdentifier = .large }
+                try await Task.sleep(for: .milliseconds(650))
+                XCTAssertGreaterThan(view.bounds.height, mediumHeight + 100, "位置长列表支持上拉展开到全屏")
+                capture("-expanded")
+                presentation.animateChanges { presentation.selectedDetentIdentifier = .medium }
+                try await Task.sleep(for: .milliseconds(650))
+                XCTAssertEqual(view.bounds.height, mediumHeight, accuracy: 2)
+            }
+            if selection == "music" {
                 try f.receive(["kind": "device-tools-permissions", "version": 1, "connectionLeaseId": "lease", "permissions": ["music": false]])
                 XCTAssertFalse(f.model.isRegisteredModuleAllowed(try XCTUnwrap(f.model.registeredModules.first { $0.id == "music" })))
                 try await Task.sleep(for: .milliseconds(100)); capture("-revoked")

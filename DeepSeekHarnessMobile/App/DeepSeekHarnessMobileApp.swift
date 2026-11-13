@@ -58,8 +58,15 @@ struct DeepSeekHarnessMobileApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
+                #if DEBUG
+                if ProcessInfo.processInfo.environment["DSH_CONNECTOR_SHEET_UI_TEST"] == "1" {
+                    ConnectorSheetUITestHarness()
+                } else if hosts.isReady { RootView() }
+                else { ProgressView() }
+                #else
                 if hosts.isReady { RootView() }
                 else { ProgressView() }
+                #endif
             }
                 .id(ObjectIdentifier(hosts.activeStore))
                 .environmentObject(hosts.activeStore)

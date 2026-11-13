@@ -91,7 +91,7 @@ class ConnectorUiDeviceTest {
             compose.onNodeWithTag("connector-capabilities-sheet").assertIsDisplayed()
             compose.onNodeWithTag("connector-registered-module-calendar").performClick()
             compose.onNodeWithText("查询日历忙闲").assertIsDisplayed()
-            compose.onNodeWithTag("connector-capabilities-back").performClick()
+            compose.onNodeWithTag("connector-capabilities-detail-close").performClick()
             compose.onNodeWithText("查询日历忙闲").assertDoesNotExist()
             compose.onNodeWithTag("connector-capabilities-close").performClick()
             compose.onNodeWithTag("connector-capabilities-sheet").assertDoesNotExist()
@@ -156,7 +156,12 @@ class ConnectorUiDeviceTest {
             }
         }
         try {
-            compose.setContent { DshTheme(appearance) { ConnectorStatusScreen(model, {}) } }
+            compose.setContent {
+                val deviceDensity = androidx.compose.ui.platform.LocalDensity.current
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(deviceDensity.density, 1f)
+                ) { DshTheme(appearance) { ConnectorStatusScreen(model, {}) } }
+            }
             compose.runOnIdle { model.setEnabled("music", true); model.visibility(true); model.connection(true) }
             compose.waitUntil { frames.any { it.optString("type") == "device-tools-register" } }
             compose.runOnIdle {
@@ -168,6 +173,11 @@ class ConnectorUiDeviceTest {
             }
             compose.onNodeWithTag("connector-registered-module-music").assertDoesNotExist()
             screenshot("connector-capabilities-entry.png")
+            compose.onNodeWithTag("connector-status-section-header").assertIsDisplayed()
+            compose.onNodeWithTag("connector-registration-status").assertHeightIsEqualTo((157f / 3).dp)
+            compose.onNodeWithTag("connector-confirmed-count").assertHeightIsEqualTo((157f / 3).dp)
+            compose.onNodeWithTag("connector-registered-capabilities").assertHeightIsEqualTo(82.dp)
+            compose.onNodeWithTag("connector-registration-actions").assertHeightIsEqualTo((157f / 3).dp)
             compose.onNodeWithTag("connector-registered-capabilities").performClick()
             compose.onNodeWithText("Android · 6 个连接器 · 22 项能力").assertIsDisplayed()
             tools.keys.forEach { compose.onNodeWithTag("connector-icon-$it", useUnmergedTree = true).assertIsDisplayed() }
@@ -189,34 +199,102 @@ class ConnectorUiDeviceTest {
             assertEquals(gap, header.fetchSemanticsNode().boundsInRoot.top - handle.fetchSemanticsNode().boundsInRoot.top, 2f)
             handle.performTouchInput { up() }
             compose.waitForIdle()
+            val listTop = compose.onNodeWithTag("connector-capabilities-page-list").fetchSemanticsNode().positionInRoot.y
+            compose.mainClock.autoAdvance = false
             compose.onNodeWithTag("connector-registered-module-music").performClick()
+            compose.mainClock.advanceTimeBy(80)
+            compose.waitForIdle()
+            val enterEarly = compose.onNodeWithTag("connector-capabilities-page-music").fetchSemanticsNode().positionInRoot.y
+            screenshot("connector-capabilities-detail-enter-early.png")
+            compose.mainClock.advanceTimeBy(80)
+            compose.waitForIdle()
+            val enterLate = compose.onNodeWithTag("connector-capabilities-page-music").fetchSemanticsNode().positionInRoot.y
+            assertTrue("详情必须作为新面板从底部滑入", enterEarly > enterLate)
+            assertEquals("底层能力列表不得被替换", listTop,
+                compose.onNodeWithTag("connector-capabilities-page-list").fetchSemanticsNode().positionInRoot.y, 2f)
+            compose.mainClock.advanceTimeBy(800)
+            compose.mainClock.autoAdvance = true
+            compose.onAllNodes(isDialog()).assertCountEquals(2)
+            compose.onNodeWithTag("connector-capabilities-back").assertDoesNotExist()
             compose.onNodeWithText("本机音乐").assertIsDisplayed()
             compose.onNodeWithTag("connector-capability-music.state").assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "已允许"))
             screenshot("connector-capabilities-detail.png")
+            val density = context.resources.displayMetrics.density
+            val pageBottom = compose.onNodeWithTag("connector-capabilities-page-music").fetchSemanticsNode().boundsInRoot.bottom
+            val lastToolBottom = compose.onNodeWithTag("connector-capability-music.play-library").fetchSemanticsNode().boundsInRoot.bottom
+            assertTrue("末行下方保留32dp内容留白及系统导航安全区", pageBottom - lastToolBottom >= 32f * density)
+            val detailHandle = compose.onNodeWithTag("connector-capabilities-detail-handle", useUnmergedTree = true)
+            val detailTitle = compose.onNodeWithTag("connector-capabilities-detail-header")
+            val detailStart = detailHandle.fetchSemanticsNode().boundsInRoot.top
+            val detailGap = detailTitle.fetchSemanticsNode().boundsInRoot.top - detailStart
+            detailHandle.performTouchInput { down(center); moveBy(androidx.compose.ui.geometry.Offset(0f, 100f)) }
+            compose.waitForIdle()
+            val detailDown = detailHandle.fetchSemanticsNode().boundsInRoot.top
+            assertTrue(detailDown > detailStart)
+            assertEquals(detailGap, detailTitle.fetchSemanticsNode().boundsInRoot.top - detailDown, 2f)
+            screenshot("connector-capabilities-detail-drag-down.png")
+            detailHandle.performTouchInput { moveBy(androidx.compose.ui.geometry.Offset(0f, -40f)) }
+            compose.waitForIdle()
+            assertTrue(detailHandle.fetchSemanticsNode().boundsInRoot.top < detailDown)
+            assertEquals(detailGap, detailTitle.fetchSemanticsNode().boundsInRoot.top - detailHandle.fetchSemanticsNode().boundsInRoot.top, 2f)
+            detailHandle.performTouchInput { up() }
+            compose.waitForIdle()
+            compose.mainClock.autoAdvance = false
+            compose.onNodeWithTag("connector-capabilities-detail-close").performClick()
+            compose.mainClock.advanceTimeBy(80)
+            compose.waitForIdle()
+            val exitEarly = compose.onNodeWithTag("connector-capabilities-page-music").fetchSemanticsNode().positionInRoot.y
+            screenshot("connector-capabilities-detail-exit-early.png")
+            compose.mainClock.advanceTimeBy(80)
+            compose.waitForIdle()
+            val exitLate = compose.onNodeWithTag("connector-capabilities-page-music").fetchSemanticsNode().positionInRoot.y
+            assertTrue("关闭详情应向下收起顶层面板", exitLate > exitEarly)
+            compose.mainClock.advanceTimeBy(800)
+            compose.mainClock.autoAdvance = true
+            compose.onNodeWithTag("connector-capabilities-detail-sheet").assertDoesNotExist()
+            compose.onAllNodes(isDialog()).assertCountEquals(1)
+            assertEquals(listTop, compose.onNodeWithTag("connector-capabilities-page-list").fetchSemanticsNode().positionInRoot.y, 2f)
+            compose.onNodeWithTag("connector-registered-module-music").performClick()
             androidx.test.espresso.Espresso.pressBack()
             compose.onNodeWithTag("connector-registered-module-music").assertIsDisplayed()
             compose.onNodeWithTag("connector-registered-module-music").performClick()
             compose.runOnIdle { model.receive(JSONObject().put("kind", "device-tools-permissions").put("version", 1).put("connectionLeaseId", "sheet-lease").put("permissions", JSONObject().put("music", false)).toString()) }
             compose.onNodeWithTag("connector-capability-music.state").assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "主机未允许"))
-            compose.onNodeWithTag("connector-capabilities-back").performClick()
+            compose.onNodeWithTag("connector-capabilities-detail-close").performClick()
+            compose.onNodeWithTag("connector-registered-module-calendar").performClick()
+            compose.onNodeWithTag("connector-capability-calendar.create").assertIsDisplayed()
+            val calendarBottom = compose.onNodeWithTag("connector-capabilities-page-calendar").fetchSemanticsNode().boundsInRoot.bottom
+            val calendarLastRow = compose.onNodeWithTag("connector-capability-calendar.create").fetchSemanticsNode().boundsInRoot.bottom
+            assertTrue("两项能力的短详情也要保留底部留白", calendarBottom - calendarLastRow >= 32f * density)
+            screenshot("connector-capabilities-calendar-detail.png")
+            compose.onNodeWithTag("connector-capabilities-detail-handle", useUnmergedTree = true).performTouchInput {
+                swipe(start = center, end = center + androidx.compose.ui.geometry.Offset(0f, 600f), durationMillis = 300)
+            }
+            compose.onNodeWithTag("connector-capabilities-detail-sheet").assertDoesNotExist()
+            compose.onNodeWithTag("connector-capabilities-sheet").assertIsDisplayed()
             compose.onNodeWithTag("connector-registered-module-location").performClick()
             compose.runOnIdle { appearance.selectFontFollowsSystem(false); appearance.selectFontScale(1.6f) }
             compose.waitForIdle()
-            val fixedTop = header.fetchSemanticsNode().boundsInRoot.top
-            val list = compose.onNodeWithTag("connector-capabilities-list")
+            val detailHeader = compose.onNodeWithTag("connector-capabilities-detail-header")
+            val fixedTop = detailHeader.fetchSemanticsNode().boundsInRoot.top
+            val list = compose.onNodeWithTag("connector-capabilities-detail-list")
             repeat(4) { list.performTouchInput { swipeUp() } }
             compose.onNodeWithTag("connector-capability-maps.markers.delete").assertIsDisplayed()
-            assertEquals(fixedTop, header.fetchSemanticsNode().boundsInRoot.top, 2f)
+            assertEquals(fixedTop, detailHeader.fetchSemanticsNode().boundsInRoot.top, 2f)
             repeat(4) { list.performTouchInput { swipeDown() } }
             compose.onNodeWithTag("connector-capability-location.current").assertIsDisplayed()
-            assertEquals(fixedTop, header.fetchSemanticsNode().boundsInRoot.top, 2f)
+            assertEquals(fixedTop, detailHeader.fetchSemanticsNode().boundsInRoot.top, 2f)
             compose.runOnIdle { appearance.selectFontScale(1f); appearance.selectInterfaceStyle(InterfaceStyle.DARK) }
-            compose.onNodeWithTag("connector-capabilities-back").performClick()
+            compose.onNodeWithTag("connector-capabilities-detail-close").performClick()
             screenshot("connector-capabilities-dark.png")
+            compose.onNodeWithTag("connector-capabilities-close").performClick()
+            compose.onNodeWithTag("connector-status-section-header").assertIsDisplayed()
+            screenshot("connector-status-dark-aligned.png")
+            compose.onNodeWithTag("connector-registered-capabilities").performClick()
             compose.runOnIdle { model.connection(false) }
             compose.onNodeWithTag("connector-capabilities-sheet").assertDoesNotExist()
             compose.onNodeWithTag("connector-registered-capabilities").assertDoesNotExist()
-        } finally { scope.cancel() }
+        } finally { compose.mainClock.autoAdvance = true; scope.cancel() }
     }
 
     @Test fun markdownCardsKeepSurroundingTextAndDoNotTransformCodeOrInlineLinks() {

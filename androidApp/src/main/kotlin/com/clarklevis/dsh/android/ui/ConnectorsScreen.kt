@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,7 +28,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.Lifecycle
@@ -47,8 +45,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import java.text.DateFormat
-import java.util.Date
 
 @Composable
 internal fun ConnectorsContent(
@@ -112,15 +108,7 @@ internal fun ConnectorsContent(
 }
 
 @Composable
-internal fun ConnectorStatusScreen(connectors: AndroidDeviceConnectors?, onBack: () -> Unit) {
-    ConnectorRegistrationPolling(connectors)
-    ConnectorPage(appText("连接器状态"), onBack, "connector-status-screen") {
-        ConnectorRegistrationContent(connectors)
-    }
-}
-
-@Composable
-private fun ConnectorRegistrationPolling(connectors: AndroidDeviceConnectors?) {
+internal fun ConnectorRegistrationPolling(connectors: AndroidDeviceConnectors?) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(connectors, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -181,7 +169,7 @@ internal fun ConnectorIcon(module: String, size: androidx.compose.ui.unit.Dp = 3
     Image(painterResource(icon), null, Modifier.size(size).testTag("connector-icon-$module"))
 }
 
-private fun registrationColor(state: ConnectorRegistrationState?): Color = when (state) {
+internal fun registrationColor(state: ConnectorRegistrationState?): Color = when (state) {
     ConnectorRegistrationState.REGISTERED -> DshColors.Success
     ConnectorRegistrationState.FAILED, ConnectorRegistrationState.TIMED_OUT, ConnectorRegistrationState.NOT_REGISTERED -> Color(0xFFE34D59)
     ConnectorRegistrationState.REGISTERING, ConnectorRegistrationState.UNVERIFIED, ConnectorRegistrationState.UNSUPPORTED -> DshColors.Orange
@@ -198,71 +186,6 @@ internal fun registrationTitle(state: ConnectorRegistrationState) = appText(when
     ConnectorRegistrationState.TIMED_OUT -> "连接器注册超时"
     ConnectorRegistrationState.NOT_REGISTERED -> "已连接，连接器未注册"
 })
-
-@Composable
-private fun ConnectorRegistrationContent(connectors: AndroidDeviceConnectors?) {
-    val state = connectors?.registrationState ?: ConnectorRegistrationState.DISCONNECTED
-    ConnectorGroup {
-        Row(Modifier.fillMaxWidth().padding(18.dp).testTag("connector-registration-status"), verticalAlignment = Alignment.CenterVertically) {
-            StatusIndicatorDot(registrationColor(state), Modifier.size(8.dp))
-            Spacer(Modifier.width(10.dp)); Text(registrationTitle(state), Modifier.weight(1f))
-            if (connectors?.checkingRegistration == true || state == ConnectorRegistrationState.REGISTERING) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-        }
-        HorizontalDivider(Modifier.padding(horizontal = 18.dp), thickness = .5.dp,
-            color = mapPickerPalette(isSystemInDarkTheme()).separator)
-        if (state == ConnectorRegistrationState.REGISTERED && connectors != null) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)) {
-                Text(appText("网关已确认"), Modifier.weight(1f)); Text(appText("%1\$s 项能力", connectors.registeredToolCount))
-            }
-        } else {
-            val message = appText(when (state) {
-                ConnectorRegistrationState.DISCONNECTED -> "连接主机后，将显示网关确认的能力。"
-                ConnectorRegistrationState.UNSUPPORTED -> "请更新并重启主机端网关，然后重新连接。"
-                ConnectorRegistrationState.REGISTERING -> "正在等待网关确认本机能力。"
-                ConnectorRegistrationState.NOT_REGISTERED -> "聊天连接正常，但网关没有当前连接的能力登记。请重新注册。"
-                else -> "网关尚未返回有效的能力清单，请刷新状态或重新注册。"
-            })
-            Text(message, Modifier.padding(horizontal = 18.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-    if (state == ConnectorRegistrationState.REGISTERED && connectors != null) {
-        connectors.registrationConfirmedAt?.let { at ->
-            Row(Modifier.padding(horizontal = 18.dp).testTag("connector-last-confirmed"),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(appText("最近确认"), style = SettingsTypography.description.copy(fontSize = 13.sp, lineHeight = 18.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(at)), style = SettingsTypography.description.copy(fontSize = 13.sp, lineHeight = 18.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        var showingCapabilities by rememberSaveable { mutableStateOf(false) }
-        ConnectorGroup {
-            Row(Modifier.fillMaxWidth().clickable { showingCapabilities = true }
-                .padding(horizontal = 16.dp, vertical = 16.dp).testTag("connector-registered-capabilities"),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Surface(shape = RoundedCornerShape(11.dp), color = DshColors.Ocean.copy(alpha = .08f)) {
-                    Icon(painterResource(R.drawable.ic_registered_capabilities), null, Modifier.padding(8.dp).size(24.dp), tint = DshColors.Ocean)
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(appText("网关已登记的能力"), style = SettingsTypography.item)
-                    Text(appText("%1\$s 个连接器", connectors.registeredModules.size), style = SettingsTypography.description,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        if (showingCapabilities) ConnectorCapabilitiesSheet(connectors) { showingCapabilities = false }
-    }
-    ConnectorGroup {
-        Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = { connectors?.refreshRegistrationStatus() }, enabled = connectors?.canCheckRegistration == true && !connectors.checkingRegistration,
-                modifier = Modifier.testTag("connector-refresh-registration")) { Text(appText("刷新状态")) }
-            TextButton(onClick = { connectors?.register() }, enabled = connectors?.canRetryRegistration == true,
-                modifier = Modifier.testTag("connector-retry-registration")) { Text(appText("重新注册")) }
-        }
-    }
-
-}
 
 internal fun connectorCapabilityTitle(tool: String): String = appText(when (tool) {
     "calendar.busy" -> "查询日历忙闲"; "calendar.create" -> "创建日历日程"

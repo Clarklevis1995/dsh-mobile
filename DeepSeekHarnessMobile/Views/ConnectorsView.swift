@@ -58,6 +58,7 @@ struct ConnectorsView: View {
 struct ConnectorRegistrationStatusView: View {
     @ObservedObject var model: IOSDeviceConnectors
     @State private var showingCapabilities = false
+    @State private var selectedModuleID: String?
 
     var body: some View {
         List {
@@ -92,7 +93,7 @@ struct ConnectorRegistrationStatusView: View {
 
             if model.registrationState == .registered {
                 Section {
-                    Button { showingCapabilities = true } label: {
+                    Button { selectedModuleID = nil; showingCapabilities = true } label: {
                         HStack(spacing: 12) {
                             Image("ConnectorRegisteredCapabilities")
                                 .renderingMode(.template).resizable().scaledToFit()
@@ -127,8 +128,8 @@ struct ConnectorRegistrationStatusView: View {
         }
         .navigationTitle("连接器状态")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showingCapabilities) {
-            ConnectorCapabilitiesSheet(model: model)
+        .sheet(isPresented: $showingCapabilities, onDismiss: { selectedModuleID = nil }) {
+            ConnectorCapabilitiesSheet(model: model, selectedID: $selectedModuleID)
         }
         .onChange(of: model.registrationState) { state in
             if state != .registered { showingCapabilities = false }
@@ -190,43 +191,60 @@ private struct ConnectorModuleIcon: View {
 struct ConnectorCapabilitiesSheet: View {
     @ObservedObject var model: IOSDeviceConnectors
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedID: String?
+    @Binding var selectedID: String?
+    private let moduleID: String?
+    init(model: IOSDeviceConnectors, selectedID: Binding<String?>, moduleID: String? = nil) {
+        self.model = model
+        _selectedID = selectedID
+        self.moduleID = moduleID
+    }
     @ScaledMetric private var moduleRowHeight: CGFloat = 66
     @ScaledMetric private var toolRowHeight: CGFloat = 52
-    init(model: IOSDeviceConnectors, selectedModuleID: String? = nil) {
-        self.model = model
-        _selectedID = State(initialValue: selectedModuleID)
-    }
     private var selected: PhoneConnectorRegistrationModule? {
-        model.registeredModules.first { $0.id == selectedID }
+        model.registeredModules.first { $0.id == moduleID }
     }
-    private var preferredHeight: CGFloat {
-        if let selected { return 180 + CGFloat(max(1, selected.tools.count)) * toolRowHeight }
-        return 94 + CGFloat(max(1, model.registeredModules.count)) * moduleRowHeight
-    }
+    @State private var sheetDetent: PresentationDetent = .medium
+
+    private struct DetailRoute: Identifiable { let id: String }
+    @State private var presentedDetail: DetailRoute?
 
     var body: some View {
+        page(module: selected)
+        .modifier(ConnectorSheetPresentation())
+        .presentationDragIndicator(.visible)
+        .presentationDetents([.medium, .large], selection: $sheetDetent)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(moduleID == nil ? "connector-capabilities-sheet" : "connector-capabilities-detail-sheet")
+        .sheet(item: $presentedDetail, onDismiss: { selectedID = nil }) { route in
+            ConnectorCapabilitiesSheet(model: model, selectedID: .constant(nil), moduleID: route.id)
+        }
+        .onChange(of: selectedID) { id in
+            guard moduleID == nil else { return }
+            presentedDetail = id.map { DetailRoute(id: $0) }
+        }
+        .onChange(of: model.registrationState) { state in
+            if state != .registered { dismiss() }
+        }
+    }
+
+    private func page(module: PhoneConnectorRegistrationModule?) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                if selected != nil {
-                    circleButton("chevron.left", label: String(localized: "返回能力列表"), id: "connector-capabilities-back") {
-                        selectedID = nil
-                    }
-                }
-                Text(selected == nil ? "已登记的能力" : "能力详情")
+                Text(module == nil ? "已登记的能力" : "能力详情")
                     .font(.system(size: 21, weight: .medium)).frame(maxWidth: .infinity, alignment: .leading)
-                circleButton("xmark", label: String(localized: "关闭"), id: "connector-capabilities-close") { dismiss() }
+                circleButton("xmark", label: String(localized: "关闭"), id: module == nil ? "connector-capabilities-close" : "connector-capabilities-detail-close") { dismiss() }
             }
             .padding(.horizontal, 20).padding(.top, 8)
-            .accessibilityIdentifier("connector-capabilities-header")
-            if selected == nil {
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(module == nil ? "connector-capabilities-header" : "connector-capabilities-detail-header")
+            if module == nil {
                 Text(String.localizedStringWithFormat(String(localized: "iOS · %d 个连接器 · %d 项能力"), model.registeredModules.count, model.registeredToolCount))
-                    .font(.system(size: 13)).foregroundStyle(.secondary)
+                    .font(.system(size: 14)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20).padding(.top, 6).padding(.bottom, 18)
             }
             List {
-                if let module = selected {
+                if let module {
                     Section {
                         moduleRow(module, detail: true)
                             .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
@@ -247,11 +265,14 @@ struct ConnectorCapabilitiesSheet: View {
                             .accessibilityIdentifier("connector-capability-\(tool)")
                             .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
                         }
-                    } header: { Text("已登记的控制能力").font(.system(size: 13)).textCase(nil) }
+                    } header: { Text("已登记的控制能力").font(.system(size: 14)).textCase(nil) }
                 } else {
                     Section {
                         ForEach(model.registeredModules) { module in
-                            Button { selectedID = module.id } label: { moduleRow(module, detail: false) }
+                            Button {
+                                selectedID = module.id
+                                presentedDetail = DetailRoute(id: module.id)
+                            } label: { moduleRow(module, detail: false) }
                                 .buttonStyle(.plain)
                                 .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 14))
                                 .accessibilityIdentifier("connector-registered-module-\(module.id)")
@@ -260,18 +281,12 @@ struct ConnectorCapabilitiesSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .modifier(ConnectorSheetListMargins(detail: selected != nil))
+            .modifier(ConnectorSheetListMargins(detail: module != nil))
             .scrollContentBackground(.hidden)
-            .id(selectedID)
+            .padding(.bottom, module == nil ? 0 : 32)
         }
-        .background(Color(.systemGroupedBackground))
-        .modifier(ConnectorSheetPresentation())
-        .presentationDragIndicator(.visible)
-        .presentationDetents([.height(preferredHeight)])
-        .accessibilityIdentifier("connector-capabilities-sheet")
-        .onChange(of: model.registrationState) { state in
-            if state != .registered { dismiss() }
-        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("connector-capabilities-page-\(module?.id ?? "list")")
     }
 
     private func allowed(_ module: PhoneConnectorRegistrationModule) -> Bool {
@@ -291,12 +306,14 @@ struct ConnectorCapabilitiesSheet: View {
                 Text(detail && module.id == "music" ? "Apple Music" : (IOSDeviceConnectors.modules.first { $0.id == module.id }?.title ?? module.id))
                     .font(.system(size: 17, weight: detail ? .medium : .regular)).foregroundStyle(.primary)
                 Text(connectorToolCount(module.tools.count) + (detail ? " · " + String(localized: "网关已确认") : ""))
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .font(.system(size: 14)).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading)
-            Text(status(module)).font(.system(size: 12)).foregroundStyle(.secondary)
+            Text(status(module)).font(.system(size: 14)).foregroundStyle(.secondary)
             if !detail { Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary) }
         }
         .frame(minHeight: detail ? 56 : moduleRowHeight - 20)
+        // plain 按钮默认只命中文字/图标；让包含 Spacer 的整行都可点击。
+        .contentShape(Rectangle())
     }
     private func circleButton(_ symbol: String, label: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -319,11 +336,46 @@ private struct ConnectorSheetListMargins: ViewModifier {
 
 private struct ConnectorSheetPresentation: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
-        if #available(iOS 16.4, *) {
-            content.presentationBackground(Color(.systemGroupedBackground)).presentationCornerRadius(32)
-        } else { content }
+        if #available(iOS 26.0, *) {
+            // 原生半高 Sheet 自动使用 Liquid Glass，不覆盖材质和系统圆角。
+            content
+        } else if #available(iOS 16.4, *) {
+            content.background(Color(.systemGroupedBackground))
+                .presentationBackground(Color(.systemGroupedBackground)).presentationCornerRadius(32)
+        } else { content.background(Color(.systemGroupedBackground)) }
     }
 }
+
+#if DEBUG
+/// UI 测试使用内存中的网关确认，不连接主机，也不读取系统数据。
+struct ConnectorSheetUITestHarness: View {
+    @StateObject private var model = makeModel()
+    var body: some View {
+        NavigationStack { ConnectorRegistrationStatusView(model: model) }
+    }
+    private static func makeModel() -> IOSDeviceConnectors {
+        var registration: [String: Any] = [:]
+        let model = IOSDeviceConnectors(hostID: "ui-test-connector-sheet") { raw in
+            if let frame = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
+               frame["type"] as? String == "device-tools-register" { registration = frame }
+        }
+        model.connected(["device-tools-v1"])
+        let tools = ["calendar": ["calendar.busy", "calendar.create"], "photos": ["photos.select"],
+                     "location": ["location.current", "location.precise", "maps.search", "maps.geocode", "maps.reverse-geocode", "maps.directions", "maps.open", "maps.markers.create", "maps.markers.list", "maps.markers.update", "maps.markers.delete"],
+                     "music": ["music.search", "music.state", "music.play", "music.pause", "music.seek", "music.library", "music.play-library", "music.catalog-search"]]
+        let frame: [String: Any] = ["kind": "device-tools-registered", "version": 1,
+            "requestId": registration["requestId"] ?? "", "capabilityRevision": registration["capabilityRevision"] ?? "",
+            "connectionLeaseId": "ui-test", "permissions": [:],
+            "modules": IOSDeviceConnectors.modules.map {
+                ["id": $0.id, "available": true, "enabled": false, "tools": tools[$0.id] ?? []] as [String: Any]
+            }]
+        if let data = try? JSONSerialization.data(withJSONObject: frame) {
+            model.receive(String(decoding: data, as: UTF8.self))
+        }
+        return model
+    }
+}
+#endif
 
 private extension PhoneConnectorRegistrationState {
     var indicatorColor: Color {

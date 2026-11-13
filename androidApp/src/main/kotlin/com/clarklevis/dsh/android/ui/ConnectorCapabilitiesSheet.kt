@@ -1,6 +1,5 @@
 package com.clarklevis.dsh.android.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -26,6 +25,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.android.platform.devicetools.AndroidDeviceConnectors
@@ -40,79 +40,121 @@ internal fun ConnectorCapabilitiesSheet(connectors: AndroidDeviceConnectors, onD
     val selected = modules.firstOrNull { it.id == selectedId }
     val palette = mapPickerPalette(isSystemInDarkTheme())
     val maximumHeight = adaptiveWindowSize().height * .85f - 31.dp
+    CapabilityModalSheet(palette, detail = false, onDismiss = onDismiss) { close ->
+        CapabilitySheetPage(connectors, modules, null, palette, maximumHeight,
+            onSelect = { selectedId = it }, onDismiss = close)
+    }
+    if (selected != null) {
+        CapabilityModalSheet(palette, detail = true, onDismiss = { selectedId = null }) { close ->
+            CapabilitySheetPage(connectors, modules, selected, palette, maximumHeight,
+                onSelect = {}, onDismiss = close)
+        }
+    }
+}
+
+/** 每一层均使用独立的原生 Sheet；关闭顶层只移除详情，底层列表继续保留。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CapabilityModalSheet(
+    palette: MapPickerPalette,
+    detail: Boolean,
+    onDismiss: () -> Unit,
+    content: @Composable (onClose: () -> Unit) -> Unit
+) {
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onDismissRequest = onDismiss, sheetState = state,
         shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
         containerColor = palette.background, contentColor = palette.ink, tonalElevation = 0.dp,
         scrimColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = .32f),
         contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top) },
         dragHandle = {
-            Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 16.dp).testTag("connector-capabilities-handle"), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 16.dp)
+                .testTag(if (detail) "connector-capabilities-detail-handle" else "connector-capabilities-handle"), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(36.dp, 5.dp).background(palette.handle, CircleShape))
             }
         }
     ) {
         DshMenuHost {
-            BackHandler(enabled = selected != null) { selectedId = null }
-            Column(Modifier.fillMaxWidth().heightIn(max = maximumHeight).navigationBarsPadding()
-                .testTag("connector-capabilities-sheet")) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag("connector-capabilities-header"),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (selected != null) CapabilitySheetButton(R.drawable.ic_back_chevron, appText("返回能力列表"), "connector-capabilities-back", palette) { selectedId = null }
-                    Text(appText(if (selected == null) "已登记的能力" else "能力详情"), Modifier.weight(1f),
-                        style = SettingsTypography.item.copy(fontSize = 21.sp, lineHeight = 29.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
-                    CapabilitySheetButton(R.drawable.ic_close, appText("关闭"), "connector-capabilities-close", palette, onDismiss)
+            Box(Modifier.fillMaxWidth().testTag(if (detail) "connector-capabilities-detail-sheet" else "connector-capabilities-sheet")) {
+                content {
+                    scope.launch {
+                        state.hide()
+                        if (!state.isVisible) onDismiss()
+                    }
                 }
-                if (selected == null) Text(
-                    appText("Android · %1\$s 个连接器 · %2\$s 项能力", modules.size, modules.sumOf { it.tools.size }),
-                    Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 18.dp),
-                    style = SettingsTypography.description.copy(fontSize = 13.sp, lineHeight = 18.sp), color = palette.secondary
-                )
-                key(selected?.id) {
-                    val scroll = rememberScrollState()
-                    val boundary = remember(scroll) {
-                        object : NestedScrollConnection {
-                            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = Offset(0f, available.y)
-                            override suspend fun onPreFling(available: Velocity) =
-                                if ((available.y < 0 && !scroll.canScrollForward) || (available.y > 0 && !scroll.canScrollBackward)) Velocity(0f, available.y) else Velocity.Zero
-                            override suspend fun onPostFling(consumed: Velocity, available: Velocity) = Velocity(0f, available.y)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CapabilitySheetPage(
+    connectors: AndroidDeviceConnectors,
+    modules: List<RegisteredConnectorModule>,
+    module: RegisteredConnectorModule?,
+    palette: MapPickerPalette,
+    maximumHeight: androidx.compose.ui.unit.Dp,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth().heightIn(max = maximumHeight)
+        .testTag("connector-capabilities-page-${module?.id ?: "list"}")
+        .navigationBarsPadding().padding(bottom = if (module == null) 16.dp else 32.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).testTag(if (module == null) "connector-capabilities-header" else "connector-capabilities-detail-header"),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(appText(if (module == null) "已登记的能力" else "能力详情"), Modifier.weight(1f),
+                style = SettingsTypography.item.copy(fontSize = 21.sp, lineHeight = 29.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium))
+            CapabilitySheetButton(R.drawable.ic_close, appText("关闭"), if (module == null) "connector-capabilities-close" else "connector-capabilities-detail-close", palette, onDismiss)
+        }
+        if (module == null) Text(
+            appText("Android · %1\$s 个连接器 · %2\$s 项能力", modules.size, modules.sumOf { it.tools.size }),
+            Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 18.dp),
+            style = SettingsTypography.description.copy(fontSize = 14.sp, lineHeight = 20.sp), color = palette.secondary
+        )
+        key(module?.id) {
+            val scroll = rememberScrollState()
+            val boundary = remember(scroll) {
+                object : NestedScrollConnection {
+                    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = Offset(0f, available.y)
+                    override suspend fun onPreFling(available: Velocity) =
+                        if ((available.y < 0 && !scroll.canScrollForward) || (available.y > 0 && !scroll.canScrollBackward)) Velocity(0f, available.y) else Velocity.Zero
+                    override suspend fun onPostFling(consumed: Velocity, available: Velocity) = Velocity(0f, available.y)
+                }
+            }
+            Column(Modifier.weight(1f, fill = false).nestedScroll(boundary).verticalScroll(scroll)
+                .padding(horizontal = 20.dp).testTag(if (module == null) "connector-capabilities-list" else "connector-capabilities-detail-list")) {
+                if (module != null) {
+                    Spacer(Modifier.height(16.dp))
+                    Surface(shape = RoundedCornerShape(20.dp), color = palette.row, contentColor = palette.ink) {
+                        CapabilityModuleRow(module, connectors, palette, detail = true)
+                    }
+                    Text(appText("已登记的控制能力"), Modifier.padding(start = 4.dp, top = 14.dp, bottom = 12.dp),
+                        style = SettingsTypography.description.copy(fontSize = 14.sp, lineHeight = 20.sp), color = palette.secondary)
+                    Surface(shape = RoundedCornerShape(20.dp), color = palette.row, contentColor = palette.ink) {
+                        Column {
+                            if (module.tools.isEmpty()) Text(appText("网关未接入该能力"), Modifier.padding(16.dp), color = palette.secondary)
+                            val status = connectorModuleStatus(module, connectors)
+                            module.tools.forEachIndexed { index, tool ->
+                                if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = .5.dp, color = palette.separator)
+                                Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 12.dp)
+                                    .testTag("connector-capability-$tool").semantics { stateDescription = status }, verticalAlignment = Alignment.CenterVertically) {
+                                    Text(connectorCapabilityTitle(tool), Modifier.weight(1f),
+                                        style = SettingsTypography.item.copy(fontSize = 15.sp, lineHeight = 21.sp))
+                                    Spacer(Modifier.width(12.dp))
+                                    if (connectorModuleAllowed(module, connectors)) Icon(painterResource(R.drawable.ic_menu_check), status, Modifier.size(17.dp), tint = DshColors.Success)
+                                    else Text("−", color = palette.secondary)
+                                }
+                            }
                         }
                     }
-                    Column(Modifier.weight(1f, fill = false).nestedScroll(boundary).verticalScroll(scroll)
-                        .padding(start = 20.dp, end = 20.dp, bottom = 16.dp).testTag("connector-capabilities-list")) {
-                        if (selected != null) {
-                            Spacer(Modifier.height(16.dp))
-                            Surface(shape = RoundedCornerShape(20.dp), color = palette.row, contentColor = palette.ink) {
-                                CapabilityModuleRow(selected, connectors, palette, detail = true)
-                            }
-                            Text(appText("已登记的控制能力"), Modifier.padding(start = 4.dp, top = 14.dp, bottom = 12.dp),
-                                style = SettingsTypography.description.copy(fontSize = 13.sp, lineHeight = 18.sp), color = palette.secondary)
-                            Surface(shape = RoundedCornerShape(20.dp), color = palette.row, contentColor = palette.ink) {
-                                Column {
-                                    if (selected.tools.isEmpty()) Text(appText("网关未接入该能力"), Modifier.padding(16.dp), color = palette.secondary)
-                                    val status = connectorModuleStatus(selected, connectors)
-                                    selected.tools.forEachIndexed { index, tool ->
-                                        if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = .5.dp, color = palette.separator)
-                                        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 12.dp)
-                                            .testTag("connector-capability-$tool").semantics { stateDescription = status }, verticalAlignment = Alignment.CenterVertically) {
-                                            Text(connectorCapabilityTitle(tool), Modifier.weight(1f),
-                                                style = SettingsTypography.item.copy(fontSize = 15.sp, lineHeight = 21.sp))
-                                            Spacer(Modifier.width(12.dp))
-                                            if (connectorModuleAllowed(selected, connectors)) Icon(painterResource(R.drawable.ic_menu_check), status, Modifier.size(17.dp), tint = DshColors.Success)
-                                            else Text("−", color = palette.secondary)
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            Surface(shape = RoundedCornerShape(20.dp), color = palette.row, contentColor = palette.ink) {
-                                Column {
-                                    modules.forEachIndexed { index, module ->
-                                        if (index > 0) HorizontalDivider(Modifier.padding(start = 72.dp), thickness = .5.dp, color = palette.separator)
-                                        CapabilityModuleRow(module, connectors, palette, detail = false, onClick = { selectedId = module.id })
-                                    }
-                                }
+                } else {
+                    Surface(shape = RoundedCornerShape(20.dp), color = palette.row, contentColor = palette.ink) {
+                        Column {
+                            modules.forEachIndexed { index, module ->
+                                if (index > 0) HorizontalDivider(Modifier.padding(start = 72.dp), thickness = .5.dp, color = palette.separator)
+                                CapabilityModuleRow(module, connectors, palette, detail = false, onClick = { onSelect(module.id) })
                             }
                         }
                     }
@@ -146,9 +188,9 @@ private fun CapabilityModuleRow(module: RegisteredConnectorModule, connectors: A
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(if (detail && module.id == "music") appText("本机音乐") else connectorModuleTitle(module.id), style = SettingsTypography.item)
             Text(appText("%1\$s 项能力", module.tools.size) + if (detail) " · " + appText("网关已确认") else "",
-                style = SettingsTypography.description, color = palette.secondary)
+                style = SettingsTypography.description.copy(fontSize = 14.sp, lineHeight = 20.sp), color = palette.secondary)
         }
-        Text(connectorModuleStatus(module, connectors), style = SettingsTypography.description, color = palette.secondary)
+        Text(connectorModuleStatus(module, connectors), style = SettingsTypography.description.copy(fontSize = 14.sp, lineHeight = 20.sp), color = palette.secondary)
         if (!detail) Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp), tint = palette.secondary)
     }
 }
