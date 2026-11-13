@@ -350,12 +350,11 @@ internal fun makeConversationDisplayEntries(
             ConversationItemKind.ASSISTANT,
             ConversationItemKind.SYSTEM -> {
                 flushProcess()
-                // 只比较正式对话消息，工具和状态事件不影响半小时间隔。
+                // 首条正式消息显示时间，后续只在间隔超过半小时后显示；工具和状态事件不参与比较。
                 if (item.kind != ConversationItemKind.SYSTEM && item.epochSeconds.isFinite() && item.epochSeconds > 0) {
-                    previousMessageTime?.let { previous ->
-                        if (item.epochSeconds - previous > 30 * 60) {
-                            result += ConversationDisplayEntry.TimeSeparator(item.id, item.epochSeconds)
-                        }
+                    val previous = previousMessageTime
+                    if (previous == null || item.epochSeconds - previous > 30 * 60) {
+                        result += ConversationDisplayEntry.TimeSeparator(item.id, item.epochSeconds)
                     }
                     previousMessageTime = item.epochSeconds
                 }

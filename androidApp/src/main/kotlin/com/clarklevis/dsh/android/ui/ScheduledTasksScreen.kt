@@ -298,34 +298,39 @@ private fun ScheduledTasksContent(stateHolder: AndroidSharedStateHolder, onBack:
         ScheduledTaskEditSheet(task, stateHolder, onDismiss = { editingTask = null })
     }
     deletingTask?.let { task ->
-        AlertDialog(
+        DshAlertDialog(
             onDismissRequest = { deletingTask = null },
-            title = { Text(appText("删除定时任务？")) },
-            text = { DshMenuHost { Text(appText("删除后任务及投递记录无法恢复；已进入会话队列的消息不会撤回。"))  } },
-            confirmButton = {
-                TextButton(onClick = {
-                    stateHolder.deleteScheduledTask(task)
-                    deletingTask = null
-                }) { Text(appText("删除任务及投递记录"), color = MaterialTheme.colorScheme.error) }
+            title = appText("删除定时任务？"),
+            message = appText("删除后任务及投递记录无法恢复；已进入会话队列的消息不会撤回。"),
+            confirmLabel = appText("删除任务及投递记录"),
+            confirmDestructive = true,
+            stackedButtons = true,
+            confirmEnabled = stateHolder.scheduledTaskPendingId == null,
+            onConfirm = {
+                stateHolder.deleteScheduledTask(task)
+                deletingTask = null
             },
-            dismissButton = { TextButton(onClick = { deletingTask = null }) { Text(appText("取消")) } }
+            dismissLabel = appText("取消"),
+            onDismissClick = { deletingTask = null }
         )
     }
     LaunchedEffect(stateHolder.scheduledTaskMutationError) {
         if (stateHolder.scheduledTaskMutationError != null && editingTask == null) showsMutationError = true
     }
     if (confirmsDeleteEnded) {
-        AlertDialog(
+        DshAlertDialog(
             onDismissRequest = { confirmsDeleteEnded = false },
-            title = { Text(appText("删除已结束的定时任务？")) },
-            text = { DshMenuHost { Text(appText("已结束任务及其投递记录将被删除，无法恢复。")) } },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmsDeleteEnded = false
-                    stateHolder.clearEndedScheduledTasks()
-                }) { Text(appText("删除"), color = MaterialTheme.colorScheme.error) }
+            title = appText("删除已结束的定时任务？"),
+            message = appText("已结束任务及其投递记录将被删除，无法恢复。"),
+            confirmLabel = appText("删除"),
+            confirmDestructive = true,
+            confirmEnabled = stateHolder.scheduledTaskPendingId == null,
+            onConfirm = {
+                confirmsDeleteEnded = false
+                stateHolder.clearEndedScheduledTasks()
             },
-            dismissButton = { TextButton(onClick = { confirmsDeleteEnded = false }) { Text(appText("取消")) } }
+            dismissLabel = appText("取消"),
+            onDismissClick = { confirmsDeleteEnded = false }
         )
     }
     if (showsMutationError) {

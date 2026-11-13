@@ -29,8 +29,11 @@ class ConversationDisplayGroupsTest {
             item("later", ConversationItemKind.USER).copy(epochSeconds = 4_601.0),
             item("reply", ConversationItemKind.ASSISTANT).copy(epochSeconds = 4_602.0)
         ))
-        val separator = entries.filterIsInstance<ConversationDisplayEntry.TimeSeparator>().single()
-        assertEquals("time-later", separator.id)
+        val separators = entries.filterIsInstance<ConversationDisplayEntry.TimeSeparator>()
+        assertEquals(listOf("time-first", "time-later"), separators.map { it.id })
+        assertEquals(1_000.0, separators.first().epochSeconds, 0.0)
+        assertEquals("first", (entries[1] as ConversationDisplayEntry.Message).item.id)
+        val separator = separators.last()
         assertEquals(4_601.0, separator.epochSeconds, 0.0)
         assertTrue(entries[entries.indexOf(separator) + 1] is ConversationDisplayEntry.Message)
         assertEquals(1, makeConversationTimelineEntries(entries).count { it.id == separator.id })
@@ -180,14 +183,15 @@ class ConversationDisplayGroupsTest {
             )
         )
 
-        assertEquals(3, entries.size)
-        assertTrue(entries[0] is ConversationDisplayEntry.Message)
-        val process = (entries[1] as ConversationDisplayEntry.Process).group
+        assertEquals(4, entries.size)
+        assertEquals("time-user", entries[0].id)
+        assertTrue(entries[1] is ConversationDisplayEntry.Message)
+        val process = (entries[2] as ConversationDisplayEntry.Process).group
         assertEquals("耗时 5 秒 · 1 项上下文 · 1 次工具调用", process.title)
         assertEquals("先分析", process.reasoningText)
         assertEquals("call", process.tools.single().call?.id)
         assertEquals("result", process.tools.single().result?.id)
-        assertTrue(entries[2] is ConversationDisplayEntry.Message)
+        assertTrue(entries[3] is ConversationDisplayEntry.Message)
     }
 
     @Test

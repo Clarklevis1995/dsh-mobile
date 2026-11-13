@@ -35,9 +35,35 @@ internal object LocalAppLog {
         executor.execute {
             runCatching {
                 store = HourlyLogStore(directory)
-                store?.append("INFO App started")
+                store?.append("INFO App started pid=${android.os.Process.myPid()}")
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    // 系统记录可能缺失或被 ROM 合并；仅记录事实，不把 socket 断线推断为 LMK。
+                    runCatching {
+                        val manager = context.getSystemService(android.app.ActivityManager::class.java)
+                        manager.getHistoricalProcessExitReasons(context.packageName, 0, 5).forEach { exit ->
+                            store?.append(
+                                "INFO ProcessExit timestamp=${exit.timestamp} pid=${exit.pid} " +
+                                    "reason=${exit.reason} type=${exitReasonName(exit.reason)} status=${exit.status} importance=${exit.importance} " +
+                                    "pssKb=${exit.pss} rssKb=${exit.rss}"
+                            )
+                        }
+                    }.onFailure { store?.append("WARN ProcessExit unavailable reason=${it.javaClass.simpleName}") }
+                }
             }
         }
+    }
+
+    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.R)
+    private fun exitReasonName(reason: Int): String = when (reason) {
+        android.app.ApplicationExitInfo.REASON_CRASH -> "crash"
+        android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "native-crash"
+        android.app.ApplicationExitInfo.REASON_ANR -> "anr"
+        android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "low-memory"
+        android.app.ApplicationExitInfo.REASON_USER_REQUESTED -> "user-requested"
+        android.app.ApplicationExitInfo.REASON_USER_STOPPED -> "user-stopped"
+        android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "exit-self"
+        android.app.ApplicationExitInfo.REASON_SIGNALED -> "signaled"
+        else -> "other-or-unknown"
     }
 
     fun println(

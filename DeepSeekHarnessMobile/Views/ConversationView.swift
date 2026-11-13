@@ -1281,6 +1281,13 @@ struct ConversationView: View {
     }
 
     private var composer: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            WorkspaceChangesDock(store: store)
+            composerWithQueue
+        }
+    }
+
+    private var composerWithQueue: some View {
         VStack(spacing: store.selectedQueueItems.isEmpty ? 0 : -24) {
             if !store.selectedQueueItems.isEmpty {
                 queueDock
@@ -2538,6 +2545,19 @@ struct ConversationView: View {
         }?.id ?? target
     }
 
+    private func messageRow(_ item: ConversationItem, showsCopyButton: Bool, sessionID: String) -> some View {
+        ConversationRow(
+            item: item,
+            showsCopyButton: showsCopyButton,
+            imageData: { store.imageData(for: $0, sessionID: sessionID) },
+            imageError: { store.imageLoadError(for: $0, sessionID: sessionID) },
+            onRetryImage: { store.retryImageAttachment($0, sessionID: sessionID) },
+            onOpenFile: conversationFileOpener(),
+            onOpenUploadedFile: uploadedFileOpener()
+        ).environment(\.messageQuoteAction, composerQuoteAction)
+            .environment(\.workspaceMarkdownImageContext, store.markdownImageContext(sessionID: sessionID))
+    }
+
     private func makeConversationViewportEntries(from items: [ConversationItem]) -> [ConversationViewportEntry] {
         guard let sessionID = store.selectedSessionId else { return [] }
         var entries = ConversationDisplayEntry.make(from: items).flatMap { entry in
@@ -2561,7 +2581,9 @@ struct ConversationView: View {
                     id: entry.id,
                     revision: revision,
                     userMessage: .init(item: item, imageData: { store.imageData(for: $0, sessionID: sessionID) },
-                        showsCopyButton: entry.showsCopyButton, onOpenFile: uploadedFileOpener())
+                        showsCopyButton: entry.showsCopyButton, onOpenFile: uploadedFileOpener()),
+                    markdownContent: AnyView(messageRow(item, showsCopyButton: entry.showsCopyButton, sessionID: sessionID)),
+                    layoutRevision: viewportEntryRevision(entry, includesImageState: false)
                 )]
             }
             switch entry.content {
@@ -2569,16 +2591,7 @@ struct ConversationView: View {
                 return [ConversationViewportEntry(
                     id: entry.id,
                     revision: revision,
-                    content: AnyView(ConversationRow(
-                        item: item,
-                        showsCopyButton: entry.showsCopyButton,
-                        imageData: { store.imageData(for: $0, sessionID: sessionID) },
-                        imageError: { store.imageLoadError(for: $0, sessionID: sessionID) },
-                        onRetryImage: { store.retryImageAttachment($0, sessionID: sessionID) },
-                        onOpenFile: conversationFileOpener(),
-                        onOpenUploadedFile: uploadedFileOpener()
-                    ).environment(\.messageQuoteAction, composerQuoteAction)
-                        .environment(\.workspaceMarkdownImageContext, store.markdownImageContext(sessionID: sessionID))),
+                    content: AnyView(messageRow(item, showsCopyButton: entry.showsCopyButton, sessionID: sessionID)),
                     // Completed responses are immutable for this revision.
                     // The viewport measures their SwiftUI root directly before
                     // caching, including fenced-code horizontal scroll views.
@@ -4166,8 +4179,8 @@ private struct ConversationTimeSeparator: View {
 
     var body: some View {
         Text(ConversationTimeLabel.text(for: date))
-            .appFont(.system(size: 12))
-            .foregroundStyle(.secondary)
+            .appFont(.system(size: 13))
+            .foregroundStyle(Color(.sRGB, white: 128.0 / 255, opacity: 1))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .accessibilityIdentifier("conversation-time-separator")
@@ -4212,9 +4225,9 @@ struct ConversationDisplayEntry: Identifiable {
                 continue
             case .user, .assistant, .system:
                 flushProcess()
-                // 只比较正式对话消息，工具和状态事件不影响半小时间隔。
+                // 首条正式消息显示时间，后续只在间隔超过半小时后显示；工具和状态事件不参与比较。
                 if item.kind != .system, item.date.timeIntervalSince1970.isFinite, item.date.timeIntervalSince1970 > 0 {
-                    if let previousMessageDate, item.date.timeIntervalSince(previousMessageDate) > 30 * 60 {
+                    if previousMessageDate.map({ item.date.timeIntervalSince($0) > 30 * 60 }) ?? true {
                         result.append(.init(id: "time-\(item.id)", content: .timeSeparator(item.date), showsCopyButton: false))
                     }
                     previousMessageDate = item.date
@@ -5397,9 +5410,9 @@ struct ConversationRow: View {
                     UploadedFileCard(file: file) { onOpenUploadedFile?(file) }
                 }
                 if let parts = item.textParts, parts.contains(where: { $0.type == "quote" }) {
-                    SentReplyBubble(textParts: parts)
+                    SentReplyBubble(textParts: parts, knownFiles: item.knownFiles, onOpenFile: onOpenFile)
                 } else if !item.text.isEmpty {
-                    Text(item.text).appFont(.body)
+                    MarkdownContent(item.text, knownFiles: item.knownFiles, onOpenFile: onOpenFile)
                         .padding(.horizontal, 10).padding(.vertical, 10)
                         .background(userBubbleFill, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
                         .overlay {
@@ -6189,6 +6202,8 @@ private struct ComposerReplyPreview: View {
 /// 引用与正文共用外层消息气泡，按两者中较宽的一项确定宽度。
 struct SentReplyBubble: View {
     let textParts: [GatewayTextPart]
+    var knownFiles: [PresentedFile] = []
+    var onOpenFile: ((String) -> Void)? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     private var bodyText: String {
@@ -6201,7 +6216,8 @@ struct SentReplyBubble: View {
                 SentMessageQuote(text: part.text)
             }
             if !bodyText.isEmpty {
-                Text(bodyText).appFont(.body).fixedSize(horizontal: false, vertical: true)
+                MarkdownContent(bodyText, knownFiles: knownFiles, onOpenFile: onOpenFile)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("sent-reply-body")
             }
         }
@@ -6625,6 +6641,11 @@ final class MarkdownRenderProductCache<Key: Hashable, Value>: @unchecked Sendabl
 /// Completed messages are immutable, but collection-view reuse can bring the
 /// same message on screen many times. Reuse MarkdownUI's parsed block tree so
 /// scrolling does not repeatedly parse long responses on the main thread.
+/// UIKit 快速气泡只显示纯文本；Markdown 和转义语法交给完整渲染器。
+func userMessageRequiresMarkdown(_ text: String) -> Bool {
+    !ParsedMarkdownCache.document(for: MarkdownMath.prepare(text)).isPlainText || text.contains("\\")
+}
+
 private enum ParsedMarkdownCache {
     private final class Box: NSObject {
         let document: MarkdownUI.MarkdownContent

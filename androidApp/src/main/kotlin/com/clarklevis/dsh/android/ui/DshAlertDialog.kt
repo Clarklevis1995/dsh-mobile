@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,6 +45,8 @@ internal fun DshAlertDialog(
     confirmLabel: String? = null,
     onConfirm: (() -> Unit)? = null,
     confirmEnabled: Boolean = true,
+    confirmDestructive: Boolean = false,
+    stackedButtons: Boolean = false,
     content: (@Composable ColumnScope.() -> Unit)? = null
 ) {
     BasicAlertDialog(onDismissRequest = onDismissRequest) {
@@ -52,7 +55,7 @@ internal fun DshAlertDialog(
                 modifier = modifier.adaptiveContentWidth(340.dp),
                 shape = RoundedCornerShape(28.dp),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                tonalElevation = 8.dp,
+                tonalElevation = if (confirmDestructive) 0.dp else 8.dp,
                 shadowElevation = 18.dp
             ) {
                 Column(
@@ -71,7 +74,29 @@ internal fun DshAlertDialog(
                     }
                     content?.invoke(this)
                     if (dismissLabel != null || confirmLabel != null) {
-                        Row(
+                        if (stackedButtons) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                confirmLabel?.let { label ->
+                                    DshAlertDialogButton(
+                                        label = label,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        enabled = confirmEnabled,
+                                        destructive = confirmDestructive,
+                                        onClick = onConfirm ?: onDismissRequest
+                                    )
+                                }
+                                dismissLabel?.let { label ->
+                                    DshAlertDialogButton(
+                                        label = label,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = onDismissClick ?: onDismissRequest
+                                    )
+                                }
+                            }
+                        } else Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -87,6 +112,7 @@ internal fun DshAlertDialog(
                                     label = label,
                                     modifier = if (dismissLabel == null) Modifier.fillMaxWidth() else Modifier.weight(1f),
                                     enabled = confirmEnabled,
+                                    destructive = confirmDestructive,
                                     onClick = onConfirm ?: onDismissRequest
                                 )
                             }
@@ -103,20 +129,24 @@ private fun DshAlertDialogButton(
     label: String,
     modifier: Modifier,
     enabled: Boolean = true,
+    destructive: Boolean = false,
     onClick: () -> Unit
 ) {
     val buttonColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.08f else 0.04f)
     Box(
         modifier = modifier
-            .height(48.dp)
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(24.dp))
             .background(buttonColor)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f),
+            color = (if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                .copy(alpha = if (enabled) 1f else 0.38f),
+            textAlign = TextAlign.Center,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold
         )

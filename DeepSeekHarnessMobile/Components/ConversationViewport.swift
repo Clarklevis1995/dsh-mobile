@@ -112,6 +112,15 @@ struct ConversationViewportEntry: Identifiable {
         clipsContentToBounds = false
     }
 
+    init(id: String, revision: Int, userMessage: UserMessage, markdownContent: AnyView, layoutRevision: Int? = nil) {
+        if userMessageRequiresMarkdown(userMessage.text) {
+            self.init(id: id, revision: revision, content: markdownContent,
+                clipsContentToBounds: true, layoutRevision: layoutRevision)
+        } else {
+            self.init(id: id, revision: revision, userMessage: userMessage)
+        }
+    }
+
     init(id: String, revision: Int, userMessage: UserMessage) {
         self.id = id
         self.revision = revision

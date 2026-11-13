@@ -217,7 +217,8 @@ internal fun dshMarkdownPalette(compact: Boolean): DshMarkdownPalette {
 internal fun DshMarkdownText(
     markdown: String,
     modifier: Modifier = Modifier,
-    compact: Boolean = false
+    compact: Boolean = false,
+    wrapContent: Boolean = false
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -227,13 +228,29 @@ internal fun DshMarkdownText(
     }
     val textSizeSp = if (compact) 14f else 16f
     val lineSpacingExtra = with(density) { (if (compact) 2.dp else 4.dp).toPx() }
+    val rendered = renderedMarkdown(markwon, markdown, palette)
+    // 用户气泡使用固有宽度；为 AndroidView 提供明确宽度，兼容引用气泡的固有尺寸测量。
+    val contentModifier = if (wrapContent) {
+        val naturalWidth = remember(rendered, textSizeSp, density) {
+            val hasBlock = rendered.getSpans(0, rendered.length, DshTableMarker::class.java).isNotEmpty() ||
+                rendered.getSpans(0, rendered.length, DshCodeBlockMarker::class.java).isNotEmpty() ||
+                rendered.getSpans(0, rendered.length, DshMarkdownImageMarker::class.java).isNotEmpty() ||
+                rendered.getSpans(0, rendered.length, DshMathFormula::class.java).isNotEmpty() ||
+                rendered.getSpans(0, rendered.length, ConnectorAppCard::class.java).isNotEmpty()
+            if (hasBlock) 360.dp else with(density) {
+                val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = textSizeSp.sp.toPx() }
+                (kotlin.math.ceil(Layout.getDesiredWidth(rendered, paint)) + 1f).toDp().coerceAtLeast(1.dp)
+            }
+        }
+        modifier.width(naturalWidth)
+    } else modifier
     DshRenderedMarkdownText(
         markdown = markdown,
-        rendered = renderedMarkdown(markwon, markdown, palette),
+        rendered = rendered,
         palette = palette,
         textSizeSp = textSizeSp,
         lineSpacingExtra = lineSpacingExtra,
-        modifier = modifier
+        modifier = contentModifier
     )
 }
 

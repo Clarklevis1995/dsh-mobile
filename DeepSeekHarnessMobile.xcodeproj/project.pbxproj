@@ -20,6 +20,8 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		A0C1234567890ABCDE0000003 /* WorkspaceChangesViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C1234567890ABCDE0000004 /* WorkspaceChangesViewTests.swift */; };
+		A0C1234567890ABCDE0000001 /* WorkspaceChangesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C1234567890ABCDE0000002 /* WorkspaceChangesView.swift */; };
 		D5A7E0010000000000000011 = {isa = PBXBuildFile; fileRef = D5A7E0010000000000000012; };
 		AC1200000000000000000001 /* VoiceAudioExceptionGuard.m in Sources */ = {isa = PBXBuildFile; fileRef = AC1200000000000000000002 /* VoiceAudioExceptionGuard.m */; };
 		B9DF00000000000000000044 /* PhoneMapMarkerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9DF00000000000000000044 /* PhoneMapMarkerStore.swift */; };
@@ -179,6 +181,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A0C1234567890ABCDE0000004 /* WorkspaceChangesViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceChangesViewTests.swift; sourceTree = "<group>"; };
+		A0C1234567890ABCDE0000002 /* WorkspaceChangesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceChangesView.swift; sourceTree = "<group>"; };
 		D5A7E0010000000000000012 = {isa = PBXFileReference; lastKnownFileType = text.json; path = Tests/Fixtures/latex-math.json; sourceTree = SOURCE_ROOT; };
 		AC1200000000000000000002 /* VoiceAudioExceptionGuard.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = VoiceAudioExceptionGuard.m; sourceTree = "<group>"; };
 		AC1200000000000000000003 /* VoiceAudioExceptionGuard.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VoiceAudioExceptionGuard.h; sourceTree = "<group>"; };
@@ -396,6 +400,7 @@
 			children = (
 				CA7400000000000000000004 /* WorkspaceSessionListTests.swift */,
 				0B53A008218F24CA9A4DB4D1 /* GatewayProtocolTests.swift */,
+				A0C1234567890ABCDE0000004 /* WorkspaceChangesViewTests.swift */,
 				DA3100000000000000000004 /* LocalAppLogTests.swift */,
 				DA4200000000000000000002 /* NodeForwardingTests.swift */,
 				D800EB089E66481480D3C8A0 /* TailscaleAccountTests.swift */,
@@ -520,6 +525,7 @@
 				DA3200000000000000000002 /* LogExportView.swift */,
 				65009160A0642089906B54DF /* TrajectoryView.swift */,
 				D610757C1FF81FD953A9D000 /* WorkspaceView.swift */,
+				A0C1234567890ABCDE0000002 /* WorkspaceChangesView.swift */,
 				DCB5E4921392A6503AD87B74 /* ConversationSidebar.swift */,
 				65B6B2953247E15BDA40F0BB /* GatewaySwitcherView.swift */,
 				AB0200000000000000000002 /* TailscaleTunnelView.swift */,
@@ -825,6 +831,7 @@
 			files = (
 				CA7400000000000000000003 /* WorkspaceSessionListTests.swift in Sources */,
 				39FD319C875F4B4A6893D676 /* GatewayProtocolTests.swift in Sources */,
+				A0C1234567890ABCDE0000003 /* WorkspaceChangesViewTests.swift in Sources */,
 				60B737A7C3E04619BA1F0B06,
 				DA3100000000000000000003 /* LocalAppLogTests.swift in Sources */,
 				DA4200000000000000000001 /* NodeForwardingTests.swift in Sources */,
@@ -915,6 +922,7 @@
 				DA3200000000000000000001 /* LogExportView.swift in Sources */,
 				C5F737EBF5077A9BF35E9F64 /* TrajectoryView.swift in Sources */,
 				E7585B9F7F89A3084B6E0182 /* WorkspaceView.swift in Sources */,
+				A0C1234567890ABCDE0000001 /* WorkspaceChangesView.swift in Sources */,
 				65B1D361C78618DBA4550C4F /* ConversationSidebar.swift in Sources */,
 				375D401B1B6F03015EC9073D /* GatewayProfile.swift in Sources */,
 				C075849EE750C3CCD2C87FC7 /* MultiGatewayStore.swift in Sources */,

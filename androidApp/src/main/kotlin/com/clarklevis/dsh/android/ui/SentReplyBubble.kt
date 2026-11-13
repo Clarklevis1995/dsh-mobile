@@ -52,7 +52,10 @@ internal fun SentReplyBubble(textParts: List<GatewayTextPart>, modifier: Modifie
                         expanded = !expanded
                     }.padding(horizontal = 10.dp, vertical = 8.dp).testTag("sent-reply-quote-$index"))
         }
-        if (body.isNotEmpty()) Text(body, fontSize = 16.sp,
-            color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.testTag("sent-reply-body"))
+        if (body.isNotEmpty()) DshMarkdownText(
+            markdown = body,
+            modifier = Modifier.testTag("sent-reply-body"),
+            wrapContent = true
+        )
     }
 }

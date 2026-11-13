@@ -218,6 +218,9 @@ struct GatewayFrame: Codable, Sendable {
     var projectionState: String?
     var running: Bool?
     var title: String?
+    var summary: JSONValue?
+    var diff: JSONValue?
+    var index: Int?
     var seq: Int?
     var time: Double?
     var event: GatewayEvent?

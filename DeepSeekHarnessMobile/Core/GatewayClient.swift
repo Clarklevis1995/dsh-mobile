@@ -20,6 +20,23 @@ final class GatewayClient: ObservableObject {
     private let channel: String
     var requestDecorator: ((String) -> String?)?
     var conversationTarget: ((String) -> MobileConversationTarget?)?
+    private var sessionCatalogRefreshTask: Task<Void, Never>?
+
+    /// status 同时用于通知外部新增/删除会话；首页也必须同步目录，不能依赖会话订阅。
+    private func invalidateSessionCatalog() {
+        guard channel == "control", state.isConnected, sessionCatalogRefreshTask == nil else { return }
+        let generation = connectionGeneration
+        sessionCatalogRefreshTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(150)) }
+            catch { return }
+            guard let self, self.connectionGeneration == generation else { return }
+            self.sessionCatalogRefreshTask = nil
+            guard self.state.isConnected else { return }
+            self.requestWorkspaces()
+            self.requestSessions()
+        }
+    }
+
     private var subscriptionPending = false
     private var pendingSubscriptionID: String?
     private var desiredSubscriptionID: String?
@@ -318,6 +335,7 @@ final class GatewayClient: ObservableObject {
     private var isRecoveringFromBackground = false
 
     deinit {
+        sessionCatalogRefreshTask?.cancel()
         subscriptionTimeout?.cancel()
         networkPathMonitor?.cancel()
         outboundTask?.cancel()
@@ -505,6 +523,8 @@ final class GatewayClient: ObservableObject {
     }
 
     private func disconnectTransport(reconnect: Bool) {
+        sessionCatalogRefreshTask?.cancel()
+        sessionCatalogRefreshTask = nil
         isReadyForSessionCreation = false
         connectionGeneration = UUID()
         connectionMethod = ""
@@ -1162,6 +1182,9 @@ final class GatewayClient: ObservableObject {
     }
 
     func deliverApplicationFrame(_ frame: GatewayFrame, data: Data) {
+        if frame.kind == "session-status", let sessionID = frame.sessionId, !sessionID.isEmpty, frame.running != nil {
+            invalidateSessionCatalog()
+        }
         if frame.kind == "agent-presets" || frame.requestType == "agent-presets" {
             Self.presetLogger.info("received decoded response kind=\(frame.kind) bytes=\(data.count)")
         }

@@ -16,8 +16,7 @@ import com.clarklevis.dsh.android.ui.AppearanceSettings
 import kotlinx.coroutines.launch
 
 /**
- * 仅在用户已发起且尚未收到 turn/end 的 Agent turn 期间运行。
- * 普通前台浏览不常驻服务；通知的“断开”操作会显式结束 socket 与后台保活。
+ * 回合、内嵌隧道或用户开启后台常驻时运行，复用同一条常驻通知。
  */
 class GatewayConnectionService : Service() {
     override fun attachBaseContext(newBase: Context) {
@@ -45,9 +44,30 @@ class GatewayConnectionService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        graph.diagnostics.lifecycle(GatewayLifecycleEvent.SERVICE_STARTED)
-        startForeground(NOTIFICATION_ID, makeNotification())
+        if (!(application as DshAndroidApplication).hosts.connectionKeepAliveRequested) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        try {
+            startForeground(NOTIFICATION_ID, makeNotification())
+            graph.diagnostics.lifecycle(GatewayLifecycleEvent.SERVICE_STARTED)
+        } catch (error: IllegalStateException) {
+            startFailed(error)
+        } catch (error: SecurityException) {
+            startFailed(error)
+        }
         return START_NOT_STICKY
+    }
+
+    private fun startFailed(error: RuntimeException) {
+        com.clarklevis.dsh.android.platform.LocalAppLog.w("GatewayService", "foreground-failed reason=${error.javaClass.simpleName}")
+        stopSelf()
+    }
+
+    override fun onDestroy() {
+        startRequested = false
+        com.clarklevis.dsh.android.platform.LocalAppLog.i("GatewayService", "destroyed")
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -100,11 +120,28 @@ class GatewayConnectionService : Service() {
         private const val NOTIFICATION_ID = 12_001
         private const val ACTION_DISCONNECT = "com.clarklevis.dsh.android.action.DISCONNECT_GATEWAY"
 
+        private var startRequested = false
+
         fun start(context: Context) {
-            ContextCompat.startForegroundService(context, Intent(context, GatewayConnectionService::class.java))
+            if (startRequested) return
+            try {
+                ContextCompat.startForegroundService(context, Intent(context, GatewayConnectionService::class.java))
+                startRequested = true
+                com.clarklevis.dsh.android.platform.LocalAppLog.i("GatewayService", "keep-alive-start")
+            } catch (error: IllegalStateException) {
+                logStartFailure(error)
+            } catch (error: SecurityException) {
+                logStartFailure(error)
+            }
+        }
+
+        private fun logStartFailure(error: RuntimeException) {
+            com.clarklevis.dsh.android.platform.LocalAppLog.w("GatewayService", "start-denied reason=${error.javaClass.simpleName}")
         }
 
         fun stop(context: Context) {
+            if (startRequested) com.clarklevis.dsh.android.platform.LocalAppLog.i("GatewayService", "keep-alive-stop")
+            startRequested = false
             context.stopService(Intent(context, GatewayConnectionService::class.java))
         }
     }

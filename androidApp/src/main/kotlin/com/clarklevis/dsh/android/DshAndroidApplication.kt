@@ -37,6 +37,16 @@ class DshAndroidApplication :
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate
     )
 
+    private val backgroundPreferences by lazy { getSharedPreferences("background_connection", MODE_PRIVATE) }
+    internal var backgroundKeepAliveEnabled by mutableStateOf(false)
+        private set
+
+    internal fun setBackgroundKeepAlive(enabled: Boolean) {
+        backgroundPreferences.edit().putBoolean("enabled", enabled).apply()
+        backgroundKeepAliveEnabled = enabled
+        hosts.applyConnectionKeepAlive()
+    }
+
     /** 隧道开启时请求保持前台服务；最终由 AndroidMultiGatewayStore 统一裁决（回合与隧道是或关系）。 */
     internal var tunnelKeepAliveRequested = false
         private set
@@ -105,6 +115,7 @@ class DshAndroidApplication :
         tunnelScope.launch(Dispatchers.IO) {
             com.clarklevis.dsh.android.platform.devicetools.AndroidReminderReceiver.restore(this@DshAndroidApplication)
         }
+        backgroundKeepAliveEnabled = backgroundPreferences.getBoolean("enabled", false)
         hosts = AndroidMultiGatewayStore(this)
         maintainCacheStorage()
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
@@ -126,6 +137,7 @@ class DshAndroidApplication :
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
+        com.clarklevis.dsh.android.platform.LocalAppLog.i("AppLifecycle", "trim-memory level=$level")
         if (!::hosts.isInitialized) return
         graph.stateHolder.trimMemory()
         com.clarklevis.dsh.android.platform.AndroidAttachmentCache.trimMemory()
@@ -142,6 +154,7 @@ class DshAndroidApplication :
 
     override fun onStart(owner: LifecycleOwner) {
         isInForeground = true
+        hosts.applyConnectionKeepAlive()
         graph.diagnostics.lifecycle(GatewayLifecycleEvent.FOREGROUND)
         if (!tunnel.hasSession) autoStartTunnelIfEnabled()
         // 浏览器授权返回时保留原节点和候选节点，立即刷新授权结果。

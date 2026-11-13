@@ -185,6 +185,18 @@ internal object AndroidStrings {
     )
 
     internal val english: Map<String, String> = mapOf(
+        "去设置" to "Open settings",
+        "稍后" to "Later",
+        "无法打开系统设置，请在系统设置中找到本应用的电池管理。" to "Could not open system settings. Find this app’s battery management in system settings.",
+        "当前检测到系统电池限制，后台连接可能中断。请允许忽略电池优化；若系统仍限制后台活动，请在本应用的电池管理中选择“允许后台活动”或“无限制”。部分设备还需手动开启自启动。" to "System battery restrictions are enabled and may interrupt the background connection. Allow the app to ignore battery optimization. If background activity is still restricted, choose “Allow background activity” or “Unrestricted” in this app’s battery settings. Some devices also require enabling auto-start manually.",
+        "允许后台运行" to "Allow background activity",
+        "已豁免系统优化" to "Optimization exempted",
+        "建议解除优化" to "Optimization enabled",
+        "后台活动受限" to "Background activity restricted",
+        "后台连接" to "Background connection",
+        "后台常驻" to "Keep connected in background",
+        "电池优化设置" to "Battery optimization settings",
+        "开启后通过常驻通知保持连接，会增加耗电；系统仍可能终止应用。" to "Keep the connection active with an ongoing notification. This uses more battery; the system may still stop the app.",
         "conversation.time.date" to "MMM d, H:mm",
         "conversation.time.yearDate" to "MMM d, yyyy H:mm",
         "一次最多添加 20 个附件，请等待已有附件准备完成" to "You can add up to 20 attachments. Wait for the existing attachments to finish preparing.",

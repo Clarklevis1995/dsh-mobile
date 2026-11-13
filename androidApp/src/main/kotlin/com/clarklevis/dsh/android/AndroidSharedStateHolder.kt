@@ -150,6 +150,40 @@ class AndroidSharedStateHolder(
             }
         }
     }
+    private val workspaceChangesStore = com.clarklevis.dsh.shared.facade.SharedWorkspaceChangesStore()
+    var workspaceChanges by mutableStateOf(workspaceChangesStore.snapshot())
+        private set
+    private val changesTimeouts = mutableMapOf<String, Job>()
+
+    fun refreshWorkspaceChanges() {
+        applyWorkspaceChanges(workspaceChangesStore.open(snapshot.selectedSessionId,
+            "workspace-changes-v1" in gatewayState.capabilities && !isViewingTeamMember,
+            gatewayState.connection == GatewayConnectionState.CONNECTED))
+    }
+
+    fun retryWorkspaceChanges() = applyWorkspaceChanges(workspaceChangesStore.retrySummary())
+    fun selectChangedFile(index: Int) = applyWorkspaceChanges(workspaceChangesStore.selectFile(index))
+    fun closeChangesDiff() = applyWorkspaceChanges(workspaceChangesStore.closeDiff())
+
+    private fun applyWorkspaceChanges(transition: com.clarklevis.dsh.shared.facade.SharedWorkspaceChangesTransition) {
+        workspaceChanges = transition.snapshot
+        if (!workspaceChanges.loading && !workspaceChanges.diffLoading) {
+            changesTimeouts.values.forEach { it.cancel() }
+            changesTimeouts.clear()
+        }
+        val appGraph = graph ?: return
+        transition.requests.forEach { request ->
+            val id = request.correlationId ?: return@forEach
+            changesTimeouts[id] = appGraph.gatewayScope.launch {
+                if (appGraph.gatewayRuntime.sendRequest(request)) delay(36_000)
+                withContext(Dispatchers.Main.immediate) {
+                    changesTimeouts.remove(id)
+                    applyWorkspaceChanges(workspaceChangesStore.requestFailed(id))
+                }
+            }
+        }
+    }
+
     private val sessionAgentPresetStore = SharedSessionAgentPresetStore()
     var sessionAgentPreset by mutableStateOf(sessionAgentPresetStore.snapshot())
         private set
@@ -3284,6 +3318,7 @@ class AndroidSharedStateHolder(
                                 remoteSearch.disconnected()
                                 remoteSearchTimeout?.cancel()
                                 remoteSearchResultQuery = null
+                                refreshWorkspaceChanges()
                                 applySessionAgentPresetTransition(sessionAgentPresetStore.disconnected())
                                 pendingMessageSubmission = null
                                 cancellingSessionIds = emptySet()
@@ -3450,6 +3485,7 @@ class AndroidSharedStateHolder(
                                     }
                                     withContext(Dispatchers.Main.immediate) { voiceInput.accept(event.rawJson) }
                                     withContext(Dispatchers.Main.immediate) {
+                                        applyWorkspaceChanges(workspaceChangesStore.accept(event.frame))
                                         applySessionAgentPresetTransition(sessionAgentPresetStore.accept(
                                             if (event.frame.sessionId == null && event.correlatedSessionId != null) {
                                                 event.frame.copy(sessionId = event.correlatedSessionId)

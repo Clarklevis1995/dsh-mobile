@@ -97,6 +97,19 @@ public struct MarkdownContent: Equatable, MarkdownContentProtocol {
     self.init(blocks: content().blocks)
   }
 
+  /// Whether every block contains only unformatted text and line breaks.
+  public var isPlainText: Bool {
+    blocks.allSatisfy { block in
+      guard case .paragraph(let nodes) = block else { return false }
+      return nodes.allSatisfy { node in
+        switch node {
+        case .text, .softBreak, .lineBreak: return true
+        default: return false
+        }
+      }
+    }
+  }
+
   /// Renders this Markdown content value as a Markdown-formatted text.
   public func renderMarkdown() -> String {
     let result = self.blocks.renderMarkdown()

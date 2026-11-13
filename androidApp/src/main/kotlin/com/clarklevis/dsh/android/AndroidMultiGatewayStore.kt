@@ -232,12 +232,23 @@ class AndroidMultiGatewayStore(private val application: Application) {
         }
     }
 
-    // 前台服务的存在条件由两个来源共同决定：回合活跃（shared 层的判定）与内嵌隧道开启。
-    // 通知没有推送通道，全靠这条 socket，所以隧道开着时必须保证进程不被冻结。
     private var turnKeepAlive = false
 
+    internal val connectionKeepAliveRequested: Boolean
+        get() {
+            val app = application as? DshAndroidApplication
+            val connectionRequested = activeGraph.gatewayRuntime.state.value.connection != GatewayConnectionState.DISCONNECTED
+            return turnKeepAlive || app?.tunnelKeepAliveRequested == true ||
+                (app?.backgroundKeepAliveEnabled == true && connectionRequested)
+        }
+
     internal fun applyConnectionKeepAlive() {
-        if (turnKeepAlive || (application as? com.clarklevis.dsh.android.DshAndroidApplication)?.tunnelKeepAliveRequested == true) {
+        val app = application as? DshAndroidApplication
+        // 常驻还需要允许共享运行时在空闲后台重连，否则服务在、socket 断后却不恢复。
+        val externalKeepAlive = app?.backgroundKeepAliveEnabled == true || app?.tunnelKeepAliveRequested == true
+        val runtime = activeGraph.gatewayRuntime
+        scope.launch { runtime.setBackgroundConnectionKeepAlive(externalKeepAlive) }
+        if (connectionKeepAliveRequested) {
             GatewayConnectionService.start(application)
         } else {
             GatewayConnectionService.stop(application)

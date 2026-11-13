@@ -536,6 +536,38 @@ final class AppStore: ObservableObject {
     private var supportsSessionCreation = false
     private var supportsSessionAgentPreset = false
     @Published private(set) var sessionAgentPreset = SharedSessionAgentPresetStore().snapshot()
+    @Published private(set) var workspaceChanges = SharedWorkspaceChangesStore().snapshot()
+    @Published private(set) var supportsWorkspaceChanges = false
+    private let workspaceChangesStore = SharedWorkspaceChangesStore()
+    private var changesTimeouts: [String: Task<Void, Never>] = [:]
+
+    func refreshWorkspaceChanges() {
+        applyWorkspaceChanges(workspaceChangesStore.open(sessionId: selectedSessionId,
+            supported: supportsWorkspaceChanges && !isViewingTeamMember, connected: gateway.state.isConnected))
+    }
+
+    func retryWorkspaceChanges() { applyWorkspaceChanges(workspaceChangesStore.retrySummary()) }
+    func selectChangedFile(_ index: Int) { applyWorkspaceChanges(workspaceChangesStore.selectFile(index: Int32(index))) }
+    func closeChangesDiff() { applyWorkspaceChanges(workspaceChangesStore.closeDiff()) }
+
+    private func applyWorkspaceChanges(_ transition: SharedWorkspaceChangesTransition) {
+        workspaceChanges = transition.snapshot
+        if !workspaceChanges.loading && !workspaceChanges.diffLoading {
+            changesTimeouts.values.forEach { $0.cancel() }
+            changesTimeouts.removeAll()
+        }
+        for request in transition.requests {
+            guard let id = request.correlationId else { continue }
+            gateway.sendRequestPayload(request.payload, decorate: false)
+            changesTimeouts[id] = Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(36)) } catch { return }
+                guard let self else { return }
+                self.changesTimeouts.removeValue(forKey: id)
+                self.applyWorkspaceChanges(self.workspaceChangesStore.requestFailed(requestId: id))
+            }
+        }
+    }
+
     private let sessionAgentPresetStore = SharedSessionAgentPresetStore()
     private var sessionAgentPresetTimeout: Task<Void, Never>?
     private var isPreparingNewConversation = false
@@ -1523,6 +1555,7 @@ final class AppStore: ObservableObject {
             }
             gateway.applicationDidEnterBackground()
             if !gateway.state.isConnected {
+                refreshWorkspaceChanges()
                 applySessionAgentPresetTransition(sessionAgentPresetStore.disconnected())
             }
         case .inactive:
@@ -3223,6 +3256,23 @@ final class AppStore: ObservableObject {
     }
 
     private func handle(_ frame: GatewayFrame) {
+        if frame.kind == "hello" {
+            supportsWorkspaceChanges = frame.capabilities?.contains("workspace-changes-v1") == true
+            refreshWorkspaceChanges()
+        }
+        if (frame.kind == "event" && frame.event?.type == "workspace/changes")
+            || ["history", "session-snapshot", "workspace-changes-summary", "workspace-changes-diff"].contains(frame.kind)
+            || frame.requestType?.hasPrefix("workspace-changes-") == true {
+            var changesFrame = frame
+            if frame.kind == "history" || frame.kind == "session-snapshot" {
+                changesFrame = GatewayFrame(kind: frame.kind, sessionId: frame.sessionId)
+                changesFrame.events = frame.events?.filter { $0.type == "workspace/changes" }
+            }
+            if let data = try? JSONEncoder().encode(changesFrame) {
+                applyWorkspaceChanges(workspaceChangesStore.acceptJson(json: String(decoding: data, as: UTF8.self)))
+            }
+            if frame.kind.hasPrefix("workspace-changes-") || frame.requestType?.hasPrefix("workspace-changes-") == true { return }
+        }
         if frame.kind == "hello" { connectors.connected(frame.capabilities ?? []) }
         if frame.kind == "error", frame.code == "subscription-timeout",
            frame.sessionId == nil || frame.sessionId != selectedSessionId || preparedConversationActivationKey != frame.sessionId {
@@ -5194,6 +5244,8 @@ final class AppStore: ObservableObject {
     }
 
     private func resetOutstandingRequests() {
+        applyWorkspaceChanges(workspaceChangesStore.open(sessionId: selectedSessionId,
+            supported: supportsWorkspaceChanges && !isViewingTeamMember, connected: false))
         if messageSubmissionPending || commandSubmissionPending {
             // 服务端可能已经执行，只是确认留在旧连接；切换承载不能自动重放写操作。
             messageSubmissionTimeout?.cancel()

@@ -86,6 +86,20 @@ data class GatewayRequest(
 
 /** 请求字段逐项复制现有 iOS GatewayClient 与 Mobile Gateway 已验证协议。 */
 object GatewayRequests {
+    fun workspaceChanges(sessionId: String, seq: Int, index: Int?, requestId: String): GatewayRequest {
+        require(sessionId.isNotBlank() && sessionId.length <= 2048 && seq >= 0)
+        require(index == null || index >= 0)
+        require(requestId.isNotBlank() && requestId.length <= 128)
+        val type = if (index == null) "workspace-changes-summary" else "workspace-changes-diff"
+        return request(type, type, targetSessionId = sessionId, correlationId = requestId,
+            lanePolicy = GatewayRequestLanePolicy.FIFO) {
+            put("sessionId", sessionId)
+            put("seq", seq)
+            put("requestId", requestId)
+            index?.let { put("index", it) }
+        }.copy(timeoutMilliseconds = 35_000)
+    }
+
     private fun managementRequest(type: String, requestId: String, mutation: Boolean = false,
         responseKind: String = type, fields: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit
     ): GatewayRequest {

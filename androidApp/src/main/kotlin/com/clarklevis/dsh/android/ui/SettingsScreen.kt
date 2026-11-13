@@ -40,11 +40,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,11 +71,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.clarklevis.dsh.android.AndroidSharedStateHolder
 import com.clarklevis.dsh.android.DshAndroidApplication
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
+import com.clarklevis.dsh.android.platform.AndroidBackgroundBattery
 import com.clarklevis.dsh.android.platform.TunnelUiStage
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import com.clarklevis.dsh.shared.protocol.GatewayAgentPreset
@@ -259,6 +265,7 @@ internal fun SettingsScreen(
                             SettingsDivider()
                             UiEffectsSettingsRow()
                         }
+                        BackgroundConnectionSettings()
                         SettingsSection(appText("本地存储")) {
                             SettingsValueRow(
                                 title = appText("存储空间"),
@@ -865,6 +872,87 @@ internal fun FontSizeSettingsRow(onClick: () -> Unit) {
         value = if (appearance.fontFollowsSystem) appText("跟随系统") else "${(appearance.fontScale * 100).roundToInt()}%",
         onClick = onClick
     )
+}
+
+@Composable
+private fun BackgroundConnectionSettings() {
+    val context = LocalContext.current
+    val application = context.applicationContext as DshAndroidApplication
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var batteryStatus by remember(context) {
+        mutableStateOf(AndroidBackgroundBattery.status(context))
+    }
+    var showGuidance by rememberSaveable { mutableStateOf(false) }
+    DisposableEffect(context, lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                batteryStatus = AndroidBackgroundBattery.status(context)
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    fun openBatterySettings() {
+        val status = AndroidBackgroundBattery.status(context)
+        if (!AndroidBackgroundBattery.openSettings(context, status)) {
+            android.widget.Toast.makeText(context, appText("无法打开系统设置，请在系统设置中找到本应用的电池管理。"), android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+    SettingsSection(
+        title = appText("后台连接"),
+        footer = appText("开启后通过常驻通知保持连接，会增加耗电；系统仍可能终止应用。")
+    ) {
+        BackgroundKeepAliveSettingsRow(application.backgroundKeepAliveEnabled) { enabled ->
+            application.setBackgroundKeepAlive(enabled)
+            batteryStatus = AndroidBackgroundBattery.status(context)
+            showGuidance = enabled && batteryStatus.needsGuidance
+        }
+        SettingsDivider()
+        SettingsValueRow(
+            title = appText("电池优化设置"),
+            value = when {
+                batteryStatus.backgroundRestricted -> appText("后台活动受限")
+                !batteryStatus.ignoresOptimizations -> appText("建议解除优化")
+                else -> appText("已豁免系统优化")
+            },
+            modifier = Modifier.testTag("background-battery-settings"),
+            onClick = {
+                batteryStatus = AndroidBackgroundBattery.status(context)
+                if (batteryStatus.needsGuidance) showGuidance = true else openBatterySettings()
+            }
+        )
+    }
+    if (showGuidance) {
+        DshAlertDialog(
+            title = appText("允许后台运行"),
+            message = appText("当前检测到系统电池限制，后台连接可能中断。请允许忽略电池优化；若系统仍限制后台活动，请在本应用的电池管理中选择“允许后台活动”或“无限制”。部分设备还需手动开启自启动。"),
+            onDismissRequest = { showGuidance = false },
+            dismissLabel = appText("稍后"),
+            onDismissClick = { showGuidance = false },
+            confirmLabel = appText("去设置"),
+            onConfirm = { showGuidance = false; openBatterySettings() }
+        )
+    }
+}
+
+@Composable
+private fun BackgroundKeepAliveSettingsRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .testTag("background-keep-alive-switch")
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            )
+            .heightIn(min = 54.dp)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(appText("后台常驻"), modifier = Modifier.weight(1f), style = SettingsTypography.item)
+        DshSwitch(checked = checked, onCheckedChange = null)
+    }
 }
 
 @Composable

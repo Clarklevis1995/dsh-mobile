@@ -201,7 +201,42 @@ class GatewayRuntime(
         conversationTargets[target.sessionId] = target
     }
 
+    private var sessionCatalogRefreshJob: Job? = null
+
+    /** 全局元数据通知不受当前会话订阅限制；合并短时间内的新增/运行/结束通知。 */
+    private fun invalidateSessionCatalogLocked() {
+        if (sessionCatalogRefreshJob?.isActive == true) return
+        val generation = connectionGeneration
+        sessionCatalogRefreshJob = scope.launch {
+            delay(150)
+            serialized {
+                sessionCatalogRefreshJob = null
+                if (generation != connectionGeneration || mutableState.value.connection != GatewayConnectionState.CONNECTED) {
+                    return@serialized
+                }
+                sendRequestLocked(GatewayRequests.simple("workspaces"))
+                sendRequestLocked(GatewayRequests.simple("sessions"))
+            }
+        }
+    }
+
     private var isInBackground = false
+    private var backgroundConnectionKeepAlive = false
+
+    private fun keepConnectionInBackground(): Boolean =
+        backgroundConnectionKeepAlive || mutableState.value.shouldKeepAliveInBackground
+
+    /** 平台已获用户授权的连接常驻；不改变回合状态，也不覆盖手动断开或鉴权失败。 */
+    suspend fun setBackgroundConnectionKeepAlive(enabled: Boolean) = serialized {
+        if (backgroundConnectionKeepAlive == enabled) return@serialized
+        backgroundConnectionKeepAlive = enabled
+        updateRequestTimeoutsLocked()
+        if (enabled && canReconnectLocked() &&
+            mutableState.value.connection in setOf(GatewayConnectionState.SUSPENDED, GatewayConnectionState.FAILED,
+                GatewayConnectionState.WAITING_FOR_NETWORK)) {
+            scheduleReconnectLocked(immediate = true)
+        }
+    }
     private var connectionGeneration = 0L
     private var requestGeneration = 0L
     private var reconnectJob: Job? = null
@@ -609,7 +644,7 @@ class GatewayRuntime(
             mutableState.value = mutableState.value.copy(connection = GatewayConnectionState.WAITING_FOR_NETWORK)
             return
         }
-        if (isInBackground && !mutableState.value.shouldKeepAliveInBackground) {
+        if (isInBackground && !keepConnectionInBackground()) {
             mutableState.value = mutableState.value.copy(connection = GatewayConnectionState.SUSPENDED)
             return
         }
@@ -795,11 +830,16 @@ class GatewayRuntime(
             replayAfterHelloLocked()
         }
 
+        if (frame.kind == "session-status" && !frame.sessionId.isNullOrBlank() && frame.running != null) {
+            invalidateSessionCatalogLocked()
+        }
+
         val correlation = correlateLocked(frame)
         if (!correlation.accepted) return null
         if (frame.kind == "error") {
             if (frame.resetRequired == true || frame.requestType?.startsWith("speech-") == true ||
                 frame.requestType?.startsWith("file-") == true ||
+                frame.requestType?.startsWith("workspace-changes-") == true ||
                 frame.requestType in setOf("session-agent-preset", "select-agent-preset", "agent-team", "subagents") ||
                 conversationTargets[frame.sessionId]?.parentSessionId != null) {
                 return FrameDelivery(GatewayRuntimeEvent.Frame(transportFrame.text, frame, correlation.sessionId, correlation.isBackgroundHistory),
@@ -963,6 +1003,7 @@ class GatewayRuntime(
                 (payload["uploadId"] as? JsonPrimitive)?.content == frame.uploadId
             }.getOrDefault(false))
             "file-upload-opened", "file-upload-chunk-accepted", "file-upload-cancelled",
+            "workspace-changes-summary", "workspace-changes-diff",
             "session-created", "session-agent-preset", "select-agent-preset", "file-resolved", "file-list", "file-download-opened" -> request.correlationId == frame.requestId
             "file-download-chunk", "file-download-cancelled" -> request.correlationId == frame.transferId
             "command-options", "command-selected" -> request.correlationId == frame.command?.stringValue
@@ -981,6 +1022,7 @@ class GatewayRuntime(
             "speech-catalog", "speech-subscribed", "speech-unsubscribed", "speech-preparing",
             "speech-preparation-cancelled", "speech-transcript", "speech-cancelled",
             "sent", "file-upload-opened", "file-upload-chunk-accepted", "file-upload-completed", "file-upload-cancelled",
+            "workspace-changes-summary", "workspace-changes-diff",
             "session-created", "session-agent-preset", "select-agent-preset", "file-resolved", "file-list", "file-download-opened" -> frame.requestId
             "file-download-chunk", "file-download-cancelled" -> frame.transferId
             "command-options", "command-selected" -> frame.command?.stringValue
@@ -1086,6 +1128,8 @@ class GatewayRuntime(
     }
 
     private suspend fun clearConnectionWorkLocked() {
+        sessionCatalogRefreshJob?.cancel()
+        sessionCatalogRefreshJob = null
         cancelForegroundResumeLocked()
         cancelPendingLocked(ERROR_CONNECTION_CLOSED)
         while (deferredRequests.isNotEmpty()) {
@@ -1146,7 +1190,7 @@ class GatewayRuntime(
             completeLaneLocked(responseKind)
             return
         }
-        if (isInBackground && !mutableState.value.shouldKeepAliveInBackground) {
+        if (isInBackground && !keepConnectionInBackground()) {
             lane.active.timeoutJob = null
             return
         }
@@ -1255,7 +1299,7 @@ class GatewayRuntime(
     }
 
     private fun updateRequestTimeoutsLocked() {
-        val shouldRun = !isInBackground || mutableState.value.shouldKeepAliveInBackground
+        val shouldRun = !isInBackground || keepConnectionInBackground()
         pendingLanes.forEach { (responseKind, lane) ->
             val pending = lane.active
             if (!shouldRun) {
@@ -1277,7 +1321,7 @@ class GatewayRuntime(
 
     private fun canReconnectLocked(): Boolean =
         desiredConnection && !reconnectBlocked && !isManualPairingAttempt && networkAvailableLocked() &&
-            (!isInBackground || mutableState.value.shouldKeepAliveInBackground)
+            (!isInBackground || keepConnectionInBackground())
 
     private fun startConnectionAttemptTimeoutLocked(generation: Long) {
         connectionAttemptTimeoutJob?.cancel()
@@ -1533,9 +1577,10 @@ class GatewayRuntime(
             "event", "hello", "paired", "question-requested", "question-resolved",
             "approval-requested", "approval-resolved", "tasks-updated", "goal-updated",
             "session-snapshot", "assistant-stream", "session-stream-reset", "projection-baseline",
-            "session-agent-preset-updated"
+            "session-agent-preset-updated", "session-status"
         )
         private val RESPONSE_KINDS_REQUIRING_ACTIVE_REQUEST = setOf(
+            "workspace-changes-summary", "workspace-changes-diff",
             "history", "attachment", "sent", "question-response", "approval-response",
             "file-resolved", "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled",
             "session-cancelled", "session-created", "queue-item-updated",

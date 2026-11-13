@@ -1,11 +1,9 @@
 package com.clarklevis.dsh.android.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -54,16 +52,10 @@ internal fun ConnectorStatusScreen(connectors: AndroidDeviceConnectors?, onBack:
         Surface(Modifier.fillMaxSize().testTag("connector-status-screen"), color = background, contentColor = ink) {
             Column(Modifier.fillMaxSize().padding(top = topInset)) {
                 Box(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 16.dp)) {
-                    Surface(
-                        modifier = Modifier.align(Alignment.CenterStart).size(44.dp)
-                            .clickable(role = Role.Button, onClick = onBack),
-                        shape = CircleShape, color = background,
-                        border = BorderStroke(.5.dp, secondary.copy(alpha = .35f))
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(painterResource(R.drawable.ic_back_chevron), appText("返回"), Modifier.size(32.dp), tint = ink)
-                        }
-                    }
+                    TopBarCircleButton(
+                        R.drawable.ic_back_chevron, appText("返回"), onBack,
+                        Modifier.align(Alignment.CenterStart)
+                    )
                     Text(appText("连接器状态"), Modifier.align(Alignment.Center), style = SettingsTypography.title)
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).navigationBarsPadding()) {

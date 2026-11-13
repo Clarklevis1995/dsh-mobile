@@ -709,6 +709,7 @@ private fun ConversationPage(
                             stateHolder = stateHolder,
                             modifier = Modifier.padding(horizontal = 14.dp)
                         )
+                        WorkspaceChangesDock(stateHolder)
                         Composer(stateHolder, onPickImage, onPickFile, onDismissInput)
                     }
                 }
@@ -1273,8 +1274,8 @@ private fun ConversationTimeline(
                                 is ConversationDisplayEntry.Process -> ConversationProcessRow(display.group)
                                 is ConversationDisplayEntry.TimeSeparator -> Text(
                                     text = conversationTimeLabel(display.epochSeconds),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF808080),
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
                                         .testTag("conversation-time-separator")
@@ -3154,7 +3155,7 @@ private fun processToolIcon(toolName: String?): Int {
 }
 
 @Composable
-private fun UserMessage(
+internal fun UserMessage(
     item: ConversationItem,
     thumbnails: Map<String, ImageBitmap>,
     states: Map<String, AttachmentLoadState>,
@@ -3196,14 +3197,14 @@ private fun UserMessage(
                 val parts = item.textParts
                 if (parts?.any { it.type == "quote" } == true) {
                     SentReplyBubble(parts)
-                } else Text(
-                    text = item.text,
+                } else DshMarkdownText(
+                    markdown = item.text,
                     modifier = Modifier
                         .background(bubbleFill, RoundedCornerShape(15.dp))
                         .border(0.7.dp, bubbleEdge, RoundedCornerShape(15.dp))
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                         .testTag("user-text-bubble"),
-                    fontSize = 16.sp
+                    wrapContent = true
                 )
                 CopyButton(item.text)
             }

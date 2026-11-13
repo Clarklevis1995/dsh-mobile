@@ -3214,6 +3214,50 @@ final class ConversationProcessProjectionTests: XCTestCase {
 }
 
 final class GatewayProtocolTests: XCTestCase {
+    @MainActor
+    func testGlobalSessionStatusRefreshesHomeListWithoutOpeningConversation() async throws {
+        let old = SessionSummary(id: "old", title: "Old", lastActivity: Date(), isRunning: true, hasUnread: false)
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://127.0.0.1:3080/ws/mobile",
+            selectedWorkspaceID: nil, sessions: [old]), chatHistoryCache: nil)
+        defer { store.deactivateGateway() }
+        var requests: [String] = []
+        store.gateway.installConnectedTransportForTesting { payload in
+            if let data = payload.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let kind = object["type"] as? String { requests.append(kind) }
+        }
+        XCTAssertNil(store.selectedSessionId)
+        for _ in 0..<20 {
+            store.gateway.deliverApplicationFrame(GatewayFrame(kind: "session-status", sessionId: "external", running: false), data: Data())
+        }
+        store.gateway.deliverApplicationFrame(GatewayFrame(kind: "session-status", sessionId: "old", running: false), data: Data())
+        for _ in 0..<100 where !requests.contains("sessions") {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(requests.filter { $0 == "sessions" }.count, 1)
+        XCTAssertEqual(requests.filter { $0 == "workspaces" }.count, 1)
+        let response = Data(#"{"kind":"sessions","items":[{"sessionId":"external","updatedAt":2,"running":false,"blank":false},{"sessionId":"old","updatedAt":1,"running":false,"blank":false}]}"#.utf8)
+        store.gateway.deliverApplicationFrame(try GatewayWireDecoder.decode(response), data: response)
+        await flushDeferredKMPEvents(in: store)
+        XCTAssertEqual(store.sessions.map(\.id), ["external", "old"])
+        XCTAssertFalse(store.sessions.contains { $0.isRunning })
+        XCTAssertNil(store.selectedSessionId)
+        XCTAssertFalse(requests.contains("subscribe"))
+        XCTAssertFalse(requests.contains("history"))
+    }
+
+    @MainActor
+    func testSessionCatalogNotificationRefreshIsCancelledOnDisconnect() async throws {
+        let gateway = GatewayClient()
+        defer { gateway.disconnect() }
+        var requests: [String] = []
+        gateway.installConnectedTransportForTesting { requests.append($0) }
+        gateway.deliverApplicationFrame(GatewayFrame(kind: "session-status", sessionId: "external", running: true), data: Data())
+        gateway.disconnect()
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertTrue(requests.isEmpty)
+    }
+
     func testQueueFramesSurviveSwiftDecodeAndSharedBridge() throws {
         let json = #"{"kind":"session-queues","queues":{"s":[{"id":"q","placement":"queued","message":{"id":"m","content":[{"type":"text","text":"再写一个 👏"}]}}]}}"#
         let frame = try JSONDecoder().decode(GatewayFrame.self, from: Data(json.utf8))
@@ -16493,8 +16537,11 @@ final class GeneratedToolImageTests: XCTestCase {
             item("later", .user, 4_601), item("reply", .assistant, 4_602)
         ])
         let separators = entries.filter { if case .timeSeparator = $0.content { return true }; return false }
-        XCTAssertEqual(separators.map(\.id), ["time-later"])
-        guard case .timeSeparator(let date) = separators.first?.content else { return XCTFail("缺少时间分隔") }
+        XCTAssertEqual(separators.map(\.id), ["time-first", "time-later"])
+        guard case .timeSeparator(let firstDate) = entries.first?.content else { return XCTFail("缺少首条消息时间") }
+        XCTAssertEqual(firstDate.timeIntervalSince1970, 1_000)
+        XCTAssertEqual(entries[1].id, "message-first")
+        guard case .timeSeparator(let date) = separators.last?.content else { return XCTFail("缺少时间分隔") }
         XCTAssertEqual(date.timeIntervalSince1970, 4_601)
         let index = entries.firstIndex { $0.id == "time-later" }!
         XCTAssertEqual(entries[index + 1].id, "message-later")
@@ -16528,9 +16575,10 @@ final class GeneratedToolImageTests: XCTestCase {
             ConversationItem(id: "reply", kind: .assistant, title: "", text: body, isError: false, date: .now)
         ]
         let entries = ConversationDisplayEntry.make(from: items)
-        XCTAssertEqual(entries.count, 3)
-        guard case .message(let user) = entries.first?.content,
-              case .process(let process) = entries[1].content,
+        XCTAssertEqual(entries.count, 4)
+        XCTAssertEqual(entries.first?.id, "time-user")
+        guard case .message(let user) = entries[1].content,
+              case .process(let process) = entries[2].content,
               case .message(let reply) = entries.last?.content else { return XCTFail("消息分组错误") }
         XCTAssertEqual(user.images, [image])
         XCTAssertEqual(process.items.map(\.id), ["tool", "result"])
@@ -16698,6 +16746,109 @@ final class ScheduledTaskCreationTests: XCTestCase {
         }
         XCTAssertEqual(try XCTUnwrap(findInput(host.view)).text, seed)
         XCTAssertFalse(requests.contains { $0["type"] as? String == "send" })
+    }
+}
+
+@MainActor
+final class UserMessageMarkdownRoutingTests: XCTestCase {
+    private func item(_ text: String) -> ConversationItem {
+        .init(id: "user-route", kind: .user, title: "", text: text, isError: false, date: .now)
+    }
+
+    private func entry(_ item: ConversationItem) -> ConversationViewportEntry {
+        .init(id: item.id, revision: item.text.hashValue,
+            userMessage: .init(item: item, imageData: { _ in nil }, showsCopyButton: true),
+            markdownContent: AnyView(ConversationRow(item: item, showsCopyButton: true, imageData: { _ in nil })))
+    }
+
+    func testMarkdownUsesHostedCellAndPlainTextKeepsNativeCell() {
+        for text in ["# hello\n## hello", "**重点**", "- 第一项\n- 第二项", "> 引用", "```kotlin\nval x = 1\n```",
+                     "[链接](https://example.com)", "![图片](https://example.com/image.png)", "| A | B |\n| --- | --- |\n| 1 | 2 |", "---", "\\*原样星号\\*"] {
+            XCTAssertNil(entry(item(text)).userMessage, "Markdown 不能进入 UILabel 快速路径：\(text)")
+        }
+        for text in ["", "你好", "第一行\n第二行", "C# 和 a*b，以及 2 > 1"] {
+            XCTAssertNotNil(entry(item(text)).userMessage, "普通文本仍应使用原生路径：\(text)")
+        }
+    }
+
+    func testActualViewportRoutesHeadingsAfterNativeMessageIsReused() async throws {
+        let controller = ConversationViewportController(onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in }, onBottomAlignmentCompleted: {}, onApproachingTop: {})
+        controller.loadViewIfNeeded()
+        controller.overrideUserInterfaceStyle = .light
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        controller.view.backgroundColor = .systemBackground
+        controller.view.layoutIfNeeded()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
+        func descendants(_ view: UIView) -> [UIView] { [view] + view.subviews.flatMap(descendants) }
+        let list = try XCTUnwrap(descendants(controller.view).compactMap { $0 as? UICollectionView }.first)
+        let timeline = ConversationTimeline()
+        timeline.publish([item("普通文本")])
+        controller.configure(sessionID: "user-markdown-route", timeline: timeline, supplementalEntries: [],
+            makeEntries: { [self] items in items.map(entry) }, bottomInset: 0)
+        for _ in 0..<200 where list.visibleCells.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(list.visibleCells.contains { String(describing: type(of: $0)).contains("UserMessageCell") })
+        timeline.publish([item("# hello\n## hello")])
+        for _ in 0..<200 {
+            if !list.isHidden && list.alpha > 0 && !list.visibleCells.isEmpty &&
+                !list.visibleCells.contains(where: { String(describing: type(of: $0)).contains("UserMessageCell") }) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(list.isHidden)
+        XCTAssertFalse(list.visibleCells.isEmpty)
+        XCTAssertFalse(list.visibleCells.contains { String(describing: type(of: $0)).contains("UserMessageCell") },
+            "同一消息从纯文本变成 Markdown 后必须替换原生 cell，并重新测量高度")
+        controller.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(250))
+        let screenshot = UIGraphicsImageRenderer(size: controller.view.bounds.size).image { _ in
+            controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: screenshot)
+        attachment.name = "实际聊天列表：用户标题 Markdown"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
+@MainActor
+final class UserMessageMarkdownRenderingTests: XCTestCase {
+    @MainActor
+    func testUserMarkdownAndQuotedReplyFitPhoneAndTabletWidths() async throws {
+        let source = "# 提问标题\n\n**重点**、[链接](https://example.com) 和 `code`。\n\n- 第一项\n- 第二项\n\n```kotlin\nval answer = 42\n```"
+        for quoted in [false, true] {
+            let parts: [GatewayTextPart]? = quoted ? [.init(type: "quote", text: "引用内容"), .init(type: "text", text: source)] : nil
+            let item = ConversationItem(id: "user-markdown", kind: .user, title: "", text: source,
+                isError: false, date: .now, textParts: parts)
+            let host = UIHostingController(rootView:
+                ConversationRow(item: item, showsCopyButton: true, imageData: { _ in nil }).padding(16))
+            for width in [CGFloat(280), 390, 900] {
+                let size = host.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+                XCTAssertTrue(size.height.isFinite)
+                XCTAssertGreaterThan(size.height, 150)
+                XCTAssertLessThanOrEqual(size.width, width + 1)
+            }
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 740))
+            window.rootViewController = host
+            window.isHidden = false
+            host.view.frame = window.bounds
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(200))
+            let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in
+                host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = quoted ? "用户引用回复 Markdown" : "用户提问 Markdown"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            window.isHidden = true
+            window.rootViewController = nil
+        }
     }
 }
 

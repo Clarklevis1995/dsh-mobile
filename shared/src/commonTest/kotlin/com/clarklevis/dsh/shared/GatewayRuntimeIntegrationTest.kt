@@ -52,6 +52,136 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class GatewayRuntimeIntegrationTest {
     @Test
+    fun globalSessionStatusRefreshesHomeCatalogWithoutSelectingConversation() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport, clock = RecordingDelayClock())
+        val store = com.clarklevis.dsh.shared.facade.SharedMobileStore()
+        backgroundScope.launch {
+            runtime.events.collect { event ->
+                if (event is GatewayRuntimeEvent.Frame) store.acceptFrame(event.rawJson)
+            }
+        }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        transport.receive("""{"kind":"workspaces","items":[]}""")
+        transport.receive("""{"kind":"sessions","items":[{"sessionId":"old","updatedAt":1,"running":true,"blank":false}]}""")
+        runCurrent()
+        assertTrue(store.snapshot().sessions.single().isRunning)
+        val initialRequests = transport.sentPayloads.size
+        repeat(20) {
+            transport.receive("""{"kind":"session-status","sessionId":"external","running":false}""")
+        }
+        transport.receive("""{"kind":"session-status","sessionId":"old","running":false}""")
+        runCurrent()
+        advanceTimeBy(150)
+        runCurrent()
+        assertEquals(listOf("workspaces", "sessions"), transport.sentTypes.drop(initialRequests))
+        transport.receive("""{"kind":"workspaces","items":[]}""")
+        transport.receive("""{"kind":"sessions","items":[{"sessionId":"external","updatedAt":2,"running":false,"blank":false},{"sessionId":"old","updatedAt":1,"running":false,"blank":false}]}""")
+        runCurrent()
+        assertEquals(listOf("external", "old"), store.snapshot().sessions.map { it.id })
+        assertFalse(store.snapshot().sessions.any { it.isRunning })
+        assertNull(store.snapshot().selectedSessionId)
+        assertFalse(transport.sentTypes.any { it == "subscribe" || it == "history" })
+    }
+
+    @Test
+    fun statusDuringCatalogRequestQueuesFreshSnapshotAndDisconnectCancelsRefresh() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport, clock = RecordingDelayClock())
+        backgroundScope.launch { runtime.events.collect { } }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        // 首次目录请求仍在途，通知不能因为请求合并而丢失。
+        transport.receive("""{"kind":"session-status","sessionId":"external","running":true}""")
+        runCurrent()
+        advanceTimeBy(150)
+        runCurrent()
+        assertEquals(1, transport.sentTypes.count { it == "sessions" })
+        transport.receive("""{"kind":"workspaces","items":[]}""")
+        transport.receive("""{"kind":"sessions","items":[]}""")
+        runCurrent()
+        assertEquals(2, transport.sentTypes.count { it == "sessions" })
+        transport.receive("""{"kind":"session-status","sessionId":"external","running":false}""")
+        runCurrent()
+        runtime.disconnect()
+        val requestCount = transport.sentPayloads.size
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(requestCount, transport.sentPayloads.size)
+    }
+
+    @Test
+    fun backgroundConnectionKeepAliveReconnectsWithoutTurnAndStopsAfterOptOut() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport, clock = RecordingDelayClock())
+        backgroundScope.launch { runtime.events.collect { } }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        runtime.setBackgroundConnectionKeepAlive(true)
+        runtime.applicationDidEnterBackground()
+        assertFalse(runtime.state.value.shouldKeepAliveInBackground)
+        transport.fail(GatewayTransportState.Failed(transport.connectionSpecs.last().generation,
+            reason = "websocket-failure", recoverable = true))
+        runCurrent()
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals(2, transport.connectionSpecs.size)
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        runtime.setBackgroundConnectionKeepAlive(false)
+        transport.fail(GatewayTransportState.Failed(transport.connectionSpecs.last().generation,
+            reason = "websocket-failure", recoverable = true))
+        runCurrent()
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(2, transport.connectionSpecs.size)
+        runtime.setBackgroundConnectionKeepAlive(true)
+        runCurrent()
+        assertEquals(3, transport.connectionSpecs.size)
+        runtime.disconnect()
+        runtime.setBackgroundConnectionKeepAlive(false)
+        runtime.setBackgroundConnectionKeepAlive(true)
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(3, transport.connectionSpecs.size)
+        assertEquals(GatewayConnectionState.DISCONNECTED, runtime.state.value.connection)
+    }
+
+    @Test
+    fun backgroundConnectionKeepAliveDoesNotOverrideAuthenticationFailure() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport, clock = RecordingDelayClock())
+        backgroundScope.launch { runtime.events.collect { } }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        runtime.setBackgroundConnectionKeepAlive(true)
+        runtime.applicationDidEnterBackground()
+        transport.fail(GatewayTransportState.Failed(transport.connectionSpecs.last().generation,
+            reason = "websocket-failure", httpStatus = 401, recoverable = true))
+        runCurrent()
+        runtime.setBackgroundConnectionKeepAlive(false)
+        runtime.setBackgroundConnectionKeepAlive(true)
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(1, transport.connectionSpecs.size)
+        assertEquals(GatewayConnectionState.FAILED, runtime.state.value.connection)
+    }
+
+    @Test
     fun deviceToolStatusUsesNegotiatedControlTransportWithoutEnteringRpcLane() = runTest {
         val transport = FakeTransport()
         val runtime = newRuntime(transport)
@@ -244,6 +374,36 @@ class GatewayRuntimeIntegrationTest {
         assertEquals(1, transport.connectionSpecs.size)
         assertTrue(runtime.sendRequest(request))
         assertEquals(transport.sentPayloads.takeLast(2).first(), transport.sentPayloads.last())
+    }
+
+    @Test
+    fun workspaceChangesResponsesRequireRequestIdentityAndPreserveMissingErrors() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport)
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect(events::add) }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","protocol":3,"capabilities":["workspace-changes-v1"]}""")
+        runCurrent()
+        assertTrue(runtime.sendRequest(GatewayRequests.workspaceChanges("s1", 160, null, "changes-1")))
+        transport.receive("""{"kind":"workspace-changes-summary","requestId":"stale","sessionId":"s1","seq":160,
+            "summary":{"turn":3,"total":0,"added":0,"deleted":0,"files":[]}}""")
+        runCurrent()
+        assertTrue(events.filterIsInstance<GatewayRuntimeEvent.Frame>().none { it.frame.requestId == "stale" })
+        transport.receive("""{"kind":"error","requestType":"workspace-changes-summary","requestId":"changes-1",
+            "sessionId":"s1","seq":160,"code":"workspace-changes-missing"}""")
+        runCurrent()
+        val missing = events.filterIsInstance<GatewayRuntimeEvent.Frame>().single { it.frame.requestId == "changes-1" }
+        assertEquals("workspace-changes-missing", missing.frame.code)
+        assertTrue(runtime.sendRequest(GatewayRequests.workspaceChanges("s1", 170, 2, "diff-2")))
+        transport.receive("""{"kind":"workspace-changes-diff","requestId":"diff-2","sessionId":"s1","seq":170,
+            "index":2,"diff":{"kind":"binary","path":"x","display":"x"}}""")
+        runCurrent()
+        val diff = events.filterIsInstance<GatewayRuntimeEvent.Frame>().single { it.frame.requestId == "diff-2" }
+        assertEquals(2, diff.frame.index)
+        assertEquals("binary", diff.frame.diff?.kind)
     }
 
     @Test
