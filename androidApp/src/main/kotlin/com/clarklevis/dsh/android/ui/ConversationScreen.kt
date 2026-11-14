@@ -573,163 +573,167 @@ private fun ConversationPage(
     val question = stateHolder.snapshot.pendingQuestions.firstOrNull {
         stateHolder.snapshot.selectedSessionId == null || it.sessionId == stateHolder.snapshot.selectedSessionId
     }
-    Box(Modifier.fillMaxSize()) {
-        androidx.compose.runtime.key(sessionId) {
-            ConversationTimeline(
-                stateHolder = stateHolder,
-                bottomContentHeight = bottomContentHeight,
-                topContentInset = topContentInset,
-                scrollToBottomToken = scrollToBottomToken,
-                onPinnedToBottomChanged = { isPinnedToBottom = it },
-                onUserInteraction = onDismissInput,
-                onPreviewImages = { attachments, initialIndex ->
-                    imagePreview = ConversationImagePreviewRequest(attachments, initialIndex)
-                }
-            )
-        }
-        if (stateHolder.localSearchContextSessionId == sessionId && sessionId != null) {
-            Row(
-                Modifier.align(
-                    Alignment.TopCenter
-                ).fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    if (stateHolder.localSearchIsOpening) {
-                        appText("正在定位搜索结果")
-                    } else if (stateHolder.localSearchIsFragment) {
-                        appText("只读本地搜索片段")
-                    } else {
-                        appText("已定位搜索结果")
-                    },
-                    fontSize = 12.sp,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = stateHolder::returnToLatestCached) { Text(appText("返回最新消息")) }
-            }
-        }
-        val showInitialHistoryOverlay = shouldShowInitialHistoryOverlay(
-            isLoading = stateHolder.snapshot.selectedHistoryIsLoading,
-            isLoadingOlder = stateHolder.snapshot.selectedHistoryIsLoadingOlder,
-            hasLocalContent = stateHolder.snapshot.conversation.isNotEmpty()
-        )
-        AnimatedVisibility(
-            visible = showInitialHistoryOverlay,
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxSize()
-                .padding(remember(topContentInset) { ComposerViewportPadding(bottomContentHeight, topContentInset) })
-                .zIndex(1f),
-            enter = fadeIn(tween(120)),
-            exit = fadeOut(tween(120))
-        ) {
-            HistoryLoadingOverlay(
-                loadedEventCount = stateHolder.snapshot.selectedHistoryLoadedEventCount,
-                totalEventCount = stateHolder.snapshot.selectedHistoryTotalEventCount
-            )
-        }
-        ConversationBottomFade(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            contentHeight = bottomContentHeight
-        )
-        ConversationComposerChrome(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .adaptiveContentWidth()
-                .graphicsLayer { alpha = if (stateHolder.voiceInput.state.overlayVisible) 0f else 1f }
-                .imePadding(),
-            composerModifier = Modifier
-                .testTag("conversation-composer-column")
-                .onSizeChanged { size ->
-                    bottomContentHeight.value = with(density) { size.height.toDp() }
-                }
-                .navigationBarsPadding(),
-            jumpVisible = stateHolder.snapshot.conversation.isNotEmpty() && !isPinnedToBottom,
-            jumpButton = {
-                ScrollToBottomButton(
-                    isGenerating = stateHolder.snapshot.sessions
-                        .firstOrNull { it.id == sessionId }
-                        ?.isRunning == true,
-                    onClick = { scrollToBottomToken += 1 }
-                )
-            }
-        ) {
-            if (approval != null) {
-                ApprovalRequestCard(
-                    request = approval,
-                    status = stateHolder.snapshot.approvalRequestStatuses[approval.rpcId]
-                        ?: com.clarklevis.dsh.shared.facade.SharedApprovalStatusSnapshot("idle"),
-                    commandPreview = stateHolder.snapshot.approvalCommandPreviews[approval.rpcId],
-                    details = stateHolder.snapshot.approvalDetails[approval.rpcId],
-                    onDecision = { stateHolder.respondToApproval(approval.rpcId, it) }
-                )
-            } else {
-                AnimatedHumanQuestionPanel(
-                    request = question,
-                    onAnswer = { answeredRequest, answers ->
-                        stateHolder.answerQuestion(
-                            answeredRequest.rpcId,
-                            answeredRequest.sessionId,
-                            answers
-                        )
-                    },
-                    onCancel = { cancelledRequest ->
-                        stateHolder.cancelQuestion(cancelledRequest.rpcId, cancelledRequest.sessionId)
-                    }
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Pending interaction cards replace normal composer
-                        // chrome. Stats/tasks/goals must not consume height and
-                        // push the approval or question actions off screen.
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            if (!stateHolder.isViewingTeamMember) SessionAgentPresetControl(
-                                state = stateHolder.sessionAgentPreset,
-                                onSelect = stateHolder::selectSessionAgentPreset,
-                                onRetry = stateHolder::refreshSessionAgentPreset
-                            )
-                            Spacer(Modifier.weight(1f))
-                            if (stateHolder.showsNewConversationWorkspace) NewConversationWorkspaceControl(
-                                selectedId = stateHolder.newConversationWorkspace.workspaceId,
-                                workspaces = stateHolder.availableWorkspaces,
-                                changing = stateHolder.isChangingNewConversationWorkspace,
-                                enabled = stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED &&
-                                    !stateHolder.fileUploads.preparing && !stateHolder.preparingImages,
-                                onSelect = stateHolder::selectNewConversationWorkspace
-                            )
+    ComposerGlassBackdropHost { composerBackdropModifier ->
+        Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().then(composerBackdropModifier).background(MaterialTheme.colorScheme.surface)) {
+                androidx.compose.runtime.key(sessionId) {
+                    ConversationTimeline(
+                        stateHolder = stateHolder,
+                        bottomContentHeight = bottomContentHeight,
+                        topContentInset = topContentInset,
+                        scrollToBottomToken = scrollToBottomToken,
+                        onPinnedToBottomChanged = { isPinnedToBottom = it },
+                        onUserInteraction = onDismissInput,
+                        onPreviewImages = { attachments, initialIndex ->
+                            imagePreview = ConversationImagePreviewRequest(attachments, initialIndex)
                         }
-                        TaskGoalPanels(
-                            stateHolder = stateHolder,
-                            modifier = Modifier.padding(horizontal = 14.dp)
-                        )
-                        SlashCommandMenus(
-                            stateHolder = stateHolder,
-                            modifier = Modifier.padding(horizontal = 14.dp)
-                        )
-                        WorkspaceChangesDock(stateHolder)
-                        Composer(stateHolder, onPickImage, onPickFile, onDismissInput)
+                    )
+                }
+            }
+            if (stateHolder.localSearchContextSessionId == sessionId && sessionId != null) {
+                Row(
+                    Modifier.align(
+                        Alignment.TopCenter
+                    ).fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (stateHolder.localSearchIsOpening) {
+                            appText("正在定位搜索结果")
+                        } else if (stateHolder.localSearchIsFragment) {
+                            appText("只读本地搜索片段")
+                        } else {
+                            appText("已定位搜索结果")
+                        },
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = stateHolder::returnToLatestCached) { Text(appText("返回最新消息")) }
+                }
+            }
+            val showInitialHistoryOverlay = shouldShowInitialHistoryOverlay(
+                isLoading = stateHolder.snapshot.selectedHistoryIsLoading,
+                isLoadingOlder = stateHolder.snapshot.selectedHistoryIsLoadingOlder,
+                hasLocalContent = stateHolder.snapshot.conversation.isNotEmpty()
+            )
+            AnimatedVisibility(
+                visible = showInitialHistoryOverlay,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxSize()
+                    .padding(remember(topContentInset) { ComposerViewportPadding(bottomContentHeight, topContentInset) })
+                    .zIndex(1f),
+                enter = fadeIn(tween(120)),
+                exit = fadeOut(tween(120))
+            ) {
+                HistoryLoadingOverlay(
+                    loadedEventCount = stateHolder.snapshot.selectedHistoryLoadedEventCount,
+                    totalEventCount = stateHolder.snapshot.selectedHistoryTotalEventCount
+                )
+            }
+            ConversationBottomFade(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                contentHeight = bottomContentHeight
+            )
+            ConversationComposerChrome(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .adaptiveContentWidth()
+                    .graphicsLayer { alpha = if (stateHolder.voiceInput.state.overlayVisible) 0f else 1f }
+                    .imePadding(),
+                composerModifier = Modifier
+                    .testTag("conversation-composer-column")
+                    .onSizeChanged { size ->
+                        bottomContentHeight.value = with(density) { size.height.toDp() }
+                    }
+                    .navigationBarsPadding(),
+                jumpVisible = stateHolder.snapshot.conversation.isNotEmpty() && !isPinnedToBottom,
+                jumpButton = {
+                    ScrollToBottomButton(
+                        isGenerating = stateHolder.snapshot.sessions
+                            .firstOrNull { it.id == sessionId }
+                            ?.isRunning == true,
+                        onClick = { scrollToBottomToken += 1 }
+                    )
+                }
+            ) {
+                if (approval != null) {
+                    ApprovalRequestCard(
+                        request = approval,
+                        status = stateHolder.snapshot.approvalRequestStatuses[approval.rpcId]
+                            ?: com.clarklevis.dsh.shared.facade.SharedApprovalStatusSnapshot("idle"),
+                        commandPreview = stateHolder.snapshot.approvalCommandPreviews[approval.rpcId],
+                        details = stateHolder.snapshot.approvalDetails[approval.rpcId],
+                        onDecision = { stateHolder.respondToApproval(approval.rpcId, it) }
+                    )
+                } else {
+                    AnimatedHumanQuestionPanel(
+                        request = question,
+                        onAnswer = { answeredRequest, answers ->
+                            stateHolder.answerQuestion(
+                                answeredRequest.rpcId,
+                                answeredRequest.sessionId,
+                                answers
+                            )
+                        },
+                        onCancel = { cancelledRequest ->
+                            stateHolder.cancelQuestion(cancelledRequest.rpcId, cancelledRequest.sessionId)
+                        }
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Pending interaction cards replace normal composer
+                            // chrome. Stats/tasks/goals must not consume height and
+                            // push the approval or question actions off screen.
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (!stateHolder.isViewingTeamMember) SessionAgentPresetControl(
+                                    state = stateHolder.sessionAgentPreset,
+                                    onSelect = stateHolder::selectSessionAgentPreset,
+                                    onRetry = stateHolder::refreshSessionAgentPreset
+                                )
+                                Spacer(Modifier.weight(1f))
+                                if (stateHolder.showsNewConversationWorkspace) NewConversationWorkspaceControl(
+                                    selectedId = stateHolder.newConversationWorkspace.workspaceId,
+                                    workspaces = stateHolder.availableWorkspaces,
+                                    changing = stateHolder.isChangingNewConversationWorkspace,
+                                    enabled = stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED &&
+                                        !stateHolder.fileUploads.preparing && !stateHolder.preparingImages,
+                                    onSelect = stateHolder::selectNewConversationWorkspace
+                                )
+                            }
+                            TaskGoalPanels(
+                                stateHolder = stateHolder,
+                                modifier = Modifier.padding(horizontal = 14.dp)
+                            )
+                            SlashCommandMenus(
+                                stateHolder = stateHolder,
+                                modifier = Modifier.padding(horizontal = 14.dp)
+                            )
+                            WorkspaceChangesDock(stateHolder)
+                            Composer(stateHolder, onPickImage, onPickFile, onDismissInput)
+                        }
                     }
                 }
             }
-        }
-        AnimatedVisibility(
-            visible = stateHolder.voiceInput.state.overlayVisible,
-            modifier = Modifier.align(Alignment.BottomCenter)
-                .fillMaxWidth().height(adaptiveWindowSize().height * VoiceInputInteraction.OVERLAY_HEIGHT_FRACTION.toFloat()).zIndex(3f),
-            enter = fadeIn(tween(VoiceInputInteraction.OVERLAY_FADE_IN_MILLISECONDS, easing = LinearOutSlowInEasing)) +
-                slideInVertically(
-                    animationSpec = tween(VoiceInputInteraction.OVERLAY_FADE_IN_MILLISECONDS, easing = LinearOutSlowInEasing),
-                    initialOffsetY = { with(density) { VoiceInputInteraction.OVERLAY_ENTER_OFFSET.dp.roundToPx() } }
-                ),
-            exit = fadeOut(tween(VoiceInputInteraction.OVERLAY_FADE_OUT_MILLISECONDS))
-        ) {
-            VoiceInputPanel(
-                voice = stateHolder.voiceInput,
-                modifier = Modifier.fillMaxSize()
-            )
+            AnimatedVisibility(
+                visible = stateHolder.voiceInput.state.overlayVisible,
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth().height(adaptiveWindowSize().height * VoiceInputInteraction.OVERLAY_HEIGHT_FRACTION.toFloat()).zIndex(3f),
+                enter = fadeIn(tween(VoiceInputInteraction.OVERLAY_FADE_IN_MILLISECONDS, easing = LinearOutSlowInEasing)) +
+                    slideInVertically(
+                        animationSpec = tween(VoiceInputInteraction.OVERLAY_FADE_IN_MILLISECONDS, easing = LinearOutSlowInEasing),
+                        initialOffsetY = { with(density) { VoiceInputInteraction.OVERLAY_ENTER_OFFSET.dp.roundToPx() } }
+                    ),
+                exit = fadeOut(tween(VoiceInputInteraction.OVERLAY_FADE_OUT_MILLISECONDS))
+            ) {
+                VoiceInputPanel(
+                    voice = stateHolder.voiceInput,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
     imagePreview?.let { request ->
@@ -1629,9 +1633,6 @@ private fun Composer(
         voice.open(stateHolder.snapshot.selectedSessionId ?: "new-session", stateHolder.composerText)
     }
     val shape = RoundedCornerShape(24.dp)
-    val isDark = isSystemInDarkTheme()
-    val shadowColor = dshFloatingSurfaceShadow(isDark)
-    val glassEdge = dshGlassEdge(isDark)
     val draftQuotes = remember(stateHolder.messageDraft) {
         com.clarklevis.dsh.shared.protocol.GatewayQuoteTextParts.parse(stateHolder.messageDraft)
     }
@@ -1723,20 +1724,9 @@ private fun Composer(
         ) {
             QueueDock(stateHolder)
         }
-        Surface(
-            modifier = Modifier.fillMaxWidth().testTag("composer-card")
-                .dropShadow(
-                    shape = shape,
-                    shadow = Shadow(
-                        radius = 10.dp,
-                        spread = 0.dp,
-                        color = shadowColor,
-                        offset = DpOffset(x = 0.dp, y = 4.dp)
-                    )
-            ),
-            shape = shape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-            border = androidx.compose.foundation.BorderStroke(0.8.dp, glassEdge)
+        ComposerGlassSurface(
+            modifier = Modifier.fillMaxWidth().testTag("composer-card"),
+            shape = shape
         ) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
                 AnimatedVisibility(

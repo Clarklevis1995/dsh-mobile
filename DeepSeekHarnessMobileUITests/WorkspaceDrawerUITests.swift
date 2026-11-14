@@ -1,5 +1,133 @@
 import XCTest
+
+final class WorkspaceReviewUITests: XCTestCase {
+    func testDropdownAndWrappedDiffKeepCurrentPage() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_WORKSPACE_REVIEW_UI_TEST"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        if app.alerts.firstMatch.waitForExistence(timeout: 1) { app.alerts.firstMatch.buttons.firstMatch.tap() }
+        XCTAssertFalse(app.staticTexts["合并视图"].exists)
+        let selector = app.buttons["workspace-file-selector"]
+        if selector.waitForExistence(timeout: 8) {
+            let title = app.staticTexts["文件改动"].firstMatch
+            let y = title.frame.minY
+            let page = app.staticTexts["workspace-file-page"]
+            XCTAssertEqual(page.frame.midX, app.windows.firstMatch.frame.midX, accuracy: 1, "页数必须相对面板居中")
+            XCTAssertEqual(app.buttons["workspace-file-previous"].label, "上一个文件")
+            XCTAssertEqual(app.buttons["workspace-file-next"].label, "下一个文件")
+            selector.tap()
+            let nativeAppFile = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "app.js")).firstMatch
+            XCTAssertTrue(nativeAppFile.waitForExistence(timeout: 3))
+            XCTAssertEqual(title.frame.minY, y, accuracy: 1)
+            let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "文件下拉菜单"; shot.lifetime = .keepAlways; add(shot)
+            nativeAppFile.tap()
+            XCTAssertTrue(selector.label.contains("app.js"))
+            XCTAssertFalse(app.staticTexts["# 今日"].exists)
+            XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "const remaining")).firstMatch.waitForExistence(timeout: 3))
+            let firstCode = app.textViews.matching(NSPredicate(format: "label CONTAINS %@", "const remaining")).firstMatch
+            XCTAssertGreaterThan(firstCode.frame.height, 20, "长代码应自然撑高")
+            let secondCode = app.textViews.matching(NSPredicate(format: "label CONTAINS %@", "const line2 ")).firstMatch
+            XCTAssertGreaterThanOrEqual(secondCode.frame.minY, firstCode.frame.maxY, "相邻逻辑行不能重叠")
+            let long = XCTAttachment(screenshot: app.screenshot()); long.name = "长代码自然换行"; long.lifetime = .keepAlways; add(long)
+            let wrap = app.buttons["workspace-wrap-lines"]
+            let wrapFrame = wrap.frame
+            wrap.tap()
+            XCTAssertEqual(wrap.value as? String, "关闭")
+            XCTAssertEqual(wrap.frame, wrapFrame, "点击切换图标，按钮和点击区域保持稳定")
+            XCTAssertEqual(wrap.frame.width, 44, accuracy: 1)
+            XCTAssertEqual(wrap.staticTexts.count, 0, "纯图标按钮不显示文字或对勾")
+            let off = XCTAttachment(screenshot: app.screenshot()); off.name = "手机不换行图标"; off.lifetime = .keepAlways; add(off)
+            XCTAssertEqual(firstCode.frame.height, 20, accuracy: 1, "关闭换行后代码仅占一个逻辑行")
+            wrap.tap()
+            XCTAssertEqual(wrap.value as? String, "开启")
+            XCTAssertEqual(wrap.frame, wrapFrame)
+            XCTAssertGreaterThan(firstCode.frame.height, 20)
+            selector.tap()
+            let nativeOtherFile = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "index.html")).firstMatch
+            XCTAssertTrue(nativeOtherFile.waitForExistence(timeout: 2))
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.75)).tap()
+            XCTAssertFalse(nativeOtherFile.waitForExistence(timeout: 1))
+            XCTAssertTrue(selector.label.contains("app.js"))
+        } else {
+            // 平板宽度由正式页面尺寸决定，目录直接常驻。
+            XCTAssertTrue(app.buttons["workspace-file-1"].waitForExistence(timeout: 3))
+            app.buttons["workspace-file-1"].tap()
+            XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "const remaining")).firstMatch.waitForExistence(timeout: 3))
+            let wrap = app.buttons["workspace-wrap-lines"]
+            let frame = wrap.frame
+            wrap.tap()
+            XCTAssertEqual(wrap.value as? String, "关闭")
+            XCTAssertEqual(wrap.frame, frame, "平板切换图标时点击区域保持稳定")
+            XCTAssertEqual(wrap.staticTexts.count, 0)
+            let off = XCTAttachment(screenshot: app.screenshot()); off.name = "平板关闭换行"; off.lifetime = .keepAlways; add(off)
+            wrap.tap()
+            XCTAssertEqual(wrap.value as? String, "开启")
+            XCTAssertEqual(wrap.frame, frame)
+            let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "大屏双栏审阅"; shot.lifetime = .keepAlways; add(shot)
+        }
+        let list = app.scrollViews["workspace-changes-list"]
+        list.swipeUp()
+        list.swipeUp()
+        let firstLine = app.textViews.matching(NSPredicate(format: "label CONTAINS %@", "const remaining")).firstMatch
+        XCTAssertFalse(firstLine.exists && firstLine.isHittable)
+        let wrap = app.buttons["workspace-wrap-lines"]
+        wrap.tap()
+        XCTAssertFalse(firstLine.exists && firstLine.isHittable, "切换换行不能重建列表并跳回文件开头")
+        wrap.tap()
+        XCTAssertFalse(firstLine.exists && firstLine.isHittable, "恢复换行仍保留正文滚动位置")
+    }
+}
 import UIKit
+
+final class WorkspaceReviewFilePreviewUITests: XCTestCase {
+    func testChangedFilePathOpensCompletePreviewAndReturnsToDiff() throws {
+        try checkCompleteFilePreview(fontScale: "1.0")
+    }
+
+    func testChangedFilePathAtLargeFontSize() throws {
+        try checkCompleteFilePreview(fontScale: "1.5")
+    }
+
+    private func checkCompleteFilePreview(fontScale: String) throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                "-appearance.fontScale", fontScale, "-appearance.fontFollowsSystem", "NO"]
+        app.launch()
+        if app.alerts.firstMatch.waitForExistence(timeout: 1) { app.alerts.firstMatch.buttons.firstMatch.tap() }
+        let session = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-")).firstMatch
+        try XCTSkipUnless(session.waitForExistence(timeout: 10), "需要已有文件改动的已连接会话")
+        session.tap()
+        let capsule = app.buttons["查看本轮文件改动"]
+        XCTAssertTrue(capsule.waitForExistence(timeout: 10))
+        let dock = XCTAttachment(screenshot: app.screenshot()); dock.name = "输入框右侧文件改动胶囊"; dock.lifetime = .keepAlways; add(dock)
+        capsule.tap()
+        let path = app.buttons["workspace-open-file"]
+        XCTAssertTrue(path.waitForExistence(timeout: 8))
+        if app.buttons["workspace-file-1"].exists {
+            app.buttons["workspace-file-1"].tap()
+        } else {
+            app.buttons["workspace-file-next"].tap()
+        }
+        let absolutePath = try XCTUnwrap(path.value as? String)
+        XCTAssertTrue(absolutePath.hasPrefix("/"), "应显示 Host 文件绝对路径")
+        XCTAssertTrue(absolutePath.hasSuffix("app.js"))
+        let before = XCTAttachment(screenshot: app.screenshot()); before.name = "可点击的完整文件路径"; before.lifetime = .keepAlways; add(before)
+        path.tap()
+        let title = app.staticTexts["workspace-preview-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        XCTAssertEqual(title.label, "app.js")
+        let code = app.textViews["workspace-code-text"]
+        XCTAssertTrue(code.waitForExistence(timeout: 12), "从 diff 打开现有完整文件预览")
+        XCTAssertFalse((code.value as? String ?? "").isEmpty)
+        let preview = XCTAttachment(screenshot: app.screenshot()); preview.name = "从改动查看完整文件"; preview.lifetime = .keepAlways; add(preview)
+        app.buttons["workspace-preview-close"].tap()
+        XCTAssertTrue(path.waitForExistence(timeout: 5))
+        XCTAssertEqual(path.value as? String, absolutePath, "关闭预览返回原文件的 diff")
+    }
+}
 
 final class ModelMenuLayoutUITests: XCTestCase {
     func testNativeModelSubmenusAtStandardAndMaximumFontSize() throws {
@@ -26,6 +154,9 @@ final class ModelMenuLayoutUITests: XCTestCase {
             try XCTSkipUnless(NSPredicate { _, _ in toggle.isEnabled }.evaluateAfterWaiting(timeout: 10),
                               "需要可切换模型的会话目录")
             let currentModelTitle = try XCTUnwrap(toggle.staticTexts.allElementsBoundByIndex.first?.label)
+            let labelFrame = toggle.staticTexts.allElementsBoundByIndex.reduce(CGRect.null) { $0.union($1.frame) }
+            XCTAssertLessThanOrEqual(toggle.frame.width, labelFrame.width + 32,
+                                     "原生菜单的锚点应紧贴模型标签，不能撑满输入栏")
             let hasSelectedEffort = toggle.staticTexts.count > 1
             let outside = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.4))
             let modelSubmenu = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "模型")).firstMatch
@@ -35,6 +166,7 @@ final class ModelMenuLayoutUITests: XCTestCase {
             XCTAssertTrue(modelSubmenu.waitForExistence(timeout: 5))
             XCTAssertTrue(effortSubmenu.exists)
             let root = app.collectionViews.containing(.button, identifier: modelSubmenu.label).firstMatch
+            XCTAssertGreaterThan(root.frame.maxX, labelFrame.minX, "菜单应出现在右侧模型按钮附近")
             XCTAssertEqual(root.buttons.count, 2, "一级菜单只包含模型和推理等级两个入口")
             XCTAssertLessThan(modelSubmenu.frame.midY, effortSubmenu.frame.midY)
             XCTAssertTrue(modelSubmenu.label.contains(currentModelTitle) || root.staticTexts[currentModelTitle].exists)

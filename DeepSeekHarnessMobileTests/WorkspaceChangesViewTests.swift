@@ -6,6 +6,12 @@ import DeepSeekHarnessShared
 @MainActor
 final class WorkspaceChangesViewTests: XCTestCase {
     func testWireFramePreservesDiffAndSummaryAndRendersSheet() async throws {
+        XCTAssertNotNil(UIFont(name: "NotoSansSC-Thin", size: 12))
+        XCTAssertNotNil(UIFont(name: "JetBrainsMono-Regular", size: 12))
+        XCTAssertNotNil(UIImage(named: "WorkspaceReviewClose"))
+        XCTAssertNotNil(UIImage(named: "WorkspaceReviewChevron"))
+        XCTAssertNotNil(UIImage(named: "WorkspaceReviewWrap"))
+        XCTAssertNotNil(UIImage(named: "WorkspaceReviewNoWrap"))
         let shared = SharedWorkspaceChangesStore()
         _ = shared.open(sessionId: "fixture", supported: true, connected: true)
         let announcement = shared.acceptJson(json: """
@@ -38,7 +44,7 @@ final class WorkspaceChangesViewTests: XCTestCase {
         let snapshot = shared.snapshot()
         let host = UIHostingController(rootView: Color(.systemGroupedBackground).sheet(isPresented: .constant(true)) {
             WorkspaceChangesSheet(state: snapshot, selectFile: { _ in }, retrySummary: {})
-                .presentationDetents([.large]).presentationDragIndicator(.visible)
+                .presentationDetents([.large]).presentationDragIndicator(.hidden)
         })
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let window = UIWindow(windowScene: scene)

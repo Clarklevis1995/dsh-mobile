@@ -1475,6 +1475,7 @@ struct MobileTeamMember: Codable, Equatable, Identifiable {
     var error: String?
     var canOpen: Bool
     var avatarIndex: Int?
+    var identityName: String? = nil
 
     var statusLabel: String {
         if phase == "provisioning" { return String(localized: "正在创建") }
@@ -1494,10 +1495,30 @@ struct MobileTeamTask: Codable, Equatable, Identifiable {
     var description: String
     var status: String
     var ownerName: String?
+    var ownerId: String? = nil
     var blockedBy: [String]
     var writeScopes: [String]
     var ready: Bool
     var writeScopeWarnings: [String]
+
+    var isUnassigned: Bool { ownerId == nil && ownerName == nil }
+
+    func owner(in members: [MobileTeamMember]) -> MobileTeamMember? {
+        if let ownerId { return members.first { $0.id == ownerId } }
+        guard let ownerName else { return nil }
+        let matches = members.filter { ($0.identityName ?? $0.name) == ownerName }
+        return matches.count == 1 ? matches.first : nil
+    }
+
+    func isOwned(by sessionID: String?, in members: [MobileTeamMember]) -> Bool {
+        guard let sessionID else { return false }
+        if let ownerId { return ownerId == sessionID }
+        return owner(in: members)?.id == sessionID
+    }
+
+    func ownerDisplayName(in members: [MobileTeamMember]) -> String? {
+        owner(in: members)?.name ?? ownerName ?? ownerId
+    }
 
     var statusLabel: String {
         switch status {

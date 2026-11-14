@@ -1,11 +1,45 @@
 package com.clarklevis.dsh.shared
 
 import com.clarklevis.dsh.shared.facade.SharedWorkspaceChangesStore
+import com.clarklevis.dsh.shared.facade.WorkspaceReviewPresentation
 import com.clarklevis.dsh.shared.gateway.GatewayRequests
 import com.clarklevis.dsh.shared.protocol.*
 import kotlin.test.*
 
 class WorkspaceChangesTest {
+    @Test fun reviewAbsolutePathsUseHostWorkspaceWithoutDecodingFileNames() {
+        assertEquals("/Users/demo/project/src/前 后%20.swift", WorkspaceReviewPresentation.absolutePath("./src/前 后%20.swift", "/Users/demo/project/"))
+        assertEquals("/tmp/outside.txt", WorkspaceReviewPresentation.absolutePath("/tmp/outside.txt", "/project"))
+        assertEquals("C:/DSH/project/src/app.js", WorkspaceReviewPresentation.absolutePath("src\\app.js", "C:\\DSH\\project\\"))
+        assertEquals("D:/outside/app.js", WorkspaceReviewPresentation.absolutePath("D:\\outside\\app.js", null))
+        assertEquals("//server/share/app.js", WorkspaceReviewPresentation.absolutePath("\\\\server\\share\\app.js", null))
+        assertEquals("/app.js", WorkspaceReviewPresentation.absolutePath("app.js", "/"))
+        assertNull(WorkspaceReviewPresentation.absolutePath("app.js", null))
+        assertNull(WorkspaceReviewPresentation.absolutePath("app.js", "relative-root"))
+    }
+
+    @Test fun reviewSeparatesMarkersAndPreservesCodeIndentationAndLogicalNumbers() {
+        val diff = WorkspaceChangesDiff("text", "app.js", "app.js", hunks = listOf(
+            WorkspaceDiffHunk(8, 2, 8, 3, listOf(" const ready = true;", "-  old();", "+  next();", "+  +value;")),
+            WorkspaceDiffHunk(13, 1, 14, 1, listOf(" "))
+        ))
+        val rows = WorkspaceReviewPresentation.rows(diff)
+        assertEquals(listOf(8, 9, 9, 10, 14), rows.mapNotNull { it.lineNumber })
+        assertEquals("  +value;", rows.single { it.lineNumber == 10 }.text)
+        assertEquals("  old();", rows.single { it.kind == "deleted" }.text)
+        assertEquals("", rows.last().text)
+        assertEquals("省略 3 行未修改内容", rows.single { it.kind == "omitted" }.text)
+        assertEquals("第 8–10 行", rows.first().text)
+    }
+
+    @Test fun deletedOnlyReviewUsesOriginalLineRange() {
+        val diff = WorkspaceChangesDiff("text", "a.md", "a.md", hunks = listOf(
+            WorkspaceDiffHunk(51, 2, 51, 0, listOf("-a", "-b"))
+        ))
+        val rows = WorkspaceReviewPresentation.rows(diff)
+        assertEquals("第 51–52 行", rows.first().text)
+        assertEquals(listOf(51, 52), rows.mapNotNull { it.lineNumber })
+    }
     private fun event(seq: Int = 160, turn: Int = 3, session: String = "s1") = GatewayFrame(
         kind = "event", sessionId = session, seq = seq, event = GatewayEvent("workspace/changes", turn = turn))
 

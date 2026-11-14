@@ -34,6 +34,40 @@ class WorkspaceSessionSectionsDeviceTest {
     private var animatorScale: String? = null
 
     @Test
+    fun tabletFirstSessionStartsDirectlyBelowSearch() {
+        val holder = AndroidSharedStateHolder()
+        var opened: String? = null
+        try {
+            holder.wirePayload = """{"kind":"sessions","items":[{"sessionId":"gap","updatedAt":1800000000,
+                "running":false,"blank":false,"projections":{"values":{"title":"创建中文待办事项应用"}}}]}"""
+            holder.submitWirePayload()
+            holder.wirePayload = """{"kind":"workspaces","items":[{"workspaceId":"w1","path":"/repo",
+                "title":"file-changes-demo","sessionIds":["gap"],"createdAt":"","updatedAt":""}]}"""
+            holder.submitWirePayload()
+            holder.selectWorkspace("w1")
+            compose.setContent { DshTheme {
+                AdaptiveWindowHost { WorkspaceScreen(holder, { opened = it }, {}, {}, {}, {}, onConnectors = {}) }
+            } }
+            compose.waitForIdle()
+            val viewport = compose.onNodeWithTag("workspace-screen").fetchSemanticsNode().boundsInRoot
+            org.junit.Assume.assumeTrue(AdaptiveLayout.workspaceUsesColumns(
+                viewport.width / compose.density.density, viewport.height / compose.density.density, compose.density.fontScale))
+            compose.waitUntil(5_000) { compose.onAllNodesWithTag("workspace-session-gap").fetchSemanticsNodes().isNotEmpty() }
+            val search = compose.onNodeWithTag("workspace-session-search").fetchSemanticsNode().boundsInRoot
+            val session = compose.onNodeWithTag("workspace-session-gap").fetchSemanticsNode().boundsInRoot
+            val left = compose.onNodeWithTag("workspace-actions").fetchSemanticsNode().boundsInRoot
+            org.junit.Assert.assertTrue("首条会话应紧跟搜索框", session.top - search.bottom in 0f..(24 * compose.density.density))
+            org.junit.Assert.assertTrue("首条会话不能被左栏高度推后", session.top < left.bottom)
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            File(instrumentation.targetContext.getExternalFilesDir(null), "workspace-tablet-no-gap.png").outputStream().use {
+                instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+            compose.onNodeWithTag("workspace-session-gap").performClick()
+            compose.runOnIdle { assertEquals("gap", opened) }
+        } finally { compose.runOnIdle { holder.close() } }
+    }
+
+    @Test
     fun allWorkspacesCanCreateWithoutWorkspaceReminderInChinese() {
         verifyAllWorkspaceCreation(Locale.SIMPLIFIED_CHINESE)
     }

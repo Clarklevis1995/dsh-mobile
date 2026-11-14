@@ -1510,15 +1510,7 @@ struct ConversationView: View {
         AnyView(composerCardContent)
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .glassSurface(radius: 24, tint: glassTint, shadowOpacity: 0)
-        // 先收住玻璃自带的向下投影，再单独控制输入框阴影。
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(glassEdge, lineWidth: 0.7)
-        }
-        // 轻微下移增强底部层次，保持原有扩散范围。
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.10), radius: 10, x: 0, y: 2)
+        .composerGlassSurface(radius: 24)
         // 同一事务覆盖玻璃外框、裁剪边界和内部布局，避免外框先跳到终点，
         // 把仍在移动的加号裁掉，再从卡片底部重新露出。
         .animation(composerLayoutAnimation, value: composerExpanded)
@@ -3292,7 +3284,7 @@ private struct ConversationModelMenuLabel: View {
         }
         .appFont(.caption.weight(.medium))
         .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        // Menu 以标签的实际边界定位；剩余空间由工具栏的 Spacer 承担。
         .contentShape(Rectangle())
     }
 }
@@ -7123,9 +7115,9 @@ struct TeamContentSheet: View {
     let select: (MobileTeamMember) -> Void
 
     private var tasks: [MobileTeamTask] {
-        let current = store.teamSnapshot.members.first { $0.id == store.selectedSessionId }
         return store.teamSnapshot.tasks.filter {
-            filter == "all" || (filter == "unassigned" ? $0.ownerName == nil : current != nil && $0.ownerName == current?.name)
+            filter == "all" || (filter == "unassigned" ? $0.isUnassigned
+                : $0.isOwned(by: store.selectedSessionId, in: store.teamSnapshot.members))
         }
     }
 
@@ -7185,7 +7177,7 @@ struct TeamContentSheet: View {
 
     private func taskCard(_ task: MobileTeamTask) -> some View {
         let isExpanded = expanded.contains(task.id)
-        let owner = store.teamSnapshot.members.first { $0.name == task.ownerName }
+        let owner = task.owner(in: store.teamSnapshot.members)
         let openOwner: () -> Void = {
             if let owner, owner.canOpen { dismiss(); select(owner) }
         }
@@ -7231,7 +7223,7 @@ struct TeamContentSheet: View {
                     } else {
                         Image(systemName: "person.crop.circle").frame(width: 20, height: 20).accessibilityHidden(true)
                     }
-                    Text("负责人：\(task.ownerName ?? String(localized: "未分配"))")
+                    Text("负责人：\(task.ownerDisplayName(in: store.teamSnapshot.members) ?? String(localized: "未分配"))")
                 }
                 .appFont(.caption).foregroundStyle(owner?.canOpen == true ? Color.blue : Color.secondary)
             }

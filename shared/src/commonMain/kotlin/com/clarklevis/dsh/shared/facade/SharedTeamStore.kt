@@ -35,7 +35,8 @@ data class TeamMemberView(
     val id: String, val name: String, val role: String = "teammate", val phase: String = "active",
     val mode: String = "continuable", val parentSessionId: String? = null,
     val model: String? = null, val detail: String? = null, val running: Boolean? = null,
-    val error: String? = null, val canOpen: Boolean = true, val avatarIndex: Int = 0
+    val error: String? = null, val canOpen: Boolean = true, val avatarIndex: Int = 0,
+    val identityName: String? = null
 )
 
 @Serializable
@@ -46,8 +47,21 @@ data class TeamTaskView(
     val id: String, val revision: Int = 0, val subject: String, val description: String = "",
     val status: String, val ownerName: String? = null, val blockedBy: List<String> = emptyList(),
     val writeScopes: List<String> = emptyList(), val ready: Boolean = false,
-    val writeScopeWarnings: List<String> = emptyList()
-)
+    val writeScopeWarnings: List<String> = emptyList(), val ownerId: String? = null
+) {
+    val isUnassigned: Boolean get() = ownerId == null && ownerName == null
+
+    fun owner(members: List<TeamMemberView>): TeamMemberView? = if (ownerId != null) {
+        members.firstOrNull { it.id == ownerId }
+    } else {
+        members.singleOrNull { (it.identityName ?: it.name) == ownerName }
+    }
+
+    fun isOwnedBy(sessionId: String?, members: List<TeamMemberView>): Boolean =
+        sessionId != null && (if (ownerId != null) ownerId == sessionId else owner(members)?.id == sessionId)
+
+    fun ownerDisplayName(members: List<TeamMemberView>): String? = owner(members)?.name ?: ownerName ?: ownerId
+}
 
 @Serializable
 data class TeamSnapshot(
@@ -127,29 +141,74 @@ class SharedTeamStore {
     fun snapshot(leadSessionId: String): TeamSnapshot {
         val team = projections[leadSessionId to "agentTeam"]
         val value = (team?.value ?: lastValues[leadSessionId to "agentTeam"]) as? JsonObject
-        val catalog = (projections[leadSessionId to "subagentCatalog"]?.value ?: lastValues[leadSessionId to "subagentCatalog"]) as? JsonArray
-        val members = value?.get("members")?.jsonArray.orEmpty().mapNotNull { raw ->
-            val m = raw as? JsonObject ?: return@mapNotNull null
-            val id = m.text("id")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val role = m.text("role") ?: "teammate"
-            member(id, m.text("name") ?: id, role, m.text("phase") ?: "unknown", m.text("error"),
-                if (role == "lead") null else leadSessionId, if (role == "lead") "continuable" else "continuable")
-        }.toMutableList()
-        if (members.isEmpty() && !catalog.isNullOrEmpty()) members += member(leadSessionId, "lead", "lead", "active", null, null, "continuable")
-        catalog.orEmpty().forEach { raw ->
-            val m = raw as? JsonObject ?: return@forEach
-            val id = m.text("id")?.takeIf { it.isNotBlank() && it != leadSessionId } ?: return@forEach
-            if (members.none { it.id == id }) members += member(id, m.text("label") ?: id, "subagent", "active", null, leadSessionId, resolvedMode(id, m.text("mode") ?: "unknown"))
+        val members = mutableListOf<TeamMemberView>()
+        val visited = mutableSetOf<String>()
+        fun appendChildren(parent: String) {
+            if (!visited.add(parent)) return
+            val parentTeam = (projections[parent to "agentTeam"]?.value ?: lastValues[parent to "agentTeam"]) as? JsonObject
+            val catalog = catalog(parent)
+            // 旧宿主名册只作兼容；目录名称优先，label 只用于描述和旧目录显示回退。
+            (parentTeam?.get("members") as? JsonArray).orEmpty().forEach { raw ->
+                val m = raw as? JsonObject ?: return@forEach
+                val id = m.text("id")?.takeIf { it.isNotBlank() } ?: return@forEach
+                if (members.any { it.id == id } || (parent != leadSessionId && id == parent)) return@forEach
+                val role = m.text("role") ?: "teammate"
+                val entry = catalog.firstOrNull { it.text("id") == id }
+                val path = if (!entry?.text("name").isNullOrBlank()) identityPath(id)
+                    else m.text("name") ?: if (entry != null) identityPath(id) else id
+                members += member(id, entry?.text("name")?.takeIf { it.isNotBlank() }?.let { path } ?: m.text("name") ?: id,
+                    role, m.text("phase") ?: "unknown", m.text("error"),
+                    if (role == "lead") targets[id]?.parentSessionId else parent,
+                    if (role == "lead") "continuable" else resolvedMode(id, entry?.text("mode") ?: "continuable"))
+                    .copy(identityName = path)
+            }
+            catalog.forEach { m ->
+                val id = m.text("id")?.takeIf { it.isNotBlank() && it != parent && it !in visited } ?: return@forEach
+                if (members.none { it.id == id }) {
+                    val path = identityPath(id)
+                    val displayName = if (targets[parent]?.parentSessionId != null ||
+                        !m.text("name").isNullOrBlank()) path else m.text("label") ?: id
+                    members += member(id, displayName,
+                        "subagent", "active", null, parent, resolvedMode(id, m.text("mode") ?: "unknown"))
+                        .copy(identityName = path)
+                }
+                appendChildren(id)
+            }
+        }
+        appendChildren(leadSessionId)
+        if ((value?.get("members") as? JsonArray).isNullOrEmpty() &&
+            catalog(leadSessionId).isNotEmpty() && members.isNotEmpty() && members.none { it.id == leadSessionId }) {
+            members.add(0, member(leadSessionId, "lead", "lead", "active", null,
+                targets[leadSessionId]?.parentSessionId, "continuable").copy(identityName = identityPath(leadSessionId)))
         }
         val tasks = value?.get("tasks")?.let { runCatching { wireJson.decodeFromJsonElement<List<TeamTaskView>>(it) }.getOrNull() }.orEmpty().filter { it.status != "deleted" }
-        // 能力声明和 Lead 本身不能证明已启用团队；只根据真实成员投影显示入口。
+        // 已启用的空团队和关闭后的历史任务都需要保留入口。
+        val enabled = (value?.get("enabled") as? JsonPrimitive)?.booleanOrNull == true
         val hasTeamMembers = "agent-team-v1" in capabilities && members.any { it.id != leadSessionId && it.role == "teammate" }
         val hasSubagents = "subagent-conversations-v1" in capabilities && members.any { it.id != leadSessionId && it.role == "subagent" }
         return TeamSnapshot(leadSessionId, assignAvatars(leadSessionId, members), tasks,
             if ("agent-team-v1" !in capabilities) "unsupported" else team?.state ?: "loading",
             errors[leadSessionId] ?: value?.text("failure")?.let { UiMessage.raw(it) },
-            hasTeamMembers || hasSubagents,
-            members.any { it.role == "teammate" } || tasks.isNotEmpty())
+            ("agent-team-v1" in capabilities && (enabled || tasks.isNotEmpty() || hasTeamMembers)) || hasSubagents,
+            enabled || members.any { it.role == "teammate" } || tasks.isNotEmpty())
+    }
+
+    private fun catalog(parent: String): List<JsonObject> =
+        ((projections[parent to "subagentCatalog"]?.value ?: lastValues[parent to "subagentCatalog"]) as? JsonArray)
+            .orEmpty().mapNotNull { it as? JsonObject }
+
+    /** 根为 lead；第一层不加 lead/，未命名链路使用 ID，绝不使用描述拼身份。 */
+    private fun identityPath(id: String): String {
+        val segments = mutableListOf<String>()
+        val visited = mutableSetOf<String>()
+        var current = id
+        while (visited.add(current)) {
+            val parent = targets[current]?.parentSessionId ?: break
+            segments += catalog(parent).firstOrNull { it.text("id") == current }
+                ?.text("name")?.takeIf { it.isNotBlank() } ?: current
+            current = parent
+        }
+        return if (segments.isEmpty()) "lead" else segments.asReversed().joinToString("/")
     }
 
     private fun member(id: String, name: String, role: String, phase: String, error: String?, parent: String?, mode: String): TeamMemberView {

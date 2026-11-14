@@ -11812,6 +11812,55 @@ final class WorkspaceFilePreviewPresentationTests: XCTestCase {
         XCTAssertNil(host.presentedViewController)
     }
 
+    func testCancelledPreviewKeepsRenderedDocumentUntilViewIsRemoved() async throws {
+        let store = await makeStore()
+        store.openWorkspaceFile(item, purpose: "preview")
+        let request = try XCTUnwrap(store.workspaceFilePreviewRequest)
+        // 退场动画期间 SwiftUI 仍会渲染原面板，单独挂载它可稳定检查这个阶段。
+        let host = UIHostingController(rootView: AnyView(WorkspaceFilePreviewLoadingSheet(store: store, request: request)))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            store.deactivateGateway()
+            window.isHidden = true
+            window.rootViewController = nil
+            previous?.makeKeyAndVisible()
+        }
+        host.view.layoutIfNeeded()
+        try opened(store, requestID: request.id.uuidString)
+        try deliver(store, """
+            {"kind":"file-download-chunk","transferId":"t1","offset":0,"data":"aGVsbG8=","eof":true,"sha256":"\(digest)"}
+            """)
+        try await waitForCompletion(store)
+        let file = try XCTUnwrap(store.completedWorkspaceFile).url
+        for _ in 0..<100 where codeText(in: host.view) == nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let textView = try XCTUnwrap(codeText(in: host.view))
+        XCTAssertEqual(textView.text, "hello")
+        store.cancelWorkspaceFileDownload()
+        XCTAssertNil(store.workspaceFilePreviewRequest)
+        XCTAssertNil(store.completedWorkspaceFile)
+        for _ in 0..<20 {
+            try await Task.sleep(for: .milliseconds(20))
+            XCTAssertTrue(codeText(in: host.view) === textView, "退场时保留原正文，不能切换为加载失败页面")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "退场结束前文档仍持有文件租约")
+        }
+        host.rootView = AnyView(Color.clear)
+        for _ in 0..<100 where FileManager.default.fileExists(atPath: file.path) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "面板销毁后释放临时文件")
+    }
+
+    private func codeText(in view: UIView) -> UITextView? {
+        if let text = view as? UITextView, text.accessibilityIdentifier == "workspace-code-text" { return text }
+        return view.subviews.lazy.compactMap { self.codeText(in: $0) }.first
+    }
+
     func testFailedDownloadEndsLoadingAndSheetRemainsClosable() async throws {
         let store = await makeStore()
         defer { store.cancelWorkspaceFileDownload() }
@@ -14824,6 +14873,88 @@ final class TeamIntegrationTests: XCTestCase {
         XCTAssertEqual(message["requestId"] as? String, "send-a")
         XCTAssertEqual(message["mode"] as? String, "steer")
         XCTAssertEqual((message["images"] as? [[String: Any]])?.first?["data"] as? String, "AQID")
+    }
+
+    func testRC3OwnerIdentityAndOldBridgeDefaults() throws {
+        let decoder = JSONDecoder()
+        func member(_ id: String, _ name: String, _ identity: String? = nil) throws -> MobileTeamMember {
+            var json: [String: Any] = ["id": id, "name": name, "role": "subagent", "phase": "active", "mode": "continuable", "canOpen": true]
+            if let identity { json["identityName"] = identity }
+            return try decoder.decode(MobileTeamMember.self, from: JSONSerialization.data(withJSONObject: json))
+        }
+        let members = try [member("r", "reviewer", "reviewer"), member("c1", "reviewer/checker", "reviewer/checker"),
+                           member("c2", "writer/checker", "writer/checker"), member("old", "legacy")]
+        func task(_ id: String? = nil, _ name: String? = nil) throws -> MobileTeamTask {
+            var json: [String: Any] = ["id": "t", "revision": 1, "subject": "任务", "description": "", "status": "pending",
+                                       "blockedBy": [], "writeScopes": [], "ready": true, "writeScopeWarnings": []]
+            if let id { json["ownerId"] = id }
+            if let name { json["ownerName"] = name }
+            return try decoder.decode(MobileTeamTask.self, from: JSONSerialization.data(withJSONObject: json))
+        }
+        XCTAssertTrue(try task().isUnassigned)
+        XCTAssertFalse(try task("c1").isUnassigned)
+        XCTAssertEqual(try task("c1").owner(in: members)?.id, "c1")
+        XCTAssertTrue(try task("c1").isOwned(by: "c1", in: members))
+        XCTAssertEqual(try task(nil, "reviewer/checker").owner(in: members)?.id, "c1")
+        XCTAssertNil(try task(nil, "checker").owner(in: members))
+        XCTAssertNil(try task("missing", "reviewer").owner(in: members))
+        XCTAssertFalse(try task("missing", "reviewer").isOwned(by: "r", in: members))
+        XCTAssertEqual(try task("missing").ownerDisplayName(in: members), "missing")
+        XCTAssertEqual(try task(nil, "legacy").owner(in: members)?.id, "old")
+        XCTAssertNil(members.last?.identityName)
+        XCTAssertNil(try task(nil, "legacy").ownerId)
+    }
+
+    func testRC3TeamSheetAcrossPhoneTabletOrientationsAndLargeText() async throws {
+        let lead = SessionSummary(id: "lead", title: "RC.3 团队验证", lastActivity: .now, isRunning: false, hasUnread: false)
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://127.0.0.1:3080/ws/mobile",
+            selectedWorkspaceID: nil, sessions: [lead]), gatewayLocalID: "rc3-\(UUID().uuidString)", chatHistoryCache: nil)
+        defer { store.deactivateGateway() }
+        store.gateway.installConnectedTransportForTesting()
+        func deliver(_ json: String) throws {
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(json.utf8)))
+        }
+        try deliver(#"{"kind":"hello","capabilities":["agent-team-v1","subagent-conversations-v1"]}"#)
+        _ = await store.prepareConversation(for: lead)
+        try deliver(#"{"kind":"agent-team-updated","sessionId":"lead","asOfSeq":1,"agentTeam":{"enabled":true,"tasks":[]}}"#)
+        XCTAssertTrue(store.teamSnapshot.visible)
+        XCTAssertTrue(store.teamSnapshot.isTeam)
+        try deliver(#"{"kind":"subagents-updated","sessionId":"lead","asOfSeq":2,"subagentCatalog":[{"id":"r","name":"reviewer","label":"检查分镜与长文本布局、横竖屏和放大字号","mode":"continuable"}]}"#)
+        try deliver(#"{"kind":"subagents-updated","sessionId":"r","asOfSeq":2,"subagentCatalog":[{"id":"c","name":"checker-with-a-long-name","label":"多层子代理描述","mode":"continuable"}]}"#)
+        try deliver(#"{"kind":"agent-team-updated","sessionId":"lead","asOfSeq":3,"agentTeam":{"enabled":false,"tasks":[{"id":"id-only","subject":"仅有负责人 ID 的历史任务及长文本展示验证","description":"检查负责人导航与完整身份路径","status":"completed","ownerId":"c"},{"id":"unknown","subject":"未知 ID 不应跳转同名成员","status":"pending","ownerId":"missing","ownerName":"reviewer"},{"id":"unassigned","subject":"未分配任务","status":"pending"}]}}"#)
+        XCTAssertEqual(store.teamSnapshot.tasks.first?.owner(in: store.teamSnapshot.members)?.name, "reviewer/checker-with-a-long-name")
+        XCTAssertNil(store.teamSnapshot.tasks[1].owner(in: store.teamSnapshot.members))
+        let previousFontScale = UserDefaults.standard.object(forKey: AppFontScale.key)
+        let previousFollowsSystem = UserDefaults.standard.object(forKey: AppFontScale.followsSystemKey)
+        defer {
+            if let previousFontScale { UserDefaults.standard.set(previousFontScale, forKey: AppFontScale.key) }
+            else { UserDefaults.standard.removeObject(forKey: AppFontScale.key) }
+            if let previousFollowsSystem { UserDefaults.standard.set(previousFollowsSystem, forKey: AppFontScale.followsSystemKey) }
+            else { UserDefaults.standard.removeObject(forKey: AppFontScale.followsSystemKey) }
+        }
+        UserDefaults.standard.set(false, forKey: AppFontScale.followsSystemKey)
+        for size in [CGSize(width: 390, height: 844), CGSize(width: 844, height: 390),
+                     CGSize(width: 1024, height: 1366), CGSize(width: 1366, height: 1024)] {
+            for largeText in [false, true] {
+                UserDefaults.standard.set(largeText ? 1.5 : 1.0, forKey: AppFontScale.key)
+                let host = UIHostingController(rootView: TeamContentSheet(select: { _ in }).environmentObject(store)
+                    .environment(\.dynamicTypeSize, largeText ? .accessibility3 : .large))
+                let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+                window.rootViewController = host
+                window.makeKeyAndVisible()
+                host.view.frame = window.bounds
+                try await Task.sleep(for: .milliseconds(100))
+                host.view.layoutIfNeeded()
+                let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+                    host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+                }
+                let attachment = XCTAttachment(image: image)
+                attachment.name = "rc3-team-\(Int(size.width))x\(Int(size.height))-large-\(largeText)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                window.isHidden = true
+            }
+        }
     }
 
     func testTeamSheetScrollsWithinPhoneHeight() async throws {
@@ -18853,4 +18984,42 @@ private struct KeyboardAvoidanceTestInput: UIViewRepresentable {
         return view
     }
     func updateUIView(_ uiView: UITextView, context: Context) {}
+}
+
+@MainActor
+final class WorkspaceChangesLifecycleTests: XCTestCase {
+    func testHelloRestoresChangesConnectionAfterCleanupAndRetriesPendingSummary() async throws {
+        let session = SessionSummary(id: "changes-lifecycle", title: "文件改动重连", lastActivity: .now,
+            isRunning: false, hasUnread: false)
+        let gateway = GatewayClient()
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+            selectedWorkspaceID: nil, sessions: [session]), gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.deactivateGateway() }
+        var requests: [[String: Any]] = []
+        func connect() {
+            gateway.installConnectedTransportForTesting { payload in
+                requests.append((try? JSONSerialization.jsonObject(with: Data(payload.utf8))) as? [String: Any] ?? [:])
+            }
+            gateway.onFrame?(GatewayFrame(kind: "hello", protocol: 3,
+                capabilities: ["workspace-changes-v1"], authenticated: true))
+        }
+        connect()
+        let prepared = await store.prepareConversation(for: session)
+        XCTAssertTrue(prepared)
+        store.refreshWorkspaceChanges()
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"event","sessionId":"changes-lifecycle","seq":160,"event":{"type":"workspace/changes","turn":3}}"#.utf8)))
+        XCTAssertTrue(store.workspaceChanges.connected)
+        XCTAssertTrue(store.workspaceChanges.visible)
+        let before = requests.filter { $0["type"] as? String == "workspace-changes-summary" }.count
+        XCTAssertEqual(before, 1)
+        store.disconnect()
+        XCTAssertFalse(store.workspaceChanges.connected)
+        connect()
+        XCTAssertTrue(store.workspaceChanges.connected, "hello 的旧请求清理之后必须恢复改动查询连接")
+        XCTAssertEqual(requests.filter { $0["type"] as? String == "workspace-changes-summary" }.count, before + 1)
+        gateway.onFrame?(GatewayFrame(kind: "hello", protocol: 3, capabilities: [], authenticated: true))
+        XCTAssertFalse(store.workspaceChanges.supported)
+        XCTAssertFalse(store.workspaceChanges.visible)
+    }
 }

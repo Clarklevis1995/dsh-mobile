@@ -1,3 +1,8 @@
+# Android UI 总体规范
+
+- 所有 UI 新增和修改均遵守根目录 `AGENTS.md` 的「UI 设计与开发规范」：先查看当前 iOS 原生组件的实际运行效果，再在 Android 按 1:1 复刻，并完成手机、平板及交互对照验证。
+- 下述项目组件是复用手段；其效果与当前 iOS 原生组件不一致时，必须先校准或改造组件。
+
 # Android 开关规范
 
 - 所有应用内二态开关统一使用 `DshSwitch`，保持与 iOS 一致的胶囊轨道、白色滑块及动画；业务页面不要使用 Material `Switch` 或平台默认开关。
@@ -5,8 +10,8 @@
 
 # Android 菜单规范
 
-- 所有应用内菜单必须使用项目统一的 `DshMenu`、`DshMenuItem`、`DshMenuPopup` 和 `DshMenuSurface` 组件，沿用圆角毛玻璃、轻阴影及淡入缩放动画。
-- 禁止在业务页面直接使用 Material `DropdownMenu` / `DropdownMenuItem`、平台 `PopupMenu`、自行绘制的 `PopupWindow` 菜单或系统默认文字操作工具栏。
+- 应用内菜单优先复用项目统一的 `DshMenu`、`DshMenuItem`、`DshMenuPopup` 和 `DshMenuSurface` 组件；材质、圆角、阴影、布局、锚点及动画必须以当前 iOS 原生菜单的实际效果为准。
+- Material `DropdownMenu` / `DropdownMenuItem`、平台 `PopupMenu`、`PopupWindow` 菜单和系统文字操作工具栏只有在对照验证能达到上述一致效果时才可使用；业务页面不能直接引入未经校准的默认外观，新增实现应封装为可复用组件。
 - 特殊锚点、箭头面板、横向文字工具栏可保留业务定位逻辑，但必须复用统一的菜单容器、菜单项和背景采样宿主。
 - 输入框及正文的文字操作保留原生选区、手柄、剪贴板和编辑行为，操作菜单使用项目组件。
 - 原生网页必须使用 `DshMenuWebView`，将浏览器文字选择动作交给项目菜单组件，不能直接实例化 `WebView`。

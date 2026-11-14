@@ -83,6 +83,28 @@ extension View {
     }
 }
 
+/// 输入框与其上方的文件胶囊共用材质、边缘和阴影，仅轮廓半径不同。
+private struct ComposerGlassSurface: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    let radius: CGFloat
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        content
+            .glassSurface(radius: radius, tint: Color(uiColor: .secondarySystemBackground)
+                .opacity(colorScheme == .dark ? 0.52 : 0.48), shadowOpacity: 0)
+            .clipShape(shape)
+            .overlay { shape.stroke(colorScheme == .dark ? Color.white.opacity(0.13) : Color.white.opacity(0.56), lineWidth: 0.7) }
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.10), radius: 10, x: 0, y: 2)
+    }
+}
+
+extension View {
+    func composerGlassSurface(radius: CGFloat) -> some View {
+        modifier(ComposerGlassSurface(radius: radius))
+    }
+}
+
 struct ConnectionDot: View {
     let state: ConnectionState
 

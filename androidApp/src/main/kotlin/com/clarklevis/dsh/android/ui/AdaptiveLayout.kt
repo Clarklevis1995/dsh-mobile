@@ -18,6 +18,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -143,34 +150,64 @@ internal fun AdaptiveWorkspaceContent(
     window: DpSize,
     header: @Composable () -> Unit,
     actions: @Composable () -> Unit,
-    recentSessions: @Composable () -> Unit
+    recentSessions: @Composable () -> Unit,
+    listState: LazyListState = rememberLazyListState(),
+    contentPadding: PaddingValues = PaddingValues(),
+    userScrollEnabled: Boolean = true,
+    sessions: LazyListScope.() -> Unit = {}
 ) {
     val columns = AdaptiveLayout.workspaceUsesColumns(window.width.value, window.height.value, LocalDensity.current.fontScale)
-    Column(
-        Modifier.adaptiveContentWidth(AdaptiveLayout.WorkspaceWidth)
-            .padding(horizontal = if (columns) 40.dp else 22.dp, vertical = 18.dp)
-            .testTag(if (columns) "workspace-columns" else "workspace-single-column"),
-        verticalArrangement = Arrangement.spacedBy(if (columns) 40.dp else 18.dp)
-    ) {
-        header()
-        if (columns) {
-            Row(horizontalArrangement = Arrangement.spacedBy(48.dp), verticalAlignment = Alignment.Top) {
-                Column(Modifier.width(minOf(440.dp, window.width * 0.38f)).testTag("workspace-actions"),
-                    verticalArrangement = Arrangement.spacedBy(18.dp)) { actions() }
-                Column(Modifier.weight(1f).testTag("workspace-recents"),
-                    verticalArrangement = Arrangement.spacedBy(18.dp)) { recentSessions() }
+    if (columns) {
+        Column(
+            Modifier.fillMaxSize().padding(contentPadding).adaptiveContentWidth(AdaptiveLayout.WorkspaceWidth)
+                .padding(horizontal = 40.dp).padding(top = 18.dp).testTag("workspace-columns"),
+            verticalArrangement = Arrangement.spacedBy(40.dp)
+        ) {
+            header()
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(48.dp), verticalAlignment = Alignment.Top) {
+                Column(Modifier.width(minOf(440.dp, window.width * 0.38f)).fillMaxSize()
+                    .verticalScroll(rememberScrollState(), enabled = userScrollEnabled)) {
+                    Column(Modifier.testTag("workspace-actions").padding(bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp)) { actions() }
+                }
+                // 会话属于右栏，首行位置不再受左栏操作区高度影响。
+                LazyColumn(Modifier.weight(1f).testTag("workspace-session-list"), state = listState,
+                    userScrollEnabled = userScrollEnabled, contentPadding = PaddingValues(bottom = 24.dp)) {
+                    item(key = "workspace-recents-header", contentType = "header") {
+                        Column(Modifier.testTag("workspace-recents").padding(bottom = 18.dp),
+                            verticalArrangement = Arrangement.spacedBy(18.dp)) { recentSessions() }
+                    }
+                    sessions()
+                }
             }
-        } else {
-            Spacer(Modifier.height(44.dp))
-            Column(Modifier.testTag("workspace-actions"), verticalArrangement = Arrangement.spacedBy(18.dp)) { actions() }
-            Column(Modifier.testTag("workspace-recents"), verticalArrangement = Arrangement.spacedBy(18.dp)) { recentSessions() }
+        }
+    } else {
+        LazyColumn(Modifier.fillMaxSize().testTag("workspace-session-list"), state = listState,
+            contentPadding = contentPadding, userScrollEnabled = userScrollEnabled,
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            item(key = "workspace-header", contentType = "header") {
+                Column(Modifier.adaptiveContentWidth(AdaptiveLayout.WorkspaceWidth)
+                    .padding(horizontal = 22.dp, vertical = 18.dp).testTag("workspace-single-column"),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    header()
+                    Spacer(Modifier.height(44.dp))
+                    Column(Modifier.testTag("workspace-actions"), verticalArrangement = Arrangement.spacedBy(18.dp)) { actions() }
+                    Column(Modifier.testTag("workspace-recents"), verticalArrangement = Arrangement.spacedBy(18.dp)) { recentSessions() }
+                }
+            }
+            sessions()
+            item(key = "workspace-sessions-footer", contentType = "footer") { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
 
-/** 全部会话的各行直接进入外层 LazyColumn，保持与首页分栏相同的边距和右列位置。 */
+/** 窄屏会话保持页面边距；宽屏列表已经位于右栏，直接使用列宽。 */
 @Composable
-internal fun AdaptiveWorkspaceSessionContent(window: DpSize, content: @Composable () -> Unit) {
+internal fun AdaptiveWorkspaceSessionContent(window: DpSize, inColumn: Boolean = false, content: @Composable () -> Unit) {
+    if (inColumn) {
+        Box(Modifier.fillMaxWidth()) { content() }
+        return
+    }
     val columns = AdaptiveLayout.workspaceUsesColumns(window.width.value, window.height.value, LocalDensity.current.fontScale)
     Box(
         Modifier.adaptiveContentWidth(AdaptiveLayout.WorkspaceWidth)

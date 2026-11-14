@@ -142,6 +142,10 @@
 		580623DD7AA64CB4B43421ED = {isa = PBXBuildFile; fileRef = A8EDB2282ECE4510A12EBE54; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B9DF00000000000000000031 /* IOSDeviceConnectors.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9DF00000000000000000031 /* IOSDeviceConnectors.swift */; };
 		B9DF00000000000000000032 /* ConnectorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9DF00000000000000000032 /* ConnectorsView.swift */; };
+		A0C240000000000000000001 /* workspace_noto.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A0C240000000000000000002 /* workspace_noto.ttf */; };
+		A0C240000000000000000003 /* workspace_mono.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A0C240000000000000000004 /* workspace_mono.ttf */; };
+		A0C240000000000000000005 /* notosanssc-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = A0C240000000000000000006 /* notosanssc-OFL.txt */; };
+		A0C240000000000000000007 /* jetbrainsmono-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = A0C240000000000000000008 /* jetbrainsmono-OFL.txt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -303,6 +307,10 @@
 		A8EDB2282ECE4510A12EBE54 = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = ActionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9DF00000000000000000031 /* IOSDeviceConnectors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDeviceConnectors.swift; sourceTree = "<group>"; };
 		A9DF00000000000000000032 /* ConnectorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorsView.swift; sourceTree = "<group>"; };
+		A0C240000000000000000002 /* workspace_noto.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Design/review-fonts/android/font/workspace_noto.ttf"; sourceTree = SOURCE_ROOT; };
+		A0C240000000000000000004 /* workspace_mono.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Design/review-fonts/android/font/workspace_mono.ttf"; sourceTree = SOURCE_ROOT; };
+		A0C240000000000000000006 /* notosanssc-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Design/review-fonts/notosanssc-OFL.txt"; sourceTree = SOURCE_ROOT; };
+		A0C240000000000000000008 /* jetbrainsmono-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Design/review-fonts/jetbrainsmono-OFL.txt"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -474,6 +482,10 @@
 		7CECE0900CF815A6EB3A938D /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				A0C240000000000000000002 /* workspace_noto.ttf */,
+				A0C240000000000000000004 /* workspace_mono.ttf */,
+				A0C240000000000000000006 /* notosanssc-OFL.txt */,
+				A0C240000000000000000008 /* jetbrainsmono-OFL.txt */,
 				AB0170000000000000000003 /* ../../AppRelease/release-info.json */,
 				AB0170000000000000000004 /* ../../AppRelease/release-notes.md */,
 				59B069578BB7F31AD35F601A /* Info.plist */,
@@ -731,6 +743,10 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A0C240000000000000000001 /* workspace_noto.ttf in Resources */,
+				A0C240000000000000000003 /* workspace_mono.ttf in Resources */,
+				A0C240000000000000000005 /* notosanssc-OFL.txt in Resources */,
+				A0C240000000000000000007 /* jetbrainsmono-OFL.txt in Resources */,
 				AB0170000000000000000001 /* ../../AppRelease/release-info.json in Resources */,
 				AB0170000000000000000002 /* ../../AppRelease/release-notes.md in Resources */,
 				A1A0C0000000000000000001 /* LaunchScreen.storyboard in Resources */,

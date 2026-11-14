@@ -57,10 +57,12 @@ internal fun DshMenu(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier.width(240.dp),
     offset: DpOffset = DpOffset(0.dp, 8.dp),
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(26.dp),
+    shadowInset: Dp = DshMenuShadowPadding,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val density = LocalDensity.current
-    val shadowPadding = with(density) { DshMenuShadowPadding.roundToPx() }
+    val shadowPadding = with(density) { shadowInset.roundToPx() }
     val offsetPx = with(density) { IntOffset(offset.x.roundToPx(), offset.y.roundToPx()) }
     var origin by remember { mutableStateOf(TransformOrigin.Center) }
     val positionProvider =
@@ -83,7 +85,7 @@ internal fun DshMenu(
                 }
             }
         }
-    DshMenuPopup(expanded, onDismissRequest, positionProvider, modifier, transformOrigin = origin) {
+    DshMenuPopup(expanded, onDismissRequest, positionProvider, modifier, transformOrigin = origin, shape = shape, shadowPadding = shadowInset) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp), content = content)
     }
 

@@ -58,6 +58,7 @@ android {
     }
 
     sourceSets.getByName("main").assets.srcDir(rootProject.file("AppRelease"))
+    sourceSets.getByName("main").res.srcDir(rootProject.file("Design/review-fonts/android"))
     sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("Tests/Fixtures"))
 
     packaging {

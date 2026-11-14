@@ -59,7 +59,9 @@ struct DeepSeekHarnessMobileApp: App {
         WindowGroup {
             Group {
                 #if DEBUG
-                if ProcessInfo.processInfo.environment["DSH_CONNECTOR_SHEET_UI_TEST"] == "1" {
+                if ProcessInfo.processInfo.environment["DSH_WORKSPACE_REVIEW_UI_TEST"] == "1" {
+                    WorkspaceReviewUITestHarness()
+                } else if ProcessInfo.processInfo.environment["DSH_CONNECTOR_SHEET_UI_TEST"] == "1" {
                     ConnectorSheetUITestHarness()
                 } else if hosts.isReady { RootView() }
                 else { ProgressView() }

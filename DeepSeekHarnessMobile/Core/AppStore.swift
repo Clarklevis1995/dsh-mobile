@@ -558,6 +558,8 @@ final class AppStore: ObservableObject {
         }
         for request in transition.requests {
             guard let id = request.correlationId else { continue }
+            appLog("[WorkspaceChanges] request type=%@ seq=%d connected=%@",
+                request.requestType, workspaceChanges.seq?.intValue ?? -1, String(workspaceChanges.connected))
             gateway.sendRequestPayload(request.payload, decorate: false)
             changesTimeouts[id] = Task { [weak self] in
                 do { try await Task.sleep(for: .seconds(36)) } catch { return }
@@ -3256,10 +3258,6 @@ final class AppStore: ObservableObject {
     }
 
     private func handle(_ frame: GatewayFrame) {
-        if frame.kind == "hello" {
-            supportsWorkspaceChanges = frame.capabilities?.contains("workspace-changes-v1") == true
-            refreshWorkspaceChanges()
-        }
         if (frame.kind == "event" && frame.event?.type == "workspace/changes")
             || ["history", "session-snapshot", "workspace-changes-summary", "workspace-changes-diff"].contains(frame.kind)
             || frame.requestType?.hasPrefix("workspace-changes-") == true {
@@ -3267,6 +3265,13 @@ final class AppStore: ObservableObject {
             if frame.kind == "history" || frame.kind == "session-snapshot" {
                 changesFrame = GatewayFrame(kind: frame.kind, sessionId: frame.sessionId)
                 changesFrame.events = frame.events?.filter { $0.type == "workspace/changes" }
+            }
+            if changesFrame.event?.type == "workspace/changes" || changesFrame.events?.isEmpty == false {
+                appLog("[WorkspaceChanges] announced kind=%@ seq=%d records=%d",
+                    frame.kind, frame.seq ?? -1, changesFrame.events?.count ?? 1)
+            }
+            if frame.kind.hasPrefix("workspace-changes-") || frame.requestType?.hasPrefix("workspace-changes-") == true {
+                appLog("[WorkspaceChanges] response kind=%@ seq=%d code=%@", frame.kind, frame.seq ?? -1, frame.code ?? "none")
             }
             if let data = try? JSONEncoder().encode(changesFrame) {
                 applyWorkspaceChanges(workspaceChangesStore.acceptJson(json: String(decoding: data, as: UTF8.self)))
@@ -3647,6 +3652,11 @@ final class AppStore: ObservableObject {
             supportsImages = payload.protocolVersion >= 3 && payload.capabilities.contains("images")
             supportsFileDownloads = payload.protocolVersion >= 3 && payload.capabilities.contains("file-downloads")
             supportsFileReferences = payload.capabilities.contains("file-references-v1")
+            // 必须在 resetOutstandingRequests 清理上一代连接之后恢复查询状态。
+            supportsWorkspaceChanges = payload.capabilities.contains("workspace-changes-v1")
+            refreshWorkspaceChanges()
+            appLog("[WorkspaceChanges] hello supported=%@ connected=%@",
+                String(supportsWorkspaceChanges), String(workspaceChanges.connected))
             supportsSlashCommands = payload.capabilities.contains("commands")
             supportsSessionCreation = payload.capabilities.contains("session-create")
             supportsSessionAgentPreset = payload.capabilities.contains("session-agent-preset")

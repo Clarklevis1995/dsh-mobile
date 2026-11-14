@@ -3,6 +3,7 @@ package com.clarklevis.dsh.shared
 import com.clarklevis.dsh.shared.facade.ConversationTarget
 import com.clarklevis.dsh.shared.facade.SharedTeamStore
 import com.clarklevis.dsh.shared.facade.TeamMemberProfileRequest
+import com.clarklevis.dsh.shared.facade.TeamTaskView
 import com.clarklevis.dsh.shared.protocol.wireJson
 import kotlinx.serialization.json.*
 import kotlin.test.*
@@ -62,6 +63,60 @@ class SharedTeamStoreTest {
         assertTrue(s.snapshot("marketing").tasks.all { it.status == "completed" })
     }
 
+    @Test fun rc3EmptyTeamAndHistoricalTasksRemainVisible() {
+        val s = store()
+        update(s, """{"enabled":true,"tasks":[]}""")
+        assertTrue(s.snapshot("lead").visible)
+        assertTrue(s.snapshot("lead").isTeam)
+        update(s, """{"enabled":false,"tasks":[{"id":"t","subject":"历史","status":"completed","ownerId":"gone"}],"failure":"诊断"}""", 121)
+        val snapshot = s.snapshot("lead")
+        assertTrue(snapshot.visible)
+        assertTrue(snapshot.isTeam)
+        assertEquals("gone", snapshot.tasks.single().ownerId)
+        assertNotNull(snapshot.error)
+        update(s, "null", 122)
+        assertEquals("unavailable", s.snapshot("lead").state)
+        assertEquals(snapshot.tasks, s.snapshot("lead").tasks)
+        update(s, """{"enabled":false,"tasks":[]}""", 123)
+        assertFalse(s.snapshot("lead").visible)
+    }
+
+    @Test fun rc3OwnerIdentityUsesIdsAndFullPathsWithoutDescriptionMatching() {
+        val s = store()
+        fun catalog(parent: String, value: String) {
+            assertTrue(s.acceptFrameJson("""{"kind":"subagents-updated","sessionId":"$parent","subagentCatalog":$value}"""))
+        }
+        catalog("lead", """[{"id":"r","name":"reviewer","label":"检查分镜","mode":"continuable"},{"id":"w","name":"writer","mode":"continuable"},{"id":"old","label":"旧描述","mode":"continuable"}]""")
+        catalog("r", """[{"id":"c1","name":"checker","mode":"continuable"},{"id":"c4","label":"未命名的检查代理","mode":"continuable"}]""")
+        catalog("w", """[{"id":"c2","name":"checker","mode":"continuable"}]""")
+        catalog("old", """[{"id":"c3","name":"checker","mode":"continuable"}]""")
+        val members = s.snapshot("lead").members
+        assertEquals("reviewer", members.first { it.id == "r" }.name)
+        assertEquals("检查分镜", members.first { it.id == "r" }.detail)
+        assertEquals("reviewer/checker", members.first { it.id == "c1" }.name)
+        assertEquals("old/checker", members.first { it.id == "c3" }.identityName)
+        assertEquals("reviewer/c4", members.first { it.id == "c4" }.name)
+        fun task(id: String? = null, name: String? = null) = TeamTaskView("t", subject = "任务", status = "pending", ownerId = id, ownerName = name)
+        assertEquals("r", task(name = "reviewer").owner(members)?.id)
+        assertEquals("c1", task(name = "reviewer/checker").owner(members)?.id)
+        assertNull(task(name = "checker").owner(members))
+        assertNull(task(name = "检查分镜").owner(members))
+        assertNull(task(name = "旧描述").owner(members))
+        assertEquals("old", task(name = "old").owner(members)?.id)
+        assertEquals("c2", task(id = "c2", name = "reviewer/checker").owner(members)?.id)
+        assertTrue(task(id = "c2").isOwnedBy("c2", members))
+        assertFalse(task(id = "missing", name = "reviewer").isOwnedBy("r", members))
+        assertTrue(task(name = "reviewer/checker").isOwnedBy("c1", members))
+        assertFalse(task().isOwnedBy("r", members))
+        assertFalse(task(id = "c2").isUnassigned)
+        assertEquals("writer/checker", task(id = "c2").ownerDisplayName(members))
+        assertNull(task(id = "missing", name = "reviewer").owner(members))
+        assertEquals("reviewer", task(id = "missing", name = "reviewer").ownerDisplayName(members))
+        assertEquals("missing", task(id = "missing").ownerDisplayName(members))
+        assertTrue(task().isUnassigned)
+        assertEquals("r", wireJson.decodeFromString<ConversationTarget>(s.targetJson("c1")).parentSessionId)
+    }
+
     private fun store() = SharedTeamStore().apply {
         acceptFrameJson("""{"kind":"hello","capabilities":["agent-team-v1","subagent-conversations-v1"]}""")
     }
@@ -73,7 +128,10 @@ class SharedTeamStoreTest {
     @Test fun teamMemberUsesCatalogDescriptionBeforeAnyMemberHistoryIsOpened() {
         val s = store(); update(s)
         s.acceptFrameJson("""{"kind":"subagents-updated","sessionId":"lead","asOfSeq":121,"subagentCatalog":[{"id":"a","mode":"continuable","label":"原创合成配乐与音效"}]}""")
-        assertEquals("原创合成配乐与音效", s.snapshot("lead").members.last().detail)
+        val snapshot = s.snapshot("lead")
+        assertEquals("原创合成配乐与音效", snapshot.members.last().detail)
+        assertEquals("a", snapshot.tasks.single().owner(snapshot.members)?.id,
+            "旧名册的身份名称不能被只有 label 的旧目录覆盖")
     }
 
     @Test fun memberProfilesAreBoundedAddressedAndCachedBeforeSelection() {

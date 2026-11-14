@@ -403,6 +403,7 @@ internal fun WorkspaceScreen(
     onConnectors: () -> Unit
 ) {
     val window = adaptiveWindowSize()
+    val workspaceColumns = AdaptiveLayout.workspaceUsesColumns(window.width.value, window.height.value, androidx.compose.ui.platform.LocalDensity.current.fontScale)
     val workspaceListState = rememberLazyListState()
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showManualPairing by rememberSaveable { mutableStateOf(false) }
@@ -490,109 +491,103 @@ internal fun WorkspaceScreen(
                 HarnessAnimatedBackground(backdropModifier, animationEnabled = backgroundAnimationEnabled)
             }
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().testTag("workspace-session-list"),
+            AdaptiveWorkspaceContent(
+                window = window,
+                header = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        WorkspaceHeader(
+                            state = stateHolder.gatewayState,
+                            onScan = {
+                                stateHolder.clearPlatformError()
+                                showQrScanner = true
+                            },
+                            onManualEntry = {
+                                stateHolder.clearPlatformError()
+                                showManualPairing = true
+                            },
+                            onSettings = onSettings,
+                            onOpenDrawer = openDrawer
+                        )
+                        GatewaySwitcherBar()
+                    }
+                },
+                actions = {
+                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text(
+                            stringResource(R.string.workspace_hero_title),
+                            color = Color.White,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.semantics { heading() }.testTag("workspace-hero-title")
+                        )
+                        Text(appText("Deepseek Harness 预览版"), color = Color.White.copy(alpha = 0.65f), fontSize = 14.sp)
+                    }
+                    Box(Modifier.fillMaxWidth()) {
+                        WorkspaceCard(
+                            workspace = selectedWorkspace,
+                            ungrouped = ungroupedSelected,
+                            ungroupedCount = ungroupedCount,
+                            allWorkspaces = showingAllWorkspaces,
+                            sessionCount = sessions.size,
+                            state = stateHolder.gatewayState,
+                            onClick = { showWorkspaceMenu = true }
+                        )
+                        WorkspaceSelectionMenu(
+                            expanded = showWorkspaceMenu,
+                            workspaces = workspaces,
+                            selectedWorkspaceId = stateHolder.selectedWorkspaceId,
+                            onSelect = { workspaceId ->
+                                stateHolder.selectWorkspace(workspaceId)
+                                showWorkspaceMenu = false
+                            },
+                            onAddWorkspace = {
+                                showWorkspaceMenu = false
+                                showDirectoryBrowser = true
+                            },
+                            onDismiss = { showWorkspaceMenu = false }
+                        )
+                    }
+                    GlassActionButton("＋", appText("新建会话")) {
+                        onNewSession()
+                    }
+                },
+                recentSessions = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (showingAllWorkspaces) appText("全部会话") else appText("最近会话"),
+                            color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                        Spacer(Modifier.weight(1f))
+                        ConnectionStatusText(stateHolder.gatewayState)
+                    }
+                    LocalChatSearchContent(stateHolder, searchQuery, { searchQuery = it }, onOpenSession)
+                    if (sessions.isEmpty()) EmptySessions()
+                },
+                listState = workspaceListState,
                 contentPadding = WindowInsets.safeDrawing.asPaddingValues(),
-                horizontalAlignment = Alignment.CenterHorizontally,
                 userScrollEnabled = canScrollVertically,
-                state = workspaceListState
-            ) {
-                item(key = "workspace-header", contentType = "header") {
-                    AdaptiveWorkspaceContent(
-                        window = window,
-                        header = {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                WorkspaceHeader(
-                                    state = stateHolder.gatewayState,
-                                    onScan = {
-                                        stateHolder.clearPlatformError()
-                                        showQrScanner = true
+                sessions = {
+                    items(sessionEntries, key = { it.key }, contentType = { it::class }) { entry ->
+                        AdaptiveWorkspaceSessionContent(window, inColumn = workspaceColumns) {
+                            when (entry) {
+                                is WorkspaceSessionListEntry.Header -> WorkspaceSessionSectionHeader(entry)
+                                is WorkspaceSessionListEntry.Toggle -> WorkspaceSessionSectionToggle(entry) { id ->
+                                    expandedSectionIds = if (id in expandedSectionIds) expandedSectionIds - id else expandedSectionIds + id
+                                }
+                                is WorkspaceSessionListEntry.Session -> SessionListItem(
+                                    session = entry.session,
+                                    folderLabel = if (showingAllWorkspaces) null else sessionFolderLabel(entry.session, sessionFolderLabels),
+                                    onOpen = { id ->
+                                        if (searchQuery.isNotBlank()) stateHolder.localChatMatches.firstOrNull { it.sessionId == id }
+                                            ?.let(stateHolder::prepareLocalChatMatch)
+                                        onOpenSession(id)
                                     },
-                                    onManualEntry = {
-                                        stateHolder.clearPlatformError()
-                                        showManualPairing = true
-                                    },
-                                    onSettings = onSettings,
-                                    onOpenDrawer = openDrawer
-                                )
-                                GatewaySwitcherBar()
-                            }
-                        },
-                        actions = {
-                            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                Text(
-                                    stringResource(R.string.workspace_hero_title),
-                                    color = Color.White,
-                                    fontSize = 32.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.semantics { heading() }.testTag("workspace-hero-title")
-                                )
-                                Text(appText("Deepseek Harness 预览版"), color = Color.White.copy(alpha = 0.65f), fontSize = 14.sp)
-                            }
-                            Box(Modifier.fillMaxWidth()) {
-                                WorkspaceCard(
-                                    workspace = selectedWorkspace,
-                                    ungrouped = ungroupedSelected,
-                                    ungroupedCount = ungroupedCount,
-                                    allWorkspaces = showingAllWorkspaces,
-                                    sessionCount = sessions.size,
-                                    state = stateHolder.gatewayState,
-                                    onClick = { showWorkspaceMenu = true }
-                                )
-                                WorkspaceSelectionMenu(
-                                    expanded = showWorkspaceMenu,
-                                    workspaces = workspaces,
-                                    selectedWorkspaceId = stateHolder.selectedWorkspaceId,
-                                    onSelect = { workspaceId ->
-                                        stateHolder.selectWorkspace(workspaceId)
-                                        showWorkspaceMenu = false
-                                    },
-                                    onAddWorkspace = {
-                                        showWorkspaceMenu = false
-                                        showDirectoryBrowser = true
-                                    },
-                                    onDismiss = { showWorkspaceMenu = false }
+                                    onRename = stateHolder::renameSession,
+                                    onArchive = stateHolder::archiveSession
                                 )
                             }
-                            GlassActionButton("＋", appText("新建会话")) {
-                                onNewSession()
-                            }
-                        },
-                        recentSessions = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(if (showingAllWorkspaces) appText("全部会话") else appText("最近会话"),
-                                    color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-                                Spacer(Modifier.weight(1f))
-                                ConnectionStatusText(stateHolder.gatewayState)
-                            }
-                            LocalChatSearchContent(stateHolder, searchQuery, { searchQuery = it }, onOpenSession)
-                            if (sessions.isEmpty()) EmptySessions()
-                        }
-                    )
-                }
-                items(sessionEntries, key = { it.key }, contentType = { it::class }) { entry ->
-                    AdaptiveWorkspaceSessionContent(window) {
-                        when (entry) {
-                            is WorkspaceSessionListEntry.Header -> WorkspaceSessionSectionHeader(entry)
-                            is WorkspaceSessionListEntry.Toggle -> WorkspaceSessionSectionToggle(entry) { id ->
-                                expandedSectionIds = if (id in expandedSectionIds) expandedSectionIds - id else expandedSectionIds + id
-                            }
-                            is WorkspaceSessionListEntry.Session -> SessionListItem(
-                                session = entry.session,
-                                folderLabel = if (showingAllWorkspaces) null else sessionFolderLabel(entry.session, sessionFolderLabels),
-                                onOpen = { id ->
-                                    if (searchQuery.isNotBlank()) stateHolder.localChatMatches.firstOrNull { it.sessionId == id }
-                                        ?.let(stateHolder::prepareLocalChatMatch)
-                                    onOpenSession(id)
-                                },
-                                onRename = stateHolder::renameSession,
-                                onArchive = stateHolder::archiveSession
-                            )
                         }
                     }
                 }
-                item(key = "workspace-sessions-footer", contentType = "footer") { Spacer(Modifier.height(24.dp)) }
-            }
+            )
         }
     }
 

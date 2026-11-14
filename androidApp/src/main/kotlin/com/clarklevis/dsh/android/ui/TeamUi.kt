@@ -313,11 +313,10 @@ private fun TeamSheetContent(
 ) {
     val team = holder.teamSnapshot
     var filter by remember { mutableIntStateOf(0) }
-    val current = team.members.firstOrNull { it.id == holder.snapshot.selectedSessionId }
     val tasks =
         team.tasks.filter {
             filter == 0 ||
-                if (filter == 1) current != null && it.ownerName == current.name else it.ownerName == null
+                if (filter == 1) it.isOwnedBy(holder.snapshot.selectedSessionId, team.members) else it.isUnassigned
         }
     LazyColumn(
         modifier.fillMaxWidth(),
@@ -386,7 +385,7 @@ private fun TeamSheetContent(
         items(tasks, key = { "task-${it.id}" }) { task ->
             TeamTaskCard(
                 task,
-                team.members.firstOrNull { it.name == task.ownerName },
+                task.owner(team.members),
                 task.blockedBy.map { id -> team.tasks.firstOrNull { it.id == id }?.subject ?: id },
                 select,
             )
@@ -533,7 +532,7 @@ internal fun TeamTaskCard(
             ) {
                 owner?.let { AgentAvatar(it.avatarIndex, Modifier.size(20.dp)) }
                 Text(
-                    appText("负责人：%1\$s", task.ownerName ?: appText("未分配")),
+                    appText("负责人：%1\$s", owner?.name ?: task.ownerName ?: task.ownerId ?: appText("未分配")),
                     fontSize = 12.sp,
                     lineHeight = 16.sp,
                     color = if (owner?.canOpen == true) Color(0xFF007AFF) else secondary,

@@ -2112,11 +2112,11 @@ struct WorkspaceFilePreviewLoadingSheet: View {
     let request: WorkspaceFilePreviewRequest
     var onSaved: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var preview = WorkspacePreviewFileLease()
 
     var body: some View {
         Group {
-            if let file = store.completedWorkspaceFile,
-               file.purpose == "preview", file.sessionID == request.sessionID {
+            if let file = preview.file {
                 WorkspaceFilePreview(file: file, gatewayID: store.gatewayLocalID, onSaved: onSaved)
                     .environment(\.workspaceMarkdownImageContext, store.markdownImageContext(sessionID: file.sessionID))
             } else {
@@ -2129,8 +2129,9 @@ struct WorkspaceFilePreviewLoadingSheet: View {
                             Text(store.workspaceFilePreviewProgress, format: .percent.precision(.fractionLength(0)))
                                 .appFont(.caption.monospacedDigit())
                                 .accessibilityIdentifier("workspace-preview-progress")
-                        } else {
-                            Text(store.workspaceFilePreviewError ?? String(localized: "文件加载失败"))
+                        } else if let error = store.workspaceFilePreviewError,
+                                  store.workspaceFilePreviewRequest?.id == request.id {
+                            Text(error)
                                 .multilineTextAlignment(.center)
                             Button(String(localized: "重试")) { store.retryWorkspaceFilePreview() }
                                 .buttonStyle(.borderedProminent)
@@ -2147,6 +2148,12 @@ struct WorkspaceFilePreviewLoadingSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
+        .onReceive(store.$completedWorkspaceFile) { file in
+            guard store.workspaceFilePreviewRequest?.id == request.id,
+                  let file, file.purpose == "preview", file.sessionID == request.sessionID else { return }
+            // 取消请求会立即清空 Store；退场结束前仍保留已显示的文档及文件租约。
+            preview.update(file)
+        }
         .onDisappear {
             // 保存面板等子页面不结束外层预览；关闭按钮和交互式关闭均由绑定取消请求。
             if store.workspaceFilePreviewRequest?.id == request.id,
@@ -2157,6 +2164,26 @@ struct WorkspaceFilePreviewLoadingSheet: View {
     private func close() {
         store.cancelWorkspaceFileDownload()
         dismiss()
+    }
+}
+
+private final class WorkspacePreviewFileLease: ObservableObject {
+    @Published private(set) var file: WorkspaceLocalFile?
+
+    func update(_ file: WorkspaceLocalFile) {
+        guard self.file != file else { return }
+        WorkspaceFileLifetime.shared.retain(file.url)
+        releaseFile()
+        self.file = file
+    }
+
+    deinit { releaseFile() }
+
+    private func releaseFile() {
+        guard let file else { return }
+        WorkspaceFileLifetime.shared.release(
+            file.url, deleteTemporary: file.url.path.hasPrefix(WorkspacePreviewCache.temporaryRoot.path + "/")
+        )
     }
 }
 
