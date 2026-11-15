@@ -216,6 +216,13 @@ object GatewayRequests {
         put("requestId", requestId)
     }
 
+    fun setTeamEnabled(sessionId: String, enabled: Boolean, requestId: String): GatewayRequest = request(
+        "agent-team-set-enabled", "agent-team-mode-set", targetSessionId = sessionId,
+        correlationId = requestId, lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY
+    ) {
+        put("sessionId", sessionId); put("requestId", requestId); put("enabled", enabled)
+    }
+
     fun simple(type: String, responseKind: String = type): GatewayRequest =
         request(type, responseKind, lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST)
 

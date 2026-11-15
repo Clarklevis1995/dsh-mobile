@@ -392,6 +392,53 @@ final class AppStore: ObservableObject {
         prepareTeamMemberProfiles()
     }
 
+    @Published private(set) var teamMode = MobileTeamModeSnapshot()
+    @Published var teamModeDisableTarget: String?
+    private var teamModeTimeouts: [String: Task<Void, Never>] = [:]
+
+    private struct TeamModeCommand: Decodable { let requestId: String; let payload: String }
+
+    private func publishTeamModeSnapshot(load: Bool = false) {
+        guard let data = teamStore.modeSnapshotJson(sessionId: selectedSessionId,
+            connected: gateway.state.isConnected).data(using: .utf8),
+              let value = try? JSONDecoder().decode(MobileTeamModeSnapshot.self, from: data) else { return }
+        if teamMode != value { teamMode = value }
+        if load, value.supported, let id = selectedSessionId, gateway.state.isConnected,
+           let query = teamStore.queryIfNeededJson(leadSessionId: id, kind: "agent-team") {
+            gateway.sendRequestPayload(query)
+        }
+    }
+
+    func setTeamModeEnabled(_ enabled: Bool, sessionID: String? = nil, confirmed: Bool = false) {
+        guard let id = sessionID ?? selectedSessionId else { return }
+        let current = teamStore.modeSnapshot(sessionId: id, connected: gateway.state.isConnected)
+        if !enabled && current.requiresDisableConfirmation && !confirmed {
+            if current.canChange { teamModeDisableTarget = id }
+            return
+        }
+        guard let encoded = teamStore.setEnabledRequestJson(sessionId: id, enabled: enabled,
+            confirmed: confirmed, connected: gateway.state.isConnected)?.data(using: .utf8),
+              let command = try? JSONDecoder().decode(TeamModeCommand.self, from: encoded) else { return }
+        publishTeamModeSnapshot()
+        gateway.sendRequestPayload(command.payload)
+        teamModeTimeouts[command.requestId] = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(15)) } catch { return }
+            guard let self else { return }
+            teamModeTimeouts.removeValue(forKey: command.requestId)
+            if teamStore.modeRequestFailed(sessionId: id, requestId: command.requestId, message: nil) {
+                publishTeamModeSnapshot()
+                lastError = String(localized: "team.modeUnconfirmed")
+                refreshTeamMode(id)
+            }
+        }
+    }
+
+    private func refreshTeamMode(_ id: String) {
+        if gateway.state.isConnected, let query = teamStore.queryJson(leadSessionId: id, kind: "agent-team") {
+            gateway.sendRequestPayload(query)
+        }
+    }
+
     private struct TeamMemberProfileRequest: Decodable {
         let sessionId: String
         let requestId: String
@@ -1088,6 +1135,8 @@ final class AppStore: ObservableObject {
             self?.handleConnectionFailure(detail)
         }
         gateway.onConnectionInvalidated = { [weak self] in
+            self?.teamStore.modeConnectionLost()
+            self?.publishTeamModeSnapshot()
             self?.connectors.disconnected()
             self?.workspaceMarkdownImages.cancelAll()
             self?.pauseSessionControlRequests()
@@ -1097,7 +1146,10 @@ final class AppStore: ObservableObject {
             self?.resetOutstandingRequests()
         }
         gateway.onConnectionCheckStarted = { [weak self] in self?.pauseSessionControlRequests() }
-        gateway.onConnectionReady = { [weak self] in self?.resumeSessionControlRequests() }
+        gateway.onConnectionReady = { [weak self] in
+            self?.resumeSessionControlRequests()
+            self?.publishTeamModeSnapshot(load: true)
+        }
         offlineCatalogRestoreTask = Task { [weak self] in
             await offlineCatalogRestoreBarrier?()
             guard let self, offlineCatalogActive else { return }
@@ -1678,6 +1730,12 @@ final class AppStore: ObservableObject {
         preparedConversationActivationKey = sessionID ?? Self.newConversationActivationKey
         activeConversationActivationKey = nil
         await commitPendingKMPEventsAfterViewUpdate()
+        if let sessionID {
+            teamLeadSessionID = sessionID
+            publishTeamSnapshot()
+            ensureTeamLoaded()
+            publishTeamModeSnapshot(load: true)
+        }
         return selectedSessionId == sessionID
     }
 
@@ -3071,7 +3129,7 @@ final class AppStore: ObservableObject {
             return false
         }
 
-        guard !sessionAgentPreset.blocksSending else { return false }
+        guard !sessionAgentPreset.blocksSending, !teamMode.pending else { return false }
         if isShowingSearchContext { clearSearchContext(); conversationSearchTarget = nil }
         if !isViewingTeamMember, let command = kmpSlashCommandStore.commandExecutionForInput(text: trimmed) {
             guard !hasFiles else { lastError = String(localized: "斜杠命令不支持文件，请使用普通消息发送"); return false }
@@ -3317,10 +3375,19 @@ final class AppStore: ObservableObject {
         }
         if frame.kind == "subscribed", !gateway.acceptSubscriptionAck(sessionID: frame.sessionId) { return }
         if frame.kind == "error", frame.requestType == "subscribe" { gateway.resetSubscriptionRequests() }
-        if ["hello", "sessions", "session-status", "projection-baseline", "agent-team", "agent-team-updated", "subagents", "subagents-updated", "subagent-identity-updated", "subagent-timing-updated", "session-snapshot", "history", "error"].contains(frame.kind),
+        if ["hello", "sessions", "session-status", "projection-baseline", "agent-team-mode-set", "sent", "agent-team", "agent-team-updated", "subagents", "subagents-updated", "subagent-identity-updated", "subagent-timing-updated", "session-snapshot", "history", "error"].contains(frame.kind),
            let data = try? JSONEncoder().encode(frame),
            teamStore.acceptFrameJson(json: String(decoding: data, as: UTF8.self)) {
             publishTeamSnapshot()
+            publishTeamModeSnapshot(load: frame.kind == "hello")
+            if let requestID = frame.requestId,
+               frame.kind == "agent-team-mode-set" || frame.kind == "error" && frame.requestType == "agent-team-set-enabled" {
+                teamModeTimeouts.removeValue(forKey: requestID)?.cancel()
+                if let error = teamMode.error {
+                    lastError = error.localized
+                    if let id = frame.sessionId { refreshTeamMode(id) }
+                }
+            }
             let routing = teamStore.routingJson()
             if routing != persistedTeamRouting {
                 objectWillChange.send()
@@ -3329,7 +3396,7 @@ final class AppStore: ObservableObject {
             }
             if frame.kind == "hello" { refreshTeam() }
         }
-        if ["agent-team", "agent-team-updated", "subagents", "subagents-updated", "subagent-identity-updated", "subagent-timing-updated", "session-status"].contains(frame.kind) { return }
+        if ["agent-team-mode-set", "agent-team", "agent-team-updated", "subagents", "subagents-updated", "subagent-identity-updated", "subagent-timing-updated", "session-status"].contains(frame.kind) { return }
 
         if chatPrefetcher.consume(frame) || chatPrefetcher.consumeHistoryError(frame,
             foregroundHistoryPending: !historyLoadingSessionIds.isEmpty) { return }
@@ -5423,6 +5490,7 @@ final class AppStore: ObservableObject {
             selectedSessionId = snapshot.selectedSessionId
         }
         // stage9-kmp-write-scope: session-list-end
+        publishTeamModeSnapshot(load: true)
         let removedSessionIDs = previousSessionIDs.subtracting(mappedSessions.map(\.id))
         let newlyArchivedSessionIDs = mappedArchivedSessionIDs.subtracting(previousArchivedSessionIDs)
         let clearedSessionIDs = removedSessionIDs.union(newlyArchivedSessionIDs)

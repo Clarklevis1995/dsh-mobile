@@ -1,6 +1,6 @@
 # RC.3 团队兼容适配
 
-本次修改团队只读展示及负责人关联，不新增 Team 开关 RPC。发送、历史和停止继续使用已有移动协议。
+RC.3 基础适配修改团队展示及负责人关联，发送、历史和停止继续使用已有移动协议。后续已补对话「更多」菜单 Team 开关及可选 RPC，详见 [移动端 Team 模式开关](team-mode-control.md)。
 
 ## 数据规则
 
@@ -40,4 +40,4 @@ Android：构建 debug 应用和 androidTest，在模拟器执行 `TeamTaskCardD
 - iPhone 模拟器团队集成测试 14 项通过；iPad 模拟器额外通过 RC.3 页面尺寸及字体测试。
 - iOS 测试生成手机/平板宽高、横竖屏尺寸及 1.5 倍应用字号截图；Android 手机和平板各通过 8 项设备测试，并检查长路径卡片截图。
 - Android 编译成功。全局本地化检查被其他工作区改动中的中文字面量阻断，针对性构建通过 `-x :androidApp:verifyLocalizations` 继续。Android 全量单元测试共运行 302 项，有 4 项失败：MenuArchitectureTest 指向 WorkspaceChangesUi.kt，ConversationHistoryPresentationTest 有 3 项锚点索引失败；本次未修改相关实现。
-- 尚未连接真实 RC.3 网关进行真机发送、停止及断线恢复联调；也未完成两端整个团队页面在所有尺寸下的像素与手势对照验收。截图及测试产物位于 /tmp，未作为应用资源纳入仓库。
+- 初次代码适配阶段未进行真实网关联调。用户升级宿主与网关后的验证结果见 [RC.3 真实网关验收记录](rc3-live-verification.md)。物理手机及全部尺寸的像素/手势对照仍未覆盖；截图及测试产物位于 /tmp，未作为应用资源纳入仓库。

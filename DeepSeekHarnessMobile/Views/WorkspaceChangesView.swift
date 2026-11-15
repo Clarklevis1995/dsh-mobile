@@ -549,7 +549,6 @@ struct WorkspaceChangesDock: View {
                                 ProgressView().controlSize(.mini)
                                     .frame(width: style.PROGRESS_SIZE, height: style.PROGRESS_SIZE)
                             }
-                            if store.workspaceChanges.error != nil { Text("查看").foregroundStyle(changesLabel) }
                         }
                     }
                     .appFont(.system(size: style.FONT_SIZE))

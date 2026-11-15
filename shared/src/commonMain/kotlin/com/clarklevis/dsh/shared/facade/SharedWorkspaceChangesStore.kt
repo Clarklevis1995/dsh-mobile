@@ -26,7 +26,9 @@ data class SharedWorkspaceChangesSnapshot(
     val diffError: String? = null,
     val previews: List<WorkspaceFilePreview> = emptyList()
 ) {
-    val visible: Boolean get() = supported && seq != null && (summary == null || summary.total > 0)
+    // 仅有历史事件不代表 Host 仍保有快照；拿到有效清单后才提供查看入口。
+    val visible: Boolean get() = supported && seq != null && !loading && error == null &&
+        (summary?.total ?: 0) > 0 && !summary?.files.isNullOrEmpty()
 }
 
 data class SharedWorkspaceChangesTransition(
@@ -157,6 +159,10 @@ class SharedWorkspaceChangesStore {
         if (id == diffId) {
             diffId = null
             state = state.copy(diffLoading = false, diffError = code)
+            if (code == "workspace-changes-missing") {
+                // 清单返回后快照也可能过期；整轮记录失效，关闭面板后不能再次出现入口。
+                state = state.copy(summary = null, error = code, diff = null, rows = emptyList(), previews = emptyList())
+            }
         }
         return result()
     }

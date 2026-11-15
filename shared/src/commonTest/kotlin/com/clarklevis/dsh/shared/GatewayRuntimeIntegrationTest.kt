@@ -52,6 +52,31 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class GatewayRuntimeIntegrationTest {
     @Test
+    fun teamModeReplyRequiresMatchingRequestAndSession() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport, clock = RecordingDelayClock())
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect { events += it } }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        assertTrue(runtime.sendRequest(GatewayRequests.setTeamEnabled("lead", true, "mode-1")))
+        transport.receive("""{"kind":"agent-team-mode-set","sessionId":"other","requestId":"mode-1","agentTeam":{"enabled":true}}""")
+        transport.receive("""{"kind":"agent-team-mode-set","sessionId":"lead","requestId":"stale","agentTeam":{"enabled":true}}""")
+        runCurrent()
+        assertFalse(events.filterIsInstance<GatewayRuntimeEvent.Frame>().any { it.frame.kind == "agent-team-mode-set" })
+        transport.receive("""{"kind":"agent-team-mode-set","sessionId":"lead","requestId":"mode-1","agentTeam":{"enabled":true},"asOfSeq":10,"projectionState":"ready"}""")
+        runCurrent()
+        assertEquals(1, events.filterIsInstance<GatewayRuntimeEvent.Frame>().count { it.frame.kind == "agent-team-mode-set" })
+        assertTrue(runtime.sendRequest(GatewayRequests.setTeamEnabled("lead", false, "mode-2")))
+        transport.receive("""{"kind":"error","sessionId":"lead","requestType":"agent-team-set-enabled","requestId":"mode-2","message":"flush failed"}""")
+        runCurrent()
+        assertTrue(events.filterIsInstance<GatewayRuntimeEvent.Frame>().any { it.frame.requestId == "mode-2" && it.frame.kind == "error" })
+    }
+
+    @Test
     fun globalSessionStatusRefreshesHomeCatalogWithoutSelectingConversation() = runTest {
         val transport = FakeTransport()
         val runtime = newRuntime(transport, clock = RecordingDelayClock())

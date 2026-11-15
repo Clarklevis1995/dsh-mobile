@@ -79,14 +79,18 @@ class WorkspaceChangesTest {
         val store = SharedWorkspaceChangesStore()
         store.open("s1", true, true)
         val request = store.accept(event()).requests.single()
+        assertFalse(store.snapshot().visible, "清单查询中不显示入口")
         store.accept(GatewayFrame("error", sessionId = "s1", seq = 160, requestId = request.correlationId,
             code = "workspace-changes-missing", requestType = request.requestType))
         assertNull(store.snapshot().summary)
         assertEquals("workspace-changes-missing", store.snapshot().error)
+        assertFalse(store.snapshot().visible, "历史快照不可用时隐藏入口")
         val retry = store.retrySummary().requests.single()
+        assertFalse(store.snapshot().visible, "重试期间不显示无效入口")
         store.accept(GatewayFrame("workspace-changes-summary", sessionId = "s1", seq = 160,
             requestId = retry.correlationId, summary = WorkspaceChangesSummary(3, 9, 10, 2, listOf(
                 WorkspaceChangedFile("z", "z", 1, 1), WorkspaceChangedFile("a", "a", 9, 1)))))
+        assertTrue(store.snapshot().visible, "有效文件清单恢复后显示入口")
         val diffRequest = store.selectFile(1).requests.single()
         assertEquals(1, wireJson.parseToJsonElement(diffRequest.payload).let { (it as kotlinx.serialization.json.JsonObject)["index"].toString().toInt() })
         assertEquals(9, store.snapshot().summary?.total)
@@ -94,6 +98,35 @@ class WorkspaceChangesTest {
         store.accept(GatewayFrame("workspace-changes-diff", sessionId = "s1", seq = 160, index = 1,
             requestId = diffRequest.correlationId, diff = WorkspaceChangesDiff("binary", "a", "a")))
         assertNull(store.snapshot().diff)
+    }
+
+    @Test fun capsuleRequiresSuccessfulNonEmptySummaryAndExpiredDiffStaysHiddenAfterClose() {
+        val store = SharedWorkspaceChangesStore()
+        store.open("s1", true, true)
+        val first = store.accept(event()).requests.single()
+        store.requestFailed(requireNotNull(first.correlationId))
+        assertFalse(store.snapshot().visible, "超时不能留下查看入口")
+        val empty = store.retrySummary().requests.single()
+        store.accept(GatewayFrame("workspace-changes-summary", sessionId = "s1", seq = 160,
+            requestId = empty.correlationId, summary = WorkspaceChangesSummary(3, 0, 0, 0, emptyList())))
+        assertFalse(store.snapshot().visible, "无改动时隐藏入口")
+        val next = store.accept(event(170, 4)).requests.single()
+        store.accept(GatewayFrame("workspace-changes-summary", sessionId = "s1", seq = 170,
+            requestId = next.correlationId, summary = WorkspaceChangesSummary(4, 1, 1, 0,
+                listOf(WorkspaceChangedFile("a", "a", 1, 0)))))
+        assertTrue(store.snapshot().visible, "新一轮有效改动显示入口")
+        val diff = store.selectFile(0).requests.single()
+        store.accept(GatewayFrame("error", sessionId = "s1", seq = 170, requestId = diff.correlationId,
+            code = "workspace-changes-missing", requestType = diff.requestType))
+        assertFalse(store.snapshot().visible, "读取 diff 时快照失效也隐藏入口")
+        store.closeDiff()
+        assertFalse(store.snapshot().visible, "关闭面板不能恢复过期入口")
+        assertEquals("workspace-changes-missing", store.snapshot().error)
+        val fresh = store.accept(event(180, 5)).requests.single()
+        store.accept(GatewayFrame("workspace-changes-summary", sessionId = "s1", seq = 180,
+            requestId = fresh.correlationId, summary = WorkspaceChangesSummary(5, 1, 2, 0,
+                listOf(WorkspaceChangedFile("b", "b", 2, 0)))))
+        assertTrue(store.snapshot().visible)
     }
 
     @Test fun rowNumbersRespectHunksAndPreserveWhitespace() {

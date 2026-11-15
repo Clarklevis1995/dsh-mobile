@@ -152,6 +152,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
@@ -366,6 +367,8 @@ private fun ConversationScreenContent(
                             Spacer(Modifier.width(8.dp))
                         }
                         ConversationMoreMenu(
+                            teamMode = stateHolder.teamMode,
+                            onSetTeamEnabled = { stateHolder.setTeamModeEnabled(it) },
                             canBrowseFiles = stateHolder.snapshot.selectedSessionId != null &&
                                 stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED &&
                                 "file-downloads" in stateHolder.gatewayState.capabilities,
@@ -411,6 +414,7 @@ private fun ConversationScreenContent(
             onDismissRequest = stateHolder.voiceInput::dismissAlert
         )
     }
+    TeamModeDisableConfirmation(stateHolder)
     if (showStats) {
         SessionStatsSheet(stateHolder.snapshot.statsSnapshot) { showStats = false }
     }
@@ -478,20 +482,24 @@ internal fun ConversationMoreMenu(
     canBrowseFiles: Boolean,
     onBrowseFiles: () -> Unit,
     canShowStats: Boolean,
-    onShowStats: () -> Unit
+    onShowStats: () -> Unit,
+    teamMode: com.clarklevis.dsh.shared.facade.TeamModeSnapshot = com.clarklevis.dsh.shared.facade.TeamModeSnapshot(),
+    onSetTeamEnabled: (Boolean) -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         TopBarCircleButton(
             iconRes = R.drawable.ic_more_horizontal,
             description = appText("更多"),
-            onClick = { expanded = true }
+            onClick = { expanded = true },
+            modifier = Modifier.testTag("conversation-more-menu-toggle")
         )
         DshMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.width(200.dp).testTag("conversation-more-menu"),
-            offset = DpOffset(x = (-192).dp, y = 8.dp)
+            modifier = Modifier.width(250.dp).testTag("conversation-more-menu"),
+            offset = DpOffset(x = (-206).dp, y = (-44).dp),
+            shadowInset = 8.dp
         ) {
             ConversationMoreMenuItem(
                 title = appText("工作区文件"),
@@ -509,6 +517,10 @@ internal fun ConversationMoreMenu(
                 expanded = false
                 onShowStats()
             }
+            TeamModeMenuItems(teamMode) {
+                expanded = false
+                onSetTeamEnabled(it)
+            }
         }
     }
 }
@@ -524,22 +536,23 @@ private fun ConversationMoreMenuItem(
         text = {
             Text(
                 title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium
+                fontSize = 17.sp,
+                lineHeight = 22.sp,
+                letterSpacing = 0.sp
             )
         },
         leadingIcon = {
             Icon(
                 painter = painterResource(iconRes),
                 contentDescription = null,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(20.dp)
             )
         },
-        modifier = Modifier.height(44.dp),
+        modifier = Modifier.heightIn(min = 44.dp),
         enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 14.dp),
+        contentPadding = PaddingValues(horizontal = 30.dp, vertical = 10.dp),
         minHeight = 44.dp,
-        horizontalSpacing = 8.dp,
+        horizontalSpacing = 14.dp,
         onClick = onClick
     )
 }
@@ -2546,11 +2559,12 @@ private fun ComposerMenuItem(title: String, selected: Boolean, onClick: () -> Un
 }
 
 @Composable
-private fun ModelControl(
+internal fun ModelControl(
     stateHolder: AndroidSharedStateHolder,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var page by remember { mutableStateOf("root") }
     val effort = currentModelEffortTitle(stateHolder)
     val selection = currentModelSelection(stateHolder)
     val groups = stateHolder.snapshot.modelCatalog?.groups.orEmpty()
@@ -2558,80 +2572,100 @@ private fun ModelControl(
         groups.isNotEmpty() && stateHolder.snapshot.modelCatalog?.routable != false
     Box(modifier) {
         Row(
-            modifier = Modifier.fillMaxWidth().clickable(enabled = enabled) { expanded = true },
+            modifier = Modifier.fillMaxWidth().testTag("conversation-model-menu-toggle")
+                .clickable(enabled = enabled) { page = "root"; expanded = true },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Text(
-                modelTitle(stateHolder),
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.End,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
+            Text(modelTitle(stateHolder), modifier = Modifier.weight(1f), textAlign = TextAlign.End,
+                fontSize = 12.sp, fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            effort?.let {
-                ReasoningEffortTag(it)
-            }
-            Icon(
-                painter = painterResource(R.drawable.ic_chevrons_vertical),
-                contentDescription = null,
-                modifier = Modifier.size(9.dp),
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.30f)
-            )
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            effort?.let { ReasoningEffortTag(it) }
+            Icon(painterResource(R.drawable.ic_chevrons_vertical), null, Modifier.size(9.dp),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.30f))
         }
-        ComposerPopupMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            width = 286.dp,
-            alignment = Alignment.BottomEnd,
-            horizontalCompensation = 28.dp
-        ) {
+        ComposerPopupMenu(expanded, { expanded = false }, 310.dp, Alignment.BottomEnd, 28.dp) {
             val efforts = currentModelEfforts(stateHolder)
-            if (efforts.isNotEmpty()) {
-                ComposerMenuSectionTitle(appText("推理等级"))
-                efforts.forEach { option ->
-                    ComposerMenuItem(
-                        title = option.name,
-                        selected = option.id == selection?.reasoningEffort
-                    ) {
-                        selection ?: return@ComposerMenuItem
-                        stateHolder.selectModel(selection.provider, selection.model, option.id)
-                        expanded = false
-                    }
-                }
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
-                )
-            }
-            groups.forEachIndexed { index, group ->
-                if (index > 0) HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
-                )
-                ComposerMenuSectionTitle(group.name)
-                group.models.forEach { model ->
-                    ComposerMenuItem(
-                        title = model.name,
-                        selected = group.id == selection?.provider && model.id == selection.model
-                    ) {
-                        val retainedEffort = selection?.reasoningEffort?.takeIf { current ->
-                            model.reasoning?.efforts.orEmpty().any { it.id == current }
+            if (page == "root") {
+                ModelMenuNavigationItem(appText("模型"), modelTitle(stateHolder), enabled) { page = "models" }
+                if (efforts.isNotEmpty()) ModelMenuNavigationItem(appText("推理等级"), effort.orEmpty(), enabled) { page = "efforts" }
+
+            } else {
+                DshMenuItem(text = { Text(appText("返回"), fontSize = 17.sp) },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_back_chevron), null, Modifier.size(18.dp)) },
+                    onClick = { page = "root" })
+                if (page == "efforts") {
+                    efforts.forEach { option ->
+                        ComposerMenuItem(option.name, option.id == selection?.reasoningEffort) {
+                            selection?.let { stateHolder.selectModel(it.provider, it.model, option.id) }
+                            expanded = false
                         }
-                        stateHolder.selectModel(
-                            group.id,
-                            model.id,
-                            retainedEffort ?: model.reasoning?.defaultEffort
-                        )
-                        expanded = false
+                    }
+                } else groups.forEachIndexed { index, group ->
+                    if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 18.dp, vertical = 4.dp))
+                    ComposerMenuSectionTitle(group.name)
+                    group.models.forEach { model ->
+                        ComposerMenuItem(model.name, group.id == selection?.provider && model.id == selection.model) {
+                            val retained = selection?.reasoningEffort?.takeIf { current ->
+                                model.reasoning?.efforts.orEmpty().any { it.id == current }
+                            }
+                            stateHolder.selectModel(group.id, model.id, retained ?: model.reasoning?.defaultEffort)
+                            expanded = false
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+internal fun TeamModeDisableConfirmation(stateHolder: AndroidSharedStateHolder) {
+    stateHolder.teamModeDisableTarget?.let { target ->
+        DshAlertDialog(title = appText("确认停用智能体团队协作？"),
+            message = appText("停用将关闭团队协调工具，可能影响缓存复用并增加后续用量。已有子代理和任务会保留。"),
+            dismissLabel = appText("取消"), confirmLabel = appText("确认停用"), confirmDestructive = true,
+            onDismissRequest = { stateHolder.teamModeDisableTarget = null },
+            onConfirm = {
+                stateHolder.teamModeDisableTarget = null
+                stateHolder.setTeamModeEnabled(false, sessionId = target, confirmed = true)
+            })
+    }
+}
+
+@Composable
+private fun ModelMenuNavigationItem(title: String, value: String, enabled: Boolean, onClick: () -> Unit) {
+    DshMenuItem(text = {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, fontSize = 17.sp)
+            Text(value, Modifier.weight(1f), textAlign = TextAlign.End, fontSize = 15.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+        }
+    }, trailingIcon = { Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(12.dp)) },
+        enabled = enabled, onClick = onClick)
+}
+
+@Composable
+internal fun TeamModeMenuItems(
+    mode: com.clarklevis.dsh.shared.facade.TeamModeSnapshot,
+    onToggle: (Boolean) -> Unit
+) {
+    if (!mode.supported) return
+    HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+    DshMenuItem(
+        text = { Text(appText(when {
+            mode.pending -> "正在保存团队设置…"
+            mode.enabled == null -> "正在读取团队设置…"
+            else -> "启用智能体团队协作"
+        }), fontSize = 17.sp, lineHeight = 22.sp, letterSpacing = 0.sp) },
+        modifier = Modifier.testTag("conversation-team-mode-toggle").semantics { selected = mode.enabled == true },
+        leadingIcon = {
+            TeamGlyph(Modifier.size(20.dp), if (mode.enabled == true) DshColors.Ocean else Color(0xFF8E8E93))
+        }, contentPadding = PaddingValues(horizontal = 30.dp, vertical = 10.dp),
+        minHeight = 44.dp, horizontalSpacing = 14.dp, enabled = mode.canChange, onClick = { onToggle(mode.enabled != true) })
+
 }
 
 @Composable

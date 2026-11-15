@@ -259,10 +259,19 @@ final class LocalizationCatalogTests: XCTestCase {
         )
     }
 
-    func testEnglishInfoPlistStringsShipCameraAndLocalNetworkCopy() throws {
+    func testPermissionPurposeStringsIncludeHealthKitReadAndWrite() throws {
         let table = try englishTable("InfoPlist")
         XCTAssertNotNil(table["NSCameraUsageDescription"])
         XCTAssertNotNil(table["NSLocalNetworkUsageDescription"])
+        for key in ["NSHealthShareUsageDescription", "NSHealthUpdateUsageDescription"] {
+            let purpose = try XCTUnwrap(Bundle.main.infoDictionary?[key] as? String)
+            XCTAssertFalse(purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            for language in ["zh-Hans", "en"] {
+                let localized = try localizedTable("InfoPlist", localization: language)
+                let value = try XCTUnwrap(localized[key], "\(language) 缺少 \(key)")
+                XCTAssertFalse(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
     }
 
     @MainActor

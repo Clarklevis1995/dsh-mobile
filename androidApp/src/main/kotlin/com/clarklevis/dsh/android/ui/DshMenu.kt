@@ -143,12 +143,15 @@ internal fun DshMenuPopup(
     val maxWidth = with(density) { window.width.toDp() - shadowPadding * 2 }.coerceAtLeast(1.dp)
     val maxHeight = with(density) { window.height.toDp() - shadowPadding * 2 }.coerceAtLeast(1.dp)
     Popup(popupPositionProvider = positionProvider, onDismissRequest = onDismissRequest, properties = properties) {
-        AnimatedVisibility(visibleState = visibility,
-            enter = fadeIn(tween(180)) + scaleIn(tween(220), initialScale = .94f, transformOrigin = transformOrigin),
-            exit = fadeOut(tween(140)) + scaleOut(tween(140), targetScale = .96f, transformOrigin = transformOrigin)) {
-            Box(Modifier.padding(shadowPadding)) {
-                DshMenuSurface(Modifier.widthIn(max = maxWidth).heightIn(max = maxHeight).then(modifier),
-                    shape, whiteSurface, content)
+        // Popup 自有窗口会提供系统 Density，显式保留调用处的 App 字号。
+        CompositionLocalProvider(LocalDensity provides density) {
+            AnimatedVisibility(visibleState = visibility,
+                enter = fadeIn(tween(180)) + scaleIn(tween(220), initialScale = .94f, transformOrigin = transformOrigin),
+                exit = fadeOut(tween(140)) + scaleOut(tween(140), targetScale = .96f, transformOrigin = transformOrigin)) {
+                Box(Modifier.padding(shadowPadding)) {
+                    DshMenuSurface(Modifier.widthIn(max = maxWidth).heightIn(max = maxHeight).then(modifier),
+                        shape, whiteSurface, content)
+                }
             }
         }
     }

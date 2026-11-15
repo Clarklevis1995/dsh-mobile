@@ -14555,6 +14555,57 @@ final class GatewaySubscriptionLifecycleTests: XCTestCase {
 
 @MainActor
 final class TeamIntegrationTests: XCTestCase {
+    func testTeamModeWaitsForHostAndConfirmsDisable() async throws {
+        let lead = SessionSummary(id: "lead", title: "团队开关", lastActivity: .now, isRunning: false, hasUnread: false)
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://127.0.0.1:3080/ws/mobile",
+            selectedWorkspaceID: nil, sessions: [lead]), chatHistoryCache: nil)
+        defer { store.deactivateGateway() }
+        var sent: [[String: Any]] = []
+        store.gateway.installConnectedTransportForTesting { payload in
+            sent.append((try? JSONSerialization.jsonObject(with: Data(payload.utf8))) as? [String: Any] ?? [:])
+        }
+        func deliver(_ json: String) throws {
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(Data(json.utf8)))
+        }
+        try deliver(#"{"kind":"hello","protocol":3,"capabilities":["agent-team-v1","agent-team-mode-v1"]}"#)
+        _ = await store.prepareConversation(for: lead)
+        await store.activatePreparedConversation(sessionID: "lead")
+        try deliver(#"{"kind":"session-snapshot","sessionId":"lead","projections":{"asOfSeq":8,"values":{"agentTeam":{"enabled":false,"tasks":[]},"modelSelection":{"lastUsed":{}}}}}"#)
+        XCTAssertTrue(store.teamMode.canChange)
+        store.setTeamModeEnabled(true)
+        let request = try XCTUnwrap(sent.last { $0["type"] as? String == "agent-team-set-enabled" })
+        let id = try XCTUnwrap(request["requestId"] as? String)
+        XCTAssertNil(request["parentSessionId"])
+        XCTAssertEqual(store.teamMode.enabled, false)
+        XCTAssertTrue(store.teamMode.pending)
+        store.setTeamModeEnabled(true)
+        XCTAssertEqual(sent.filter { $0["type"] as? String == "agent-team-set-enabled" }.count, 1)
+        try deliver("""
+            {"kind":"agent-team-mode-set","sessionId":"lead","requestId":"\(id)","asOfSeq":9,"projectionState":"ready","agentTeam":{"enabled":true,"tasks":[]}}
+            """)
+        XCTAssertEqual(store.teamMode.enabled, true)
+        XCTAssertFalse(store.teamMode.pending)
+        store.setTeamModeEnabled(false)
+        XCTAssertEqual(store.teamModeDisableTarget, "lead")
+        XCTAssertEqual(sent.filter { $0["type"] as? String == "agent-team-set-enabled" }.count, 1)
+        store.teamModeDisableTarget = nil
+        store.setTeamModeEnabled(false, sessionID: "lead", confirmed: true)
+        let disable = try XCTUnwrap(sent.last { $0["type"] as? String == "agent-team-set-enabled" })
+        XCTAssertEqual(disable["enabled"] as? Bool, false)
+        XCTAssertEqual(disable["sessionId"] as? String, "lead")
+        let disableID = try XCTUnwrap(disable["requestId"] as? String)
+        try deliver("""
+            {"kind":"error","requestType":"agent-team-set-enabled","requestId":"\(disableID)","sessionId":"lead","message":"保存失败"}
+            """)
+        XCTAssertFalse(store.teamMode.pending)
+        XCTAssertEqual(store.teamMode.enabled, true)
+        XCTAssertEqual(store.lastError, "保存失败")
+        XCTAssertEqual(sent.last?["type"] as? String, "agent-team")
+        try deliver(#"{"kind":"hello","protocol":3,"capabilities":["agent-team-v1"]}"#)
+        XCTAssertFalse(store.teamMode.supported)
+    }
+
+
     func testChildDirectoryLinksRequestBrowserAtTargetPathWithoutFilePreview() async throws {
         let lead = SessionSummary(id: "lead", title: "团队目录", lastActivity: .now, isRunning: false, hasUnread: false)
         let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://127.0.0.1:3080/ws/mobile",

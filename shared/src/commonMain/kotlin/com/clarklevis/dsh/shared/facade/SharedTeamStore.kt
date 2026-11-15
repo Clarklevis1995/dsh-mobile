@@ -92,6 +92,59 @@ class SharedTeamStore {
     private val targets = mutableMapOf<String, ConversationTarget>()
     private val avatars = mutableMapOf<Pair<String, String>, TeamAvatarAssignment>()
 
+    private data class ModeRequest(val requestId: String, val enabled: Boolean)
+    private val modeRequests = mutableMapOf<String, ModeRequest>()
+    private val modeErrors = mutableMapOf<String, UiMessage>()
+    private val modelUsedSessions = mutableSetOf<String>()
+
+    fun modeSnapshotJson(sessionId: String?, connected: Boolean): String =
+        wireJson.encodeToString(modeSnapshot(sessionId, connected))
+
+    fun modeSnapshot(sessionId: String?, connected: Boolean = true): TeamModeSnapshot {
+        val id = sessionId.orEmpty()
+        val projection = projections[id to "agentTeam"]
+        val value = (projection?.value ?: lastValues[id to "agentTeam"]) as? JsonObject
+        val enabled = (value?.get("enabled") as? JsonPrimitive)?.booleanOrNull
+        val model = (projections[id to "modelSelection"]?.value ?: lastValues[id to "modelSelection"]) as? JsonObject
+        val usedModel = model?.get("lastUsed")?.let { it !is JsonNull } == true || id in modelUsedSessions
+        val identity = (projections[id to "subagent"]?.value ?: lastValues[id to "subagent"]) as? JsonObject
+        val supported = "agent-team-mode-v1" in capabilities && !isChild(id) && identity == null
+        val pending = id in modeRequests
+        return TeamModeSnapshot(
+            sessionId = id, supported = supported, enabled = enabled,
+            canChange = supported && connected && id.isNotBlank() && enabled != null &&
+                projection?.state == "ready" && (id to "agentTeam") in confirmedProjections && !pending,
+            pending = pending, requiresDisableConfirmation = enabled == true && usedModel,
+            error = modeErrors[id]
+        )
+    }
+
+    fun setEnabledRequestJson(sessionId: String, enabled: Boolean, confirmed: Boolean, connected: Boolean): String? {
+        val state = modeSnapshot(sessionId, connected)
+        if (!state.canChange || (!enabled && state.requiresDisableConfirmation && !confirmed)) return null
+        val requestId = "team-mode-${++nextRequest}"
+        modeRequests[sessionId] = ModeRequest(requestId, enabled)
+        modeErrors.remove(sessionId)
+        val payload = buildJsonObject {
+            put("type", "agent-team-set-enabled"); put("sessionId", sessionId)
+            put("requestId", requestId); put("enabled", enabled)
+        }.toString()
+        return wireJson.encodeToString(TeamModeCommand(requestId, payload))
+    }
+
+    fun modeRequestFailed(sessionId: String, requestId: String, message: String?): Boolean {
+        if (modeRequests[sessionId]?.requestId != requestId) return false
+        modeRequests.remove(sessionId)
+        confirmedProjections.remove(sessionId to "agentTeam")
+        modeErrors[sessionId] = message?.let(UiMessage::raw) ?: UiMessage("team.modeUnconfirmed")
+        return true
+    }
+
+    fun modeConnectionLost() {
+        modeRequests.keys.forEach { modeErrors[it] = UiMessage("team.modeUnconfirmed") }
+        modeRequests.clear()
+    }
+
     fun avatarAssignmentsJson(): String = wireJson.encodeToString(
         avatars.values.sortedWith(compareBy({ it.leadSessionId }, { it.sessionId }))
     )
@@ -327,8 +380,28 @@ class SharedTeamStore {
         if (kind in setOf("history", "error") && frame.text("requestId")?.startsWith("team-profile-") == true) {
             return acceptMemberProfile(frame)
         }
+        if (kind == "error" && frame.text("requestType") == "agent-team-set-enabled") {
+            return modeRequestFailed(id ?: return false, frame.text("requestId") ?: return false, frame.text("message"))
+        }
         when (kind) {
-            "hello" -> { capabilities = frame["capabilities"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }.toSet(); running.clear(); statusDuringQuery.clear(); sessionsQueryPending = false; queryIds.clear(); confirmedProjections.clear(); profileAttempts.clear(); profileRequests.clear(); true }
+            "agent-team-mode-set" -> {
+                val sessionId = id ?: return false
+                val request = modeRequests[sessionId] ?: return false
+                if (frame.text("requestId") != request.requestId) return false
+                val value = frame["agentTeam"] as? JsonObject
+                val enabled = (value?.get("enabled") as? JsonPrimitive)?.booleanOrNull
+                val seq = (frame["asOfSeq"] as? JsonPrimitive)?.longOrNull
+                if (enabled == null || seq == null || frame.text("projectionState") != "ready") {
+                    return modeRequestFailed(sessionId, request.requestId, null)
+                }
+                modeRequests.remove(sessionId)
+                install(sessionId, "agentTeam", value, seq, "ready")
+                if (modeSnapshot(sessionId).enabled != request.enabled) modeErrors[sessionId] = UiMessage("team.modeChangedElsewhere")
+                rebuildTargets()
+                true
+            }
+            "sent" -> { if (id != null) modelUsedSessions += workspaceSessionId(id); true }
+            "hello" -> { modeConnectionLost(); capabilities = frame["capabilities"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }.toSet(); running.clear(); statusDuringQuery.clear(); sessionsQueryPending = false; queryIds.clear(); confirmedProjections.clear(); profileAttempts.clear(); profileRequests.clear(); true }
             "session-status" -> { if (id != null) frame["running"]?.jsonPrimitive?.booleanOrNull?.let { running[id] = it; if (sessionsQueryPending) statusDuringQuery[id] = it }; true }
             "sessions" -> {
                 frame["items"]?.jsonArray.orEmpty().forEach { raw -> val item = raw.jsonObject; item.text("sessionId")?.let { sid -> item["running"]?.jsonPrimitive?.booleanOrNull?.let { running[sid] = it } } }

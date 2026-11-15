@@ -66,6 +66,53 @@ class AndroidSharedStateHolder(
     voiceContext: android.content.Context? = graph?.application
 ) {
     private val teamStore = com.clarklevis.dsh.shared.facade.SharedTeamStore()
+    var teamMode by mutableStateOf(com.clarklevis.dsh.shared.facade.TeamModeSnapshot())
+        private set
+    var teamModeDisableTarget: String? by mutableStateOf(null)
+
+    private fun publishTeamMode(load: Boolean = false) {
+        val id = snapshot.selectedSessionId
+        teamMode = teamStore.modeSnapshot(id, gatewayState.connection == GatewayConnectionState.CONNECTED)
+        if (load && teamMode.supported && id != null) refreshTeamMode(id, force = false)
+    }
+
+    private fun refreshTeamMode(id: String, force: Boolean = true) {
+        val appGraph = graph ?: return
+        if (gatewayState.connection != GatewayConnectionState.CONNECTED) return
+        val payload = (if (force) teamStore.queryJson(id, "agent-team")
+            else teamStore.queryIfNeededJson(id, "agent-team")) ?: return
+        appGraph.gatewayScope.launch {
+            appGraph.gatewayRuntime.sendRequest(com.clarklevis.dsh.shared.gateway.GatewayRequest(
+                "agent-team", "agent-team", id, lanePolicy = GatewayRequestLanePolicy.COALESCE_LATEST, payload = payload))
+        }
+    }
+
+    fun setTeamModeEnabled(enabled: Boolean, sessionId: String? = null, confirmed: Boolean = false) {
+        val appGraph = graph ?: return
+        val id = sessionId ?: snapshot.selectedSessionId ?: return
+        val connected = gatewayState.connection == GatewayConnectionState.CONNECTED
+        val current = teamStore.modeSnapshot(id, connected)
+        if (!enabled && current.requiresDisableConfirmation && !confirmed) {
+            if (current.canChange) teamModeDisableTarget = id
+            return
+        }
+        val encoded = teamStore.setEnabledRequestJson(id, enabled, confirmed, connected) ?: return
+        val command = kotlinx.serialization.json.Json.decodeFromString<com.clarklevis.dsh.shared.facade.TeamModeCommand>(encoded)
+        publishTeamMode()
+        appGraph.gatewayScope.launch {
+            val sent = appGraph.gatewayRuntime.sendRequest(GatewayRequests.setTeamEnabled(id, enabled, command.requestId))
+            if (!sent) withContext(Dispatchers.Main.immediate) { failTeamMode(id, command.requestId) }
+        }
+    }
+
+    private fun failTeamMode(id: String, requestId: String) {
+        if (teamStore.modeRequestFailed(id, requestId, null)) {
+            publishTeamMode()
+            platformError = appText("team.modeUnconfirmed")
+            refreshTeamMode(id)
+        }
+    }
+
     private val agentExecutionNotifications = AndroidAgentExecutionNotifications()
     var teamSnapshot by mutableStateOf(com.clarklevis.dsh.shared.facade.TeamSnapshot())
         private set
@@ -1252,6 +1299,10 @@ class AndroidSharedStateHolder(
             }
             appGraph.gatewayRuntime.requestSessions()
             requestSessionControls(appGraph, sessionId)
+            teamLeadSessionId = sessionId
+            teamSnapshot = teamStore.snapshot(sessionId)
+            requestTeam(refresh = false)
+            publishTeamMode(load = true)
             return true
         } catch (error: CancellationException) {
             throw error
@@ -2256,7 +2307,7 @@ class AndroidSharedStateHolder(
             return
         }
         val appGraph = graph ?: return
-        if (pendingMessageSubmission != null || sessionAgentPreset.blocksSending) return
+        if (pendingMessageSubmission != null || sessionAgentPreset.blocksSending || teamMode.pending) return
         if (fileUploads.preparing || (fileUploads.drafts.isNotEmpty() &&
             (!fileUploads.canSend || fileUploads.sessionId != snapshot.selectedSessionId || isViewingTeamMember))) return
         val submission = captureMessageSubmission(mode)
@@ -2537,7 +2588,7 @@ class AndroidSharedStateHolder(
             !isChangingNewConversationWorkspace &&
             !localSearchIsFragment &&
             !localSearchIsOpening &&
-            !sessionAgentPreset.blocksSending &&
+            !sessionAgentPreset.blocksSending && !teamMode.pending &&
             pendingCommandSubmission == null && pendingMessageSubmission == null &&
             !fileUploads.preparing && (fileUploads.drafts.isEmpty() || fileUploads.canSend) &&
             (composedMessageText().isNotBlank() || preparedImages.isNotEmpty() || fileUploads.drafts.isNotEmpty())
@@ -2761,7 +2812,9 @@ class AndroidSharedStateHolder(
             localSearchIsFragment = false
             localSearchIsOpening = false
         }
+        val selectionChanged = snapshot.selectedSessionId != next.selectedSessionId
         snapshot = next
+        publishTeamMode(load = selectionChanged)
         updatePrefetchForeground(next)
         restoreQueuedDraft()
         val runningSessionIds = next.sessions
@@ -3306,6 +3359,8 @@ class AndroidSharedStateHolder(
                             val didReconnect = state.connection == GatewayConnectionState.CONNECTED &&
                                 lastObservedConnection != GatewayConnectionState.CONNECTED
                             gatewayState = state
+                            if (state.connection != GatewayConnectionState.CONNECTED) teamStore.modeConnectionLost()
+                            publishTeamMode(load = didReconnect)
                             deviceConnectors?.connection(state.connection == GatewayConnectionState.CONNECTED, state.capabilities)
                             voiceInput.connectionChanged(state.connection == GatewayConnectionState.CONNECTED,
                                 "speech-input-v1" in state.capabilities)
@@ -3381,6 +3436,20 @@ class AndroidSharedStateHolder(
                             // 否则另起 collector 会与投影竞争并随机吞掉 session-created。
                             pendingSessionCreation.accept(event)
                             appGraph.diagnostics.runtimeEvent(event)
+                            val modeFailure = when (event) {
+                                is GatewayRuntimeEvent.RequestCancelled -> Triple(event.requestType, event.targetSessionId, event.correlationId)
+                                is GatewayRuntimeEvent.RequestTimedOut -> Triple(event.requestType, event.targetSessionId, event.correlationId)
+                                is GatewayRuntimeEvent.RequestRejected -> Triple(event.requestType, event.targetSessionId, event.correlationId)
+                                else -> null
+                            }
+                            if (modeFailure?.first == "agent-team-set-enabled") {
+                                withContext(Dispatchers.Main.immediate) {
+                                    val id = modeFailure.second
+                                    val requestId = modeFailure.third
+                                    if (id != null && requestId != null) failTeamMode(id, requestId)
+                                }
+                                return@collect
+                            }
                             val profileId = when (event) {
                                 is GatewayRuntimeEvent.RequestCancelled -> event.correlationId
                                 is GatewayRuntimeEvent.RequestTimedOut -> event.correlationId
@@ -3435,10 +3504,17 @@ class AndroidSharedStateHolder(
                                         }
                                         return@collect
                                     }
-                                    if (event.frame.kind in setOf("hello", "sessions", "session-status", "projection-baseline", "agent-team", "agent-team-updated", "subagents", "subagents-updated", "subagent-identity-updated", "subagent-timing-updated", "session-snapshot", "history", "error")) {
+                                    if (event.frame.kind in setOf("hello", "sessions", "session-status", "projection-baseline", "agent-team", "agent-team-updated", "subagents", "subagents-updated", "subagent-identity-updated", "subagent-timing-updated", "session-snapshot", "history", "error", "agent-team-mode-set", "sent")) {
                                         withContext(Dispatchers.Main.immediate) {
                                             if (teamStore.acceptFrameJson(event.rawJson)) {
                                                 teamLeadSessionId?.let { teamSnapshot = teamStore.snapshot(it) }
+                                                publishTeamMode(load = event.frame.kind == "hello")
+                                                if (event.frame.kind == "agent-team-mode-set" || event.frame.requestType == "agent-team-set-enabled") {
+                                                    teamMode.error?.let {
+                                                        platformError = appText(it)
+                                                        event.frame.sessionId?.let { id -> refreshTeamMode(id) }
+                                                    }
+                                                }
                                                 prepareTeamMemberProfiles()
                                                 persistTeamAvatarsIfChanged()
                                                 val routing = teamStore.routingJson()

@@ -45,6 +45,7 @@ class WorkspaceChangesDeviceTest {
             }, {}, {})
         } }
         compose.waitForIdle()
+        assertSheetBoundaries()
         compose.onAllNodesWithText("README.md").onFirst().assertIsDisplayed()
         compose.onNodeWithText("/promo/onetake-*").assertIsDisplayed()
         val page = compose.onNodeWithTag("workspace-file-page").fetchSemanticsNode().boundsInRoot
@@ -135,11 +136,45 @@ class WorkspaceChangesDeviceTest {
             }, {}, {})
         } }
         compose.waitForIdle()
+        assertSheetBoundaries()
         compose.onNodeWithTag("workspace-file-selector").assertDoesNotExist()
         compose.onNodeWithTag("workspace-file-1").performClick()
         compose.onNodeWithTag("workspace-file-0").assertIsDisplayed()
         compose.onNodeWithTag("workspace-diff-row-1").assertIsDisplayed()
         screenshot("workspace-review-wide.png")
+    }
+
+    @Test fun unavailableChangesKeepSheetBelowSystemBars() {
+        var state by mutableStateOf(fixture().copy(summary = null, selectedIndex = null, diff = null, rows = emptyList(),
+            previews = emptyList(), error = "workspace-changes-missing"))
+        compose.setContent { DshTheme { WorkspaceChangesSheet(state, {}, {}, {}) } }
+        compose.waitForIdle()
+        assertSheetBoundaries()
+        compose.onNodeWithText("重试").assertIsDisplayed()
+        screenshot("workspace-review-error-boundaries.png")
+        compose.runOnIdle { state = state.copy(error = null, loading = true) }
+        compose.waitForIdle()
+        assertSheetBoundaries()
+        compose.runOnIdle { state = state.copy(loading = false) }
+        compose.waitForIdle()
+        assertSheetBoundaries()
+    }
+
+    private fun assertSheetBoundaries() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val metrics = context.getSystemService(android.view.WindowManager::class.java).currentWindowMetrics
+        val insets = metrics.windowInsets.getInsetsIgnoringVisibility(
+            android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout())
+        val margin = 12 * context.resources.displayMetrics.density
+        val handle = compose.onNodeWithTag("workspace-changes-handle", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val header = compose.onNodeWithTag("workspace-changes-header").fetchSemanticsNode().boundsInRoot
+        val content = compose.onNodeWithTag("workspace-changes-content").fetchSemanticsNode().boundsInRoot
+        // 外层 tag 在 Material 的拖动位移修饰符之前；拖动条才是最终显示的面板顶边。
+        assertTrue("面板顶边须在系统安全区下方留白：$handle，安全区 $insets", handle.top >= insets.top + margin - 2)
+        assertTrue("标题不得压住拖动条", header.top >= handle.bottom - 1)
+        assertEquals("正文左边界必须与拖动条容器一致", handle.left, content.left, 2f)
+        assertEquals("正文右边界必须与拖动条容器一致", handle.right, content.right, 2f)
+        assertTrue("底部操作须避开系统导航栏", content.bottom <= metrics.bounds.height() - insets.bottom + 2)
     }
 
     @Test fun wrapIconSwitchesWithoutRecreatingList() {

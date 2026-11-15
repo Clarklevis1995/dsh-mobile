@@ -45,7 +45,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.8.1</string>
+	<string>1.8.2</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -58,7 +58,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>40</string>
+	<string>41</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -120,5 +120,7 @@
 	<string>$(DSH_SHARE_APP_GROUP)</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>读取步数与睡眠摘要，供你已授权的主机和模型服务回顾日常健康。可随时关闭连接器。</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>用于健康连接器的系统授权；当前仅按你的授权读取步数和睡眠摘要，不写入或修改健康数据。</string>
 </dict>
 </plist>

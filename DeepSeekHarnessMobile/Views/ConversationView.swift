@@ -671,6 +671,13 @@ struct ConversationView: View {
         .onDisappear {
             if store.conversationFileIsOpening { store.cancelWorkspaceFileDownload() }
         }
+        .alert(item: teamModeAlert) { target in
+            Alert(title: Text("确认停用智能体团队协作？"),
+                message: Text("停用将关闭团队协调工具，可能影响缓存复用并增加后续用量。已有子代理和任务会保留。"),
+                primaryButton: .destructive(Text("确认停用")) {
+                    store.setTeamModeEnabled(false, sessionID: target.id, confirmed: true)
+                }, secondaryButton: .cancel(Text("取消")))
+        }
         .sheet(item: conversationPreviewBinding) { request in
             WorkspaceFilePreviewLoadingSheet(store: store, request: request)
         }
@@ -1701,7 +1708,7 @@ struct ConversationView: View {
         .disabled(
             !store.selectedMemberCanSend || (showsSessionStopButton
                 ? store.isCancellingSelectedSession
-                : (composerHasContent && (store.isChangingNewConversationWorkspace || store.sessionAgentPreset.blocksSending || store.waitingForNewSession || isImportingImages || store.fileUploads.preparing || (!store.fileUploads.drafts.isEmpty && !store.fileUploads.canSend) || store.commandSubmissionPending || store.messageSubmissionPending)))
+                : (composerHasContent && (store.teamMode.pending || store.isChangingNewConversationWorkspace || store.sessionAgentPreset.blocksSending || store.waitingForNewSession || isImportingImages || store.fileUploads.preparing || (!store.fileUploads.drafts.isEmpty && !store.fileUploads.canSend) || store.commandSubmissionPending || store.messageSubmissionPending)))
         )
         .opacity(
             showsSessionStopButton
@@ -2321,6 +2328,11 @@ struct ConversationView: View {
         } else {
             permissionMenu
         }
+    }
+
+    private var teamModeAlert: Binding<TeamModeAlert?> {
+        Binding(get: { store.teamModeDisableTarget.map { TeamModeAlert(id: $0) } },
+                set: { if $0 == nil { store.teamModeDisableTarget = nil } })
     }
 
     @ViewBuilder
@@ -3144,6 +3156,10 @@ private struct ConversationDefaultModelSummary: View {
     }
 }
 
+private struct TeamModeAlert: Identifiable {
+    let id: String
+}
+
 private struct ConversationModelMenu: View {
     let title: String
     let effortTitle: String?
@@ -3162,11 +3178,12 @@ private struct ConversationModelMenu: View {
                 onSelectModel: onSelectModel,
                 onSelectEffort: onSelectEffort
             )
+            .disabled(isDisabled)
         } label: {
             ConversationModelMenuLabel(title: title, effortTitle: effortTitle, isLoading: isLoading)
         }
         .menuOrder(.fixed)
-        .disabled(isDisabled || isLoading)
+        .disabled(isLoading || isDisabled)
         .accessibilityIdentifier("conversation-model-menu-toggle")
     }
 }
@@ -6875,11 +6892,7 @@ private struct TeamCachedMenuButton: UIViewRepresentable {
         coordinator.clearSource()
     }
 
-    static let glyph: UIImage = {
-        let renderer = ImageRenderer(content: TeamGlyph().frame(width: 18, height: 18))
-        renderer.scale = 3
-        return (renderer.uiImage ?? UIImage(systemName: "person.2") ?? UIImage()).withRenderingMode(.alwaysTemplate)
-    }()
+    static let glyph = TeamGlyph.menuImage
 
     final class Coordinator: NSObject, UIPopoverPresentationControllerDelegate {
         var members: [MobileTeamMember] = []
@@ -7023,7 +7036,16 @@ struct TeamMemberPopover: View {
 }
 
 /// 与 Web 团队入口一致的双人线框图标，使用矢量避免位图缩放模糊。
-private struct TeamGlyph: View {
+struct TeamGlyph: View {
+    @MainActor static let menuImage: UIImage = {
+        let renderer = ImageRenderer(content: TeamGlyph().frame(width: 18, height: 18))
+        renderer.scale = 3
+        return (renderer.uiImage ?? UIImage(systemName: "person.2") ?? UIImage()).withRenderingMode(.alwaysTemplate)
+    }()
+
+    @MainActor static let enabledMenuImage = menuImage.withTintColor(UIColor(DSHColor.ocean), renderingMode: .alwaysOriginal)
+    @MainActor static let disabledMenuImage = menuImage.withTintColor(.systemGray, renderingMode: .alwaysOriginal)
+
     var body: some View {
         Canvas { context, size in
             var path = Path()

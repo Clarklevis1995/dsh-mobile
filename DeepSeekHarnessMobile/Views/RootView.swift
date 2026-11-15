@@ -1657,6 +1657,7 @@ private struct ConversationNavigationShell<Content: View>: View {
     @State private var liveTitle: String?
     @State private var livePresetTitle: String?
     @State private var showsTeamEntry = false
+    @State private var teamMode = MobileTeamModeSnapshot()
     @State private var showsSidebar = false
     @State private var sidebarAvailableHeight: CGFloat = 0
     @State private var compactHeader = false
@@ -1703,6 +1704,9 @@ private struct ConversationNavigationShell<Content: View>: View {
             }
             .onReceive(store.$teamSnapshot) { snapshot in
                 showsTeamEntry = snapshot.visible
+            }
+            .onReceive(store.$teamMode) { state in
+                teamMode = state
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarRole(.editor)
@@ -1846,13 +1850,35 @@ private struct ConversationNavigationShell<Content: View>: View {
             }
             .disabled(header.sessionID == nil)
             .accessibilityIdentifier("conversation-session-stats")
+            if teamMode.supported {
+                Divider()
+                if let enabled = teamMode.enabled {
+                    Button {
+                        store.setTeamModeEnabled(!enabled)
+                    } label: {
+                        Label {
+                            Text(teamMode.pending ? String(localized: "正在保存团队设置…") : String(localized: "启用智能体团队协作"))
+                        } icon: {
+                            Image(uiImage: enabled ? TeamGlyph.enabledMenuImage : TeamGlyph.disabledMenuImage)
+                                .renderingMode(.original)
+                        }
+                    }
+                    .disabled(!teamMode.canChange)
+                    .accessibilityValue(enabled ? String(localized: "已开启") : String(localized: "未启用"))
+                    .accessibilityIdentifier("conversation-team-mode-toggle")
+                } else {
+                    Button("正在读取团队设置…") {}.disabled(true)
+                }
+            }
         } label: {
             Image(systemName: "ellipsis")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 22, height: 22)
         }
+        .menuOrder(.fixed)
         .accessibilityLabel("更多")
+        .accessibilityIdentifier("conversation-more-menu-toggle")
     }
 
     private var conversationStatus: some View {

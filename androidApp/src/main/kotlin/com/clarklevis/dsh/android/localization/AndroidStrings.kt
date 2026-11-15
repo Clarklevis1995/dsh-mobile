@@ -79,6 +79,8 @@ internal object AndroidStrings {
      * Chinese-source keys need no entry: on a zh locale they render as the key itself.
      */
     internal val chinese: Map<String, String> = mapOf(
+        "team.modeUnconfirmed" to "团队设置结果待确认，请刷新后重试。",
+        "team.modeChangedElsewhere" to "团队设置已被其他客户端修改，当前显示宿主的最新状态。",
         "conversation.time.date" to "M月d日 H:mm",
         "conversation.time.yearDate" to "yyyy年M月d日 H:mm",
         "voice.hint" to "描述你想要构建的内容",
@@ -185,6 +187,14 @@ internal object AndroidStrings {
     )
 
     internal val english: Map<String, String> = mapOf(
+        "启用智能体团队协作" to "Enable Agent Teams",
+        "确认停用智能体团队协作？" to "Turn off Agent Teams?",
+        "停用将关闭团队协调工具，可能影响缓存复用并增加后续用量。已有子代理和任务会保留。" to "Turning this off disables team coordination tools and may reduce cache reuse and increase subsequent usage. Existing subagents and tasks are kept.",
+        "确认停用" to "Turn Off",
+        "正在保存团队设置…" to "Saving team settings…",
+        "正在读取团队设置…" to "Loading team settings…",
+        "team.modeUnconfirmed" to "The team setting could not be confirmed. Refresh before retrying.",
+        "team.modeChangedElsewhere" to "Another client changed the team setting. The latest host state is shown.",
         "去设置" to "Open settings",
         "稍后" to "Later",
         "无法打开系统设置，请在系统设置中找到本应用的电池管理。" to "Could not open system settings. Find this app’s battery management in system settings.",

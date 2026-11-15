@@ -1444,6 +1444,16 @@ extension GatewayFrame {
 }
 
 // KMP 团队投影的只读展示镜像；任务状态与地址规则由 SharedTeamStore 持有。
+struct MobileTeamModeSnapshot: Codable, Equatable {
+    var sessionId = ""
+    var supported = false
+    var enabled: Bool?
+    var canChange = false
+    var pending = false
+    var requiresDisableConfirmation = false
+    var error: MobileUiMessage?
+}
+
 struct MobileTeamSnapshot: Codable, Equatable {
     var leadSessionId = ""
     var members: [MobileTeamMember] = []

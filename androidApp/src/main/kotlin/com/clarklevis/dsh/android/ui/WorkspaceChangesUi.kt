@@ -133,19 +133,30 @@ internal fun WorkspaceChangesSheet(
         if (files.isNotEmpty() && state.selectedIndex == null) selectFile(selected)
     }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val dragHandleHeight = 20.dp
+    // 90% 是整个面板的目标高度，包含拖动条和底部系统边距，不能全给正文。
+    // 顶边还必须落在状态栏、挖孔下方，矮窗口也要留出可见的外部遮罩。
+    val safeInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
+    val density = LocalDensity.current
+    val safeTop = with(density) { safeInsets.getTop(this).toDp() }
+    val safeBottom = with(density) { safeInsets.getBottom(this).toDp() }
+    val topGap = maxOf(window.height * .10f, safeTop + 12.dp)
+    val contentHeight = (window.height - topGap - dragHandleHeight - safeBottom).coerceAtLeast(0.dp)
     ModalBottomSheet(
         onDismissRequest = dismiss, sheetState = sheetState, containerColor = colors.surface,
         contentColor = colors.ink, sheetMaxWidth = minOf(WorkspaceChangesStyle.REVIEW_MAX_WIDTH.dp, window.width),
         modifier = Modifier.adaptiveSheetBounds().testTag("workspace-changes-sheet"),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        // 与上面的高度预算使用相同边距，底部只由外层处理一次。
+        contentWindowInsets = { safeInsets.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom) },
         dragHandle = {
-            Box(Modifier.fillMaxWidth().height(20.dp).testTag("workspace-changes-handle"), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxWidth().height(dragHandleHeight).testTag("workspace-changes-handle"), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(36.dp, 4.dp).background(colors.line, RoundedCornerShape(2.dp)))
             }
         }
     ) {
         DshMenuColumnHost {
-            Column(Modifier.fillMaxWidth().height(window.height * .90f).testTag("workspace-changes-content")) {
+            Column(Modifier.fillMaxWidth().height(contentHeight).testTag("workspace-changes-content")) {
                 Row(Modifier.fillMaxWidth().heightIn(min = if (wide) 60.dp else 64.dp).padding(start = if (wide) 24.dp else 16.dp, end = 8.dp)
                     .testTag("workspace-changes-header"), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -462,6 +473,12 @@ internal fun WorkspaceChangesDock(holder: AndroidSharedStateHolder) {
     LaunchedEffect(session, holder.gatewayState.connection, holder.gatewayState.capabilities) {
         holder.refreshWorkspaceChanges()
     }
+    LaunchedEffect(session, state.visible) {
+        if (!state.visible && expanded) {
+            expanded = false
+            holder.closeChangesDiff()
+        }
+    }
     DisposableEffect(session) { onDispose { holder.closeChangesDiff() } }
     if (state.sessionId == session && state.visible) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
@@ -511,7 +528,6 @@ internal fun WorkspaceChangesCapsule(
                     Text("−${it.deleted}", color = changeRed)
                 }
                 if (state.loading) CircularProgressIndicator(Modifier.size(WorkspaceChangesStyle.PROGRESS_SIZE.dp), strokeWidth = 1.5.dp)
-                if (state.error != null) Text("查看", color = Color(WorkspaceChangesStyle.LABEL_COLOR_ARGB))
             }
         }
     }

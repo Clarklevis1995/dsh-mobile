@@ -85,6 +85,33 @@ import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.facade.TeamMemberView
 import com.clarklevis.dsh.shared.facade.TeamTaskView
 
+@Composable
+internal fun TeamGlyph(
+    modifier: Modifier = Modifier.size(18.dp),
+    color: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Canvas(modifier) {
+        scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) {
+            drawCircle(
+                color,
+                4f,
+                Offset(9f, 7f),
+                style = Stroke(1.5f),
+            )
+            val p =
+                Path().apply {
+                    moveTo(2f, 22f)
+                    cubicTo(2f, 12f, 16f, 12f, 16f, 22f)
+                    moveTo(17f, 3f)
+                    cubicTo(22f, 3f, 22f, 11f, 17f, 11f)
+                    moveTo(20f, 15f)
+                    quadraticTo(23f, 16f, 23f, 22f)
+                }
+            drawPath(p, color, style = Stroke(1.5f))
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TeamEntryButton(holder: AndroidSharedStateHolder) {
@@ -98,27 +125,7 @@ internal fun TeamEntryButton(holder: AndroidSharedStateHolder) {
             onClick = { menu = !menu },
             modifier = Modifier.testTag("team-entry").semantics { role = Role.Button },
         ) {
-            val color = MaterialTheme.colorScheme.onSurface
-            Canvas(Modifier.size(18.dp)) {
-                scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) {
-                    drawCircle(
-                        color,
-                        4f,
-                        Offset(9f, 7f),
-                        style = Stroke(1.5f),
-                    )
-                    val p =
-                        Path().apply {
-                            moveTo(2f, 22f)
-                            cubicTo(2f, 12f, 16f, 12f, 16f, 22f)
-                            moveTo(17f, 3f)
-                            cubicTo(22f, 3f, 22f, 11f, 17f, 11f)
-                            moveTo(20f, 15f)
-                            quadraticTo(23f, 16f, 23f, 22f)
-                        }
-                    drawPath(p, color, style = Stroke(1.5f))
-                }
-            }
+            TeamGlyph()
         }
         DshMenu(
             expanded = menu,

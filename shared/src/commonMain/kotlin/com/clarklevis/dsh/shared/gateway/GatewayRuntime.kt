@@ -840,7 +840,7 @@ class GatewayRuntime(
             if (frame.resetRequired == true || frame.requestType?.startsWith("speech-") == true ||
                 frame.requestType?.startsWith("file-") == true ||
                 frame.requestType?.startsWith("workspace-changes-") == true ||
-                frame.requestType in setOf("session-agent-preset", "select-agent-preset", "agent-team", "subagents") ||
+                frame.requestType in setOf("session-agent-preset", "select-agent-preset", "agent-team", "subagents", "agent-team-set-enabled") ||
                 conversationTargets[frame.sessionId]?.parentSessionId != null) {
                 return FrameDelivery(GatewayRuntimeEvent.Frame(transportFrame.text, frame, correlation.sessionId, correlation.isBackgroundHistory),
                     transportFrame.byteCount.toLong())
@@ -1004,7 +1004,7 @@ class GatewayRuntime(
             }.getOrDefault(false))
             "file-upload-opened", "file-upload-chunk-accepted", "file-upload-cancelled",
             "workspace-changes-summary", "workspace-changes-diff",
-            "session-created", "session-agent-preset", "select-agent-preset", "file-resolved", "file-list", "file-download-opened" -> request.correlationId == frame.requestId
+            "session-created", "session-agent-preset", "select-agent-preset", "agent-team-mode-set", "file-resolved", "file-list", "file-download-opened" -> request.correlationId == frame.requestId
             "file-download-chunk", "file-download-cancelled" -> request.correlationId == frame.transferId
             "command-options", "command-selected" -> request.correlationId == frame.command?.stringValue
             else -> request.correlationId == null || request.correlationId == frame.requestId
@@ -1023,7 +1023,7 @@ class GatewayRuntime(
             "speech-preparation-cancelled", "speech-transcript", "speech-cancelled",
             "sent", "file-upload-opened", "file-upload-chunk-accepted", "file-upload-completed", "file-upload-cancelled",
             "workspace-changes-summary", "workspace-changes-diff",
-            "session-created", "session-agent-preset", "select-agent-preset", "file-resolved", "file-list", "file-download-opened" -> frame.requestId
+            "session-created", "session-agent-preset", "select-agent-preset", "agent-team-mode-set", "file-resolved", "file-list", "file-download-opened" -> frame.requestId
             "file-download-chunk", "file-download-cancelled" -> frame.transferId
             "command-options", "command-selected" -> frame.command?.stringValue
             else -> null
@@ -1584,7 +1584,7 @@ class GatewayRuntime(
             "history", "attachment", "sent", "question-response", "approval-response",
             "file-resolved", "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled",
             "session-cancelled", "session-created", "queue-item-updated",
-            "session-agent-preset", "select-agent-preset",
+            "session-agent-preset", "select-agent-preset", "agent-team-mode-set",
             "speech-catalog", "speech-subscribed", "speech-unsubscribed", "speech-preparing",
             "speech-preparation-cancelled", "speech-transcript", "speech-cancelled"
         )
