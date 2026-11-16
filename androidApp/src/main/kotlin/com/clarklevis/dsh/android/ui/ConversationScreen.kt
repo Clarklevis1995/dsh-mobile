@@ -214,7 +214,8 @@ internal fun ConversationScreen(
     onPickFile: () -> Unit = {},
     onPlugins: () -> Unit = {},
     onScheduledTasks: () -> Unit = {},
-    onSettings: () -> Unit = {}
+    onSettings: () -> Unit = {},
+    onConnectors: () -> Unit = {}
 ) {
     val quote: ((String) -> Unit)? = if ("message-quotes-v1" in stateHolder.gatewayState.capabilities) {
         { selected ->
@@ -229,7 +230,7 @@ internal fun ConversationScreen(
         }
     } else null
     androidx.compose.runtime.CompositionLocalProvider(LocalMessageQuote provides quote) {
-        ConversationScreenContent(stateHolder, onPickImage, onBack, onPickFile, onPlugins, onScheduledTasks, onSettings)
+        ConversationScreenContent(stateHolder, onPickImage, onBack, onPickFile, onPlugins, onScheduledTasks, onSettings, onConnectors)
     }
 }
 
@@ -241,7 +242,8 @@ private fun ConversationScreenContent(
     onPickFile: () -> Unit = {},
     onPlugins: () -> Unit = {},
     onScheduledTasks: () -> Unit = {},
-    onSettings: () -> Unit = {}
+    onSettings: () -> Unit = {},
+    onConnectors: () -> Unit = {}
 ) {
     val session = stateHolder.snapshot.sessions.firstOrNull { it.id == stateHolder.snapshot.selectedSessionId }
     val title = stateHolder.teamSnapshot.members.firstOrNull { it.id == stateHolder.snapshot.selectedSessionId && it.role != "lead" }?.name ?: session?.title ?: if (stateHolder.snapshot.selectedSessionId != null) appText("已缓存会话") else appText("新建 DeepSeek Harness")
@@ -322,7 +324,8 @@ private fun ConversationScreenContent(
             },
             onPlugins = onPlugins,
             onScheduledTasks = onScheduledTasks,
-            onSettings = onSettings
+            onSettings = onSettings,
+            onConnectors = onConnectors
         )
     }
 

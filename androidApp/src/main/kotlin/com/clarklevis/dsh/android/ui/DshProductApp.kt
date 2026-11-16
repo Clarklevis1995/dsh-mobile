@@ -256,7 +256,8 @@ internal fun DshProductApp(
                     stateHolder, onPickImage, navController::popBackStack, onPickFile,
                     onPlugins = { navController.navigate(ROUTE_PLUGINS) { launchSingleTop = true } },
                     onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) { launchSingleTop = true } },
-                    onSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } }
+                    onSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
+                    onConnectors = { navController.navigate(CONNECTORS_ROUTE) { launchSingleTop = true } }
                 )
             }
             composable(ROUTE_SETTINGS) {

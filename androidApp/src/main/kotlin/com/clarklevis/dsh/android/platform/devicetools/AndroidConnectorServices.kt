@@ -4,23 +4,15 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
 import android.location.Geocoder
 import android.os.Build
-import android.os.Bundle
-import android.os.Looper
 import android.provider.AlarmClock
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZonedDateTime
-import kotlin.coroutines.resume
 
 class AndroidConnectorServices(private val context: Context, hostId: String) : AndroidConnectorPlatform {
     private val storage = AndroidConnectorStorage(context, hostId)
@@ -92,35 +84,13 @@ class AndroidConnectorServices(private val context: Context, hostId: String) : A
         }
     }
 
-    @Suppress("MissingPermission", "DEPRECATION")
     private suspend fun location(tool: String, args: JSONObject): JSONObject {
         val precise = tool == "location.precise"
         if (!precise) require(args.optString("requestedPrecision", "coarse") == "coarse")
         val maxAge = args.integer("maxAgeSeconds", 60, 1..300)
         if (precise && !granted(Manifest.permission.ACCESS_FINE_LOCATION)) throw ConnectorFailure("precise_location_required")
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val providers = (if (precise) listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER) else listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER))
-            .filter { runCatching { manager.isProviderEnabled(it) }.getOrDefault(false) }
-        if (providers.isEmpty()) throw ConnectorFailure("location_disabled")
-        val cached = providers.mapNotNull { manager.getLastKnownLocation(it) }.filter {
-            it.latitude.isFinite() && it.longitude.isFinite() && System.currentTimeMillis() - it.time in 0..maxAge * 1000L
-        }.minByOrNull { it.accuracy }
-        val sample = cached ?: suspendCancellableCoroutine<Location> { continuation ->
-            val listener = object : LocationListener {
-                override fun onLocationChanged(value: Location) { manager.removeUpdates(this); if (continuation.isActive) continuation.resume(value) }
-                override fun onProviderEnabled(provider: String) {}
-                override fun onProviderDisabled(provider: String) {}
-                override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-            }
-            manager.requestSingleUpdate(providers.first(), listener, Looper.getMainLooper())
-            continuation.invokeOnCancellation { manager.removeUpdates(listener) }
-        }
-        require(System.currentTimeMillis() - sample.time in 0..maxAge * 1000L)
-        return JSONObject().put("latitude", if (precise) sample.latitude else kotlin.math.round(sample.latitude * 100) / 100)
-            .put("longitude", if (precise) sample.longitude else kotlin.math.round(sample.longitude * 100) / 100)
-            .put("precision", if (precise) "precise" else "coarse")
-            .put("horizontalAccuracyMeters", if (precise) maxOf(0.0, sample.accuracy.toDouble()) else maxOf(1500.0, sample.accuracy.toDouble()))
-            .put("sampledAt", Instant.ofEpochMilli(sample.time).toString())
+        return AndroidLocationConnector(LocationManagerSource(manager)).location(precise, maxAge)
     }
 
     private suspend fun openAlarm(request: JSONObject): JSONObject {

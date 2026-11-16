@@ -17660,6 +17660,65 @@ final class ConversationInitialPresentationTests: XCTestCase {
 }
 
 @MainActor
+final class ComposerDraftPersistenceTests: XCTestCase {
+    private func makeStore(host: String = "draft-host") -> AppStore {
+        AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile", selectedWorkspaceID: nil, sessions: []),
+            gatewayClient: GatewayClient(), gatewayLocalID: host, chatHistoryCache: nil)
+    }
+
+    func testComposerRestoresTypedTextAfterConversationViewIsDestroyed() async throws {
+        let store = makeStore()
+        defer { store.deactivateGateway() }
+        let session = SessionSummary(id: "a", title: "A", lastActivity: .now, isRunning: false, hasUnread: false)
+        _ = await store.prepareConversation(for: session)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        func mount() -> UIHostingController<some View> {
+            UIHostingController(rootView: ConversationView(activeView: .constant(0)).environmentObject(store))
+        }
+        func input(_ view: UIView) -> UITextView? {
+            if let field = view as? UITextView, field.accessibilityIdentifier == "composer-input" { return field }
+            return view.subviews.lazy.compactMap(input).first
+        }
+        var first: UIViewController? = mount()
+        window.rootViewController = first
+        window.makeKeyAndVisible()
+        first!.view.frame = window.bounds
+        first!.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(100))
+        let editor = try XCTUnwrap(input(first!.view))
+        let expected = "**未发送的草稿**\n第二行也保留"
+        editor.text = expected
+        editor.delegate?.textViewDidChange?(editor)
+        XCTAssertEqual(store.composerDraftText(for: "a"), expected)
+        window.rootViewController = nil
+        first = nil
+        let reopened = mount()
+        window.rootViewController = reopened
+        reopened.view.frame = window.bounds
+        reopened.view.layoutIfNeeded()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(try XCTUnwrap(input(reopened.view)).text, expected)
+        window.isHidden = true
+        window.rootViewController = nil
+    }
+
+    func testDraftsAreIsolatedAndClearedDraftIsNotReseeded() {
+        let store = makeStore()
+        let other = makeStore(host: "other-host")
+        defer { store.deactivateGateway(); other.deactivateGateway() }
+        store.setComposerDraftText("A 的草稿", for: "a")
+        store.setComposerDraftText("B 的草稿", for: "b")
+        XCTAssertEqual(store.composerDraftText(for: "a"), "A 的草稿")
+        XCTAssertEqual(store.composerDraftText(for: "b"), "B 的草稿")
+        XCTAssertEqual(other.composerDraftText(for: "a"), "")
+        store.setComposerDraftText("", for: "a")
+        store.seedComposerDraft("旧的初始提示词", for: "a")
+        XCTAssertEqual(store.composerDraftText(for: "a"), "")
+        XCTAssertEqual(store.composerDraftText(for: "b"), "B 的草稿")
+    }
+}
+
+@MainActor
 final class NewConversationWorkspaceTests: XCTestCase {
     final class Requests {
         var payloads: [[String: Any]] = []
@@ -18482,6 +18541,48 @@ final class AppleMusicAppCardTests: XCTestCase {
 
 @MainActor
 final class PhoneMusicLibraryTests: XCTestCase {
+    func testResumeWaitsForPlayingWithoutReplacingOrReplayingTheQueue() async throws {
+        var plays = 0
+        var waits = 0
+        try await IOSMusicLibraryConnector.resumePlayback(play: { plays += 1 },
+            isPlaying: { waits >= 2 }, wait: { waits += 1 })
+        XCTAssertEqual(plays, 1)
+        XCTAssertEqual(waits, 2, "异步状态尚为暂停时不能立刻报告播放成功")
+    }
+
+    func testUnconfirmedPlaybackAndSystemErrorsAreNotReportedAsSuccess() async throws {
+        do {
+            try await IOSMusicLibraryConnector.resumePlayback(play: {}, isPlaying: { false }, wait: {})
+            XCTFail("持续暂停必须返回失败")
+        } catch let error as PhoneConnectorFailure {
+            XCTAssertEqual(error.code, "music_playback_unavailable")
+        }
+        do {
+            try await IOSMusicLibraryConnector.resumePlayback(play: { throw NSError(domain: "MusicKit", code: 401) },
+                isPlaying: { true }, wait: {})
+            XCTFail("系统播放失败不能因旧状态仍为播放而成功")
+        } catch let error as PhoneConnectorFailure {
+            XCTAssertEqual(error.code, "music_playback_unavailable")
+        }
+    }
+
+    func testPlaybackCancellationDoesNotTurnIntoAPlaybackFailure() async throws {
+        do {
+            try await IOSMusicLibraryConnector.resumePlayback(play: {}, isPlaying: { false },
+                wait: { throw CancellationError() })
+            XCTFail()
+        } catch is CancellationError {} catch { XCTFail("应保留取消语义：\(error)") }
+    }
+
+    func testMusicDiagnosticsKeepUnderlyingCodesWithoutSensitiveUserInfo() {
+        let underlying = NSError(domain: NSURLErrorDomain, code: -1009,
+            userInfo: [NSLocalizedDescriptionKey: "private-token-and-query", "url": "https://example.com/?token=private"])
+        let error = NSError(domain: "MusicKit", code: 401,
+            userInfo: [NSUnderlyingErrorKey: underlying, NSLocalizedDescriptionKey: "secret"])
+        XCTAssertEqual(IOSMusicLibraryConnector.errorChain(error), "MusicKit:401 -> NSURLErrorDomain:-1009")
+        XCTAssertEqual(IOSMusicLibraryConnector.errorChain(NSError(domain: "https://secret", code: 1)), "redacted-domain:1")
+    }
+
     func testPersonalLibraryCanBeBrowsedWithoutGuessingASongName() async throws {
         var requests: [PhoneMusicLibraryOptions] = []
         let connector = IOSMusicLibraryConnector(authorized: { true }) { options in

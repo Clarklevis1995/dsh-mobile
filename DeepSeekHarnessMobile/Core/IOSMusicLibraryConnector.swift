@@ -75,6 +75,49 @@ struct PhoneMusicLibraryPage {
 /// 使用个人资料库请求，不搜索在线目录，不把系统读取错误降级为空曲库。
 @MainActor
 final class IOSMusicLibraryConnector {
+    /// 系统播放器的 play 是异步操作。只有观察到播放开始才向上层确认成功。
+    static func resumePlayback(
+        play: () async throws -> Void = { try await SystemMusicPlayer.shared.play() },
+        isPlaying: () -> Bool = { SystemMusicPlayer.shared.state.playbackStatus == .playing },
+        wait: () async throws -> Void = { try await Task.sleep(for: .milliseconds(100)) }
+    ) async throws {
+        try Task.checkCancellation()
+        do {
+            try await play()
+            for _ in 0..<15 {
+                try Task.checkCancellation()
+                if isPlaying() { return }
+                try await wait()
+            }
+            try Task.checkCancellation()
+            if isPlaying() { return }
+            LocalAppLog.shared.write("WARN MusicConnector operation=play confirmation=not-playing")
+            throw PhoneConnectorFailure(code: "music_playback_unavailable")
+        } catch is CancellationError { throw CancellationError() }
+        catch let error as PhoneConnectorFailure { throw error }
+        catch {
+            try Task.checkCancellation()
+            recordFailure(error, operation: "play")
+            throw PhoneConnectorFailure(code: "music_playback_unavailable")
+        }
+    }
+
+    /// 仅输出错误类别和数字代码；不记录 userInfo、请求 URL、查询词或 token。
+    static func errorChain(_ error: Error) -> String {
+        var current: NSError? = error as NSError
+        var visited = Set<ObjectIdentifier>()
+        var entries: [String] = []
+        while let failure = current, entries.count < 4, visited.insert(ObjectIdentifier(failure)).inserted {
+            let domain = failure.domain.range(of: "^[A-Za-z0-9_.-]{1,120}$", options: .regularExpression) != nil
+                ? failure.domain : "redacted-domain"
+            entries.append("\(domain):\(failure.code)")
+            current = failure.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return entries.joined(separator: " -> ")
+    }
+    static func recordFailure(_ error: Error, operation: String) {
+        LocalAppLog.shared.write("WARN MusicConnector operation=\(operation) bundle=\(Bundle.main.bundleIdentifier ?? "unknown") authorization=\(MusicAuthorization.currentStatus) errors=\(errorChain(error))")
+    }
     typealias Loader = @MainActor (PhoneMusicLibraryOptions) async throws -> PhoneMusicLibraryPage
     typealias CatalogLoader = @MainActor (PhoneMusicCatalogOptions) async throws -> [[String: Any]]
     private let authorized: () -> Bool
@@ -98,6 +141,8 @@ final class IOSMusicLibraryConnector {
         do { items = try await catalogLoader(options) }
         catch is CancellationError { throw CancellationError() }
         catch {
+            try Task.checkCancellation()
+            Self.recordFailure(error, operation: "catalog-search")
             if !authorized() { throw PhoneConnectorFailure(code: "permission_denied") }
             throw PhoneConnectorFailure(code: "music_catalog_unavailable")
         }
@@ -198,6 +243,6 @@ final class IOSMusicLibraryConnector {
             try Task.checkCancellation(); player.queue = .init(for: [item])
         }
         try Task.checkCancellation()
-        try await player.play()
+        try await resumePlayback()
     }
 }

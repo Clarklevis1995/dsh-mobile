@@ -803,7 +803,7 @@ private fun SettingsSection(title: String, footer: String? = null, content: @Com
 }
 
 @Composable
-private fun SettingsValueRow(
+internal fun SettingsValueRow(
     title: String,
     value: String,
     enabled: Boolean = true,
@@ -820,25 +820,29 @@ private fun SettingsValueRow(
     ) {
         Text(
             title,
-            modifier = Modifier.weight(1f),
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = rowAlpha),
-            style = SettingsTypography.item
+            style = SettingsTypography.item,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Spacer(Modifier.width(12.dp))
-        if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
-            )
-        } else {
-            Text(
-                value,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.52f else 0.3f),
-                style = SettingsTypography.item,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        // 先保留标题的自然宽度，长值只使用剩余空间，与 iOS 设置行一致。
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
+                )
+            } else {
+                Text(
+                    value,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.52f else 0.3f),
+                    style = SettingsTypography.item,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         if (onClick != null) {
             Icon(

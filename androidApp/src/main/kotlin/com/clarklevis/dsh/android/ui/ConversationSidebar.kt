@@ -82,7 +82,8 @@ internal fun ConversationSidebarButton(
     onSelectSession: (String) -> Unit,
     onPlugins: () -> Unit,
     onScheduledTasks: () -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    onConnectors: () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
     var expandedGroups by rememberSaveable { mutableStateOf(emptyList<String>()) }
@@ -145,6 +146,9 @@ internal fun ConversationSidebarButton(
                 SidebarNavigationItem(appTextKey("插件"), R.drawable.ic_drawer_plugin, "conversation-sidebar-plugins") { select(onPlugins) }
                 SidebarNavigationItem(appTextKey("定时任务"), R.drawable.ic_drawer_schedule, "conversation-sidebar-scheduled-tasks") {
                     select(onScheduledTasks)
+                }
+                SidebarNavigationItem(appTextKey("连接器"), R.drawable.ic_drawer_connectors, "conversation-sidebar-connectors") {
+                    select(onConnectors)
                 }
                 Text(
                     appText("工作区"),

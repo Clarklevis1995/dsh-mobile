@@ -557,13 +557,15 @@ struct ConversationView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var activeView: Int
     var topContentInset: CGFloat = 0
-    @State private var draft = ""
+    private let initialDraft: String
+    private var draft: String {
+        get { store.composerDraftText(for: store.selectedSessionId) }
+        nonmutating set { store.setComposerDraftText(newValue, for: store.selectedSessionId) }
+    }
     @ObservedObject private var incomingShares = IncomingShareCoordinator.shared
     @State private var importingShareID: UUID?
     @State private var initialDraftFocusPending = false
     @State private var draftSelection = NSRange(location: NSNotFound, length: 0)
-    @State private var memberDrafts: [String: String] = [:]
-    @State private var memberImages: [String: [GatewayOutgoingImage]] = [:]
     @State private var voiceSnapshot: SharedVoiceInputSnapshot?
     @State private var voiceTouchActive = false
     @State private var voiceToast: String?
@@ -572,7 +574,10 @@ struct ConversationView: View {
     @State private var showsFileUploadUpgradeAlert = false
     @State private var filePickerSessionID: String?
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
-    @State private var pendingImages: [GatewayOutgoingImage] = []
+    private var pendingImages: [GatewayOutgoingImage] {
+        get { store.composerDraftImages(for: store.selectedSessionId) }
+        nonmutating set { store.setComposerDraftImages(newValue, for: store.selectedSessionId) }
+    }
     @State private var isImportingImages = false
     @State private var showsContextUsage = false
     @State private var tasksExpanded = false
@@ -607,7 +612,7 @@ struct ConversationView: View {
     init(activeView: Binding<Int>, topContentInset: CGFloat = 0, initialDraft: String = "") {
         _activeView = activeView
         self.topContentInset = topContentInset
-        _draft = State(initialValue: initialDraft)
+        self.initialDraft = initialDraft
         _initialDraftFocusPending = State(initialValue: !initialDraft.isEmpty)
     }
 
@@ -1072,6 +1077,7 @@ struct ConversationView: View {
             store.voiceInput.cancel()
         }
         .onAppear {
+            store.seedComposerDraft(initialDraft, for: store.selectedSessionId)
             store.voiceInput.onDraftUpdate = { composerTextBinding.wrappedValue = $0 }
             store.voiceInput.open(context: store.selectedSessionId ?? "new-session", draft: composerEditableText)
             store.voiceInput.keyboardChanged(composerIsFocused)
@@ -1082,13 +1088,8 @@ struct ConversationView: View {
             store.leaveSessionAgentPreset()
         }
         .onChangeCompat(of: store.selectedSessionId) { previous, current in
-            if !store.isDraftWorkspaceReplacement(from: previous, to: current) {
-                if let previous {
-                    memberDrafts[previous] = draft
-                    memberImages[previous] = pendingImages
-                }
-                draft = current.flatMap { memberDrafts[$0] } ?? ""
-                pendingImages = current.flatMap { memberImages[$0] } ?? []
+            if store.isDraftWorkspaceReplacement(from: previous, to: current) {
+                store.copyComposerDraft(from: previous, to: current)
             }
             selectedPhotoItems = []
             store.voiceInput.open(context: current ?? "new-session", draft: composerEditableText)
@@ -1473,9 +1474,9 @@ struct ConversationView: View {
             guard let submitted = submittedQueueDraft else { return }
             defer { submittedQueueDraft = nil; submittedQueueImages = [] }
             if let target = submittedQueueSessionID, target != store.selectedSessionId {
-                if memberDrafts[target] == submitted, memberImages[target] == submittedQueueImages {
-                    memberDrafts[target] = ""
-                    memberImages[target] = []
+                if store.composerDraftText(for: target) == submitted, store.composerDraftImages(for: target) == submittedQueueImages {
+                    store.setComposerDraftText("", for: target)
+                    store.setComposerDraftImages([], for: target)
                 }
                 return
             }
@@ -2088,7 +2089,7 @@ struct ConversationView: View {
                 store.lastError = String(localized: "image.process.failed", defaultValue: "处理所选图片失败：\(error.localizedDescription)")
             }
         }
-        var destination = store.selectedSessionId == targetSessionID ? pendingImages : targetSessionID.flatMap { memberImages[$0] } ?? []
+        var destination = store.composerDraftImages(for: targetSessionID)
         let existingBytes = destination.reduce(0) { $0 + $1.data.count }
         var acceptedBytes = existingBytes
         for image in imported where !destination.contains(where: { $0.mediaType == image.mediaType && $0.data == image.data }) {
@@ -2106,7 +2107,7 @@ struct ConversationView: View {
                 composerIsFocused = true
             }
             pendingImages = destination
-        } else if let targetSessionID { memberImages[targetSessionID] = destination }
+        } else { store.setComposerDraftImages(destination, for: targetSessionID) }
     }
 
     private var composerBottomPadding: CGFloat {

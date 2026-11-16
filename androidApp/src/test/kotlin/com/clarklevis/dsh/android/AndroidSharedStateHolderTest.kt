@@ -23,6 +23,27 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class AndroidSharedStateHolderTest {
     @Test
+    fun composerDraftSurvivesReopeningAndIsIsolatedBetweenOrdinarySessions() = runTest {
+        val holder = AndroidSharedStateHolder()
+        try {
+            holder.selectSession("a")
+            holder.messageDraft = "**还没发送**\n第二行"
+            holder.selectSession("a")
+            assertEquals("**还没发送**\n第二行", holder.messageDraft)
+            holder.selectSession("b")
+            assertEquals("", holder.messageDraft)
+            holder.messageDraft = "B 的草稿"
+            holder.selectSession("a")
+            assertEquals("**还没发送**\n第二行", holder.messageDraft)
+            holder.messageDraft = ""
+            holder.selectSession("b")
+            assertEquals("B 的草稿", holder.messageDraft)
+            holder.selectSession("a")
+            assertEquals("", holder.messageDraft)
+        } finally { holder.close() }
+    }
+
+    @Test
     fun allScopeKeepsDefaultWorkspaceAndDoesNotReportObsoleteCreationRestriction() = runTest {
         val holder = AndroidSharedStateHolder()
         try {
@@ -184,7 +205,12 @@ class AndroidSharedStateHolderTest {
         holder.messageDraft = "new draft"
         holder.setPreparedImagesForTest(listOf(newImage))
         holder.selectSession("another-session")
+        assertEquals("", holder.messageDraft)
+        holder.messageDraft = "other session draft"
         holder.applyMessageSendResultForTest(submission, sent = true)
+        assertEquals("other session draft", holder.messageDraft)
+        assertTrue(holder.preparedImages.isEmpty())
+        holder.selectSession("android-demo")
 
         assertEquals("new draft", holder.messageDraft)
         assertEquals(listOf(newImage), holder.preparedImages)

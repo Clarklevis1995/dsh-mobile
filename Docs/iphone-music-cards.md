@@ -26,3 +26,14 @@ musicLinks 保留无片段的 url，另附 cardURL。Agent 优先原样输出 `[
 MusicCatalogSearchRequest 需要正确配置 App ID 的 MusicKit 服务与可用网络。真机需验证签名配置、所在地区的目录可用性和点击后由 Apple Music 处理链接的行为；模拟器及注入数据测试不代表用户真实曲库或账号已经验收。
 
 参考：[Song.url](https://developer.apple.com/documentation/musickit/song/url)、[MusicCatalogSearchRequest](https://developer.apple.com/documentation/musickit/musiccatalogsearchrequest)、[App ID MusicKit 服务](https://developer.apple.com/help/account/services/musickit)、[仅通过 Universal Link 打开应用](https://developer.apple.com/documentation/uikit/uiapplication/openexternalurloptionskey/universallinksonly)。
+
+## 2026-11-15 真机报告后的播放与目录诊断
+
+- `music.play` 改为等待 `SystemMusicPlayer.shared.play()`，不带 itemId 时沿用当前系统队列，不重新选歌或重置队列。指定旧媒体 ID 时仍先使用原有个人曲库解析，再等待系统播放器执行。
+- `music.play` 与 `music.play-library` 在异步调用完成后，最多再等待 1.5 秒观察到 playing 才返回播放成功；持续暂停或系统报错返回 `music_playback_unavailable`。确认只表示观察到系统播放状态，不保证扬声器已经发声。取消仍按取消处理，不自动重放命令。
+- 目录失败保留对外错误码 `music_catalog_unavailable`，本机可导出日志新增 `MusicConnector operation=catalog-search`，包含实际 bundle ID、Whaleness 的 MusicAuthorization 状态及最多四层 NSError domain/code。不记录 token、查询词、URL、原始描述和 userInfo；播放系统错误使用同样的安全诊断。
+- 系统音乐 App 能搜索，并不能证明 Whaleness 的 MusicKit 服务、自动开发者令牌和授权正常；非法 limit 在网关就可能被拒绝，也不能用于证明请求已到达手机。关闭代理后的相同错误仍需结合底层错误码区分服务配置、授权和网络问题。
+- 真机复测：暂停 → 不带 ID 的 play → state，确认成功时为播放中、播放进度延续；接着合法调用 catalog-search，失败后通过 App 的日志导出入口查找上述诊断行。导出前无需提供 Apple Music token。
+- 若日志指向 MusicKit 服务或令牌配置，需在 Apple Developer 的 Identifiers 中找到日志里的实际 App ID，在 App Services 开启 MusicKit；Debug 与正式版标识不同的，要分别核对。现有“打开系统权限设置”入口可用于检查本 App 的音乐权限；再次调用授权接口不会强制重置已授予的系统权限。
+
+本地注入测试不访问用户曲库、账号，也不改变真实播放状态；目录服务是否恢复仍须在正确签名的真机版本上复测。

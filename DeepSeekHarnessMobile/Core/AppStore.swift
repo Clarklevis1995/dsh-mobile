@@ -488,6 +488,37 @@ final class AppStore: ObservableObject {
         await activatePreparedConversation(sessionID: member.id)
     }
 
+    // 草稿跟随主机 Store 生命周期，页面销毁和重建不会清空；不同会话分别保存。
+    private struct ComposerDraftKey: Hashable { let sessionID: String? }
+    @Published private var composerDraftTexts: [ComposerDraftKey: String] = [:]
+    @Published private var composerDraftImages: [ComposerDraftKey: [GatewayOutgoingImage]] = [:]
+
+    func composerDraftText(for sessionID: String?) -> String {
+        composerDraftTexts[ComposerDraftKey(sessionID: sessionID)] ?? ""
+    }
+
+    func setComposerDraftText(_ text: String, for sessionID: String?) {
+        composerDraftTexts[ComposerDraftKey(sessionID: sessionID)] = text
+    }
+
+    func composerDraftImages(for sessionID: String?) -> [GatewayOutgoingImage] {
+        composerDraftImages[ComposerDraftKey(sessionID: sessionID)] ?? []
+    }
+
+    func setComposerDraftImages(_ images: [GatewayOutgoingImage], for sessionID: String?) {
+        composerDraftImages[ComposerDraftKey(sessionID: sessionID)] = images
+    }
+
+    func seedComposerDraft(_ text: String, for sessionID: String?) {
+        let key = ComposerDraftKey(sessionID: sessionID)
+        if composerDraftTexts[key] == nil { composerDraftTexts[key] = text }
+    }
+
+    func copyComposerDraft(from previous: String?, to current: String?) {
+        setComposerDraftText(composerDraftText(for: previous), for: current)
+        setComposerDraftImages(composerDraftImages(for: previous), for: current)
+    }
+
     @Published private(set) var selectedSessionId: String?
     @Published private(set) var sessions: [SessionSummary] = []
     @Published private(set) var scheduledTasks: [ScheduledTask] = []

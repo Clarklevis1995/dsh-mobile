@@ -1824,6 +1824,10 @@ private struct ConversationNavigationShell<Content: View>: View {
                 showsSidebar = false
                 sidebarActions.openScheduledTasks()
             },
+            openConnectors: {
+                showsSidebar = false
+                sidebarActions.openConnectors()
+            },
             openSettings: {
                 showsSidebar = false
                 sidebarActions.openSettings()

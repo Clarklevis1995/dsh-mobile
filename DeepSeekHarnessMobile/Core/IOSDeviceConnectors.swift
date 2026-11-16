@@ -553,7 +553,7 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
             catch is CancellationError { throw CancellationError() }
             catch { throw Failure(code: "music_playback_unavailable") }
             let player = MPMusicPlayerController.systemMusicPlayer
-            return ["playbackState": player.playbackState.rawValue, "playbackSeconds": player.currentPlaybackTime.isFinite ? player.currentPlaybackTime : 0, "requested": tool]
+            return ["playbackState": MPMusicPlaybackState.playing.rawValue, "playbackSeconds": player.currentPlaybackTime.isFinite ? player.currentPlaybackTime : 0, "requested": tool]
         case "music.state", "music.search", "music.play", "music.pause", "music.seek":
             guard MPMediaLibrary.authorizationStatus() == .authorized else { throw Failure(code: "permission_denied") }
             let player = MPMusicPlayerController.systemMusicPlayer
@@ -571,14 +571,15 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
                     player.setQueue(with: MPMediaItemCollection(items: [item]))
                 }
                 guard player.nowPlayingItem != nil || args["itemId"] != nil else { throw Failure(code: "data_unavailable") }
-                player.play()
+                try await IOSMusicLibraryConnector.resumePlayback()
             } else if tool == "music.pause" { player.pause() }
             else if tool == "music.seek" {
                 guard let seconds = args["seconds"] as? Double, seconds.isFinite, seconds >= 0, let item = player.nowPlayingItem,
                       seconds <= item.playbackDuration else { throw Failure(code: "invalid_request") }
                 player.currentPlaybackTime = seconds
             }
-            return ["playbackState": player.playbackState.rawValue, "playbackSeconds": player.currentPlaybackTime.isFinite ? player.currentPlaybackTime : 0, "requested": tool]
+            return ["playbackState": tool == "music.play" ? MPMusicPlaybackState.playing.rawValue : player.playbackState.rawValue,
+                    "playbackSeconds": player.currentPlaybackTime.isFinite ? player.currentPlaybackTime : 0, "requested": tool]
         default: throw Failure(code: "tool_unsupported")
         }
     }

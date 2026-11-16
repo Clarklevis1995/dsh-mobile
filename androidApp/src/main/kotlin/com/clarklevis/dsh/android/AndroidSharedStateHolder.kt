@@ -697,8 +697,9 @@ class AndroidSharedStateHolder(
 
     fun selectSession(sessionId: String) {
         fileUploads.select(sessionId, !isViewingTeamMember && !switchingTeamMember)
-        if (switchingTeamMember || isViewingTeamMember) {
-            (pendingSelectedSessionId ?: snapshot.selectedSessionId)?.let { teamDrafts[it] = messageDraft to preparedImages }
+        val previousSessionId = pendingSelectedSessionId ?: snapshot.selectedSessionId
+        if (previousSessionId != sessionId) {
+            previousSessionId?.let { teamDrafts[it] = messageDraft to preparedImages }
             val saved = teamDrafts[sessionId]
             messageDraft = saved?.first.orEmpty()
             preparedImages = saved?.second.orEmpty()
@@ -1281,6 +1282,11 @@ class AndroidSharedStateHolder(
                 newConversationWorkspaceStore.open(sessionId, workspaceId)
             }
             newConversationWorkspace = newConversationWorkspaceStore.snapshot()
+            if (workspaceSelectionToken == 0L) {
+                (pendingSelectedSessionId ?: snapshot.selectedSessionId)?.let { teamDrafts[it] = messageDraft to preparedImages }
+                messageDraft = ""
+                preparedImages = emptyList()
+            }
             pendingSelectedSessionId = sessionId
             inputGeneration += 1
             applySlashCommandTransition(slashCommandStore.reset(sessionId))

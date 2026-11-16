@@ -75,7 +75,8 @@ class ConversationSidebarDeviceTest {
                             ConversationSidebarButton(
                                 listOf(GatewayWorkspace("workspace", "/project", "project", listOf("one", "two"), "", "")),
                                 sessions, selected, {}, { selected = it },
-                                { destination = "plugins" }, { destination = "tasks" }, { destination = "settings" }
+                                { destination = "plugins" }, { destination = "tasks" }, { destination = "settings" },
+                                onConnectors = { destination = "connectors" }
                             )
                         }
                         Text("正文", Modifier.align(Alignment.Center).testTag("sidebar-content"))
@@ -97,7 +98,7 @@ class ConversationSidebarDeviceTest {
         compose.onNodeWithTag("conversation-sidebar-session-two").assertIsSelected()
         pressBack()
         compose.onNodeWithTag("conversation-sidebar").assertDoesNotExist()
-        for ((tag, expected) in listOf("plugins" to "plugins", "scheduled-tasks" to "tasks", "settings" to "settings")) {
+        for ((tag, expected) in listOf("plugins" to "plugins", "scheduled-tasks" to "tasks", "connectors" to "connectors", "settings" to "settings")) {
             open()
             compose.onNodeWithTag("conversation-sidebar-$tag").performClick()
             compose.onNodeWithTag("conversation-sidebar").assertDoesNotExist()
@@ -121,6 +122,10 @@ class ConversationSidebarDeviceTest {
             compose.onNodeWithTag("conversation-sidebar-toggle").assertIsDisplayed().performClick()
             compose.onNodeWithTag("conversation-sidebar-plugins").performClick()
             compose.onNodeWithText("插件").assertIsDisplayed()
+            compose.onNodeWithContentDescription("返回").performClick()
+            compose.onNodeWithTag("conversation-sidebar-toggle").assertIsDisplayed().performClick()
+            compose.onNodeWithTag("conversation-sidebar-connectors").performClick()
+            compose.onNodeWithTag("connectors-screen").assertIsDisplayed()
             compose.onNodeWithContentDescription("返回").performClick()
             compose.onNodeWithTag("conversation-sidebar-toggle").assertIsDisplayed().performClick()
             compose.onNodeWithTag("conversation-sidebar-settings").performClick()
