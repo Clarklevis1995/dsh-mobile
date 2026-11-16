@@ -161,13 +161,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Read step and sleep summaries for your authorized host and model service to review daily wellbeing. You can turn off the connector at any time."
+            "value" : "Read summaries of the steps, sleep, activity, heart rate, heart rate variability, blood oxygen, respiratory rate and weight you choose to share, for your authorized host and model service to review daily wellbeing. You can turn off the connector at any time."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "读取步数与睡眠摘要，供你已授权的主机和模型服务回顾日常健康。可随时关闭连接器。"
+            "value" : "读取你选择共享的步数、睡眠、活动、心率、心率变异性、血氧、呼吸频率和体重摘要，供已授权的主机和模型服务回顾日常健康。可随时关闭连接器。"
           }
         }
       }
@@ -178,19 +178,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Used for the health connector's system authorization. Whaleness currently only reads step counts and sleep summaries you authorize and does not write or modify Health data."
+            "value" : "Used for the health connector's system authorization. Whaleness only reads health and activity summaries you authorize and does not write or modify Health data."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ヘルスケアコネクタのシステム認証に使用します。現在は許可された歩数と睡眠の概要のみを読み取り、ヘルスケアデータの書き込みや変更は行いません。"
+            "value" : "ヘルスケアコネクタのシステム認証に使用します。許可された健康とアクティビティの概要のみを読み取り、ヘルスケアデータの書き込みや変更は行いません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用于健康连接器的系统授权；当前仅按你的授权读取步数和睡眠摘要，不写入或修改健康数据。"
+            "value" : "用于健康连接器的系统授权；仅按你的授权读取健康与活动摘要，不写入或修改健康数据。"
           }
         }
       }

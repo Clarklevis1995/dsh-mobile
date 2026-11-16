@@ -8,6 +8,17 @@ extension MarkdownContent {
     return (destination, MarkdownContent(block: .paragraph(content: children)).renderPlainText())
   }
 
+  /// 收集会以独立段落渲染的链接；不将行内链接或代码示例视为独立卡片。
+  public var standaloneLinks: [(destination: String, title: String)] {
+    func collect(_ nodes: [BlockNode]) -> [(destination: String, title: String)] {
+      nodes.flatMap { node in
+        if let link = MarkdownContent(block: node).standaloneLink { return [link] }
+        return collect(node.children)
+      }
+    }
+    return collect(blocks)
+  }
+
   public var containsTable: Bool {
     func contains(_ nodes: [BlockNode]) -> Bool {
       nodes.contains { node in

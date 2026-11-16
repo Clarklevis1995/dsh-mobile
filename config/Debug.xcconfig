@@ -1,4 +1,6 @@
 // Debug 默认配置；个人真机签名由 Local.xcconfig 覆盖。
 LOCAL_BUNDLE_IDENTIFIER = com.example.dshmobile
 LOCAL_DEVELOPMENT_TEAM =
+LOCAL_APP_GROUP = group.$(LOCAL_BUNDLE_IDENTIFIER)
+LOCAL_EXTENSION_SUFFIX =
 #include? "Local.xcconfig"

@@ -1,8 +1,17 @@
 import Foundation
 import MusicKit
+import UIKit
 
 /// 只保留 Apple Music 内容链接及歌曲选择参数，不从资料库 ID 猜测目录链接。
 enum AppleMusicLink {
+    static func songID(_ url: URL) -> String? {
+        guard let clean = Self.url(url.absoluteString), let parts = URLComponents(url: clean, resolvingAgainstBaseURL: false) else { return nil }
+        var path = parts.path.split(separator: "/").map(String.init)
+        if path.first?.range(of: "^[a-z]{2}$", options: .regularExpression) != nil { path.removeFirst() }
+        if path.first == "song" { return path.last }
+        if path.first == "album" { return parts.queryItems?.first(where: { $0.name == "i" })?.value }
+        return nil
+    }
     static func artworkURL(_ value: String) -> URL? {
         guard value.utf16.count <= 2048, let parts = URLComponents(string: value),
               parts.scheme?.lowercased() == "https", let host = parts.host?.lowercased(),
@@ -23,6 +32,49 @@ enum AppleMusicLink {
         parts.scheme = "https"; parts.host = "music.apple.com"
         parts.queryItems = song.isEmpty ? nil : song
         return parts.url
+    }
+}
+
+/// 整卡点击是用户的直接播放指令；查看正文及恢复历史不会执行此流程。
+@MainActor
+enum AppleMusicCardPlayback {
+    enum Failure: Error { case permissionDenied, playbackFailed, openFailed, busy }
+    private static var active = false
+
+    static func activate(_ url: URL,
+        authorize: () async -> Bool = { await MusicAuthorization.request() == .authorized },
+        play: (String) async throws -> Void = { try await playSong($0) },
+        open: (URL) async -> Bool = { await UIApplication.shared.open($0, options: [.universalLinksOnly: true]) }
+    ) async throws {
+        guard !active else { throw Failure.busy }
+        active = true
+        defer { active = false }
+        guard let clean = AppleMusicLink.url(url.absoluteString) else { throw Failure.openFailed }
+        try Task.checkCancellation()
+        if let id = AppleMusicLink.songID(clean) {
+            guard await authorize() else { throw Failure.permissionDenied }
+            try Task.checkCancellation()
+            do { try await play(id) }
+            catch is CancellationError { throw CancellationError() }
+            catch {
+                IOSMusicLibraryConnector.recordFailure(error, operation: "card-play")
+                throw Failure.playbackFailed
+            }
+        }
+        try Task.checkCancellation()
+        guard await open(clean) else { throw Failure.openFailed }
+    }
+
+    private static func playSong(_ id: String) async throws {
+        let request = MusicCatalogResourceRequest<Song>(matching: \.id, equalTo: MusicItemID(id))
+        guard let song = try await request.response().items.first else { throw Failure.playbackFailed }
+        try Task.checkCancellation()
+        let player = SystemMusicPlayer.shared
+        player.queue = .init(for: [song], startingAt: song)
+        try await IOSMusicLibraryConnector.resumePlayback(play: { try await player.play() }, isPlaying: {
+            // 原来另一首歌仍在播放不算成功，必须观察到本次选择的歌曲。
+            player.state.playbackStatus == .playing && player.queue.currentEntry?.item?.id == song.id
+        })
     }
 }
 

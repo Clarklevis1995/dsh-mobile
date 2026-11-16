@@ -1247,13 +1247,16 @@ final class PhoneConnectorsUITests: XCTestCase {
         let listHeader = app.buttons["connector-capabilities-close"]
         let calendar = app.buttons["connector-registered-module-calendar"]
         XCTAssertTrue(calendar.waitForExistence(timeout: 5))
-        for module in ["calendar", "photos", "music", "location", "calendar"] {
+        for module in ["calendar", "photos", "music", "health", "location", "calendar"] {
             let row = app.buttons["connector-registered-module-\(module)"]
             for _ in 0..<3 where !row.isHittable { app.swipeUp() }
             let listTop = listHeader.frame.minY
             row.tap()
             let close = app.buttons["connector-capabilities-detail-close"]
             XCTAssertTrue(close.waitForExistence(timeout: 5), "实际点击 \(module) 必须弹出详情")
+            if module == "health" {
+                XCTAssertTrue(app.staticTexts["读取健康与活动摘要"].exists)
+            }
             let screenshot = XCTAttachment(screenshot: app.screenshot())
             screenshot.name = "native-glass-detail-\(module)"; screenshot.lifetime = .keepAlways; add(screenshot)
             if module == "location" {

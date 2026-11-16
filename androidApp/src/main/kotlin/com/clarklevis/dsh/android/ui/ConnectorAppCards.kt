@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
@@ -206,23 +207,29 @@ internal fun ConnectorAppCardView(card: ConnectorAppCard) {
             }.getOrNull()
         } }
     }
-    Surface(onClick = { if (card.isMap) choosingMap = true else failed = runCatching { card.open(context) }.isFailure }, shape = shape,
-        color = Color.Transparent, contentColor = foreground, tonalElevation = 0.dp,
-        modifier = Modifier.fillMaxWidth().dshAppCardGlass(shape, dark)
-            .testTag(if (card.isMap) "maps-app-card" else "music-app-card")) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            val icon = if (card.isMap) R.drawable.connector_app_location else R.drawable.connector_app_music
-            if (image != null) Image(image!!, null, Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
-            else Image(painterResource(icon), null, Modifier.size(if (card.isMap) 48.dp else 64.dp).clip(RoundedCornerShape(11.dp)))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(card.title, style = MaterialTheme.typography.titleSmall, maxLines = 2)
-                card.artist?.takeIf(String::isNotEmpty)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, color = secondary) }
-                val details = listOfNotNull(card.album?.takeIf(String::isNotEmpty), card.duration?.let { seconds -> "%d:%02d".format(seconds.toInt() / 60, seconds.toInt() % 60) })
-                if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall, maxLines = 1, color = secondary)
-                Text(if (card.isMap) appText("在地图应用中打开") else if (card.platform == "local") appText("在音乐应用中打开") else appText("在 %1\$s 中打开", musicPlatformTitle(card.platform)),
-                    style = MaterialTheme.typography.labelSmall, color = secondary)
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+        Surface(onClick = { if (card.isMap) choosingMap = true else failed = runCatching { card.open(context) }.isFailure }, shape = shape,
+            color = Color.Transparent, contentColor = foreground, tonalElevation = 0.dp,
+            modifier = Modifier.then(if (card.isMap) Modifier else Modifier.widthIn(max = 336.dp)).fillMaxWidth()
+                // 正文列另有 10dp 段落间距；上下各 1dp 使连续音乐卡片净距与 iOS 的 12pt 一致。
+                .padding(horizontal = if (card.isMap) 0.dp else 8.dp, vertical = if (card.isMap) 0.dp else 1.dp)
+                .dshAppCardGlass(shape, dark, shadowStrength = if (card.isMap) 1f else 0.6f)
+                .testTag(if (card.isMap) "maps-app-card" else "music-app-card")) {
+            Row(Modifier.padding(if (card.isMap) 14.dp else 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val icon = if (card.isMap) R.drawable.connector_app_location else R.drawable.connector_app_music
+                if (image != null) Image(image!!, null, Modifier.size(if (card.isMap) 64.dp else 56.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
+                else Image(painterResource(icon), null, Modifier.size(if (card.isMap) 48.dp else 56.dp).clip(RoundedCornerShape(11.dp)))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (card.isMap) 4.dp else 3.dp)) {
+                    Text(card.title, style = MaterialTheme.typography.titleSmall, maxLines = if (card.isMap) 2 else 1,
+                        overflow = if (card.isMap) TextOverflow.Clip else TextOverflow.Ellipsis)
+                    card.artist?.takeIf(String::isNotEmpty)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, color = secondary) }
+                    val details = listOfNotNull(card.album?.takeIf(String::isNotEmpty), card.duration?.let { seconds -> "%d:%02d".format(seconds.toInt() / 60, seconds.toInt() % 60) })
+                    if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall, maxLines = 1, color = secondary)
+                    Text(if (card.isMap) appText("在地图应用中打开") else if (card.platform == "local") appText("在音乐应用中打开") else appText("在 %1\$s 中打开", musicPlatformTitle(card.platform)),
+                        style = MaterialTheme.typography.labelSmall, color = secondary)
+                }
+                Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp), tint = secondary)
             }
-            Icon(painterResource(R.drawable.ic_chevron_right), null, Modifier.size(18.dp), tint = secondary)
         }
     }
     if (choosingMap && card.isMap) MapAppPicker(SharedMapDestination(card.latitude!!, card.longitude!!, card.title,

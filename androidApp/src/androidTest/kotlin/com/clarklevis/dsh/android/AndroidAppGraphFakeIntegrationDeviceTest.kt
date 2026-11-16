@@ -243,6 +243,63 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { decodeWorkspaceLoadingLogo(corrupted) }
     }
 
+    @Test
+    fun conversationApkPreviewWaitsForInstallButtonBeforeHandoff() = runBlocking {
+        checkApkPreviewHandoff(fromWorkspace = false)
+    }
+
+    @Test
+    fun workspaceApkPreviewAlsoWaitsForInstallButtonBeforeHandoff() = runBlocking {
+        checkApkPreviewHandoff(fromWorkspace = true)
+    }
+
+    private suspend fun checkApkPreviewHandoff(fromWorkspace: Boolean) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        var launched: android.content.Intent? = null
+        val monitor = object : android.app.Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: android.content.Intent): android.app.Instrumentation.ActivityResult? {
+                if (intent.action == android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES ||
+                    intent.type == "application/vnd.android.package-archive") {
+                    launched = intent
+                    // 拦截系统交接，不安装测试文件，也不更改设备授权。
+                    return android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED, null)
+                }
+                return null
+            }
+        }
+        instrumentation.addMonitor(monitor)
+        try {
+            withFilePreview { holder, transport ->
+                onMain {
+                    if (fromWorkspace) holder.openWorkspaceFile(GatewayDirectoryItem(
+                        name = "app-debug.APK", path = "app-debug.APK", kind = "file", bytes = 5
+                    ), "preview")
+                    else holder.openConversationFile(holder.gatewayLocalId, "android-demo", "app-debug.APK")
+                }
+                completePreviewDownload(transport, "app-debug.APK", "application/octet-stream")
+                compose.onNodeWithTag("workspace-apk-install").assertIsDisplayed()
+                assertTrue("打开 APK 预览不能自动跳转", launched == null)
+                compose.onNodeWithTag("workspace-file-preview-sheet").assertIsDisplayed()
+                compose.onNodeWithTag("workspace-apk-install").performClick()
+                compose.waitUntil(10_000) { launched != null }
+                assertTrue(holder.completedWorkspaceFile != null)
+                val intent = requireNotNull(launched)
+                if (intent.action == android.content.Intent.ACTION_VIEW) {
+                    assertEquals("application/vnd.android.package-archive", intent.type)
+                    // 交给安装器的预览文件必须可读。
+                    instrumentation.targetContext.contentResolver.openInputStream(intent.data!!)!!.use {
+                        assertEquals("hello", it.bufferedReader().readText())
+                    }
+                } else {
+                    assertEquals(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, intent.action)
+                    assertEquals("package:${instrumentation.targetContext.packageName}", intent.data.toString())
+                }
+            }
+        } finally {
+            instrumentation.removeMonitor(monitor)
+        }
+    }
+
     private suspend fun withFilePreview(block: suspend (AndroidSharedStateHolder, FakeTransport) -> Unit) {
         val originalLocale = Locale.getDefault()
         Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
@@ -275,22 +332,22 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
     }
 
     private fun fileEntry() = GatewayDirectoryItem(name = "a.txt", path = "a.txt", kind = "file", bytes = 5)
-    private fun resolvedFile(requestId: String) =
-        """{"kind":"file-resolved","requestId":"$requestId","sessionId":"android-demo","path":"a.txt","name":"a.txt","mediaType":"text/plain","size":5,"modifiedAt":10.5}"""
-    private fun openedFile(requestId: String, transferId: String) =
-        """{"kind":"file-download-opened","requestId":"$requestId","transferId":"$transferId","sessionId":"android-demo","path":"a.txt","name":"a.txt","mediaType":"text/plain","size":5,"chunkBytes":100}"""
+    private fun resolvedFile(requestId: String, path: String = "a.txt", mime: String = "text/plain") =
+        """{"kind":"file-resolved","requestId":"$requestId","sessionId":"android-demo","path":"$path","name":"$path","mediaType":"$mime","size":5,"modifiedAt":10.5}"""
+    private fun openedFile(requestId: String, transferId: String, path: String = "a.txt", mime: String = "text/plain") =
+        """{"kind":"file-download-opened","requestId":"$requestId","transferId":"$transferId","sessionId":"android-demo","path":"$path","name":"$path","mediaType":"$mime","size":5,"chunkBytes":100}"""
 
-    private suspend fun completePreviewDownload(transport: FakeTransport) {
+    private suspend fun completePreviewDownload(transport: FakeTransport, path: String = "a.txt", mime: String = "text/plain") {
         waitUntil("transport.payloadsOfType(\"file-resolve\").isNotEmpty()") { transport.payloadsOfType("file-resolve").isNotEmpty() }
         val requestId = transport.payloadsOfType("file-resolve").last().getValue("requestId").jsonPrimitive.content
-        transport.receive(resolvedFile(requestId))
+        transport.receive(resolvedFile(requestId, path, mime))
         waitUntil("transport.payloadsOfType(\"file-download-open\").any { it.getValue(\"requestId\").jsonPrimitive.content == \"$requestId-download\" }") { transport.payloadsOfType("file-download-open").any { it.getValue("requestId").jsonPrimitive.content == "$requestId-download" } }
         val transferId = UUID.randomUUID().toString()
-        transport.receive(openedFile("$requestId-download", transferId))
+        transport.receive(openedFile("$requestId-download", transferId, path, mime))
         waitUntil("transport.payloadsOfType(\"file-download-read\").any { it.getValue(\"transferId\").jsonPrimitive.content == transferId }") { transport.payloadsOfType("file-download-read").any { it.getValue("transferId").jsonPrimitive.content == transferId } }
         transport.receive("""{"kind":"file-download-chunk","transferId":"$transferId","offset":0,"data":"aGVsbG8=","eof":true,"sha256":"$HELLO_DIGEST"}""")
         waitUntil("transport.payloadsOfType(\"file-resolve\").any { it.getValue(\"requestId\").jsonPrimitive.content == \"$transferId-verify\" }") { transport.payloadsOfType("file-resolve").any { it.getValue("requestId").jsonPrimitive.content == "$transferId-verify" } }
-        transport.receive(resolvedFile("$transferId-verify"))
+        transport.receive(resolvedFile("$transferId-verify", path, mime))
     }
 
     private companion object {

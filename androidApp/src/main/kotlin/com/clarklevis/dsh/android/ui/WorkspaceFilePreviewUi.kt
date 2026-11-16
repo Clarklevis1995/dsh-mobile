@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.android.ui
 
 import android.graphics.Bitmap
+import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -11,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -51,6 +56,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -108,6 +114,7 @@ internal fun WorkspaceFilePreviewHost(stateHolder: AndroidSharedStateHolder) {
     DisposableEffect(stateHolder, sessionId) {
         onDispose { stateHolder.cancelWorkspaceFileDownload() }
     }
+    val requestApkInstall = rememberWorkspaceApkInstaller(stateHolder)
     val request = stateHolder.workspaceFilePreviewRequest ?: return
     if (request.sessionId != sessionId) return
     val file = stateHolder.completedWorkspaceFile?.takeIf {
@@ -136,16 +143,70 @@ internal fun WorkspaceFilePreviewHost(stateHolder: AndroidSharedStateHolder) {
             val external = { openWorkspaceFileExternally(context, stateHolder, file) }
             val images = rememberDshMarkdownImages(stateHolder, file.sessionId)
             androidx.compose.runtime.CompositionLocalProvider(LocalDshMarkdownImages provides images) {
-                WorkspaceFilePreviewContent(file, external, contentPadding)
+                WorkspaceFilePreviewContent(file, external, contentPadding, onInstall = { requestApkInstall(file) })
             }
         }
     }
 }
 
 @Composable
-internal fun WorkspaceFilePreviewContent(file: AndroidWorkspaceLocalFile, onOpenExternal: () -> Unit, contentPadding: PaddingValues) {
+internal fun WorkspaceFilePreviewContent(
+    file: AndroidWorkspaceLocalFile,
+    onOpenExternal: () -> Unit,
+    contentPadding: PaddingValues,
+    onInstall: (() -> Unit)? = null
+) {
     androidx.compose.runtime.key(file.file) {
-        when (workspacePreviewKind(file.name, file.mediaType)) {
+        if (file.isApk()) {
+            // BottomSheet 自有窗口可能保留系统主题；玻璃控件须跟随预览的实际主题。
+            val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+            val configuration = Configuration(LocalConfiguration.current).apply {
+                uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                    if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+            }
+            CompositionLocalProvider(LocalConfiguration provides configuration) {
+                DshLiquidGlassHost(
+                    modifier = Modifier.fillMaxSize().padding(contentPadding),
+                    background = { backdrop ->
+                        Box(backdrop.fillMaxSize().background(MaterialTheme.colorScheme.surface))
+                    }
+                ) {
+                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                        val compact = maxHeight < 300.dp
+                        Column(
+                            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(if (compact) 16.dp else 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 16.dp, Alignment.CenterVertically),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            FileTypeIcon(FileIconCatalog.resolve(file.name, file.mediaType), Modifier.size(if (compact) 48.dp else 64.dp))
+                            Text(
+                                file.name,
+                                modifier = Modifier.widthIn(max = 320.dp).testTag("workspace-apk-name"),
+                                textAlign = TextAlign.Center,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp
+                            )
+                            DshGlassButton(
+                                description = appText("安装"),
+                                onClick = { onInstall?.invoke() },
+                                enabled = onInstall != null,
+                                shape = RoundedCornerShape(20.dp),
+                                modifier = Modifier.widthIn(min = 96.dp).heightIn(min = 44.dp)
+                                    .testTag("workspace-apk-install")
+                            ) {
+                                Text(
+                                    appText("安装"),
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (onInstall != null) 1f else 0.3f),
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else when (workspacePreviewKind(file.name, file.mediaType)) {
             WorkspacePreviewKind.IMAGE -> WorkspaceImagePreviewContent(file, onOpenExternal, contentPadding)
             WorkspacePreviewKind.VIDEO -> WorkspaceVideoPreviewContent(file, onOpenExternal, contentPadding)
             WorkspacePreviewKind.CODE -> WorkspaceCodePreviewContent(file, onOpenExternal, contentPadding)

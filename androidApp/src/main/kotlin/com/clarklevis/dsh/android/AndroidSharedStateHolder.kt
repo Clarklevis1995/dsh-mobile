@@ -1471,7 +1471,7 @@ class AndroidSharedStateHolder(
         val sessionId = snapshot.selectedSessionId ?: return
         if (entry.kind != "file" || workspaceFilePreviewRequest != null || conversationFileIsOpening) return
         releaseCompletedWorkspaceFile()
-        val previewsFile = purpose == "preview" && !entry.name.endsWith(".apk", ignoreCase = true)
+        val previewsFile = purpose == "preview"
         if (previewsFile) {
             platformError = null
             workspaceFilePreviewError = null
@@ -1487,7 +1487,7 @@ class AndroidSharedStateHolder(
         appGraph.gatewayScope.launch {
             if (operationId != workspaceFileOperationId || sessionId != snapshot.selectedSessionId) return@launch
             workspaceFileStore.setWorkspaceSession(sessionId, workspaceSessionId)
-            if (purpose == "preview" && !entry.name.endsWith(".apk", ignoreCase = true)) {
+            if (previewsFile) {
                 applyWorkspaceFileTransition(appGraph, workspaceFileStore.resolve(
                     sessionId, entry.path, UUID.randomUUID().toString(),
                     "file-references-v1" in gatewayState.capabilities, useCache = true
@@ -1500,7 +1500,7 @@ class AndroidSharedStateHolder(
                     sessionId,
                     entry.path,
                     UUID.randomUUID().toString(),
-                    if (purpose == "preview" && entry.name.endsWith(".apk", ignoreCase = true)) "install" else purpose
+                    purpose
                 )
             )
         }

@@ -1,3 +1,7 @@
 // 复制为 Local.xcconfig，填写自己的 Bundle ID 和 Apple Team ID。
 LOCAL_BUNDLE_IDENTIFIER = com.yourname.dshmobile.dev
 LOCAL_DEVELOPMENT_TEAM = YOUR_TEAM_ID
+// 可选：团队切换导致默认 App Group 不可用时，填写当前团队可注册的独立名称。
+// LOCAL_APP_GROUP = group.com.yourname.dshmobile.dev.yourteam
+// 可选：扩展 Bundle ID 被其他团队占用时，为三个 Debug 扩展统一追加后缀。
+// LOCAL_EXTENSION_SUFFIX = -yourteam

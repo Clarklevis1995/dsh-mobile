@@ -984,6 +984,7 @@ internal object AndroidStrings {
         "安装包校验失败" to "APK verification failed",
         "安装包版本与更新配置不一致" to "APK version does not match the update manifest",
         "安装包签名不一致，无法覆盖安装" to "APK signature does not match. Cannot install the update.",
+        "安装" to "Install",
         "安装新版本" to "Install update",
         "完全访问" to "Full access",
         "完成" to "Done",

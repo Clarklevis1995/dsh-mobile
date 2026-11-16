@@ -4,6 +4,7 @@ import android.util.Base64
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.navigation.NavHostController
@@ -352,6 +353,22 @@ class ConnectorUiDeviceTest {
         androidx.test.espresso.Espresso.pressBack()
         compose.onNodeWithTag("map-app-picker").assertDoesNotExist()
         compose.onNodeWithTag("maps-app-card").assertIsDisplayed()
+    }
+
+    @Test fun musicCardUsesFileBubbleWidthAndLeadingAlignment() {
+        compose.setContent {
+            DshTheme { DshMenuHost {
+                Box(Modifier.fillMaxWidth().testTag("music-card-container")) {
+                    ConnectorAppCardView(ConnectorAppCard("https://music.apple.com/song/123", "Hometown Glory", "Apple Music", artist = "Adele"))
+                }
+            } }
+        }
+        val card = compose.onNodeWithTag("music-app-card").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val container = compose.onNodeWithTag("music-card-container").fetchSemanticsNode().boundsInRoot
+        with(compose.density) {
+            assertTrue("音乐卡片表面不应超过文件气泡的 320dp", card.width <= 320.dp.toPx() + 1f)
+            assertEquals("靠左对齐并给阴影保留 8dp", container.left + 8.dp.toPx(), card.left, 1f)
+        }
     }
 
     @Test fun chatCardsUseNeutralLightGlassUnderPurpleMaterialTheme() {

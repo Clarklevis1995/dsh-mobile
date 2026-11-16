@@ -11,7 +11,7 @@
 | 位置 | 前台单次近似/系统授权精确位置；地点搜索、地址转换、驾车/步行路线及苹果地图跳转 | 前台单次近似位置，同样限制精度与时效 |
 | 照片 | 系统选择器选择一张，修正方向、缩放、重新编码，选中后直接回传 | 系统图片选择器选择一张，修正方向、重新编码，选中后直接回传 |
 | 音乐 | 已授权本地音乐库搜索、系统播放器状态、播放/暂停/定位 | 暂不可用；没有申请通知读取或无障碍权限来代替播放器接入 |
-| 健康 | HealthKit 步数及睡眠摘要，用于日常健康回顾 | 暂不可用；Health Connect 适配另行实现 |
+| 健康 | HealthKit 步数、睡眠、活动、心肺指标及体重摘要，共 13 类数据，用于日常健康回顾 | 暂不可用；Health Connect 适配另行实现 |
 | 闹钟 | iOS 26+ AlarmKit 一次性闹钟，创建、查询和取消当前主机通过 Whaleness 创建的闹钟 | 未声明此能力 |
 
 iOS 七类能力已接上原生接口，闹钟在 iOS 26 以下禁用。Android 三类不可用能力在页面禁用，并向网关报告 unavailable，避免假连接。照片为有界缩略图版本：最长边 768 像素、JPEG 不超过 64 KiB、每次一张；不支持整库语义搜索、原图或视频。健康查询的时间窗最多 8 天，返回该窗合计；不写入健康数据，不做诊断。
@@ -40,6 +40,34 @@ iOS 七类能力已接上原生接口，闹钟在 iOS 26 以下禁用。Android 
 `phone_tool` 允许的原生工具为 `calendar.busy`、`calendar.create`、`reminders.list`、`reminders.create`、`alarms.create`、`alarms.list`、`alarms.cancel`、`location.current`、`location.precise`、`maps.search`、`maps.geocode`、`maps.reverse-geocode`、`maps.directions`、`maps.open`、`photos.select`、`music.search`、`music.state`、`music.play`、`music.pause`、`music.seek`、`health.daily-summary`。没有任意命令执行接口。日历、提醒和健康的范围读取要求带偏移的 start/end 及 IANA timeZone；最长 8×24 小时。手机消息携带的 `clientTimeZone` 可作为缺省 timeZone，因此上例无需重复提供；桌面无来源时必须提供。音乐播放可指定搜索返回的 itemId；定位播放进度使用 seconds。
 
 同一个 DSH 进程有多个网关实例时，手机请求按真实来源的 `gatewayId` 路由；若另有插件配置且与来源冲突，返回 `gateway_source_mismatch`。桌面无来源时才需要配置 `gatewayId` 区分多个网关，否则返回 `gateway_selection_required`。没有手机来源且没有显式设备 ID 时返回 `device_not_bound`，不会猜测唯一在线设备。
+
+### 健康摘要扩展（2026-11-16）
+
+继续使用 `phone_health_daily_summary` / `health.daily-summary`，参数仍为带时区偏移的 `start`、`end` 和 IANA `timeZone`，最长 8 天；不新增网关白名单。`schemaVersion: 2` 的结果保留顶层 `steps`、`sleepMinutes`、`timeZone`、`coverage`、`availability`、`collectedAt`，并新增实际查询的 `start`、`end` 与 `metrics`。
+
+每个 `metrics` 项包含 `value`（数字或 `null`）、`unit`、`aggregation`；体重有记录时还带 `recordedAt`。单位固定，不受设备地区设置影响。下表的“平均”是查询窗口内 HealthKit 的样本统计均值，不是实时测量或按天的趋势序列。
+
+| metrics 字段 | 数据 | unit | aggregation |
+| --- | --- | --- | --- |
+| `steps` | 步数 | `count` | `sum` |
+| `sleepMinutes` | 睡眠时长 | `min` | `union-duration` |
+| `walkingRunningDistance` | 步行与跑步距离 | `m` | `sum` |
+| `flightsClimbed` | 已爬楼层 | `count` | `sum` |
+| `activeEnergy` | 活动能量 | `kcal` | `sum` |
+| `basalEnergy` | 静息能量 | `kcal` | `sum` |
+| `exerciseMinutes` | Apple 运动时间 | `min` | `sum` |
+| `heartRate` | 平均心率 | `bpm` | `average` |
+| `restingHeartRate` | 平均静息心率 | `bpm` | `average` |
+| `heartRateVariability` | 平均心率变异性（SDNN） | `ms` | `average` |
+| `oxygenSaturation` | 平均血氧饱和度（例如 98，而非 0.98） | `%` | `average` |
+| `respiratoryRate` | 平均呼吸频率 | `breaths/min` | `average` |
+| `bodyMass` | 窗口内最新体重（不查窗口外旧记录） | `kg` | `latest` |
+
+数值查询仅纳入完整落在请求窗口中的样本。睡眠允许跨窗口，裁剪后合并重叠区间，只统计睡着的阶段，避免多来源重复计时；不计入清醒或仅卧床时间。所有数值使用 HealthKit 统计查询，体重使用窗口内按结束时间倒序的单条查询。逐项查询均可取消，原有关闭连接器、网关撤权、租约失效、后台与超时约束继续有效。
+
+已有用户更新 App 后，在手机连接器页将“健康”关闭再开启，系统会对新增数据类型请求授权；用户可逐项拒绝，旧权限不自动扩大。没有记录或未共享的数据返回 `null`，不会冒报为 0，也不据此断言用户拒绝授权。没有手表或其他数据来源时，部分类型可能一直没有记录。仍然只读，不导出原始逐条记录，不申请写入权限。
+
+部署时先更新网关的 v2 回包校验，再更新手机 App。新网关继续接受旧版手机仅含步数和睡眠的回包；旧网关会将 v2 新字段判为 `invalid_result`。
 
 ## 请求来源与响应速度
 

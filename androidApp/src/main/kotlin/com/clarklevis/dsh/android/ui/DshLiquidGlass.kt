@@ -91,7 +91,7 @@ internal enum class DshGlassStyle(
 
 /** 聊天应用卡片使用中性着色和轻折射，避免首页的深蓝底色影响正文。 */
 @Composable
-internal fun Modifier.dshAppCardGlass(shape: Shape, dark: Boolean): Modifier {
+internal fun Modifier.dshAppCardGlass(shape: Shape, dark: Boolean, shadowStrength: Float = 1f): Modifier {
     val surface = if (dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
     val rim = Color(0xFF8E8E93)
     if (LocalUiEffectsReduced.current) {
@@ -100,7 +100,7 @@ internal fun Modifier.dshAppCardGlass(shape: Shape, dark: Boolean): Modifier {
             .clip(shape)
     }
     return dshOuterShadow(shape, ComposeShadow(
-        radius = 6.dp, color = Color.Black.copy(alpha = if (dark) 0.20f else 0.07f),
+        radius = 6.dp, color = Color.Black.copy(alpha = (if (dark) 0.20f else 0.07f) * shadowStrength),
         offset = DpOffset(0.dp, 2.dp)
     ))
         .dshLiquidGlass(shape, DshGlassStyle.APP_CARD, shadowsEnabled = false)

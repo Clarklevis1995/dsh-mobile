@@ -1,6 +1,7 @@
 import XCTest
 import SQLite3
 import CoreLocation
+import HealthKit
 import class DeepSeekHarnessShared.ScheduleTimingEditor
 import UserNotifications
 import Network
@@ -18505,6 +18506,188 @@ final class AppleMusicAppCardTests: XCTestCase {
         let attachment = XCTAttachment(image: image); attachment.name = "音乐卡片歌手专辑时长与封面回退"
         attachment.lifetime = .keepAlways; add(attachment)
     }
+    func testSongSelectionUsesSongPathOrAlbumTrackAndDoesNotGuessOtherContent() throws {
+        XCTAssertEqual(AppleMusicLink.songID(try XCTUnwrap(URL(string: "https://music.apple.com/us/song/123"))), "123")
+        XCTAssertEqual(AppleMusicLink.songID(try XCTUnwrap(URL(string: "https://music.apple.com/cn/album/test/123?i=456"))), "456")
+        for value in ["https://music.apple.com/album/test/123", "https://music.apple.com/artist/test/123?i=456", "https://music.apple.com/playlist/pl.test", "https://evil.test/song/123"] {
+            XCTAssertNil(AppleMusicLink.songID(try XCTUnwrap(URL(string: value))))
+        }
+    }
+
+    func testCardReplacesPreviouslyPlayingSongBeforeOpeningMusic() async throws {
+        let url = try XCTUnwrap(URL(string: "https://music.apple.com/album/test/123?i=456"))
+        var events: [String] = []
+        var selectedSong = "previous-song"
+        try await AppleMusicCardPlayback.activate(url, authorize: { events.append("authorize"); return true }, play: { id in
+            selectedSong = id; events.append("play-\(id)")
+        }, open: { target in
+            XCTAssertEqual(selectedSong, "456")
+            XCTAssertEqual(target, url)
+            events.append("open"); return true
+        })
+        XCTAssertEqual(events, ["authorize", "play-456", "open"])
+    }
+
+    func testPlaybackFailuresAndDeniedPermissionNeverBecomeJustAnOpen() async throws {
+        let url = try XCTUnwrap(URL(string: "https://music.apple.com/song/123"))
+        do {
+            try await AppleMusicCardPlayback.activate(url, authorize: { false }, play: { _ in XCTFail() }, open: { _ in XCTFail(); return true })
+            XCTFail()
+        } catch { XCTAssertEqual(error as? AppleMusicCardPlayback.Failure, .permissionDenied) }
+        do {
+            try await AppleMusicCardPlayback.activate(url, authorize: { true }, play: { _ in throw NSError(domain: "test", code: 1) }, open: { _ in XCTFail(); return true })
+            XCTFail()
+        } catch { XCTAssertEqual(error as? AppleMusicCardPlayback.Failure, .playbackFailed) }
+        do {
+            try await AppleMusicCardPlayback.activate(url, authorize: { true }, play: { _ in }, open: { _ in false })
+            XCTFail()
+        } catch { XCTAssertEqual(error as? AppleMusicCardPlayback.Failure, .openFailed) }
+    }
+
+    func testNonSongCardsOpenWithoutInventingATrackAndCancelledClicksDoNotPlay() async throws {
+        let album = try XCTUnwrap(URL(string: "https://music.apple.com/album/test/123"))
+        try await AppleMusicCardPlayback.activate(album, authorize: { XCTFail(); return false }, play: { _ in XCTFail() }, open: { $0 == album })
+        let task = Task {
+            try await AppleMusicCardPlayback.activate(try XCTUnwrap(URL(string: "https://music.apple.com/song/123")), authorize: {
+                withUnsafeCurrentTask { $0?.cancel() }; return true
+            }, play: { _ in XCTFail() }, open: { _ in XCTFail(); return true })
+        }
+        do { try await task.value; XCTFail() } catch is CancellationError {} catch { XCTFail() }
+    }
+
+    func testOldPlayingSongDoesNotSatisfySelectedSongConfirmation() async throws {
+        var current = "old"
+        var waits = 0
+        try await IOSMusicLibraryConnector.resumePlayback(play: {}, isPlaying: { current == "selected" }, wait: {
+            waits += 1
+            if waits == 2 { current = "selected" }
+        })
+        XCTAssertEqual(waits, 2)
+    }
+
+    func testMusicCardGalleryAtPhoneTabletLandscapeAndLargeTextSizes() async throws {
+        let defaults = UserDefaults.standard
+        let previousScale = defaults.object(forKey: AppFontScale.key)
+        let previousFollowsSystem = defaults.object(forKey: AppFontScale.followsSystemKey)
+        defer {
+            if let previousScale { defaults.set(previousScale, forKey: AppFontScale.key) }
+            else { defaults.removeObject(forKey: AppFontScale.key) }
+            if let previousFollowsSystem { defaults.set(previousFollowsSystem, forKey: AppFontScale.followsSystemKey) }
+            else { defaults.removeObject(forKey: AppFontScale.followsSystemKey) }
+        }
+        defaults.set(false, forKey: AppFontScale.followsSystemKey)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        let short = try cardLink(["v": 1, "title": "Hometown Glory", "artist": "Adele", "album": "19", "durationSeconds": 271])
+        let long = try cardLink(["v": 1, "title": "这是一首歌名比较长的歌曲，用于检查换行和阴影留白", "artist": "歌手", "album": "专辑", "durationSeconds": 212])
+        let markdown = "歌曲列表\n\n[Hometown Glory](\(short))\n\n[长歌名](\(long))\n\n列表结束"
+        for (name, size, dark, type) in [
+            ("phone", CGSize(width: 390, height: 844), false, DynamicTypeSize.large),
+            ("landscape-dark", CGSize(width: 844, height: 390), true, DynamicTypeSize.large),
+            ("tablet", CGSize(width: 768, height: 1024), false, DynamicTypeSize.large),
+            ("large-text", CGSize(width: 390, height: 844), false, DynamicTypeSize.accessibility2)
+        ] {
+            defaults.set(type == .accessibility2 ? 1.6 : 1, forKey: AppFontScale.key)
+            window.frame = CGRect(origin: .zero, size: size)
+            window.overrideUserInterfaceStyle = dark ? .dark : .light
+            let root = ScrollView { DeepSeekHarnessMobile.MarkdownContent(markdown).padding(.horizontal, 16).padding(.vertical, 20) }
+                .environment(\.dynamicTypeSize, type).background(Color(uiColor: .systemBackground))
+            window.rootViewController = UIHostingController(rootView: root)
+            window.makeKeyAndVisible()
+            try await Task.sleep(for: .milliseconds(100))
+            window.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(size: window.bounds.size).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "music-card-gallery-\(name)"; attachment.lifetime = .keepAlways; add(attachment)
+        }
+    }
+
+    func testOnlyRenderedAppCardsAllowMessageShadowOverflow() {
+        let link = "[Song](https://music.apple.com/song/123)"
+        XCTAssertTrue(markdownContainsAppLinkCards("说明\n\n\(link)\n\n结束"))
+        XCTAssertTrue(markdownContainsAppLinkCards("> \(link)"))
+        for text in ["普通正文", "听听 \(link) 吧", "```\n\(link)\n```", "`\(link)`", "[Song](https://music.apple.com.evil.test/song/123)"] {
+            XCTAssertFalse(markdownContainsAppLinkCards(text), text)
+        }
+    }
+
+    func testActualChatViewportDoesNotCutNativeMusicShadowAtMessageEdgesAfterReuse() async throws {
+        try await assertNativeMusicShadowsInChatViewport(width: 360)
+    }
+
+    func testActualWideChatViewportDoesNotCutNativeMusicShadowAtMessageEdge() async throws {
+        try await assertNativeMusicShadowsInChatViewport(width: 768)
+    }
+
+    private func assertNativeMusicShadowsInChatViewport(width: CGFloat) async throws {
+        let link = try cardLink(["v": 1, "title": "Hometown Glory", "artist": "Adele", "album": "19", "durationSeconds": 271])
+        let source = "[Song](\(link))\n\n[Song](\(link))"
+        let controller = ConversationViewportController(onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in }, onBottomAlignmentCompleted: {}, onApproachingTop: {})
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: width, height: 650)
+        window.rootViewController = controller
+        window.overrideUserInterfaceStyle = .light
+        window.makeKeyAndVisible()
+        defer { controller.detachHistoryPresentationConsumer(); window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        controller.loadViewIfNeeded()
+        controller.view.backgroundColor = .white
+        func descendants(_ view: UIView) -> [UIView] { [view] + view.subviews.flatMap(descendants) }
+        let list = try XCTUnwrap(descendants(controller.view).compactMap { $0 as? UICollectionView }.first)
+        func render(clipped: Bool, revision: Int) async throws -> (UIImage, CGRect) {
+            let entry = ConversationViewportEntry(id: "music-shadows", revision: revision,
+                content: AnyView(DeepSeekHarnessMobile.MarkdownContent(source)), clipsContentToBounds: clipped)
+            controller.apply(entries: [entry], revision: revision, bottomInset: 0, hasConversationContent: true)
+            for _ in 0..<100 {
+                controller.view.layoutIfNeeded()
+                if list.visibleCells.first != nil { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            try await Task.sleep(for: .milliseconds(250))
+            controller.view.layoutIfNeeded()
+            let cell = try XCTUnwrap(list.visibleCells.first)
+            XCTAssertEqual(cell.clipsToBounds, clipped)
+            XCTAssertEqual(cell.contentView.clipsToBounds, clipped)
+            let host = try XCTUnwrap(controller.children.first { $0 is UIHostingController<AnyView> })
+            XCTAssertEqual(host.view.clipsToBounds, clipped, "内部宿主也必须按当前消息更新，不能在复用后继续裁切阴影")
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.preferredRange = .standard
+            let image = UIGraphicsImageRenderer(size: window.bounds.size, format: format).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = clipped ? "chat-music-shadow-clipped-\(Int(width))-\(revision)" : "chat-music-shadow-complete-\(Int(width))-\(revision)"
+            attachment.lifetime = .keepAlways; add(attachment)
+            return (image, cell.convert(cell.bounds, to: window))
+        }
+        let (before, rect) = try await render(clipped: true, revision: 1)
+        let (after, _) = try await render(clipped: !markdownContainsAppLinkCards(source), revision: 2)
+        func brightness(_ image: UIImage, x: Int, y: Int) throws -> Int {
+            let cg = try XCTUnwrap(image.cgImage)
+            let data = try XCTUnwrap(cg.dataProvider?.data)
+            let bytes = try XCTUnwrap(CFDataGetBytePtr(data))
+            let offset = y * cg.bytesPerRow + x * 4
+            return (Int(bytes[offset]) + Int(bytes[offset + 1]) + Int(bytes[offset + 2])) / 3
+        }
+        // 第一张卡片会经过聊天顶部的原生模糊遮罩；比较第二张卡片的未遮挡区域。
+        let y = Int((rect.maxY - 65).rounded())
+        let left = Int(rect.minX.rounded()) - 1
+        let right = Int(rect.maxX.rounded()) + 1
+        // 大屏的卡片靠左，右阴影在消息内部；窄屏两侧都会越过消息边界。
+        for x in width < 400 ? [left, right] : [left] {
+            XCTAssertLessThan(try brightness(after, x: x, y: y), try brightness(before, x: x, y: y),
+                              "左右两侧的消息边界外必须实际绘制出阴影，不能只检查独立卡片")
+        }
+        for x in [0, Int(width) - 1] {
+            XCTAssertGreaterThanOrEqual(try brightness(after, x: x, y: y), 254, "阴影应在视口边缘之前自然淡出，不能在屏幕边缘硬切")
+        }
+        _ = try await render(clipped: true, revision: 3)
+        _ = try await render(clipped: false, revision: 4)
+    }
+
     /// 公开歌曲封面预览；网络不可用时跳过，核心协议和回退测试不依赖网络。
     func testOfficialArtworkCardPreview() async throws {
         let artwork = "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/08/8c/24/088c2405-2e33-801b-5c38-e967f2c01e69/191404113974.png/300x300bb.jpg"
@@ -19173,5 +19356,134 @@ final class WorkspaceChangesLifecycleTests: XCTestCase {
         gateway.onFrame?(GatewayFrame(kind: "hello", protocol: 3, capabilities: [], authenticated: true))
         XCTAssertFalse(store.workspaceChanges.supported)
         XCTAssertFalse(store.workspaceChanges.visible)
+    }
+}
+
+@MainActor
+final class PhoneHealthSummaryTests: XCTestCase {
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+    private var end: Date { start.addingTimeInterval(86400) }
+    private let zone = TimeZone(identifier: "Asia/Shanghai")!
+
+    func testAuthorizationIncludesEveryReadableMetricAndSleep() {
+        let expected: Set<String> = [
+            HKQuantityTypeIdentifier.stepCount.rawValue, HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue,
+            HKQuantityTypeIdentifier.flightsClimbed.rawValue, HKQuantityTypeIdentifier.activeEnergyBurned.rawValue,
+            HKQuantityTypeIdentifier.basalEnergyBurned.rawValue, HKQuantityTypeIdentifier.appleExerciseTime.rawValue,
+            HKQuantityTypeIdentifier.heartRate.rawValue, HKQuantityTypeIdentifier.restingHeartRate.rawValue,
+            HKQuantityTypeIdentifier.heartRateVariabilitySDNN.rawValue, HKQuantityTypeIdentifier.oxygenSaturation.rawValue,
+            HKQuantityTypeIdentifier.respiratoryRate.rawValue, HKQuantityTypeIdentifier.bodyMass.rawValue,
+            HKCategoryTypeIdentifier.sleepAnalysis.rawValue
+        ]
+        XCTAssertEqual(Set(PhoneHealthSummary.readTypes.map(\.identifier)), expected)
+        XCTAssertEqual(PhoneHealthSummary.metrics.filter { $0.aggregation == .latest }.map(\.key), ["bodyMass"])
+    }
+
+    func testUnitsAndAggregationAreExplicitAndLegacyFieldsStayCompatible() async throws {
+        let readings: [String: HKQuantity] = [
+            "steps": .init(unit: .count(), doubleValue: 4321),
+            "walkingRunningDistance": .init(unit: .meterUnit(with: .kilo), doubleValue: 3.25),
+            "flightsClimbed": .init(unit: .count(), doubleValue: 4),
+            "activeEnergy": .init(unit: .joule(), doubleValue: 4184),
+            "basalEnergy": .init(unit: .kilocalorie(), doubleValue: 1500),
+            "exerciseMinutes": .init(unit: .second(), doubleValue: 1800),
+            "heartRate": .init(unit: .count().unitDivided(by: .second()), doubleValue: 1.25),
+            "restingHeartRate": .init(unit: .count().unitDivided(by: .minute()), doubleValue: 60),
+            "heartRateVariability": .init(unit: .second(), doubleValue: 0.045),
+            "oxygenSaturation": .init(unit: .percent(), doubleValue: 0.98),
+            "respiratoryRate": .init(unit: .count().unitDivided(by: .minute()), doubleValue: 16),
+            "bodyMass": .init(unit: .gram(), doubleValue: 70000)
+        ]
+        let recordedAt = start.addingTimeInterval(3600)
+        let result = try await PhoneHealthSummary.collect(start: start, end: end, zone: zone, read: { metric in
+            .init(quantity: try XCTUnwrap(readings[metric.key]), recordedAt: metric.key == "bodyMass" ? recordedAt : nil)
+        }, sleep: { [] })
+        let metrics = try XCTUnwrap(result["metrics"] as? [String: [String: Any]])
+        for (key, expected) in ["walkingRunningDistance": 3250.0, "activeEnergy": 1, "exerciseMinutes": 30,
+                                "heartRate": 75, "heartRateVariability": 45, "oxygenSaturation": 98, "bodyMass": 70] {
+            XCTAssertEqual(try XCTUnwrap(metrics[key]?["value"] as? Double), expected, accuracy: 0.0001, key)
+        }
+        XCTAssertEqual(metrics["oxygenSaturation"]?["unit"] as? String, "%")
+        XCTAssertEqual(metrics["heartRate"]?["aggregation"] as? String, "average")
+        XCTAssertEqual(metrics["activeEnergy"]?["aggregation"] as? String, "sum")
+        XCTAssertEqual(metrics["bodyMass"]?["recordedAt"] as? String, ISO8601DateFormatter().string(from: recordedAt))
+        XCTAssertEqual(result["steps"] as? Double, 4321)
+        XCTAssertTrue(result["sleepMinutes"] is NSNull)
+        XCTAssertEqual(result["start"] as? String, ISO8601DateFormatter().string(from: start))
+        XCTAssertEqual(result["end"] as? String, ISO8601DateFormatter().string(from: end))
+        XCTAssertEqual(result["timeZone"] as? String, "Asia/Shanghai")
+        XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: result))
+        let attachment = XCTAttachment(data: try JSONSerialization.data(withJSONObject: result), uniformTypeIdentifier: "public.json")
+        attachment.name = "health-summary-v2-synthetic.json"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    func testMissingReadingsRemainNullWhileRecordedZeroRemainsZero() async throws {
+        let result = try await PhoneHealthSummary.collect(start: start, end: end, zone: zone, read: { metric in
+            metric.key == "steps" ? .init(quantity: HKQuantity(unit: .count(), doubleValue: 0), recordedAt: nil) : nil
+        }, sleep: { [] })
+        let metrics = try XCTUnwrap(result["metrics"] as? [String: [String: Any]])
+        XCTAssertEqual(result["steps"] as? Double, 0)
+        XCTAssertEqual(metrics.count, 13)
+        for (key, row) in metrics where key != "steps" { XCTAssertTrue(row["value"] is NSNull, key) }
+        XCTAssertEqual(result["availability"] as? String, "no-data-may-mean-not-shared")
+        XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: result))
+    }
+
+    func testSleepClipsWindowAndMergesSourcesWithoutCountingAwakeOrInBed() async throws {
+        func sample(_ value: HKCategoryValueSleepAnalysis, _ from: Double, _ to: Double) -> HKCategorySample {
+            HKCategorySample(type: HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!, value: value.rawValue,
+                             start: start.addingTimeInterval(from * 60), end: start.addingTimeInterval(to * 60))
+        }
+        let result = try await PhoneHealthSummary.collect(start: start, end: end, zone: zone, read: { _ in nil }, sleep: {
+            [sample(.asleepCore, -60, 60), sample(.asleepDeep, 30, 90), sample(.asleepREM, 90, 120),
+             sample(.inBed, 0, 240), sample(.awake, 120, 180), sample(.asleepUnspecified, 1430, 1500)]
+        })
+        XCTAssertEqual(result["sleepMinutes"] as? Double, 130)
+        let metrics = try XCTUnwrap(result["metrics"] as? [String: [String: Any]])
+        XCTAssertEqual(metrics["sleepMinutes"]?["value"] as? Double, 130)
+    }
+
+    func testCancellationStopsBeforeAnotherHealthQueryAndProducesNoSummary() async throws {
+        var queries = 0
+        var sleepQueries = 0
+        let task = Task {
+            try await PhoneHealthSummary.collect(start: start, end: end, zone: zone, read: { _ in
+                queries += 1
+                withUnsafeCurrentTask { $0?.cancel() }
+                return nil
+            }, sleep: { sleepQueries += 1; return [] })
+        }
+        do { _ = try await task.value; XCTFail("取消后不可回传健康摘要") }
+        catch is CancellationError {} catch { XCTFail("应保留取消语义") }
+        XCTAssertEqual(queries, 1)
+        XCTAssertEqual(sleepQueries, 0)
+    }
+
+    func testQueryFailureDoesNotBecomeASuccessfulEmptySummary() async throws {
+        let failure = NSError(domain: HKErrorDomain, code: HKError.Code.errorHealthDataUnavailable.rawValue)
+        do {
+            _ = try await PhoneHealthSummary.collect(start: start, end: end, zone: zone,
+                read: { _ in throw failure }, sleep: { XCTFail("失败后不得继续查询"); return [] })
+            XCTFail("系统查询失败不能伪装为全部无记录")
+        } catch { XCTAssertEqual((error as NSError).code, failure.code) }
+    }
+
+    func testNoDataAndUnrequestedNewTypesDoNotBlockOtherHealthMetrics() async throws {
+        let result = try await PhoneHealthSummary.collect(start: start, end: end, zone: zone, read: { metric in
+            switch metric.key {
+            case "heartRate": throw NSError(domain: HKErrorDomain, code: HKError.Code.errorNoData.rawValue)
+            case "oxygenSaturation": throw NSError(domain: HKErrorDomain, code: HKError.Code.errorAuthorizationNotDetermined.rawValue)
+            case "bodyMass": throw NSError(domain: HKErrorDomain, code: HKError.Code.errorAuthorizationDenied.rawValue)
+            case "steps": return .init(quantity: HKQuantity(unit: .count(), doubleValue: 1000), recordedAt: nil)
+            default: return nil
+            }
+        }, sleep: { throw NSError(domain: HKErrorDomain, code: HKError.Code.errorNoData.rawValue) })
+        let metrics = try XCTUnwrap(result["metrics"] as? [String: [String: Any]])
+        XCTAssertEqual(result["steps"] as? Double, 1000)
+        for key in ["heartRate", "oxygenSaturation", "bodyMass", "sleepMinutes"] {
+            XCTAssertTrue(metrics[key]?["value"] is NSNull, key)
+        }
     }
 }

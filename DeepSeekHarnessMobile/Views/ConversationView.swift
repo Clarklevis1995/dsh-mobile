@@ -2600,7 +2600,7 @@ struct ConversationView: View {
                     // Completed responses are immutable for this revision.
                     // The viewport measures their SwiftUI root directly before
                     // caching, including fenced-code horizontal scroll views.
-                    clipsContentToBounds: true,
+                    clipsContentToBounds: !markdownContainsAppLinkCards(item.text),
                     layoutRevision: viewportEntryRevision(entry, includesImageState: false)
                 )]
             case .timeSeparator(let date):
@@ -6656,6 +6656,15 @@ func userMessageRequiresMarkdown(_ text: String) -> Bool {
     !ParsedMarkdownCache.document(for: MarkdownMath.prepare(text)).isPlainText || text.contains("\\")
 }
 
+/// 卡片的玻璃阴影需要越过消息边界；普通文本、行内链接和代码仍使用原有裁切。
+func markdownContainsAppLinkCards(_ text: String) -> Bool {
+    guard text.contains("://") else { return false }
+    return ParsedMarkdownCache.document(for: MarkdownMath.prepare(text)).standaloneLinks.contains { link in
+        AppleMusicCardDestination(link: link.destination, title: link.title) != nil
+            || AppleMapsCardDestination(link: link.destination, title: link.title) != nil
+    }
+}
+
 private enum ParsedMarkdownCache {
     private final class Box: NSObject {
         let document: MarkdownUI.MarkdownContent
@@ -6712,7 +6721,7 @@ private extension Theme {
                 } else if !compact, let link = configuration.content.standaloneLink,
                           let destination = AppleMusicCardDestination(link: link.destination, title: link.title) {
                     AppleMusicAppCard(destination: destination)
-                        .markdownMargin(top: 2, bottom: 10)
+                        .markdownMargin(top: 2, bottom: 4)
                 } else {
                     configuration.label
                         .fixedSize(horizontal: false, vertical: true)

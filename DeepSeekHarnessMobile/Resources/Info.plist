@@ -119,8 +119,8 @@
 	<key>ShareAppGroup</key>
 	<string>$(DSH_SHARE_APP_GROUP)</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>读取步数与睡眠摘要，供你已授权的主机和模型服务回顾日常健康。可随时关闭连接器。</string>
+	<string>读取你选择共享的步数、睡眠、活动、心率、心率变异性、血氧、呼吸频率和体重摘要，供已授权的主机和模型服务回顾日常健康。可随时关闭连接器。</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>用于健康连接器的系统授权；当前仅按你的授权读取步数和睡眠摘要，不写入或修改健康数据。</string>
+	<string>用于健康连接器的系统授权；仅按你的授权读取健康与活动摘要，不写入或修改健康数据。</string>
 </dict>
 </plist>

@@ -56,20 +56,42 @@ struct AppleMusicCardDestination: Equatable {
 
 struct AppleMusicAppCard: View {
     let destination: AppleMusicCardDestination
-    @State private var openFailed = false
+    @State private var failure: AppleMusicCardPlayback.Failure?
+    @State private var opening = false
+    @State private var openTask: Task<Void, Never>?
 
     var body: some View {
-        AppLinkCard(icon: "ConnectorMusic", name: destination.name, subtitle: String(localized: "在 Apple Music 中打开"),
-                    artworkURL: destination.artworkURL, detail: destination.artist, secondaryDetail: destination.secondaryDetail, imageSize: 64) {
-            UIApplication.shared.open(destination.url, options: [.universalLinksOnly: true]) { success in
-                Task { @MainActor in openFailed = !success }
+        AppLinkCard(icon: "ConnectorMusic", name: destination.name,
+                    subtitle: AppleMusicLink.songID(destination.url) == nil ? String(localized: "在 Apple Music 中打开") : String(localized: "在 Apple Music 中播放"),
+                    artworkURL: destination.artworkURL, detail: destination.artist, secondaryDetail: destination.secondaryDetail,
+                    imageSize: 56, contentPadding: 12, textSpacing: 3, titleLineLimit: 1, surfaceStrength: 0.6, busy: opening) {
+            guard !opening else { return }
+            opening = true
+            openTask = Task { @MainActor in
+                defer { opening = false; openTask = nil }
+                do { try await AppleMusicCardPlayback.activate(destination.url) }
+                catch is CancellationError { }
+                catch { failure = (error as? AppleMusicCardPlayback.Failure) ?? .playbackFailed }
             }
         }
+        .frame(maxWidth: 320)
+        // 原生玻璃的阴影留在正文布局边界内，避免被聊天宿主或相邻段落裁切。
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("apple-music-app-card")
-        .alert("无法打开 Apple Music", isPresented: $openFailed) {
+        .onDisappear { openTask?.cancel() }
+        .alert("Apple Music", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
             Button("好", role: .cancel) { }
         } message: {
-            Text("请确认已安装 Apple Music，并允许其打开音乐链接。")
+            Text(failureMessage)
+        }
+    }
+    private var failureMessage: String {
+        switch failure {
+        case .permissionDenied: String(localized: "请允许访问 Apple Music 后再播放。")
+        case .playbackFailed: String(localized: "未能播放所选歌曲，请检查 Apple Music 订阅、网络和歌曲可用性。")
+        case .busy: String(localized: "正在打开另一首歌曲，请稍后重试。")
+        default: String(localized: "请确认已安装 Apple Music，并允许其打开音乐链接。")
         }
     }
 }
@@ -83,6 +105,11 @@ struct AppLinkCard: View {
     var detail: String? = nil
     var secondaryDetail: String? = nil
     var imageSize: CGFloat = 48
+    var contentPadding: CGFloat = 14
+    var textSpacing: CGFloat = 5
+    var titleLineLimit = 2
+    var surfaceStrength: Double = 1
+    var busy = false
     let open: () -> Void
 
     var body: some View {
@@ -101,20 +128,23 @@ struct AppLinkCard: View {
                     .frame(width: imageSize, height: imageSize)
                     .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(name).appFont(.body.weight(.semibold)).foregroundStyle(.primary).lineLimit(2)
+                VStack(alignment: .leading, spacing: textSpacing) {
+                    Text(name).appFont(.body.weight(.semibold)).foregroundStyle(.primary)
+                        .lineLimit(titleLineLimit).truncationMode(.tail)
                     if let detail, !detail.isEmpty { Text(detail).appFont(.subheadline).foregroundStyle(.secondary).lineLimit(1) }
                     if let secondaryDetail { Text(secondaryDetail).appFont(.caption).foregroundStyle(.secondary).lineLimit(1) }
                     Text(subtitle).appFont(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: "arrow.up.right").font(.body.weight(.medium)).foregroundStyle(.secondary)
+                if busy { ProgressView().controlSize(.small).frame(width: 18) }
+                else { Image(systemName: "arrow.up.right").font(.body.weight(.medium)).foregroundStyle(.secondary) }
             }
-            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-            .modifier(AppLinkCardSurface())
+            .padding(contentPadding).frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(AppLinkCardSurface(strength: surfaceStrength))
             .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
+        .disabled(busy)
         .accessibilityLabel(Text([name, detail, secondaryDetail, subtitle].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "，")))
     }
 }
@@ -122,16 +152,26 @@ struct AppLinkCard: View {
 /// iOS 26 使用原生交互玻璃；旧系统及“降低透明度”保留清晰的中性底色。
 private struct AppLinkCardSurface: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    let strength: Double
 
     @ViewBuilder
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         if #available(iOS 26.0, *), !reduceTransparency {
-            content
-                .glassEffect(
-                    .regular.tint(Color(uiColor: .secondarySystemBackground).opacity(0.45)).interactive(),
-                    in: shape
-                )
+            if strength < 1 {
+                // 只淡化玻璃背景及其原生阴影，文字和封面保持完整不透明度。
+                content.background {
+                    Color.clear
+                        .glassEffect(.regular.tint(Color(uiColor: .secondarySystemBackground).opacity(0.45)).interactive(), in: shape)
+                        .opacity(strength)
+                }
+            } else {
+                content
+                    .glassEffect(
+                        .regular.tint(Color(uiColor: .secondarySystemBackground).opacity(0.45)).interactive(),
+                        in: shape
+                    )
+            }
         } else {
             content
                 .background(Color(uiColor: .secondarySystemBackground), in: shape)

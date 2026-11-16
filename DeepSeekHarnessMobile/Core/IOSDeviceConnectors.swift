@@ -408,7 +408,7 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
         case "music":
             return await MusicAuthorization.request() == .authorized
         case "health":
-            try await health.requestAuthorization(toShare: [], read: [HKObjectType.quantityType(forIdentifier: .stepCount)!, HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!])
+            try await health.requestAuthorization(toShare: [], read: PhoneHealthSummary.readTypes)
             // HealthKit 不公开读取授权状态；完成弹窗不代表数据可读。
             return true
         case "alarms":
@@ -629,15 +629,37 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
     }
     private func healthSummary(_ args: [String: Any]) async throws -> [String: Any] {
         let (start, end, zone) = try range(args)
-        let steps = HKQuantityType.quantityType(forIdentifier: .stepCount)!
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
-        let count: Double? = try await withCheckedThrowingContinuation { continuation in
+        // 数值样本必须完整落在窗口内；睡眠可跨午夜，按窗口裁剪后合并。
+        let quantities = HKQuery.predicateForSamples(withStart: start, end: end, options: [.strictStartDate, .strictEndDate])
+        let sleep = HKQuery.predicateForSamples(withStart: start, end: end)
+        return try await PhoneHealthSummary.collect(start: start, end: end, zone: zone, read: { metric in
+            if metric.aggregation == .latest {
+                let samples = try await self.healthSamples(type: metric.type, predicate: quantities, limit: 1,
+                    sort: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)])
+                guard let sample = samples.first as? HKQuantitySample else { return nil }
+                return .init(quantity: sample.quantity, recordedAt: sample.endDate)
+            }
+            return try await self.healthStatistic(metric, predicate: quantities)
+        }, sleep: {
+            let samples = try await self.healthSamples(type: HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!,
+                                                      predicate: sleep, limit: 2001)
+            guard samples.count <= 2000 else { throw Failure(code: "result_too_large") }
+            return samples.compactMap { $0 as? HKCategorySample }
+        })
+    }
+    private func healthStatistic(_ metric: PhoneHealthSummary.Metric, predicate: NSPredicate) async throws -> PhoneHealthSummary.Reading? {
+        try Task.checkCancellation()
+        return try await withCheckedThrowingContinuation { continuation in
             var completed = false
-            let query = HKStatisticsQuery(quantityType: steps, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, error in
+            let options: HKStatisticsOptions = metric.aggregation == .sum ? .cumulativeSum : .discreteAverage
+            let query = HKStatisticsQuery(quantityType: metric.type, quantitySamplePredicate: predicate, options: options) { _, result, error in
                 Task { @MainActor in
                     guard !completed else { return }; completed = true
                     if let error { continuation.resume(throwing: error) }
-                    else { continuation.resume(returning: result?.sumQuantity()?.doubleValue(for: .count())) }
+                    else {
+                        let quantity = metric.aggregation == .sum ? result?.sumQuantity() : result?.averageQuantity()
+                        continuation.resume(returning: quantity.map { .init(quantity: $0, recordedAt: nil) })
+                    }
                 }
             }
             nativeCancel = { [health] in
@@ -646,11 +668,13 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
             }
             health.execute(query)
         }
+    }
+    private func healthSamples(type: HKSampleType, predicate: NSPredicate, limit: Int,
+                               sort: [NSSortDescriptor]? = nil) async throws -> [HKSample] {
         try Task.checkCancellation()
-        let sleepType = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!
-        let samples: [HKSample] = try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { continuation in
             var completed = false
-            let query = HKSampleQuery(sampleType: sleepType, predicate: predicate, limit: 2001, sortDescriptors: nil) { _, found, error in
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: limit, sortDescriptors: sort) { _, found, error in
                 Task { @MainActor in
                     guard !completed else { return }; completed = true
                     if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: found ?? []) }
@@ -662,18 +686,6 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
             }
             health.execute(query)
         }
-        try Task.checkCancellation()
-        guard samples.count <= 2000 else { throw Failure(code: "result_too_large") }
-        let sorted = samples.compactMap { $0 as? HKCategorySample }.filter {
-            [HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue, HKCategoryValueSleepAnalysis.asleepCore.rawValue, HKCategoryValueSleepAnalysis.asleepDeep.rawValue, HKCategoryValueSleepAnalysis.asleepREM.rawValue].contains($0.value)
-        }.map { (max(start, $0.startDate), min(end, $0.endDate)) }.filter { $0.0 < $0.1 }.sorted { $0.0 < $1.0 }
-        var merged: [(Date, Date)] = []
-        for row in sorted {
-            if let last = merged.last, row.0 <= last.1 { merged[merged.count - 1].1 = max(last.1, row.1) }
-            else { merged.append(row) }
-        }
-        return ["steps": count as Any? ?? NSNull(), "sleepMinutes": merged.isEmpty ? NSNull() : NSNumber(value: merged.reduce(0) { $0 + $1.1.timeIntervalSince($1.0) } / 60),
-                "timeZone": zone.identifier, "coverage": "authorized-health-data", "availability": "no-data-may-mean-not-shared", "collectedAt": ISO8601DateFormatter().string(from: Date())]
     }
     nonisolated func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         Task { @MainActor in
@@ -723,6 +735,89 @@ final class IOSDeviceConnectors: NSObject, ObservableObject, CLLocationManagerDe
             guard activeLocation === manager, let pending = locationResult else { return }
             locationResult = nil; activeLocation?.delegate = nil; activeLocation = nil; pending.resume(throwing: error)
         }
+    }
+}
+
+/// 同一份指标定义驱动授权与读取，避免只扩大系统权限、却遗漏实际查询。
+enum PhoneHealthSummary {
+    enum Aggregation: String { case sum, average, latest }
+    struct Metric {
+        let key: String
+        let identifier: HKQuantityTypeIdentifier
+        let unit: HKUnit
+        let unitName: String
+        let aggregation: Aggregation
+        var scale: Double = 1
+        var type: HKQuantityType { HKObjectType.quantityType(forIdentifier: identifier)! }
+    }
+    struct Reading {
+        let quantity: HKQuantity
+        let recordedAt: Date?
+    }
+    static let metrics: [Metric] = [
+        .init(key: "steps", identifier: .stepCount, unit: .count(), unitName: "count", aggregation: .sum),
+        .init(key: "walkingRunningDistance", identifier: .distanceWalkingRunning, unit: .meter(), unitName: "m", aggregation: .sum),
+        .init(key: "flightsClimbed", identifier: .flightsClimbed, unit: .count(), unitName: "count", aggregation: .sum),
+        .init(key: "activeEnergy", identifier: .activeEnergyBurned, unit: .kilocalorie(), unitName: "kcal", aggregation: .sum),
+        .init(key: "basalEnergy", identifier: .basalEnergyBurned, unit: .kilocalorie(), unitName: "kcal", aggregation: .sum),
+        .init(key: "exerciseMinutes", identifier: .appleExerciseTime, unit: .minute(), unitName: "min", aggregation: .sum),
+        .init(key: "heartRate", identifier: .heartRate, unit: .count().unitDivided(by: .minute()), unitName: "bpm", aggregation: .average),
+        .init(key: "restingHeartRate", identifier: .restingHeartRate, unit: .count().unitDivided(by: .minute()), unitName: "bpm", aggregation: .average),
+        .init(key: "heartRateVariability", identifier: .heartRateVariabilitySDNN, unit: .secondUnit(with: .milli), unitName: "ms", aggregation: .average),
+        .init(key: "oxygenSaturation", identifier: .oxygenSaturation, unit: .percent(), unitName: "%", aggregation: .average, scale: 100),
+        .init(key: "respiratoryRate", identifier: .respiratoryRate, unit: .count().unitDivided(by: .minute()), unitName: "breaths/min", aggregation: .average),
+        .init(key: "bodyMass", identifier: .bodyMass, unit: .gramUnit(with: .kilo), unitName: "kg", aggregation: .latest)
+    ]
+    static var readTypes: Set<HKObjectType> {
+        Set(metrics.map { $0.type as HKObjectType } + [HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!])
+    }
+    private static func missingData(_ error: Error) -> Bool {
+        guard let error = error as? HKError else { return false }
+        // 统计查询无可用样本时也可能以 errorNoData 返回；未重新授权新增类型不应阻断旧指标。
+        return [.errorNoData, .errorAuthorizationDenied, .errorAuthorizationNotDetermined].contains(error.code)
+    }
+
+    @MainActor
+    static func collect(start: Date, end: Date, zone: TimeZone,
+                        read: (Metric) async throws -> Reading?,
+                        sleep: () async throws -> [HKCategorySample]) async throws -> [String: Any] {
+        let formatter = ISO8601DateFormatter()
+        var values: [String: [String: Any]] = [:]
+        for metric in metrics {
+            try Task.checkCancellation()
+            let reading: Reading?
+            do { reading = try await read(metric) }
+            catch where missingData(error) { reading = nil }
+            try Task.checkCancellation()
+            var row: [String: Any] = ["value": NSNull(), "unit": metric.unitName, "aggregation": metric.aggregation.rawValue]
+            if let reading {
+                let value = reading.quantity.doubleValue(for: metric.unit) * metric.scale
+                if value.isFinite { row["value"] = value }
+                if let date = reading.recordedAt { row["recordedAt"] = formatter.string(from: date) }
+            }
+            values[metric.key] = row
+        }
+        try Task.checkCancellation()
+        let samples: [HKCategorySample]
+        do { samples = try await sleep() }
+        catch where missingData(error) { samples = [] }
+        try Task.checkCancellation()
+        let sorted = samples.filter {
+            [HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue, HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+             HKCategoryValueSleepAnalysis.asleepDeep.rawValue, HKCategoryValueSleepAnalysis.asleepREM.rawValue].contains($0.value)
+        }.map { (max(start, $0.startDate), min(end, $0.endDate)) }.filter { $0.0 < $0.1 }.sorted { $0.0 < $1.0 }
+        var merged: [(Date, Date)] = []
+        for row in sorted {
+            if let last = merged.last, row.0 <= last.1 { merged[merged.count - 1].1 = max(last.1, row.1) }
+            else { merged.append(row) }
+        }
+        let sleepMinutes: Any = merged.isEmpty ? NSNull() : NSNumber(value: merged.reduce(0) { $0 + $1.1.timeIntervalSince($1.0) } / 60)
+        values["sleepMinutes"] = ["value": sleepMinutes, "unit": "min", "aggregation": "union-duration"]
+        // 保留旧字段以兼容现有网关；新增字段携带单位和聚合含义，避免将均值当作实时读数。
+        return ["schemaVersion": 2, "steps": values["steps"]!["value"]!, "sleepMinutes": sleepMinutes,
+                "metrics": values, "start": formatter.string(from: start), "end": formatter.string(from: end),
+                "timeZone": zone.identifier, "coverage": "authorized-health-data", "availability": "no-data-may-mean-not-shared",
+                "collectedAt": formatter.string(from: Date())]
     }
 }
 

@@ -1999,6 +1999,23 @@
         }
       }
     },
+    "Apple Music" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Music"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Music"
+          }
+        }
+      }
+    },
     "assistant.generationCancelled" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -14633,6 +14650,23 @@
         }
       }
     },
+    "在 Apple Music 中播放" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Play in Apple Music"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Apple Music 中播放"
+          }
+        }
+      }
+    },
     "在会话中创建的定时任务会显示在这里" : {
       "localizations" : {
         "en" : {
@@ -22400,6 +22434,23 @@
         }
       }
     },
+    "未能播放所选歌曲，请检查 Apple Music 订阅、网络和歌曲可用性。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not play the selected song. Check your Apple Music subscription, connection and song availability."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未能播放所选歌曲，请检查 Apple Music 订阅、网络和歌曲可用性。"
+          }
+        }
+      }
+    },
     "未能确认审批结果" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23778,6 +23829,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在开启麦克风"
+          }
+        }
+      }
+    },
+    "正在打开另一首歌曲，请稍后重试。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Another song is being opened. Please try again shortly."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在打开另一首歌曲，请稍后重试。"
           }
         }
       }
@@ -28420,6 +28488,23 @@
         }
       }
     },
+    "请允许访问 Apple Music 后再播放。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow access to Apple Music to play this song."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请允许访问 Apple Music 后再播放。"
+          }
+        }
+      }
+    },
     "请先在设置中连接 DeepSeek Harness" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -28845,6 +28930,7 @@
       }
     },
     "请确认已安装 Apple Music，并允许其打开音乐链接。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -29059,6 +29145,23 @@
         }
       }
     },
+    "读取健康与活动摘要" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read health and activity summaries"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取健康与活动摘要"
+          }
+        }
+      }
+    },
     "读取或迁移主机资料失败：%@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -29106,23 +29209,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "モードを読み取り中…"
-          }
-        }
-      }
-    },
-    "读取步数与睡眠摘要" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Read steps and sleep summaries"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "读取步数与睡眠摘要"
           }
         }
       }

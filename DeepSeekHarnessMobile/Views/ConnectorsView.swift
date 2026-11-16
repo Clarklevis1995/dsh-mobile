@@ -156,7 +156,7 @@ private func connectorCapabilityTitle(_ tool: String) -> String {
         "photos.select": String(localized: "选择照片"), "music.search": String(localized: "搜索本地音乐"), "music.state": String(localized: "读取播放状态"),
         "music.play": String(localized: "播放音乐"), "music.pause": String(localized: "暂停音乐"), "music.seek": String(localized: "调整播放进度"),
         "music.library": String(localized: "浏览 Apple Music 曲库"), "music.play-library": String(localized: "播放曲库歌曲或歌单"), "music.catalog-search": String(localized: "搜索 Apple Music 歌曲"),
-        "health.daily-summary": String(localized: "读取步数与睡眠摘要"), "alarms.create": String(localized: "创建系统闹钟"),
+        "health.daily-summary": String(localized: "读取健康与活动摘要"), "alarms.create": String(localized: "创建系统闹钟"),
         "alarms.list": String(localized: "查询应用闹钟"), "alarms.cancel": String(localized: "取消应用闹钟")
     ]
     return titles[tool] ?? tool
@@ -360,7 +360,7 @@ struct ConnectorSheetUITestHarness: View {
                frame["type"] as? String == "device-tools-register" { registration = frame }
         }
         model.connected(["device-tools-v1"])
-        let tools = ["calendar": ["calendar.busy", "calendar.create"], "photos": ["photos.select"],
+        let tools = ["calendar": ["calendar.busy", "calendar.create"], "photos": ["photos.select"], "health": ["health.daily-summary"],
                      "location": ["location.current", "location.precise", "maps.search", "maps.geocode", "maps.reverse-geocode", "maps.directions", "maps.open", "maps.markers.create", "maps.markers.list", "maps.markers.update", "maps.markers.delete"],
                      "music": ["music.search", "music.state", "music.play", "music.pause", "music.seek", "music.library", "music.play-library", "music.catalog-search"]]
         let frame: [String: Any] = ["kind": "device-tools-registered", "version": 1,
