@@ -28,8 +28,12 @@ class WorkspaceChangesTest {
         assertEquals("  +value;", rows.single { it.lineNumber == 10 }.text)
         assertEquals("  old();", rows.single { it.kind == "deleted" }.text)
         assertEquals("", rows.last().text)
-        assertEquals("省略 3 行未修改内容", rows.single { it.kind == "omitted" }.text)
-        assertEquals("第 8–10 行", rows.first().text)
+        assertEquals("3", rows.single { it.kind == "omitted" }.text)
+        assertEquals("workspace.review.omitted", rows.single { it.kind == "omitted" }.uiMessage?.key)
+        assertEquals(listOf("3"), rows.single { it.kind == "omitted" }.uiMessage?.args)
+        assertEquals("8–10", rows.first().text)
+        assertEquals("workspace.review.range", rows.first().uiMessage?.key)
+        assertEquals(listOf("8", "10"), rows.first().uiMessage?.args)
     }
 
     @Test fun deletedOnlyReviewUsesOriginalLineRange() {
@@ -37,7 +41,8 @@ class WorkspaceChangesTest {
             WorkspaceDiffHunk(51, 2, 51, 0, listOf("-a", "-b"))
         ))
         val rows = WorkspaceReviewPresentation.rows(diff)
-        assertEquals("第 51–52 行", rows.first().text)
+        assertEquals("51–52", rows.first().text)
+        assertEquals(listOf("51", "52"), rows.first().uiMessage?.args)
         assertEquals(listOf(51, 52), rows.mapNotNull { it.lineNumber })
     }
     private fun event(seq: Int = 160, turn: Int = 3, session: String = "s1") = GatewayFrame(

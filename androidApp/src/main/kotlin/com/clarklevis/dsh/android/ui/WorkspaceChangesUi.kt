@@ -1,5 +1,7 @@
 package com.clarklevis.dsh.android.ui
 
+import com.clarklevis.dsh.android.localization.appText
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -107,7 +109,7 @@ internal fun WorkspaceChangesSheet(
     selectFile: (Int) -> Unit,
     retrySummary: () -> Unit,
     dismiss: () -> Unit,
-    workspaceName: String = "工作区",
+    workspaceName: String = appText("工作区"),
     workspaceRoot: String? = null,
     openFile: ((String) -> Unit)? = null
 ) {
@@ -161,12 +163,12 @@ internal fun WorkspaceChangesSheet(
                     .testTag("workspace-changes-header"), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        ReviewText("文件改动", size = 20, line = 28, weight = FontWeight.Medium)
-                        ReviewText("$workspaceName · 本轮改动", color = colors.secondary, maxLines = 1)
+                        ReviewText(appText("文件改动"), size = 20, line = 28, weight = FontWeight.Medium)
+                        ReviewText(appText("%1\$s · 本轮改动", workspaceName), color = colors.secondary, maxLines = 1)
                     }
                     if (wide) ReviewSummary(state, colors)
                     IconButton(onClick = dismiss, modifier = Modifier.size(44.dp)) {
-                        Icon(painterResource(R.drawable.ic_workspace_review_close), "关闭文件改动", Modifier.size(20.dp), tint = colors.secondary)
+                        Icon(painterResource(R.drawable.ic_workspace_review_close), appText("关闭文件改动"), Modifier.size(20.dp), tint = colors.secondary)
                     }
                 }
                 if (!wide) Box(Modifier.fillMaxWidth().heightIn(min = 36.dp).padding(horizontal = 16.dp)) { ReviewSummary(state, colors, Modifier.fillMaxWidth()) }
@@ -177,7 +179,7 @@ internal fun WorkspaceChangesSheet(
                         val list = rememberLazyListState()
                         LazyColumn(Modifier.width(side).fillMaxHeight().background(colors.subtle).isolateReviewScroll(list).padding(horizontal = 12.dp),
                             state = list, verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(top = 16.dp, bottom = 20.dp)) {
-                            item { ReviewText("本轮文件", color = colors.secondary, modifier = Modifier.padding(bottom = 4.dp)) }
+                            item { ReviewText(appText("本轮文件"), color = colors.secondary, modifier = Modifier.padding(bottom = 4.dp)) }
                             itemsIndexed(files) { index, entry -> ReviewFileOption(entry, index, selected, colors, 28, { choose(index) }) }
                         }
                         VerticalDivider(color = colors.line, thickness = 1.dp)
@@ -188,10 +190,10 @@ internal fun WorkspaceChangesSheet(
                             if (wide) {
                                 Column(Modifier.weight(1f).clickable(enabled = file != null && openFile != null, role = Role.Button) {
                                     file?.let { openFile?.invoke(it.path) }
-                                }.semantics { contentDescription = "查看完整文件"; stateDescription = filePath.orEmpty() }
+                                }.semantics { contentDescription = appText("查看完整文件"); stateDescription = filePath.orEmpty() }
                                     .testTag("workspace-open-file"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        ReviewText(file?.display?.substringAfterLast('/') ?: "文件改动", Modifier.weight(1f, fill = false),
+                                        ReviewText(file?.display?.substringAfterLast('/') ?: appText("文件改动"), Modifier.weight(1f, fill = false),
                                             size = 14, line = 20, weight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                                         file?.let { ReviewText("+${it.added}  −${it.deleted}", color = colors.secondary, maxLines = 1) }
                                     }
@@ -205,7 +207,7 @@ internal fun WorkspaceChangesSheet(
                                 }
                             }
                             Box(Modifier.size(44.dp).clickable(role = Role.Button) { wraps = !wraps }
-                                .semantics { contentDescription = "自动换行"; stateDescription = if (wraps) "开启" else "关闭" }
+                                .semantics { contentDescription = appText("自动换行"); stateDescription = if (wraps) appText("开启") else appText("关闭") }
                                 .testTag("workspace-wrap-lines"), contentAlignment = Alignment.Center) {
                                 Icon(painterResource(if (wraps) R.drawable.ic_workspace_review_wrap else R.drawable.ic_workspace_review_no_wrap),
                                     contentDescription = null, tint = if (wraps) colors.blue else colors.secondary,
@@ -214,7 +216,7 @@ internal fun WorkspaceChangesSheet(
                         }
                         if (!wide && file != null && filePath != null) {
                             Box(Modifier.fillMaxWidth().clickable(enabled = openFile != null, role = Role.Button) { openFile?.invoke(file.path) }
-                                .semantics { contentDescription = "查看完整文件"; stateDescription = filePath }
+                                .semantics { contentDescription = appText("查看完整文件"); stateDescription = filePath }
                                 .testTag("workspace-open-file").padding(horizontal = 16.dp).padding(bottom = 8.dp)
                                 .heightIn(min = 32.dp), contentAlignment = Alignment.CenterStart) {
                                 ReviewText(filePath, color = colors.blue, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
@@ -228,18 +230,18 @@ internal fun WorkspaceChangesSheet(
                             }
                         }
                         if (wide) Box(Modifier.fillMaxWidth().height(40.dp).background(colors.subtle).padding(horizontal = 24.dp), contentAlignment = Alignment.CenterStart) {
-                            ReviewText("删除行显示旧行号，其余显示新行号", color = colors.secondary)
+                            ReviewText(appText("删除行显示旧行号，其余显示新行号"), color = colors.secondary)
                         }
                     }
                 }
                 if (!wide) {
                     HorizontalDivider(color = colors.line, thickness = 1.dp)
                     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        ReviewNav("上一个文件", selected > 0, colors, Modifier.weight(1f).testTag("workspace-file-previous"), Alignment.CenterStart) { choose(selected - 1) }
+                        ReviewNav(appText("上一个文件"), selected > 0, colors, Modifier.weight(1f).testTag("workspace-file-previous"), Alignment.CenterStart) { choose(selected - 1) }
                         Box(Modifier.weight(1f).testTag("workspace-file-page"), contentAlignment = Alignment.Center) {
                             ReviewText(if (files.isEmpty()) "0 / 0" else "${selected + 1} / ${files.size}", color = colors.secondary, size = 14, line = 20)
                         }
-                        ReviewNav("下一个文件", selected + 1 < files.size, colors, Modifier.weight(1f).testTag("workspace-file-next"), Alignment.CenterEnd) { choose(selected + 1) }
+                        ReviewNav(appText("下一个文件"), selected + 1 < files.size, colors, Modifier.weight(1f).testTag("workspace-file-next"), Alignment.CenterEnd) { choose(selected + 1) }
                     }
                 }
             }
@@ -281,7 +283,7 @@ private fun ReviewNativeFileSelector(files: List<WorkspaceChangedFile>, selected
                         isCheckable = true
                         isChecked = index == selected
                         if (android.os.Build.VERSION.SDK_INT >= 26) {
-                            contentDescription = "${entry.display}，新增 ${entry.added} 行，删除 ${entry.deleted} 行"
+                            contentDescription = appText("%1\$s，新增 %2\$s 行，删除 %3\$s 行", entry.display, entry.added, entry.deleted)
                         }
                     }
                 }
@@ -293,7 +295,7 @@ private fun ReviewNativeFileSelector(files: List<WorkspaceChangedFile>, selected
                 menu.show()
             }.padding(start = 12.dp, end = 8.dp).testTag("workspace-file-selector"),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ReviewText(files.getOrNull(selected)?.display?.substringAfterLast('/') ?: "选择文件", Modifier.weight(1f, fill = false),
+            ReviewText(files.getOrNull(selected)?.display?.substringAfterLast('/') ?: appText("选择文件"), Modifier.weight(1f, fill = false),
                 size = 14, line = 20, weight = FontWeight.SemiBold, maxLines = 1)
             Icon(painterResource(R.drawable.ic_workspace_review_chevron), null, Modifier.size(16.dp), tint = colors.secondary)
         }
@@ -305,7 +307,7 @@ private fun ReviewSummary(state: SharedWorkspaceChangesSnapshot, colors: ReviewC
     Row(modifier.heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         val total = state.summary?.total ?: 0
         val listed = state.summary?.files?.size ?: 0
-        ReviewText(if (listed < total) "已列出 $listed / $total 个文件" else "$total 个文件", color = colors.secondary)
+        ReviewText(if (listed < total) appText("已列出 %1\$s / %2\$s 个文件", listed, total) else appText("%1\$s 个文件", total), color = colors.secondary)
         if (modifier != Modifier) Spacer(Modifier.weight(1f))
         state.summary?.let {
             ReviewText("+${it.added}", color = colors.added, size = 14, line = 20, weight = FontWeight.SemiBold)
@@ -354,7 +356,7 @@ private fun ReviewDiff(state: SharedWorkspaceChangesSnapshot, selected: Int, wid
     when {
         state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         state.error != null -> ChangesFailure(requireNotNull(state.error), retrySummary)
-        state.summary?.files.isNullOrEmpty() -> ReviewText("本轮没有可预览的文件改动。", Modifier.padding(16.dp), color = colors.secondary)
+        state.summary?.files.isNullOrEmpty() -> ReviewText(appText("本轮没有可预览的文件改动。"), Modifier.padding(16.dp), color = colors.secondary)
         state.selectedIndex != selected && !state.connected -> ChangesFailure("disconnected", retryFile)
         state.selectedIndex != selected || state.diffLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         state.diffError != null -> ChangesFailure(requireNotNull(state.diffError), retryFile)
@@ -383,12 +385,12 @@ private fun ReviewDiff(state: SharedWorkspaceChangesSnapshot, selected: Int, wid
                         .isolateReviewScroll(list).testTag("workspace-changes-list"), state = list,
                         contentPadding = PaddingValues(top = if (wide) 20.dp else 12.dp, bottom = 24.dp)) {
                         val message = when {
-                            diff.kind == "binary" -> "二进制文件已改动，无法逐行对比。"
-                            diff.kind == "oversized" -> "文件过大，无法逐行对比。"
-                            diff.coarse -> "比较超时，按整段替换展示。"
-                            diff.before == false -> "新建文件"
-                            diff.after == false -> "已删除文件"
-                            rows.isEmpty() -> "此文件没有可显示的文本差异。"
+                            diff.kind == "binary" -> appText("二进制文件已改动，无法逐行对比。")
+                            diff.kind == "oversized" -> appText("文件过大，无法逐行对比。")
+                            diff.coarse -> appText("比较超时，按整段替换展示。")
+                            diff.before == false -> appText("新建文件")
+                            diff.after == false -> appText("已删除文件")
+                            rows.isEmpty() -> appText("此文件没有可显示的文本差异。")
                             else -> null
                         }
                         message?.let { item { ReviewText(it, Modifier.padding(16.dp), color = colors.secondary) } }
@@ -400,7 +402,7 @@ private fun ReviewDiff(state: SharedWorkspaceChangesSnapshot, selected: Int, wid
                 }
             }
         }
-        else -> ReviewText("正在读取文件改动…", Modifier.padding(16.dp), color = colors.secondary)
+        else -> ReviewText(appText("正在读取文件改动…"), Modifier.padding(16.dp), color = colors.secondary)
     }
 }
 
@@ -415,7 +417,7 @@ private fun ReviewDiffLine(row: WorkspaceReviewRow, index: Int, wide: Boolean, w
     if (row.kind == "hunk" || row.kind == "omitted") {
         Box(Modifier.fillMaxWidth().heightIn(min = 32.dp).clip(shape).background(background).padding(horizontal = 12.dp, vertical = 7.dp),
             contentAlignment = if (row.kind == "omitted") Alignment.Center else Alignment.CenterStart) {
-            ReviewText(row.text, color = if (row.kind == "omitted") colors.muted else colors.secondary)
+            ReviewText(row.uiMessage?.let { appText(it) } ?: row.text, color = if (row.kind == "omitted") colors.muted else colors.secondary)
         }
     } else {
         val style = TextStyle(fontFamily = reviewCodeFont, fontSize = (if (wide) 13 else 12).sp,
@@ -449,7 +451,7 @@ private fun ReviewDiffLine(row: WorkspaceReviewRow, index: Int, wide: Boolean, w
 private fun ChangesFailure(code: String, retry: () -> Unit) {
     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ReviewText(changesError(code))
-        TextButton(onClick = retry) { ReviewText("重试") }
+        TextButton(onClick = retry) { ReviewText(appText("重试")) }
     }
 }
 
@@ -457,12 +459,12 @@ private val changeGreen = Color(WorkspaceChangesStyle.ADDED_COLOR_ARGB)
 private val changeRed = Color(WorkspaceChangesStyle.DELETED_COLOR_ARGB)
 
 internal fun changesError(code: String): String = when (code) {
-    "workspace-changes-missing" -> "该次改动记录已不可用，Host 重启后可能无法查看历史改动。"
-    "disconnected" -> "连接已断开，请重连后重试。"
-    "workspace-changes-unavailable" -> "当前网关暂不支持文件改动查询。"
-    "workspace-changes-response-too-large" -> "改动内容超过响应大小限制，无法完整展示。"
-    "unauthorized", "forbidden", "auth-required" -> "没有权限读取该次改动，请检查连接认证。"
-    else -> "无法读取改动内容，请重试。"
+    "workspace-changes-missing" -> appText("该次改动记录已不可用，Host 重启后可能无法查看历史改动。")
+    "disconnected" -> appText("连接已断开，请重连后重试。")
+    "workspace-changes-unavailable" -> appText("当前网关暂不支持文件改动查询。")
+    "workspace-changes-response-too-large" -> appText("改动内容超过响应大小限制，无法完整展示。")
+    "unauthorized", "forbidden", "auth-required" -> appText("没有权限读取该次改动，请检查连接认证。")
+    else -> appText("无法读取改动内容，请重试。")
 }
 
 @Composable
@@ -489,7 +491,7 @@ internal fun WorkspaceChangesDock(holder: AndroidSharedStateHolder) {
     if (expanded && state.sessionId == session && state.visible) WorkspaceChangesSheet(
         state, holder::selectChangedFile, holder::retryWorkspaceChanges,
         dismiss = { expanded = false; holder.closeChangesDiff() },
-        workspaceName = holder.activeWorkspace?.title ?: "工作区",
+        workspaceName = holder.activeWorkspace?.title ?: appText("工作区"),
         workspaceRoot = holder.snapshot.workspaces.firstOrNull { session in it.sessionIds }?.path,
         openFile = { path ->
             if (session != null) holder.openConversationFile(holder.gatewayLocalId, session, path)
@@ -522,7 +524,7 @@ internal fun WorkspaceChangesCapsule(
             ).heightIn(min = WorkspaceChangesStyle.LINE_HEIGHT.dp),
                 horizontalArrangement = Arrangement.spacedBy(WorkspaceChangesStyle.ITEM_SPACING.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                Text(state.summary?.let { "${it.total} 个文件" } ?: "文件改动", color = Color(WorkspaceChangesStyle.LABEL_COLOR_ARGB))
+                Text(state.summary?.let { appText("%1\$s 个文件", it.total) } ?: appText("文件改动"), color = Color(WorkspaceChangesStyle.LABEL_COLOR_ARGB))
                 state.summary?.let {
                     Text("+${it.added}", color = changeGreen)
                     Text("−${it.deleted}", color = changeRed)
@@ -541,7 +543,7 @@ private fun WorkspaceChangesComposerPreview() {
         ComposerGlassBackdropHost { backdrop ->
             Box(Modifier.fillMaxWidth().height(240.dp).background(MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.fillMaxSize().then(backdrop).background(MaterialTheme.colorScheme.surface).padding(14.dp)) {
-                    repeat(8) { Text("文件修改预览 · 同一玻璃材质 · +15 −2", color = MaterialTheme.colorScheme.onSurface.copy(alpha = .35f)) }
+                    repeat(8) { Text("文件修改预览 · 同一玻璃材质 · +15 −2", color = MaterialTheme.colorScheme.onSurface.copy(alpha = .35f)) } // i18n-ignore: Android Studio 设计预览素材，不是运行时产品文案。
                 }
                 Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 14.dp),
                     horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -551,7 +553,7 @@ private fun WorkspaceChangesComposerPreview() {
                         ), onClick = {}
                     )
                     ComposerGlassSurface(Modifier.padding(horizontal = 14.dp).fillMaxWidth(), RoundedCornerShape(24.dp)) {
-                        Text("＋    描述你想要构建的内容", Modifier.padding(horizontal = 14.dp, vertical = 18.dp),
+                        Text("＋    描述你想要构建的内容", Modifier.padding(horizontal = 14.dp, vertical = 18.dp), // i18n-ignore: Android Studio 设计预览素材，不是运行时产品文案。
                             fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

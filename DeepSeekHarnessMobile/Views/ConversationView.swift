@@ -7514,7 +7514,7 @@ struct ConversationGalleryUITestHarness: View {
     }
     static func item(_ index: Int, kind: ConversationItem.Kind) -> ConversationItem {
         let markdown = index == 3 && ProcessInfo.processInfo.environment["DSH_GALLERY_MARKDOWN"] == "1"
-        return ConversationItem(id: "s-\(index)", kind: kind, title: "", text: markdown ? "![正文图片](images/gallery.png)" : "",
+        return ConversationItem(id: "s-\(index)", kind: kind, title: "", text: markdown ? "![正文图片](images/gallery.png)" : "", // i18n-ignore: 相册调试素材的 Markdown 替代文本，不是产品文案。
                          images: markdown ? [] : [attachments[index - 1]],
                          isError: false, date: Date(timeIntervalSince1970: Double(index)))
     }

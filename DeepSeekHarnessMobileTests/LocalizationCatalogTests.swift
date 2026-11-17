@@ -7,6 +7,17 @@ import SwiftUI
 /// tables must exist, stay populated, and keep placeholder arguments intact,
 /// so the UI never exposes localization identifiers to users.
 final class LocalizationCatalogTests: XCTestCase {
+    func testFileReviewCopyAndCountsResolveInBothLanguages() throws {
+        let english = try englishTable("Localizable")
+        let chinese = try localizedTable("Localizable", localization: "zh-Hans")
+        XCTAssertEqual(english["文件改动"], "File changes")
+        XCTAssertEqual(english["自动换行"], "Wrap lines")
+        XCTAssertEqual(String(format: try XCTUnwrap(english["已列出 %@ / %@ 个文件"]), "2", "10"), "Showing 2 / 10 files")
+        XCTAssertEqual(String(format: try XCTUnwrap(chinese["已列出 %@ / %@ 个文件"]), "2", "10"), "已列出 2 / 10 个文件")
+        XCTAssertEqual(String(format: try XCTUnwrap(english["workspace.review.range"]), "8", "10"), "Lines 8–10")
+        XCTAssertEqual(String(format: try XCTUnwrap(chinese["workspace.review.range"]), "8", "10"), "第 8–10 行")
+    }
+
     func testConnectorAndAttachmentCopyResolvesInBothLanguagesWithoutChangingErrorDetails() throws {
         for language in ["zh-Hans", "en"] {
             let path = try XCTUnwrap(Bundle.main.path(forResource: language, ofType: "lproj"))

@@ -48,7 +48,7 @@ struct WorkspaceChangesSheet: View {
     let state: SharedWorkspaceChangesSnapshot
     let selectFile: (Int) -> Void
     let retrySummary: () -> Void
-    var workspaceName = "工作区"
+    var workspaceName = String(localized: "工作区")
     var workspaceRoot: String? = nil
     var openFile: ((String) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
@@ -101,15 +101,15 @@ struct WorkspaceChangesSheet: View {
     private func header(wide: Bool) -> some View {
         HStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("文件改动").font(ReviewTheme.font(20, weight: .medium))
-                Text("\(workspaceName) · 本轮改动").foregroundStyle(ReviewTheme.secondary).lineLimit(1)
+                Text(String(localized: "文件改动")).font(ReviewTheme.font(20, weight: .medium))
+                Text(String(localized: "\(workspaceName) · 本轮改动")).foregroundStyle(ReviewTheme.secondary).lineLimit(1)
             }
             Spacer(minLength: 8)
             if wide { summary.fixedSize() }
             Button { dismiss() } label: {
                 Image("WorkspaceReviewClose").renderingMode(.template).resizable().scaledToFit().frame(width: 20, height: 20)
                     .foregroundStyle(ReviewTheme.secondary).frame(width: 44, height: 44).contentShape(Rectangle())
-            }.buttonStyle(.plain).accessibilityLabel("关闭文件改动")
+            }.buttonStyle(.plain).accessibilityLabel(String(localized: "关闭文件改动"))
         }.padding(.leading, wide ? 24 : 16).padding(.trailing, 8)
             .frame(minHeight: wide ? 60 : 64).accessibilityElement(children: .contain)
             .accessibilityIdentifier("workspace-changes-header")
@@ -118,7 +118,7 @@ struct WorkspaceChangesSheet: View {
     private var summary: some View {
         HStack(spacing: 10) {
             let count = state.summary?.total ?? 0
-            Text(files.count < count ? "已列出 \(files.count) / \(count) 个文件" : "\(count) 个文件")
+            Text(files.count < count ? String(localized: "已列出 \(String(files.count)) / \(String(count)) 个文件") : String(localized: "\(String(count)) 个文件"))
                 .foregroundStyle(ReviewTheme.secondary)
             Spacer(minLength: 8)
             if let summary = state.summary {
@@ -135,7 +135,7 @@ struct WorkspaceChangesSheet: View {
                     Button { if let file { openFile?(file.path) } } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 12) {
-                                Text(file.map { ($0.display as NSString).lastPathComponent } ?? "文件改动")
+                                Text(file.map { ($0.display as NSString).lastPathComponent } ?? String(localized: "文件改动"))
                                     .font(ReviewTheme.font(14, weight: .semibold)).foregroundStyle(ReviewTheme.ink)
                                     .lineLimit(1).truncationMode(.middle)
                                 if let file { Text("+\(file.added)  −\(file.deleted)").foregroundStyle(ReviewTheme.secondary).fixedSize() }
@@ -144,11 +144,11 @@ struct WorkspaceChangesSheet: View {
                         }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                     }.buttonStyle(.plain).disabled(file == nil || openFile == nil)
                         .accessibilityIdentifier("workspace-open-file")
-                        .accessibilityLabel("查看完整文件")
+                        .accessibilityLabel(String(localized: "查看完整文件"))
                         .accessibilityValue(filePath ?? "")
                 } else {
                     Menu {
-                        Picker("本轮改动文件", selection: Binding(get: { selected }, set: { choose($0) })) {
+                        Picker(String(localized: "本轮改动文件"), selection: Binding(get: { selected }, set: { choose($0) })) {
                             ForEach(Array(files.enumerated()), id: \.offset) { index, entry in
                                 Label {
                                     Text(entry.display)
@@ -161,7 +161,7 @@ struct WorkspaceChangesSheet: View {
                         }.pickerStyle(.inline)
                     } label: {
                         HStack(spacing: 10) {
-                            Text(file.map { ($0.display as NSString).lastPathComponent } ?? "选择文件")
+                            Text(file.map { ($0.display as NSString).lastPathComponent } ?? String(localized: "选择文件"))
                                 .font(ReviewTheme.font(14, weight: .semibold)).lineLimit(1).truncationMode(.middle)
                             Image("WorkspaceReviewChevron").renderingMode(.template).resizable().scaledToFit()
                                 .frame(width: 16, height: 16).foregroundStyle(ReviewTheme.secondary)
@@ -178,9 +178,9 @@ struct WorkspaceChangesSheet: View {
                         .foregroundStyle(wrapLines ? ReviewTheme.blue : ReviewTheme.secondary)
                         .frame(width: 44, height: 44).contentShape(Rectangle())
                 }.buttonStyle(.plain).fixedSize().accessibilityIdentifier("workspace-wrap-lines")
-                    .accessibilityLabel("自动换行")
-                    .accessibilityValue(wrapLines ? "开启" : "关闭")
-                    .accessibilityHint(wrapLines ? "切换为不自动换行" : "切换为自动换行")
+                    .accessibilityLabel(String(localized: "自动换行"))
+                    .accessibilityValue(wrapLines ? String(localized: "开启") : String(localized: "关闭"))
+                    .accessibilityHint(wrapLines ? String(localized: "切换为不自动换行") : String(localized: "切换为自动换行"))
             }.padding(.horizontal, wide ? 24 : 16).frame(height: wide ? 64 : 56)
             if !wide, let file, let filePath {
                 Button { openFile?(file.path) } label: {
@@ -189,14 +189,14 @@ struct WorkspaceChangesSheet: View {
                         .padding(.horizontal, 16).padding(.bottom, 8).contentShape(Rectangle())
                 }.buttonStyle(.plain).disabled(openFile == nil)
                     .accessibilityIdentifier("workspace-open-file")
-                    .accessibilityLabel("查看完整文件").accessibilityValue(filePath)
+                    .accessibilityLabel(String(localized: "查看完整文件")).accessibilityValue(filePath)
             }
             Rectangle().fill(ReviewTheme.line).frame(height: 1)
             // 换行只更新正文布局，保留滚动容器身份；切换文件才重置位置。
             diffContent(wide: wide).id("\(coordinate):\(selected)")
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             if wide {
-                Text("删除行显示旧行号，其余显示新行号").foregroundStyle(ReviewTheme.secondary)
+                Text(String(localized: "删除行显示旧行号，其余显示新行号")).foregroundStyle(ReviewTheme.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).frame(height: 40)
                     .background(ReviewTheme.subtle)
             }
@@ -206,7 +206,7 @@ struct WorkspaceChangesSheet: View {
     private func sidebar(width: CGFloat) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 4) {
-                Text("本轮文件").foregroundStyle(ReviewTheme.secondary).padding(.bottom, 4)
+                Text(String(localized: "本轮文件")).foregroundStyle(ReviewTheme.secondary).padding(.bottom, 4)
                 ForEach(Array(files.enumerated()), id: \.offset) { index, file in fileOption(file, index: index, iconSize: 28) }
             }.padding(.horizontal, 12).padding(.top, 16).padding(.bottom, 20)
         }.frame(width: width).background(ReviewTheme.subtle)
@@ -237,7 +237,7 @@ struct WorkspaceChangesSheet: View {
         VStack(spacing: 0) {
             Rectangle().fill(ReviewTheme.line).frame(height: 1)
             HStack(spacing: 0) {
-                Button("上一个文件") { choose(selected - 1) }
+                Button(String(localized: "上一个文件")) { choose(selected - 1) }
                     .disabled(selected == 0 || files.isEmpty)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .accessibilityIdentifier("workspace-file-previous")
@@ -245,7 +245,7 @@ struct WorkspaceChangesSheet: View {
                     .font(ReviewTheme.font(14)).monospacedDigit().foregroundStyle(ReviewTheme.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .accessibilityIdentifier("workspace-file-page")
-                Button("下一个文件") { choose(selected + 1) }
+                Button(String(localized: "下一个文件")) { choose(selected + 1) }
                     .disabled(selected + 1 >= files.count)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .trailing)
                     .accessibilityIdentifier("workspace-file-next")
@@ -264,7 +264,7 @@ struct WorkspaceChangesSheet: View {
     @ViewBuilder private func diffContent(wide: Bool) -> some View {
         if state.loading { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
         else if let error = state.error { failure(error, retry: retrySummary) }
-        else if files.isEmpty { notice("本轮没有可预览的文件改动。") }
+        else if files.isEmpty { notice(String(localized: "本轮没有可预览的文件改动。")) }
         else if state.selectedIndex?.intValue != selected {
             if !state.connected { failure("disconnected") { selectFile(selected) } }
             else { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
@@ -274,37 +274,37 @@ struct WorkspaceChangesSheet: View {
             let rows = WorkspaceReviewPresentation.shared.rows(diff: diff)
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
-                    if diff.kind == "binary" { notice("二进制文件已改动，无法逐行对比。") }
-                    else if diff.kind == "oversized" { notice("文件过大，无法逐行对比。") }
+                    if diff.kind == "binary" { notice(String(localized: "二进制文件已改动，无法逐行对比。")) }
+                    else if diff.kind == "oversized" { notice(String(localized: "文件过大，无法逐行对比。")) }
                     else {
-                        if diff.coarse { notice("比较超时，按整段替换展示。") }
-                        if diff.before?.boolValue == false { notice("新建文件") }
-                        if diff.after?.boolValue == false { notice("已删除文件") }
+                        if diff.coarse { notice(String(localized: "比较超时，按整段替换展示。")) }
+                        if diff.before?.boolValue == false { notice(String(localized: "新建文件")) }
+                        if diff.after?.boolValue == false { notice(String(localized: "已删除文件")) }
                         WorkspaceDiffBody(rows: rows, wrapLines: wrapLines, wide: wide)
-                        if rows.isEmpty { notice("此文件没有可显示的文本差异。") }
+                        if rows.isEmpty { notice(String(localized: "此文件没有可显示的文本差异。")) }
                     }
                 }.frame(maxWidth: ReviewTheme.style.REVIEW_CODE_MAX_WIDTH, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .top)
                     .padding(.horizontal, wide ? 24 : 16).padding(.top, wide ? 20 : 12).padding(.bottom, 24)
             }.accessibilityIdentifier("workspace-changes-list")
-        } else { notice("正在读取文件改动…") }
+        } else { notice(String(localized: "正在读取文件改动…")) }
     }
 
     private func notice(_ message: String) -> some View {
         Text(message).foregroundStyle(ReviewTheme.secondary).padding(16).frame(maxWidth: .infinity, alignment: .leading)
     }
     private func failure(_ code: String, retry: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 12) { Text(changesError(code)); Button("重试", action: retry).foregroundStyle(ReviewTheme.blue) }
+        VStack(alignment: .leading, spacing: 12) { Text(changesError(code)); Button(String(localized: "重试"), action: retry).foregroundStyle(ReviewTheme.blue) }
             .padding(20).frame(maxWidth: .infinity, alignment: .leading)
     }
     private func changesError(_ code: String) -> String {
         switch code {
-        case "workspace-changes-missing": return "该次改动记录已不可用，Host 重启后可能无法查看历史改动。"
-        case "disconnected": return "连接已断开，请重连后重试。"
-        case "workspace-changes-unavailable": return "当前网关暂不支持文件改动查询。"
-        case "workspace-changes-response-too-large": return "改动内容超过响应大小限制，无法完整展示。"
-        case "unauthorized", "forbidden", "auth-required": return "没有权限读取该次改动，请检查连接认证。"
-        default: return "无法读取改动内容，请重试。"
+        case "workspace-changes-missing": return String(localized: "该次改动记录已不可用，Host 重启后可能无法查看历史改动。")
+        case "disconnected": return String(localized: "连接已断开，请重连后重试。")
+        case "workspace-changes-unavailable": return String(localized: "当前网关暂不支持文件改动查询。")
+        case "workspace-changes-response-too-large": return String(localized: "改动内容超过响应大小限制，无法完整展示。")
+        case "unauthorized", "forbidden", "auth-required": return String(localized: "没有权限读取该次改动，请检查连接认证。")
+        default: return String(localized: "无法读取改动内容，请重试。")
         }
     }
 }
@@ -390,7 +390,7 @@ private struct WorkspaceDiffBody: View {
             .foregroundStyle(ReviewTheme.muted).frame(width: gutter, height: lineHeight, alignment: .topTrailing)
     }
     private func section(_ row: WorkspaceReviewRow) -> some View {
-        Text(row.text).font(ReviewTheme.font(12)).foregroundStyle(row.kind == "omitted" ? ReviewTheme.muted : ReviewTheme.secondary)
+        Text(row.uiMessage?.localized ?? row.text).font(ReviewTheme.font(12)).foregroundStyle(row.kind == "omitted" ? ReviewTheme.muted : ReviewTheme.secondary)
             .padding(.horizontal, 12).frame(maxWidth: .infinity, minHeight: 32, alignment: row.kind == "omitted" ? .center : .leading)
             .background(background(row))
     }
@@ -496,11 +496,11 @@ private struct ReviewCodeLabel: UIViewRepresentable {
         let transition = shared.selectFile(index: Int32(index))
         if let request = transition.requests.first {
             let names = ["README.md", "app.js", "index.html", "style.css"]
-            let lines = index == 0 ? ["-# 小待办", "+# 今日", " ", " 一个极简的中文待办清单，纯 HTML / CSS / JavaScript，无依赖。", " "] :
-                (1...160).map { $0 == 1 ? "+  const remaining = todos.filter(todo => !todo.done).length;" : "+  const line\($0) = '保留中文与缩进，并验证较长代码不会遮挡相邻行';" }
+            let lines = index == 0 ? ["-# 小待办", "+# 今日", " ", " 一个极简的中文待办清单，纯 HTML / CSS / JavaScript，无依赖。", " "] : // i18n-ignore: 调试差异正文样例，验证中文排版，不是产品界面文案。
+                (1...160).map { $0 == 1 ? "+  const remaining = todos.filter(todo => !todo.done).length;" : "+  const line\($0) = '保留中文与缩进，并验证较长代码不会遮挡相邻行';" } // i18n-ignore: 调试差异正文样例，验证中文排版，不是产品界面文案。
             let hunks: [[String: Any]] = index == 0 ? [
                 ["oldStart": 1, "oldLines": 4, "newStart": 1, "newLines": 4, "lines": lines],
-                ["oldStart": 7, "oldLines": 6, "newStart": 7, "newLines": 8, "lines": [" - 添加待办", " - 点击文字标记完成 / 取消完成", " - 点击「删除」移除待办", "+- 顶部显示剩余未完成数量", "+- 蓝色主题", " - 数据保存在浏览器 localStorage，刷新不会丢失。", " ", " ## 使用"]]
+                ["oldStart": 7, "oldLines": 6, "newStart": 7, "newLines": 8, "lines": [" - 添加待办", " - 点击文字标记完成 / 取消完成", " - 点击「删除」移除待办", "+- 顶部显示剩余未完成数量", "+- 蓝色主题", " - 数据保存在浏览器 localStorage，刷新不会丢失。", " ", " ## 使用"]] // i18n-ignore: 调试差异正文样例，验证中文排版，不是产品界面文案。
             ] : [["oldStart": 1, "oldLines": 0, "newStart": 1, "newLines": 160, "lines": lines]]
             let payload: [String: Any] = ["kind": "workspace-changes-diff", "requestId": request.correlationId ?? "", "sessionId": "review-ui-test", "seq": 1, "index": index,
                 "diff": ["kind": "text", "path": names[index], "display": names[index], "before": true, "after": true, "hunks": hunks]]
@@ -540,11 +540,11 @@ struct WorkspaceChangesDock: View {
                 Button { expanded = true } label: {
                     HStack(spacing: style.ITEM_SPACING) {
                         if let summary = store.workspaceChanges.summary {
-                            Text("\(summary.total) 个文件").foregroundStyle(changesLabel)
+                            Text(String(localized: "\(summary.total) 个文件")).foregroundStyle(changesLabel)
                             Text("+\(summary.added)").foregroundStyle(changesGreen)
                             Text("−\(summary.deleted)").foregroundStyle(changesRed)
                         } else {
-                            Text("文件改动").foregroundStyle(changesLabel)
+                            Text(String(localized: "文件改动")).foregroundStyle(changesLabel)
                             if store.workspaceChanges.loading {
                                 ProgressView().controlSize(.mini)
                                     .frame(width: style.PROGRESS_SIZE, height: style.PROGRESS_SIZE)
@@ -559,7 +559,7 @@ struct WorkspaceChangesDock: View {
                     .composerGlassSurface(radius: 1000)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("查看本轮文件改动")
+                .accessibilityLabel(String(localized: "查看本轮文件改动"))
                 .padding(.bottom, style.COMPOSER_SPACING)
             }
         }
@@ -569,7 +569,7 @@ struct WorkspaceChangesDock: View {
         .onChangeCompat(of: store.selectedSessionId) { _, _ in expanded = false; store.closeChangesDiff() }
         .sheet(isPresented: $expanded, onDismiss: { closeFilePreview(); store.closeChangesDiff() }) {
             WorkspaceChangesSheet(state: store.workspaceChanges, selectFile: store.selectChangedFile, retrySummary: store.retryWorkspaceChanges,
-                                  workspaceName: store.activeWorkspace?.title ?? "工作区",
+                                  workspaceName: store.activeWorkspace?.title ?? String(localized: "工作区"),
                                   workspaceRoot: store.workspaces.first { $0.sessionIds.contains(store.workspaceChanges.sessionId ?? "") }?.path,
                                   openFile: openFile)
                 .presentationDetents([.large])

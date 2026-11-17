@@ -23,6 +23,18 @@ class AndroidStringsTest {
     @get:Rule val locale = LocaleTestRule(Locale.ENGLISH)
 
     @Test
+    fun fileReviewLabelsAndCountsResolveInBothLanguages() {
+        assertEquals("File changes", appText("文件改动"))
+        assertEquals("Showing 2 / 10 files", appText("已列出 %1\$s / %2\$s 个文件", 2, 10))
+        assertEquals("报告.swift, lines added: 3, lines deleted: 1", appText("%1\$s，新增 %2\$s 行，删除 %3\$s 行", "报告.swift", 3, 1))
+        assertEquals("3 unchanged lines omitted", appText(UiMessage("workspace.review.omitted", listOf("3"))))
+        assertEquals("Lines 8–10", appText(UiMessage("workspace.review.range", listOf("8", "10"))))
+        Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
+        assertEquals("已列出 2 / 10 个文件", appText("已列出 %1\$s / %2\$s 个文件", 2, 10))
+        assertEquals("第 8–10 行", appText(UiMessage("workspace.review.range", listOf("8", "10"))))
+    }
+
+    @Test
     fun mapPluginNamesFollowTheActiveLanguageAndOfficialBrandNames() {
         Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
         val plugins = com.clarklevis.dsh.android.ui.androidMapPlugins

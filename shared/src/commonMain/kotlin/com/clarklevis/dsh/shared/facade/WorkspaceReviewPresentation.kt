@@ -1,9 +1,17 @@
 package com.clarklevis.dsh.shared.facade
 
 import com.clarklevis.dsh.shared.protocol.WorkspaceChangesDiff
+import com.clarklevis.dsh.shared.i18n.UiMessage
 
 /** 单一逻辑行：续行不重复行号，协议前缀与正文分离。 */
-data class WorkspaceReviewRow(val kind: String, val lineNumber: Int?, val text: String)
+data class WorkspaceReviewRow(val kind: String, val lineNumber: Int?, val text: String) {
+    val uiMessage: UiMessage? get() = when (kind) {
+        "omitted" -> UiMessage("workspace.review.omitted", listOf(text))
+        "hunk" -> if ('–' in text) UiMessage("workspace.review.range", text.split('–'))
+                  else UiMessage("workspace.review.line", listOf(text))
+        else -> null
+    }
+}
 
 object WorkspaceReviewPresentation {
     /** 仅用于展示 Host 路径；读取文件仍使用协议中的原始 path，由网关检查权限。 */
@@ -23,12 +31,12 @@ object WorkspaceReviewPresentation {
         diff.hunks.forEach { hunk ->
             previousNewEnd?.let { end ->
                 val gap = hunk.newStart - end
-                if (gap > 0) add(WorkspaceReviewRow("omitted", null, "省略 $gap 行未修改内容"))
+                if (gap > 0) add(WorkspaceReviewRow("omitted", null, gap.toString()))
             }
             val start = if (hunk.newLines > 0) hunk.newStart else hunk.oldStart
             val length = if (hunk.newLines > 0) hunk.newLines else hunk.oldLines
             val end = start + (length - 1).coerceAtLeast(0)
-            add(WorkspaceReviewRow("hunk", null, if (start == end) "第 $start 行" else "第 $start–$end 行"))
+            add(WorkspaceReviewRow("hunk", null, if (start == end) start.toString() else "$start–$end"))
             var old = hunk.oldStart
             var new = hunk.newStart
             hunk.lines.forEach { line ->
