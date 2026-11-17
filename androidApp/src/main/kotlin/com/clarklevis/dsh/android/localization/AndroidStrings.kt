@@ -884,6 +884,7 @@ internal object AndroidStrings {
         "使用系统应用打开" to "Open in a system app",
         "保存" to "Save",
         "保存到文件" to "Save to files",
+        "下载图片" to "Download image",
         "保存文件失败：%1\$s" to "Failed to save file: %1\$s",
         "保持原重复规则" to "Keep existing recurrence",
         "保留原有%1\$s规则和时区 %2\$s。" to "Keep the existing %1\$s rule and time zone %2\$s.",

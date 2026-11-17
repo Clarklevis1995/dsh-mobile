@@ -391,6 +391,10 @@ class AndroidSharedStateHolder(
     private val attachmentQueue = ArrayDeque<AttachmentRequest>()
     private var activeAttachment: AttachmentRequest? = null
     private var visibleAttachmentKeys: Set<String> = emptySet()
+    private var timelineAttachmentIds: Set<String> = emptySet()
+    private var gallerySessionId: String? = null
+    private var galleryAttachmentIds: Set<String> = emptySet()
+    private var galleryVisibleAttachmentIds: Set<String> = emptySet()
     private var thumbnailTargetWidthPixels = DEFAULT_THUMBNAIL_TARGET_PIXELS
     private var thumbnailTargetHeightPixels = DEFAULT_THUMBNAIL_TARGET_PIXELS
     private var lastObservedConnection = GatewayConnectionState.DISCONNECTED
@@ -2249,35 +2253,47 @@ class AndroidSharedStateHolder(
     private var preparingImageCount by mutableStateOf(0)
     val preparingImages: Boolean get() = preparingImageCount > 0
 
-    fun prepareImage(uri: Uri) {
-        if (isChangingNewConversationWorkspace) return
+    fun prepareImage(uri: Uri) = prepareImages(listOf(uri))
+
+    fun prepareImages(uris: List<Uri>, pickerSessionId: String? = snapshot.selectedSessionId) {
+        if (isChangingNewConversationWorkspace || pickerSessionId != snapshot.selectedSessionId || uris.isEmpty()) return
+        if (uris.size + preparedImages.size + preparingImageCount > AndroidImagePreprocessor.MAXIMUM_IMAGE_COUNT) {
+            platformError = "image-selection-limit-exceeded"
+            return
+        }
         val appGraph = graph ?: return
         appGraph.diagnostics.intent(GatewayDiagnosticAction.PREPARE_IMAGE)
         val imageTarget = snapshot.selectedSessionId
         platformError = null
         scope?.launch {
-            preparingImageCount += 1
+            preparingImageCount += uris.size
             try {
-            runCatching { appGraph.imagePreprocessor.prepare(uri) }
-                .onSuccess { image ->
-                    val destination = if (snapshot.selectedSessionId == imageTarget) preparedImages else teamDrafts[imageTarget]?.second.orEmpty()
-                    val nextCount = destination.size + 1
-                    val nextBytes = destination.sumOf(AndroidPreparedImage::byteCount) + image.byteCount
-                    val nextBase64Characters = destination.sumOf { it.outgoing.base64Data.length } +
-                        image.outgoing.base64Data.length
-                    if (
-                        nextCount > AndroidImagePreprocessor.MAXIMUM_IMAGE_COUNT ||
-                        nextBytes > AndroidImagePreprocessor.MAXIMUM_TOTAL_BYTES ||
-                        nextBase64Characters > AndroidImagePreprocessor.MAXIMUM_TOTAL_BASE64_CHARACTERS
-                    ) {
-                        platformError = "image-selection-limit-exceeded"
-                    } else {
-                        if (snapshot.selectedSessionId == imageTarget) preparedImages = destination + image
-                        else if (imageTarget != null) teamDrafts[imageTarget] = teamDrafts[imageTarget]?.first.orEmpty() to (destination + image)
-                    }
+                // 顺序解码，避免多选大图时同时占用多份位图内存，并保留选择顺序。
+                for (uri in uris) {
+                    runCatching { appGraph.imagePreprocessor.prepare(uri) }
+                        .onSuccess { image ->
+                            val destination = if (snapshot.selectedSessionId == imageTarget) preparedImages else teamDrafts[imageTarget]?.second.orEmpty()
+                            val nextCount = destination.size + 1
+                            val nextBytes = destination.sumOf(AndroidPreparedImage::byteCount) + image.byteCount
+                            val nextBase64Characters = destination.sumOf { it.outgoing.base64Data.length } +
+                                image.outgoing.base64Data.length
+                            if (
+                                nextCount > AndroidImagePreprocessor.MAXIMUM_IMAGE_COUNT ||
+                                nextBytes > AndroidImagePreprocessor.MAXIMUM_TOTAL_BYTES ||
+                                nextBase64Characters > AndroidImagePreprocessor.MAXIMUM_TOTAL_BASE64_CHARACTERS
+                            ) {
+                                platformError = "image-selection-limit-exceeded"
+                            } else {
+                                if (snapshot.selectedSessionId == imageTarget) preparedImages = destination + image
+                                else if (imageTarget != null) teamDrafts[imageTarget] = teamDrafts[imageTarget]?.first.orEmpty() to (destination + image)
+                            }
+                        }
+                        .onFailure {
+                            if (it is kotlinx.coroutines.CancellationException) throw it
+                            platformError = "image-preprocess-failed"
+                        }
                 }
-                .onFailure { platformError = "image-preprocess-failed" }
-            } finally { preparingImageCount -= 1 }
+            } finally { preparingImageCount -= uris.size }
         }
     }
 
@@ -2480,9 +2496,30 @@ class AndroidSharedStateHolder(
     }
 
     fun updateVisibleAttachments(attachmentIds: Set<String>) {
+        timelineAttachmentIds = attachmentIds
+        refreshVisibleAttachments()
+    }
+
+    fun updateGalleryAttachments(sessionId: String?, allIds: Set<String>, visibleIds: Set<String>) {
+        if (sessionId != snapshot.selectedSessionId) return
+        gallerySessionId = sessionId
+        galleryAttachmentIds = if (visibleIds.isEmpty()) emptySet() else allIds
+        galleryVisibleAttachmentIds = visibleIds
+        if (sessionId != null) visibleIds.forEach { id ->
+            val key = gatewayAttachmentCacheKey(sessionId, id)
+            if (attachmentStateCache.get(key) == AttachmentLoadState.DEFERRED ||
+                attachmentStateCache.get(key) == AttachmentLoadState.LOADED && thumbnailCache.get(key) == null) {
+                attachmentStateCache.put(key, AttachmentLoadState.IDLE)
+            }
+        }
+        refreshVisibleAttachments()
+    }
+
+    private fun refreshVisibleAttachments() {
         val selectedSessionId = snapshot.selectedSessionId ?: return
         val sessionIds = currentSessionAttachmentIds()
-        visibleAttachmentKeys = (attachmentIds intersect sessionIds).mapTo(mutableSetOf()) {
+        val galleryIds = if (gallerySessionId == selectedSessionId) galleryVisibleAttachmentIds else emptySet()
+        visibleAttachmentKeys = ((timelineAttachmentIds + galleryIds) intersect sessionIds).mapTo(mutableSetOf()) {
             gatewayAttachmentCacheKey(selectedSessionId, it)
         }
         pruneAttachmentStateForSession()
@@ -2519,7 +2556,7 @@ class AndroidSharedStateHolder(
         if (key !in visibleAttachmentKeys) return
         graph?.diagnostics?.intent(GatewayDiagnosticAction.RETRY_ATTACHMENT, hasSession = true)
         attachmentStateCache.put(key, AttachmentLoadState.IDLE)
-        updateVisibleAttachments(visibleAttachmentKeys.mapTo(mutableSetOf(), ::attachmentIdFromCacheKey))
+        refreshVisibleAttachments()
     }
 
     fun updateThumbnailTargetSize(widthPixels: Int, heightPixels: Int) {
@@ -3259,7 +3296,8 @@ class AndroidSharedStateHolder(
     private fun isAttachmentVisible(cacheKey: String): Boolean = cacheKey in visibleAttachmentKeys
 
     private fun currentSessionAttachmentIds(): Set<String> =
-        snapshot.conversation.flatMap { it.images }.mapTo(mutableSetOf()) { it.attachmentId }
+        snapshot.conversation.flatMap { it.images }.mapTo(mutableSetOf()) { it.attachmentId } +
+            if (gallerySessionId == snapshot.selectedSessionId) galleryAttachmentIds else emptySet()
 
     private fun markAttachmentFailed(cacheKey: String) {
         val currentKeys = snapshot.selectedSessionId?.let { sessionId ->

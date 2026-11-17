@@ -45,4 +45,5 @@ internal suspend fun saveImageToPhotos(context: Context, bytes: ByteArray, media
             runCatching { resolver.delete(uri, null, null) }
             throw error
         }
+        uri
     }

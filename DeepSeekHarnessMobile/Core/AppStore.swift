@@ -1305,6 +1305,32 @@ final class AppStore: ObservableObject {
         imageAttachmentErrors.removeValue(forKey: imageCacheKey(attachment.id, sessionID: sessionID))
         enqueueImageAttachments([attachment], sessionId: sessionID)
     }
+
+    func galleryImageReference(url: URL, sessionID: String) -> GatewayImageAttachment? {
+        guard let path = WorkspaceMarkdownImageContext.path(for: url) else { return nil }
+        return markdownImageReferences[sessionID]?[path]
+    }
+
+    func loadGalleryImages(_ attachments: [GatewayImageAttachment], sessionID: String) {
+        guard selectedSessionId == sessionID else { return }
+        enqueueImageAttachments(attachments, sessionId: sessionID)
+    }
+
+    func galleryHistoryCursor(sessionID: String) -> Int? {
+        if isShowingSearchContext, selectedSessionId == sessionID { return searchContextRecords.first?.seq }
+        return events[sessionID]?.first?.seq
+    }
+
+    func galleryHistoryIsBusy(sessionID: String) -> Bool {
+        historyLoadingSessionIds.contains(sessionID) || historyPresentationAdmission.isPending(sessionID: sessionID)
+            || pendingConversationHistory[sessionID] != nil || activeConversationHistory[sessionID] != nil
+            || offlineHistoryLoadingOlderSessionIds[sessionID] != nil || searchContextLoadingOlder
+    }
+
+    func loadGalleryHistory(sessionID: String) -> Bool {
+        guard let consumerID = historyPresentationAdmission.activeConsumerID(sessionID: sessionID) else { return false }
+        return requestOlderHistoryPresentation(sessionID: sessionID, consumerID: consumerID, batchesReadingWindow: false)
+    }
     func conversationTimeline(for sessionId: String) -> ConversationTimeline {
         if let timeline = conversationTimelines[sessionId] { return timeline }
         let timeline = ConversationTimeline()
@@ -1344,14 +1370,15 @@ final class AppStore: ObservableObject {
     }
 
     @discardableResult
-    func requestOlderHistoryPresentation(sessionID: String, consumerID: UUID, readingWindow: CGSize? = nil) -> Bool {
+    func requestOlderHistoryPresentation(sessionID: String, consumerID: UUID, readingWindow: CGSize? = nil,
+                                         batchesReadingWindow: Bool = true) -> Bool {
         guard sessionID == selectedSessionId,
               let operationID = historyPresentationAdmission.begin(sessionID: sessionID, consumerID: consumerID,
                 domainLoading: kmpHistoryStore.isLoading(sessionID: sessionID), hasMore: selectedHistoryHasMore,
                 producerBusy: pendingConversationHistory[sessionID] != nil || activeConversationHistory[sessionID] != nil
                     || offlineHistoryLoadingOlderSessionIds[sessionID] != nil || searchContextLoadingOlder,
                 minimumHistoryEventSequence: (kmpHistoryStore.lastEventSequence ?? 0) + 1, activate: false) else { return false }
-        if !isShowingSearchContext, selectedSession?.isRunning != true,
+        if batchesReadingWindow, !isShowingSearchContext, selectedSession?.isRunning != true,
            gateway.state.isConnected || kmpHistoryStore.canPrependCachedPage(sessionID: sessionID),
            let before = events[sessionID]?.first?.seq {
             let size = readingWindow ?? CGSize(width: 340, height: 560)

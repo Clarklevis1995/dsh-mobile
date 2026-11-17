@@ -140,6 +140,91 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
     }
 
     @Test
+    fun multiplePickedImagesPreserveOrderAndRejectOverflowOrWrongSession() = runBlocking {
+        withFilePreview { holder, _ ->
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val folder = java.io.File(context.cacheDir, "workspace-files/multi-pick-${UUID.randomUUID()}")
+            folder.mkdirs()
+            try {
+                val files = (1..3).map { index -> java.io.File(folder, "image-$index.png").apply { writeBytes(tinyPng()) } }
+                val uris = files.map { androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.workspace-files", it) }
+                onMain { holder.prepareImages(uris.take(2), "android-demo") }
+                waitUntil { !holder.preparingImages && holder.preparedImages.size == 2 }
+                assertEquals(listOf("image-1.png", "image-2.png"), holder.preparedImages.map { it.outgoing.name })
+                onMain { holder.prepareImages(uris, "android-demo") }
+                assertEquals("image-selection-limit-exceeded", holder.platformError)
+                assertEquals(2, holder.preparedImages.size)
+                onMain { holder.prepareImages(uris.takeLast(1), "other-session") }
+                assertEquals(2, holder.preparedImages.size)
+                // 某张图片读取失败，仍应继续处理同批其余有效图片。
+                onMain { holder.prepareImages(listOf(android.net.Uri.parse("content://missing/images/1"), uris.last()), "android-demo") }
+                waitUntil { !holder.preparingImages && holder.preparedImages.size == 3 }
+                assertEquals("image-3.png", holder.preparedImages.last().outgoing.name)
+            } finally { folder.deleteRecursively() }
+        }
+    }
+
+    @Test
+    fun tappingAnImageOpensImagesFromOtherMessagesInTheSameConversation() = runBlocking {
+        withFilePreview(showConversation = true) { holder, transport ->
+            val png = tinyPng(200)
+            for ((index, role) in listOf("user", "assistant").withIndex()) {
+                val id = "gallery-$role"
+                transport.receive("""{"kind":"event","sessionId":"android-demo","seq":${1300 + index},"time":${1300 + index},"event":{"type":"$role/message","turn":2,"step":1,"text":"image $role","images":[{"attachmentId":"$id","name":"$id.png","mediaType":"image/png","bytes":${png.size},"width":200,"height":200}]}}""")
+            }
+            waitUntil { holder.snapshot.conversation.flatMap { it.images }.any { it.attachmentId == "gallery-assistant" } }
+            onMain { holder.updateVisibleAttachments(setOf("gallery-user", "gallery-assistant")) }
+            for (role in listOf("user", "assistant")) {
+                waitUntil("图片请求 gallery-$role") {
+                    transport.payloadsOfType("attachment").any { it["attachmentId"]?.jsonPrimitive?.content == "gallery-$role" }
+                }
+                transport.receive("""{"kind":"attachment","sessionId":"android-demo","attachment":{"attachmentId":"gallery-$role","mediaType":"image/png","bytes":${png.size},"width":200,"height":200},"data":"${Base64.encodeToString(png, Base64.NO_WRAP)}"}""")
+            }
+            waitUntil { "gallery-assistant" in holder.attachmentThumbnails }
+            val all = com.clarklevis.dsh.android.ui.mergeConversationGallery(emptyList(), holder.snapshot.conversation)
+                .map { it.attachment.attachmentId }
+            val index = all.indexOf("gallery-assistant")
+            compose.onNodeWithTag("conversation-message-list")
+                .performScrollToNode(hasContentDescription("gallery-assistant.png"))
+            compose.onNodeWithContentDescription("gallery-assistant.png").performClick()
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithTag("conversation-image-preview").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithTag("conversation-image-preview").assertIsDisplayed()
+            compose.onNodeWithText("${index + 1} / ${all.size}").assertIsDisplayed()
+            compose.onNodeWithTag("conversation-image-preview").performTouchInput { swipeRight() }
+            compose.onNodeWithText("$index / ${all.size}").assertIsDisplayed()
+            waitUntil { "gallery-user" in holder.attachmentThumbnails }
+            compose.onNodeWithTag("conversation-image-download").assertIsEnabled()
+            compose.onNodeWithContentDescription("关闭图片预览").performClick()
+            compose.onNodeWithTag("conversation-image-preview").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun galleryLoadsOnlyVisibleNeighborsAndKeepsThemOutsideTimelineWindow() = runBlocking {
+        withFilePreview { holder, transport ->
+            val all = (1..50).mapTo(mutableSetOf()) { "gallery-$it" }
+            val visible = setOf("gallery-20", "gallery-21", "gallery-22")
+            onMain {
+                holder.updateGalleryAttachments("android-demo", all, visible)
+                holder.updateVisibleAttachments(emptySet())
+            }
+            val png = tinyPng()
+            for (id in visible) {
+                waitUntil("相册请求 $id") {
+                    transport.payloadsOfType("attachment").any { it["attachmentId"]?.jsonPrimitive?.content == id }
+                }
+                transport.receive("""{"kind":"attachment","sessionId":"android-demo","attachment":{"attachmentId":"$id","mediaType":"image/png","bytes":${png.size},"width":2,"height":2},"data":"${Base64.encodeToString(png, Base64.NO_WRAP)}"}""")
+            }
+            waitUntil { holder.attachmentThumbnails.keys.containsAll(visible) }
+            assertEquals(visible, transport.payloadsOfType("attachment").map { it.getValue("attachmentId").jsonPrimitive.content }.toSet())
+            onMain { holder.updateGalleryAttachments("android-demo", emptySet(), emptySet()) }
+            assertTrue(holder.attachmentThumbnails.keys.none { it in visible })
+        }
+    }
+
+    @Test
     fun previewAppearsBeforeDownloadAndBecomesCodeWithoutReopeningSheet() = runBlocking {
         withFilePreview { holder, transport ->
             onMain { holder.openWorkspaceFile(fileEntry(), "preview") }
@@ -300,7 +385,7 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
         }
     }
 
-    private suspend fun withFilePreview(block: suspend (AndroidSharedStateHolder, FakeTransport) -> Unit) {
+    private suspend fun withFilePreview(showConversation: Boolean = false, block: suspend (AndroidSharedStateHolder, FakeTransport) -> Unit) {
         val originalLocale = Locale.getDefault()
         Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
         val transport = FakeTransport()
@@ -319,7 +404,10 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
             waitUntil("holder.gatewayState.connection.name == \"CONNECTED\"") { holder.gatewayState.connection.name == "CONNECTED" }
             onMain { holder.loadFixture() }
             waitUntil("holder.snapshot.selectedSessionId == \"android-demo\"") { holder.snapshot.selectedSessionId == "android-demo" }
-            compose.setContent { MaterialTheme { WorkspaceFilePreviewHost(holder) } }
+            compose.setContent {
+                if (showConversation) DshTheme { ConversationScreen(holder, onPickImage = {}, onBack = {}) }
+                else MaterialTheme { WorkspaceFilePreviewHost(holder) }
+            }
             try {
                 block(holder, transport)
             } catch (failure: Throwable) {
@@ -589,8 +677,8 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(block)
     }
 
-    private fun tinyPng(): ByteArray {
-        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+    private fun tinyPng(size: Int = 2): ByteArray {
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         return ByteArrayOutputStream().use { output ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
             bitmap.recycle()

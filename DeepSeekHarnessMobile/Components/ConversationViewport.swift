@@ -212,6 +212,7 @@ struct ConversationViewport: UIViewControllerRepresentable {
     var onHistoryPresentationConsumerAttached: (String, HistoryPresentationConsumer) -> Void = { _, _ in }
     var onHistoryPresentationConsumerDetached: (String, UUID) -> Void = { _, _ in }
     var onHistoryPresented: (String, UUID, HistoryPresentationStamp) -> Void = { _, _, _ in }
+    var onPreviewImage: ((String) -> Void)? = nil
 
     func makeUIViewController(context: Context) -> ConversationViewportController {
         let controller = ConversationViewportController(
@@ -224,6 +225,7 @@ struct ConversationViewport: UIViewControllerRepresentable {
         controller.onHistoryPresentationConsumerAttached = onHistoryPresentationConsumerAttached
         controller.onHistoryPresentationConsumerDetached = onHistoryPresentationConsumerDetached
         controller.onHistoryPresented = onHistoryPresented
+        controller.onPreviewImage = onPreviewImage
         proxy.controller = controller
         return controller
     }
@@ -237,6 +239,7 @@ struct ConversationViewport: UIViewControllerRepresentable {
         controller.onHistoryPresentationConsumerAttached = onHistoryPresentationConsumerAttached
         controller.onHistoryPresentationConsumerDetached = onHistoryPresentationConsumerDetached
         controller.onHistoryPresented = onHistoryPresented
+        controller.onPreviewImage = onPreviewImage
         controller.cacheScope = cacheScope
         controller.searchTargetID = searchTargetID
         controller.setTopContentInset(topInset)
@@ -312,6 +315,7 @@ private final class ConversationCollectionView: UICollectionView {
 
 final class ConversationViewportController: UIViewController, UICollectionViewDelegate, ChatLayoutDelegate {
     weak var proxyOwner: ConversationViewportProxy?
+    var onPreviewImage: ((String) -> Void)?
     var onContentAvailabilityChanged: (String?, Bool) -> Void
     var onPinnedToBottomChanged: (Bool) -> Void
     var onScrolledFromTopChanged: (Bool) -> Void = { _ in }
@@ -1060,7 +1064,13 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
                     }
                 )
                 cell.onOpenImagePreview = { [weak self] items, initialIndex in
-                    self?.presentImagePreview(items, initialIndex: initialIndex)
+                    guard let self else { return }
+                    if let onPreviewImage, items.indices.contains(initialIndex) {
+                        stopInertialScrolling()
+                        onPreviewImage(items[initialIndex].id)
+                    } else {
+                        presentImagePreview(items, initialIndex: initialIndex)
+                    }
                 }
                 cell.apply(userMessage, containerWidth: self.chatLayout.layoutFrame.width)
                 return cell

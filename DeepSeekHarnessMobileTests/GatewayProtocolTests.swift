@@ -4019,6 +4019,100 @@ final class GatewayProtocolTests: XCTestCase {
     }
 
     @MainActor
+    func testGalleryHistoryPagesWaitForPresentationAndRetainAllImages() async throws {
+        let (store, session) = try await makeRc2HistoryLoadingStore()
+        defer { store.deactivateGateway() }
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"user/message","seq":10,"time":10,"data":{"content":[{"type":"text","text":"existing"},{"type":"image","attachment":{"attachmentId":"image-10","mediaType":"image/png","bytes":8,"width":20,"height":20}}]}}],"hasMore":true,"nextBeforeSeq":10}"#)
+        try await completeInitialHistoryPage(store)
+        await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "existing")
+        let timeline = store.conversationTimeline(for: session.id)
+        let gallery = ConversationImageGalleryModel(timeline: timeline)
+        gallery.start()
+        defer { gallery.stop() }
+        let consumerID = UUID()
+        store.attachHistoryPresentationConsumer(sessionID: session.id, consumer: .init(id: consumerID) { _ in })
+        defer { store.detachHistoryPresentationConsumer(sessionID: session.id, consumerID: consumerID) }
+        XCTAssertTrue(store.loadGalleryHistory(sessionID: session.id))
+        for sequence in [9, 8] {
+            XCTAssertEqual(store.galleryHistoryCursor(sessionID: session.id), sequence + 1)
+            XCTAssertTrue(store.galleryHistoryIsBusy(sessionID: session.id))
+            XCTAssertFalse(store.loadGalleryHistory(sessionID: session.id))
+            await store.awaitPendingKMPEventDeliveriesForTesting(includingHistoryPreparation: false)
+            try await deliverHistoryLoadingFrame(store,
+                """
+                {"kind":"history","sessionId":"mask-session","historyFormatVersion":3,"events":[{"type":"user/message","seq":\(sequence),"time":\(sequence),"data":{"content":[{"type":"image","attachment":{"attachmentId":"image-\(sequence)","mediaType":"image/png","bytes":8,"width":20,"height":20}}]}}],"hasMore":\(sequence == 9),"nextBeforeSeq":\(sequence)}
+                """)
+            try await waitReading { gallery.attachments.contains { $0.id == "image-\(sequence)" } }
+            let stamp = try XCTUnwrap(timeline.currentSnapshot.historyPresentationStamp)
+            store.acknowledgeHistoryPresentation(sessionID: session.id, consumerID: consumerID, stamp: stamp)
+            if sequence == 9 {
+                XCTAssertTrue(store.galleryHistoryIsBusy(sessionID: session.id), "还有续页时不能再次发起同一历史请求")
+            }
+        }
+        for _ in 0..<600 where store.galleryHistoryIsBusy(sessionID: session.id) {
+            if let stamp = timeline.currentSnapshot.historyPresentationStamp {
+                store.acknowledgeHistoryPresentation(sessionID: session.id, consumerID: consumerID, stamp: stamp)
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertFalse(store.galleryHistoryIsBusy(sessionID: session.id))
+        XCTAssertFalse(store.selectedHistoryHasMore)
+        XCTAssertEqual(gallery.attachments.map(\.id), ["image-8", "image-9", "image-10"])
+    }
+
+    @MainActor
+    func testGalleryLoadsAllHistoryWhileCoveringTheNativeConversationViewport() async throws {
+        let (store, session) = try await makeRc2HistoryLoadingStore()
+        defer { store.deactivateGateway() }
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"subscribed","sessionId":"mask-session","subscriptionId":"sub","assistantStream":true}"#)
+        try await deliverHistoryLoadingFrame(store,
+            #"{"kind":"session-snapshot","sessionId":"mask-session","subscriptionId":"sub","streamId":"stream","historyFormatVersion":3,"cursor":10,"events":[{"type":"user/message","seq":10,"time":10,"data":{"content":[{"type":"text","text":"existing"}]}}],"hasMore":true,"nextBeforeSeq":10}"#)
+        try await completeInitialHistoryPage(store)
+        await store.awaitConversationProjectionForTesting(sessionID: session.id, expectedText: "existing")
+        let timeline = store.conversationTimeline(for: session.id)
+        let controller = ConversationViewportController(onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in }, onBottomAlignmentCompleted: {}, onApproachingTop: {})
+        controller.onHistoryPresentationConsumerAttached = { store.attachHistoryPresentationConsumer(sessionID: $0, consumer: $1) }
+        controller.onHistoryPresentationConsumerDetached = { store.detachHistoryPresentationConsumer(sessionID: $0, consumerID: $1) }
+        controller.onHistoryPresented = { store.acknowledgeHistoryPresentation(sessionID: $0, consumerID: $1, stamp: $2) }
+        controller.loadViewIfNeeded()
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive })
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = controller; window.makeKeyAndVisible()
+        defer {
+            controller.dismiss(animated: false)
+            controller.detachHistoryPresentationConsumer()
+            window.isHidden = true; window.rootViewController = nil; previous?.makeKey()
+        }
+        controller.view.layoutIfNeeded()
+        controller.configure(sessionID: session.id, timeline: timeline, supplementalEntries: [], makeEntries: { items in
+            items.map { .init(id: $0.id, revision: $0.text.count, content: AnyView(Text($0.text).frame(height: 80))) }
+        }, bottomInset: 0)
+        try await waitReading { !controller.isInitialContentRevealPendingForTesting }
+        let host = UIHostingController(rootView: SessionConversationImageGallery(store: store,
+            request: .init(sessionID: session.id, initialID: "image-9")))
+        host.modalPresentationStyle = .fullScreen
+        controller.present(host, animated: false)
+        for sequence in [9, 8] {
+            try await waitReading { store.historyLoadingSessionIds.contains(session.id) }
+            try await deliverHistoryLoadingFrame(store,
+                """
+                {"kind":"history","sessionId":"mask-session","historyFormatVersion":3,"events":[{"type":"user/message","seq":\(sequence),"time":\(sequence),"data":{"content":[{"type":"image","attachment":{"attachmentId":"image-\(sequence)","mediaType":"image/png","bytes":8,"width":20,"height":20}}]}}],"hasMore":\(sequence == 9),"nextBeforeSeq":\(sequence)}
+                """)
+            try await waitReading { timeline.currentSnapshot.items.flatMap(\.images).contains { $0.id == "image-\(sequence)" } }
+        }
+        try await waitReading { !store.galleryHistoryIsBusy(sessionID: session.id) }
+        XCTAssertFalse(store.selectedHistoryHasMore)
+        XCTAssertEqual(timeline.currentSnapshot.items.flatMap(\.images).map(\.id), ["image-8", "image-9"])
+    }
+
+    @MainActor
     func testFailedOpeningKeepsHistoryFailureInsteadOfEmptyWelcome() async throws {
         let (store, session) = try await makeRc2HistoryLoadingStore()
         try await deliverHistoryLoadingFrame(store,
@@ -16638,7 +16732,7 @@ final class GeneratedToolImageTests: XCTestCase {
         XCTAssertEqual(preview.contentInset.top, 150)
         XCTAssertFalse(preview.panGestureRecognizer.isEnabled, "原始比例下应允许外层翻页")
         XCTAssertTrue(preview.previewImageView.clipsToBounds)
-        XCTAssertEqual(preview.previewImageView.layer.cornerRadius, 12)
+        XCTAssertEqual(preview.previewImageView.layer.cornerRadius, 0)
 
         preview.toggleZoom(at: CGPoint(x: 150, y: 150), animated: false)
         preview.layoutIfNeeded()

@@ -592,6 +592,7 @@ struct ConversationView: View {
     @State private var composerHeight: CGFloat = 168
     @State private var viewportScrollToBottomToken = 0
     @State private var viewportProxy = ConversationViewportProxy()
+    @State private var imageGalleryRequest: ConversationImageGalleryRequest?
     @State private var expandedConversationNodeIDsBySession: [String: Set<String>] = [:]
     @State private var isPreparingHistoryPresentation = false
     @State private var historyPresentationSessionID: String?
@@ -672,6 +673,7 @@ struct ConversationView: View {
         }
         .onChangeCompat(of: store.selectedSessionId) { _, _ in
             showsAgentPresetMenu = false
+            imageGalleryRequest = nil
         }
         .onDisappear {
             if store.conversationFileIsOpening { store.cancelWorkspaceFileDownload() }
@@ -685,6 +687,9 @@ struct ConversationView: View {
         }
         .sheet(item: conversationPreviewBinding) { request in
             WorkspaceFilePreviewLoadingSheet(store: store, request: request)
+        }
+        .fullScreenCover(item: $imageGalleryRequest) { request in
+            SessionConversationImageGallery(store: store, request: request)
         }
     }
 
@@ -780,6 +785,9 @@ struct ConversationView: View {
                 },
                 onHistoryPresented: { sessionID, consumerID, stamp in
                     store.acknowledgeHistoryPresentation(sessionID: sessionID, consumerID: consumerID, stamp: stamp)
+                },
+                onPreviewImage: { id in
+                    if let sessionID { openImageGallery(id: id, sessionID: sessionID) }
                 }
             )
             // Session 是 UIKit viewport 的身份边界。切换时直接销毁旧
@@ -2561,6 +2569,21 @@ struct ConversationView: View {
             onOpenUploadedFile: uploadedFileOpener()
         ).environment(\.messageQuoteAction, composerQuoteAction)
             .environment(\.workspaceMarkdownImageContext, store.markdownImageContext(sessionID: sessionID))
+            .environment(\.conversationImagePreviewAction, { id in openImageGallery(id: id, sessionID: sessionID) })
+            .environment(\.conversationMarkdownImagePreviewAction, { asset in
+                let id = URL(string: asset.id).flatMap { store.galleryImageReference(url: $0, sessionID: sessionID)?.id } ?? asset.id
+                openImageGallery(id: id, sessionID: sessionID, asset: asset)
+            })
+    }
+
+    private func openImageGallery(id: String, sessionID: String, asset: MarkdownImageAsset? = nil) {
+        guard sessionID == store.selectedSessionId else { return }
+        viewportProxy.prepareForOverlayPresentation()
+        composerIsFocused = false
+        imageGalleryRequest = ConversationImageGalleryRequest(sessionID: sessionID, initialID: id, initialAsset: asset,
+            seedItems: store.displayedConversationTimeline(for: sessionID).currentSnapshot.items.filter {
+                $0.images.contains { $0.id == id }
+            })
     }
 
     private func makeConversationViewportEntries(from items: [ConversationItem]) -> [ConversationViewportEntry] {
@@ -5081,6 +5104,7 @@ private struct AttachmentImageGrid: View {
     var imageError: (String) -> String? = { _ in nil }
     var onRetry: (GatewayImageAttachment) -> Void = { _ in }
     @State private var preview: GatewayImageAttachment?
+    @Environment(\.conversationImagePreviewAction) private var previewConversationImage
 
     var body: some View {
         ConversationAttachmentGridLayout(attachments: attachments) {
@@ -5107,7 +5131,10 @@ private struct AttachmentImageGrid: View {
                         }
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .contentShape(Rectangle())
-                        .onTapGesture { preview = attachment }
+                        .onTapGesture {
+                            if let previewConversationImage { previewConversationImage(attachment.id) }
+                            else { preview = attachment }
+                        }
                         .accessibilityLabel(attachment.name ?? String(localized: "图片附件"))
                 }
             }
@@ -5156,6 +5183,8 @@ private struct ZoomableAttachmentImage: UIViewRepresentable {
     let data: Data?
     let attachment: GatewayImageAttachment
     let isActive: Bool
+    var onTap: (() -> Void)? = nil
+    var onLongPress: (() -> Void)? = nil
 
     func makeUIView(context: Context) -> AttachmentZoomScrollView {
         AttachmentZoomScrollView()
@@ -5164,6 +5193,8 @@ private struct ZoomableAttachmentImage: UIViewRepresentable {
     func updateUIView(_ view: AttachmentZoomScrollView, context: Context) {
         view.previewImageView.accessibilityLabel = attachment.name ?? String(localized: "图片")
         view.load(data)
+        view.onSingleTap = onTap
+        view.onLongPress = onLongPress
         if !isActive { view.resetZoom() }
     }
 
@@ -5172,7 +5203,9 @@ private struct ZoomableAttachmentImage: UIViewRepresentable {
     }
 }
 
-final class AttachmentZoomScrollView: UIScrollView, UIScrollViewDelegate {
+final class AttachmentZoomScrollView: UIScrollView, UIScrollViewDelegate, UIContextMenuInteractionDelegate {
+    var onSingleTap: (() -> Void)?
+    var onLongPress: (() -> Void)?
     let previewImageView = UIImageView()
     private let placeholder = UIImageView(image: UIImage(systemName: "photo"))
     private var sourceData: Data?
@@ -5195,7 +5228,7 @@ final class AttachmentZoomScrollView: UIScrollView, UIScrollViewDelegate {
         accessibilityIdentifier = "attachment-preview-scroll"
         panGestureRecognizer.isEnabled = false
         previewImageView.contentMode = .scaleAspectFit
-        previewImageView.layer.cornerRadius = 12
+        previewImageView.layer.cornerRadius = 0
         previewImageView.layer.cornerCurve = .continuous
         previewImageView.clipsToBounds = true
         previewImageView.isAccessibilityElement = true
@@ -5207,6 +5240,22 @@ final class AttachmentZoomScrollView: UIScrollView, UIScrollViewDelegate {
         let tap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
         tap.numberOfTapsRequired = 2
         addGestureRecognizer(tap)
+        addInteraction(UIContextMenuInteraction(delegate: self))
+        let singleTap = UITapGestureRecognizer(target: self, action: #selector(singleTapped))
+        singleTap.require(toFail: tap)
+        addGestureRecognizer(singleTap)
+    }
+
+    @objc private func singleTapped() { onSingleTap?() }
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+                                configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
+        guard onLongPress != nil, previewImageView.image != nil,
+              previewImageView.bounds.contains(convert(location, to: previewImageView)) else { return nil }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            UIMenu(children: [UIAction(title: String(localized: "保存到相册"), image: UIImage(systemName: "square.and.arrow.down")) {
+                [weak self] _ in self?.onLongPress?()
+            }])
+        }
     }
 
     required init?(coder: NSCoder) { nil }
@@ -5322,7 +5371,18 @@ struct AttachmentGallery: View {
     @State private var saving = false
     @State private var saveMessage: String?
     var exportDocument: MarkdownImageAsset? = nil
+    var onVisibleImageChanged: (String) -> Void = { _ in }
+    var showsImageCount = false
+    var historyLoading = false
+    var historyError = false
+    var onRetryHistory: () -> Void = {}
     @State private var exporting = false
+
+    private var selectedIndex: Int { attachments.firstIndex { $0.id == selectedID } ?? 0 }
+    private var visibleIDs: Set<String> {
+        guard !attachments.isEmpty else { return [] }
+        return Set(attachments[max(0, selectedIndex - 1)..<min(attachments.count, selectedIndex + 2)].map(\.id))
+    }
 
     private func save(_ attachment: GatewayImageAttachment) {
         guard !saving, let data = imageData(attachment.id) else { return }
@@ -5343,49 +5403,73 @@ struct AttachmentGallery: View {
             Color.black.ignoresSafeArea()
             TabView(selection: $selectedID) {
                 ForEach(attachments) { attachment in
-                    VStack(spacing: 16) {
-                        ZoomableAttachmentImage(data: imageData(attachment.id), attachment: attachment,
-                                                isActive: selectedID == attachment.id)
-                            .contextMenu {
-                                Button { save(attachment) } label: {
-                                    Label("保存到相册", systemImage: "square.and.arrow.down")
-                                }
-                                .disabled(saving || imageData(attachment.id) == nil)
-                            }
+                    let data = visibleIDs.contains(attachment.id) ? imageData(attachment.id) : nil
+                    ZStack {
+                        ZoomableAttachmentImage(data: data, attachment: attachment,
+                            isActive: selectedID == attachment.id,
+                            onTap: { dismiss() }, onLongPress: { save(attachment) })
                         if let error = imageError(attachment.id) {
-                            Text(error).foregroundStyle(.white)
+                            VStack(spacing: 12) {
+                                Text(error).foregroundStyle(.white)
+                                Button("重试") { onRetry(attachment) }
+                            }.padding(20)
+                        } else if data == nil, visibleIDs.contains(attachment.id) {
+                            ProgressView().tint(.white)
                         }
-                        if imageData(attachment.id) == nil { Button("重试") { onRetry(attachment) } }
-                    }
-                    .padding(16).tag(attachment.id)
+                    }.tag(attachment.id)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: attachments.count > 1 ? .always : .never))
-            HStack(spacing: 20) {
-                if exportDocument != nil {
-                    Menu {
-                        Button { exporting = true } label: {
-                            Label(String(localized: "markdown.image.save-file", defaultValue: "存储到文件"), systemImage: "folder")
-                        }
-                        if let attachment = attachments.first {
-                            Button { save(attachment) } label: { Label("保存到相册", systemImage: "photo") }
-                                .disabled(saving)
-                        }
-                    } label: {
-                        Image(systemName: "square.and.arrow.down").font(.system(size: 26)).foregroundStyle(.white)
-                    }
-                    .accessibilityLabel(Text(String(localized: "markdown.image.download", defaultValue: "下载图片")))
-                    .accessibilityIdentifier("markdown-image-download")
-                }
+            .tabViewStyle(.page(indexDisplayMode: !showsImageCount && attachments.count > 1 ? .always : .never))
+            .ignoresSafeArea(.container, edges: .all)
+            .accessibilityIdentifier("image-gallery")
+            HStack(spacing: 12) {
                 Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 30)).foregroundStyle(.white)
+                    Image(systemName: "xmark").font(.system(size: 16, weight: .semibold))
+                        .frame(width: 28, height: 28)
                 }
+                .glassCircleButton(onDarkBackground: true)
                 .accessibilityLabel("关闭")
                 .accessibilityIdentifier("image-gallery-close")
-            }.padding(20)
+                Spacer(minLength: 0)
+                if showsImageCount {
+                    HStack(spacing: 8) {
+                        Text(verbatim: "\(selectedIndex + 1) / \(attachments.count)")
+                            .monospacedDigit().accessibilityIdentifier("conversation-gallery-count")
+                        if historyLoading { ProgressView().tint(.white).controlSize(.small) }
+                        else if historyError { Button("重试", action: onRetryHistory) }
+                    }.appFont(.subheadline)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    if let attachment = attachments.first(where: { $0.id == selectedID }) { save(attachment) }
+                } label: {
+                    Group {
+                        if saving { ProgressView().tint(.white) }
+                        else { Image(systemName: "arrow.down").font(.system(size: 18, weight: .semibold)) }
+                    }.frame(width: 28, height: 28)
+                }
+                .glassCircleButton(onDarkBackground: true)
+                .disabled(saving || imageData(selectedID) == nil)
+                .accessibilityLabel(Text(String(localized: "markdown.image.download", defaultValue: "下载图片")))
+                .accessibilityIdentifier("markdown-image-download")
+                .contextMenu {
+                    if exportDocument != nil {
+                        Button { exporting = true } label: { Label(String(localized: "markdown.image.save-file", defaultValue: "存储到文件"), systemImage: "folder") }
+                    }
+                }
+            }
+            .foregroundStyle(.white).padding(.horizontal, 16).padding(.vertical, 10)
+
         }
-        .onAppear { selectedID = initialID }
-        .accessibilityIdentifier("image-gallery")
+        .onAppear {
+            selectedID = attachments.contains(where: { $0.id == initialID }) ? initialID : attachments.first?.id ?? ""
+            onVisibleImageChanged(selectedID)
+        }
+        .onChangeCompat(of: selectedID) { _, id in onVisibleImageChanged(id) }
+        .onChangeCompat(of: attachments.map(\.id)) { _, ids in
+            if !ids.contains(selectedID) { selectedID = ids.first ?? "" }
+            onVisibleImageChanged(selectedID)
+        }
         .fileExporter(isPresented: $exporting, document: exportDocument,
                       contentType: exportDocument?.contentType ?? .image, defaultFilename: exportDocument?.name) { result in
             if case .failure(let error) = result { saveMessage = error.localizedDescription }
@@ -7425,6 +7509,186 @@ enum ComposerPasteLoader {
                     else { continuation.resume(throwing: CocoaError(.fileReadUnknown)) }
                 }
             }
+        }
+    }
+}
+
+#if DEBUG
+/// 复用正式消息视口、两类图片入口、目录与原生分页组件。
+struct ConversationGalleryUITestHarness: View {
+    static let attachments = (1...4).map {
+        GatewayImageAttachment(attachmentId: "gallery-\($0)", mediaType: "image/png", bytes: 0,
+                               width: 120, height: 90, name: "image-\($0).png")
+    }
+    static let data: Data = UIGraphicsImageRenderer(size: CGSize(width: 320, height: 240)).pngData { context in
+        UIColor.systemBlue.setFill()
+        context.fill(CGRect(x: 0, y: 0, width: 320, height: 240))
+    }
+    static func item(_ index: Int, kind: ConversationItem.Kind) -> ConversationItem {
+        let markdown = index == 3 && ProcessInfo.processInfo.environment["DSH_GALLERY_MARKDOWN"] == "1"
+        return ConversationItem(id: "s-\(index)", kind: kind, title: "", text: markdown ? "![正文图片](images/gallery.png)" : "",
+                         images: markdown ? [] : [attachments[index - 1]],
+                         isError: false, date: Date(timeIntervalSince1970: Double(index)))
+    }
+    @State private var timeline: ConversationTimeline
+    @StateObject private var gallery: ConversationImageGalleryModel
+    @State private var proxy = ConversationViewportProxy()
+    @State private var previewID: String?
+    @State private var visibleNeighbors = ""
+
+    init() {
+        let timeline = ConversationTimeline()
+        timeline.publish([Self.item(2, kind: .user), Self.item(3, kind: .assistant), Self.item(4, kind: .generatedImages)])
+        _timeline = State(initialValue: timeline)
+        _gallery = StateObject(wrappedValue: ConversationImageGalleryModel(timeline: timeline))
+    }
+
+    var body: some View {
+        ConversationViewport(proxy: proxy, sessionID: "s", timeline: timeline, supplementalEntries: [],
+            makeEntries: { items in items.map { item in
+                if item.kind == .user {
+                    return ConversationViewportEntry(id: item.id, revision: 0,
+                        userMessage: .init(item: item, imageData: { _ in Self.data }, showsCopyButton: false))
+                }
+                return ConversationViewportEntry(id: item.id, revision: 0, content: AnyView(
+                    ConversationRow(item: item, showsCopyButton: false, imageData: { _ in Self.data })
+                        .environment(\.conversationImagePreviewAction, { previewID = $0 })
+                        .environment(\.conversationMarkdownImagePreviewAction, { previewID = $0.id })
+                        .environment(\.workspaceMarkdownImageContext, WorkspaceMarkdownImageContext(id: "test-gallery") { _ in Self.data })))
+            } }, bottomInset: 16, scrollToBottomToken: 0,
+            onContentAvailabilityChanged: { _, _ in }, onPinnedToBottomChanged: { _ in },
+            onScrolledFromTopChanged: { _ in }, onBottomAlignmentCompleted: {}, onApproachingTop: {},
+            onPreviewImage: { previewID = $0 })
+        .fullScreenCover(isPresented: Binding(get: { previewID != nil }, set: { if !$0 { previewID = nil } })) {
+            AttachmentGallery(attachments: gallery.attachments, initialID: previewID ?? "gallery-2",
+                imageData: { _ in Self.data }, imageError: { _ in nil }, onRetry: { _ in },
+                onVisibleImageChanged: { id in visibleNeighbors = gallery.neighbors(of: id).map(\.id).joined(separator: ",") },
+                showsImageCount: true)
+                .onAppear { gallery.start() }
+                .onDisappear { gallery.stop() }
+                .task {
+                    guard ProcessInfo.processInfo.environment["DSH_GALLERY_PREPEND"] == "1" else { return }
+                    try? await Task.sleep(for: .seconds(3))
+                    guard !Task.isCancelled else { return }
+                    timeline.publish([Self.item(1, kind: .user)] + timeline.currentSnapshot.items)
+                }
+                .accessibilityValue(visibleNeighbors)
+        }
+    }
+}
+#endif
+
+private struct ConversationImagePreviewActionKey: EnvironmentKey {
+    static let defaultValue: ((String) -> Void)? = nil
+}
+
+private struct ConversationMarkdownImagePreviewActionKey: EnvironmentKey {
+    static let defaultValue: ((MarkdownImageAsset) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var conversationMarkdownImagePreviewAction: ((MarkdownImageAsset) -> Void)? {
+        get { self[ConversationMarkdownImagePreviewActionKey.self] }
+        set { self[ConversationMarkdownImagePreviewActionKey.self] = newValue }
+    }
+    var conversationImagePreviewAction: ((String) -> Void)? {
+        get { self[ConversationImagePreviewActionKey.self] }
+        set { self[ConversationImagePreviewActionKey.self] = newValue }
+    }
+}
+
+struct ConversationImageGalleryRequest: Identifiable {
+    let sessionID: String
+    let initialID: String
+    var initialAsset: MarkdownImageAsset? = nil
+    var seedItems: [ConversationItem] = []
+    var id: String { "\(sessionID):\(initialID)" }
+}
+
+struct SessionConversationImageGallery: View {
+    private struct HistoryTaskID: Hashable {
+        let retry: Int
+        let hasMore: Bool
+    }
+    @ObservedObject var store: AppStore
+    let request: ConversationImageGalleryRequest
+    @StateObject private var gallery: ConversationImageGalleryModel
+    @State private var retryToken = 0
+    @State private var discovering = false
+    @State private var visibleImageID: String
+    @State private var markdownAssets: [String: MarkdownImageAsset]
+    @State private var markdownErrors: [String: String] = [:]
+    @State private var imageRetry = 0
+
+    init(store: AppStore, request: ConversationImageGalleryRequest) {
+        self.store = store
+        self.request = request
+        _visibleImageID = State(initialValue: request.initialID)
+        _markdownAssets = State(initialValue: request.initialAsset.map { [request.initialID: $0] } ?? [:])
+        _gallery = StateObject(wrappedValue: ConversationImageGalleryModel(
+            timeline: store.displayedConversationTimeline(for: request.sessionID), seedItems: request.seedItems,
+            reference: { store.galleryImageReference(url: $0, sessionID: request.sessionID) }))
+    }
+
+    var body: some View {
+        AttachmentGallery(attachments: gallery.attachments.map { attachment in
+            guard var loaded = markdownAssets[attachment.id]?.attachment else { return attachment }
+            loaded.attachmentId = attachment.id
+            return loaded
+        }, initialID: request.initialID,
+            imageData: { markdownAssets[$0]?.data ?? store.imageData(for: $0, sessionID: request.sessionID) },
+            imageError: { markdownErrors[$0] ?? store.imageLoadError(for: $0, sessionID: request.sessionID) },
+            onRetry: { attachment in
+                if gallery.entries.contains(where: { $0.attachment.id == attachment.id && $0.sourceURL != nil }) { imageRetry += 1 }
+                else { store.retryImageAttachment(attachment, sessionID: request.sessionID) }
+            },
+            exportDocument: markdownAssets[visibleImageID],
+            onVisibleImageChanged: { visibleImageID = $0 },
+            showsImageCount: true, historyLoading: discovering, historyError: store.historyLoadErrors[request.sessionID] != nil,
+            onRetryHistory: { retryToken += 1 })
+            .onAppear { gallery.start() }
+            .onDisappear { gallery.stop() }
+            .task(id: "\(gallery.neighbors(of: visibleImageID).map(\.id)):\(imageRetry)") {
+                await loadVisibleImages()
+            }
+            .task(id: HistoryTaskID(retry: retryToken, hasMore: store.selectedHistoryHasMore)) {
+                await discoverHistory()
+            }
+    }
+
+    @MainActor private func loadVisibleImages() async {
+        let neighbors = gallery.neighbors(of: visibleImageID)
+        let ids = Set(neighbors.map(\.id))
+        markdownAssets = markdownAssets.filter { ids.contains($0.key) }
+        let sources = gallery.entries.filter { ids.contains($0.attachment.id) && $0.sourceURL != nil }
+        let sourceIDs = Set(sources.map { $0.attachment.id })
+        store.loadGalleryImages(neighbors.filter { !sourceIDs.contains($0.id) }, sessionID: request.sessionID)
+        for entry in sources where markdownAssets[entry.attachment.id] == nil {
+            guard let url = entry.sourceURL, !Task.isCancelled else { return }
+            markdownErrors[entry.attachment.id] = nil
+            do {
+                let loaded = try await MarkdownImageRenderCache.shared.load(url: url,
+                    context: store.markdownImageContext(sessionID: request.sessionID))
+                try Task.checkCancellation()
+                markdownAssets[entry.attachment.id] = loaded.asset
+            } catch is CancellationError { return }
+            catch { markdownErrors[entry.attachment.id] = error.localizedDescription }
+        }
+    }
+
+    /// 顺序复用历史加载和呈现确认机制；离开相册后任务自动取消。
+    @MainActor private func discoverHistory() async {
+        discovering = true
+        defer { discovering = false }
+        var lastRequestedCursor: Int?
+        while !Task.isCancelled, store.selectedSessionId == request.sessionID, store.selectedHistoryHasMore {
+            if !store.galleryHistoryIsBusy(sessionID: request.sessionID) {
+                if lastRequestedCursor != nil, store.historyLoadErrors[request.sessionID] != nil { return }
+                guard let cursor = store.galleryHistoryCursor(sessionID: request.sessionID), cursor != lastRequestedCursor else { return }
+                if store.loadGalleryHistory(sessionID: request.sessionID) { lastRequestedCursor = cursor }
+            }
+            do { try await Task.sleep(for: .milliseconds(200)) }
+            catch { return }
         }
     }
 }

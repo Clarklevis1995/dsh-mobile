@@ -138,3 +138,25 @@ extension MarkdownContent {
     return rows.map { $0.cells.map { plain($0.content) } }
   }
 }
+
+extension MarkdownContent {
+  /// 使用渲染器相同的语法树，排除代码示例并保留引用式图片和列表、表格中的图片。
+  public var imageSources: [String] {
+    func inline(_ nodes: [InlineNode]) -> [String] {
+      nodes.flatMap { node -> [String] in
+        if case .image(let source, _) = node { return source.hasPrefix("dsh-math:") ? [] : [source] }
+        return inline(node.children)
+      }
+    }
+    func collect(_ nodes: [BlockNode]) -> [String] {
+      nodes.flatMap { node -> [String] in
+        switch node {
+        case .paragraph(let content), .heading(_, let content): return inline(content)
+        case .table(_, let rows): return rows.flatMap { $0.cells.flatMap { inline($0.content) } }
+        default: return collect(node.children)
+        }
+      }
+    }
+    return collect(blocks)
+  }
+}

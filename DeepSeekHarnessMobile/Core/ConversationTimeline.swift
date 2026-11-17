@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import UIKit
+import MarkdownUI
 
 struct ConversationItem: Identifiable, Sendable {
     enum Kind: Equatable, Sendable { case user, context, assistant, reasoning, tool, jsonTool, toolResult, generatedImages, status, system }
@@ -151,5 +152,82 @@ final class ConversationProjectionDriver {
             self.isProjecting = false
             self.displayLink.isPaused = !self.isDirty
         }
+    }
+}
+
+/// 相册只保留图片元数据；历史正文窗口裁剪后，已发现的图片仍可翻阅。
+struct ConversationGalleryEntry: Equatable {
+    let attachment: GatewayImageAttachment
+    let date: Date
+    let messageID: String
+    let position: Int
+    var sourceURL: URL? = nil
+
+    static func merge(_ previous: [Self], items: [ConversationItem],
+                      reference: (URL) -> GatewayImageAttachment? = { _ in nil }) -> [Self] {
+        var byID = Dictionary(uniqueKeysWithValues: previous.map { ($0.attachment.id, $0) })
+        for item in items {
+            for (position, attachment) in item.images.enumerated() {
+                byID[attachment.id] = Self(attachment: attachment, date: item.date,
+                                          messageID: item.id, position: position)
+            }
+            guard item.text.contains("![") else { continue }
+            for (position, source) in MarkdownUI.MarkdownContent(item.text).imageSources.enumerated() {
+                guard let url = URL(string: source), MarkdownMath.Formula(url: url) == nil else { continue }
+                let linked = reference(url)
+                let attachment = linked ?? GatewayImageAttachment(attachmentId: url.absoluteString,
+                    mediaType: "image/png", bytes: 0, width: 1, height: 1, name: url.lastPathComponent)
+                if byID[attachment.id] == nil {
+                    byID[attachment.id] = Self(attachment: attachment, date: item.date, messageID: item.id,
+                        position: item.images.count + position, sourceURL: linked == nil ? url : nil)
+                }
+            }
+        }
+        return byID.values.sorted {
+            if $0.date != $1.date { return $0.date < $1.date }
+            if $0.messageID != $1.messageID {
+                return $0.messageID.compare($1.messageID, options: .numeric) == .orderedAscending
+            }
+            return $0.position < $1.position
+        }
+    }
+}
+
+@MainActor
+final class ConversationImageGalleryModel: ObservableObject {
+    @Published private(set) var entries: [ConversationGalleryEntry]
+    @Published private(set) var imageRevision = 0
+    private let timeline: ConversationTimeline
+    private var observerID: UUID?
+    private let reference: (URL) -> GatewayImageAttachment?
+
+    init(timeline: ConversationTimeline, seedItems: [ConversationItem] = [],
+         reference: @escaping (URL) -> GatewayImageAttachment? = { _ in nil }) {
+        self.timeline = timeline
+        self.reference = reference
+        entries = ConversationGalleryEntry.merge([], items: seedItems + timeline.currentSnapshot.items, reference: reference)
+    }
+
+    var attachments: [GatewayImageAttachment] { entries.map(\.attachment) }
+
+    func start() {
+        guard observerID == nil else { return }
+        observerID = timeline.observe { [weak self] snapshot in
+            guard let self else { return }
+            let merged = ConversationGalleryEntry.merge(entries, items: snapshot.items, reference: reference)
+            if merged != entries { entries = merged }
+            // 附件的磁盘回填和网络完成也通过 timeline 通知，不依赖正文变化。
+            imageRevision &+= 1
+        }
+    }
+
+    func stop() {
+        if let observerID { timeline.removeObserver(observerID) }
+        observerID = nil
+    }
+
+    func neighbors(of id: String) -> [GatewayImageAttachment] {
+        guard let index = entries.firstIndex(where: { $0.attachment.id == id }) else { return [] }
+        return entries[max(0, index - 1)..<min(entries.count, index + 2)].map(\.attachment)
     }
 }

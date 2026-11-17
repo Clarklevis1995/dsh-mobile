@@ -1149,3 +1149,54 @@ private actor ChatProtectionCommitBarrier {
         continuation = nil
     }
 }
+
+final class ConversationImageGalleryTests: XCTestCase {
+    private func item(_ seq: Int, kind: DeepSeekHarnessMobile.ConversationItem.Kind = .user, images: [String]) -> DeepSeekHarnessMobile.ConversationItem {
+        DeepSeekHarnessMobile.ConversationItem(id: "session-\(seq)", kind: kind, title: "", text: "", images: images.map {
+            DeepSeekHarnessMobile.GatewayImageAttachment(attachmentId: $0, mediaType: "image/png", bytes: 8, width: 20, height: 20, name: nil)
+        }, isError: false, date: Date(timeIntervalSince1970: Double(seq)))
+    }
+
+    @MainActor func testMarkdownImagesShareTheAttachmentGalleryAndIgnoreCodeExamples() {
+        let text = "![正文](images/first.png)\n\n![引用][picture]\n\n[picture]: images/second.png\n\n`![代码](fake.png)`\n\n```md\n![示例](example.png)\n```"
+        let message = DeepSeekHarnessMobile.ConversationItem(id: "s-2", kind: .assistant, title: "", text: text,
+            isError: false, date: Date(timeIntervalSince1970: 2))
+        let entries = ConversationGalleryEntry.merge([], items: [item(1, images: ["upload"]), message])
+        XCTAssertEqual(entries.map { $0.attachment.id }, ["upload", "images/first.png", "images/second.png"])
+        XCTAssertEqual(entries.last?.sourceURL?.absoluteString, "images/second.png")
+        let linked = item(1, images: ["generated"]).images[0]
+        let deduplicated = ConversationGalleryEntry.merge([], items: [item(1, images: ["generated"]), message],
+            reference: { $0.absoluteString == "images/first.png" ? linked : nil })
+        XCTAssertEqual(deduplicated.map { $0.attachment.id }, ["generated", "images/second.png"])
+    }
+
+    @MainActor func testBothRolesAndOlderPagesRemainAfterTimelineWindowIsTrimmed() {
+        let timeline = ConversationTimeline()
+        timeline.publish([item(10, images: ["user"]), item(11, kind: .assistant, images: ["assistant", "second"])])
+        let gallery = ConversationImageGalleryModel(timeline: timeline)
+        gallery.start()
+        timeline.publish([item(2, images: ["older"])] + timeline.currentSnapshot.items)
+        XCTAssertEqual(gallery.attachments.map(\.id), ["older", "user", "assistant", "second"])
+        timeline.publish([item(12, kind: .generatedImages, images: ["generated", "second"])])
+        XCTAssertEqual(gallery.attachments.map(\.id), ["older", "user", "assistant", "generated", "second"])
+        XCTAssertEqual(gallery.neighbors(of: "assistant").map(\.id), ["user", "assistant", "generated"])
+        gallery.stop()
+    }
+
+    @MainActor func testAttachmentUpdatesNotifyGalleryAndClosingDetachesObserver() {
+        let timeline = ConversationTimeline()
+        timeline.publish([item(1, images: ["a"])])
+        let gallery = ConversationImageGalleryModel(timeline: timeline)
+        gallery.start()
+        let revision = gallery.imageRevision
+        timeline.publish(timeline.currentSnapshot.items)
+        XCTAssertGreaterThan(gallery.imageRevision, revision)
+        gallery.stop()
+        let stopped = gallery.imageRevision
+        timeline.publish([item(2, images: ["b"])])
+        XCTAssertEqual(gallery.imageRevision, stopped)
+        XCTAssertEqual(gallery.attachments.map(\.id), ["a"])
+        let other = ConversationImageGalleryModel(timeline: timeline)
+        XCTAssertEqual(other.attachments.map(\.id), ["b"])
+    }
+}

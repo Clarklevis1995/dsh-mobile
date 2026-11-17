@@ -452,6 +452,7 @@ private struct MarkdownAttachmentImage: View {
     @State private var failed = false
     @State private var attempt = 0
     @State private var layoutDimensions: GatewayImageDimensions?
+    @Environment(\.conversationMarkdownImagePreviewAction) private var previewConversationImage
     @State private var loadedKey: String?
 
     init(url: URL, context: WorkspaceMarkdownImageContext?) {
@@ -513,10 +514,15 @@ private struct MarkdownAttachmentImage: View {
         } message: { Text(exportError ?? "") }
     }
 
+    private func openPreview(_ asset: MarkdownImageAsset) {
+        if let previewConversationImage { previewConversationImage(asset) }
+        else { preview = asset }
+    }
+
     private var content: some View {
         Group {
             if let image, let asset {
-                Button { preview = asset } label: {
+                Button { openPreview(asset) } label: {
                     Image(uiImage: image).resizable().scaledToFit()
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
@@ -524,7 +530,7 @@ private struct MarkdownAttachmentImage: View {
                 .accessibilityLabel("预览")
                 .accessibilityIdentifier("markdown-image-preview-button")
                 .contextMenu {
-                    Button { preview = asset } label: { Label("预览", systemImage: "arrow.up.left.and.arrow.down.right") }
+                    Button { openPreview(asset) } label: { Label("预览", systemImage: "arrow.up.left.and.arrow.down.right") }
                     Button { exporting = true } label: {
                         Label(String(localized: "markdown.image.download", defaultValue: "下载图片"), systemImage: "square.and.arrow.down")
                     }

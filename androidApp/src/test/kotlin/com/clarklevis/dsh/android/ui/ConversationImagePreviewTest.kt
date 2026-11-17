@@ -6,6 +6,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ConversationImagePreviewTest {
+    @Test fun `gallery includes both roles and retains older metadata across history windows`() {
+        fun image(id: String) = com.clarklevis.dsh.shared.protocol.GatewayImageAttachment(id, "image/png", 10, 20, 20)
+        fun item(id: String, time: Double, role: com.clarklevis.dsh.shared.projection.ConversationItemKind, vararg images: String) =
+            com.clarklevis.dsh.shared.projection.ConversationItem(id, role, "", "", images.map(::image), epochSeconds = time)
+        val user = com.clarklevis.dsh.shared.projection.ConversationItemKind.USER
+        val assistant = com.clarklevis.dsh.shared.projection.ConversationItemKind.ASSISTANT
+        val recent = mergeConversationGallery(emptyList(), listOf(item("s-10", 10.0, user, "b", "c")))
+        val older = mergeConversationGallery(recent, listOf(item("s-2", 2.0, assistant, "a"), item("s-10", 10.0, user, "b", "c")))
+        assertEquals(listOf("a", "b", "c"), older.map { it.attachment.attachmentId })
+        val newest = mergeConversationGallery(older, listOf(item("s-20", 20.0, assistant, "d", "c")))
+        assertEquals(listOf("a", "b", "c", "d"), newest.map { it.attachment.attachmentId })
+    }
     @Test
     fun `attachment placeholders preserve aspect ratio within viewport and height limits`() {
         assertEquals(UserAttachmentPreviewSize(320.dp, 160.dp), userSingleAttachmentPreviewSize(1600, 800, 390.dp))

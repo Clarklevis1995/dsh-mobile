@@ -72,9 +72,13 @@ fun DeepSeekHarnessAndroidApp() {
         }
     }
     val stateHolder = hosts.activeGraph.stateHolder
-    val imageOwner = remember { androidx.compose.runtime.mutableStateOf<AndroidSharedStateHolder?>(null) }
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (imageOwner.value === stateHolder) uri?.let(stateHolder::prepareImage)
+    val imageOwner = remember { androidx.compose.runtime.mutableStateOf<Pair<AndroidSharedStateHolder, String?>?>(null) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(
+        com.clarklevis.dsh.android.platform.AndroidImagePreprocessor.MAXIMUM_IMAGE_COUNT
+    )) { uris ->
+        imageOwner.value?.takeIf { it.first === stateHolder }?.let { (owner, sessionId) ->
+            if (uris.isNotEmpty()) owner.prepareImages(uris, sessionId)
+        }
         imageOwner.value = null
     }
     val fileOwner = remember { androidx.compose.runtime.mutableStateOf<Pair<AndroidSharedStateHolder, String?>?>(null) }
@@ -102,7 +106,7 @@ fun DeepSeekHarnessAndroidApp() {
                 androidx.compose.runtime.key(stateHolder) {
                     DshProductApp(
                         stateHolder = stateHolder,
-                        onPickImage = { imageOwner.value = stateHolder; imagePicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                        onPickImage = { imageOwner.value = stateHolder to stateHolder.snapshot.selectedSessionId; imagePicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                         onPickFile = { fileOwner.value = stateHolder to stateHolder.snapshot.selectedSessionId; filePicker.launch(arrayOf("*/*")) },
                         notificationRoute = notificationRoute?.takeIf { it.gatewayId == hosts.activeId },
                         onNotificationRouteOpened = application::clearNotificationSession

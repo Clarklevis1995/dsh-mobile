@@ -44,7 +44,11 @@ class IncomingShareConversationDeviceTest {
         exerciseUploadReconnect(pauseFirstUpload = true)
     }
 
-    private suspend fun exerciseUploadReconnect(pauseFirstUpload: Boolean) {
+    @Test fun multiplePickedFilesAreUploadedAsSeparateAttachments() = runBlocking<Unit> {
+        exerciseUploadReconnect(pauseFirstUpload = false, multipleFiles = true)
+    }
+
+    private suspend fun exerciseUploadReconnect(pauseFirstUpload: Boolean, multipleFiles: Boolean = false) {
         val transport = FakeTransport()
         val application = ApplicationProvider.getApplicationContext<Application>()
         val graph = AndroidAppGraph(application = application, transportOverride = transport,
@@ -97,6 +101,20 @@ class IncomingShareConversationDeviceTest {
             }
             val uri = androidx.core.content.FileProvider.getUriForFile(application,
                 "${application.packageName}.workspace-files", source)
+            if (multipleFiles) {
+                val second = java.io.File(source.parentFile, "notes.txt")
+                try {
+                    second.writeBytes(original)
+                    val secondUri = androidx.core.content.FileProvider.getUriForFile(application,
+                        "${application.packageName}.workspace-files", second)
+                    onMain { holder.prepareFiles(listOf(uri, secondUri), "upload-session") }
+                    waitUntil("多文件上传完成") { opened.get() == 2 && holder.fileUploads.canSend }
+                    assertEquals(listOf("chat.zip", "notes.txt"), holder.fileUploads.drafts.map { it.name })
+                    assertEquals(listOf("receipt-1", "receipt-2"), holder.fileUploads.receipts)
+                    assertTrue(transport.payloadsOfType("message").isEmpty())
+                    return
+                } finally { second.delete() }
+            }
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                 holder.fileUploads.select("upload-session", true)
                 holder.fileUploads.importFiles(listOf(uri))

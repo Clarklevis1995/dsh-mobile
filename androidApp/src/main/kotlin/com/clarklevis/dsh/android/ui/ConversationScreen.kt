@@ -574,6 +574,30 @@ private fun ConversationPage(
     LaunchedEffect(sessionId) { stateHolder.fileUploads.select(sessionId, !stateHolder.isViewingTeamMember) }
     val bottomContentHeight = remember { mutableStateOf(160.dp) }
     var imagePreview by remember(sessionId) { mutableStateOf<ConversationImagePreviewRequest?>(null) }
+    var galleryEntries by remember(sessionId) { mutableStateOf(emptyList<ConversationGalleryEntry>()) }
+    var galleryRequestedBefore by remember(sessionId) { mutableStateOf<Int?>(null) }
+    val gallerySource by remember(stateHolder) {
+        derivedStateOf { conversationGalleryEntries(stateHolder.snapshot.conversation) }
+    }
+    LaunchedEffect(imagePreview != null, if (imagePreview != null) gallerySource else emptyList()) {
+        val preview = imagePreview ?: return@LaunchedEffect
+        galleryEntries = mergeGalleryEntries(galleryEntries, gallerySource)
+        val attachments = (galleryEntries.map { it.attachment } + preview.attachments).distinctBy { it.attachmentId }
+        imagePreview = preview.copy(attachments = attachments)
+    }
+    LaunchedEffect(imagePreview != null, stateHolder.snapshot.selectedHistoryEarliestSequence,
+        stateHolder.snapshot.selectedHistoryIsLoadingOlder, stateHolder.snapshot.selectedHistoryIsLoading,
+        stateHolder.snapshot.selectedHistoryHasMore, stateHolder.historyPagingSessionIds,
+        stateHolder.snapshot.selectedHistoryError) {
+        if (imagePreview != null && stateHolder.snapshot.selectedHistoryHasMore &&
+            !stateHolder.snapshot.selectedHistoryIsLoading && !stateHolder.snapshot.selectedHistoryIsLoadingOlder &&
+            sessionId !in stateHolder.historyPagingSessionIds && stateHolder.snapshot.selectedHistoryError == null) {
+            val before = stateHolder.snapshot.selectedHistoryEarliestSequence
+            if (before != null && before != galleryRequestedBefore && stateHolder.loadOlderHistory()) {
+                galleryRequestedBefore = before
+            }
+        }
+    }
     var isPinnedToBottom by remember(sessionId) { mutableStateOf(true) }
     var scrollToBottomToken by remember(sessionId) { mutableIntStateOf(0) }
     val imeIsVisible = WindowInsets.isImeVisible
@@ -601,7 +625,11 @@ private fun ConversationPage(
                         onPinnedToBottomChanged = { isPinnedToBottom = it },
                         onUserInteraction = onDismissInput,
                         onPreviewImages = { attachments, initialIndex ->
-                            imagePreview = ConversationImagePreviewRequest(attachments, initialIndex)
+                            galleryRequestedBefore = null
+                            galleryEntries = mergeConversationGallery(emptyList(), stateHolder.snapshot.conversation)
+                            val all = (galleryEntries.map { it.attachment } + attachments).distinctBy { it.attachmentId }
+                            val selectedId = attachments.getOrNull(initialIndex)?.attachmentId
+                            imagePreview = ConversationImagePreviewRequest(all, all.indexOfFirst { it.attachmentId == selectedId }.coerceAtLeast(0))
                         }
                     )
                 }
@@ -757,7 +785,14 @@ private fun ConversationPage(
             request = request,
             thumbnails = stateHolder.attachmentThumbnails,
             loadOriginal = { attachment -> sessionId?.let { stateHolder.imageAttachmentData(it, attachment.attachmentId) } },
-            onDismiss = { imagePreview = null }
+            onVisibleImagesChanged = { ids -> stateHolder.updateGalleryAttachments(sessionId,
+                request.attachments.mapTo(mutableSetOf()) { it.attachmentId }, ids) },
+            onRetryImage = { stateHolder.retryAttachment(it.attachmentId) },
+            imageStates = stateHolder.attachmentStates,
+            historyLoading = stateHolder.snapshot.selectedHistoryIsLoadingOlder || sessionId in stateHolder.historyPagingSessionIds,
+            historyError = stateHolder.snapshot.selectedHistoryError != null,
+            onRetryHistory = { stateHolder.loadOlderHistory() },
+            onDismiss = { imagePreview = null; galleryEntries = emptyList() }
         )
     }
 }
@@ -1305,7 +1340,8 @@ private fun ConversationTimeline(
                                 item = entry.item,
                                 thumbnails = stateHolder.attachmentThumbnails,
                                 states = stateHolder.attachmentStates,
-                                onRetry = stateHolder::retryAttachment
+                                onRetry = stateHolder::retryAttachment,
+                                onPreviewImages = onPreviewImages
                             )
                             is ConversationTimelineEntry.AssistantMarkdown -> DshLazyMarkdownText(
                                 markdown = entry.markdown,
@@ -1798,7 +1834,8 @@ private fun Composer(
                                         leadingIcon = {
                                             Icon(painterResource(R.drawable.ic_photo_outline), null, Modifier.size(20.dp))
                                         },
-                                        enabled = "images" in stateHolder.gatewayState.capabilities && stateHolder.preparedImages.size < 20,
+                                        enabled = "images" in stateHolder.gatewayState.capabilities && !stateHolder.preparingImages &&
+                                            stateHolder.preparedImages.size < com.clarklevis.dsh.android.platform.AndroidImagePreprocessor.MAXIMUM_IMAGE_COUNT,
                                         onClick = { attachmentMenu = false; onPickImage() })
                                     DshMenuItem(text = { Text(appText("文件")) },
                                         leadingIcon = {
@@ -2872,7 +2909,7 @@ private fun ConversationRow(
         ConversationItemKind.GENERATED_IMAGES -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
             UserAttachmentPreview(item.images, thumbnails, attachmentStates, onRetryAttachment, onPreviewImages, stacked = false)
         }
-        ConversationItemKind.ASSISTANT -> AssistantMessage(item, thumbnails, attachmentStates, onRetryAttachment)
+        ConversationItemKind.ASSISTANT -> AssistantMessage(item, thumbnails, attachmentStates, onRetryAttachment, onPreviewImages)
         ConversationItemKind.STATUS -> StatusRow(item)
         ConversationItemKind.SYSTEM -> SystemRow(item)
         else -> Unit
@@ -3412,9 +3449,16 @@ internal fun ConversationImagePreviewDialog(
     request: ConversationImagePreviewRequest,
     thumbnails: Map<String, ImageBitmap>,
     onDismiss: () -> Unit,
-    loadOriginal: suspend (GatewayImageAttachment) -> ByteArray? = { null }
+    loadOriginal: suspend (GatewayImageAttachment) -> ByteArray? = { null },
+    onVisibleImagesChanged: (Set<String>) -> Unit = {},
+    onRetryImage: (GatewayImageAttachment) -> Unit = {},
+    imageStates: Map<String, AttachmentLoadState> = emptyMap(),
+    historyLoading: Boolean = false,
+    historyError: Boolean = false,
+    onRetryHistory: () -> Unit = {}
 ) {
     if (request.attachments.isEmpty()) return
+    val galleryAttachments by rememberUpdatedState(request.attachments)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
@@ -3444,11 +3488,27 @@ internal fun ConversationImagePreviewDialog(
         if (granted && attachment != null) save(attachment)
         else Toast.makeText(context, appText("请允许存储权限后重试"), Toast.LENGTH_LONG).show()
     }
-    var zoomedPages by remember { mutableStateOf(emptySet<Int>()) }
+    fun requestSave(attachment: GatewayImageAttachment) {
+        if (saving) return
+        if (Build.VERSION.SDK_INT <= 28 && ContextCompat.checkSelfPermission(context,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            permissionTarget = attachment
+            storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else save(attachment)
+    }
+    var zoomedPages by remember { mutableStateOf(emptySet<String>()) }
     val pagerState = rememberPagerState(
-        initialPage = imagePreviewInitialPage(request.attachments.size, request.initialIndex),
-        pageCount = request.attachments::size
+        initialPage = imagePreviewInitialPage(galleryAttachments.size, request.initialIndex),
+        pageCount = { galleryAttachments.size }
     )
+    val visibleImagesChanged by rememberUpdatedState(onVisibleImagesChanged)
+    LaunchedEffect(pagerState.currentPage, galleryAttachments) {
+        visibleImagesChanged(galleryAttachments.subList(
+            (pagerState.currentPage - 1).coerceAtLeast(0),
+            (pagerState.currentPage + 2).coerceAtMost(galleryAttachments.size)
+        ).mapTo(mutableSetOf()) { it.attachmentId })
+    }
+    DisposableEffect(Unit) { onDispose { visibleImagesChanged(emptySet()) } }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -3465,33 +3525,32 @@ internal fun ConversationImagePreviewDialog(
             ) {
                 HorizontalPager(
                     state = pagerState,
-                    userScrollEnabled = pagerState.currentPage !in zoomedPages,
-                    modifier = Modifier.fillMaxSize()
+                    userScrollEnabled = galleryAttachments[pagerState.currentPage].attachmentId !in zoomedPages,
+                    modifier = Modifier.fillMaxSize(),
+                    key = { galleryAttachments[it].attachmentId }
                 ) { page ->
-                    val attachment = request.attachments[page]
+                    val attachment = galleryAttachments[page]
                     ZoomablePreviewImage(
                         image = thumbnails[attachment.attachmentId],
                         contentDescription = attachment.name ?: appText("图片"),
+                        onRetry = if (imageStates[attachment.attachmentId] in setOf(AttachmentLoadState.FAILED, AttachmentLoadState.DEFERRED)) {
+                            { onRetryImage(attachment) }
+                        } else null,
                         isActive = pagerState.currentPage == page,
-                        onZoomChanged = { zoomed -> zoomedPages = if (zoomed) zoomedPages + page else zoomedPages - page },
+                        onZoomChanged = { zoomed -> zoomedPages = if (zoomed) zoomedPages + attachment.attachmentId else zoomedPages - attachment.attachmentId },
                         onLongPress = { position ->
                             saveTarget = attachment
                             saveMenuPosition = IntOffset(position.x.toInt(), position.y.toInt())
-                        }
+                        },
+                        onTap = onDismiss
                     )
                 }
                 DshPointMenu(point = saveMenuPosition, onDismiss = { saveMenuPosition = null; saveTarget = null }) {
                     DshMenuItem(text = { Text(appText("保存到相册")) }, enabled = !saving, onClick = {
                         val attachment = saveTarget
-                        saveTarget = null
                         saveMenuPosition = null
-                        if (attachment != null) {
-                            if (Build.VERSION.SDK_INT <= 28 && ContextCompat.checkSelfPermission(context,
-                                    Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                                permissionTarget = attachment
-                                storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                            } else save(attachment)
-                        }
+                        saveTarget = null
+                        if (attachment != null) requestSave(attachment)
                     })
                 }
                 Row(
@@ -3504,15 +3563,30 @@ internal fun ConversationImagePreviewDialog(
                     DshGlassButton(appText("关闭图片预览"), onDismiss, Modifier.size(38.dp)) {
                         Icon(painterResource(R.drawable.ic_close), null, Modifier.size(16.dp), tint = dshGlassForeground())
                     }
-                    Text(
-                        text = "${pagerState.currentPage + 1} / ${request.attachments.size}",
-                        modifier = Modifier.weight(1f),
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.size(38.dp))
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("${pagerState.currentPage + 1} / ${galleryAttachments.size}",
+                            color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        if (historyLoading) {
+                            Spacer(Modifier.width(8.dp))
+                            androidx.compose.material3.CircularProgressIndicator(
+                                Modifier.size(12.dp), strokeWidth = 1.5.dp, color = Color.White)
+                        } else if (historyError) {
+                            TextButton(onClick = onRetryHistory) { Text(appText("重试"), color = Color.White) }
+                        }
+                    }
+                    val currentAttachment = galleryAttachments[pagerState.currentPage]
+                    DshGlassButton(
+                        description = appText("下载图片"),
+                        onClick = { requestSave(currentAttachment) },
+                        enabled = !saving && thumbnails[currentAttachment.attachmentId] != null,
+                        modifier = Modifier.size(38.dp).testTag("conversation-image-download")
+                    ) {
+                        if (saving) androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = dshGlassForeground()
+                        ) else Icon(painterResource(R.drawable.ic_download_arrow), null,
+                            Modifier.size(20.dp), tint = dshGlassForeground())
+                    }
                 }
             }
         }
@@ -3537,11 +3611,14 @@ internal fun ZoomablePreviewImage(
     contentDescription: String,
     onLongPress: ((Offset) -> Unit)? = null,
     isActive: Boolean = true,
-    onZoomChanged: (Boolean) -> Unit = {}
+    onZoomChanged: (Boolean) -> Unit = {},
+    onRetry: (() -> Unit)? = null,
+    onTap: (() -> Unit)? = null
 ) {
     var scale by remember(image) { mutableFloatStateOf(1f) }
     var translation by remember(image) { mutableStateOf(Offset.Zero) }
     val currentLongPress by rememberUpdatedState(onLongPress)
+    val currentTap by rememberUpdatedState(onTap)
     val currentZoomChanged by rememberUpdatedState(onZoomChanged)
     LaunchedEffect(isActive, image) {
         scale = 1f
@@ -3555,6 +3632,7 @@ internal fun ZoomablePreviewImage(
             .clipToBounds()
             .pointerInput(image) {
                 detectTapGestures(
+                    onTap = { currentTap?.invoke() },
                     onLongPress = { currentLongPress?.invoke(it) },
                     onDoubleTap = { point ->
                         if (image != null) {
@@ -3613,6 +3691,8 @@ internal fun ZoomablePreviewImage(
                     },
                 contentScale = ContentScale.Fit
             )
+        } else if (onRetry != null) {
+            TextButton(onClick = onRetry) { Text(appText("加载失败 · 点击重试"), color = Color.White) }
         } else {
             Icon(
                 painter = painterResource(R.drawable.ic_photo_stack),
@@ -3629,10 +3709,11 @@ private fun AssistantMessage(
     item: ConversationItem,
     thumbnails: Map<String, ImageBitmap>,
     states: Map<String, AttachmentLoadState>,
-    onRetry: (String) -> Unit
+    onRetry: (String) -> Unit,
+    onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        AttachmentGrid(item.images, thumbnails, states, onRetry)
+        AttachmentGrid(item.images, thumbnails, states, onRetry, onPreviewImages)
         if (item.text.isNotEmpty()) {
             DshStreamingAwareMarkdownText(
                 markdown = item.text,
@@ -3649,13 +3730,14 @@ private fun AssistantMessageHeader(
     item: ConversationItem,
     thumbnails: Map<String, ImageBitmap>,
     states: Map<String, AttachmentLoadState>,
-    onRetry: (String) -> Unit
+    onRetry: (String) -> Unit,
+    onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit
 ) {
     Column(
         Modifier.fillMaxWidth().padding(top = 12.dp),
         verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        AttachmentGrid(item.images, thumbnails, states, onRetry)
+        AttachmentGrid(item.images, thumbnails, states, onRetry, onPreviewImages)
     }
 }
 
@@ -3699,16 +3781,17 @@ internal fun AttachmentGrid(
     attachments: List<GatewayImageAttachment>,
     thumbnails: Map<String, ImageBitmap>,
     states: Map<String, AttachmentLoadState>,
-    onRetry: (String) -> Unit
+    onRetry: (String) -> Unit,
+    onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit = { _, _ -> }
 ) {
     if (attachments.isEmpty()) return
     // 元数据先决定占位尺寸，缩略图和错误提示只填充区域，不参与行高计算。
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val columnWidth = if (attachments.size == 1) maxWidth else (maxWidth - 6.dp) / 2
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            attachments.chunked(2).forEach { row ->
+            attachments.chunked(2).forEachIndexed { rowIndex, row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    row.forEach { attachment ->
+                    row.forEachIndexed { columnIndex, attachment ->
                         val size = userSingleAttachmentPreviewSize(
                             attachment.width, attachment.height,
                             minOf(if (attachments.size == 1) 320.dp else 180.dp, columnWidth)
@@ -3716,7 +3799,8 @@ internal fun AttachmentGrid(
                         Box(Modifier.weight(1f), contentAlignment = Alignment.TopStart) {
                             UserAttachmentImage(
                                 attachment, thumbnails[attachment.attachmentId], states[attachment.attachmentId],
-                                onRetry, {}, Modifier.size(size.width, size.height), 12.dp, 0.dp
+                                onRetry, { onPreviewImages(attachments, rowIndex * 2 + columnIndex) },
+                                Modifier.size(size.width, size.height), 12.dp, 0.dp
                             )
                         }
                     }

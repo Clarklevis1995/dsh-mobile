@@ -1407,3 +1407,133 @@ final class GatewayHostRowHitTargetUITests: XCTestCase {
         }
     }
 }
+
+final class ConversationGalleryUITests: XCTestCase {
+    private func launch(prepend: Bool = false, largeFont: Bool = false) -> XCUIApplication {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_CONVERSATION_GALLERY_UI_TEST"] = "1"
+        if prepend { app.launchEnvironment["DSH_GALLERY_PREPEND"] = "1" }
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                "-appearance.fontScale", largeFont ? "1.5" : "1.0", "-appearance.fontFollowsSystem", "NO"]
+        app.launch()
+        if app.alerts.firstMatch.waitForExistence(timeout: 1) { app.alerts.firstMatch.buttons.firstMatch.tap() }
+        return app
+    }
+
+    private func count(_ text: String, in app: XCUIApplication) {
+        let count = app.staticTexts["conversation-gallery-count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 5))
+        let matches = NSPredicate(format: "label == %@", text)
+        expectation(for: matches, evaluatedWith: count)
+        waitForExpectations(timeout: 5)
+    }
+
+    func testEdgeToEdgePreviewGlassButtonsTapExitAndLongPressSave() {
+        let app = launch()
+        let open = app.buttons["查看图片"]
+        XCTAssertTrue(open.waitForExistence(timeout: 8)); open.tap()
+        count("1 / 3", in: app)
+        let image = app.images["attachment-preview-image"].firstMatch
+        XCTAssertTrue(image.waitForExistence(timeout: 5))
+        let window = app.windows.firstMatch.frame
+        XCTAssertEqual(image.frame.minX, window.minX, accuracy: 1, "预览图片不得添加左右 padding")
+        XCTAssertEqual(image.frame.maxX, window.maxX, accuracy: 1)
+        let close = app.buttons["image-gallery-close"]
+        let download = app.buttons["markdown-image-download"]
+        XCTAssertLessThan(close.frame.midX, window.midX)
+        XCTAssertGreaterThan(download.frame.midX, window.midX)
+        XCTAssertEqual(close.frame.midY, download.frame.midY, accuracy: 1)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "无边距直角预览与原生玻璃按钮"; shot.lifetime = .keepAlways; add(shot)
+        image.doubleTap()
+        XCTAssertTrue(close.exists, "双击缩放不能触发短按退出")
+        image.tap()
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        XCTAssertFalse(close.exists)
+        open.tap(); count("1 / 3", in: app)
+        app.swipeLeft(); count("2 / 3", in: app)
+        app.images["attachment-preview-image"].firstMatch.press(forDuration: 0.8)
+        let save = app.buttons["保存到相册"].firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 5), "长按应先弹出保存菜单")
+        XCTAssertFalse(app.alerts["保存图片"].exists, "尚未点击菜单时不能保存")
+        let menuShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        menuShot.name = "长按图片的保存菜单"; menuShot.lifetime = .keepAlways; add(menuShot)
+        save.tap()
+        let permission = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch
+        if permission.waitForExistence(timeout: 2) { permission.buttons.allElementsBoundByIndex.last?.tap() }
+        let result = app.alerts["保存图片"]
+        XCTAssertTrue(result.waitForExistence(timeout: 8), "点击保存菜单后应触发保存")
+        XCTAssertTrue(result.staticTexts["已保存到相册"].exists, "点击菜单后应实际保存成功")
+        XCTAssertTrue(close.exists, "长按保存不能触发短按退出")
+        result.buttons.firstMatch.tap()
+        close.tap()
+    }
+
+    func testMarkdownBodyImageOpensTheWholeConversationGallery() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_CONVERSATION_GALLERY_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_GALLERY_MARKDOWN"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        if app.alerts.firstMatch.waitForExistence(timeout: 1) { app.alerts.firstMatch.buttons.firstMatch.tap() }
+        let image = app.buttons["markdown-image-preview-button"].firstMatch
+        XCTAssertTrue(image.waitForExistence(timeout: 10))
+        image.tap()
+        count("2 / 3", in: app)
+        app.swipeRight(); count("1 / 3", in: app)
+        app.swipeLeft(); count("2 / 3", in: app)
+        app.swipeLeft(); count("3 / 3", in: app)
+        app.buttons["image-gallery-close"].tap()
+        XCTAssertTrue(image.waitForExistence(timeout: 5))
+    }
+
+    func testNativeUserImageOpensOtherMessagesAndSurvivesRotation() {
+        let app = launch()
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCTAssertTrue(app.buttons["查看图片"].waitForExistence(timeout: 8))
+        app.buttons["查看图片"].tap()
+        count("1 / 3", in: app)
+        app.swipeLeft(); count("2 / 3", in: app)
+        app.swipeLeft(); count("3 / 3", in: app)
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            XCUIDevice.shared.orientation = orientation
+            // iPhone 按项目策略固定竖屏；iPad 窗口方向独立于物理屏幕，不以设备方向推断窗口尺寸。
+            count("3 / 3", in: app)
+            let close = app.buttons["image-gallery-close"]
+            XCTAssertTrue(close.isHittable)
+            XCTAssertTrue(app.windows.firstMatch.frame.contains(close.frame), "关闭按钮必须位于旋转后的窗口边界内")
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            shot.name = "会话图片相册 \(orientation.rawValue)"; shot.lifetime = .keepAlways; add(shot)
+        }
+        app.buttons["image-gallery-close"].tap()
+        XCTAssertTrue(app.buttons["查看图片"].waitForExistence(timeout: 5))
+    }
+
+    func testAssistantImageOpensUserImageAtLargeFontSize() {
+        let app = launch(largeFont: true)
+        let image = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "image-3.png")).firstMatch
+        XCTAssertTrue(image.waitForExistence(timeout: 8)); image.tap()
+        count("2 / 3", in: app)
+        app.swipeRight(); count("1 / 3", in: app)
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "会话相册大字号"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["image-gallery-close"].tap()
+        XCTAssertTrue(image.waitForExistence(timeout: 5))
+    }
+
+    func testOlderImagesAreInsertedWithoutChangingSelectedImage() {
+        let app = launch(prepend: true)
+        let image = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "image-3.png")).firstMatch
+        XCTAssertTrue(image.waitForExistence(timeout: 8)); image.tap()
+        count("2 / 3", in: app)
+        count("3 / 4", in: app)
+        let current = app.images.matching(NSPredicate(format: "identifier == %@ AND label == %@", "attachment-preview-image", "image-3.png")).firstMatch
+        XCTAssertTrue(current.isHittable, "较早图片前插后仍显示原来点击的图片")
+        app.swipeRight(); count("2 / 4", in: app)
+        app.swipeRight(); count("1 / 4", in: app)
+        app.swipeLeft(); count("2 / 4", in: app)
+    }
+}
