@@ -1459,6 +1459,7 @@ internal object AndroidStrings {
         "重置" to "Reset",
         "重试" to "Retry",
         "重试模式" to "Retry mode",
+        "未记录模式" to "No recorded mode",
         "铺开问题脉络中" to "Mapping out the problem",
         "错误" to "Error",
         "错误：%1\$s" to "Error: %1\$s",

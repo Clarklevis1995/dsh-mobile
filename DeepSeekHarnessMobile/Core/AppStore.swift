@@ -4848,7 +4848,7 @@ final class AppStore: ObservableObject {
         if let existing = conversationProjectionDrivers[sessionId] {
             driver = existing
         } else {
-            driver = ConversationProjectionDriver { [weak self] in
+            driver = ConversationProjectionDriver(preferredFramesPerSecond: 30) { [weak self] in
                 guard let self else { return }
                 await self.projectIncrementally(for: sessionId)
             }
@@ -5087,6 +5087,19 @@ final class AppStore: ObservableObject {
                 domainLoading: kmpHistoryStore.isLoading(sessionID: sessionId), failure: batch.failed ? .failed : nil,
                 operationID: batch.operationID)
             return
+        }
+        // 先完成当前快照的解析再发布，后续 token 由 display link 合并为下一份快照。
+        // 不因新 token 取消正在解析的任务，否则长回复可能一直没有可提交的渲染结果。
+        let liveReplies = items.filter { $0.kind == .assistant && $0.title == L10n.streamingAssistantTitle }
+        if !liveReplies.isEmpty {
+            let epoch = conversationProjectionEpochs[sessionId, default: 0]
+            await Task.detached(priority: .userInitiated) {
+                for item in liveReplies {
+                    _ = PreparedMarkdownCache.document(for: item.text, filePaths: item.knownFiles.map(\.path))
+                }
+            }.value
+            guard !Task.isCancelled, !evictedConversationSessionIDs.contains(sessionId),
+                  conversationProjectionEpochs[sessionId, default: 0] == epoch else { return }
         }
         publishConversationItems(items, for: sessionId)
     }

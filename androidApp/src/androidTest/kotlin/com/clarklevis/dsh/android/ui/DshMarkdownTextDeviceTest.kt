@@ -7,6 +7,10 @@ import android.text.Spanned
 import android.text.style.ClickableSpan
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.clarklevis.dsh.shared.protocol.PresentedFile
@@ -533,6 +537,94 @@ class DshMarkdownTextDeviceTest {
         assertTrue(rendered.joinToString("\n").contains("背景与容器"))
         assertTrue(rendered.joinToString("\n").contains("文字与图标"))
         assertFalse(rendered.joinToString("\n").contains("|---|"))
+    }
+
+    @Test
+    fun streamingFormattedPrefixesRenderOnDevice() {
+        val prefixes = listOf(
+            "## 正在生成\n\n第一段包含 **加粗** 和 `inlineCode`。",
+            "## 正在生成\n\n第一段包含 **加粗** 和 `inlineCode`。\n\n```kotlin\nval message = \"你好\"\nprintln(message)",
+            "## 正在生成\n\n第一段包含 **加粗** 和 `inlineCode`。\n\n```kotlin\nval message = \"你好\"\nprintln(message)\n```\n\n| 平台 | 状态 |\n| --- | --- |\n| iOS | 生成中 |"
+        )
+        val source = mutableStateOf(prefixes.first())
+        var rootView: View? = null
+        compose.setContent {
+            rootView = LocalView.current
+            DshTheme {
+                androidx.compose.foundation.layout.Column(
+                    Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.background)
+                        .verticalScroll(rememberScrollState()).padding(20.dp)
+                ) { DshLazyMarkdownText(source.value) }
+            }
+        }
+        prefixes.forEachIndexed { index, prefix ->
+            compose.runOnIdle { source.value = prefix }
+            compose.waitForIdle()
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            // 小文档解析完成后检查原生 TextView，生成中不能暴露标题和加粗语法。
+            compose.runOnIdle {
+                val text = requireNotNull(rootView?.findMarkdownTextView()).text.toString()
+                assertTrue(text.contains("正在生成"))
+                assertFalse(text.contains("## 正在生成"))
+                assertFalse(text.contains("**加粗**"))
+            }
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val screenshot = instrumentation.uiAutomation.takeScreenshot()
+            val file = java.io.File(instrumentation.targetContext.cacheDir, "stream-prefix-$index.png")
+            file.outputStream().use { screenshot.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            screenshot.recycle()
+        }
+    }
+
+    @Test
+    fun continuousMarkdownUpdatesMakeProgressBeforeGenerationFinishes() {
+        val source = mutableStateOf("## 正在生成\n\n**起始内容**")
+        var rootView: View? = null
+        val observed = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val finished = java.util.concurrent.atomic.AtomicBoolean(false)
+        compose.setContent {
+            rootView = LocalView.current
+            DshTheme { DshLazyMarkdownText(source.value) }
+        }
+        compose.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        // 生产者独立于 Compose 的 idle 等待持续输入，覆盖解析任务与 token 到达交错的情况。
+        val producer = Thread {
+            try {
+                repeat(60) { index ->
+                    instrumentation.runOnMainSync {
+                        source.value = "## 正在生成\n\n**起始内容** " +
+                            "正文包含 `inlineCode` 与继续生成的内容。".repeat(100 + index) + " 进度$index"
+                        rootView?.findMarkdownTextView()?.text?.toString()?.let(observed::add)
+                    }
+                    Thread.sleep(16)
+                }
+                instrumentation.runOnMainSync {
+                    source.value += "\n\n**最终结束标记**"
+                }
+            } finally {
+                finished.set(true)
+            }
+        }
+        producer.start()
+        compose.waitUntil(15_000) { finished.get() }
+        producer.join(1_000)
+        compose.waitUntil(15_000) {
+            var complete = false
+            instrumentation.runOnMainSync {
+                complete = rootView?.findMarkdownTextView()?.text?.contains("最终结束标记") == true
+            }
+            complete
+        }
+        assertTrue("生成结束之前必须展示至少一份中间富文本", observed.any { it.contains("进度") })
+        assertTrue("已经渲染的部分不能回退成 Markdown 源码", observed.all { !it.contains("**起始内容**") })
+        compose.runOnIdle {
+            val text = requireNotNull(rootView?.findMarkdownTextView()).text.toString()
+            assertTrue(text.contains("进度59"))
+            assertTrue(text.contains("最终结束标记"))
+            assertFalse(text.contains("## 正在生成"))
+            assertFalse(text.contains("**最终结束标记**"))
+        }
     }
 
     @Test

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+from unittest.mock import patch
 import plistlib
 import tempfile
 import unittest
@@ -124,6 +126,63 @@ class InfoPlistTests(unittest.TestCase):
         errors.clear()
         verify.check_info_plist({"NSCameraUsageDescription"}, errors)
         self.assertEqual(errors, [])
+
+
+class TranslationScopeTests(unittest.TestCase):
+    def test_catalog_checks_chinese_and_ids_but_not_numeric_formats(self) -> None:
+        strings = {
+            "+%@": {}, "−%@": {}, "+%@  −%@": {"localizations": {"zh-Hans": {"stringUnit": {"state": "new", "value": ""}}}},
+            "1 / 3": {}, "100%": {}, "Hello": {},
+            "%@ 个文件": {}, "voice.hint": {},
+            "Count %@": {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "%@ 个文件"}}}},
+            "第 %@ 行": {"localizations": {"en": {"stringUnit": {"state": "translated", "value": "Line %d"}}}},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Localizable.xcstrings").write_text(json.dumps({"strings": strings}))
+            with patch.object(verify, "IOS_RESOURCES", root):
+                errors: list[str] = []
+                keys = verify.check_catalog("Localizable", errors)
+        self.assertEqual(keys, set(strings))
+        self.assertEqual(len(errors), 5)
+        self.assertTrue(any("%@ 个文件" in e for e in errors))
+        self.assertTrue(any("voice.hint" in e and "英文" in e for e in errors))
+        self.assertTrue(any("voice.hint" in e and "中文" in e for e in errors))
+        self.assertTrue(any("Count %@" in e for e in errors))
+        self.assertTrue(any("格式参数不一致" in e for e in errors))
+
+    def test_swift_calls_only_require_chinese_text_or_semantic_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Sample.swift").write_text('Text("+%@"); Text("Hello"); Text("%@ 个文件"); Text("voice.hint")')
+            with patch.object(verify, "ROOT", root), patch.object(verify, "IOS_SOURCES", root):
+                errors: list[str] = []
+                verify.check_swift_calls(set(), errors)
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(any("%@ 个文件" in e for e in errors))
+        self.assertTrue(any("voice.hint" in e for e in errors))
+
+    def test_android_numeric_resource_needs_no_english_but_chinese_does(self) -> None:
+        with patch.object(verify, "android_strings", side_effect=[
+            {"delta": "+%s", "files": "%s 个文件"}, {}
+        ]):
+            errors: list[str] = []
+            verify.check_android(errors)
+        self.assertEqual(errors, ["Android: 'files' 缺少中文或英文译文"])
+
+    def test_android_calls_and_catalog_follow_same_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalog = root / "com/clarklevis/dsh/android/localization/AndroidStrings.kt"
+            catalog.parent.mkdir(parents=True)
+            catalog.write_text('internal val chinese: Map = mapOf()\ninternal val english: Map = mapOf("+%s" to "")')
+            (root / "Sample.kt").write_text('appText("+%d"); appText("Hello"); appText("模型"); appText("voice.hint")')
+            with patch.object(verify, "ROOT", root), patch.object(verify, "ANDROID_SOURCES", root):
+                errors: list[str] = []
+                verify.check_android_ui(errors)
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(any("模型" in e for e in errors))
+        self.assertTrue(any("voice.hint" in e for e in errors))
 
 
 if __name__ == "__main__":

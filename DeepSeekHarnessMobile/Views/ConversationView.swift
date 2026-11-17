@@ -2237,7 +2237,8 @@ struct ConversationView: View {
                         .frame(width: 16, height: 16)
                         .accessibilityHidden(true)
                     Text(state.saving ? String(localized: "切换中…") : current?.name ?? state.agentPreset.map(agentPresetTitle)
-                         ?? (state.loading ? String(localized: "读取模式…") : String(localized: "重试模式")))
+                         ?? (state.loading ? String(localized: "读取模式…")
+                             : state.known ? String(localized: "未记录模式") : String(localized: "重试模式")))
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Image(systemName: "chevron.down")
@@ -2591,18 +2592,6 @@ struct ConversationView: View {
         var entries = ConversationDisplayEntry.make(from: items).flatMap { entry in
             let revision = viewportEntryRevision(entry)
             if case .message(let item) = entry.content,
-               item.kind == .assistant,
-               item.images.isEmpty,
-               item.files.isEmpty,
-               item.knownFiles.isEmpty,
-               item.title == L10n.streamingAssistantTitle {
-                return [ConversationViewportEntry(
-                    id: entry.id,
-                    revision: revision,
-                    streamingAssistant: .init(title: item.title, text: item.text)
-                )]
-            }
-            if case .message(let item) = entry.content,
                item.kind == .user,
                item.textParts?.contains(where: { $0.type == "quote" }) != true {
                 return [ConversationViewportEntry(
@@ -2620,11 +2609,10 @@ struct ConversationView: View {
                     id: entry.id,
                     revision: revision,
                     content: AnyView(messageRow(item, showsCopyButton: entry.showsCopyButton, sessionID: sessionID)),
-                    // Completed responses are immutable for this revision.
-                    // The viewport measures their SwiftUI root directly before
-                    // caching, including fenced-code horizontal scroll views.
+                    // 生成中与完成态共用 MarkdownUI；高度按正文版本更新，根视图身份保持稳定。
                     clipsContentToBounds: !markdownContainsAppLinkCards(item.text),
-                    layoutRevision: viewportEntryRevision(entry, includesImageState: false)
+                    layoutRevision: viewportEntryRevision(entry, includesImageState: false),
+                    preservesContentIdentity: item.kind == .assistant
                 )]
             case .timeSeparator(let date):
                 return [ConversationViewportEntry(

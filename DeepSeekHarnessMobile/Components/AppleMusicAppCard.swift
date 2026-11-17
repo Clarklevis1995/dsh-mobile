@@ -57,18 +57,19 @@ struct AppleMusicCardDestination: Equatable {
 struct AppleMusicAppCard: View {
     let destination: AppleMusicCardDestination
     @State private var failure: AppleMusicCardPlayback.Failure?
-    @State private var opening = false
-    @State private var openTask: Task<Void, Never>?
+    @State private var startingPlayback = false
+    @State private var playbackTask: Task<Void, Never>?
 
     var body: some View {
         AppLinkCard(icon: "ConnectorMusic", name: destination.name,
-                    subtitle: AppleMusicLink.songID(destination.url) == nil ? String(localized: "在 Apple Music 中打开") : String(localized: "在 Apple Music 中播放"),
+                    subtitle: AppleMusicLink.songID(destination.url) == nil ? "Apple Music" : String(localized: "在 Apple Music 中播放"),
                     artworkURL: destination.artworkURL, detail: destination.artist, secondaryDetail: destination.secondaryDetail,
-                    imageSize: 56, contentPadding: 12, textSpacing: 3, titleLineLimit: 1, surfaceStrength: 0.6, busy: opening) {
-            guard !opening else { return }
-            opening = true
-            openTask = Task { @MainActor in
-                defer { opening = false; openTask = nil }
+                    imageSize: 56, contentPadding: 12, textSpacing: 3, titleLineLimit: 1, surfaceStrength: 0.6,
+                    actionSymbol: "play.fill", busy: startingPlayback) {
+            guard !startingPlayback else { return }
+            startingPlayback = true
+            playbackTask = Task { @MainActor in
+                defer { startingPlayback = false; playbackTask = nil }
                 do { try await AppleMusicCardPlayback.activate(destination.url) }
                 catch is CancellationError { }
                 catch { failure = (error as? AppleMusicCardPlayback.Failure) ?? .playbackFailed }
@@ -79,7 +80,7 @@ struct AppleMusicAppCard: View {
         .padding(.horizontal, 8).padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("apple-music-app-card")
-        .onDisappear { openTask?.cancel() }
+        .onDisappear { playbackTask?.cancel() }
         .alert("Apple Music", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
             Button("好", role: .cancel) { }
         } message: {
@@ -90,8 +91,9 @@ struct AppleMusicAppCard: View {
         switch failure {
         case .permissionDenied: String(localized: "请允许访问 Apple Music 后再播放。")
         case .playbackFailed: String(localized: "未能播放所选歌曲，请检查 Apple Music 订阅、网络和歌曲可用性。")
-        case .busy: String(localized: "正在打开另一首歌曲，请稍后重试。")
-        default: String(localized: "请确认已安装 Apple Music，并允许其打开音乐链接。")
+        case .busy: String(localized: "正在播放另一首歌曲，请稍后重试。")
+        case .unsupportedContent: String(localized: "请选择具体歌曲进行播放。")
+        default: String(localized: "未能播放所选歌曲，请检查 Apple Music 订阅、网络和歌曲可用性。")
         }
     }
 }
@@ -109,6 +111,7 @@ struct AppLinkCard: View {
     var textSpacing: CGFloat = 5
     var titleLineLimit = 2
     var surfaceStrength: Double = 1
+    var actionSymbol = "arrow.up.right"
     var busy = false
     let open: () -> Void
 
@@ -137,7 +140,7 @@ struct AppLinkCard: View {
                 }
                 Spacer(minLength: 4)
                 if busy { ProgressView().controlSize(.small).frame(width: 18) }
-                else { Image(systemName: "arrow.up.right").font(.body.weight(.medium)).foregroundStyle(.secondary) }
+                else { Image(systemName: actionSymbol).font(.body.weight(.medium)).foregroundStyle(.secondary) }
             }
             .padding(contentPadding).frame(maxWidth: .infinity, alignment: .leading)
             .modifier(AppLinkCardSurface(strength: surfaceStrength))

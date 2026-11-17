@@ -163,10 +163,13 @@ class SharedSessionAgentPresetStore {
                 queryId = null
                 if (frame.locked == true) lockedSessions.add(id)
                 val previousPreset = state.agentPreset
+                // Host 允许空预设；成功查询的锁定状态与预设是否有记录相互独立。
+                // iOS Codable 桥接可能省略 null 字段，因此 null 和省略均按未记录处理。
+                val known = frame.locked != null && (frame.agentPreset == null || frame.agentPreset.isNotBlank())
                 state = state.copy(
-                    agentPreset = if (queryRevision == presetRevision) frame.agentPreset ?: state.agentPreset else state.agentPreset,
+                    agentPreset = if (known && queryRevision == presetRevision) frame.agentPreset else state.agentPreset,
                     locked = id in lockedSessions,
-                    known = frame.locked != null && !frame.agentPreset.isNullOrBlank(),
+                    known = known,
                     loading = false, submitting = false
                 )
                 return result(refreshCommands = previousPreset != state.agentPreset)

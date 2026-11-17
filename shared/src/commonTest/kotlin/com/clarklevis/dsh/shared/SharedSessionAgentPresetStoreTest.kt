@@ -17,6 +17,71 @@ class SharedSessionAgentPresetStoreTest {
         return store
     }
 
+    @Test fun legacyNullPresetAllowsContinuationAndStaysLockedAfterReconnect() {
+        val store = SharedSessionAgentPresetStore()
+        val query = store.open("legacy", true, true).requests.first()
+        assertTrue(store.snapshot().blocksSending)
+        store.acceptJson("""{"kind":"session-agent-preset","sessionId":"legacy","requestId":"${query.correlationId}","agentPreset":null,"locked":true}""")
+        assertTrue(store.snapshot().known)
+        assertEquals(null, store.snapshot().agentPreset)
+        assertTrue(store.snapshot().locked)
+        assertFalse(store.snapshot().blocksSending)
+        assertFalse(store.snapshot().visible)
+        assertTrue(store.select("standard").requests.isEmpty())
+        store.disconnected()
+        store.leave()
+        val reopened = store.open("legacy", true, true).requests.first()
+        // Swift JSONEncoder 在桥接 DTO 时省略 nil，不影响成功状态。
+        store.acceptJson("""{"kind":"session-agent-preset","sessionId":"legacy","requestId":"${reopened.correlationId}","locked":true}""")
+        assertTrue(store.snapshot().known)
+        assertTrue(store.snapshot().locked)
+        assertFalse(store.snapshot().blocksSending)
+    }
+
+    @Test fun confirmedNullClearsStalePresetAndBlankSessionCanSelectOrSend() {
+        val store = ready()
+        val query = store.query().requests.single()
+        val result = store.accept(GatewayFrame(kind = "session-agent-preset", sessionId = "s1", requestId = query.correlationId, agentPreset = null, locked = false))
+        assertTrue(result.refreshCommands)
+        assertEquals(null, store.snapshot().agentPreset)
+        assertTrue(store.snapshot().known)
+        assertTrue(store.snapshot().canSelect)
+        assertFalse(store.snapshot().blocksSending)
+        val selection = store.select("minimal").requests.single()
+        assertEquals("select-agent-preset", selection.requestType)
+        assertTrue(store.snapshot().blocksSending)
+        store.accept(GatewayFrame(kind = "select-agent-preset", sessionId = "s1", requestId = selection.correlationId, agentPreset = "minimal"))
+        assertEquals("minimal", store.snapshot().agentPreset)
+        assertFalse(store.snapshot().blocksSending)
+        store.beginMessage()
+        assertTrue(store.snapshot().submitting)
+    }
+
+    @Test fun nullPresetFailureAndMissingLockStillBlockSending() {
+        for (failure in listOf("error", "timeout", "missing-lock", "blank-preset")) {
+            val store = SharedSessionAgentPresetStore()
+            val query = store.open("legacy", true, true).requests.first()
+            when (failure) {
+                "error" -> store.accept(GatewayFrame(kind = "error", sessionId = "legacy", requestId = query.correlationId, requestType = "session-agent-preset", code = "agent-preset/unavailable"))
+                "timeout" -> store.requestFailed("session-agent-preset", "legacy", query.correlationId, null)
+                "missing-lock" -> store.accept(GatewayFrame(kind = "session-agent-preset", sessionId = "legacy", requestId = query.correlationId, agentPreset = null))
+                else -> store.accept(GatewayFrame(kind = "session-agent-preset", sessionId = "legacy", requestId = query.correlationId, agentPreset = " ", locked = false))
+            }
+            assertFalse(store.snapshot().known, failure)
+            assertTrue(store.snapshot().blocksSending, failure)
+            assertFalse(store.snapshot().canSelect, failure)
+        }
+    }
+
+    @Test fun lateNullResponseCannotOverwriteNewerSelectionNotification() {
+        val store = ready()
+        val query = store.query().requests.single()
+        store.acceptJson("""{"kind":"session-agent-preset-updated","sessionId":"s1","agentPreset":"minimal","seq":22}""")
+        store.accept(GatewayFrame(kind = "session-agent-preset", sessionId = "s1", requestId = query.correlationId, agentPreset = null, locked = false))
+        assertEquals("minimal", store.snapshot().agentPreset)
+        assertTrue(store.snapshot().known)
+    }
+
     @Test fun repeatedSwitchesKeepSessionAndWaitForAcknowledgement() {
         val store = ready()
         for (preset in listOf("minimal", "standard")) {

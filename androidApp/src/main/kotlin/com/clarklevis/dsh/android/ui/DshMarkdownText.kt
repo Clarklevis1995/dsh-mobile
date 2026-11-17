@@ -25,6 +25,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,6 +60,7 @@ import io.noties.markwon.movement.MovementMethodPlugin
 import java.util.concurrent.Executors
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.conflate
 import org.commonmark.node.Code
 import org.commonmark.node.ThematicBreak
 import org.commonmark.parser.Parser
@@ -284,12 +287,16 @@ internal fun DshLazyMarkdownText(
             )
         )
     }
-    LaunchedEffect(context, markdown, palette) {
-        if (presented.source != markdown) {
-            presented = PresentedMarkdown(
-                source = markdown,
-                rendered = DshAsyncMarkdownRenderer.render(context, markdown, palette)
-            )
+    val latestMarkdown by rememberUpdatedState(markdown)
+    LaunchedEffect(context, palette) {
+        // 当前解析一定完成；积压片段只保留最新正文，避免连续 token 反复取消解析而饿死展示。
+        snapshotFlow { latestMarkdown }.conflate().collect { source ->
+            if (presented.source != source) {
+                presented = PresentedMarkdown(
+                    source = source,
+                    rendered = DshAsyncMarkdownRenderer.render(context, source, palette)
+                )
+            }
         }
     }
 
@@ -500,8 +507,7 @@ private fun markdownTextSegment(rendered: Spanned, start: Int, end: Int): Spanne
 }
 
 /**
- * 流式阶段不反复解析整篇 Markdown。最终 assistant/message 到达后 ID 会切换为
- * 持久化事件 ID，再一次性使用 Markwon 渲染完整正文。
+ * 兼容调用入口；生成中与完成态共用富文本渲染，更新期间保留上一份已完成的结果。
  */
 @Composable
 @Suppress("UNUSED_PARAMETER")

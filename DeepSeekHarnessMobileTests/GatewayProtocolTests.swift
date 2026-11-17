@@ -10793,6 +10793,169 @@ private final class AgentLongRunningKeepAliveSpy: AgentLongRunningKeepAlive {
     func prepareForTermination() {}
 }
 
+/// 在真实 MarkdownUI 与会话视口中逐段提交正文，覆盖未闭合语法和完成事件。
+@MainActor
+final class ConversationStreamingMarkdownTests: XCTestCase {
+    private let prefixes = [
+        "## 正在生成\n\n第一段包含 **加粗** 和 `inlineCode`。",
+        "## 正在生成\n\n第一段包含 **加粗** 和 `inlineCode`。\n\n```kotlin\nval message = \"你好\"\nprintln(message)",
+        "## 正在生成\n\n第一段包含 **加粗** 和 `inlineCode`。\n\n```kotlin\nval message = \"你好\"\nprintln(message)\n```\n\n| 平台 | 状态 |\n| --- | --- |\n| iOS | 生成中 |",
+        "## 正在生成\n\n第一段包含 **加粗** 和 `inlineCode`。\n\n```kotlin\nval message = \"你好\"\nprintln(message)\n```\n\n| 平台 | 状态 |\n| --- | --- |\n| iOS | 完成 |\n| Android | 完成 |\n\n- 已完成第一项\n- 已完成第二项\n\n公式 $x^2 + y^2$。\n\n结束标记。"
+    ]
+
+    func testNativeMarkdownBaseline() async throws {
+        let host = UIHostingController(rootView: DeepSeekHarnessMobile.MarkdownContent(prefixes.last!)
+            .padding(20))
+        let window = try makeWindow(width: 390, height: 844)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        try await Task.sleep(for: .milliseconds(150))
+        host.view.layoutIfNeeded()
+        capture(window, name: "原生 Markdown 基准")
+    }
+
+    func testFormattedPrefixesKeepHostAndMatchFinalHeight() async throws {
+        try await verify(width: 390, height: 844, scale: 1, capturePrefixes: true)
+    }
+
+    func testGrowingCodeFenceKeepsHorizontalScrollPosition() async throws {
+        let source = "```kotlin\nval message = \"" + String(repeating: "这是很长的代码", count: 20) + "\""
+        func root(_ text: String) -> AnyView {
+            AnyView(DeepSeekHarnessMobile.MarkdownContent(text).padding(20))
+        }
+        let host = UIHostingController(rootView: root(source))
+        let window = try makeWindow(width: 390, height: 844)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        try await Task.sleep(for: .milliseconds(200))
+        host.view.layoutIfNeeded()
+        func codeScrollView() -> UIScrollView? {
+            descendants(host.view).compactMap { $0 as? UIScrollView }
+                .first { $0.contentSize.width > $0.bounds.width + 40 }
+        }
+        let scroll = try XCTUnwrap(codeScrollView())
+        scroll.setContentOffset(CGPoint(x: 40, y: 0), animated: false)
+        try await Task.sleep(for: .milliseconds(100))
+        host.rootView = root(source + "\nprintln(message)\n```\n\n继续生成下一段。")
+        try await Task.sleep(for: .milliseconds(200))
+        host.view.layoutIfNeeded()
+        let updated = try XCTUnwrap(codeScrollView())
+        XCTAssertTrue(updated === scroll, "追加代码和闭合围栏不能重建原生横向滚动视图")
+        XCTAssertEqual(updated.contentOffset.x, 40, accuracy: 1)
+    }
+
+    func testPhoneTabletLandscapeAndLargeText() async throws {
+        for (width, height, scale) in [(390.0, 844.0, 1.6), (760, 360, 1),
+                                       (820, 1100, 1), (1100, 780, 1), (540, 780, 1.6)] {
+            try await verify(width: width, height: height, scale: scale)
+        }
+    }
+
+    func testLongReplyBuffersDuringUserScrollAndResumesWithLatestMarkdown() async throws {
+        let paragraphs = String(repeating: "\n\n这一段持续生成 **加粗内容**，用于检查长回复、换行与阅读位置。", count: 100)
+        try await verify(width: 390, height: 844, scale: 1,
+            sources: [prefixes[0], prefixes[1], prefixes[2] + paragraphs, prefixes[3] + paragraphs + "\n\n长回复结束。"],
+            simulateScroll: true)
+    }
+
+    private func verify(width: CGFloat, height: CGFloat, scale: Double, capturePrefixes: Bool = false,
+                        sources: [String]? = nil, simulateScroll: Bool = false) async throws {
+        let sources = sources ?? prefixes
+        let defaults = UserDefaults.standard
+        let oldScale = defaults.object(forKey: AppFontScale.key)
+        let oldFollowsSystem = defaults.object(forKey: AppFontScale.followsSystemKey)
+        defaults.set(scale, forKey: AppFontScale.key)
+        defaults.set(false, forKey: AppFontScale.followsSystemKey)
+        defer {
+            if let oldScale { defaults.set(oldScale, forKey: AppFontScale.key) }
+            else { defaults.removeObject(forKey: AppFontScale.key) }
+            if let oldFollowsSystem { defaults.set(oldFollowsSystem, forKey: AppFontScale.followsSystemKey) }
+            else { defaults.removeObject(forKey: AppFontScale.followsSystemKey) }
+        }
+        let timeline = ConversationTimeline()
+        let controller = ConversationViewportController(onContentAvailabilityChanged: { _, _ in },
+            onPinnedToBottomChanged: { _ in }, onBottomAlignmentCompleted: {}, onApproachingTop: {})
+        let window = try makeWindow(width: width, height: height)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        controller.view.layoutIfNeeded()
+        controller.configure(sessionID: "rich-stream", timeline: timeline, supplementalEntries: [], makeEntries: { items in
+            items.map { item in
+                ConversationViewportEntry(id: item.id, revision: item.text.hashValue ^ item.title.hashValue,
+                    content: AnyView(ConversationRow(item: item, showsCopyButton: item.title == "完成", imageData: { _ in nil })),
+                    preservesContentIdentity: true)
+            } + [ConversationViewportEntry(id: "following-row", revision: 1, content: AnyView(Text("下一行")))]
+        }, bottomInset: 0)
+        let list = try XCTUnwrap(descendants(controller.view).compactMap { $0 as? UICollectionView }.first)
+        var hostIdentity: ObjectIdentifier?
+        for (index, source) in sources.enumerated() {
+            // 同步骤模拟 assistant/chunk；不发送最终事件，格式必须已经可见。
+            let html = PreparedMarkdownCache.document(for: source, filePaths: []).renderHTML()
+            XCTAssertTrue(html.contains("<h2>"))
+            XCTAssertTrue(html.contains("<strong>加粗</strong>"))
+            if index > 0 { XCTAssertTrue(html.contains("language-kotlin")) }
+            if index > 1 { XCTAssertTrue(html.contains("<table>")) }
+            let pausesForScroll = simulateScroll && index == 2
+            let previousHeight = list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame.height
+            if pausesForScroll { controller.scrollViewWillBeginDragging(list) }
+            timeline.publish([ConversationItem(id: "stream-rich", kind: .assistant,
+                title: L10n.streamingAssistantTitle, text: source, isError: false, date: .distantPast)])
+            try await Task.sleep(for: .milliseconds(180))
+            if pausesForScroll {
+                XCTAssertEqual(list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame.height,
+                    previousHeight, "阅读手势期间不能改动正在阅读的布局")
+                controller.scrollViewDidEndDragging(list, willDecelerate: false)
+                try await Task.sleep(for: .milliseconds(500))
+            }
+            controller.view.layoutIfNeeded()
+            let cell = try XCTUnwrap(list.cellForItem(at: IndexPath(item: 0, section: 0)) as? HostedConversationCell)
+            let identity = try XCTUnwrap(cell.warmHostIdentityForTesting)
+            if let hostIdentity { XCTAssertEqual(identity, hostIdentity, "连续片段必须保留同一个原生 host") }
+            hostIdentity = identity
+            let first = try XCTUnwrap(list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))).frame
+            let next = try XCTUnwrap(list.layoutAttributesForItem(at: IndexPath(item: 1, section: 0))).frame
+            XCTAssertGreaterThan(first.height, 30)
+            XCTAssertEqual(first.maxY, next.minY, accuracy: 1, "正文和下一行不能重叠或出现空洞")
+            if capturePrefixes { capture(window, name: "流式片段-\(index)") }
+        }
+        let before = try XCTUnwrap(list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))).frame.height
+        timeline.publish([ConversationItem(id: "stream-rich", kind: .assistant, title: "完成",
+            text: sources.last!, isError: false, date: .distantPast)])
+        try await Task.sleep(for: .milliseconds(180))
+        controller.view.layoutIfNeeded()
+        let final = try XCTUnwrap(list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))).frame
+        XCTAssertGreaterThanOrEqual(final.height, before)
+        XCTAssertLessThan(final.height - before, 100, "完成事件只应增加操作栏，不能整篇重新排版")
+        capture(window, name: "完成-\(Int(width))x\(Int(height))-字号\(scale)")
+    }
+
+    private func descendants(_ view: UIView) -> [UIView] {
+        view.subviews.flatMap { [$0] + descendants($0) }
+    }
+
+    private func makeWindow(width: CGFloat, height: CGFloat) throws -> UIWindow {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        window.backgroundColor = .systemBackground
+        return window
+    }
+
+    private func capture(_ window: UIWindow, name: String) {
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            XCTAssertTrue(window.drawHierarchy(in: window.bounds, afterScreenUpdates: true))
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
 /// Regression coverage for a launch-time crash on a physical device.
 ///
 /// A completed assistant message is premeasured by hosting the real view
@@ -18608,43 +18771,39 @@ final class AppleMusicAppCardTests: XCTestCase {
         }
     }
 
-    func testCardReplacesPreviouslyPlayingSongBeforeOpeningMusic() async throws {
+    func testCardReplacesPreviouslyPlayingSongWithoutOpeningMusic() async throws {
         let url = try XCTUnwrap(URL(string: "https://music.apple.com/album/test/123?i=456"))
         var events: [String] = []
         var selectedSong = "previous-song"
         try await AppleMusicCardPlayback.activate(url, authorize: { events.append("authorize"); return true }, play: { id in
             selectedSong = id; events.append("play-\(id)")
-        }, open: { target in
-            XCTAssertEqual(selectedSong, "456")
-            XCTAssertEqual(target, url)
-            events.append("open"); return true
         })
-        XCTAssertEqual(events, ["authorize", "play-456", "open"])
+        XCTAssertEqual(selectedSong, "456")
+        XCTAssertEqual(events, ["authorize", "play-456"])
     }
 
-    func testPlaybackFailuresAndDeniedPermissionNeverBecomeJustAnOpen() async throws {
+    func testPlaybackFailuresAndDeniedPermissionAreReported() async throws {
         let url = try XCTUnwrap(URL(string: "https://music.apple.com/song/123"))
         do {
-            try await AppleMusicCardPlayback.activate(url, authorize: { false }, play: { _ in XCTFail() }, open: { _ in XCTFail(); return true })
+            try await AppleMusicCardPlayback.activate(url, authorize: { false }, play: { _ in XCTFail() })
             XCTFail()
         } catch { XCTAssertEqual(error as? AppleMusicCardPlayback.Failure, .permissionDenied) }
         do {
-            try await AppleMusicCardPlayback.activate(url, authorize: { true }, play: { _ in throw NSError(domain: "test", code: 1) }, open: { _ in XCTFail(); return true })
+            try await AppleMusicCardPlayback.activate(url, authorize: { true }, play: { _ in throw NSError(domain: "test", code: 1) })
             XCTFail()
         } catch { XCTAssertEqual(error as? AppleMusicCardPlayback.Failure, .playbackFailed) }
-        do {
-            try await AppleMusicCardPlayback.activate(url, authorize: { true }, play: { _ in }, open: { _ in false })
-            XCTFail()
-        } catch { XCTAssertEqual(error as? AppleMusicCardPlayback.Failure, .openFailed) }
     }
 
-    func testNonSongCardsOpenWithoutInventingATrackAndCancelledClicksDoNotPlay() async throws {
+    func testNonSongCardsDoNotNavigateOrInventATrackAndCancelledClicksDoNotPlay() async throws {
         let album = try XCTUnwrap(URL(string: "https://music.apple.com/album/test/123"))
-        try await AppleMusicCardPlayback.activate(album, authorize: { XCTFail(); return false }, play: { _ in XCTFail() }, open: { $0 == album })
+        do {
+            try await AppleMusicCardPlayback.activate(album, authorize: { XCTFail(); return false }, play: { _ in XCTFail() })
+            XCTFail()
+        } catch { XCTAssertEqual(error as? AppleMusicCardPlayback.Failure, .unsupportedContent) }
         let task = Task {
             try await AppleMusicCardPlayback.activate(try XCTUnwrap(URL(string: "https://music.apple.com/song/123")), authorize: {
                 withUnsafeCurrentTask { $0?.cancel() }; return true
-            }, play: { _ in XCTFail() }, open: { _ in XCTFail(); return true })
+            }, play: { _ in XCTFail() })
         }
         do { try await task.value; XCTFail() } catch is CancellationError {} catch { XCTFail() }
     }

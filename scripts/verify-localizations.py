@@ -51,12 +51,19 @@ def value(entry: dict, language: str) -> str | None:
     return entry.get("localizations", {}).get(language, {}).get("stringUnit", {}).get("value")
 
 
+def requires_translation(text: str) -> bool:
+    # 语义键是查表 ID，不能当作无需翻译的英文文案；数值、符号及纯英文展示文本不强制翻译。
+    return bool(HAN.search(text) or SEMANTIC_KEY.fullmatch(text))
+
+
 def check_catalog(name: str, errors: list[str]) -> set[str]:
     data = json.loads((IOS_RESOURCES / f"{name}.xcstrings").read_text())
     strings = data["strings"]
     for key, entry in strings.items():
         english = value(entry, "en")
         chinese = value(entry, "zh-Hans")
+        if not requires_translation(key) and not HAN.search(chinese or ""):
+            continue
         if not english or not english.strip():
             errors.append(f"{name}: {key!r} 缺少英文译文")
         if (name == "InfoPlist" or not HAN.search(key)) and (not chinese or not chinese.strip()):
@@ -89,7 +96,7 @@ def check_swift_calls(keys: set[str], errors: list[str]) -> None:
         for pattern in (LOCALIZED_CALL, UI_CALL):
             for match in pattern.finditer(source):
                 key = match.group(1)
-                if key and "\\(" not in key and key not in keys:
+                if requires_translation(key) and "\\(" not in key and key not in keys:
                     errors.append(f"{path.relative_to(ROOT)}: {key!r} 未收录到 Localizable.xcstrings")
 
 
@@ -104,6 +111,8 @@ def check_android(errors: list[str]) -> int:
     english = android_strings("en")
     for key in sorted(chinese.keys() | english.keys()):
         zh, en = chinese.get(key), english.get(key)
+        if not HAN.search(zh or "") and not HAN.search(en or ""):
+            continue
         if not zh or not zh.strip() or not en or not en.strip():
             errors.append(f"Android: {key!r} 缺少中文或英文译文")
         elif arguments(zh, ANDROID_ARGUMENT) != arguments(en, ANDROID_ARGUMENT):
@@ -135,6 +144,8 @@ def check_android_ui(errors: list[str]) -> int:
         if key in catalog:
             errors.append(f"Android UI: {key!r} 重复收录")
         catalog[key] = english
+        if not requires_translation(key) and not HAN.search(chinese.get(key, "")):
+            continue
         if not english.strip() or HAN.search(english):
             errors.append(f"Android UI: {key!r} 缺少完整英文译文")
         semantic = bool(SEMANTIC_KEY.match(key))
@@ -151,7 +162,7 @@ def check_android_ui(errors: list[str]) -> int:
         source = path.read_text()
         for match in KOTLIN_LOCALIZED_CALL.finditer(source):
             key = kotlin_string(match.group(1))
-            if key not in catalog:
+            if requires_translation(key) and key not in catalog:
                 errors.append(f"{path.relative_to(ROOT)}: {key!r} 未收录到 AndroidStrings")
     return len(catalog), set(catalog)
 

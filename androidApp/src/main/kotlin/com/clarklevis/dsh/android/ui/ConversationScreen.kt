@@ -2428,6 +2428,7 @@ internal fun SessionAgentPresetControl(
                         state.agentPreset != null -> current?.name?.takeIf(String::isNotBlank)
                             ?: agentPresetDisplayName(state.agentPreset)
                         state.loading -> appText("读取模式…")
+                        state.known -> appText("未记录模式")
                         else -> appText("重试模式")
                     },
                     modifier = Modifier.widthIn(max = 132.dp),
