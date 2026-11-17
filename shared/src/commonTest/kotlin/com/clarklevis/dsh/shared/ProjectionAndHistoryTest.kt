@@ -133,6 +133,23 @@ class ProjectionAndHistoryTest {
     }
 
     @Test
+    fun trajectoryProjectionMeasuresModelTimeFromStepStartWhenChunksAreMissing() {
+        val source = listOf(
+            SessionEvent("s1", 1, 100.0, GatewayEvent("user/message", text = "执行")),
+            SessionEvent("s1", 2, 101.0, GatewayEvent("step/start", turn = 1, step = 1)),
+            SessionEvent("s1", 3, 106.0, GatewayEvent("assistant/message", turn = 1, step = 1, text = "完成"))
+        )
+
+        val nodes = TrajectoryProjection.make(source)
+        val request = nodes.single { it.kind == TrajectoryNodeKind.REQUEST }
+        val assistant = nodes.single { it.kind == TrajectoryNodeKind.ASSISTANT }
+        assertEquals(101.0, request.startEpochSeconds)
+        assertEquals(101.0, assistant.startEpochSeconds)
+        assertEquals(106.0, assistant.endEpochSeconds)
+        assertEquals(5.0, assistant.endEpochSeconds - assistant.startEpochSeconds)
+    }
+
+    @Test
     fun historyReducerRejectsCursorLoopAndMergerKeepsSequenceOrder() {
         var state = HistoryState(sessions = mapOf("s1" to HistorySessionState(hasMore = true, nextBeforeSequence = 100)))
         state = HistoryReducer.reduce(state, HistoryAction.Start("s1", older = true, hasLocalEvents = true, earliestLocalSequence = 100)).state

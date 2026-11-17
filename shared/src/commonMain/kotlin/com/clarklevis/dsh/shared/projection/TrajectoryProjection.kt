@@ -71,6 +71,10 @@ object TrajectoryProjection {
                 "reasoning-delta", "text-delta", "tool-call-delta", "block-start", "block-end", "usage", "finish"
             )
         }.groupBy(::stepKey)
+        // 模型时间从 step/start 起算：它包含 TTFT，且在没有 chunk 的历史里仍然存在。
+        val stepStarts = events.filter { it.event.type == "step/start" }
+            .groupBy(::stepKey)
+            .mapValues { (_, records) -> records.first() }
         val metadata = events.filter { it.event.type in setOf("request/header", "request/context") }
         val options = metadata.firstOrNull { it.event.type == "request/header" }?.event?.raw?.get("header")?.get("config")
         val context = metadata.firstOrNull { it.event.type == "request/context" }?.event?.raw
@@ -102,12 +106,18 @@ object TrajectoryProjection {
                         val usage = requestUsage(event.usage)
                         cumulativeUsage += usage
                         requestIndexes[key] = nodes.size
-                        nodes += requestNode(requestNumber, key, record, record, metadata + record, options, context, usage, cumulativeUsage, null, events)
+                        nodes += requestNode(
+                            requestNumber, key, stepStarts[key] ?: record, record, metadata + record,
+                            options, context, usage, cumulativeUsage, null, events
+                        )
                     }
                     val index = assistantIndexes[key]
                     if (index == null) {
                         assistantIndexes[key] = nodes.size
-                        nodes += node("assistant-stream-$key", TrajectoryNodeKind.ASSISTANT, "Assistant", event.text, record)
+                        nodes += node(
+                            "assistant-stream-$key", TrajectoryNodeKind.ASSISTANT, "Assistant", event.text, record,
+                            start = stepStarts[key] ?: record
+                        )
                         streamingText[key] = StringBuilder(event.text)
                     } else {
                         streamingText.getValue(key).append(event.text)
@@ -115,7 +125,7 @@ object TrajectoryProjection {
                 }
                 event.type == "assistant/message" || event.type == "assistant/attempt" -> {
                     val stepChunks = chunks[key].orEmpty()
-                    val start = stepChunks.firstOrNull() ?: record
+                    val start = stepStarts[key] ?: stepChunks.firstOrNull() ?: record
                     val usage = requestUsage(event.usage ?: event.raw?.get("usage"))
                     val existing = requestIndexes[key]
                     if (existing == null) {
@@ -230,8 +240,14 @@ object TrajectoryProjection {
         )
     }
 
-    private fun node(id: String, kind: TrajectoryNodeKind, title: String, subtitle: String, record: SessionEvent) =
-        TrajectoryNode(id, kind, title, subtitle, record.seq, record.seq, epoch(record), epoch(record), listOf(record))
+    private fun node(
+        id: String,
+        kind: TrajectoryNodeKind,
+        title: String,
+        subtitle: String,
+        record: SessionEvent,
+        start: SessionEvent = record
+    ) = TrajectoryNode(id, kind, title, subtitle, start.seq, record.seq, epoch(start), epoch(record), listOf(record))
 
     private fun appendResult(node: TrajectoryNode, result: String, record: SessionEvent): TrajectoryNode = node.copy(
         subtitle = if (result.isEmpty()) node.subtitle else node.subtitle + (if (node.subtitle.isEmpty()) "" else "  →  ") + result.replace("\n", " "),
