@@ -1,18 +1,17 @@
 ## 功能更新
 
-- 会话菜单支持启用和停用智能体团队协作，完善运行中任务的停用确认、成员导航与状态同步。
-- 修复返回首页或切换会话后输入草稿丢失的问题，文字和待发送图片按会话分别保留。
-- Android APK 文件先显示预览、文件名和圆角玻璃“安装”按钮，点击后进入系统安装流程，并支持安装权限引导。
-- 修复 Android 精确定位将低精度坐标标为精确结果的问题；同时使用 GPS 与网络取样，未达到精度要求时明确返回不可用。
-- 改善 iOS 音乐卡片的打开与播放体验，播放操作等待实际状态确认，减少未播放却提示成功的情况。
-- 扩展 iOS 健康摘要，支持读取已授权的运动、能量、心率、血氧、呼吸和体重等指标，改善无数据及睡眠统计处理。
-- 优化连接器入口、应用卡片、表格和文件改动预览，修复 Android 设置中长模型名称挤压标题等布局问题。
+- Android 支持一次选择并上传多张图片，已发送的图片也可以保存。
+- iOS 和 Android 会话图片支持全屏预览和左右滑动，长按图片可打开保存菜单。
+- 修复生成图片只有下载链接时缺少预览的问题，正文已展示的同一张图片只显示一次。
+- 修复 iOS 重启后外观设置恢复为跟随系统的问题，保留用户所选的深色、浅色或跟随系统。
+- 改善长回复的流式 Markdown 显示和滚动体验，修复轨迹中模型耗时的计时起点。
+- 改善 iOS Apple Music 卡片的播放反馈，补齐双端文件改动页面的翻译，并兼容未记录 Agent 预设的旧会话。
 
 ## 必需插件
 
-- 必须安装 [dsh-plugin-mobile-gateway](https://github.com/Clarklevis1995/dsh-plugin-mobile-gateway) `v0.12.1` 或更高版本。
+- 必须安装 [dsh-plugin-mobile-gateway](https://github.com/Clarklevis1995/dsh-plugin-mobile-gateway) `v0.12.2` 或更高版本。
 - 安装或升级后，需要完整退出并重新启动 `dsh web`。
 
 ```bash
-dsh plugin --profile web add dsh-plugin-mobile-gateway@latest
+dsh plugin --profile web add dsh-plugin-mobile-gateway@0.12.2
 ```
