@@ -1360,6 +1360,8 @@ internal object AndroidStrings {
         "目标操作正在处理中，请稍后重试。" to "A goal action is in progress. Try again later.",
         "目标操作超时，已刷新当前目标后可重试。" to "Goal action timed out. The current goal has been refreshed. Try again.",
         "相机启动失败，请稍后重试。" to "Unable to start the camera. Try again later.",
+        "相机" to "Camera",
+        "此设备没有可用相机。" to "No camera is available on this device.",
         "真实 Gateway 消息/附件冒烟" to "Gateway message / attachment smoke test",
         "知道了" to "Got it",
         "确定" to "OK",

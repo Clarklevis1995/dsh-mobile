@@ -185,6 +185,7 @@ class ConversationKeyboardDeviceTest {
             compose.onNodeWithContentDescription("添加附件").performTouchInput { click() }
             compose.onNodeWithText("图片").assertIsDisplayed()
             compose.onNodeWithText("文件").assertIsDisplayed()
+            compose.onNodeWithText("相机").assertIsDisplayed()
             editor.assertIsNotFocused()
             org.junit.Assert.assertEquals(compactHeight, card.fetchSemanticsNode().boundsInRoot.height, 1f)
             androidx.test.espresso.Espresso.pressBack()

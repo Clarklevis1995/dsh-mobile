@@ -121,7 +121,8 @@ internal fun DshProductApp(
     onPickImage: () -> Unit,
     onPickFile: () -> Unit,
     notificationRoute: AndroidNotificationSessionRoute?,
-    onNotificationRouteOpened: (AndroidNotificationSessionRoute) -> Unit
+    onNotificationRouteOpened: (AndroidNotificationSessionRoute) -> Unit,
+    onTakePhoto: () -> Unit = {}
 ) {
     ConnectorRequestHost(stateHolder.deviceConnectors)
     val updateModel: com.clarklevis.dsh.android.update.AppUpdateViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -257,7 +258,8 @@ internal fun DshProductApp(
                     onPlugins = { navController.navigate(ROUTE_PLUGINS) { launchSingleTop = true } },
                     onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) { launchSingleTop = true } },
                     onSettings = { navController.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
-                    onConnectors = { navController.navigate(CONNECTORS_ROUTE) { launchSingleTop = true } }
+                    onConnectors = { navController.navigate(CONNECTORS_ROUTE) { launchSingleTop = true } },
+                    onTakePhoto = onTakePhoto
                 )
             }
             composable(ROUTE_SETTINGS) {

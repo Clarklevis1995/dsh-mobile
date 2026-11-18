@@ -1,4 +1,5 @@
 import ImageIO
+import AVFoundation
 import SwiftUI
 import MarkdownUI
 import PhotosUI
@@ -6,6 +7,82 @@ import UniformTypeIdentifiers
 import UIKit
 import WebKit
 import DeepSeekHarnessShared
+
+private struct ComposerCameraCapture: Identifiable {
+    let id = UUID()
+    let sessionID: String?
+}
+
+private struct ComposerCameraPicker: UIViewControllerRepresentable {
+    let onCompletion: (Result<UIImage?, Error>) -> Void
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        // 权限对话框或外部相机占用可能改变可用性。
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            DispatchQueue.main.async {
+                onCompletion(.failure(CameraUnavailable()))
+            }
+            return UIViewController()
+        }
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.mediaTypes = [UTType.image.identifier]
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onCompletion: onCompletion) }
+
+    private struct CameraUnavailable: LocalizedError {
+        var errorDescription: String? {
+            String(localized: "camera.unavailable", defaultValue: "此设备没有可用相机。")
+        }
+    }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onCompletion: (Result<UIImage?, Error>) -> Void
+
+        init(onCompletion: @escaping (Result<UIImage?, Error>) -> Void) {
+            self.onCompletion = onCompletion
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            onCompletion(.success(nil))
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            guard let image = info[.originalImage] as? UIImage else {
+                onCompletion(.failure(GatewayImagePreprocessorError.cannotDecode))
+                return
+            }
+            onCompletion(.success(image))
+        }
+    }
+}
+
+#if DEBUG
+struct ComposerCameraUITestHarness: View {
+    @StateObject private var store = AppStore(gatewayLocalID: "composer-camera-ui-test", chatHistoryCache: nil)
+    @State private var activeView = 0
+
+    var body: some View {
+        ConversationView(activeView: $activeView)
+            .environmentObject(store)
+            .task {
+                let hello = Data(#"{"kind":"hello","authenticated":true,"protocol":3,"capabilities":["images"]}"#.utf8)
+                if let frame = try? GatewayWireDecoder.decode(hello) { store.gateway.onFrame?(frame) }
+            }
+            .alert("Whaleness", isPresented: Binding(get: { store.lastError != nil }, set: { if !$0 { store.lastError = nil } })) {
+                Button("好", role: .cancel) { store.lastError = nil }
+            } message: {
+                Text(store.lastError ?? "")
+            }
+    }
+}
+#endif
 
 struct SlashCommandComposerPresentation: Equatable {
     let token: String
@@ -570,6 +647,8 @@ struct ConversationView: View {
     @State private var voiceTouchActive = false
     @State private var voiceToast: String?
     @State private var showsPhotoPicker = false
+    @State private var cameraCapture: ComposerCameraCapture?
+    @State private var isRequestingCamera = false
     @State private var showsFilePicker = false
     @State private var showsFileUploadUpgradeAlert = false
     @State private var filePickerSessionID: String?
@@ -1324,11 +1403,16 @@ struct ConversationView: View {
     private var voiceState: SharedVoiceInputSnapshot { voiceSnapshot ?? store.voiceInput.state }
 
     private var attachmentMenu: some View {
-        Menu {
+        let canAddImage = store.supportsImages && pendingImages.count < 20 && !isImportingImages
+        return Menu {
+            Button { requestCameraCapture() } label: {
+                Label { Text("相机") } icon: { Image("ComposerCamera") }
+            }
+            .disabled(!canAddImage || isRequestingCamera)
             Button { showsPhotoPicker = true } label: {
                 Label("图片", systemImage: "photo")
             }
-            .disabled(!store.supportsImages || pendingImages.count >= 20 || isImportingImages)
+            .disabled(!canAddImage)
             Button {
                 guard store.fileUploads.supported else {
                     showsFileUploadUpgradeAlert = true
@@ -1354,12 +1438,69 @@ struct ConversationView: View {
         .accessibilityLabel("添加附件")
         .photosPicker(isPresented: $showsPhotoPicker, selection: $selectedPhotoItems,
             maxSelectionCount: max(1, 20 - pendingImages.count), matching: .images)
+        .fullScreenCover(item: $cameraCapture) { capture in
+            ComposerCameraPicker { result in
+                cameraCapture = nil
+                switch result {
+                case .success(let image):
+                    if let image {
+                        isImportingImages = true
+                        Task { await importCapturedPhoto(image, targetSessionID: capture.sessionID) }
+                    }
+                case .failure(let error):
+                    store.lastError = error.localizedDescription
+                }
+            }
+            .ignoresSafeArea()
+        }
         .fileImporter(isPresented: $showsFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: true,
             onCompletion: importPickedFiles)
         .alert("请升级网关", isPresented: $showsFileUploadUpgradeAlert) {
             Button("好", role: .cancel) {}
         } message: {
             Text("当前网关不支持文件上传，请升级到支持文件上传的 Mobile Gateway，并重新连接。")
+        }
+    }
+
+    private func requestCameraCapture() {
+        guard !isRequestingCamera else { return }
+        let target = store.selectedSessionId
+        isRequestingCamera = true
+        Task { @MainActor in
+            defer { isRequestingCamera = false }
+            guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+                store.lastError = String(localized: "camera.unavailable", defaultValue: "此设备没有可用相机。")
+                return
+            }
+            let authorized = switch AVCaptureDevice.authorizationStatus(for: .video) {
+            case .authorized: true
+            case .notDetermined: await AVCaptureDevice.requestAccess(for: .video)
+            default: false
+            }
+            guard store.selectedSessionId == target else { return }
+            guard authorized else {
+                store.lastError = String(localized: "camera.denied", defaultValue: "未获得相机权限。请在系统设置中允许 Whaleness 使用相机后重试。")
+                return
+            }
+            composerIsFocused = false
+            cameraCapture = ComposerCameraCapture(sessionID: target)
+        }
+    }
+
+    @MainActor
+    private func importCapturedPhoto(_ image: UIImage, targetSessionID: String?) async {
+        defer { isImportingImages = false }
+        do {
+            let prepared = try await Task.detached(priority: .userInitiated) {
+                guard let data = image.jpegData(compressionQuality: 0.95) else {
+                    throw GatewayImagePreprocessorError.cannotEncode
+                }
+                return try GatewayImagePreprocessor.prepare(data: data)
+            }.value
+            appendImportedImages([GatewayOutgoingImage(mediaType: prepared.mediaType, data: prepared.data)],
+                                 targetSessionID: targetSessionID)
+        } catch {
+            store.lastError = String(localized: "image.process.failed", defaultValue: "处理所选图片失败：\(error.localizedDescription)")
         }
     }
 
@@ -2097,6 +2238,11 @@ struct ConversationView: View {
                 store.lastError = String(localized: "image.process.failed", defaultValue: "处理所选图片失败：\(error.localizedDescription)")
             }
         }
+        appendImportedImages(imported, targetSessionID: targetSessionID)
+    }
+
+    @MainActor
+    private func appendImportedImages(_ imported: [GatewayOutgoingImage], targetSessionID: String?) {
         var destination = store.composerDraftImages(for: targetSessionID)
         let existingBytes = destination.reduce(0) { $0 + $1.data.count }
         var acceptedBytes = existingBytes

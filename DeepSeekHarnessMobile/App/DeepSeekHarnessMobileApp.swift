@@ -61,6 +61,8 @@ struct DeepSeekHarnessMobileApp: App {
                 #if DEBUG
                 if ProcessInfo.processInfo.environment["DSH_CONVERSATION_GALLERY_UI_TEST"] == "1" {
                     ConversationGalleryUITestHarness()
+                } else if ProcessInfo.processInfo.environment["DSH_COMPOSER_CAMERA_UI_TEST"] == "1" {
+                    ComposerCameraUITestHarness()
                 } else if ProcessInfo.processInfo.environment["DSH_WORKSPACE_REVIEW_UI_TEST"] == "1" {
                     WorkspaceReviewUITestHarness()
                 } else if ProcessInfo.processInfo.environment["DSH_CONNECTOR_SHEET_UI_TEST"] == "1" {

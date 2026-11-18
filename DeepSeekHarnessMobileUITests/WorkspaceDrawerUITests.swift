@@ -231,23 +231,40 @@ final class CompactComposerUITests: XCTestCase {
     func testAttachmentMenuDoesNotExpandCompactComposer() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchEnvironment["DSH_COMPOSER_CAMERA_UI_TEST"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                "-appearance.fontScale", "1.5", "-appearance.fontFollowsSystem", "NO"]
         app.launch()
         if app.alerts.firstMatch.waitForExistence(timeout: 2) { app.alerts.firstMatch.buttons.firstMatch.tap() }
-        let sessions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "workspace-session-"))
-        try XCTSkipUnless(sessions.firstMatch.waitForExistence(timeout: 10), "需要一个已有会话验证附件菜单")
-        sessions.firstMatch.tap()
         let input = app.textViews["composer-input"]
         XCTAssertTrue(input.waitForExistence(timeout: 10))
         let compact = input.frame
         app.buttons["添加附件"].tap()
         XCTAssertTrue(app.buttons["文件"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["图片"].exists)
+        XCTAssertTrue(app.buttons["相机"].exists)
+        attach(app, name: "会话附件菜单-相机")
         XCTAssertEqual(input.frame.width, compact.width, accuracy: 1, "仅打开菜单不能展开输入框")
         XCTAssertEqual(input.frame.height, compact.height, accuracy: 1)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
         XCTAssertFalse(app.buttons["composer-action"].isHittable)
         XCTAssertEqual(input.frame.width, compact.width, accuracy: 1)
+        #if targetEnvironment(simulator)
+        let isTablet = app.windows.firstMatch.frame.width > 700
+        defer { if isTablet { XCUIDevice.shared.orientation = .portrait } }
+        if isTablet { XCUIDevice.shared.orientation = .landscapeLeft }
+        let existingPhotos = app.buttons.matching(identifier: "移除图片").count
+        app.buttons["添加附件"].tap()
+        let camera = app.buttons["相机"]
+        XCTAssertTrue(camera.isEnabled)
+        if isTablet { attach(app, name: "会话附件菜单-平板横屏") }
+        camera.tap()
+        let unavailable = app.alerts.firstMatch
+        XCTAssertTrue(unavailable.waitForExistence(timeout: 5))
+        XCTAssertTrue(unavailable.staticTexts["此设备没有可用相机。"].exists)
+        unavailable.buttons.firstMatch.tap()
+        XCTAssertEqual(app.buttons.matching(identifier: "移除图片").count, existingPhotos)
+        #endif
     }
 
     func testFocusExpandsComposerAndTimelineTapRestoresCompactLayout() throws {

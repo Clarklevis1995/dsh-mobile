@@ -4,6 +4,7 @@
         name="workspace_files"
         path="workspace-files/" />
     <cache-path name="workspace_previews" path="workspace-previews/" />
+    <cache-path name="composer_camera" path="composer-camera/" />
     <cache-path name="app_updates" path="updates/" />
     <files-path name="diagnostic_exports" path="diagnostic-logs/exports/" />
 </paths>

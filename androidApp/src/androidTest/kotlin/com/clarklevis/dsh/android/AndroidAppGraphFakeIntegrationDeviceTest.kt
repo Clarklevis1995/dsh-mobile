@@ -10,6 +10,9 @@ import com.clarklevis.dsh.android.ui.WorkspaceFilePreviewHost
 import com.clarklevis.dsh.android.ui.ConversationScreen
 import com.clarklevis.dsh.android.ui.DshTheme
 import com.clarklevis.dsh.android.ui.decodeWorkspaceLoadingLogo
+import com.clarklevis.dsh.android.ui.AppearanceSettings
+import com.clarklevis.dsh.android.ui.rememberComposerCamera
+import com.clarklevis.dsh.android.ui.rememberAppearanceSettings
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import com.clarklevis.dsh.shared.protocol.GatewayDirectoryItem
@@ -137,6 +140,58 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
             imageNode.performClick()
             compose.onNodeWithTag("conversation-image-preview").assertIsDisplayed()
         } finally { onMain { holder.close() } }
+    }
+
+    @Test
+    fun systemCameraStagesConfirmedPhotoAndDiscardsCancelledPhoto() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("systemCamera") == "true")
+        val context = instrumentation.targetContext
+        val automation = instrumentation.uiAutomation
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        }
+        automation.grantRuntimePermission(context.packageName, android.Manifest.permission.CAMERA)
+        val cameraDirectory = context.cacheDir.resolve("composer-camera")
+        val initialFiles = cameraDirectory.list()?.toSet().orEmpty()
+
+        suspend fun tapCameraControl(id: String) = withTimeout(15_000) {
+            while (true) {
+                val control = automation.rootInActiveWindow
+                    ?.findAccessibilityNodeInfosByViewId("com.android.camera2:id/$id")?.firstOrNull()
+                if (control?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK) == true) break
+                delay(120)
+            }
+        }
+
+        withFilePreview(showConversation = true, systemCamera = true) { holder, transport ->
+            fun openCamera() {
+                compose.onNode(hasContentDescription("添加附件") or hasContentDescription("Add attachment")).performClick()
+                val button = compose.onNode(hasText("相机") or hasText("Camera"))
+                button.assertIsDisplayed().assertIsEnabled()
+                val files = compose.onNode(hasText("文件") or hasText("File"))
+                val photos = compose.onNode(hasText("图片") or hasText("Image"))
+                val top = { node: SemanticsNodeInteraction -> node.fetchSemanticsNode().boundsInRoot.top }
+                assertTrue(top(files) < top(photos) && top(photos) < top(button))
+                context.cacheDir.resolve("system-camera-menu-test.png").outputStream().use { stream ->
+                    automation.takeScreenshot()?.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                }
+                button.performClick()
+            }
+            openCamera()
+            tapCameraControl("shutter_button")
+            tapCameraControl("cancel_button")
+            waitUntil { cameraDirectory.list()?.none { it !in initialFiles } == true }
+            assertTrue(holder.preparedImages.isEmpty())
+
+            openCamera()
+            tapCameraControl("shutter_button")
+            tapCameraControl("done_button")
+            waitUntil { holder.preparedImages.size == 1 && cameraDirectory.list()?.none { it !in initialFiles } == true }
+            compose.onNode(hasContentDescription("移除图片") or hasContentDescription("Remove image")).assertIsDisplayed()
+            assertTrue(holder.preparedImages.single().byteCount > 0)
+            assertTrue(transport.payloadsOfType("message").isEmpty())
+        }
     }
 
     @Test
@@ -385,7 +440,11 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
         }
     }
 
-    private suspend fun withFilePreview(showConversation: Boolean = false, block: suspend (AndroidSharedStateHolder, FakeTransport) -> Unit) {
+    private suspend fun withFilePreview(
+        showConversation: Boolean = false,
+        systemCamera: Boolean = false,
+        block: suspend (AndroidSharedStateHolder, FakeTransport) -> Unit
+    ) {
         val originalLocale = Locale.getDefault()
         Locale.setDefault(Locale.SIMPLIFIED_CHINESE)
         val transport = FakeTransport()
@@ -400,12 +459,27 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
         try {
             waitUntil("transport.specs.isNotEmpty()") { transport.specs.isNotEmpty() }
             transport.open()
-            transport.receive("""{"kind":"hello","authenticated":true,"protocol":3,"capabilities":["file-downloads","file-references-v1"]}""")
+            val imagesCapability = if (systemCamera) ",\"images\"" else ""
+            transport.receive("""{"kind":"hello","authenticated":true,"protocol":3,"capabilities":["file-downloads","file-references-v1"$imagesCapability]}""")
             waitUntil("holder.gatewayState.connection.name == \"CONNECTED\"") { holder.gatewayState.connection.name == "CONNECTED" }
-            onMain { holder.loadFixture() }
+            if (systemCamera) {
+                // 普通会话用于拍照，默认预览样例里的待回答问题会替换输入框。
+                transport.receive("""{"kind":"sessions","items":[{"sessionId":"android-demo","updatedAt":2,"running":false,"blank":false}]}""")
+                waitUntil { holder.snapshot.sessions.any { it.id == "android-demo" } }
+                onMain { holder.selectSession("android-demo") }
+            } else {
+                onMain { holder.loadFixture() }
+            }
             waitUntil("holder.snapshot.selectedSessionId == \"android-demo\"") { holder.snapshot.selectedSessionId == "android-demo" }
+            val cameraAppearance = if (systemCamera) {
+                val preferences = graph.application.getSharedPreferences("composer-camera-ui-test", android.content.Context.MODE_PRIVATE)
+                AppearanceSettings(preferences).apply { selectFontScale(1.5f) }
+            } else null
             compose.setContent {
-                if (showConversation) DshTheme { ConversationScreen(holder, onPickImage = {}, onBack = {}) }
+                if (showConversation) DshTheme(appearance = cameraAppearance ?: rememberAppearanceSettings()) {
+                    val takePhoto = if (systemCamera) rememberComposerCamera(holder) else ({})
+                    ConversationScreen(holder, onPickImage = {}, onBack = {}, onTakePhoto = takePhoto)
+                }
                 else MaterialTheme { WorkspaceFilePreviewHost(holder) }
             }
             try {

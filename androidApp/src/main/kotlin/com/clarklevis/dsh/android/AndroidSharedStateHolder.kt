@@ -2253,19 +2253,21 @@ class AndroidSharedStateHolder(
     private var preparingImageCount by mutableStateOf(0)
     val preparingImages: Boolean get() = preparingImageCount > 0
 
-    fun prepareImage(uri: Uri) = prepareImages(listOf(uri))
+    fun prepareImage(uri: Uri) {
+        prepareImages(listOf(uri))
+    }
 
-    fun prepareImages(uris: List<Uri>, pickerSessionId: String? = snapshot.selectedSessionId) {
-        if (isChangingNewConversationWorkspace || pickerSessionId != snapshot.selectedSessionId || uris.isEmpty()) return
+    fun prepareImages(uris: List<Uri>, pickerSessionId: String? = snapshot.selectedSessionId): kotlinx.coroutines.Job? {
+        if (isChangingNewConversationWorkspace || pickerSessionId != snapshot.selectedSessionId || uris.isEmpty()) return null
         if (uris.size + preparedImages.size + preparingImageCount > AndroidImagePreprocessor.MAXIMUM_IMAGE_COUNT) {
             platformError = "image-selection-limit-exceeded"
-            return
+            return null
         }
-        val appGraph = graph ?: return
+        val appGraph = graph ?: return null
         appGraph.diagnostics.intent(GatewayDiagnosticAction.PREPARE_IMAGE)
         val imageTarget = snapshot.selectedSessionId
         platformError = null
-        scope?.launch {
+        return scope?.launch {
             preparingImageCount += uris.size
             try {
                 // 顺序解码，避免多选大图时同时占用多份位图内存，并保留选择顺序。
