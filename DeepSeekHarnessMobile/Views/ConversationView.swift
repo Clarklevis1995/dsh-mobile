@@ -2550,7 +2550,9 @@ struct ConversationView: View {
     private var searchTargetViewportID: String? {
         guard let target = store.conversationSearchTarget else { return nil }
         let eventID = String(target.dropFirst("message-".count))
-        return ConversationDisplayEntry.make(from: conversationItems).first { entry in
+        return ConversationDisplayEntry.make(from: conversationItems, imageReference: { url in
+            store.selectedSessionId.flatMap { store.galleryImageReference(url: url, sessionID: $0) }
+        }).first { entry in
             switch entry.content {
             case .timeSeparator: false
             case .message(let item): item.id == eventID || item.id.hasPrefix(eventID + "-")
@@ -2589,7 +2591,9 @@ struct ConversationView: View {
 
     private func makeConversationViewportEntries(from items: [ConversationItem]) -> [ConversationViewportEntry] {
         guard let sessionID = store.selectedSessionId else { return [] }
-        var entries = ConversationDisplayEntry.make(from: items).flatMap { entry in
+        var entries = ConversationDisplayEntry.make(from: items, imageReference: { url in
+            store.galleryImageReference(url: url, sessionID: sessionID)
+        }).flatMap { entry in
             let revision = viewportEntryRevision(entry)
             if case .message(let item) = entry.content,
                item.kind == .user,
@@ -4219,10 +4223,32 @@ struct ConversationDisplayEntry: Identifiable {
     let content: Content
     var showsCopyButton: Bool
 
-    static func make(from items: [ConversationItem]) -> [ConversationDisplayEntry] {
+    static func make(from items: [ConversationItem],
+                     imageReference: (URL) -> GatewayImageAttachment? = { _ in nil }) -> [ConversationDisplayEntry] {
         var result: [ConversationDisplayEntry] = []
         var processItems: [ConversationItem] = []
         var previousMessageDate: Date?
+        // 只在同一轮的正文确实展示相同附件时去重，普通链接与代码示例不算图片。
+        var bodyImagesByItem: [String: Set<String>] = [:]
+        var bodyImages = Set<String>()
+        var pendingImageIDs: [String] = []
+        func finishTurn() {
+            for id in pendingImageIDs { bodyImagesByItem[id] = bodyImages }
+            pendingImageIDs.removeAll(keepingCapacity: true)
+            bodyImages.removeAll(keepingCapacity: true)
+        }
+        for item in items {
+            if item.kind == .user { finishTurn() }
+            if item.kind == .generatedImages { pendingImageIDs.append(item.id) }
+            if item.kind == .assistant, item.text.contains("![") {
+                for source in MarkdownUI.MarkdownContent(item.text).imageSources {
+                    if let url = URL(string: source), let image = imageReference(url) {
+                        bodyImages.insert(image.id)
+                    }
+                }
+            }
+        }
+        finishTurn()
 
         func flushProcess() {
             guard let first = processItems.first else { return }
@@ -4242,8 +4268,13 @@ struct ConversationDisplayEntry: Identifiable {
                 flushProcess()
                 processItems.append(item)
             case .generatedImages:
-                // 图片仅保留助手正文中的展示，不额外插入工具结果图片卡片。
-                continue
+                let images = item.images.filter { !(bodyImagesByItem[item.id] ?? []).contains($0.id) }
+                guard !images.isEmpty else { continue }
+                flushProcess()
+                let visibleItem = ConversationItem(id: item.id, kind: item.kind, title: item.title,
+                    text: item.text, images: images, isError: item.isError, date: item.date,
+                    files: item.files, knownFiles: item.knownFiles, textParts: item.textParts)
+                result.append(.init(id: "message-\(item.id)", content: .message(visibleItem), showsCopyButton: false))
             case .user, .assistant, .system:
                 flushProcess()
                 // 首条正式消息显示时间，后续只在间隔超过半小时后显示；工具和状态事件不参与比较。

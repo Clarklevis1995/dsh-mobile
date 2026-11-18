@@ -52,7 +52,7 @@ class ConversationDisplayGroupsTest {
     }
 
     @Test
-    fun toolImageCardsAreHiddenWhileAssistantBodyAndUserUploadsRemain() {
+    fun matchingAssistantBodyImagesHideOnlyDuplicateToolCards() {
         val image = com.clarklevis.dsh.shared.protocol.GatewayImageAttachment("image", "image/png", 10, 100, 80)
         val generated = item("result-images", ConversationItemKind.GENERATED_IMAGES, text = "").copy(images = listOf(image))
         val body = "已生成。\n\n![风景](/workspace/image.png)"
@@ -61,7 +61,7 @@ class ConversationDisplayGroupsTest {
         val entries = makeConversationDisplayEntries(listOf(
             user, item("call", ConversationItemKind.TOOL), generated,
             item("result", ConversationItemKind.TOOL_RESULT), reply
-        ))
+        ), mapOf("/workspace/image.png" to image))
         assertEquals(3, entries.size)
         assertEquals(user, (entries.first() as ConversationDisplayEntry.Message).item)
         assertEquals(2, (entries[1] as ConversationDisplayEntry.Process).group.items.size)
@@ -70,7 +70,30 @@ class ConversationDisplayGroupsTest {
         assertEquals(listOf(image), timeline.first().images)
         assertEquals(body, timeline.filterIsInstance<ConversationTimelineEntry.AssistantMarkdown>().joinToString("") { it.markdown })
         assertTrue(timeline.none { it.id == generated.id })
-        assertTrue(makeConversationDisplayEntries(listOf(generated)).isEmpty())
+        assertEquals(listOf(generated), makeConversationDisplayEntries(listOf(generated)).filterIsInstance<ConversationDisplayEntry.Message>().map { it.item })
+    }
+
+    @Test
+    fun generatedImageFallbackIgnoresLinksCodeAndOtherTurnsAndKeepsUnmatchedBatchImages() {
+        val first = com.clarklevis.dsh.shared.protocol.GatewayImageAttachment("first", "image/png", 10, 100, 80)
+        val second = first.copy(attachmentId = "second")
+        val generated = item("generated", ConversationItemKind.GENERATED_IMAGES).copy(images = listOf(first, second))
+        val references = mapOf("/workspace/image.png" to first)
+        fun visibleImages(items: List<ConversationItem>, mapped: Boolean = true) =
+            makeConversationDisplayEntries(items, if (mapped) references else emptyMap())
+                .filterIsInstance<ConversationDisplayEntry.Message>()
+                .filter { it.item.kind == ConversationItemKind.GENERATED_IMAGES }.flatMap { it.item.images }
+        for (text in listOf("Done", "[Download](</workspace/image.png>)", "`![Image](/workspace/image.png)`",
+            "```markdown\n![Image](/workspace/image.png)\n```", "![Other](/elsewhere/image.png)")) {
+            assertEquals(text, listOf(first, second), visibleImages(listOf(generated, item("reply", ConversationItemKind.ASSISTANT, text = text))))
+        }
+        val reply = item("reply", ConversationItemKind.ASSISTANT, text = "![Image](</workspace/image.png>)")
+        assertEquals(listOf(second), visibleImages(listOf(generated, reply)))
+        assertEquals(listOf(first, second), visibleImages(listOf(generated, reply), mapped = false))
+        assertEquals(listOf(first, second), visibleImages(listOf(generated, item("next", ConversationItemKind.USER), reply)))
+        assertEquals(listOf(first, second), visibleImages(listOf(item("upload", ConversationItemKind.USER, text = reply.text), generated)))
+        val reference = item("ref", ConversationItemKind.ASSISTANT, text = "![Image][result]\n\n[result]: /workspace/image.png")
+        assertEquals(listOf(second), visibleImages(listOf(generated, reference)))
     }
 
     @Test

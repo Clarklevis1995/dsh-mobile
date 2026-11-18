@@ -2,6 +2,7 @@ package com.clarklevis.dsh.android.ui
 
 import com.clarklevis.dsh.shared.projection.ConversationItem
 import com.clarklevis.dsh.shared.projection.ConversationItemKind
+import com.clarklevis.dsh.shared.protocol.GatewayImageAttachment
 import kotlin.math.ceil
 
 /** 一次触边补足约两屏正文；工具事件不按消息数占用阅读窗口。 */
@@ -93,17 +94,20 @@ internal data class ConversationTimelinePresentation(
     val entries: List<ConversationTimelineEntry>,
     val streamingId: String?,
     val earliestSequence: Int? = null,
-    val running: Boolean = false
+    val running: Boolean = false,
+    val imageReferences: Map<String, GatewayImageAttachment> = emptyMap()
 )
 
 internal fun prepareConversationPresentation(
     items: List<ConversationItem>,
     running: Boolean,
-    earliestSequence: Int? = null
+    earliestSequence: Int? = null,
+    imageReferences: Map<String, GatewayImageAttachment> = emptyMap()
 ): ConversationTimelinePresentation {
     val streamingId = activeStreamingAssistantMessageId(items, running)
     return ConversationTimelinePresentation(
-        items, makeConversationTimelineEntries(makeConversationDisplayEntries(items), streamingId), streamingId, earliestSequence, running
+        items, makeConversationTimelineEntries(makeConversationDisplayEntries(items, imageReferences), streamingId),
+        streamingId, earliestSequence, running, imageReferences
     )
 }
 
@@ -151,5 +155,6 @@ internal data class HistoryPresentationTarget(
     val loadingOlder: Boolean = false,
     val hasMore: Boolean = false,
     val failed: Boolean = false,
-    val readingBatch: Boolean = false
+    val readingBatch: Boolean = false,
+    val imageReferences: Map<String, GatewayImageAttachment> = emptyMap()
 )

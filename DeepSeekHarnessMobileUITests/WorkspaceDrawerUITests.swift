@@ -555,6 +555,38 @@ final class WorkspaceDrawerUITests: XCTestCase {
         }
     }
 
+    func testAppearanceChoiceSurvivesProcessRelaunch() {
+        app.terminate()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                "-appearance.fontScale", "1.5", "-appearance.fontFollowsSystem", "NO"]
+        app.launch()
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for (index, title) in ["深色", "浅色", "跟随系统"].enumerated() {
+            if index == 1 && app.windows.firstMatch.frame.width > 700 {
+                XCUIDevice.shared.orientation = .landscapeLeft
+            }
+            let alert = app.alerts.firstMatch
+            if alert.exists { alert.buttons.firstMatch.tap() }
+            XCTAssertTrue(homeSettings.waitForExistence(timeout: 10))
+            homeSettings.tap()
+            settingsEntry("interface-style-settings-row").tap()
+            let choice = app.buttons[title].firstMatch
+            XCTAssertTrue(choice.waitForExistence(timeout: 5))
+            choice.tap()
+            XCTAssertTrue(settingsEntry("interface-style-settings-row").label.contains(title))
+            app.terminate()
+            app.launch()
+            if app.alerts.firstMatch.exists { app.alerts.firstMatch.buttons.firstMatch.tap() }
+            XCTAssertTrue(homeSettings.waitForExistence(timeout: 10))
+            homeSettings.tap()
+            let restored = settingsEntry("interface-style-settings-row")
+            XCTAssertTrue(restored.label.contains(title), "重启后必须恢复选择：\(title)，实际：\(restored.label)")
+            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            screenshot.name = "重启后界面-\(title)"; screenshot.lifetime = .keepAlways; add(screenshot)
+            app.navigationBars["设置"].buttons.firstMatch.tap()
+        }
+    }
+
     func testSettingsChoiceMenusReselectWithoutLeavingSettings() {
         homeSettings.tap()
         for (identifier, title, labels) in [("interface-style-settings-row", "界面", ["跟随系统", "浅色", "深色"]),

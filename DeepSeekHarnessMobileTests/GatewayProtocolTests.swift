@@ -11176,6 +11176,64 @@ final class SessionAgentPresetProtocolTests: XCTestCase {
 
 final class InterfaceStylePresentationTests: XCTestCase {
     @MainActor
+    func testEveryAppearanceChoiceSurvivesAppContainerRecreation() async throws {
+        let suite = "appearance-persistence-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        // 最后切回跟随系统，验证它能覆盖之前保存的深色选择。
+        for style in [InterfaceStyle.dark, .light, .system] {
+            let hosts = MultiGatewayStore(defaults: defaults, credentials: RecoveryTestCredentials())
+            await hosts.waitUntilReady()
+            hosts.activeStore.interfaceStyle = style
+            XCTAssertEqual(defaults.string(forKey: InterfaceStyle.preferenceKey), style.rawValue)
+            hosts.activeStore.deactivateGateway()
+            let restoredDefaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            let restored = MultiGatewayStore(defaults: restoredDefaults, credentials: RecoveryTestCredentials())
+            await restored.waitUntilReady()
+            XCTAssertEqual(restored.activeStore.interfaceStyle, style)
+            restored.activeStore.deactivateGateway()
+        }
+    }
+
+    @MainActor
+    func testMissingOrUnknownAppearanceUsesSystemWithoutOverwritingPreferences() throws {
+        let suite = "appearance-invalid-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for value: String? in [nil, "future-style"] {
+            defaults.set(value, forKey: InterfaceStyle.preferenceKey)
+            let store = AppStore(appearanceDefaults: defaults)
+            XCTAssertEqual(store.interfaceStyle, .system)
+            XCTAssertEqual(defaults.string(forKey: InterfaceStyle.preferenceKey), value)
+            store.deactivateGateway()
+        }
+    }
+
+    @MainActor
+    func testAppearanceIsGlobalAcrossHostSwitchesAndColdLaunch() async throws {
+        let suite = "appearance-hosts-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let profiles = [GatewayProfile(gatewayName: "First", endpoints: ["ws://127.0.0.1:19201"]),
+                        GatewayProfile(gatewayName: "Second", endpoints: ["ws://127.0.0.1:19202"])]
+        defaults.set(try JSONEncoder().encode(profiles), forKey: "gateway.profiles.v1")
+        defaults.set(InterfaceStyle.dark.rawValue, forKey: InterfaceStyle.preferenceKey)
+        let hosts = MultiGatewayStore(defaults: defaults, credentials: RecoveryTestCredentials())
+        await hosts.waitUntilReady()
+        XCTAssertEqual(hosts.activeStore.interfaceStyle, .dark)
+        hosts.select(profiles[1], connect: false)
+        XCTAssertEqual(hosts.activeStore.interfaceStyle, .dark)
+        hosts.activeStore.interfaceStyle = .light
+        hosts.select(profiles[0], connect: false)
+        XCTAssertEqual(hosts.activeStore.interfaceStyle, .light)
+        hosts.activeStore.deactivateGateway()
+        let restored = MultiGatewayStore(defaults: defaults, credentials: RecoveryTestCredentials())
+        await restored.waitUntilReady()
+        XCTAssertEqual(restored.activeStore.interfaceStyle, .light)
+        restored.activeStore.deactivateGateway()
+    }
+
+    @MainActor
     func testRootAppliesLiveAppearanceChangesAndReturnsToSystem() async throws {
         let suite = "appearance-presentation-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -17004,7 +17062,7 @@ final class GeneratedToolImageTests: XCTestCase {
         }
     }
 
-    func testOnlyAssistantBodyImagesRemainWhileUserUploadsAndToolDetailsArePreserved() {
+    func testMatchingAssistantBodyImagesHideOnlyDuplicateToolCards() {
         let image = GatewayImageAttachment(attachmentId: "generated", mediaType: "image/png", bytes: 100, width: 1536, height: 1024)
         let body = "已生成。\n\n![风景](/workspace/image.png)"
         let items = [
@@ -17014,7 +17072,7 @@ final class GeneratedToolImageTests: XCTestCase {
             ConversationItem(id: "result", kind: .toolResult, title: "", text: "done", isError: false, date: .now),
             ConversationItem(id: "reply", kind: .assistant, title: "", text: body, isError: false, date: .now)
         ]
-        let entries = ConversationDisplayEntry.make(from: items)
+        let entries = ConversationDisplayEntry.make(from: items, imageReference: { $0.path == "/workspace/image.png" ? image : nil })
         XCTAssertEqual(entries.count, 4)
         XCTAssertEqual(entries.first?.id, "time-user")
         guard case .message(let user) = entries[1].content,
@@ -17024,7 +17082,36 @@ final class GeneratedToolImageTests: XCTestCase {
         XCTAssertEqual(process.items.map(\.id), ["tool", "result"])
         XCTAssertEqual(reply.text, body)
         XCTAssertEqual(reply.kind, .assistant)
-        XCTAssertTrue(ConversationDisplayEntry.make(from: [items[2]]).isEmpty)
+        XCTAssertEqual(ConversationDisplayEntry.make(from: [items[2]]).map(\.id), ["message-image"])
+    }
+
+    func testGeneratedImageFallbackIgnoresLinksCodeAndOtherTurnsAndKeepsUnmatchedBatchImages() {
+        let first = GatewayImageAttachment(attachmentId: "first", mediaType: "image/png", bytes: 10, width: 100, height: 80)
+        let second = GatewayImageAttachment(attachmentId: "second", mediaType: "image/png", bytes: 10, width: 100, height: 80)
+        func item(_ id: String, _ kind: ConversationItem.Kind, _ text: String = "", _ images: [GatewayImageAttachment] = []) -> ConversationItem {
+            ConversationItem(id: id, kind: kind, title: "", text: text, images: images, isError: false,
+                             date: Date(timeIntervalSince1970: 0))
+        }
+        func visibleImages(_ items: [ConversationItem], mapped: Bool = true) -> [GatewayImageAttachment] {
+            ConversationDisplayEntry.make(from: items, imageReference: { url in
+                mapped && url.path == "/workspace/image.png" ? first : nil
+            }).flatMap { entry in
+                if case .message(let item) = entry.content, item.kind == .generatedImages { return item.images }
+                return []
+            }
+        }
+        let generated = item("generated", .generatedImages, "", [first, second])
+        for text in ["Done", "[Download](</workspace/image.png>)", "`![Image](/workspace/image.png)`",
+                     "```markdown\n![Image](/workspace/image.png)\n```", "![Other](/elsewhere/image.png)"] {
+            XCTAssertEqual(visibleImages([generated, item("reply", .assistant, text)]), [first, second], text)
+        }
+        let reply = item("reply", .assistant, "![Image](</workspace/image.png>)")
+        XCTAssertEqual(visibleImages([generated, reply]), [second])
+        XCTAssertEqual(visibleImages([generated, reply], mapped: false), [first, second])
+        XCTAssertEqual(visibleImages([generated, item("next", .user), reply]), [first, second])
+        XCTAssertEqual(visibleImages([item("upload", .user, reply.text), generated]), [first, second])
+        let reference = item("ref", .assistant, "![Image][result]\n\n[result]: /workspace/image.png")
+        XCTAssertEqual(visibleImages([generated, reference]), [second])
     }
 
     private let imageJSON = #"{"attachmentId":"generated","mediaType":"image/png","bytes":100,"width":1536,"height":1024}"#

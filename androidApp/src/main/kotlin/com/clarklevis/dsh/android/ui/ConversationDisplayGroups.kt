@@ -313,11 +313,37 @@ internal data class ConversationProcessTool(
 )
 
 internal fun makeConversationDisplayEntries(
-    items: List<ConversationItem>
+    items: List<ConversationItem>,
+    imageReferences: Map<String, GatewayImageAttachment> = emptyMap()
 ): List<ConversationDisplayEntry> {
     val result = mutableListOf<ConversationDisplayEntry>()
     val processItems = mutableListOf<ConversationItem>()
     var previousMessageTime: Double? = null
+    // 只在同一轮的正文确实展示相同附件时去重，普通链接与代码示例不算图片。
+    val bodyImagesByItem = mutableMapOf<String, Set<String>>()
+    val bodyImages = mutableSetOf<String>()
+    val pendingImageIds = mutableListOf<String>()
+    fun finishTurn() {
+        val ids = bodyImages.toSet()
+        pendingImageIds.forEach { bodyImagesByItem[it] = ids }
+        pendingImageIds.clear()
+        bodyImages.clear()
+    }
+    items.forEach { item ->
+        if (item.kind == ConversationItemKind.USER) finishTurn()
+        if (item.kind == ConversationItemKind.GENERATED_IMAGES) pendingImageIds += item.id
+        if (item.kind == ConversationItemKind.ASSISTANT && ("![" in item.text || "<img" in item.text.lowercase())) {
+            val document = markdownInteractionParser.parse(item.text)
+            DshMarkdownImagePlugin().beforeRender(document)
+            document.accept(object : org.commonmark.node.AbstractVisitor() {
+                override fun visit(image: org.commonmark.node.Image) {
+                    val path = com.clarklevis.dsh.shared.facade.ConversationFileReferences.filePath(image.destination)
+                    imageReferences[path]?.let { bodyImages += it.attachmentId }
+                }
+            })
+        }
+    }
+    finishTurn()
 
     fun flushProcess() {
         val first = processItems.firstOrNull() ?: return
@@ -343,8 +369,13 @@ internal fun makeConversationDisplayEntries(
                 processItems += item
             }
 
-            // 会话只展示助手正文中的图片，不额外插入工具结果图片卡片。
-            ConversationItemKind.GENERATED_IMAGES -> Unit
+            ConversationItemKind.GENERATED_IMAGES -> {
+                val images = item.images.filter { it.attachmentId !in bodyImagesByItem[item.id].orEmpty() }
+                if (images.isNotEmpty()) {
+                    flushProcess()
+                    result += ConversationDisplayEntry.Message(item.copy(images = images))
+                }
+            }
 
             ConversationItemKind.USER,
             ConversationItemKind.ASSISTANT,

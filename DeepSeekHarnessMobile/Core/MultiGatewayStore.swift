@@ -25,7 +25,8 @@ final class MultiGatewayStore: ObservableObject {
         self.defaults = defaults
         self.credentials = credentials
         activeStore = AppStore(preferences: UserDefaultsAppPreferences(userDefaults: defaults, gatewayID: "unpaired"),
-                               gatewayClient: GatewayClient(credentials: credentials), gatewayLocalID: "unpaired")
+                               gatewayClient: GatewayClient(credentials: credentials), gatewayLocalID: "unpaired",
+                               appearanceDefaults: defaults)
         initializationTask = Task { [weak self] in await self?.restoreProfiles() }
         AgentLiveActivityIntentBridge.install { [weak self] request in
             self?.handleLiveActivityApproval(request) ?? false
@@ -123,7 +124,8 @@ final class MultiGatewayStore: ObservableObject {
     private func makeStore(_ profile: GatewayProfile) -> AppStore {
         let preferences = UserDefaultsAppPreferences(userDefaults: defaults, gatewayID: profile.id)
         preferences.endpoint = profile.connectionEndpoints.first ?? profile.endpoints[0]
-        let store = AppStore(preferences: preferences, gatewayClient: GatewayClient(credentials: credentials), gatewayLocalID: profile.id)
+        let store = AppStore(preferences: preferences, gatewayClient: GatewayClient(credentials: credentials),
+                             gatewayLocalID: profile.id, appearanceDefaults: defaults)
         store.gatewayDisplayName = profile.displayName
         store.gateway.credentialID = profile.id
         store.gateway.expectedGatewayID = profile.gatewayId
@@ -270,7 +272,8 @@ final class MultiGatewayStore: ObservableObject {
             activeID = nil
             defaults.removeObject(forKey: "gateway.activeID")
             activeStore = AppStore(preferences: UserDefaultsAppPreferences(userDefaults: defaults, gatewayID: "unpaired"),
-                                   gatewayClient: GatewayClient(credentials: credentials), gatewayLocalID: "unpaired")
+                                   gatewayClient: GatewayClient(credentials: credentials), gatewayLocalID: "unpaired",
+                                   appearanceDefaults: defaults)
             activeStore.interfaceStyle = style
             installPairingHandler(on: activeStore)
         }

@@ -305,6 +305,7 @@ enum HistoryLoadError: Equatable {
 
 enum InterfaceStyle: String, CaseIterable, Identifiable {
     case system, light, dark
+    static let preferenceKey = "appearance.interfaceStyle"
     var id: String { rawValue }
     var title: String { switch self { case .system: String(localized: "跟随系统"); case .light: String(localized: "浅色"); case .dark: String(localized: "深色") } }
     var colorScheme: ColorScheme? { switch self { case .system: nil; case .light: .light; case .dark: .dark } }
@@ -578,7 +579,9 @@ final class AppStore: ObservableObject {
     @Published var workspaceCreationIsLoading = false
     @Published var protocolNotices: [GatewayNotice] = []
     @Published var endpoint: String { didSet { preferences.endpoint = endpoint } }
-    @Published var interfaceStyle: InterfaceStyle = .system
+    @Published var interfaceStyle: InterfaceStyle {
+        didSet { appearanceDefaults.set(interfaceStyle.rawValue, forKey: InterfaceStyle.preferenceKey) }
+    }
     @Published var appLanguage: AppLanguage {
         didSet { appLanguage.apply() }
     }
@@ -823,6 +826,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var cacheStorageNotice: String?
     @Published private(set) var cacheStorageBusy = false
     private let preferences: AppPreferences
+    private let appearanceDefaults: UserDefaults
     /// SessionList 的唯一业务状态来源；Swift 属性只是 UI/持久化快照。
     private let kmpSessionListStore: KMPSessionListStoreAdapter
     /// Human Question 的唯一业务状态来源；Swift 属性只发布 KMP 快照。
@@ -1021,7 +1025,8 @@ final class AppStore: ObservableObject {
         sessionControlRequestTimeout: Duration = .seconds(12),
         chatHistoryCache: ChatHistoryCache? = .shared,
         voiceInput: VoiceInputAdapter? = nil,
-        offlineCatalogRestoreBarrier: (@Sendable () async -> Void)? = nil
+        offlineCatalogRestoreBarrier: (@Sendable () async -> Void)? = nil,
+        appearanceDefaults: UserDefaults = .standard
     ) {
         gateway = gatewayClient ?? GatewayClient()
         self.voiceInput = voiceInput ?? VoiceInputAdapter()
@@ -1033,6 +1038,9 @@ final class AppStore: ObservableObject {
         imageAttachmentCache = ImageAttachmentCache(directoryURL: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("GatewayAttachments/\(gatewayLocalID)", isDirectory: true))
         slashCommands = kmpSlashCommandStore.snapshot()
         self.preferences = preferences
+        self.appearanceDefaults = appearanceDefaults
+        interfaceStyle = appearanceDefaults.string(forKey: InterfaceStyle.preferenceKey)
+            .flatMap(InterfaceStyle.init(rawValue:)) ?? .system
         self.chatHistoryCache = historyBridge == nil ? chatHistoryCache : nil
         self.chatCacheProtectionOwner = historyBridge == nil ? chatHistoryCache?.makeProtectionOwner(gatewayID: gatewayLocalID) : nil
         self.questionEffectExecutor = questionEffectExecutor ?? gateway

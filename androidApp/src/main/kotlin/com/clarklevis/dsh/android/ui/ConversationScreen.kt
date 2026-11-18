@@ -894,7 +894,7 @@ private fun ConversationTimeline(
     val latestRunning by rememberUpdatedState(selectedSessionIsRunning)
     var presentation by remember(selectedSessionId) {
         mutableStateOf(prepareConversationPresentation(latestItems, selectedSessionIsRunning,
-            stateHolder.snapshot.selectedHistoryEarliestSequence))
+            stateHolder.snapshot.selectedHistoryEarliestSequence, stateHolder.snapshot.markdownImages))
     }
     val items = presentation.items
     val timelineEntries = presentation.entries
@@ -993,7 +993,7 @@ private fun ConversationTimeline(
             latestSnapshot.selectedHistoryEarliestSequence, latestRunning, isUserTimelineScrolling || touchingTimeline,
             interactionGeneration, selectedSessionId in stateHolder.historyPagingSessionIds || latestSnapshot.selectedHistoryIsLoadingOlder,
             latestSnapshot.selectedHistoryHasMore, latestSnapshot.selectedHistoryError != null,
-            historyReadBatch != null) }
+            historyReadBatch != null, latestSnapshot.markdownImages) }
             .distinctUntilChanged()
             .collect { targetState ->
                 val batch = historyReadBatch
@@ -1018,9 +1018,11 @@ private fun ConversationTimeline(
                 if (targetState.moving) {
                     timelineUpdatesPaused = true
                     val older = presentation.earliestSequence?.let { old -> targetState.earliestSequence?.let { it < old } } == true
-                    if (older && preparedWhileMoving?.items !== targetState.items) {
+                    if (older && (preparedWhileMoving?.items !== targetState.items ||
+                            preparedWhileMoving?.imageReferences != targetState.imageReferences)) {
                         val target = withContext(Dispatchers.Default) {
-                            prepareConversationPresentation(targetState.items, targetState.running, targetState.earliestSequence)
+                            prepareConversationPresentation(targetState.items, targetState.running,
+                                targetState.earliestSequence, targetState.imageReferences)
                         }
                         warmReadingWindow(target)
                         preparedWhileMoving = target
@@ -1036,7 +1038,8 @@ private fun ConversationTimeline(
                 val source = latestSnapshot
                 val running = latestRunning
                 if (source.conversation === presentation.items && running == presentation.running &&
-                    source.selectedHistoryEarliestSequence == presentation.earliestSequence) return@collect
+                    source.selectedHistoryEarliestSequence == presentation.earliestSequence &&
+                    source.markdownImages == presentation.imageReferences) return@collect
                 val generation = interactionGeneration
                 val older = presentation.earliestSequence?.let { old ->
                     source.selectedHistoryEarliestSequence?.let { it < old }
@@ -1046,9 +1049,11 @@ private fun ConversationTimeline(
                 if (older) com.clarklevis.dsh.android.platform.LocalAppLog.d("HistoryPresentation", "stage=prepare-start rows=${source.conversation.size}")
                 try {
                     val target = preparedWhileMoving?.takeIf { it.items === source.conversation &&
-                        it.running == running && it.earliestSequence == source.selectedHistoryEarliestSequence }
+                        it.running == running && it.earliestSequence == source.selectedHistoryEarliestSequence &&
+                        it.imageReferences == source.markdownImages }
                         ?: withContext(Dispatchers.Default) {
-                            prepareConversationPresentation(source.conversation, running, source.selectedHistoryEarliestSequence)
+                            prepareConversationPresentation(source.conversation, running,
+                                source.selectedHistoryEarliestSequence, source.markdownImages)
                         }
                     preparedWhileMoving = null
                     if (older) {
