@@ -4144,13 +4144,17 @@ final class AppStore: ObservableObject {
         case .sessions(let received):
             dispatchSessionListIntent(.remoteSessionsReceived(received))
             updateChatPrefetchState(sessionsReceived: true)
-            let runningBySessionID = received.reduce(into: [String: Bool]()) { result, session in
+            var runningBySessionID = received.reduce(into: [String: Bool]()) { result, session in
                 result[session.sessionId] = session.running
             }
             AgentLiveActivityManager.shared.reconcileSessions(
                 gatewayID: gatewayLocalID,
                 runningBySessionID: runningBySessionID
             )
+            // 发送确认前收到的列表可能早于消息入队，不能据此释放本次后台额度。
+            if messageSubmissionPending, let sessionID = messageSubmissionSessionID {
+                runningBySessionID.removeValue(forKey: sessionID)
+            }
             backgroundExecutionController.reconcileSessions(
                 runningBySessionID: runningBySessionID
             )

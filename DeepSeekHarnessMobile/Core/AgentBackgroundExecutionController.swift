@@ -18,7 +18,7 @@ final class AgentBackgroundExecutionController {
     private static let logger = LocalLogger(subsystem: "ai.dsh.mobile.ios", category: "agent-background")
 
     private func traceBackground(_ event: String) {
-        Self.logger.notice("[AgentBackground] event=\(event) background=\(self.applicationIsInBackground) turns=\(self.outstandingTurns) questions=\(self.questionAllowanceSessionIDs.count) queued=\(self.queuedSessionIDs.count) idleAllowance=\(self.holdsIdleBackgroundAllowance) hasTask=\(self.taskIdentifier != .invalid) longKeepAlive=\(self.longRunningKeepAlive?.isKeepingAlive == true)")
+        Self.logger.notice("[AgentBackground] event=\(event) background=\(self.applicationIsInBackground) turns=\(self.outstandingTurns) questions=\(self.questionAllowanceSessionIDs.count) queued=\(self.queuedSessionIDs.count) idleAllowance=\(self.holdsIdleBackgroundAllowance) hasTask=\(self.taskIdentifier != .invalid) longKeepAlive=\(self.longRunningKeepAlive?.isKeepingAlive == true) continued=\(self.continuedProcessing?.isRunning == true)")
     }
 
     private let application: BackgroundTaskApplication
@@ -246,6 +246,7 @@ final class AgentBackgroundExecutionController {
     }
 
     func cancel() {
+        if isAgentWorkActive { traceBackground("cancel-work") }
         continuedProcessing?.finish(success: false)
         holdsIdleBackgroundAllowance = false
         queuedSessionIDs.removeAll()
@@ -345,9 +346,11 @@ private final class SystemAgentContinuedProcessing: AgentContinuedProcessing {
                     return
                 }
                 self.task = continued
+                Self.logger.notice("[AgentContinued] event=started progressEvents=\(self.completedEvents)")
                 continued.expirationHandler = { [weak self] in
                     Task { @MainActor in
                         guard let self, self.identifier == id else { return }
+                        Self.logger.notice("[AgentContinued] event=expired progressEvents=\(self.completedEvents)")
                         self.finish(success: false)
                         self.onExpired?()
                     }
@@ -366,6 +369,7 @@ private final class SystemAgentContinuedProcessing: AgentContinuedProcessing {
             subtitle: String(localized: "正在同步任务进展")
         )
         request.strategy = .fail
+        Self.logger.notice("[AgentContinued] event=submit")
         if #available(iOS 27.0, *) {
             // 新 SDK 的提交会异步返回，过期回调必须核对申请身份。
             Task {
@@ -374,18 +378,19 @@ private final class SystemAgentContinuedProcessing: AgentContinuedProcessing {
                     try await BGTaskScheduler.shared.submitTaskRequest(request)
                     if identifier != id { BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: id) }
                 }
-                catch { submissionFailed(id: id) }
+                catch { submissionFailed(id: id, error: error) }
             }
         } else {
             do { try BGTaskScheduler.shared.submit(request) }
-            catch { submissionFailed(id: id) }
+            catch { submissionFailed(id: id, error: error) }
         }
 #endif
     }
 
-    private func submissionFailed(id: String) {
+    private func submissionFailed(id: String, error: Error) {
         guard identifier == id else { return }
-        Self.logger.notice("[AgentContinued] submission-refused; existing background policy remains active")
+        let failure = error as NSError
+        Self.logger.notice("[AgentContinued] event=submission-refused domain=\(failure.domain) code=\(failure.code)")
         identifier = nil
     }
 
@@ -410,6 +415,9 @@ private final class SystemAgentContinuedProcessing: AgentContinuedProcessing {
     func finish(success: Bool) {
         let oldID = identifier
         let oldTask = task
+        if oldID != nil {
+            Self.logger.notice("[AgentContinued] event=finished success=\(success) started=\(oldTask != nil) progressEvents=\(completedEvents)")
+        }
         identifier = nil
         task = nil
         attempted = false

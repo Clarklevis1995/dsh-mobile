@@ -26,7 +26,11 @@ struct SidebarNavigationIcon: View {
                     .stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
                 }
             case .connector:
-                Image(systemName: connectorSymbolName)
+                let configuration = UIImage.SymbolConfiguration(weight: .semibold)
+                let image = UIImage(systemName: connectorSymbolName, withConfiguration: configuration)
+                    .map(Image.init(uiImage:)) ?? Image(systemName: connectorSymbolName)
+                image
+                    .renderingMode(.template)
                     .resizable()
                     .scaledToFit()
             }

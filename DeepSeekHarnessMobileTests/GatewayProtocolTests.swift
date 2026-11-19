@@ -10674,6 +10674,48 @@ private final class MalformedHistoryEventBridge:
 
 final class AgentContinuedProcessingTests: XCTestCase {
     @MainActor
+    func testIdleSessionSnapshotDoesNotEndBackgroundWorkBeforeSendAcknowledgement() async throws {
+        let continued = AgentContinuedProcessingSpy()
+        let controller = AgentBackgroundExecutionController(
+            application: BackgroundTaskApplicationSpy(), continuedProcessing: continued
+        )
+        let session = SessionSummary(id: "s", title: "Test", lastActivity: .now, isRunning: false, hasUnread: false)
+        let store = AppStore(
+            preferences: AppPreferencesSpy(endpoint: "", selectedWorkspaceID: nil, sessions: [session]),
+            backgroundExecutionController: controller,
+            chatHistoryCache: nil
+        )
+        defer { store.deactivateGateway() }
+        store.gateway.installConnectedTransportForTesting()
+        let prepared = await store.prepareConversation(for: session)
+        XCTAssertTrue(prepared)
+        XCTAssertTrue(store.send("Test message"))
+        continued.isRunning = true
+        store.handleScenePhase(.background)
+        controller.begin(sessionID: "other", startsNewTurn: false)
+
+        let idle = try GatewayWireDecoder.decode(Data(#"""
+        {"kind":"sessions","items":[
+            {"sessionId":"s","updatedAt":2,"running":false,"blank":false},
+            {"sessionId":"other","updatedAt":1,"running":false,"blank":false}
+        ]}
+        """#.utf8))
+        store.gateway.onFrame?(idle)
+        XCTAssertTrue(store.messageSubmissionPending)
+        XCTAssertTrue(controller.isAgentWorkActive(sessionID: session.id))
+        XCTAssertFalse(controller.isAgentWorkActive(sessionID: "other"))
+        XCTAssertTrue(continued.completions.isEmpty)
+
+        let acknowledgement = try GatewayWireDecoder.decode(Data(#"{"kind":"sent","sessionId":"s"}"#.utf8))
+        store.gateway.onFrame?(acknowledgement)
+        XCTAssertFalse(store.messageSubmissionPending)
+        store.gateway.onFrame?(idle)
+        XCTAssertFalse(controller.isAgentWorkActive)
+        XCTAssertEqual(continued.completions, [true])
+        XCTAssertEqual(continued.beginCount, 1)
+    }
+
+    @MainActor
     func testOnlyForegroundUserWorkRequestsContinuedProcessing() {
         let continued = AgentContinuedProcessingSpy()
         let controller = AgentBackgroundExecutionController(
