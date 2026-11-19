@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clarklevis.dsh.android.localization.appText
+import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.delay
@@ -106,17 +107,7 @@ internal fun ConversationPagerChrome(
                     page(index, topInset)
                 }
             }
-            // 标题和模式文字后保持完整遮挡，40dp 渐变从栏底前 8dp 延伸到栏底后 32dp。
-            val glassProtectedHeight = (topInset - 8.dp).coerceAtLeast(0.dp)
-            val glassFadeHeight = 40.dp
-            val glassHeight = glassProtectedHeight + glassFadeHeight
-            Box(
-                Modifier.fillMaxWidth().height(glassHeight)
-                    .clipToBounds()
-                    .conversationTopGlass(backdrop, glassProtectedHeight, glassFadeHeight)
-                    .semantics { hideFromAccessibility() }
-                    .testTag("conversation-top-glass")
-            )
+            ConversationTopGlass(backdrop, topInset)
             Box(Modifier.fillMaxWidth().onSizeChanged { topInset = with(density) { it.height.toDp() } }) {
                 topBar()
             }
@@ -178,4 +169,19 @@ private fun ConversationPageIndicator(sessionId: String?, selectedPage: Int, mod
             }
         }
     }
+}
+
+@Composable
+internal fun ConversationTopGlass(backdrop: LayerBackdrop, topInset: Dp) {
+    // 标题和模式文字后保持完整遮挡，40dp 渐变从栏底前 8dp 延伸到栏底后 32dp。
+    val glassProtectedHeight = (topInset - 8.dp).coerceAtLeast(0.dp)
+    val glassFadeHeight = 40.dp
+    val glassHeight = glassProtectedHeight + glassFadeHeight
+    Box(
+        Modifier.fillMaxWidth().height(glassHeight)
+            .clipToBounds()
+            .conversationTopGlass(backdrop, glassProtectedHeight, glassFadeHeight)
+            .semantics { hideFromAccessibility() }
+            .testTag("conversation-top-glass")
+    )
 }

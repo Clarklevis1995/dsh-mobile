@@ -838,6 +838,7 @@ class GatewayRuntime(
         if (!correlation.accepted) return null
         if (frame.kind == "error") {
             if (frame.resetRequired == true || frame.requestType?.startsWith("speech-") == true ||
+                frame.requestType?.startsWith("bot-") == true ||
                 frame.requestType?.startsWith("file-") == true ||
                 frame.requestType?.startsWith("workspace-changes-") == true ||
                 frame.requestType in setOf("session-agent-preset", "select-agent-preset", "agent-team", "subagents", "agent-team-set-enabled") ||
@@ -897,6 +898,16 @@ class GatewayRuntime(
     }
 
     private suspend fun correlateLocked(frame: GatewayFrame): Correlation {
+        // Bot 请求各自关联 requestId；历史、列表及发送互不占用已有会话的 lane。
+        val botId = frame.requestId?.takeIf { it.startsWith("bot-") }
+        if (botId != null && frame.kind in setOf("bot-result", "bot-subscribed", "error")) {
+            val lane = pendingLanes[botId] ?: return Correlation(false, null)
+            if (!lane.active.request.requestType.startsWith("bot-") || lane.active.generation != connectionGeneration) {
+                return Correlation(false, null)
+            }
+            completeLaneLocked(botId)
+            return Correlation(true, null)
+        }
         // 成员资料使用有 requestId 的独立只读通道，不占用或完成前台 history lane。
         val profileId = frame.requestId?.takeIf { it.startsWith("team-profile-") }
         if (profileId != null && frame.kind in setOf("history", "error")) {

@@ -66,17 +66,19 @@ internal fun ComposerGlassBackdropHost(content: @Composable (Modifier) -> Unit) 
 internal fun ComposerGlassSurface(
     modifier: Modifier = Modifier,
     shape: Shape,
+    surfaceTint: Color? = null,
+    edgeTint: Color? = null,
     content: @Composable () -> Unit
 ) {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val backdrop = LocalComposerBackdrop.current
-    val tint = if (dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
+    val tint = surfaceTint ?: if (dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
     val glass = backdrop != null && !LocalUiEffectsReduced.current && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val material = if (glass) Modifier.drawPlainBackdrop(
         backdrop = requireNotNull(backdrop),
         shape = { shape },
         effects = { blur(24.dp.toPx()) },
-        onDrawSurface = { drawRect(tint.copy(alpha = if (dark) 0.52f else 0.48f)) }
+        onDrawSurface = { drawRect(tint.copy(alpha = if (surfaceTint != null) 0.84f else if (dark) 0.52f else 0.48f)) }
     ) else Modifier
     Surface(
         modifier = modifier.dropShadow(shape, Shadow(
@@ -86,7 +88,7 @@ internal fun ComposerGlassSurface(
         )).then(material),
         shape = shape,
         color = if (glass) Color.Transparent else tint.copy(alpha = 0.96f),
-        border = BorderStroke(0.7.dp, Color.White.copy(alpha = if (dark) 0.13f else 0.56f)),
+        border = BorderStroke(0.7.dp, edgeTint ?: Color.White.copy(alpha = if (dark) 0.13f else 0.56f)),
         content = content
     )
 }

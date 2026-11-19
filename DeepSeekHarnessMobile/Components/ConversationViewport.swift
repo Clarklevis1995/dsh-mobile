@@ -209,6 +209,8 @@ struct ConversationViewport: UIViewControllerRepresentable {
     let timeline: ConversationTimeline
     let supplementalEntries: [ConversationViewportEntry]
     let makeEntries: ([ConversationItem]) -> [ConversationViewportEntry]
+    var projectedRevision: Int? = nil
+    var hasProjectedConversationContent = false
     var topInset: CGFloat = 0
     let bottomInset: CGFloat
     let scrollToBottomToken: Int
@@ -256,6 +258,8 @@ struct ConversationViewport: UIViewControllerRepresentable {
             timeline: timeline,
             supplementalEntries: supplementalEntries,
             makeEntries: makeEntries,
+            projectedRevision: projectedRevision,
+            hasProjectedConversationContent: hasProjectedConversationContent,
             bottomInset: bottomInset
         )
         if context.coordinator.lastScrollToBottomToken != scrollToBottomToken {
@@ -387,6 +391,8 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private weak var timeline: ConversationTimeline?
     private var timelineObserverID: UUID?
     private var supplementalEntries: [ConversationViewportEntry] = []
+    private var projectedRevision: Int?
+    private var hasProjectedConversationContent = false
     private var makeEntries: (([ConversationItem]) -> [ConversationViewportEntry])?
     private var bottomInset: CGFloat = 0
     private typealias PendingPresentation = (
@@ -787,6 +793,8 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         timeline: ConversationTimeline,
         supplementalEntries: [ConversationViewportEntry],
         makeEntries: @escaping ([ConversationItem]) -> [ConversationViewportEntry],
+        projectedRevision: Int? = nil,
+        hasProjectedConversationContent: Bool = false,
         bottomInset: CGFloat
     ) {
         loadViewIfNeeded()
@@ -794,6 +802,8 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
         resetConfiguredFontIfNeeded()
         self.supplementalEntries = supplementalEntries
         self.makeEntries = makeEntries
+        self.projectedRevision = projectedRevision
+        self.hasProjectedConversationContent = hasProjectedConversationContent
         self.bottomInset = bottomInset
 
         if self.timeline !== timeline {
@@ -856,10 +866,11 @@ final class ConversationViewportController: UIViewController, UICollectionViewDe
     private func render(_ snapshot: ConversationTimeline.Snapshot) {
         guard let makeEntries else { return }
         let entries = supplementalEntries + makeEntries(snapshot.items)
-        let hasContent = !snapshot.items.isEmpty || entries.contains { $0.id == "deep-search-progress" }
+        let hasContent = hasProjectedConversationContent || !snapshot.items.isEmpty ||
+            entries.contains { $0.id == "deep-search-progress" }
         apply(
             entries: entries,
-            revision: snapshot.revision,
+            revision: projectedRevision ?? snapshot.revision,
             bottomInset: bottomInset,
             hasConversationContent: hasContent,
             historyPresentationStamp: snapshot.historyPresentationStamp
@@ -3639,18 +3650,8 @@ private final class UserMessageCell: StableSelfSizingCollectionViewCell {
 
     private func updateBubbleColors() {
         let dark = traitCollection.userInterfaceStyle == .dark
-        bubbleView.backgroundColor = UIColor(
-            red: 0.18,
-            green: 0.42,
-            blue: 0.9,
-            alpha: dark ? 0.24 : 0.11
-        )
-        bubbleView.layer.borderColor = UIColor(
-            red: 0.18,
-            green: 0.42,
-            blue: 0.9,
-            alpha: dark ? 0.34 : 0.08
-        ).cgColor
+        bubbleView.backgroundColor = UIColor(DSHColor.userBubbleFill(isDark: dark))
+        bubbleView.layer.borderColor = UIColor(DSHColor.userBubbleEdge(isDark: dark)).cgColor
     }
 }
 

@@ -20,9 +20,13 @@ struct HarnessAnimatedBackground: View {
     let style: HarnessBackgroundStyle
     var prefersOpenLightArcs = false
     var animationPaused = false
+    var lavender = false
     @State private var animationClock = HarnessBackgroundAnimationClock()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var night: Bool { lavender && colorScheme == .dark }
 
     private var usesStaticBackground: Bool {
         if #available(iOS 26.0, *) {
@@ -50,7 +54,7 @@ struct HarnessAnimatedBackground: View {
         }
         .onAppear { animationClock.setPaused(pausesAnimation, at: Date()) }
         .onChangeCompat(of: pausesAnimation) { _, paused in animationClock.setPaused(paused, at: Date()) }
-        .background(DSHColor.navy)
+        .background(lavender ? Color("BotLavender") : DSHColor.navy)
         .ignoresSafeArea()
         .clipped()
         .allowsHitTesting(false)
@@ -60,14 +64,18 @@ struct HarnessAnimatedBackground: View {
     private func backgroundLayers(time: TimeInterval, isStatic: Bool) -> some View {
         ZStack {
             HarnessFluidLayer(
-                time: time, style: style, prefersOpenLightArcs: prefersOpenLightArcs
+                time: time, style: style, prefersOpenLightArcs: prefersOpenLightArcs, lavender: lavender, night: night
             )
-            HarnessTechnicalGrid(style: style)
-            HarnessWhaleField(time: time, isStatic: isStatic, style: style)
-                .blendMode(.screen)
+            HarnessTechnicalGrid(style: style, lavender: lavender, night: night)
+            HarnessWhaleField(time: time, isStatic: isStatic, style: style, lavender: lavender, night: night)
+                .blendMode(lavender ? .normal : .screen)
 
             LinearGradient(
-                colors: [.clear, DSHColor.navy.opacity(0.12), Color.black.opacity(0.58)],
+                colors: [
+                    .clear,
+                    (night ? Color(red: 0.30, green: 0.27, blue: 0.34) : lavender ? Color(red: 0.92, green: 0.88, blue: 0.97) : DSHColor.navy).opacity(0.12),
+                    (night ? Color(red: 0.24, green: 0.21, blue: 0.28) : lavender ? Color(red: 0.88, green: 0.83, blue: 0.94) : .black).opacity(0.58)
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -121,6 +129,8 @@ private struct HarnessFluidLayer: View {
     let time: TimeInterval
     let style: HarnessBackgroundStyle
     let prefersOpenLightArcs: Bool
+    let lavender: Bool
+    let night: Bool
 
     @ViewBuilder
     var body: some View {
@@ -134,17 +144,22 @@ private struct HarnessFluidLayer: View {
                             .float2(proxy.size),
                             .float(Float(time)),
                             .float(style == .pad ? 1 : 0),
-                            .float(prefersOpenLightArcs ? 1 : 0)
+                            .float(prefersOpenLightArcs ? 1 : 0),
+                            .float(night ? 2 : lavender ? 1 : 0)
                         )
                     )
                 }
         } else {
             // iOS 16.1 兜底：用静态深色渐变替代流体场，其余图层（网格/鲸鱼粒子）不受影响。
             LinearGradient(
-                colors: [
-                    DSHColor.navy,
-                    DSHColor.navy.opacity(0.82),
-                    Color.black.opacity(0.92)
+                colors: night ? [
+                    Color(red: 0.21, green: 0.18, blue: 0.25),
+                    Color(red: 0.31, green: 0.28, blue: 0.34),
+                    Color(red: 0.24, green: 0.21, blue: 0.28)
+                ] : [
+                    lavender ? Color(red: 0.79, green: 0.70, blue: 0.89) : DSHColor.navy,
+                    lavender ? Color(red: 0.9, green: 0.85, blue: 0.96) : DSHColor.navy.opacity(0.82),
+                    lavender ? Color("BotLavender") : Color.black.opacity(0.92)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -155,6 +170,8 @@ private struct HarnessFluidLayer: View {
 
 private struct HarnessTechnicalGrid: View {
     let style: HarnessBackgroundStyle
+    let lavender: Bool
+    let night: Bool
 
     var body: some View {
         Canvas(rendersAsynchronously: true) { context, size in
@@ -172,7 +189,8 @@ private struct HarnessTechnicalGrid: View {
                 grid.addLine(to: CGPoint(x: size.width, y: y))
             }
 
-            context.stroke(grid, with: .color(.white.opacity(0.043)), lineWidth: 0.55)
+            let gridInk: Color = night ? .black : lavender ? Color(red: 0.43, green: 0.32, blue: 0.62) : .white
+            context.stroke(grid, with: .color(gridInk.opacity(0.043)), lineWidth: 0.55)
 
             // Sparse square intersections mirror the website's technical grid
             // without competing with the whale particle silhouette.
@@ -182,7 +200,7 @@ private struct HarnessTechnicalGrid: View {
                 for column in 0..<columns where (row * 11 + column * 7) % 13 == 0 {
                     let point = CGPoint(x: CGFloat(column) * spacing, y: CGFloat(row) * spacing)
                     let rect = CGRect(x: point.x - 1.1, y: point.y - 1.1, width: 2.2, height: 2.2)
-                    context.fill(Path(rect), with: .color(.white.opacity(0.085)))
+                    context.fill(Path(rect), with: .color(gridInk.opacity(0.085)))
                 }
             }
         }
@@ -206,11 +224,15 @@ private struct HarnessWhaleField: View {
     let style: HarnessBackgroundStyle
 
     private let particles: [WhaleParticle]
+    let lavender: Bool
+    let night: Bool
 
-    init(time: TimeInterval, isStatic: Bool, style: HarnessBackgroundStyle) {
+    init(time: TimeInterval, isStatic: Bool, style: HarnessBackgroundStyle, lavender: Bool = false, night: Bool = false) {
         self.time = time
         self.isStatic = isStatic
         self.style = style
+        self.lavender = lavender
+        self.night = night
         particles = WhaleParticleMask.particles(for: style)
     }
 
@@ -255,10 +277,10 @@ private struct HarnessWhaleField: View {
                 let boundedLuminance = min(1, max(0, particle.luminance))
                 let boundedLight = min(1, max(0, particle.light))
                 let alpha = min(1, max(0, (0.10 + boundedLuminance * 0.38) * shimmer))
-                let color = Color(
-                    red: min(1, max(0, 0.73 + 0.15 * boundedLight)),
-                    green: min(1, max(0, 0.79 + 0.12 * boundedLight)),
-                    blue: min(1, max(0, 0.92 + 0.08 * boundedLight))
+                let color = night ? Color(red: 0.08, green: 0.06, blue: 0.11) : Color(
+                    red: min(1, max(0, (lavender ? 0.48 : 0.73) + 0.15 * boundedLight)),
+                    green: min(1, max(0, (lavender ? 0.37 : 0.79) + 0.12 * boundedLight)),
+                    blue: min(1, max(0, (lavender ? 0.66 : 0.92) + 0.08 * boundedLight))
                 )
                 context.fill(Path(roundedRect: rect, cornerRadius: dotSize * 0.18), with: .color(color.opacity(alpha)))
             }

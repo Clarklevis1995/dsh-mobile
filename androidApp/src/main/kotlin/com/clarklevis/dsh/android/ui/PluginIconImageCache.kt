@@ -35,6 +35,11 @@ internal class PluginIconImageCache(private val assets: AssetManager) {
     private val lock = Mutex()
     private val inFlight = mutableMapOf<Source, Deferred<Bitmap?>>()
 
+    fun peekDataUrl(dataURL: String?): Bitmap? = dataURL?.let { images.get(Source.DataUrl(it)) }
+
+    suspend fun loadDataUrl(dataURL: String?): Bitmap? =
+        dataURL?.takeIf { it.length < 256_000 }?.let { image(Source.DataUrl(it)) }
+
     suspend fun load(dataURL: String?, fallback: String): Bitmap? {
         if (dataURL != null && dataURL.length < 256_000) {
             image(Source.DataUrl(dataURL))?.let { return it }

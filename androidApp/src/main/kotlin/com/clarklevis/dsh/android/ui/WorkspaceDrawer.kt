@@ -65,8 +65,13 @@ internal fun WorkspaceDrawer(
     onPlugins: () -> Unit,
     onScheduledTasks: () -> Unit,
     onConnectors: () -> Unit = {},
+    onBotMode: () -> Unit = {},
+    botMode: Boolean = false,
+    onStandardMode: () -> Unit = {},
+    gesturesEnabled: Boolean = true,
     content: @Composable (openDrawer: () -> Unit, canScrollVertically: Boolean) -> Unit
 ) {
+    BotModeTheme(botMode) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val drawerWidth = (maxWidth * 0.76f).coerceAtMost(360.dp)
@@ -93,8 +98,8 @@ internal fun WorkspaceDrawer(
             derivedStateOf { !horizontalDragActive && offsetPx == 0f }
         }
         val dark = isSystemInDarkTheme()
-        val lightSystemBars by remember(drawerWidthPx, dark) {
-            derivedStateOf { progress.value > 0.5f && !dark }
+        val lightSystemBars by remember(drawerWidthPx, dark, botMode) {
+            derivedStateOf { (botMode || progress.value > 0.5f) && !dark }
         }
         val view = LocalView.current
         val haptics = remember(view) { ClickHapticFeedback(view) }
@@ -163,6 +168,16 @@ internal fun WorkspaceDrawer(
                         modifier = Modifier.size(width = 183.dp, height = 29.dp)
                     )
                 }
+                Row(Modifier.fillMaxWidth().clickable(role = Role.Button) {
+                    animationJob?.cancel()
+                    updateOffset(0f)
+                    if (botMode) onStandardMode() else onBotMode()
+                }.padding(horizontal = 14.dp, vertical = 14.dp).testTag("drawer-bot"),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (botMode) WhalenessOrcaIcon(Modifier.size(24.dp)) else DsBotWhaleIcon(Modifier.size(24.dp))
+                    Text(appText(if (botMode) "切换到工作模式" else "切换到 Bot 模式"), Modifier.weight(1f), fontSize = 17.sp, color = MaterialTheme.colorScheme.onBackground)
+                    Image(painterResource(R.drawable.ic_mode_swap), null, Modifier.size(16.0125.dp, 19.6064.dp), colorFilter = ColorFilter.tint(Color(0xFF7760B4)))
+                }
                 DrawerItem(appText("插件"), R.drawable.ic_drawer_plugin, "drawer-plugins") {
                     onPlugins()
                 }
@@ -186,6 +201,7 @@ internal fun WorkspaceDrawer(
                         clip = fraction > 0f
                     }
                     .draggable(
+                        enabled = gesturesEnabled,
                         orientation = Orientation.Horizontal,
                         interactionSource = dragFeedback,
                         state = rememberDraggableState { delta ->
@@ -220,6 +236,7 @@ internal fun WorkspaceDrawer(
                 }
             }
         }
+    }
     }
 }
 

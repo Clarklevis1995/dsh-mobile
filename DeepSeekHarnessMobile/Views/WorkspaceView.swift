@@ -13,6 +13,9 @@ struct WorkspaceView: View {
     let onPlugins: () -> Void
     let onScheduledTasks: () -> Void
     var onConnectors: () -> Void = {}
+    var onBotMode: () -> Void = {}
+    var isBotMode = false
+    var onStandardMode: () -> Void = {}
     @State private var searchQuery = ""
     @StateObject private var sessionList = WorkspaceSessionListModel()
     @State private var renamingSession: SessionSummary?
@@ -31,7 +34,7 @@ struct WorkspaceView: View {
 
     @ViewBuilder
     var body: some View {
-        if #available(iOS 27.1, *) {
+        if #available(iOS 27.1, *), !isBotMode {
             WorkspaceVerticalToolbarLayout { usesVerticalToolbar in
                 workspaceBody(usesVerticalToolbar: usesVerticalToolbar)
             } toolbar: {
@@ -61,7 +64,12 @@ struct WorkspaceView: View {
             let dimProgress = min(max((progress - 0.45) / 0.55, 0), 1)
             let dimOpacity = 0.16 * dimProgress * dimProgress * (3 - 2 * dimProgress)
             let topInset = safeArea.top
-            let fullHeight = geometry.size.height + topInset + safeArea.bottom
+            // Bot 的分栏输入区要跟随键盘收缩；只补回窗口本身的底部安全区。
+            // safeArea.bottom 在键盘出现时还包含键盘高度，全部加回会把输入区推到键盘后面。
+            let windowBottom = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+                .flatMap(\.windows).first(where: \.isKeyWindow)?.safeAreaInsets.bottom ?? 0
+            let bottomInset = isBotMode && safeArea.bottom > windowBottom + 1 ? 0 : safeArea.bottom
+            let fullHeight = geometry.size.height + topInset + bottomInset
             let fullWidth = geometry.size.width + safeArea.leading + safeArea.trailing
 
             ZStack(alignment: .leading) {
@@ -86,7 +94,7 @@ struct WorkspaceView: View {
                     // 先扩展到窗口四边，再绘制和裁剪背景；正文仍留在安全区内。
                     .background {
                         WorkspaceScrollBackground(activity: scrollActivity, prefersOpenLightArcs: usesVerticalToolbar,
-                            animationPaused: drawerOffset > 0 || drawerDragStart != nil)
+                            animationPaused: drawerOffset > 0 || drawerDragStart != nil, lavender: isBotMode)
                     }
                     .overlay {
                         Color.black.opacity(dimOpacity)
@@ -131,11 +139,19 @@ struct WorkspaceView: View {
                 }
             }
         }
-        .background(DSHColor.navy.ignoresSafeArea())
+        .background((isBotMode ? Color("BotLavender") : DSHColor.navy).ignoresSafeArea())
         .onChangeCompat(of: drawerOffset) { _, value in
             if value > 0 { sessionSearchIsFocused = false }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(isBotMode ? Color("BotInk") : .white)
+        .onChangeCompat(of: isBotMode) { _, bot in
+            for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+                scene.windows.first(where: \.isKeyWindow)?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                if !bot && UIDevice.current.userInterfaceIdiom == .phone {
+                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+                }
+            }
+        }
         .onAppear {
             sessionList.bind(to: store)
             store.refreshRemoteState()
@@ -195,6 +211,7 @@ struct WorkspaceView: View {
         }
     }
 
+    @ViewBuilder
     private func workspaceContent(
         openDrawer: @escaping () -> Void,
         size: CGSize,
@@ -205,7 +222,20 @@ struct WorkspaceView: View {
         let usesColumns = AdaptiveLayout.workspaceUsesColumns(
             size: size, accessibilityText: dynamicTypeSize.isAccessibilitySize
         )
-        return ScrollView {
+        if isBotMode {
+            BotModeView(model: store.botMode, onStandardMode: onStandardMode, filePreviewStore: store,
+                header: AnyView(VStack(alignment: .leading, spacing: 6) {
+                    header(openDrawer: openDrawer, usesVerticalToolbar: false)
+                    GatewaySwitcherBar(onDarkBackground: colorScheme == .dark)
+                }), safeArea: safeArea,
+                drawerPan: AnyView(DrawerPanGestureAttachment(
+                    shouldBegin: { translation in
+                        abs(translation.x) > abs(translation.y) * 1.2 && (drawerOffset > 0 ? translation.x < 0 : translation.x > 0)
+                    }, onChanged: { updateDrawerDrag(translation: $0, width: drawerWidth) },
+                    onEnded: { finishDrawerDrag(translation: $0, velocity: $1, cancelled: $2, width: drawerWidth) }
+                )), scrollEnabled: drawerOffset == 0 || drawerDragStart != nil)
+        } else {
+        ScrollView {
             VStack(alignment: .leading, spacing: usesColumns ? 40 : 18) {
                 VStack(alignment: .leading, spacing: 6) {
                     header(openDrawer: openDrawer, usesVerticalToolbar: usesVerticalToolbar)
@@ -251,6 +281,7 @@ struct WorkspaceView: View {
             sessionList.setScrolling(active)
         })
         .onTapGesture { sessionSearchIsFocused = false }
+        }
     }
 
     private var workspaceActions: some View {
@@ -307,7 +338,7 @@ struct WorkspaceView: View {
     private func header(openDrawer: @escaping () -> Void, usesVerticalToolbar: Bool) -> some View {
         HStack {
             Button(action: openDrawer) {
-                HarnessMark(width: dynamicTypeSize.isAccessibilitySize ? 150 : 216)
+                HarnessMark(onDarkBackground: !isBotMode || colorScheme == .dark, width: dynamicTypeSize.isAccessibilitySize ? 150 : 216)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
                 .layoutPriority(-1)
@@ -330,6 +361,12 @@ struct WorkspaceView: View {
                 .padding(.leading, 12)
                 .padding(.bottom, 16)
 
+            drawerItem(isBotMode ? String(localized: "切换到工作模式") : String(localized: "切换到 Bot 模式"), icon: {
+                Group {
+                    if isBotMode { WhalenessOrcaIcon(size: 24) }
+                    else { Image("DsBotWhale").renderingMode(colorScheme == .dark ? .template : .original).resizable().scaledToFit().frame(width: 24, height: 24) }
+                }.frame(width: 24)
+            }, action: { selectDrawerItem(isBotMode ? onStandardMode : onBotMode) }, modeSwitch: true)
             drawerItem(String(localized: "插件"), icon: {
                 Image("DshPluginPinwheel")
                     .renderingMode(.template)
@@ -355,13 +392,15 @@ struct WorkspaceView: View {
     private func drawerItem<Icon: View>(
         _ title: String,
         @ViewBuilder icon: () -> Icon,
-        action: @escaping () -> Void
+        action: @escaping () -> Void,
+        modeSwitch: Bool = false
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 10) {
                 icon()
                 Text(title).appFont(.system(size: 17))
                 Spacer(minLength: 0)
+                if modeSwitch { Image(systemName: "arrow.left.arrow.right").appFont(.system(size: 17)).foregroundStyle(Color("BotPurple")) }
             }
             .frame(minHeight: 52)
             .padding(.horizontal, 14)
@@ -460,6 +499,7 @@ struct WorkspaceView: View {
         GatewayAuthenticationMenu(
             gateway: store.gateway,
             inToolbar: inToolbar,
+            onDarkBackground: !isBotMode || colorScheme == .dark,
             onScan: {
                 store.lastError = nil
                 showsQRScanner = true
@@ -491,7 +531,7 @@ struct WorkspaceView: View {
         Button(action: action) {
             headerButtonLabel(systemName: systemName)
         }
-        .glassCircleButton(onDarkBackground: true)
+        .glassCircleButton(onDarkBackground: !isBotMode || colorScheme == .dark)
         .accessibilityLabel(accessibilityLabel)
     }
 
@@ -747,9 +787,10 @@ private struct WorkspaceScrollBackground: View {
     @ObservedObject var activity: WorkspaceScrollActivity
     let prefersOpenLightArcs: Bool
     let animationPaused: Bool
+    var lavender = false
 
     var body: some View {
-        DeepOceanBackground(prefersOpenLightArcs: prefersOpenLightArcs,
+        DeepOceanBackground(lavender: lavender, prefersOpenLightArcs: prefersOpenLightArcs,
             animationPaused: animationPaused || activity.isScrolling)
     }
 }
@@ -1220,6 +1261,7 @@ private struct GatewayConnectionIndicator: View {
 private struct GatewayAuthenticationMenu: View {
     @ObservedObject var gateway: GatewayClient
     var inToolbar = false
+    var onDarkBackground = true
     let onScan: () -> Void
     let onManualEntry: () -> Void
 
@@ -1228,7 +1270,7 @@ private struct GatewayAuthenticationMenu: View {
         if inToolbar {
             menu.buttonStyle(.plain)
         } else {
-            menu.glassCircleButton(onDarkBackground: true)
+            menu.glassCircleButton(onDarkBackground: onDarkBackground)
         }
     }
 

@@ -4,5 +4,13 @@
     <!-- 内网构建允许连接开发机/LAN 的 ws:// Gateway。 -->
     <application
         android:usesCleartextTraffic="true"
-        tools:replace="android:usesCleartextTraffic" />
+        tools:replace="android:usesCleartextTraffic">
+        <activity
+            android:name=".BotDesignTestActivity"
+            android:exported="false"
+            android:screenOrientation="@integer/app_screen_orientation"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:theme="@style/Theme.DeepSeekHarness"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
 </manifest>

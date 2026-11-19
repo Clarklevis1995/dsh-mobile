@@ -21,16 +21,16 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 
-private val LocalScheduleInputBounds = staticCompositionLocalOf<MutableMap<Any, Rect>?> { null }
+private val LocalKeyboardDismissExclusions = staticCompositionLocalOf<MutableMap<Any, Rect>?> { null }
 
 /** 在 Initial pass 旁观完整轻触，不消费事件；编辑区内点击和拖动都保留原来的处理。 */
 @Composable
-internal fun ScheduleKeyboardDismissHost(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+internal fun KeyboardDismissHost(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val inputs = remember { mutableMapOf<Any, Rect>() }
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    CompositionLocalProvider(LocalScheduleInputBounds provides inputs) {
+    CompositionLocalProvider(LocalKeyboardDismissExclusions provides inputs) {
         Box(modifier.onGloballyPositioned { coordinates = it }.pointerInput(inputs, focus, keyboard) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -51,8 +51,8 @@ internal fun ScheduleKeyboardDismissHost(modifier: Modifier = Modifier, content:
 }
 
 @Composable
-internal fun Modifier.scheduleInputRegion(): Modifier {
-    val inputs = LocalScheduleInputBounds.current ?: return this
+internal fun Modifier.keyboardDismissExclusion(): Modifier {
+    val inputs = LocalKeyboardDismissExclusions.current ?: return this
     val key = remember { Any() }
     DisposableEffect(inputs, key) { onDispose { inputs.remove(key) } }
     return onGloballyPositioned { inputs[key] = it.boundsInWindow() }

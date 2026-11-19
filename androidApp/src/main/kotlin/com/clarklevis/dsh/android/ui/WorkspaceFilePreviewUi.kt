@@ -78,9 +78,9 @@ import kotlinx.coroutines.withContext
 
 /** 聊天和目录共用唯一预览监听器，下载导出仍由目录处理。 */
 @Composable
-internal fun WorkspaceFilePreviewHost(stateHolder: AndroidSharedStateHolder) {
+internal fun WorkspaceFilePreviewHost(stateHolder: AndroidSharedStateHolder, botChatId: String? = null) {
     val context = LocalContext.current
-    val sessionId = stateHolder.snapshot.selectedSessionId
+    val sessionId = if (botChatId == null) stateHolder.snapshot.selectedSessionId else null
     val scope = rememberCoroutineScope()
     var pendingExport by remember { mutableStateOf<AndroidWorkspaceLocalFile?>(null) }
     var pendingExportLease by remember { mutableStateOf<java.io.Closeable?>(null) }
@@ -111,12 +111,14 @@ internal fun WorkspaceFilePreviewHost(stateHolder: AndroidSharedStateHolder) {
             exported?.let { stateHolder.releaseWorkspaceTemporaryFile(it.file) }
         }
     }
-    DisposableEffect(stateHolder, sessionId) {
-        onDispose { stateHolder.cancelWorkspaceFileDownload() }
+    DisposableEffect(stateHolder, sessionId, botChatId) {
+        onDispose {
+            if (stateHolder.workspaceFilePreviewRequest?.botChatId == botChatId) stateHolder.cancelWorkspaceFileDownload()
+        }
     }
     val requestApkInstall = rememberWorkspaceApkInstaller(stateHolder)
     val request = stateHolder.workspaceFilePreviewRequest ?: return
-    if (request.sessionId != sessionId) return
+    if (request.botChatId != botChatId || (botChatId == null && request.sessionId != sessionId)) return
     val file = stateHolder.completedWorkspaceFile?.takeIf {
         it.purpose == "preview" && it.sessionId == request.sessionId
     }

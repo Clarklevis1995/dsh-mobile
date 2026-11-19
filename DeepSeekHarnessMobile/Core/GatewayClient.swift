@@ -247,6 +247,9 @@ final class GatewayClient: ObservableObject {
     var onCommandFrame: ((String) -> Void)?
     var onDeviceToolFrame: ((String) -> Void)?
     var onSpeechFrame: ((String) -> Void)?
+    var onBotFrame: ((String) -> Void)?
+    var supportsFileUploads: Bool { diagnosticsCapabilities.contains("file-upload-v1") }
+    var supportsBots: Bool { diagnosticsCapabilities.contains("bot-v1") }
     var onConnectionFailure: ((String) -> Void)?
     /// 传输生命周期与错误弹窗分离；静默恢复也必须废弃旧请求。
     var onConnectionInvalidated: (() -> Void)?
@@ -952,6 +955,15 @@ final class GatewayClient: ObservableObject {
         write(payload, to: socket)
     }
 
+    @discardableResult
+    func sendBotRequest(_ payload: String) -> Bool {
+        guard state.isConnected, supportsBots,
+              let object = (try? JSONSerialization.jsonObject(with: Data(payload.utf8))) as? [String: Any],
+              let type = object["type"] as? String, type.hasPrefix("bot-") else { return false }
+        send(object)
+        return true
+    }
+
     private func send(_ object: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: object) else { return }
         sendRequestPayload(String(decoding: data, as: UTF8.self))
@@ -998,8 +1010,8 @@ final class GatewayClient: ObservableObject {
     nonisolated static func decodeIncomingFrame(_ data: Data) throws -> (GatewayFrame?, String?) {
         struct SpeechEnvelope: Decodable { let kind: String?; let requestType: String? }
         let header = try? JSONDecoder().decode(SpeechEnvelope.self, from: data)
-        if header?.kind?.hasPrefix("device-tool") == true || header?.kind?.hasPrefix("speech-") == true ||
-            (header?.kind == "error" && (header?.requestType?.hasPrefix("speech-") == true || header?.requestType?.hasPrefix("device-tool") == true)) {
+        if header?.kind?.hasPrefix("device-tool") == true || header?.kind?.hasPrefix("speech-") == true || header?.kind?.hasPrefix("bot-") == true ||
+            (header?.kind == "error" && (header?.requestType?.hasPrefix("speech-") == true || header?.requestType?.hasPrefix("device-tool") == true || header?.requestType?.hasPrefix("bot-") == true)) {
             return (nil, String(decoding: data, as: UTF8.self))
         }
         return (try GatewayWireDecoder.decode(data), nil)
@@ -1008,6 +1020,7 @@ final class GatewayClient: ObservableObject {
     private func deliverAuxiliaryFrame(_ json: String) {
         let header = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
         if (header?["kind"] as? String)?.hasPrefix("device-tool") == true || (header?["kind"] as? String == "error" && (header?["requestType"] as? String)?.hasPrefix("device-tool") == true) { onDeviceToolFrame?(json) }
+        else if (header?["kind"] as? String)?.hasPrefix("bot-") == true || (header?["requestType"] as? String)?.hasPrefix("bot-") == true { onBotFrame?(json) }
         else { onSpeechFrame?(json) }
     }
 

@@ -28,12 +28,27 @@ import kotlin.math.sin
 internal fun OceanMeshBackground(
     time: () -> Float,
     modifier: Modifier = Modifier,
-    largeWindow: Boolean = false
+    largeWindow: Boolean = false,
+    lavender: Boolean = false,
+    night: Boolean = false
 ) {
-    val fieldColors = if (largeWindow) oceanTabletMeshColors else oceanMeshColors
-    val primaryStyle = if (largeWindow) tabletPrimaryRibbon else phonePrimaryRibbon
-    val bottomStyle = if (largeWindow) tabletBottomRibbon else phoneBottomRibbon
-    val mesh = remember(time, largeWindow) {
+    if (lavender && Build.VERSION.SDK_INT >= 33) {
+        HarnessLavenderFluid(time, modifier, largeWindow, night)
+        return
+    }
+    fun palette(color: Color): Color {
+        if (!lavender) return color
+        val l = (color.red * .2126f + color.green * .7152f + color.blue * .0722f) / .50f
+        if (night) {
+            val tone = l.coerceIn(0f, 1f)
+            return Color(.20f + .14f * tone, .17f + .13f * tone, .24f + .13f * tone, color.alpha)
+        }
+        return Color((.79f + .20f * l).coerceIn(0f,1f), (.70f + .27f * l).coerceIn(0f,1f), (.89f + .11f * l).coerceIn(0f,1f), color.alpha)
+    }
+    val fieldColors = (if (largeWindow) oceanTabletMeshColors else oceanMeshColors).map(::palette)
+    val primaryStyle = (if (largeWindow) tabletPrimaryRibbon else phonePrimaryRibbon).let { if (lavender) it.copy(colors = it.colors.map(::palette)) else it }
+    val bottomStyle = (if (largeWindow) tabletBottomRibbon else phoneBottomRibbon).let { if (lavender) it.copy(colors = it.colors.map(::palette)) else it }
+    val mesh = remember(time, largeWindow, lavender, night) {
         // drawVertices 从 API 29 开始支持硬件加速；旧系统使用标准矢量渐变。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MeshGradientPainter(rows = 4, columns = 4, hasBicubicColor = false) {
@@ -51,18 +66,18 @@ internal fun OceanMeshBackground(
             }
         } else null
     }
-    val ribbon = remember(largeWindow) {
+    val ribbon = remember(largeWindow, lavender, night) {
         if (mesh != null) oceanRibbonPainter(primaryStyle) else null
     }
-    val bottomRibbon = remember(largeWindow) {
+    val bottomRibbon = remember(largeWindow, lavender, night) {
         if (mesh != null) oceanRibbonPainter(bottomStyle) else null
     }
     Box(modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().drawWithCache {
             val fallback = Brush.radialGradient(
-                colors = if (largeWindow) {
+                colors = (if (largeWindow) {
                     listOf(Color(0xFF124D84), Color(0xFF10375C), Color(0xFF091521))
-                } else listOf(Color(0xFF092C54), Color(0xFF06172D), Color(0xFF02070C)),
+                } else listOf(Color(0xFF092C54), Color(0xFF06172D), Color(0xFF02070C))).map(::palette),
                 center = Offset(size.width * if (largeWindow) 0.52f else 0.85f, size.height * 0.18f),
                 radius = max(size.width, size.height) * if (largeWindow) 1.05f else 0.80f
             )

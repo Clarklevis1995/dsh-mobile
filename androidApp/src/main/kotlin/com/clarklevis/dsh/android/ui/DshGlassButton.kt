@@ -33,14 +33,15 @@ import androidx.compose.ui.unit.dp
 
 /** 全局操作按钮沿用日志导出页的玻璃、细描边与轻阴影规格。 */
 @Composable
-internal fun Modifier.dshGlassControl(shape: Shape = CircleShape): Modifier {
-    val surface = if (isSystemInDarkTheme()) Color(0xFF1C1C1E) else Color.White
+internal fun Modifier.dshGlassControl(shape: Shape = CircleShape, appearanceDark: Boolean? = null): Modifier {
+    val dark = appearanceDark ?: isSystemInDarkTheme()
+    val surface = if (dark) Color(0xFF1C1C1E) else Color.White
     if (LocalUiEffectsReduced.current) {
         return background(surface.copy(alpha = 0.92f), shape)
             .border(0.5.dp, Color(0xFF8E8E93).copy(alpha = 0.4f), shape)
             .clip(shape)
     }
-    val shadowColor = Color.Black.copy(alpha = if (isSystemInDarkTheme()) 0.20f else 0.08f)
+    val shadowColor = Color.Black.copy(alpha = if (dark) 0.20f else 0.08f)
     return dshOuterShadow(shape, Shadow(radius = 6.dp, color = shadowColor, offset = DpOffset(0.dp, 2.dp)))
         .dshLiquidGlass(shape, DshGlassStyle.CONTROL, shadowsEnabled = false)
         .background(surface.copy(alpha = 0.45f), shape)
@@ -60,11 +61,25 @@ internal fun DshGlassButton(
     enabled: Boolean = true,
     shape: Shape = CircleShape,
     content: @Composable () -> Unit,
+) = DshGlassButton(description, onClick, modifier, enabled, shape, appearanceDark = null, content = content)
+
+@Suppress("FunctionNaming", "ktlint:standard:function-naming", "LongParameterList")
+@Composable
+internal fun DshGlassButton(
+    description: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    shape: Shape = CircleShape,
+    appearanceDark: Boolean?,
+    clearCard: Boolean = false,
+    clearCardTint: Color? = null,
+    content: @Composable () -> Unit,
 ) {
-    CompositionLocalProvider(LocalContentColor provides dshGlassForeground().copy(alpha = if (enabled) 1f else 0.3f)) {
+    CompositionLocalProvider(LocalContentColor provides (appearanceDark?.let { if (it) Color.White else Color.Black } ?: dshGlassForeground()).copy(alpha = if (enabled) 1f else 0.3f)) {
         Box(
             modifier
-                .dshGlassControl(shape)
+                .then(if (clearCard) Modifier.dshClearCardGlass(shape, clearCardTint) else Modifier.dshGlassControl(shape, appearanceDark))
                 .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
                 .semantics { contentDescription = description },
             contentAlignment = Alignment.Center,

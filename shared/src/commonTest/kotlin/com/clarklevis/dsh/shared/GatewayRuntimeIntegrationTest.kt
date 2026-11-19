@@ -52,6 +52,32 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class GatewayRuntimeIntegrationTest {
     @Test
+    fun botRequestsCorrelateIndependentlyAndPreserveErrors() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport, clock = RecordingDelayClock())
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect { events += it } }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true,"capabilities":["bot-v1"]}""")
+        runCurrent()
+        for (id in listOf("bot-1", "bot-2")) {
+            assertTrue(runtime.sendRequest(com.clarklevis.dsh.shared.gateway.GatewayRequest(
+                "bot-call", id, correlationId = id, payload = """{"type":"bot-call","requestId":"$id","endpoint":"state"}"""
+            )))
+        }
+        transport.receive("""{"kind":"error","requestType":"bot-call","requestId":"bot-2","code":"bot/read-only","message":"Read only"}""")
+        transport.receive("""{"kind":"bot-result","requestId":"bot-1","endpoint":"state","value":{"bots":[]}}""")
+        transport.receive("""{"kind":"bot-event","subscriptionId":"bot-sub","botEvent":"stream","botData":{"text":"你好"}}""")
+        runCurrent()
+        val frames = events.filterIsInstance<GatewayRuntimeEvent.Frame>()
+        assertTrue(frames.any { it.frame.requestId == "bot-2" && it.frame.code == "bot/read-only" })
+        assertTrue(frames.any { it.frame.requestId == "bot-1" && it.frame.kind == "bot-result" })
+        assertTrue(frames.any { it.frame.botEvent == "stream" })
+    }
+
+    @Test
     fun teamModeReplyRequiresMatchingRequestAndSession() = runTest {
         val transport = FakeTransport()
         val runtime = newRuntime(transport, clock = RecordingDelayClock())

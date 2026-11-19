@@ -96,7 +96,8 @@ static float harnessPadRibbons(float2 uv, float2 safeSize, float t, float2 disto
     float2 size,
     float time,
     float tabletStyle,
-    float prefersOpenLightArcs
+    float prefersOpenLightArcs,
+    float lavenderPalette
 ) {
     float2 safeSize = max(size, float2(1.0));
     float2 uv = position / safeSize;
@@ -144,5 +145,12 @@ static float harnessPadRibbons(float2 uv, float2 safeSize, float t, float2 disto
     color *= 0.38 + 0.72 * vignette;
     color += (harnessHash(position + floor(time * 12.0)) - 0.5) * 0.010;
 
+    if (lavenderPalette > 0.5) {
+        float luminance = dot(max(color, 0.0), float3(0.2126, 0.7152, 0.0722));
+        float tone = saturate(luminance / 0.50);
+        color = lavenderPalette > 1.5
+            ? mix(float3(0.20, 0.17, 0.24), float3(0.34, 0.30, 0.37), tone)
+            : mix(float3(0.79, 0.70, 0.89), float3(0.99, 0.97, 1.0), tone);
+    }
     return half4(half3(max(color, 0.0)), currentColor.a);
 }

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "snapshot": {
+    "mainBotId": "chief",
+    "chats": [{ "id": "chief", "name": "Chief" }]
+  },
+  "histories": {
+    "chief": [
+      { "id": "short-user", "kind": "user", "text": "好", "timeMs": 1794794580000 },
+      { "id": "short-bot", "kind": "bot", "text": "**收到。**", "timeMs": 1794794580000 },
+      { "id": "mention", "kind": "user", "text": "@北京西站到南站导航 kk" },
+      { "id": "long-user", "kind": "user", "text": "这条消息用来检查长文字能否按屏幕可用宽度自然换行。" },
+      { "id": "long-bot", "kind": "bot", "text": "这条回复包含**加粗文字**，用于检查较长的 Markdown 回复能否按可用宽度换行。" }
+    ]
+  },
+  "optimistic": {}
+}

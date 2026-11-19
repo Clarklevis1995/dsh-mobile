@@ -429,6 +429,8 @@ final class PluginIconImageCache {
     struct Request: Hashable {
         let dataURL: String
         let isDark: Bool
+
+        fileprivate var cacheKey: NSString { "\(isDark):\(dataURL)" as NSString }
     }
 
     static let shared = PluginIconImageCache()
@@ -442,9 +444,14 @@ final class PluginIconImageCache {
         images.totalCostLimit = 8 * 1_024 * 1_024
     }
 
+    func cachedImage(for request: Request) -> UIImage? {
+        guard request.dataURL.utf8.count < 256_000 else { return nil }
+        return images.object(forKey: request.cacheKey)
+    }
+
     func image(for request: Request) async -> UIImage? {
         guard request.dataURL.utf8.count < 256_000 else { return nil }
-        let key = "\(request.isDark):\(request.dataURL)" as NSString
+        let key = request.cacheKey
         if let cached = images.object(forKey: key) { return cached }
         if let task = inFlight[request] { return await task.value }
         let task = Task { [renderer] () -> UIImage? in

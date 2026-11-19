@@ -44,6 +44,7 @@ import com.kyant.backdrop.shadow.Shadow
 @Composable
 internal fun DshLiquidGlassHost(
     modifier: Modifier = Modifier,
+    frostOnOlderDevices: Boolean = false,
     background: @Composable (Modifier) -> Unit,
     content: @Composable BoxScope.() -> Unit
 ) {
@@ -51,10 +52,19 @@ internal fun DshLiquidGlassHost(
     val backdrop = rememberLayerBackdrop()
     val sheetBackdrop = rememberLayerBackdrop()
     val frameSignal = remember { mutableLongStateOf(0L) }
+    val legacyBackdrop = if (frostOnOlderDevices && LocalDshCardGlassApi.current < Build.VERSION_CODES.S && !effectsReduced) {
+        remember { LegacyFrostedBackdrop() }
+    } else null
+    val backgroundCapture = when {
+        legacyBackdrop != null -> Modifier.captureFrostedBackdrop(legacyBackdrop)
+        !effectsReduced -> Modifier.layerBackdrop(backdrop)
+        else -> Modifier
+    }
     CompositionLocalProvider(
-        LocalDshBackdrop provides backdrop.takeUnless { effectsReduced },
+        LocalDshBackdrop provides backdrop.takeUnless { effectsReduced || legacyBackdrop != null },
         LocalDshSheetBackdrop provides sheetBackdrop.takeUnless { effectsReduced },
-        LocalDshGlassFrameSignal provides frameSignal.takeUnless { effectsReduced }
+        LocalDshGlassFrameSignal provides frameSignal.takeUnless { effectsReduced },
+        LocalLegacyFrostedBackdrop provides legacyBackdrop
     ) {
         // 弹层位于独立窗口，可采样整个页面；页面内的玻璃控件仍只采样背景。
         Box(if (effectsReduced) modifier else modifier.layerBackdrop(sheetBackdrop)) {
@@ -64,7 +74,7 @@ internal fun DshLiquidGlassHost(
                         frameSignal.longValue
                         drawContent()
                     }
-                    .layerBackdrop(backdrop)
+                    .then(backgroundCapture)
             )
             content()
         }
@@ -86,7 +96,11 @@ internal enum class DshGlassStyle(
     ACTION(5f, 16f, 26f, 0.012f, 0.26f, 22f, saturation = 0.74f, navyTintAlpha = 0.06f),
     FIELD(5f, 10f, 16f, 0.060f, 0.10f, 14f, saturation = 0.72f),
     SUBTLE(4f, 8f, 13f, 0.040f, 0.10f, 12f, saturation = 0.72f),
-    APP_CARD(8f, 3f, 5f, 0.020f, 0.20f, 6f, saturation = 1f)
+    APP_CARD(8f, 3f, 5f, 0.020f, 0.20f, 6f, saturation = 1f),
+    CLEAR_CARD(3f, 9f, 13f, 0.12f, 0.60f, 6f, saturation = 1f),
+    FROSTED_CARD(16f, 0f, 0f, 0.16f, 0.60f, 6f, saturation = 1f),
+    DARK_CLEAR_CARD(3f, 9f, 13f, 0.02f, 0.12f, 6f, saturation = 1f),
+    DARK_FROSTED_CARD(16f, 0f, 0f, 0.02f, 0.12f, 6f, saturation = 1f)
 }
 
 /** 聊天应用卡片使用中性着色和轻折射，避免首页的深蓝底色影响正文。 */
@@ -144,12 +158,14 @@ internal fun Modifier.dshLiquidGlass(
             colorControls(brightness = 0.005f, contrast = 1.03f, saturation = style.saturation)
             exposureAdjustment(0.015f)
             blur(style.blurRadiusDp.dp.toPx())
-            lens(
-                refractionHeight = style.refractionHeightDp.dp.toPx(),
-                refractionAmount = style.refractionAmountDp.dp.toPx(),
-                depthEffect = true,
-                chromaticAberration = true
-            )
+            if (style.refractionHeightDp > 0f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                lens(
+                    refractionHeight = style.refractionHeightDp.dp.toPx(),
+                    refractionAmount = style.refractionAmountDp.dp.toPx(),
+                    depthEffect = true,
+                    chromaticAberration = true
+                )
+            }
         },
         highlight = {
             Highlight.Default.copy(
@@ -188,6 +204,38 @@ internal fun Modifier.dshLiquidGlass(
         }
     )
 }
+
+/** 首页卡片共用这一组材质，前景与点击范围沿用调用方组件。 */
+@Composable
+internal fun Modifier.dshClearCardGlass(shape: Shape, tint: Color? = null): Modifier {
+    if (LocalUiEffectsReduced.current) {
+        return background(tint ?: Color(0xFFF0EBF8), shape)
+            .border(0.8.dp, Color.White.copy(alpha = if (tint != null) 0.12f else 1f), shape).clip(shape)
+    }
+    val legacyBackdrop = LocalLegacyFrostedBackdrop.current
+    val api = LocalDshCardGlassApi.current
+    return dshOuterShadow(shape, ComposeShadow(radius = 6.dp, color = Color.Black.copy(alpha = 0.07f), offset = DpOffset(0.dp, 2.dp)))
+        .then(if (legacyBackdrop != null) {
+            Modifier.clip(shape).drawFrostedBackdrop(legacyBackdrop)
+                .background(tint?.copy(alpha = 0.86f) ?: Color.White.copy(alpha = 0.18f), shape)
+                .border(0.8.dp, Color.White.copy(alpha = if (tint != null) 0.12f else 0.60f), shape)
+        } else {
+            Modifier.dshLiquidGlass(shape,
+                style = when {
+                    tint != null && api >= Build.VERSION_CODES.TIRAMISU -> DshGlassStyle.DARK_CLEAR_CARD
+                    tint != null -> DshGlassStyle.DARK_FROSTED_CARD
+                    api >= Build.VERSION_CODES.TIRAMISU -> DshGlassStyle.CLEAR_CARD
+                    else -> DshGlassStyle.FROSTED_CARD
+                },
+                shadowsEnabled = false)
+                .then(if (tint == null) Modifier else Modifier.background(tint.copy(alpha = 0.86f), shape)
+                    .border(0.8.dp, Color.White.copy(alpha = 0.12f), shape))
+        })
+        .clip(shape)
+}
+
+internal val LocalDshCardGlassApi = staticCompositionLocalOf { Build.VERSION.SDK_INT }
+private val LocalLegacyFrostedBackdrop = staticCompositionLocalOf<LegacyFrostedBackdrop?> { null }
 
 private val LocalDshBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 private val LocalDshSheetBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
