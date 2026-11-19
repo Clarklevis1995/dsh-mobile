@@ -30,6 +30,89 @@ private actor ColdLaunchProfileCredentials: GatewayCredentialStoring {
 final class MultiGatewayTests: XCTestCase {
     private let gatewayID = "d56a1098-8519-43a1-9dce-fb99863bf5bb"
 
+    func testSessionDeepLinkKeepsLegacyLocalGatewayIDs() throws {
+        for localID in ["legacy", "a56a1098-8519-43a1-9dce-fb99863bf5bb"] {
+            let url = try XCTUnwrap(URL(string: "dshmobile://session?gateway=\(localID)&id=session-1"))
+            XCTAssertEqual(
+                AgentNotificationSessionRoute.parseDeepLink(url, profiles: [], activeGatewayID: localID),
+                AgentNotificationSessionRoute(gatewayID: localID, sessionID: "session-1")
+            )
+            XCTAssertNil(AgentNotificationSessionRoute.parseDeepLink(url, profiles: [], activeGatewayID: "other"))
+        }
+    }
+
+    func testSessionDeepLinkResolvesGatewayIdentityForCurrentOrOtherHost() throws {
+        let unidentified = GatewayProfile(gatewayName: "Legacy", endpoints: ["wss://legacy.example/ws/mobile"])
+        let target = GatewayProfile(gatewayId: gatewayID, gatewayName: "Target", endpoints: ["wss://target.example/ws/mobile"])
+        let url = try XCTUnwrap(URL(string: "dshmobile://session?gatewayId=\(gatewayID.uppercased())&id=session-1"))
+        for activeID in [target.id, unidentified.id] {
+            XCTAssertEqual(
+                AgentNotificationSessionRoute.parseDeepLink(url, profiles: [unidentified, target], activeGatewayID: activeID),
+                AgentNotificationSessionRoute(gatewayID: target.id, sessionID: "session-1")
+            )
+        }
+    }
+
+    func testSessionDeepLinkPrefersLegacyParameterRegardlessOfQueryOrder() throws {
+        let target = GatewayProfile(gatewayId: gatewayID, gatewayName: "Target", endpoints: ["wss://target.example/ws/mobile"])
+        for query in ["gateway=legacy&gatewayId=\(gatewayID)", "gatewayId=\(gatewayID)&gateway=legacy"] {
+            let url = try XCTUnwrap(URL(string: "dshmobile://session?\(query)&id=session-1"))
+            XCTAssertEqual(
+                AgentNotificationSessionRoute.parseDeepLink(url, profiles: [target], activeGatewayID: "legacy"),
+                AgentNotificationSessionRoute(gatewayID: "legacy", sessionID: "session-1")
+            )
+        }
+    }
+
+    func testSessionDeepLinkDoesNotFallBackWhenLegacyParameterIsRejected() throws {
+        let target = GatewayProfile(gatewayId: gatewayID, gatewayName: "Target", endpoints: ["wss://target.example/ws/mobile"])
+        for legacy in ["gateway=other", "gateway=", "gateway"] {
+            let url = try XCTUnwrap(URL(string: "dshmobile://session?\(legacy)&gatewayId=\(gatewayID)&id=session-1"))
+            XCTAssertNil(AgentNotificationSessionRoute.parseDeepLink(url, profiles: [target], activeGatewayID: "legacy"))
+        }
+    }
+
+    func testSessionDeepLinkRejectsUnknownIdentityAndOtherProfileIdentifiers() throws {
+        let profile = GatewayProfile(gatewayId: gatewayID, gatewayName: "Target",
+                                     endpoints: ["wss://target.example/ws/mobile"], remoteDeviceId: "paired-device")
+        for identity in ["unknown", profile.id, "paired-device"] {
+            let url = try XCTUnwrap(URL(string: "dshmobile://session?gatewayId=\(identity)&id=session-1"))
+            XCTAssertNil(AgentNotificationSessionRoute.parseDeepLink(url, profiles: [profile], activeGatewayID: profile.id))
+        }
+        let url = try XCTUnwrap(URL(string: "dshmobile://session?gatewayId=\(gatewayID)&id=session-1"))
+        XCTAssertNil(AgentNotificationSessionRoute.parseDeepLink(url, profiles: [], activeGatewayID: "legacy"))
+    }
+
+    func testSessionDeepLinkRequiresGatewayAndSessionParameters() throws {
+        let profile = GatewayProfile(gatewayId: gatewayID, gatewayName: "Target", endpoints: ["wss://target.example/ws/mobile"])
+        for query in ["", "id=session-1", "gateway=legacy", "gatewayId=\(gatewayID)",
+                      "gateway=legacy&id", "gatewayId=\(gatewayID)&id", "gatewayId&id=session-1", "gatewayId=&id=session-1"] {
+            let url = try XCTUnwrap(URL(string: "dshmobile://session?\(query)"))
+            XCTAssertNil(AgentNotificationSessionRoute.parseDeepLink(url, profiles: [profile], activeGatewayID: "legacy"))
+        }
+    }
+
+    func testSessionDeepLinkRejectsOtherSchemesAndLeavesShareHostAlone() throws {
+        for prefix in ["https://session", "other://session", "dshmobile://share", "dshmobile://other"] {
+            for gateway in ["gateway=legacy", "gatewayId=\(gatewayID)"] {
+                let url = try XCTUnwrap(URL(string: "\(prefix)?\(gateway)&id=session-1"))
+                let profile = GatewayProfile(gatewayId: gatewayID, gatewayName: "Target", endpoints: ["wss://target.example/ws/mobile"])
+                XCTAssertNil(AgentNotificationSessionRoute.parseDeepLink(url, profiles: [profile], activeGatewayID: "legacy"))
+            }
+        }
+    }
+
+    func testSessionDeepLinkDecodesSessionQueryValue() throws {
+        let profile = GatewayProfile(gatewayId: gatewayID, gatewayName: "Target", endpoints: ["wss://target.example/ws/mobile"])
+        for gateway in ["gateway=\(profile.id)", "gatewayId=\(gatewayID)"] {
+            let url = try XCTUnwrap(URL(string: "dshmobile://session?\(gateway)&id=session%2Fone%26two"))
+            XCTAssertEqual(
+                AgentNotificationSessionRoute.parseDeepLink(url, profiles: [profile], activeGatewayID: profile.id)?.sessionID,
+                "session/one&two"
+            )
+        }
+    }
+
     @MainActor
     func testRestoredExternalGatewayAutoConnectsWithoutDependingOnRootViewTask() async throws {
         let suite = "external-cold-launch-\(UUID())"
