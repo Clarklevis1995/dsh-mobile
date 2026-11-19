@@ -6,6 +6,23 @@ import UserNotifications
 struct AgentNotificationSessionRoute: Equatable {
     let gatewayID: String
     let sessionID: String
+
+    static func parseDeepLink(_ url: URL, profiles: [GatewayProfile], activeGatewayID: String) -> Self? {
+        guard url.scheme == "dshmobile", url.host == "session",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let sessionID = components.queryItems?.first(where: { $0.name == "id" })?.value else { return nil }
+        let gatewayID: String
+        if let localGateway = components.queryItems?.first(where: { $0.name == "gateway" }) {
+            // 旧参数优先，仍只允许打开当前主机；无效时不回退到网关身份。
+            guard localGateway.value == activeGatewayID else { return nil }
+            gatewayID = activeGatewayID
+        } else {
+            guard let identity = components.queryItems?.first(where: { $0.name == "gatewayId" })?.value,
+                  let profile = profiles.first(where: { $0.gatewayId?.lowercased() == identity.lowercased() }) else { return nil }
+            gatewayID = profile.id
+        }
+        return Self(gatewayID: gatewayID, sessionID: sessionID)
+    }
 }
 
 /// 将需要用户关注的 Agent 状态转换为系统本地通知。
@@ -160,6 +177,10 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
         scheduleNotification(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
     }
 
+    func requestSessionRoute(_ route: AgentNotificationSessionRoute) {
+        pendingSessionRoute = route
+    }
+
     func clearPendingSessionRoute(_ route: AgentNotificationSessionRoute) {
         if pendingSessionRoute == route { pendingSessionRoute = nil }
     }
@@ -172,7 +193,7 @@ final class AgentUserNotificationManager: NSObject, @preconcurrency UNUserNotifi
               let gatewayID = response.notification.request.content.userInfo["gatewayID"] as? String,
               let sessionID = response.notification.request.content.userInfo["sessionID"] as? String,
               !gatewayID.isEmpty, !sessionID.isEmpty else { return }
-        pendingSessionRoute = AgentNotificationSessionRoute(gatewayID: gatewayID, sessionID: sessionID)
+        requestSessionRoute(AgentNotificationSessionRoute(gatewayID: gatewayID, sessionID: sessionID))
     }
 
     func userNotificationCenter(
