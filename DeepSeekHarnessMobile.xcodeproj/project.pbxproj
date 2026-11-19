@@ -128,6 +128,8 @@
 		DA4100000000000000000001 /* NodeForwarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4100000000000000000002 /* NodeForwarding.swift */; };
 		DA4200000000000000000001 /* NodeForwardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4200000000000000000002 /* NodeForwardingTests.swift */; };
 		DA4300000000000000000001 /* TunnelDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4300000000000000000002 /* TunnelDiagnostics.swift */; };
+		DB0700000000000000000001 /* BotModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0700000000000000000002 /* BotModeView.swift */; };
+		DB0700000000000000000003 /* BotModeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0700000000000000000004 /* BotModeUITests.swift */; };
 		DC1424D1E1924288B9D343DF /* ShareExtension/ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94588D6D6FA34422B97262F3 /* ShareExtension/ShareViewController.swift */; };
 		E20191A4C7B1C0A8FF57CAC1 /* Glass.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF581253EBCFEB43865AB51 /* Glass.swift */; };
 		E73A2DB9D678DA4B8C01E349 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 4CE3D78565179C422C796509 /* MarkdownUI */; };
@@ -308,6 +310,8 @@
 		DA4100000000000000000002 /* NodeForwarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeForwarding.swift; sourceTree = "<group>"; };
 		DA4200000000000000000002 /* NodeForwardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeForwardingTests.swift; sourceTree = "<group>"; };
 		DA4300000000000000000002 /* TunnelDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelDiagnostics.swift; sourceTree = "<group>"; };
+		DB0700000000000000000002 /* BotModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotModeView.swift; sourceTree = "<group>"; };
+		DB0700000000000000000004 /* BotModeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotModeUITests.swift; sourceTree = "<group>"; };
 		DCB5E4921392A6503AD87B74 /* ConversationSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationSidebar.swift; sourceTree = "<group>"; };
 		E5FF365A80AA28B4D4CF2347 /* MultiGatewayStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MultiGatewayStore.swift; sourceTree = "<group>"; };
 		E61E231D0CD3E07857F861B0 /* GatewayClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayClient.swift; sourceTree = "<group>"; };
@@ -568,6 +572,7 @@
 				DA3200000000000000000002 /* LogExportView.swift */,
 				65009160A0642089906B54DF /* TrajectoryView.swift */,
 				D610757C1FF81FD953A9D000 /* WorkspaceView.swift */,
+				DB0700000000000000000002 /* BotModeView.swift */,
 				A0C1234567890ABCDE0000002 /* WorkspaceChangesView.swift */,
 				DCB5E4921392A6503AD87B74 /* ConversationSidebar.swift */,
 				65B6B2953247E15BDA40F0BB /* GatewaySwitcherView.swift */,
@@ -631,6 +636,7 @@
 			isa = PBXGroup;
 			children = (
 				F2B000000000000000000002 /* WorkspaceDrawerUITests.swift */,
+				DB0700000000000000000004 /* BotModeUITests.swift */,
 				CF204000000000000000002 /* RealSessionScrollPerformanceTests.swift */,
 			);
 			path = DeepSeekHarnessMobileUITests;
@@ -1022,6 +1028,7 @@
 				DA3200000000000000000001 /* LogExportView.swift in Sources */,
 				C5F737EBF5077A9BF35E9F64 /* TrajectoryView.swift in Sources */,
 				E7585B9F7F89A3084B6E0182 /* WorkspaceView.swift in Sources */,
+				DB0700000000000000000001 /* BotModeView.swift in Sources */,
 				A0C1234567890ABCDE0000001 /* WorkspaceChangesView.swift in Sources */,
 				65B1D361C78618DBA4550C4F /* ConversationSidebar.swift in Sources */,
 				375D401B1B6F03015EC9073D /* GatewayProfile.swift in Sources */,
@@ -1056,6 +1063,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F2B000000000000000000001 /* WorkspaceDrawerUITests.swift in Sources */,
+				DB0700000000000000000003 /* BotModeUITests.swift in Sources */,
 				CF204000000000000000001 /* RealSessionScrollPerformanceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1150,7 +1158,7 @@
 				CODE_SIGN_ENTITLEMENTS = DeepSeekHarnessMobile/Resources/Sharing.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "$(LOCAL_DEVELOPMENT_TEAM)";
+				DEVELOPMENT_TEAM = T58RY5HUA7;
 				DSH_SHARE_APP_GROUP = "$(LOCAL_APP_GROUP)";
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/shared/build/bin/iosArm64/debugFramework";
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*][arch=arm64]" = "$(SRCROOT)/shared/build/bin/iosSimulatorArm64/debugFramework";

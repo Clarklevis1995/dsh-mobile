@@ -220,6 +220,22 @@ class MarkdownTableDeviceTest {
         try {
             compose.onNodeWithContentDescription(com.clarklevis.dsh.android.localization.appText("全屏浏览表格")).performClick()
             waitForPreview(android.content.res.Configuration.ORIENTATION_PORTRAIT)
+            if (context.resources.configuration.smallestScreenWidthDp < 600) {
+                compose.onNodeWithContentDescription(com.clarklevis.dsh.android.localization.appText("旋转屏幕")).assertDoesNotExist()
+                snapshot("table-isolated-dark-portrait", android.graphics.Color.BLACK)
+                compose.onNodeWithTag("markdown-table-close").performClick()
+                compose.waitUntil(15_000) { preview() == null }
+                compose.runOnIdle { appearance.selectInterfaceStyle(InterfaceStyle.LIGHT) }
+                compose.onNodeWithContentDescription(com.clarklevis.dsh.android.localization.appText("全屏浏览表格")).performClick()
+                waitForPreview(android.content.res.Configuration.ORIENTATION_PORTRAIT)
+                snapshot("table-isolated-light-portrait", android.graphics.Color.WHITE)
+                androidx.test.espresso.Espresso.pressBack()
+                compose.waitUntil(15_000) { preview() == null }
+                compose.onNodeWithTag("markdown-table-card").assertIsDisplayed()
+                assertEquals(originalOrientation, chat.requestedOrientation)
+                assertFalse("聊天页面不能被预览销毁", chat.isDestroyed)
+                return
+            }
             compose.onNodeWithContentDescription(com.clarklevis.dsh.android.localization.appText("旋转屏幕")).performClick()
             waitForPreview(android.content.res.Configuration.ORIENTATION_LANDSCAPE)
             snapshot("table-isolated-dark-landscape", android.graphics.Color.BLACK)

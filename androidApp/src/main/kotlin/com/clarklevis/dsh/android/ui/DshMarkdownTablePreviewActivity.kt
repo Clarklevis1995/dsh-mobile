@@ -27,6 +27,7 @@ class DshMarkdownTablePreviewActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.clarklevis.dsh.android.AppScreenOrientation.apply(this)
         enableEdgeToEdge()
         // 只接受本应用缓存目录下的快照，避免 Intent 携带大段正文触发 Binder 大小限制。
         sourceFile = intent.getStringExtra(EXTRA_SOURCE)?.let { name ->
@@ -63,13 +64,13 @@ class DshMarkdownTablePreviewActivity : ComponentActivity() {
                         androidx.compose.runtime.CompositionLocalProvider(LocalDshMarkdownImages provides images) {
                             DshMarkdownTablePreview(current.table, current.textSize,
                                 onClose = { finish() },
-                                onRotate = {
+                                onRotate = if (resources.configuration.smallestScreenWidthDp < 600) null else ({
                                     requestedOrientation = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
                                         ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                     } else {
                                         ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                                     }
-                                },
+                                }),
                                 onOpenFile = { path ->
                                     setResult(RESULT_OK, Intent().putExtra(EXTRA_OPEN_FILE, path))
                                     finish()

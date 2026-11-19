@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -110,11 +112,13 @@ internal class DshMarkdownImageContext(
     val load: suspend (String) -> MarkdownImageAsset,
     val gatewayId: String? = null,
     val sessionId: String? = null,
-    val documentPath: String? = null
+    val documentPath: String? = null,
+    val loadOriginal: (suspend (String) -> MarkdownImageAsset)? = null,
+    val onPreview: ((MarkdownImageAsset) -> Unit)? = null
 ) {
     fun source(path: String): String = documentPath?.let { resolveMarkdownImageSource(path, it) } ?: path
     fun relativeTo(path: String) = DshMarkdownImageContext(
-        "$id:${path.length}:$path", references, cached, load, gatewayId, sessionId, path
+        "$id:${path.length}:$path", references, cached, load, gatewayId, sessionId, path, loadOriginal, onPreview
     )
 }
 
@@ -165,7 +169,31 @@ internal fun DshMarkdownImage(marker: DshMarkdownImageMarker) {
     var asset by remember(context.id, marker.source) { mutableStateOf(source?.let(context.cached)) }
     var failed by remember(context.id, marker.source) { mutableStateOf(false) }
     var retry by remember(context.id, marker.source) { mutableIntStateOf(0) }
-    var preview by remember(context.id, marker.source) { mutableStateOf(false) }
+    var preview by rememberSaveable(context.id, marker.source) { mutableStateOf(false) }
+    var original by remember(context.id, marker.source) { mutableStateOf<MarkdownImageAsset?>(null) }
+    var opening by remember(context.id, marker.source) { mutableStateOf(false) }
+    var previewFailed by remember(context.id, marker.source) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val openPreview: () -> Unit = {
+        if (!opening && asset != null) {
+            opening = true
+            scope.launch {
+                try {
+                    if (original == null) original = context.loadOriginal?.invoke(requireNotNull(source)) ?: asset
+                    if (context.onPreview != null) context.onPreview.invoke(requireNotNull(original)) else preview = true
+                } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                catch (_: Exception) { previewFailed = true }
+                finally { opening = false }
+            }
+        }
+    }
+    LaunchedEffect(preview, asset) {
+        if (preview && original == null && asset != null) {
+            try { original = context.loadOriginal?.invoke(requireNotNull(source)) ?: asset }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { preview = false; previewFailed = true }
+        }
+    }
     LaunchedEffect(context.id, marker.source, retry) {
         if (asset != null) return@LaunchedEffect
         failed = false
@@ -176,7 +204,7 @@ internal fun DshMarkdownImage(marker: DshMarkdownImageMarker) {
     Box(Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(12.dp))
         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
         .testTag("markdown-image:${marker.source}")
-        .clickable(enabled = asset != null || failed) { if (failed) retry++ else preview = true },
+        .clickable(enabled = !opening && (asset != null || failed)) { if (failed) retry++ else openPreview() },
         contentAlignment = Alignment.Center) {
         val loaded = asset
         if (loaded != null) Image(loaded.image, marker.alt.ifEmpty { appText("图片") },
@@ -192,13 +220,17 @@ internal fun DshMarkdownImage(marker: DshMarkdownImageMarker) {
                 }
                 onDrawWithContent { clipPath(path) { this@onDrawWithContent.drawContent() } }
             }, contentScale = ContentScale.Fit)
-        else Text(appText(if (failed) "加载失败 · 点击重试" else "正在加载图片…"),
+        if (opening) Text(appText("正在加载图片…"), Modifier.align(Alignment.BottomCenter).padding(8.dp), color = MaterialTheme.colorScheme.onSurface)
+        else if (loaded == null) Text(appText(if (failed) "加载失败 · 点击重试" else "正在加载图片…"),
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(12.dp))
     }
-    if (preview) asset?.let { loaded ->
+    if (previewFailed) DshAlertDialog(title = appText("图片加载失败"), message = appText("图片尚未加载，请重试"),
+        onDismissRequest = { previewFailed = false }, confirmLabel = appText("重试"),
+        onConfirm = { previewFailed = false; openPreview() }, dismissLabel = appText("关闭"), onDismissClick = { previewFailed = false })
+    if (preview) (original ?: asset)?.let { loaded ->
         val attachment = GatewayImageAttachment("markdown-preview", loaded.mediaType, loaded.bytes.size, loaded.width, loaded.height,
             reference?.name ?: marker.alt.ifEmpty { "image" })
         ConversationImagePreviewDialog(ConversationImagePreviewRequest(listOf(attachment), 0),
-            mapOf(attachment.attachmentId to loaded.image), onDismiss = { preview = false }, loadOriginal = { loaded.bytes })
+            mapOf(attachment.attachmentId to loaded.image), onDismiss = { preview = false }, loadOriginal = { loaded.bytes }, markdownStyle = true)
     }
 }

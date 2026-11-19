@@ -75,6 +75,8 @@ data class GatewayFrame(
     val dshVersion: String? = null,
     val historyFormatVersion: Int? = null,
     val subscriptionId: String? = null,
+    val botEvent: String? = null,
+    val botData: JsonValue? = null,
     val streamId: String? = null,
     val cursor: Int? = null,
     val replace: Boolean? = null,

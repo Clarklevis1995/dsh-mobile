@@ -131,6 +131,11 @@ final class VoiceHoldGestureRecognizer: UILongPressGestureRecognizer {
     }
 }
 
+struct ComposerSelectionRequest: Equatable {
+    let id = UUID()
+    let range: NSRange
+}
+
 struct SlashCommandTextView: UIViewRepresentable {
     @AppStorage(AppFontScale.key) private var fontScale = 1.0
     @AppStorage(AppFontScale.followsSystemKey) private var fontFollowsSystem = false
@@ -141,6 +146,8 @@ struct SlashCommandTextView: UIViewRepresentable {
     var isCompact = false
     var onSelectionChange: (NSRange) -> Void = { _ in }
     var onPasteAttachments: (([NSItemProvider]) -> Void)? = nil
+    var referenceRanges: [NSRange] = []
+    var selectionRequest: ComposerSelectionRequest?
 
     func makeUIView(context: Context) -> CommandTextView {
         let textView = CommandTextView()
@@ -165,7 +172,7 @@ struct SlashCommandTextView: UIViewRepresentable {
         textView.tintColor = .systemBlue
         textView.textColor = .label
         textView.setCompactPreview(isCompact)
-        textView.apply(text: text, presentation: presentation, placeholder: placeholder)
+        textView.apply(text: text, presentation: presentation, placeholder: placeholder, referenceRanges: referenceRanges)
         return textView
     }
 
@@ -175,11 +182,12 @@ struct SlashCommandTextView: UIViewRepresentable {
         context.coordinator.update(parent: self)
         textView.onPasteAttachments = onPasteAttachments
         textView.setCompactPreview(isCompact)
-        textView.apply(text: text, presentation: presentation, placeholder: placeholder)
+        context.coordinator.applyText(to: textView)
         if isCompact && !textView.isFirstResponder && textView.contentOffset != .zero {
             textView.setContentOffset(.zero, animated: false)
         }
         context.coordinator.synchronizeFocus(textView)
+        context.coordinator.synchronizeSelection(textView)
     }
 
     func sizeThatFits(
@@ -211,12 +219,21 @@ struct SlashCommandTextView: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         private var focusRevision = 0
         private var lastRenderedFocus: Bool?
+        private var lastSelectionRequest: UUID?
+        private var applyingText = false
         private var parent: SlashCommandTextView
 
         init(_ parent: SlashCommandTextView) { self.parent = parent }
 
         func update(parent: SlashCommandTextView) {
             self.parent = parent
+        }
+
+        func applyText(to textView: CommandTextView) {
+            applyingText = true
+            defer { applyingText = false }
+            textView.apply(text: parent.text, presentation: parent.presentation,
+                           placeholder: parent.placeholder, referenceRanges: parent.referenceRanges)
         }
 
         func synchronizeFocus(_ textView: UITextView) {
@@ -235,7 +252,19 @@ struct SlashCommandTextView: UIViewRepresentable {
             }
         }
 
-        func textViewDidChangeSelection(_ textView: UITextView) { parent.onSelectionChange(textView.selectedRange) }
+        func synchronizeSelection(_ textView: UITextView) {
+            guard let request = parent.selectionRequest, lastSelectionRequest != request.id else { return }
+            lastSelectionRequest = request.id
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView, self.parent.selectionRequest == request,
+                      textView.text == self.parent.text, NSMaxRange(request.range) <= textView.textStorage.length else { return }
+                textView.selectedRange = request.range
+            }
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            if !applyingText { parent.onSelectionChange(textView.selectedRange) }
+        }
 
         func textViewDidChange(_ textView: UITextView) {
             guard parent.text != textView.text else { return }
@@ -532,14 +561,17 @@ final class CommandTextView: UITextView {
         }
     }
 
-    func apply(text: String, presentation: SlashCommandComposerPresentation?, placeholder: String) {
+    private var renderedReferenceRanges: [NSRange] = []
+
+    func apply(text: String, presentation: SlashCommandComposerPresentation?, placeholder: String, referenceRanges: [NSRange] = []) {
         let fontChanged = renderedFontSize != font?.pointSize
         renderedFontSize = font?.pointSize
         let needsTextSynchronization = self.text != text
         let textChanged = renderedText != text
         let presentationChanged = renderedPresentation != presentation
         let placeholderChanged = renderedPlaceholder != placeholder
-        guard needsTextSynchronization || textChanged || presentationChanged || placeholderChanged || fontChanged else { return }
+        let referencesChanged = renderedReferenceRanges != referenceRanges
+        guard needsTextSynchronization || textChanged || presentationChanged || placeholderChanged || fontChanged || referencesChanged else { return }
 
         let selection = selectedRange
         let attributes = baseAttributes()
@@ -549,24 +581,24 @@ final class CommandTextView: UITextView {
         // marked-text（中文输入法）状态。只有菜单选中等真正的外部赋值才同步文本。
         if needsTextSynchronization {
             attributedText = NSAttributedString(string: text, attributes: attributes)
-            selectedRange = NSRange(
-                location: min(selection.location, (text as NSString).length),
-                length: 0
-            )
+            let location = min(selection.location, (text as NSString).length)
+            let length = min(selection.length, (text as NSString).length - location)
+            selectedRange = NSRange(location: location, length: length)
         }
 
         typingAttributes = attributes
         renderedText = text
         renderedPresentation = presentation
         renderedPlaceholder = placeholder
-        if needsTextSynchronization || presentationChanged || fontChanged {
-            applyCommandHighlight(presentation)
+        if (needsTextSynchronization || presentationChanged || fontChanged || referencesChanged), markedTextRange == nil {
+            renderedReferenceRanges = referenceRanges
+            applyComposerHighlights(presentation, references: referenceRanges)
         }
         setNeedsDisplay()
         invalidateIntrinsicContentSize()
     }
 
-    private func applyCommandHighlight(_ presentation: SlashCommandComposerPresentation?) {
+    private func applyComposerHighlights(_ presentation: SlashCommandComposerPresentation?, references: [NSRange]) {
         let fullRange = NSRange(location: 0, length: textStorage.length)
         let selection = selectedRange
         textStorage.beginEditing()
@@ -581,8 +613,15 @@ final class CommandTextView: UITextView {
                 )
             }
         }
+        for reference in references where reference.location >= 0 && NSMaxRange(reference) <= fullRange.length {
+            textStorage.addAttributes([
+                .foregroundColor: UIColor.systemBlue,
+                .backgroundColor: UIColor.systemBlue.withAlphaComponent(0.10)
+            ], range: reference)
+        }
         textStorage.endEditing()
         selectedRange = selection
+        typingAttributes = baseAttributes()
     }
 
     override func draw(_ rect: CGRect) {
@@ -687,7 +726,6 @@ struct ConversationView: View {
     @State private var showsAgentPresetMenu = false
     @State private var showsNewWorkspaceMenu = false
     @ScaledMetric(relativeTo: .caption) private var composerCapsuleHeight: CGFloat = 34
-    private let conversationBottomClearance: CGFloat = 22
 
     init(activeView: Binding<Int>, topContentInset: CGFloat = 0, initialDraft: String = "") {
         _activeView = activeView
@@ -776,6 +814,7 @@ struct ConversationView: View {
         Binding(
             get: {
                 guard store.conversationFilePreviewRequested,
+                      store.workspaceFilePreviewRequest?.botChatID == nil,
                       store.workspaceFilePreviewRequest?.sessionID == store.selectedSessionId else { return nil }
                 return store.workspaceFilePreviewRequest
             },
@@ -830,7 +869,7 @@ struct ConversationView: View {
                     makeConversationViewportEntries(from: items)
                 },
                 topInset: pageTopInset + 8,
-                bottomInset: composerHeight + conversationBottomClearance,
+                bottomInset: composerHeight + ConversationComposerChromeMetrics.bottomClearance,
                 scrollToBottomToken: viewportScrollToBottomToken,
                 onContentAvailabilityChanged: { sessionID, hasContent in
                     Task { @MainActor in
@@ -899,12 +938,14 @@ struct ConversationView: View {
                 .readableContentWidth()
             }
 
-            // 底部材质铺满页面，避免在正文宽度边界留下垂直截断。
-            composerBackdrop
-                .frame(height: composerHeight + 28)
-                .allowsHitTesting(false)
-
-            VStack(spacing: 0) {
+            ConversationComposerChrome(
+                background: conversationBackground,
+                contentHeight: $composerHeight,
+                showsJump: shouldShowScrollToBottom,
+                isGenerating: store.selectedSession?.isRunning == true,
+                onJump: { viewportScrollToBottomToken &+= 1 },
+                controlsHidden: voiceState.overlayVisible
+            ) {
                 if hasVisibleConversationContent, store.gateway.subscriptionRecoveryExhausted,
                    let error = selectedHistoryError {
                     HStack(spacing: 10) {
@@ -923,17 +964,7 @@ struct ConversationView: View {
                     .padding(.bottom, 8)
                     .accessibilityIdentifier("conversation-sync-retry")
                 }
-                Group {
-                    if shouldShowScrollToBottom {
-                        scrollToBottomButton {
-                            viewportScrollToBottomToken &+= 1
-                        }
-                        .padding(.bottom, 8)
-                        .transition(.scale(scale: 0.85).combined(with: .opacity))
-                    }
-                }
-                .animation(.easeOut(duration: 0.16), value: shouldShowScrollToBottom)
-
+            } content: {
                 VStack(alignment: .leading, spacing: 0) {
                     if let request = store.selectedPendingApprovalRequest {
                         ApprovalRequestView(
@@ -1029,18 +1060,7 @@ struct ConversationView: View {
                         .disabled(store.isChangingNewConversationWorkspace)
                     }
                 }
-                .background {
-                    GeometryReader { composerGeometry in
-                        Color.clear.preference(
-                            key: ComposerHeightPreferenceKey.self,
-                            value: composerGeometry.size.height
-                        )
-                    }
-                }
             }
-            // 只约束控件的排版宽度，阴影仍可绘制到页面两侧留白。
-            .readableContentWidth()
-            .opacity(voiceState.overlayVisible ? 0 : 1)
             .zIndex(2)
             ZStack {
                 if voiceState.overlayVisible {
@@ -1094,10 +1114,6 @@ struct ConversationView: View {
                     .allowsHitTesting(false)
                     .accessibilityIdentifier("voice-input-toast")
             }
-        }
-        .onPreferenceChange(ComposerHeightPreferenceKey.self) { height in
-            guard height > 0, abs(height - composerHeight) > 0.5 else { return }
-            composerHeight = height
         }
         .onChangeCompat(of: composerIsFocused) { _, isFocused in
             // 焦点布局先提交，语音状态同步和历史贴底不占用动画起步的同一轮主线程。
@@ -1340,41 +1356,6 @@ struct ConversationView: View {
         return String(localized: "history.progress.count", defaultValue: "正在加载历史记录 · \(progress.loaded)/\(total)")
     }
 
-    @ViewBuilder
-    private func scrollToBottomButton(action: @escaping () -> Void) -> some View {
-        let isGenerating = store.selectedSession?.isRunning == true
-        if #available(iOS 26.0, *) {
-            Button(action: action) {
-                scrollToBottomButtonIcon(isGenerating: isGenerating)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel(isGenerating ? String(localized: "a11y.generating.jump-latest", defaultValue: "正在生成，滚动到最新消息") : String(localized: "a11y.jump.latest", defaultValue: "滚动到最新消息"))
-        } else {
-            Button(action: action) {
-                scrollToBottomButtonIcon(isGenerating: isGenerating)
-                    .glassSurface(radius: 18)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isGenerating ? String(localized: "a11y.generating.jump-latest", defaultValue: "正在生成，滚动到最新消息") : String(localized: "a11y.jump.latest", defaultValue: "滚动到最新消息"))
-        }
-    }
-
-    @ViewBuilder
-    private func scrollToBottomButtonIcon(isGenerating: Bool) -> some View {
-        Group {
-            if isGenerating {
-                ProgressView()
-                    .controlSize(.regular)
-                    .tint(DSHColor.ocean)
-            } else {
-                Image(systemName: "arrow.down")
-                    .appFont(.system(size: 15, weight: .semibold))
-            }
-        }
-        .frame(width: 36, height: 36)
-    }
-
     private var composer: some View {
         VStack(alignment: .leading, spacing: 0) {
             WorkspaceChangesDock(store: store)
@@ -1425,13 +1406,7 @@ struct ConversationView: View {
             }
             .disabled(store.isViewingTeamMember || store.fileUploads.drafts.count >= 20 || store.fileUploads.preparing)
         } label: {
-            Image(systemName: "plus.circle")
-                .appFont(.system(size: 21, weight: .regular))
-                // SF Symbol 自身含侧边留白，补偿后与语音圆按钮保持相同可见边距。
-                .offset(x: -2)
-                // 可见图标贴齐输入框的内容边缘，点击区域仍保留 32pt。
-                .frame(width: 32, height: 32, alignment: .leading)
-                .contentShape(Circle())
+            ConversationAttachmentButtonLabel()
         }
         .buttonStyle(.plain)
         .disabled(store.messageSubmissionPending)
@@ -2090,24 +2065,13 @@ struct ConversationView: View {
                 ForEach(store.fileUploads.drafts, id: \.id) { file in
                     PendingFileCard(
                         file: file,
-                        status: uploadStatus(file),
+                        status: conversationUploadStatus(file),
                         enabled: !store.messageSubmissionPending,
                         onRetry: { store.fileUploads.retry(file.id) },
                         onRemove: { store.fileUploads.remove(file.id) }
                     )
                 }
             }
-        }
-    }
-
-    private func uploadStatus(_ file: SharedUploadDraft) -> String {
-        switch file.status {
-        case "waiting": String(localized: "等待上传")
-        case "opening": String(localized: "开始上传…")
-        case "uploading": String(localized: "upload.progress", defaultValue: "上传中 \(file.size > 0 ? file.confirmedBytes * 100 / file.size : 0)%")
-        case "committing": String(localized: "处理中…")
-        case "ready": String(localized: "upload.ready", defaultValue: "可发送 · \(ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file))")
-        default: file.error?.localized ?? String(localized: "upload.failed")
         }
     }
 
@@ -2269,34 +2233,7 @@ struct ConversationView: View {
         // SwiftUI already avoids the keyboard because only the container safe
         // area is ignored; this inset preserves a comfortable visual gap both
         // above the Home Indicator and above the keyboard.
-        bottomSafeAreaInset + 10
-    }
-
-    private var composerBackdrop: some View {
-        ZStack {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-            LinearGradient(
-                colors: [
-                    conversationBackground.opacity(0.02),
-                    conversationBackground.opacity(0.78),
-                    conversationBackground
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .mask {
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .black.opacity(0.58), location: 0.34),
-                    .init(color: .black, location: 0.68)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
+        ConversationComposerChromeMetrics.bottomPadding(safeAreaInset: bottomSafeAreaInset)
     }
 
     @ViewBuilder
@@ -3469,7 +3406,7 @@ private struct ConversationModelMenuLabel: View {
 }
 
 /// 在 UIKit 消息视口上方直接采样背景，渐变只作用于玻璃层，不栅格化正文。
-private struct ConversationTopGlass: UIViewRepresentable {
+struct ConversationTopGlass: UIViewRepresentable {
     final class GlassView: UIVisualEffectView {
         private let fadeMask = CAGradientLayer()
         private let veil = CAGradientLayer()
@@ -3752,15 +3689,6 @@ private struct ContentSizedCommandScrollView<Content: View>: View {
     }
 }
 
-private struct ComposerHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        // 未提供测量值的分支不能覆盖输入区实际高度。
-        value = max(value, nextValue())
-    }
-}
-
 /// Reads the physical window inset even when the SwiftUI conversation surface
 /// deliberately draws through the container safe area. This keeps glass and
 /// shadows continuous while the interactive composer still avoids the Home
@@ -3779,7 +3707,7 @@ enum ComposerKeyboardAvoidance {
 
 struct WindowBottomSafeAreaReader: UIViewRepresentable {
     @Binding var bottomInset: CGFloat
-    @Binding var windowHeight: CGFloat
+    var windowHeight: Binding<CGFloat>? = nil
     @Binding var keyboardInset: CGFloat
 
     func makeUIView(context: Context) -> SafeAreaReportingView {
@@ -3805,8 +3733,8 @@ struct WindowBottomSafeAreaReader: UIViewRepresentable {
     }
 
     private func publishHeight(_ height: CGFloat) {
-        guard height > 0, abs(windowHeight - height) > 0.5 else { return }
-        DispatchQueue.main.async { windowHeight = height }
+        guard let windowHeight, height > 0, abs(windowHeight.wrappedValue - height) > 0.5 else { return }
+        DispatchQueue.main.async { windowHeight.wrappedValue = height }
     }
 
     private func publishKeyboardInset(_ inset: CGFloat) {
@@ -4327,7 +4255,8 @@ struct ConversationProcessGroup: Identifiable {
 }
 
 enum ConversationTimeLabel {
-    static func text(for date: Date, now: Date = .now, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
+    static func text(for date: Date, now: Date = .now, timeZone: TimeZone = .current, locale: Locale = .current,
+                     includesWeekday: Bool = false) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let formatter = DateFormatter()
@@ -4337,9 +4266,11 @@ enum ConversationTimeLabel {
         if calendar.isDate(date, inSameDayAs: now) {
             formatter.dateFormat = "H:mm"
         } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-            formatter.dateFormat = String(localized: "conversation.time.date", locale: locale)
+            formatter.dateFormat = includesWeekday ? String(localized: "conversation.time.dateWeekday", locale: locale)
+                : String(localized: "conversation.time.date", locale: locale)
         } else {
-            formatter.dateFormat = String(localized: "conversation.time.yearDate", locale: locale)
+            formatter.dateFormat = includesWeekday ? String(localized: "conversation.time.yearDateWeekday", locale: locale)
+                : String(localized: "conversation.time.yearDate", locale: locale)
         }
         return formatter.string(from: date)
     }
@@ -5770,11 +5701,11 @@ struct ConversationRow: View {
     }
 
     private var userBubbleFill: Color {
-        DSHColor.ocean.opacity(colorScheme == .dark ? 0.24 : 0.11)
+        DSHColor.userBubbleFill(isDark: colorScheme == .dark)
     }
 
     private var userBubbleEdge: Color {
-        DSHColor.ocean.opacity(colorScheme == .dark ? 0.34 : 0.08)
+        DSHColor.userBubbleEdge(isDark: colorScheme == .dark)
     }
 }
 
@@ -5959,13 +5890,15 @@ struct MarkdownContent: View {
     var compact = false
     var knownFiles: [PresentedFile] = []
     var onOpenFile: ((String) -> Void)?
+    var textColor: Color = .primary
     @State private var selectionDocument: MarkdownSelectionDocument?
 
-    init(_ text: String, compact: Bool = false, knownFiles: [PresentedFile] = [], onOpenFile: ((String) -> Void)? = nil) {
+    init(_ text: String, compact: Bool = false, knownFiles: [PresentedFile] = [], onOpenFile: ((String) -> Void)? = nil, textColor: Color = .primary) {
         self.text = text
         self.compact = compact
         self.knownFiles = knownFiles
         self.onOpenFile = onOpenFile
+        self.textColor = textColor
     }
 
     var body: some View {
@@ -6014,7 +5947,7 @@ struct MarkdownContent: View {
                 }
                 return .systemAction
             })
-            .markdownTheme(.deepSeek(compact: compact, scale: CGFloat(AppFontScale.effective(fontScale, followsSystem: fontFollowsSystem))))
+            .markdownTheme(.deepSeek(compact: compact, scale: CGFloat(AppFontScale.effective(fontScale, followsSystem: fontFollowsSystem)), textColor: textColor))
             .markdownCodeSyntaxHighlighter(DSHCodeSyntaxHighlighter(dark: colorScheme == .dark))
             // MarkdownUI 会自行应用 Dynamic Type。主题已合并系统与应用倍率，避免重复缩放。
             .dynamicTypeSize(.large)
@@ -6463,6 +6396,9 @@ struct SentReplyBubble: View {
     let textParts: [GatewayTextPart]
     var knownFiles: [PresentedFile] = []
     var onOpenFile: ((String) -> Void)? = nil
+    var fill: Color? = nil
+    var edge: Color? = nil
+    var quoteFill: Color? = nil
     @Environment(\.colorScheme) private var colorScheme
 
     private var bodyText: String {
@@ -6472,7 +6408,7 @@ struct SentReplyBubble: View {
     var body: some View {
         SentReplyContentLayout {
             ForEach(Array(textParts.filter { $0.type == "quote" }.enumerated()), id: \.offset) { _, part in
-                SentMessageQuote(text: part.text)
+                SentMessageQuote(text: part.text, fill: quoteFill)
             }
             if !bodyText.isEmpty {
                 MarkdownContent(bodyText, knownFiles: knownFiles, onOpenFile: onOpenFile)
@@ -6482,11 +6418,11 @@ struct SentReplyBubble: View {
         }
         .padding(10)
         .foregroundStyle(Color.primary)
-        .background(Color("SentReplyBubbleBackground"),
+        .background(fill ?? Color("SentReplyBubbleBackground"),
             in: RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(Color("SentReplyBubbleBorder"), lineWidth: 0.7)
+                .stroke(edge ?? Color("SentReplyBubbleBorder"), lineWidth: 0.7)
         }
         .accessibilityIdentifier("sent-reply-bubble")
     }
@@ -6494,6 +6430,7 @@ struct SentReplyBubble: View {
 
 private struct SentMessageQuote: View {
     let text: String
+    let fill: Color?
     @State private var expanded = false
     @Environment(\.colorScheme) private var colorScheme
 
@@ -6503,7 +6440,7 @@ private struct SentMessageQuote: View {
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 10).padding(.vertical, 8)
-            .background(Color("SentReplyQuoteBackground"),
+            .background(fill ?? Color("SentReplyQuoteBackground"),
                 in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             .onTapGesture { expanded.toggle() }
             .accessibilityAddTraits(.isButton)
@@ -6542,7 +6479,7 @@ struct MarkdownSelectionDocument: Identifiable {
 private struct MessageQuoteActionKey: EnvironmentKey {
     static let defaultValue: ((String) -> Void)? = nil
 }
-private extension EnvironmentValues {
+extension EnvironmentValues {
     var messageQuoteAction: ((String) -> Void)? {
         get { self[MessageQuoteActionKey.self] }
         set { self[MessageQuoteActionKey.self] = newValue }
@@ -6942,7 +6879,7 @@ private enum ParsedMarkdownCache {
 }
 
 private extension Theme {
-    static func deepSeek(compact: Bool, scale: CGFloat) -> Theme {
+    static func deepSeek(compact: Bool, scale: CGFloat, textColor: Color = .primary) -> Theme {
         let inlineCodeFallback: Color? = if #available(iOS 18.0, *) {
             nil
         } else {
@@ -6950,7 +6887,7 @@ private extension Theme {
         }
         return Theme.gitHub
             .text {
-                ForegroundColor(.primary)
+                ForegroundColor(textColor)
                 BackgroundColor(nil)
                 FontSize(UIFontMetrics.default.scaledValue(for: compact ? 13 : 17) * scale)
             }
@@ -7555,7 +7492,7 @@ struct TeamContentSheet: View {
 
 
 /// 与 Android 待发送文件卡片保持相同尺寸、排版和中性背景。
-private struct PendingFileCard: View {
+struct PendingFileCard: View {
     let file: SharedUploadDraft
     let status: String
     let enabled: Bool
@@ -7854,6 +7791,146 @@ struct SessionConversationImageGallery: View {
             }
             do { try await Task.sleep(for: .milliseconds(200)) }
             catch { return }
+        }
+    }
+}
+
+
+struct ConversationAttachmentButtonLabel: View {
+    var body: some View {
+        Image(systemName: "plus.circle").appFont(.system(size: 21, weight: .regular))
+            .offset(x: -2).frame(width: 32, height: 32, alignment: .leading).contentShape(Circle())
+    }
+}
+
+struct ConversationComposerActionGlyph: View {
+    let symbol: String
+    var body: some View { Image(systemName: symbol).appFont(.system(size: 17, weight: .bold)).foregroundStyle(.white) }
+}
+
+struct ConversationComposerSendIcon: View {
+    var fill = DSHColor.ocean
+
+    var body: some View {
+        ConversationComposerActionGlyph(symbol: "arrow.up")
+            .frame(width: 42, height: 42).background(fill, in: Circle())
+    }
+}
+
+func conversationUploadStatus(_ file: SharedUploadDraft) -> String {
+        switch file.status {
+        case "waiting": String(localized: "等待上传")
+        case "opening": String(localized: "开始上传…")
+        case "uploading": String(localized: "upload.progress", defaultValue: "上传中 \(file.size > 0 ? file.confirmedBytes * 100 / file.size : 0)%")
+        case "committing": String(localized: "处理中…")
+        case "ready": String(localized: "upload.ready", defaultValue: "可发送 · \(ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file))")
+        default: file.error?.localized ?? String(localized: "upload.failed")
+        }
+    }
+
+enum ConversationComposerChromeMetrics {
+    static let bottomClearance: CGFloat = 22
+
+    static func bottomPadding(safeAreaInset: CGFloat) -> CGFloat {
+        safeAreaInset + 10
+    }
+}
+
+struct ConversationComposerChrome<Leading: View, Content: View>: View {
+    let background: Color
+    @Binding var contentHeight: CGFloat
+    let showsJump: Bool
+    let isGenerating: Bool
+    let onJump: () -> Void
+    var controlsHidden = false
+    @ViewBuilder let leading: () -> Leading
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            leading()
+            Group {
+                if showsJump {
+                    jumpButton
+                        .padding(.bottom, 8)
+                        .transition(.scale(scale: 0.85).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.16), value: showsJump)
+            content()
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    if height > 0, abs(height - contentHeight) > 0.5 { contentHeight = height }
+                }
+        }
+        .readableContentWidth()
+        .opacity(controlsHidden ? 0 : 1)
+        .background(alignment: .bottom) {
+            ConversationComposerBackdrop(background: background)
+                .frame(height: contentHeight + 28)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var jumpButton: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                Button(action: onJump) { jumpIcon }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+            } else {
+                Button(action: onJump) { jumpIcon.glassSurface(radius: 18) }
+                    .buttonStyle(.plain)
+            }
+        }
+        .accessibilityLabel(isGenerating
+            ? String(localized: "a11y.generating.jump-latest", defaultValue: "正在生成，滚动到最新消息")
+            : String(localized: "a11y.jump.latest", defaultValue: "滚动到最新消息"))
+        .accessibilityIdentifier("scroll-to-bottom")
+    }
+
+    private var jumpIcon: some View {
+        ZStack {
+            Color.clear
+            if isGenerating {
+                ProgressView().controlSize(.regular).tint(DSHColor.ocean)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: "arrow.down").appFont(.system(size: 15, weight: .semibold))
+            }
+        }
+        .frame(width: 36, height: 36)
+        .contentShape(Circle())
+    }
+}
+
+private struct ConversationComposerBackdrop: View {
+    let background: Color
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+            LinearGradient(
+                colors: [
+                    background.opacity(0.02),
+                    background.opacity(0.78),
+                    background
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .mask {
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black.opacity(0.58), location: 0.34),
+                    .init(color: .black, location: 0.68)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
     }
 }

@@ -116,7 +116,7 @@ internal fun DshMarkdownTableCard(table: DshTableData, textSizeSp: Float, onOpen
 /** 独立预览 Activity 复用与聊天卡片相同的网格和操作栏。 */
 @Composable
 internal fun DshMarkdownTablePreview(table: DshTableData, textSizeSp: Float,
-    onClose: () -> Unit, onRotate: () -> Unit, onOpenFile: (String) -> Unit) {
+    onClose: () -> Unit, onRotate: (() -> Unit)?, onOpenFile: (String) -> Unit) {
     val colors = dshDocumentColors()
     Column(Modifier.fillMaxSize().background(colors.background)
         .documentPageInsets().testTag("markdown-table-fullscreen")) {

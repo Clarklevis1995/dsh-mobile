@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "snapshot": {
+    "mainBotId": "chief",
+    "chats": [{ "id": "chief", "name": "Chief", "sessionId": "current-part" }]
+  },
+  "histories": {
+    "chief": [
+      {
+        "id": "reply",
+        "kind": "bot",
+        "sessionId": "archived-part",
+        "turn": 4,
+        "text": "[reports/ds-bot-research.md](reports/ds-bot-research.md)"
+      },
+      {
+        "id": "report",
+        "kind": "file",
+        "text": "",
+        "sessionId": "archived-part",
+        "turn": 4,
+        "files": [{
+          "path": "/fixture/reports/ds-bot-research.md",
+          "description": "DS Bot 调研报告，包含架构实现、横向对比、成熟度和风险。"
+        }]
+      },
+      {
+        "id": "inline-file",
+        "kind": "bot",
+        "sessionId": "archived-part",
+        "turn": 4,
+        "text": "`ds-bot-research.md`"
+      },
+      {
+        "id": "external-file",
+        "kind": "bot",
+        "sessionId": "archived-part",
+        "turn": 5,
+        "text": "[跨工作区报告](file:///fixture/other%20workspace/cross-workspace.md#L12)"
+      }
+    ]
+  },
+  "optimistic": {}
+}

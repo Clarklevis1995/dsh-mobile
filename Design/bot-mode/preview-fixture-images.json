@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "snapshot": {
+    "mainBotId": "chief",
+    "chats": [
+      {
+        "id": "chief",
+        "name": "Chief",
+        "role": "Chief of Staff · 你的个人助理",
+        "running": true,
+        "lastAt": 1794810720000
+      },
+      {
+        "id": "room",
+        "name": "Bot 接入讨论",
+        "room": true,
+        "preview": "Chief：我来汇总最终方案。",
+        "lastAt": 1794810720000
+      },
+      {
+        "id": "researcher",
+        "name": "研究员",
+        "role": "研究员",
+        "preview": "把 Bot 接入我们的 APP",
+        "running": true,
+        "lastAt": 1794810480000
+      }
+    ],
+    "schedules": [
+      {
+        "id": "s1",
+        "title": "每日简报",
+        "status": "每天 · Chief",
+        "next": "08:30"
+      },
+      {
+        "id": "s2",
+        "title": "项目进展汇总",
+        "status": "工作日 · Chief",
+        "next": "18:00"
+      },
+      {
+        "id": "s3",
+        "title": "资料整理",
+        "status": "每周五 · 研究员",
+        "next": "17:00"
+      }
+    ],
+    "recent": [
+      {
+        "id": "d0",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d1",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d2",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d3",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d4",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d5",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d6",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d7",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d8",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d9",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d10",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      },
+      {
+        "id": "d11",
+        "text": "已整理接入方案",
+        "kind": "done",
+        "chatId": "chief",
+        "name": "Chief"
+      }
+    ]
+  },
+  "histories": {
+    "chief": [
+      {
+        "id": "1",
+        "kind": "user",
+        "text": "一起看看，怎么把 Bot 接入我们的 APP？"
+      },
+      {
+        "id": "2",
+        "kind": "bot",
+        "botId": "chief",
+        "name": "Chief",
+        "text": "可以。我把接入工作拆成三步：\n\n1. 接入网关通信\n2. 做好助理与聊天界面\n3. 验证消息同步和本地通知"
+      },
+      {
+        "id": "3",
+        "kind": "user",
+        "text": "先保留现在的本地通知就好。"
+      },
+      {
+        "id": "4",
+        "kind": "bot",
+        "botId": "chief",
+        "name": "Chief",
+        "text": "好，我会沿用现有通知方式。完成后在这里告诉你。"
+      },
+      {
+        "id": "image-response-chief",
+        "kind": "bot",
+        "botId": "chief",
+        "name": "Chief",
+        "sessionId": "chief",
+        "text": "这是 Agent 返回的图片。",
+        "images": [
+          {
+            "attachmentId": "fixture-plot",
+            "sessionId": "chief",
+            "mediaType": "image/png",
+            "name": "agent-chart.png",
+            "width": 640,
+            "height": 360
+          }
+        ]
+      }
+    ],
+    "room": [
+      {
+        "id": "r1",
+        "kind": "bot",
+        "botId": "chief",
+        "name": "Chief",
+        "text": "这个群用来推进 Bot 接入。研究员负责调研，我来整理方案。"
+      },
+      {
+        "id": "r2",
+        "kind": "user",
+        "text": "先重点确认消息同步。"
+      },
+      {
+        "id": "r3",
+        "kind": "bot",
+        "botId": "researcher",
+        "name": "研究员",
+        "text": "已确认，私聊和群聊消息都可以通过现有网关同步。\n\n我正在补充断线重连的验证方案。"
+      },
+      {
+        "id": "r4",
+        "kind": "bot",
+        "botId": "chief",
+        "name": "Chief",
+        "text": "收到，结论我会整理进接入方案。"
+      },
+      {
+        "id": "image-response-room",
+        "kind": "bot",
+        "botId": "researcher",
+        "name": "研究员",
+        "sessionId": "room",
+        "text": "这是 Agent 返回的图片。",
+        "images": [
+          {
+            "attachmentId": "fixture-plot",
+            "sessionId": "room",
+            "mediaType": "image/png",
+            "name": "agent-chart.png",
+            "width": 640,
+            "height": 360
+          }
+        ]
+      }
+    ],
+    "researcher": [
+      {
+        "id": "r3",
+        "kind": "bot",
+        "botId": "researcher",
+        "name": "研究员",
+        "text": "已确认，私聊和群聊消息都可以通过现有网关同步。\n\n我正在补充断线重连的验证方案。"
+      }
+    ]
+  },
+  "optimistic": {},
+  "previewImageBase64": "iVBORw0KGgoAAAANSUhEUgAAAoAAAAFoCAIAAABIUN0GAAAHDElEQVR4nO3csW0cSRBA0aXAzGQyCgYxABWBCEwQjIIm46FDn66MA4TDGWfur55+L4FulPO7dhf78PX5fQMA7uvHnc8DAAQYABoCDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgIAAA0BAgAEgIMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgIAAA0BAgAEgIMAAEHi8XcX566O+AgD3cPz+eVvfw9fn921ZoguwuWPZGC8ZYN0FYPUSLxZg6QXgGhleJsDSC8CVMrzGr6DVF4CLVWP6BrzEEAGY6Ri8Co/egNUXgKt2ZG6AJ08NgFWcU2syNMBj5wXAcs6RTZkY4JmTAmBd57yyjAvwwBkBcAHnsL7MCvC06QBwJeekygwK8Ki5AHBJ55jWDAowAOxjSoDnPEkAuLZzRnFGBHjILADYxDmgOyMCDAC76QM84RkCwG7Ouj59gAFgQz82f4AAsK0zbZANGAACAgwAmwXY588AtMIS2YABIPBYHApwTa9vT7ctvTy/11dYjw0YAHYKsC+AAZig6pENGAACAgwAAQEGgIAAA0BAgAEgIMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgMBjcShwP69vT7ctvTy/11eA/2MDBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgIAAA0BAgAEgIMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgIAAA0BAgAEgIMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABB6LQ9nd69vTbUsvz+/1FYApbMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgIAAA0BAgAEgIMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgIAAA0BAgAEgIMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABB6LQyd6fXu6benl+b2+AsCObMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgIAAA0BAgAEgIMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgIAAA0BAgAEgIMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgMDD1+d3ce7t/PWRnAsA/3H8/nm7OxswAAQEGAACAgwAAQEGgIAAA0BAgAEgIMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCdApz88zUADOmRDRgAAgIMAAEBBoDNAuxrYABaYYlswAAQEGAA2C/APoUGYM8G2YABYMsAW4IB2LA+fYABYEMjApw/QwDYyjGgOyMCPGQWAOxgSHGmBBgAtjIowEOeJABc2DGmNYMCPGouAFzPMakyswI8bToAXMYxrC/jAjxwRgCs7phXlokBnjkpABZ1jGzK0ACPnRcAazmm1mRugCdPDYAlHIM78vD1+X0b7/z1UV8BgJUcg9O7wAa80BwBmONYoRprbMB/WYUBWD29Swb4HzIMwLrpXTjAfykxwOaO1bp7kQD/mxgDbOJYNrrXDDAALGSNX0EDwMUIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADQECAASAgwAAQEGAACAgwAAQEGAACAgwAAQEGgIAAA0BAgAEgIMAAEBBgAAgIMAAEBBgAAgIMAAEBBoCAAANAQIABICDAABAQYAAICDAABAQYAAICDAABAQaAgAADwO3+/gDEeKsQ3yjD/wAAAABJRU5ErkJggg=="
+}

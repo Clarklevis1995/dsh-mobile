@@ -1,12 +1,19 @@
 package com.clarklevis.dsh.android.ui
 
+import androidx.compose.foundation.layout.offset
+
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import android.app.Activity
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -54,6 +61,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -130,6 +138,12 @@ internal fun DshProductApp(
     AppUpdateDialogs(updateModel, updateState)
     LaunchedEffect(updateModel) { updateModel.checkOnStartup() }
     val navController = rememberNavController()
+    val modePreferences = LocalContext.current.getSharedPreferences("app_mode", android.content.Context.MODE_PRIVATE)
+    var botMode by rememberSaveable { mutableStateOf(modePreferences.getBoolean("bot", false)) }
+    fun setBotMode(value: Boolean) {
+        botMode = value
+        modePreferences.edit().putBoolean("bot", value).apply()
+    }
     LaunchedEffect(notificationRoute, stateHolder.snapshot.sessions) {
         val route = notificationRoute ?: return@LaunchedEffect
         if (stateHolder.snapshot.sessions.none { it.id == route.sessionId }) return@LaunchedEffect
@@ -249,7 +263,9 @@ internal fun DshProductApp(
                     onSettings = { navController.navigate(ROUTE_SETTINGS) },
                     onPlugins = { navController.navigate(ROUTE_PLUGINS) },
                     onScheduledTasks = { navController.navigate(ROUTE_SCHEDULED_TASKS) },
-                    onConnectors = { navController.navigate(CONNECTORS_ROUTE) }
+                    onConnectors = { navController.navigate(CONNECTORS_ROUTE) },
+                    onBotMode = { setBotMode(true) },
+                    botMode = botMode, onStandardMode = { setBotMode(false) }
                 )
             }
             composable(ROUTE_CONVERSATION) {
@@ -352,18 +368,20 @@ internal fun DshProductApp(
         }
     }
     stateHolder.platformError?.let { error ->
-        DshAlertDialog(
-            title = "DeepSeek Harness",
-            message = appText(error),
-            onDismissRequest = stateHolder::clearPlatformError,
-            dismissLabel = appText("好"),
-            onDismissClick = stateHolder::clearPlatformError,
-            confirmLabel = appText("重新连接"),
-            onConfirm = {
-                stateHolder.clearPlatformError()
-                stateHolder.connect()
-            }
-        )
+        BotModeTheme(botMode) {
+            DshAlertDialog(
+                title = "DeepSeek Harness",
+                message = appText(error),
+                onDismissRequest = stateHolder::clearPlatformError,
+                dismissLabel = appText("好"),
+                onDismissClick = stateHolder::clearPlatformError,
+                confirmLabel = appText("重新连接"),
+                onConfirm = {
+                    stateHolder.clearPlatformError()
+                    stateHolder.connect()
+                }
+            )
+        }
     }
 }
 
@@ -403,10 +421,23 @@ internal fun WorkspaceScreen(
     onSettings: () -> Unit,
     onPlugins: () -> Unit,
     onScheduledTasks: () -> Unit,
-    onConnectors: () -> Unit
+    onConnectors: () -> Unit,
+    onBotMode: () -> Unit = {},
+    botMode: Boolean = false,
+    onStandardMode: () -> Unit = {}
 ) {
     val window = adaptiveWindowSize()
     val workspaceColumns = AdaptiveLayout.workspaceUsesColumns(window.width.value, window.height.value, androidx.compose.ui.platform.LocalDensity.current.fontScale)
+    var botChatOpened by remember { mutableStateOf(false) }
+    var modeWave by remember { mutableStateOf<WorkspaceModeWave?>(null) }
+    val modeWaveAllowed = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !LocalUiEffectsReduced.current
+    val resolver = LocalContext.current.contentResolver
+    LaunchedEffect(window.width, window.height, modeWaveAllowed) { modeWave = null }
+    LaunchedEffect(modeWave) {
+        val wave = modeWave ?: return@LaunchedEffect
+        wave.progress.animateTo(1f, tween(WORKSPACE_MODE_WAVE_DURATION_MS, easing = LinearEasing))
+        if (modeWave === wave) modeWave = null
+    }
     val workspaceListState = rememberLazyListState()
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showManualPairing by rememberSaveable { mutableStateOf(false) }
@@ -484,14 +515,35 @@ internal fun WorkspaceScreen(
         }
     }
 
-    WorkspaceDrawer(onPlugins = onPlugins, onScheduledTasks = onScheduledTasks, onConnectors = onConnectors) { openDrawer, canScrollVertically ->
-        val backgroundAnimationEnabled by remember(canScrollVertically, workspaceListState) {
-            derivedStateOf { canScrollVertically && !workspaceListState.isScrollInProgress }
+    WorkspaceDrawer(
+        onPlugins = onPlugins, onScheduledTasks = onScheduledTasks, onConnectors = onConnectors,
+        onBotMode = onBotMode, botMode = botMode, onStandardMode = onStandardMode,
+        gesturesEnabled = !botMode || !botChatOpened,
+        onModeSwitch = { origin ->
+            if (modeWaveAllowed && Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f) {
+                modeWave = WorkspaceModeWave(origin)
+            }
         }
-        DshLiquidGlassHost(
+    ) { openDrawer, canScrollVertically ->
+        val backgroundAnimationEnabled by remember(canScrollVertically, workspaceListState) {
+            derivedStateOf { canScrollVertically && !workspaceListState.isScrollInProgress && !stateHolder.botDesignPreview }
+        }
+        if (botMode) {
+            BotModeScreen(stateHolder, onStandardMode, openDrawer = openDrawer, scrollEnabled = canScrollVertically,
+                modeWave = modeWave, onChatOpened = { botChatOpened = it },
+                header = {
+                    val night = isSystemInDarkTheme()
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        WorkspaceHeader(stateHolder.gatewayState, {
+                            stateHolder.clearPlatformError(); showQrScanner = true
+                        }, { stateHolder.clearPlatformError(); showManualPairing = true }, onSettings, openDrawer, onDarkBackground = night)
+                        GatewaySwitcherBar(onDarkBackground = night)
+                    }
+                })
+        } else DshLiquidGlassHost(
             modifier = Modifier.fillMaxSize().testTag("workspace-screen"),
             background = { backdropModifier ->
-                HarnessAnimatedBackground(backdropModifier, animationEnabled = backgroundAnimationEnabled)
+                HarnessAnimatedBackground(backdropModifier, animationEnabled = backgroundAnimationEnabled, modeWave = modeWave)
             }
         ) {
             AdaptiveWorkspaceContent(
@@ -619,29 +671,30 @@ internal fun WorkspaceScreen(
 }
 
 @Composable
-private fun WorkspaceHeader(
+internal fun WorkspaceHeader(
     state: GatewayRuntimeState,
     onScan: () -> Unit,
     onManualEntry: () -> Unit,
     onSettings: () -> Unit,
-    onOpenDrawer: () -> Unit
+    onOpenDrawer: () -> Unit,
+    onDarkBackground: Boolean = true
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         // Row 先测量无权重的操作按钮，品牌只使用剩余宽度，避免窄屏压缩按钮。
-        HarnessMark(onClick = onOpenDrawer, modifier = Modifier.weight(1f))
+        HarnessMark(onClick = onOpenDrawer, modifier = Modifier.weight(1f), onDarkBackground = onDarkBackground)
         Spacer(Modifier.width(8.dp))
         GatewayAuthenticationMenu(
             state = state,
             onScan = onScan,
-            onManualEntry = onManualEntry
+            onManualEntry = onManualEntry, onDarkBackground = onDarkBackground
         )
-        Spacer(Modifier.width(12.dp))
-        GlassCircleButton(R.drawable.ic_settings, appText("设置"), onSettings)
+        Spacer(Modifier.width(if (onDarkBackground) 12.dp else 8.dp))
+        GlassCircleButton(R.drawable.ic_settings, appText("设置"), onSettings, onDarkBackground)
     }
 }
 
 @Composable
-private fun HarnessMark(onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun HarnessMark(onClick: () -> Unit, modifier: Modifier = Modifier, onDarkBackground: Boolean = true) {
     BoxWithConstraints(
         modifier = modifier.heightIn(min = 52.dp)
             .clip(RoundedCornerShape(12.dp))
@@ -651,18 +704,18 @@ private fun HarnessMark(onClick: () -> Unit, modifier: Modifier = Modifier) {
     ) {
         // 不按机型或屏幕像素缩放整页：仅品牌图片根据其实际可用宽度等比例收缩。
         val showWordmark = maxWidth >= 128.dp
-        val scale = (maxWidth / 219.dp).coerceIn(0f, 1f)
+        val scale = (maxWidth / if (onDarkBackground) 219.dp else 216.dp).coerceIn(0f, 1f)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp * scale)
+            horizontalArrangement = Arrangement.spacedBy((if (onDarkBackground) 7.dp else 4.dp) * scale)
         ) {
             WhalenessOrcaIcon(
                 modifier = Modifier.size(if (showWordmark) 29.dp * scale else 29.dp),
-                tint = Color.White
+                tint = if (onDarkBackground) Color.White else Color(0xFF252332)
             )
             if (showWordmark) {
                 Image(
-                    painter = painterResource(R.drawable.dsh_whaleness_wordmark_dark),
+                    painter = painterResource(if (onDarkBackground) R.drawable.dsh_whaleness_wordmark_dark else R.drawable.dsh_whaleness_wordmark),
                     contentDescription = null,
                     modifier = Modifier.size(width = 183.dp * scale, height = 29.dp * scale)
                 )
@@ -685,7 +738,13 @@ internal fun WhalenessOrcaIcon(
 }
 
 @Composable
-internal fun GlassCircleButton(iconRes: Int, description: String, onClick: () -> Unit) {
+internal fun GlassCircleButton(iconRes: Int, description: String, onClick: () -> Unit, onDarkBackground: Boolean = true) {
+    if (!onDarkBackground) {
+        DshGlassButton(description, onClick, Modifier.size(54.dp).offset(x = 4.dp), appearanceDark = false) {
+            Image(painterResource(iconRes), null, Modifier.size(22.dp * LocalDensity.current.fontScale), colorFilter = ColorFilter.tint(Color(0xFF252332)))
+        }
+        return
+    }
     Box(
         Modifier.requiredSize(52.dp)
             .dshLiquidGlass(CircleShape, DshGlassStyle.CONTROL)
@@ -822,12 +881,22 @@ internal fun LocalChatSearchContent(
 }
 
 @Composable
-private fun SessionSearch(query: String, onChange: (String) -> Unit) {
+internal fun SessionSearch(query: String, onChange: (String) -> Unit,
+    placeholder: String = appText("搜索会话内容"), appearanceDark: Boolean = true, modifier: Modifier = Modifier,
+    tint: Color? = null, rim: Color? = null) {
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val ink = if (tint != null) MaterialTheme.colorScheme.onSurface else if (appearanceDark) Color.White else Color(0xFF252332)
+    val fieldShape = RoundedCornerShape(13.dp)
+    var focused by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth().height(42.dp)
-            .dshLiquidGlass(RoundedCornerShape(13.dp), DshGlassStyle.FIELD)
+        modifier = modifier.fillMaxWidth().height(if (appearanceDark) 42.dp else 44.dp)
+            .then(if (tint != null) Modifier.dshLiquidGlass(fieldShape, DshGlassStyle.FIELD)
+                .background(tint, fieldShape).border(0.8.dp, rim ?: Color.Transparent, fieldShape)
+                else if (appearanceDark) Modifier.dshLiquidGlass(fieldShape, DshGlassStyle.FIELD)
+                else Modifier.dshAppCardGlass(RoundedCornerShape(22.dp), false)
+                    .background(Color.White.copy(alpha = .38f), RoundedCornerShape(22.dp)))
             .padding(horizontal = 12.dp)
-            .testTag("workspace-session-search"),
+            .then(if (appearanceDark) Modifier.testTag("workspace-session-search") else Modifier),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -835,26 +904,32 @@ private fun SessionSearch(query: String, onChange: (String) -> Unit) {
             painter = painterResource(R.drawable.ic_search),
             contentDescription = null,
             modifier = Modifier.size(20.dp),
-            colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.68f))
+            colorFilter = ColorFilter.tint(if (appearanceDark) ink.copy(alpha = .68f) else ink)
         )
         BasicTextField(
             value = query,
             onValueChange = onChange,
-            modifier = Modifier.weight(1f),
-            textStyle = TextStyle(color = Color.White.copy(alpha = 0.92f), fontSize = 16.sp),
-            cursorBrush = SolidColor(Color.White),
+            modifier = Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
+            textStyle = TextStyle(color = ink.copy(alpha = if (appearanceDark) .92f else 1f), fontSize = if (appearanceDark) 16.sp else 17.sp),
+            cursorBrush = SolidColor(if (appearanceDark) Color.White else Color(0xFF7760B4)),
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = {}),
+            keyboardActions = KeyboardActions(onSearch = { if (!appearanceDark) focus.clearFocus() }),
             decorationBox = { innerTextField ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) {
-                        Text(appText("搜索会话内容"), color = Color.White.copy(alpha = 0.58f), fontSize = 16.sp)
+                        Text(placeholder, color = ink.copy(alpha = if (tint != null) .83f else if (appearanceDark) .58f else .3f), fontSize = if (appearanceDark) 16.sp else 17.sp)
                     }
                     innerTextField()
                 }
             }
         )
+        if (!appearanceDark && focused && query.isNotEmpty()) {
+            Box(Modifier.size(24.dp).testTag("search.clear").clickable(role = androidx.compose.ui.semantics.Role.Button) { onChange("") }
+                .semantics { contentDescription = appText("清除文本") }, contentAlignment = Alignment.Center) {
+                Image(painterResource(R.drawable.ic_close), null, Modifier.size(14.dp).background(ink.copy(alpha = .45f), CircleShape).padding(3.dp), colorFilter = ColorFilter.tint(Color.White))
+            }
+        }
     }
 }
 

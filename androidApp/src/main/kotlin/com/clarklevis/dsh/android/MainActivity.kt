@@ -17,6 +17,7 @@ class MainActivity : ComponentActivity() {
         // 启动窗口已由 Starting 主题绘制，Activity 创建后切回常规主题。
         setTheme(R.style.Theme_DeepSeekHarness)
         super.onCreate(savedInstanceState)
+        com.clarklevis.dsh.android.AppScreenOrientation.apply(this)
         consumeNotificationIntent(intent)
         if (savedInstanceState == null) (application as DshAndroidApplication).receiveShare(intent)
         enableEdgeToEdge()

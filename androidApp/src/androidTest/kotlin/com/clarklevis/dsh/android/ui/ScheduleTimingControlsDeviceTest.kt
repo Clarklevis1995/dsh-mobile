@@ -155,7 +155,7 @@ class ScheduleTimingControlsDeviceTest {
         var clicks = 0
         compose.setContent {
             DshTheme { ScheduleTheme {
-                ScheduleKeyboardDismissHost {
+                KeyboardDismissHost {
                     Column(Modifier.fillMaxSize().padding(20.dp)) {
                         ScheduleFilledField(text, { text = it }, modifier = Modifier.testTag("editor"))
                         androidx.compose.material3.Text("空白区域", Modifier.testTag("outside").padding(20.dp))

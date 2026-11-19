@@ -69,6 +69,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -116,6 +117,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -187,6 +190,7 @@ import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.android.localization.appTextKey
 import com.clarklevis.dsh.android.platform.AndroidAttachmentThumbnailer
+import com.clarklevis.dsh.android.platform.AndroidImagePreprocessor
 import com.clarklevis.dsh.android.platform.AndroidPreparedImage
 import com.clarklevis.dsh.shared.facade.VoiceInputInteraction
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
@@ -853,7 +857,7 @@ internal fun HistoryLoadingOverlay(
 }
 
 @Composable
-private fun ConversationBottomFade(
+internal fun ConversationBottomFade(
     contentHeight: State<Dp>,
     modifier: Modifier = Modifier
 ) {
@@ -1836,38 +1840,23 @@ private fun Composer(
                         keepActionWhenCollapsed = stateHolder.showsSessionStopButton || composerHasContent,
                         modifier = Modifier.testTag("composer-morph-layout"),
                         leading = {
-                            Box {
-                                var attachmentMenu by remember { mutableStateOf(false) }
-                                ComposerIconButton(R.drawable.ic_composer_add, appText("添加附件"), { attachmentMenu = true })
-                                DshMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
-                                    val canAddImage = "images" in stateHolder.gatewayState.capabilities && !stateHolder.preparingImages &&
-                                        !stateHolder.messageSubmissionPending &&
-                                        stateHolder.preparedImages.size < com.clarklevis.dsh.android.platform.AndroidImagePreprocessor.MAXIMUM_IMAGE_COUNT
-                                    DshMenuItem(text = { Text(appText("文件")) },
-                                        leadingIcon = {
-                                            Icon(painterResource(R.drawable.ic_pending_file), null, Modifier.size(20.dp))
-                                        },
-                                        enabled = !stateHolder.isViewingTeamMember &&
-                                            !stateHolder.fileUploads.preparing && stateHolder.fileUploads.drafts.size < 20 && !stateHolder.messageSubmissionPending,
-                                        onClick = {
-                                            attachmentMenu = false
-                                            if (stateHolder.fileUploads.supported) onPickFile()
-                                            else showsFileUploadUpgradeAlert = true
-                                        })
-                                    DshMenuItem(text = { Text(appText("图片")) },
-                                        leadingIcon = {
-                                            Icon(painterResource(R.drawable.ic_photo_outline), null, Modifier.size(20.dp))
-                                        },
-                                        enabled = canAddImage,
-                                        onClick = { attachmentMenu = false; onPickImage() })
-                                    DshMenuItem(text = { Text(appText("相机")) },
-                                        leadingIcon = {
-                                            Icon(painterResource(R.drawable.ic_composer_camera), null, Modifier.size(20.dp))
-                                        },
-                                        enabled = canAddImage,
-                                        onClick = { attachmentMenu = false; onDismissInput(); onTakePhoto() })
-                                }
-                            }
+                            ConversationAttachmentMenu(
+                                imagesEnabled = "images" in stateHolder.gatewayState.capabilities &&
+                                    !stateHolder.preparingImages &&
+                                    !stateHolder.messageSubmissionPending &&
+                                    stateHolder.preparedImages.size < AndroidImagePreprocessor.MAXIMUM_IMAGE_COUNT,
+                                filesEnabled = !stateHolder.isViewingTeamMember && !stateHolder.fileUploads.preparing &&
+                                    stateHolder.fileUploads.drafts.size < 20 && !stateHolder.messageSubmissionPending,
+                                onPickImage = onPickImage,
+                                onPickFile = {
+                                    if (stateHolder.fileUploads.supported) onPickFile()
+                                    else showsFileUploadUpgradeAlert = true
+                                },
+                                onTakePhoto = {
+                                    onDismissInput()
+                                    onTakePhoto()
+                                },
+                            )
                         },
                         editor = {
                             val commandToken = stateHolder.slashCommands.commandToken
@@ -2055,7 +2044,7 @@ private fun Composer(
 }
 
 @Composable
-private fun PreparedImagePreview(image: AndroidPreparedImage, onRemove: () -> Unit) {
+internal fun PreparedImagePreview(image: AndroidPreparedImage, onRemove: () -> Unit) {
     val preview by produceState<PreparedImagePreviewState>(PreparedImagePreviewState.Loading, image.outgoing.base64Data) {
         val bytes = withContext(Dispatchers.IO) {
             runCatching { Base64.decode(image.outgoing.base64Data, Base64.NO_WRAP) }.getOrNull()
@@ -2326,7 +2315,7 @@ internal fun dshGlassEdge(isDark: Boolean): Brush = Brush.verticalGradient(
 )
 
 @Composable
-private fun ComposerIconButton(iconRes: Int, description: String, onClick: () -> Unit) {
+internal fun ComposerIconButton(iconRes: Int, description: String, onClick: () -> Unit) {
     Box(
         Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onClick).semantics { contentDescription = description },
         contentAlignment = Alignment.CenterStart
@@ -3237,6 +3226,10 @@ private fun processToolIcon(toolName: String?): Int {
     }
 }
 
+internal fun Modifier.userMessageBubbleBackground(shape: RoundedCornerShape, isDark: Boolean): Modifier =
+    background(DshColors.Ocean.copy(alpha = if (isDark) 0.24f else 0.11f), shape)
+        .border(0.7.dp, DshColors.Ocean.copy(alpha = if (isDark) 0.34f else 0.08f), shape)
+
 @Composable
 internal fun UserMessage(
     item: ConversationItem,
@@ -3246,8 +3239,6 @@ internal fun UserMessage(
     onPreviewImages: (List<GatewayImageAttachment>, Int) -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
-    val bubbleFill = DshColors.Ocean.copy(alpha = if (isDark) 0.24f else 0.11f)
-    val bubbleEdge = DshColors.Ocean.copy(alpha = if (isDark) 0.34f else 0.08f)
     Column(
         Modifier.fillMaxWidth().padding(start = 34.dp, top = 12.dp, bottom = 12.dp),
         horizontalAlignment = Alignment.End,
@@ -3283,8 +3274,7 @@ internal fun UserMessage(
                 } else DshMarkdownText(
                     markdown = item.text,
                     modifier = Modifier
-                        .background(bubbleFill, RoundedCornerShape(15.dp))
-                        .border(0.7.dp, bubbleEdge, RoundedCornerShape(15.dp))
+                        .userMessageBubbleBackground(RoundedCornerShape(15.dp), isDark)
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                         .testTag("user-text-bubble"),
                     wrapContent = true
@@ -3474,7 +3464,8 @@ internal fun ConversationImagePreviewDialog(
     imageStates: Map<String, AttachmentLoadState> = emptyMap(),
     historyLoading: Boolean = false,
     historyError: Boolean = false,
-    onRetryHistory: () -> Unit = {}
+    onRetryHistory: () -> Unit = {},
+    markdownStyle: Boolean = false
 ) {
     if (request.attachments.isEmpty()) return
     val galleryAttachments by rememberUpdatedState(request.attachments)
@@ -3516,6 +3507,19 @@ internal fun ConversationImagePreviewDialog(
         } else save(attachment)
     }
     var zoomedPages by remember { mutableStateOf(emptySet<String>()) }
+    var exportMenu by remember { mutableStateOf(false) }
+    var exportTarget by remember { mutableStateOf<GatewayImageAttachment?>(null) }
+    val exportImage = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/*")) { uri ->
+        val target = exportTarget
+        exportTarget = null
+        if (uri != null && target != null) scope.launch {
+            try {
+                val bytes = loadOriginal(target) ?: error("Image unavailable")
+                withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("File unavailable") }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { Toast.makeText(context, appText("保存失败，请重试"), Toast.LENGTH_LONG).show() }
+        }
+    }
     val pagerState = rememberPagerState(
         initialPage = imagePreviewInitialPage(galleryAttachments.size, request.initialIndex),
         pageCount = { galleryAttachments.size }
@@ -3549,8 +3553,10 @@ internal fun ConversationImagePreviewDialog(
                     key = { galleryAttachments[it].attachmentId }
                 ) { page ->
                     val attachment = galleryAttachments[page]
+                    Box(Modifier.fillMaxSize().then(if (markdownStyle) Modifier.safeDrawingPadding().padding(16.dp) else Modifier)) {
                     ZoomablePreviewImage(
                         image = thumbnails[attachment.attachmentId],
+                        rounded = markdownStyle,
                         contentDescription = attachment.name ?: appText("图片"),
                         onRetry = if (imageStates[attachment.attachmentId] in setOf(AttachmentLoadState.FAILED, AttachmentLoadState.DEFERRED)) {
                             { onRetryImage(attachment) }
@@ -3563,6 +3569,7 @@ internal fun ConversationImagePreviewDialog(
                         },
                         onTap = onDismiss
                     )
+                    }
                 }
                 DshPointMenu(point = saveMenuPosition, onDismiss = { saveMenuPosition = null; saveTarget = null }) {
                     DshMenuItem(text = { Text(appText("保存到相册")) }, enabled = !saving, onClick = {
@@ -3572,6 +3579,34 @@ internal fun ConversationImagePreviewDialog(
                         if (attachment != null) requestSave(attachment)
                     })
                 }
+                if (markdownStyle) {
+                    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(Modifier.weight(1f))
+                        Box {
+                            Box(Modifier.size(30.dp).clickable { exportMenu = true }.semantics { contentDescription = appText("下载图片") }, contentAlignment = Alignment.Center) {
+                                Icon(painterResource(R.drawable.ic_log_download), null, Modifier.size(26.dp), tint = Color.White)
+                            }
+                            DshMenu(exportMenu, { exportMenu = false }) {
+                                DshMenuItem(text = { Text(appText("存储到文件")) }, onClick = {
+                                    exportMenu = false
+                                    val image = galleryAttachments[pagerState.currentPage]
+                                    exportTarget = image
+                                    exportImage.launch(image.name?.takeIf { it.isNotBlank() } ?: "image.png")
+                                })
+                                DshMenuItem(text = { Text(appText("保存到相册")) }, onClick = {
+                                    exportMenu = false
+                                    val image = galleryAttachments[pagerState.currentPage]
+                                    requestSave(image)
+                                })
+                            }
+                        }
+                        Box(Modifier.size(30.dp).background(Color.White, CircleShape).clickable(onClick = onDismiss)
+                            .semantics { contentDescription = appText("关闭图片预览") }, contentAlignment = Alignment.Center) {
+                            Icon(painterResource(R.drawable.ic_close), null, Modifier.size(30.dp), tint = Color.Black)
+                        }
+                    }
+                } else {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3607,6 +3642,7 @@ internal fun ConversationImagePreviewDialog(
                             Modifier.size(20.dp), tint = dshGlassForeground())
                     }
                 }
+                }
             }
         }
     }
@@ -3632,7 +3668,8 @@ internal fun ZoomablePreviewImage(
     isActive: Boolean = true,
     onZoomChanged: (Boolean) -> Unit = {},
     onRetry: (() -> Unit)? = null,
-    onTap: (() -> Unit)? = null
+    onTap: (() -> Unit)? = null,
+    rounded: Boolean = false
 ) {
     var scale by remember(image) { mutableFloatStateOf(1f) }
     var translation by remember(image) { mutableStateOf(Offset.Zero) }
@@ -3707,7 +3744,18 @@ internal fun ZoomablePreviewImage(
                         scaleY = scale
                         translationX = translation.x
                         translationY = translation.y
-                    },
+                    }.then(if (rounded) Modifier.drawWithCache {
+                        val fit = minOf(size.width / image.width, size.height / image.height)
+                        val width = image.width * fit
+                        val height = image.height * fit
+                        val left = (size.width - width) / 2
+                        val top = (size.height - height) / 2
+                        val outline = androidx.compose.ui.graphics.Path().apply {
+                            addRoundRect(androidx.compose.ui.geometry.RoundRect(left, top, left + width, top + height,
+                                androidx.compose.ui.geometry.CornerRadius(12.dp.toPx())))
+                        }
+                        onDrawWithContent { clipPath(outline) { this@onDrawWithContent.drawContent() } }
+                    } else Modifier),
                 contentScale = ContentScale.Fit
             )
         } else if (onRetry != null) {
@@ -3967,4 +4015,44 @@ private fun permissionIcon(value: String?): Int = when (value) {
     "read-only" -> R.drawable.ic_permission_read
     "danger-full-access" -> R.drawable.ic_permission_warning
     else -> R.drawable.ic_permission_ask
+}
+
+
+@Composable
+internal fun ConversationAttachmentMenu(
+    imagesEnabled: Boolean,
+    filesEnabled: Boolean,
+    onPickImage: () -> Unit,
+    onPickFile: () -> Unit,
+    onTakePhoto: (() -> Unit)? = null,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        ComposerIconButton(R.drawable.ic_composer_add, appText("添加附件")) { expanded = true }
+        DshMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DshMenuItem(
+                text = { Text(appText("文件")) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_pending_file), null, Modifier.size(20.dp)) },
+                enabled = filesEnabled,
+                onClick = { expanded = false; onPickFile() }
+            )
+            DshMenuItem(
+                text = { Text(appText("图片")) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_photo_outline), null, Modifier.size(20.dp)) },
+                enabled = imagesEnabled,
+                onClick = { expanded = false; onPickImage() }
+            )
+            if (onTakePhoto != null) {
+                DshMenuItem(
+                    text = { Text(appText("相机")) },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_composer_camera), null, Modifier.size(20.dp)) },
+                    enabled = imagesEnabled,
+                    onClick = {
+                        expanded = false
+                        onTakePhoto()
+                    },
+                )
+            }
+        }
+    }
 }

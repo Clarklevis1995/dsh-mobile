@@ -96,14 +96,16 @@ import kotlinx.coroutines.launch
 internal fun GatewayAuthenticationMenu(
     state: GatewayRuntimeState,
     onScan: () -> Unit,
-    onManualEntry: () -> Unit
+    onManualEntry: () -> Unit,
+    onDarkBackground: Boolean = true
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     Box {
         GlassCircleButton(
             iconRes = R.drawable.ic_gateway_auth,
             description = appText("设备认证，%1\$s", gatewayConnectionTitle(state.connection)),
-            onClick = { expanded = true }
+            onClick = { expanded = true },
+            onDarkBackground = onDarkBackground
         )
         DshMenu(
             expanded = expanded,

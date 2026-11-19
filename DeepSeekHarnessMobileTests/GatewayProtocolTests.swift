@@ -16422,7 +16422,7 @@ final class MarkdownTableRenderingTests: XCTestCase {
         }
         let png = try XCTUnwrap(image.pngData())
         let digest = SHA256.hash(data: png).map { String(format: "%02x", $0) }.joined()
-        let loader = WorkspaceMarkdownImageLoader()
+        let loader = MarkdownImageLoader()
         defer { loader.send = nil; loader.cancelAll() }
         var requests: [[String: Any]] = []
         var sessions: [String: String] = [:]
@@ -16474,7 +16474,7 @@ final class MarkdownTableRenderingTests: XCTestCase {
     }
 
     func testWorkspaceScreenshotFailureCanRetryAndIgnoresUnrelatedFileResponses() async throws {
-        let loader = WorkspaceMarkdownImageLoader()
+        let loader = MarkdownImageLoader()
         var requests: [[String: Any]] = []
         loader.send = { payload in
             requests.append(try! JSONSerialization.jsonObject(with: Data(payload.utf8)) as! [String: Any])
@@ -16492,6 +16492,86 @@ final class MarkdownTableRenderingTests: XCTestCase {
         while requests.count < 2 { await Task.yield() }
         loader.cancelAll()
         do { _ = try await retry.value; XCTFail("断开连接必须结束等待") } catch is CancellationError { }
+    }
+
+    func testSharedImageLoaderCoalescesBotChunksAndKeepsSourcesAndVariantsSeparate() async throws {
+        let png = try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: 40, height: 80)).image { context in
+            UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 40, height: 80))
+        }.pngData())
+        let loader = MarkdownImageLoader()
+        defer { loader.cancelAll() }
+        var calls: [[String: Any]] = []
+        loader.sendBot = { text in
+            let request = try! JSONSerialization.jsonObject(with: Data(text.utf8)) as! [String: Any]
+            calls.append(request)
+            Task { @MainActor in
+                await Task.yield()
+                let payload = request["payload"] as! [String: Any]
+                let offset = payload["offset"] as! Int
+                let next = min(png.count, offset + (png.count + 1) / 2)
+                let result: [String: Any] = ["kind": "bot-result", "requestId": request["requestId"]!, "endpoint": request["endpoint"]!,
+                    "value": ["mime": "image/png", "data": png.subdata(in: offset..<next).base64EncodedString(),
+                        "offset": offset, "nextOffset": next, "size": png.count, "done": next == png.count, "rev": "v1"]]
+                let json = String(decoding: try! JSONSerialization.data(withJSONObject: result), as: UTF8.self)
+                XCTAssertTrue(loader.acceptBot(json))
+                XCTAssertFalse(loader.acceptBot(json), "旧分块回执不能再完成下一分块或其他来源请求")
+            }
+            return true
+        }
+        async let first = loader.loadBot(sessionID: "member-old", attachmentID: nil, path: "charts/a.png", author: "researcher", preview: true)
+        async let duplicate = loader.loadBot(sessionID: "member-old", attachmentID: nil, path: "charts/a.png", author: "researcher", preview: true)
+        let (one, two) = try await (first, duplicate)
+        XCTAssertEqual(one, png); XCTAssertEqual(two, png)
+        XCTAssertEqual(calls.count, 2, "同一图片只执行一次分块下载")
+        _ = try await loader.loadBot(sessionID: "member-old", attachmentID: nil, path: "charts/a.png", author: "researcher", preview: true)
+        XCTAssertEqual(calls.count, 2)
+        _ = try await loader.loadBot(sessionID: "member-old", attachmentID: nil, path: "charts/a.png", author: "researcher", preview: false)
+        _ = try await loader.loadBot(sessionID: "another-member", attachmentID: nil, path: "charts/a.png", author: "researcher", preview: false)
+        XCTAssertEqual(calls.count, 6, "缩略图、原图和成员原始会话必须分别缓存")
+        XCTAssertEqual((calls[0]["payload"] as? [String: Any])?["botId"] as? String, "researcher")
+        var workspaceRequests = 0
+        loader.send = { text in
+            let request = try! JSONSerialization.jsonObject(with: Data(text.utf8)) as! [String: Any]
+            guard request["type"] as? String == "file-resolve" else { return }
+            workspaceRequests += 1
+            Task { @MainActor in
+                let error = ["kind": "error", "requestType": "file-resolve", "requestId": request["requestId"]!, "message": "missing"]
+                XCTAssertTrue(loader.accept(try! GatewayWireDecoder.decode(JSONSerialization.data(withJSONObject: error))))
+            }
+        }
+        do {
+            _ = try await loader.load(sessionID: "member-old", workspaceSessionID: "member-old", path: "charts/a.png", supportsResolve: true)
+            XCTFail("普通工作目录不能读到 Bot 同路径缓存")
+        } catch { }
+        XCTAssertEqual(workspaceRequests, 1)
+    }
+
+    func testSharedImageLoaderCancellationKeepsOtherWaitersAndReleasesQueuedRequests() async throws {
+        let loader = MarkdownImageLoader()
+        var requests: [[String: Any]] = []
+        loader.sendBot = { text in
+            requests.append(try! JSONSerialization.jsonObject(with: Data(text.utf8)) as! [String: Any]); return true
+        }
+        defer { loader.cancelAll() }
+        let first = Task { try await loader.loadBot(sessionID: "s", attachmentID: "photo", path: nil, author: nil, preview: true) }
+        let second = Task { try await loader.loadBot(sessionID: "s", attachmentID: "photo", path: nil, author: nil, preview: true) }
+        let queued = Task { try await loader.loadBot(sessionID: "other", attachmentID: "photo", path: nil, author: nil, preview: true) }
+        while requests.isEmpty { await Task.yield() }
+        await Task.yield()
+        first.cancel()
+        do { _ = try await first.value; XCTFail("取消应立即结束当前等待者") } catch is CancellationError { }
+        XCTAssertEqual(requests.count, 1, "取消一个等待者不能中断其他等待者或提前启动排队图片")
+        loader.cancelAll()
+        for task in [second, queued] {
+            do { _ = try await task.value; XCTFail("断开连接应结束活动和排队的等待者") } catch is CancellationError { }
+        }
+        let stale: [String: Any] = ["kind": "bot-result", "requestId": requests[0]["requestId"]!, "endpoint": "image", "value": [:]]
+        XCTAssertFalse(loader.acceptBot(String(decoding: try JSONSerialization.data(withJSONObject: stale), as: UTF8.self)))
+        let retry = Task { try await loader.loadBot(sessionID: "s", attachmentID: "photo", path: nil, author: nil, preview: true) }
+        while requests.count < 2 { await Task.yield() }
+        let invalid: [String: Any] = ["kind": "bot-result", "requestId": requests[1]["requestId"]!, "endpoint": "state", "value": [:]]
+        XCTAssertTrue(loader.acceptBot(String(decoding: try JSONSerialization.data(withJSONObject: invalid), as: UTF8.self)))
+        do { _ = try await retry.value; XCTFail("错误接口回执不能产生图片") } catch { }
     }
 
     func testOriginalRelativeScreenshotTableRendersAfterAsynchronousLoad() async throws {

@@ -250,6 +250,7 @@ enum MarkdownMathRenderer {
 struct WorkspaceMarkdownImageContext: Sendable {
     let id: String
     var dimensions: @Sendable (String) -> GatewayImageDimensions? = { _ in nil }
+    var loadOriginal: (@MainActor @Sendable (String) async throws -> Data)? = nil
     let load: @MainActor @Sendable (String) async throws -> Data
 
     /// 文件里的图片相对文档目录解析；工作区根目录仍由原加载器和网关校验。
@@ -441,7 +442,7 @@ struct MarkdownImageSlot: Layout {
     }
 }
 
-private struct MarkdownAttachmentImage: View {
+struct MarkdownAttachmentImage: View {
     let url: URL
     let context: WorkspaceMarkdownImageContext?
     @State private var image: UIImage?
@@ -454,6 +455,25 @@ private struct MarkdownAttachmentImage: View {
     @State private var layoutDimensions: GatewayImageDimensions?
     @Environment(\.conversationMarkdownImagePreviewAction) private var previewConversationImage
     @State private var loadedKey: String?
+
+    @State private var opening = false
+    @State private var openingTask: Task<Void, Never>?
+    @State private var original: MarkdownImageAsset?
+    @State private var previewFailed = false
+
+    private func openOriginal(export: Bool = false) {
+        guard !opening, let asset else { return }
+        opening = true
+        openingTask = Task { @MainActor in
+            defer { opening = false }
+            do {
+                if original == nil, let loader = context?.loadOriginal, let path = WorkspaceMarkdownImageContext.path(for: url) {
+                    original = try MarkdownImageAsset(data: await loader(path), url: url)
+                }
+                if export { exporting = true } else { openPreview(original ?? asset) }
+            } catch { if !Task.isCancelled { previewFailed = true } }
+        }
+    }
 
     init(url: URL, context: WorkspaceMarkdownImageContext?) {
         self.url = url
@@ -501,13 +521,18 @@ private struct MarkdownAttachmentImage: View {
                 if !Task.isCancelled { failed = true }
             }
         }
+        .onDisappear { openingTask?.cancel() }
         .fullScreenCover(item: $preview) { asset in
             AttachmentGallery(attachments: [asset.attachment], initialID: asset.id,
                 imageData: { _ in asset.data }, imageError: { _ in nil }, onRetry: { _ in }, exportDocument: asset)
         }
-        .fileExporter(isPresented: $exporting, document: asset, contentType: asset?.contentType ?? .image,
-                      defaultFilename: asset?.name) { result in
+        .fileExporter(isPresented: $exporting, document: original ?? asset, contentType: (original ?? asset)?.contentType ?? .image,
+                      defaultFilename: (original ?? asset)?.name) { result in
             if case .failure(let error) = result { exportError = error.localizedDescription }
+        }
+        .alert("图片加载失败", isPresented: $previewFailed) {
+            Button("重试") { openOriginal() }
+            Button("关闭", role: .cancel) { }
         }
         .alert("保存失败", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
             Button("关闭", role: .cancel) { exportError = nil }
@@ -521,17 +546,19 @@ private struct MarkdownAttachmentImage: View {
 
     private var content: some View {
         Group {
-            if let image, let asset {
-                Button { openPreview(asset) } label: {
+            if let image, asset != nil {
+                Button { openOriginal() } label: {
                     Image(uiImage: image).resizable().scaledToFit()
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .disabled(opening)
+                .overlay { if opening { ProgressView() } }
                 .accessibilityLabel("预览")
                 .accessibilityIdentifier("markdown-image-preview-button")
                 .contextMenu {
-                    Button { openPreview(asset) } label: { Label("预览", systemImage: "arrow.up.left.and.arrow.down.right") }
-                    Button { exporting = true } label: {
+                    Button { openOriginal() } label: { Label("预览", systemImage: "arrow.up.left.and.arrow.down.right") }
+                    Button { openOriginal(export: true) } label: {
                         Label(String(localized: "markdown.image.download", defaultValue: "下载图片"), systemImage: "square.and.arrow.down")
                     }
                 }

@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// 让会话滚到状态栏和导航栏后方，并把原安全区高度留给视口的滚动留白。
+struct ConversationTopSafeArea<Content: View>: View {
+    @ViewBuilder let content: (CGFloat) -> Content
+
+    var body: some View {
+        GeometryReader { geometry in
+            content(geometry.safeAreaInsets.top)
+                .ignoresSafeArea(.container, edges: .top)
+        }
+    }
+}
+
 /// 明确选择软边缘，避免系统版本变化把滚动正文的渐进模糊切回硬质背景。
 struct ConversationScrollEdgeStyle: ViewModifier {
     @ViewBuilder
@@ -87,21 +99,24 @@ extension View {
 private struct ComposerGlassSurface: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
     let radius: CGFloat
+    let tint: Color?
+    let edge: Color?
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         content
-            .glassSurface(radius: radius, tint: Color(uiColor: .secondarySystemBackground)
-                .opacity(colorScheme == .dark ? 0.52 : 0.48), shadowOpacity: 0)
+            .glassSurface(radius: radius, dark: tint != nil && colorScheme == .dark,
+                tint: tint ?? Color(uiColor: .secondarySystemBackground).opacity(colorScheme == .dark ? 0.52 : 0.48),
+                shadowOpacity: 0)
             .clipShape(shape)
-            .overlay { shape.stroke(colorScheme == .dark ? Color.white.opacity(0.13) : Color.white.opacity(0.56), lineWidth: 0.7) }
+            .overlay { shape.stroke(edge ?? Color.white.opacity(colorScheme == .dark ? 0.13 : 0.56), lineWidth: 0.7) }
             .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.10), radius: 10, x: 0, y: 2)
     }
 }
 
 extension View {
-    func composerGlassSurface(radius: CGFloat) -> some View {
-        modifier(ComposerGlassSurface(radius: radius))
+    func composerGlassSurface(radius: CGFloat, tint: Color? = nil, edge: Color? = nil) -> some View {
+        modifier(ComposerGlassSurface(radius: radius, tint: tint, edge: edge))
     }
 }
 

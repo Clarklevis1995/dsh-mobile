@@ -221,7 +221,10 @@ internal fun DshMarkdownText(
     markdown: String,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
-    wrapContent: Boolean = false
+    wrapContent: Boolean = false,
+    textSizeSp: Float = if (compact) 14f else 16f,
+    knownFiles: List<PresentedFile> = emptyList(),
+    onOpenFile: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -229,32 +232,36 @@ internal fun DshMarkdownText(
     val markwon = remember(context.applicationContext, palette) {
         DshMarkdownTextApplier.get(context.applicationContext, palette)
     }
-    val textSizeSp = if (compact) 14f else 16f
     val lineSpacingExtra = with(density) { (if (compact) 2.dp else 4.dp).toPx() }
     val rendered = renderedMarkdown(markwon, markdown, palette)
-    // 用户气泡使用固有宽度；为 AndroidView 提供明确宽度，兼容引用气泡的固有尺寸测量。
-    val contentModifier = if (wrapContent) {
-        val naturalWidth = remember(rendered, textSizeSp, density) {
-            val hasBlock = rendered.getSpans(0, rendered.length, DshTableMarker::class.java).isNotEmpty() ||
-                rendered.getSpans(0, rendered.length, DshCodeBlockMarker::class.java).isNotEmpty() ||
-                rendered.getSpans(0, rendered.length, DshMarkdownImageMarker::class.java).isNotEmpty() ||
-                rendered.getSpans(0, rendered.length, DshMathFormula::class.java).isNotEmpty() ||
-                rendered.getSpans(0, rendered.length, ConnectorAppCard::class.java).isNotEmpty()
-            if (hasBlock) 360.dp else with(density) {
-                val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = textSizeSp.sp.toPx() }
-                (kotlin.math.ceil(Layout.getDesiredWidth(rendered, paint)) + 1f).toDp().coerceAtLeast(1.dp)
-            }
-        }
-        modifier.width(naturalWidth)
-    } else modifier
     DshRenderedMarkdownText(
         markdown = markdown,
         rendered = rendered,
         palette = palette,
         textSizeSp = textSizeSp,
         lineSpacingExtra = lineSpacingExtra,
-        modifier = contentModifier
+        modifier = if (wrapContent) modifier.wrapMarkdownContent(rendered, textSizeSp) else modifier,
+        knownFiles = knownFiles,
+        onOpenFile = onOpenFile
     )
+}
+
+/** 气泡复用实际 Markdown 的文本度量，宽度由父容器约束。 */
+@Composable
+private fun Modifier.wrapMarkdownContent(rendered: Spanned, textSizeSp: Float): Modifier {
+    val density = LocalDensity.current
+    val naturalWidth = remember(rendered, textSizeSp, density) {
+        val hasBlock = rendered.getSpans(0, rendered.length, DshTableMarker::class.java).isNotEmpty() ||
+            rendered.getSpans(0, rendered.length, DshCodeBlockMarker::class.java).isNotEmpty() ||
+            rendered.getSpans(0, rendered.length, DshMarkdownImageMarker::class.java).isNotEmpty() ||
+            rendered.getSpans(0, rendered.length, DshMathFormula::class.java).isNotEmpty() ||
+            rendered.getSpans(0, rendered.length, ConnectorAppCard::class.java).isNotEmpty()
+        if (hasBlock) 360.dp else with(density) {
+            val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = textSizeSp.sp.toPx() }
+            (kotlin.math.ceil(Layout.getDesiredWidth(rendered, paint)) + 1f).toDp().coerceAtLeast(1.dp)
+        }
+    }
+    return width(naturalWidth)
 }
 
 private data class PresentedMarkdown(
@@ -272,7 +279,9 @@ internal fun DshLazyMarkdownText(
     modifier: Modifier = Modifier,
     knownFiles: List<PresentedFile> = emptyList(),
     onOpenFile: ((String) -> Unit)? = null,
-    copyMarkdown: String = markdown
+    copyMarkdown: String = markdown,
+    textSizeSp: Float = 16f,
+    wrapContent: Boolean = false
 ) {
     val context = LocalContext.current.applicationContext
     val palette = dshMarkdownPalette(compact = false)
@@ -308,9 +317,9 @@ internal fun DshLazyMarkdownText(
         onOpenFile = onOpenFile,
         copyMarkdown = copyMarkdown,
         palette = palette,
-        textSizeSp = 16f,
+        textSizeSp = textSizeSp,
         lineSpacingExtra = with(density) { 4.dp.toPx() },
-        modifier = modifier
+        modifier = if (wrapContent) modifier.wrapMarkdownContent(presented.rendered, textSizeSp) else modifier
     )
 }
 

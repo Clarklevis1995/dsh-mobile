@@ -11,14 +11,19 @@ internal fun conversationTimeLabel(
     epochSeconds: Double,
     now: Instant = Instant.now(),
     zone: ZoneId = ZoneId.systemDefault(),
-    locale: Locale = Locale.getDefault()
+    locale: Locale = Locale.getDefault(),
+    includesWeekday: Boolean = false
 ): String {
     val date = Instant.ofEpochMilli((epochSeconds * 1_000).toLong()).atZone(zone)
     val today = now.atZone(zone)
     val pattern = when {
         date.toLocalDate() == today.toLocalDate() -> "H:mm"
-        date.year == today.year -> AndroidStrings.text("conversation.time.date", locale)
-        else -> AndroidStrings.text("conversation.time.yearDate", locale)
+        date.year == today.year -> AndroidStrings.text(
+            if (includesWeekday) "conversation.time.dateWeekday" else "conversation.time.date", locale
+        )
+        else -> AndroidStrings.text(
+            if (includesWeekday) "conversation.time.yearDateWeekday" else "conversation.time.yearDate", locale
+        )
     }
     return date.format(DateTimeFormatter.ofPattern(pattern, locale))
 }

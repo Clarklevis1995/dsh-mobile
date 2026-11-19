@@ -76,7 +76,7 @@ internal fun ScheduledTaskEditSheet(
         modifier = Modifier.testTag("scheduled-task-edit-sheet"),
         onDismiss = { if (pendingRequestId == null) onDismiss() }
     ) {
-        ScheduleKeyboardDismissHost {
+        KeyboardDismissHost {
         DshMenuColumnHost {
             Column(Modifier.fillMaxSize().navigationBarsPadding()) {
                 DshPickerHeader(appText("编辑定时任务"), onDismiss,

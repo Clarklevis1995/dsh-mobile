@@ -65,6 +65,186 @@ class AndroidSharedStateHolder(
     voiceStore: com.clarklevis.dsh.shared.facade.SharedVoiceInputStore = com.clarklevis.dsh.shared.facade.SharedVoiceInputStore(),
     voiceContext: android.content.Context? = graph?.application
 ) {
+    internal val botImageNamespace = UUID.randomUUID().toString()
+    internal var botDesignImageFailOnce = false
+    private var botDesignImageBytes: ByteArray? = null
+
+    internal suspend fun loadBotImage(sessionId: String, attachmentId: String?, path: String?, author: String?, preview: Boolean): com.clarklevis.dsh.android.platform.MarkdownImageAsset {
+        if (botDesignPreview) botDesignImageBytes?.let {
+            if (!preview && botDesignImageFailOnce) { botDesignImageFailOnce = false; error("Fixture original unavailable") }
+            return com.clarklevis.dsh.android.platform.AndroidMarkdownImageLoader.decode(it) }
+        return requireNotNull(markdownImageLoader).loadBot(sessionId, attachmentId, path, author, preview)
+    }
+
+    private val botStore = com.clarklevis.dsh.shared.facade.SharedBotStore()
+    var botSnapshot by mutableStateOf(botStore.snapshot())
+        private set
+    private var botCacheRestored = false
+    private var botCacheSave: Job? = null
+    private val botCacheMutex = kotlinx.coroutines.sync.Mutex()
+    private var botRecovery: Job? = null
+    private var botRecoveryAttempts = 0
+    private val botCacheFile: File? by lazy {
+        graph?.let {
+            File(it.application.cacheDir, "BotMode/${UUID.nameUUIDFromBytes(it.gatewayLocalId.toByteArray())}.json")
+        }
+    }
+
+    internal var botDesignPreview = false
+        private set
+    internal fun restoreBotDesignPreview(json: String, connected: Boolean = true, errorCode: String? = null) {
+        check(((graph?.application?.applicationInfo?.flags ?: 0) and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
+        botDesignPreview = true
+        botDesignImageBytes = runCatching { org.json.JSONObject(json).optString("previewImageBase64").takeIf { it.isNotEmpty() }?.let { Base64.decode(it, Base64.DEFAULT) } }.getOrNull()
+        botStore.restoreCacheJson(json)
+        val activation = botStore.activate(supported = true, connected = connected)
+        botSnapshot = activation.snapshot
+        if (errorCode != null) activation.requests.forEach { request ->
+            request.correlationId?.let { botSnapshot = botStore.requestFailed(it, errorCode).snapshot }
+        }
+    }
+
+    fun activateBotMode() {
+        if (botDesignPreview) return
+        val appGraph = graph ?: return
+        appGraph.applicationScope.launch {
+            if (!botCacheRestored) {
+                val cached = withContext(Dispatchers.IO) {
+                    runCatching { botCacheFile?.takeIf { it.length() <= 8_000_000 }?.readText() }.getOrNull()
+                }
+                if (cached != null) botStore.restoreCacheJson(cached)
+                botCacheRestored = true
+            }
+            applyBotTransition(botStore.activate("bot-v1" in gatewayState.capabilities,
+                gatewayState.connection == GatewayConnectionState.CONNECTED))
+        }
+    }
+
+    fun selectBotChat(id: String?) {
+        val transition = botStore.selectChat(id)
+        if (botDesignPreview) botSnapshot = transition.snapshot else applyBotTransition(transition)
+    }
+    fun loadEarlierBotMessages() = applyBotTransition(botStore.loadEarlier())
+    fun refreshBotMode() {
+        botRecoveryAttempts = 0
+        applyBotTransition(botStore.refresh())
+    }
+
+    private val botFileSubmissions = mutableMapOf<String, List<String>>()
+    private val selectedBotSessionId get() = botSnapshot.chats.firstOrNull { it.id == botSnapshot.selectedChatId }?.sessionId
+
+    internal fun loadBotRoleEfforts(ref: String) = applyBotTransition(botStore.loadRoleEfforts(ref))
+    internal fun saveBotMemory(id: String, entryId: String?, value: String) = applyBotTransition(botStore.saveRoleMemory(id, entryId, value))
+    internal fun forgetBotMemory(id: String, entryId: String) = applyBotTransition(botStore.forgetRoleMemory(id, entryId))
+    internal fun scheduleBotDaily(id: String, title: String, prompt: String, time: String) =
+        applyBotTransition(botStore.scheduleRoleDaily(id, title, prompt, time, TimeZone.getDefault().id))
+    internal fun deleteBotSchedule(id: String, taskId: String) = applyBotTransition(botStore.deleteRoleSchedule(id, taskId))
+    internal fun duplicateBotRole(id: String) = applyBotTransition(botStore.duplicateRole(id))
+    internal fun replacePrimaryBotRole(id: String, replacement: String) = applyBotTransition(botStore.replacePrimaryRole(id, replacement))
+    internal fun openBotRole(id: String) = applyBotTransition(botStore.openRole(id))
+    internal fun updateBotRole(id: String, changes: Map<String, Any?>) {
+        applyBotTransition(botStore.updateRole(id, org.json.JSONObject(changes.mapValues { (_, value) -> value ?: org.json.JSONObject.NULL }).toString()))
+    }
+
+    internal fun searchBotReferences(query: String, quoted: Boolean) =
+        applyBotTransition(botStore.searchReferences(query, quoted))
+
+    internal fun clearBotReferenceSearch() {
+        if (botSnapshot.referenceSearch != null) applyBotTransition(botStore.clearReferenceSearch())
+    }
+
+    fun sendBotMessage(text: String, images: List<AndroidPreparedImage> = emptyList(), displayText: String = text): String? {
+        val files = botFileUploads.drafts
+        if (botFileUploads.preparing || files.isNotEmpty() &&
+            (!botFileUploads.canSend || botFileUploads.sessionId != selectedBotSessionId)) return null
+        val wireImages = org.json.JSONArray(images.map { image ->
+            org.json.JSONObject().put("mediaType", image.outgoing.mediaType).put("data", image.outgoing.base64Data)
+                .put("name", image.outgoing.name)
+        })
+        val transition = botStore.sendMentionMessage(text, displayText, wireImages.toString(),
+            org.json.JSONArray(botFileUploads.receipts).toString())
+        val requestId = transition.requests.singleOrNull()?.correlationId
+        if (files.isNotEmpty() && requestId != null) botFileSubmissions[requestId] = files.map { it.id }
+        applyBotTransition(transition)
+        return requestId
+    }
+
+    fun answerBotQuestion(id: String, selected: List<String>, custom: String) {
+        val values = kotlinx.serialization.json.JsonArray(selected.map { kotlinx.serialization.json.JsonPrimitive(it) })
+        applyBotTransition(botStore.answerQuestion(id, values.toString(), custom))
+    }
+
+    fun answerBotApproval(id: String, allow: Boolean) = applyBotTransition(botStore.answerApproval(id, allow))
+
+    private fun applyBotTransition(transition: com.clarklevis.dsh.shared.facade.SharedBotTransition) {
+        val previousSession = selectedBotSessionId
+        val previouslyWritable = botSnapshot.writable && botSnapshot.attachmentsSupported
+        botSnapshot = transition.snapshot
+        if (botDesignPreview) return
+        val allowsAttachments = botSnapshot.writable && botSnapshot.attachmentsSupported
+        if (previousSession != selectedBotSessionId || previouslyWritable != allowsAttachments) {
+            botFileUploads.select(selectedBotSessionId, allowsAttachments)
+        }
+        val appGraph = graph ?: return
+        if (botCacheRestored) {
+            botCacheSave?.cancel()
+            botCacheSave = appGraph.applicationScope.launch {
+                delay(600)
+                val json = botStore.exportCacheJson()
+                if (json.isEmpty()) return@launch
+                withContext(Dispatchers.IO) {
+                    botCacheMutex.lock()
+                    try {
+                        runCatching {
+                            val file = botCacheFile ?: return@runCatching
+                            file.parentFile?.mkdirs()
+                            val atomic = android.util.AtomicFile(file)
+                            val output = atomic.startWrite()
+                            try {
+                                output.write(json.toByteArray())
+                                atomic.finishWrite(output)
+                            } catch (error: Throwable) {
+                                atomic.failWrite(output)
+                                throw error
+                            }
+                        }
+                    } finally {
+                        botCacheMutex.unlock()
+                    }
+                }
+            }
+        }
+        transition.requests.forEach { request ->
+            appGraph.gatewayScope.launch {
+                if (!appGraph.gatewayRuntime.sendRequest(request)) withContext(Dispatchers.Main.immediate) {
+                    request.correlationId?.let {
+                        botFileSubmissions.remove(it)
+                        applyBotTransition(botStore.requestFailed(it, "not-connected"))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun acceptBotFrame(json: String, kind: String, requestId: String?, code: String?) {
+        requestId?.let { id ->
+            val files = botFileSubmissions.remove(id)
+            if (files != null) {
+                if (kind == "bot-result") botFileUploads.accepted(files)
+                else if (code == "session/attachment-invalid") botFileUploads.invalidReceipts()
+            }
+        }
+        applyBotTransition(botStore.acceptJson(json))
+        if (kind == "bot-stream-reset" && botRecoveryAttempts < 3) {
+            botRecovery?.cancel()
+            botRecoveryAttempts++
+            botRecovery = graph?.applicationScope?.launch {
+                delay(botRecoveryAttempts * 2000L)
+                if (gatewayState.connection == GatewayConnectionState.CONNECTED) applyBotTransition(botStore.refresh())
+            }
+        }
+    }
+
     private val teamStore = com.clarklevis.dsh.shared.facade.SharedTeamStore()
     var teamMode by mutableStateOf(com.clarklevis.dsh.shared.facade.TeamModeSnapshot())
         private set
@@ -246,6 +426,9 @@ class AndroidSharedStateHolder(
             "file-references-v1" in gatewayState.capabilities, reference)
     }
     val fileUploads = com.clarklevis.dsh.android.platform.AndroidFileUploadController(graph, scope) { platformError = it }
+
+    internal var botAttachmentError by mutableStateOf<String?>(null)
+    internal val botFileUploads = com.clarklevis.dsh.android.platform.AndroidFileUploadController(graph, scope) { botAttachmentError = it }
 
     fun pasteAttachments(uris: List<Uri>) {
         if (isChangingNewConversationWorkspace || !selectedMemberCanSend) return
@@ -1511,38 +1694,64 @@ class AndroidSharedStateHolder(
     }
 
     fun openConversationFile(gatewayId: String, sessionId: String, path: String) {
-        val appGraph = graph ?: return
         if (gatewayId != gatewayLocalId || sessionId != snapshot.selectedSessionId) return
+        openConversationFilePreview(sessionId, path)
+    }
+
+    fun openBotFile(chatId: String, messageId: String, path: String) {
+        if (botSnapshot.selectedChatId != chatId) return
+        val sessionId = botSnapshot.messages.firstOrNull { it.id == messageId }
+            ?.sessionId?.takeIf(String::isNotEmpty) ?: return
+        openConversationFilePreview(sessionId, path, chatId)
+    }
+
+    private fun openConversationFilePreview(sessionId: String, path: String, botChatId: String? = null) {
+        val appGraph = graph ?: return
         // 后台准备预览时忽略重复点击，避免弹出非必要的 download-busy 提示。
         if (workspaceFilePreviewRequest != null || conversationFileIsOpening) return
-        if (gatewayState.connection != GatewayConnectionState.CONNECTED) {
-            platformError = appText("请先连接 DeepSeek Harness")
-            return
+        val error = when {
+            gatewayState.connection != GatewayConnectionState.CONNECTED -> appText("请先连接 DeepSeek Harness")
+            "file-downloads" !in gatewayState.capabilities -> appText("当前网关不支持文件下载，请升级网关。")
+            else -> null
         }
-        if ("file-downloads" !in gatewayState.capabilities) {
-            platformError = appText("当前网关不支持文件下载，请升级网关。")
+        if (error != null && botChatId == null) {
+            platformError = error
             return
         }
         releaseCompletedWorkspaceFile()
-        conversationFileIsOpening = true
+        conversationFileIsOpening = error == null
         platformError = null
         workspaceFilePreviewProgress = 0f
-        workspaceFilePreviewRequest = AndroidWorkspaceFilePreviewRequest(sessionId, path, path.replace('\\', '/').substringAfterLast('/'))
-        workspaceFilePreviewError = null
+        workspaceFilePreviewRequest = AndroidWorkspaceFilePreviewRequest(
+            sessionId, path, path.replace('\\', '/').substringAfterLast('/'), botChatId = botChatId
+        )
+        workspaceFilePreviewError = error
+        if (error != null) return
         val operationId = UUID.randomUUID().also {
             workspaceFileOperationId = it
             workspaceFileCacheEpoch = cacheStorage?.categoryEpoch(AndroidCacheDiskManager.PREVIEWS) ?: 0
         }
-        val workspaceSessionId = teamStore.workspaceSessionId(sessionId)
+        val workspaceSessionId = if (botChatId == null) teamStore.workspaceSessionId(sessionId) else sessionId
         appGraph.gatewayScope.launch {
-            if (operationId != workspaceFileOperationId || sessionId != snapshot.selectedSessionId) return@launch
+            if (operationId != workspaceFileOperationId || !isWorkspaceFileSessionActive(sessionId)) return@launch
             workspaceFileStore.setWorkspaceSession(sessionId, workspaceSessionId)
-            applyWorkspaceFileTransition(appGraph, workspaceFileStore.resolveReference(
-                sessionId, path, UUID.randomUUID().toString(),
-                "file-references-v1" in gatewayState.capabilities,
-                snapshot.workspaces.firstOrNull { workspaceSessionId in it.sessionIds }?.path
-            ))
+            val requestId = UUID.randomUUID().toString()
+            val supportsResolve = "file-references-v1" in gatewayState.capabilities
+            val transition = if (botChatId == null) {
+                workspaceFileStore.resolveReference(sessionId, path, requestId, supportsResolve,
+                    snapshot.workspaces.firstOrNull { workspaceSessionId in it.sessionIds }?.path)
+            } else {
+                workspaceFileStore.resolve(sessionId, path, requestId, supportsResolve, useCache = true)
+            }
+            applyWorkspaceFileTransition(appGraph, transition, operationId = operationId)
         }
+    }
+
+    private fun isWorkspaceFileSessionActive(sessionId: String): Boolean {
+        val request = workspaceFilePreviewRequest
+        val botChatId = request?.botChatId
+        return if (botChatId != null) request.sessionId == sessionId && botSnapshot.selectedChatId == botChatId
+            else sessionId == snapshot.selectedSessionId
     }
 
     fun consumeConversationDirectoryPath() {
@@ -2575,6 +2784,9 @@ class AndroidSharedStateHolder(
     }
 
     fun close() {
+        markdownImageLoader?.close()
+        botRecovery?.cancel()
+        botCacheSave?.cancel()
         deviceConnectors?.connection(false)
         fileUploads.clear()
         closed = true
@@ -3081,7 +3293,7 @@ class AndroidSharedStateHolder(
                 }
                 completed?.let {
                     conversationFileIsOpening = false
-                    if (it.sessionId == this@AndroidSharedStateHolder.snapshot.selectedSessionId) {
+                    if (isWorkspaceFileSessionActive(it.sessionId)) {
                         if (readyLease != null) {
                             completedWorkspaceFileLease?.close()
                             completedWorkspaceFileLease = readyLease
@@ -3405,6 +3617,9 @@ class AndroidSharedStateHolder(
                             val didReconnect = state.connection == GatewayConnectionState.CONNECTED &&
                                 lastObservedConnection != GatewayConnectionState.CONNECTED
                             gatewayState = state
+                            if (state.connection != GatewayConnectionState.CONNECTED) markdownImageLoader?.disconnected()
+                            if (!botDesignPreview) applyBotTransition(botStore.connectionChanged("bot-v1" in state.capabilities,
+                                state.connection == GatewayConnectionState.CONNECTED))
                             if (state.connection != GatewayConnectionState.CONNECTED) teamStore.modeConnectionLost()
                             publishTeamMode(load = didReconnect)
                             deviceConnectors?.connection(state.connection == GatewayConnectionState.CONNECTED, state.capabilities)
@@ -3413,9 +3628,13 @@ class AndroidSharedStateHolder(
                             if (didReconnect) {
                                 queueState = queueStore.resetConnection()
                                 fileUploads.connected(snapshot.selectedSessionId, "file-upload-v1" in state.capabilities)
+                                botFileUploads.connected(selectedBotSessionId, "file-upload-v1" in state.capabilities)
+                                botFileUploads.select(selectedBotSessionId, botSnapshot.writable && botSnapshot.attachmentsSupported)
                             }
                             if (state.connection != GatewayConnectionState.CONNECTED) {
                                 fileUploads.disconnected()
+                                botFileUploads.disconnected()
+                                botFileSubmissions.clear()
                                 remoteSearch.disconnected()
                                 remoteSearchTimeout?.cancel()
                                 remoteSearchResultQuery = null
@@ -3488,6 +3707,15 @@ class AndroidSharedStateHolder(
                                 is GatewayRuntimeEvent.RequestRejected -> Triple(event.requestType, event.targetSessionId, event.correlationId)
                                 else -> null
                             }
+                            if (modeFailure?.first?.startsWith("bot-") == true) {
+                                withContext(Dispatchers.Main.immediate) {
+                                    modeFailure.third?.let {
+                                        botFileSubmissions.remove(it)
+                                        applyBotTransition(botStore.requestFailed(it, "bot-timeout"))
+                                    }
+                                }
+                                return@collect
+                            }
                             if (modeFailure?.first == "agent-team-set-enabled") {
                                 withContext(Dispatchers.Main.immediate) {
                                     val id = modeFailure.second
@@ -3522,18 +3750,22 @@ class AndroidSharedStateHolder(
                                     markdownImageLoader?.failed(markdownRequestId) == true
                                 }) return@collect
                             if (event is GatewayRuntimeEvent.RequestTimedOut && event.requestType.startsWith("file-upload-")) {
-                                withContext(Dispatchers.Main.immediate) { event.correlationId?.let(fileUploads::timedOut) }
+                                withContext(Dispatchers.Main.immediate) { event.correlationId?.let { fileUploads.timedOut(it); botFileUploads.timedOut(it) } }
                                 return@collect
                             }
                             if (chatPrefetcher?.interceptTerminal(event) == true) return@collect
                             when (event) {
                                 is GatewayRuntimeEvent.Frame -> {
+                                    if (event.frame.kind.startsWith("bot-") || event.frame.requestType?.startsWith("bot-") == true) {
+                                        withContext(Dispatchers.Main.immediate) { acceptBotFrame(event.rawJson, event.frame.kind, event.frame.requestId, event.frame.code) }
+                                        return@collect
+                                    }
                                     if (event.frame.kind.startsWith("device-tool") || (event.frame.kind == "error" && event.frame.requestType?.startsWith("device-tool") == true)) {
                                         withContext(Dispatchers.Main.immediate) { deviceConnectors?.receive(event.rawJson) }
                                         return@collect
                                     }
                                     if (event.frame.kind.startsWith("file-upload-") || event.frame.requestType?.startsWith("file-upload-") == true) {
-                                        withContext(Dispatchers.Main.immediate) { fileUploads.accept(event.frame) }
+                                        withContext(Dispatchers.Main.immediate) { fileUploads.accept(event.frame); botFileUploads.accept(event.frame) }
                                         return@collect
                                     }
                                     if (event.frame.kind == "error" && event.frame.requestType in WORKSPACE_FILE_REQUEST_TYPES) {
@@ -4119,7 +4351,8 @@ data class AndroidWorkspaceFilePreviewRequest(
     val sessionId: String,
     val path: String,
     val name: String,
-    val id: UUID = UUID.randomUUID()
+    val id: UUID = UUID.randomUUID(),
+    val botChatId: String? = null
 )
 
 data class AndroidWorkspaceLocalFile(

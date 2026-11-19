@@ -83,7 +83,7 @@ internal fun ScheduleValueRow(label: String, value: String, onChange: (String) -
         BasicTextField(value, onChange, enabled = enabled, singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
             textStyle = TextStyle(fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.End),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.width(80.dp).scheduleInputRegion().padding(vertical = 8.dp).semantics { contentDescription = label })
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.width(80.dp).keyboardDismissExclusion().padding(vertical = 8.dp).semantics { contentDescription = label })
         if (suffix.isNotEmpty()) Text(suffix, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurface)
     }
 }
@@ -94,7 +94,7 @@ internal fun ScheduleFilledField(value: String, onChange: (String) -> Unit, hint
     BasicTextField(value, onChange, enabled = enabled, singleLine = singleLine,
         textStyle = TextStyle(fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 22.sp),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-        modifier = modifier.fillMaxWidth().scheduleInputRegion().clip(RoundedCornerShape(12.dp))
+        modifier = modifier.fillMaxWidth().keyboardDismissExclusion().clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant).padding(13.dp),
         decorationBox = { field -> Box { if (value.isEmpty()) Text(hint, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); field() } })
 }
@@ -137,7 +137,7 @@ internal fun ScheduleChoiceSheet(title: String, searchHint: String, selected: St
     var query by remember { mutableStateOf("") }
     ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.adaptiveSheetBounds(), sheetMaxWidth = adaptiveSheetWidth(),
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = MaterialTheme.colorScheme.surface) {
-        ScheduleKeyboardDismissHost {
+        KeyboardDismissHost {
             DshMenuColumnHost {
                 Column(Modifier.fillMaxWidth().fillMaxHeight(0.92f).navigationBarsPadding()) {
                     DshPickerHeader(title, onDismiss)

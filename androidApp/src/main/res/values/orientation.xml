@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 小屏仅竖屏；最小宽度达到 600dp 的设备允许系统旋转。 -->
+    <integer name="app_screen_orientation">1</integer>
+</resources>

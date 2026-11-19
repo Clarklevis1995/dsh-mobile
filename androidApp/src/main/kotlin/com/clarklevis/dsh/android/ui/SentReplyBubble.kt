@@ -28,13 +28,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.protocol.GatewayTextPart
+import com.clarklevis.dsh.shared.protocol.PresentedFile
 
 @Composable
-internal fun SentReplyBubble(textParts: List<GatewayTextPart>, modifier: Modifier = Modifier) {
+internal fun SentReplyBubble(
+    textParts: List<GatewayTextPart>, modifier: Modifier = Modifier,
+    bubbleTint: Color? = null, borderTint: Color? = null, quoteTint: Color? = null,
+    knownFiles: List<PresentedFile> = emptyList(), onOpenFile: ((String) -> Unit)? = null
+) {
     val dark = isSystemInDarkTheme()
-    val fill = if (dark) Color(0xFF172A46) else DshColors.Ocean.copy(alpha = 0.11f)
-    val edge = if (dark) Color(0xFF314A6B) else DshColors.Ocean.copy(alpha = 0.08f)
-    val quoteFill = if (dark) Color(0xFF243F63) else Color(0xFF3055A1).copy(alpha = 0.11f)
+    val fill = bubbleTint ?: if (dark) Color(0xFF172A46) else DshColors.Ocean.copy(alpha = 0.11f)
+    val edge = borderTint ?: if (dark) Color(0xFF314A6B) else DshColors.Ocean.copy(alpha = 0.08f)
+    val quoteFill = quoteTint ?: if (dark) Color(0xFF243F63) else Color(0xFF3055A1).copy(alpha = 0.11f)
     val quoteForeground = MaterialTheme.colorScheme.onSurface.copy(alpha = if (dark) 0.88f else 0.78f)
     val shape = RoundedCornerShape(15.dp)
     val body = textParts.filter { it.type == "text" }.joinToString("") { it.text }.trim()
@@ -54,6 +59,8 @@ internal fun SentReplyBubble(textParts: List<GatewayTextPart>, modifier: Modifie
         }
         if (body.isNotEmpty()) DshMarkdownText(
             markdown = body,
+            knownFiles = knownFiles,
+            onOpenFile = onOpenFile,
             modifier = Modifier.testTag("sent-reply-body"),
             wrapContent = true
         )

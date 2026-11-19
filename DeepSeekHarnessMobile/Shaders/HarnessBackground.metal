@@ -1,5 +1,39 @@
 #include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
 using namespace metal;
+
+// 波前轮廓、折射和边缘高光与 Android 着色器保持一致。
+[[ stitchable ]] half4 workspaceModeWave(float2 position, SwiftUI::Layer outgoing,
+                                        float4 bounds, float2 origin, float progress, half4 tint) {
+    float2 extent = bounds.zw;
+    float2 center = clamp(origin, 0.0, extent);
+    float2 delta = position - bounds.xy - center;
+    float distance = length(delta);
+    float width = clamp(min(extent.x, extent.y) * 0.09, 24.0, 52.0);
+    float span = length(max(center, extent - center));
+    float radius = mix(-0.8 * width, span + 1.85 * width, progress * (1.55 - 0.55 * progress));
+    float radialFront = (distance - radius) / width;
+    // 跳过波前影响范围外的像素，以免整屏计算细小的轮廓变化。
+    if (radialFront < -1.75) return half4(0.0);
+    if (radialFront > 2.14) return outgoing.sample(position);
+    float angle = atan2(delta.y, delta.x + 0.0001);
+    // 大小不同的凸缘以不同速度变化，起点先连成一片再沿弧线蔓延。
+    float contour = 0.65 * sin(3.0 * angle + 0.8 + 2.35 * progress)
+                  + 0.33 * sin(7.0 * angle - 1.4 - 3.1 * progress)
+                  + 0.20 * sin(14.0 * angle + 2.1 + 4.1 * progress)
+                  + 0.11 * sin(27.0 * angle - 0.6 - 6.0 * progress);
+    float spread = smoothstep(0.0, 3.2 * width, radius);
+    float front = radialFront - spread * contour;
+    float visibility = smoothstep(-0.085, 0.115, front);
+    float lens = 1.0 - smoothstep(0.0, 0.85, abs(front));
+    float2 bend = delta / max(distance, 1.0) * (8.0 * lens * sin(3.14 * front));
+    float2 pixel = clamp(position + bend, bounds.xy + 0.5, bounds.xy + extent - 0.5);
+    half4 color = outgoing.sample(pixel) * half(visibility);
+    float rim = 0.36 * (1.0 - smoothstep(0.015, 0.135, abs(front + 0.025)));
+    float halo = (0.10 + 0.07 * smoothstep(-0.35, 0.55, contour))
+               * (1.0 - smoothstep(0.06, 0.46, abs(front)));
+    return color * half(1.0 - rim - halo) + tint * half(rim + halo);
+}
 
 static float harnessHash(float2 p) {
     p = fract(p * float2(123.34, 456.21));
@@ -96,7 +130,8 @@ static float harnessPadRibbons(float2 uv, float2 safeSize, float t, float2 disto
     float2 size,
     float time,
     float tabletStyle,
-    float prefersOpenLightArcs
+    float prefersOpenLightArcs,
+    float lavenderPalette
 ) {
     float2 safeSize = max(size, float2(1.0));
     float2 uv = position / safeSize;
@@ -144,5 +179,12 @@ static float harnessPadRibbons(float2 uv, float2 safeSize, float t, float2 disto
     color *= 0.38 + 0.72 * vignette;
     color += (harnessHash(position + floor(time * 12.0)) - 0.5) * 0.010;
 
+    if (lavenderPalette > 0.5) {
+        float luminance = dot(max(color, 0.0), float3(0.2126, 0.7152, 0.0722));
+        float tone = saturate(luminance / 0.50);
+        color = lavenderPalette > 1.5
+            ? mix(float3(0.20, 0.17, 0.24), float3(0.34, 0.30, 0.37), tone)
+            : mix(float3(0.79, 0.70, 0.89), float3(0.99, 0.97, 1.0), tone);
+    }
     return half4(half3(max(color, 0.0)), currentColor.a);
 }

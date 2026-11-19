@@ -63,6 +63,10 @@ struct DeepSeekHarnessMobileApp: App {
                     ConversationGalleryUITestHarness()
                 } else if ProcessInfo.processInfo.environment["DSH_COMPOSER_CAMERA_UI_TEST"] == "1" {
                     ComposerCameraUITestHarness()
+                } else if ProcessInfo.processInfo.environment["DSH_BOT_DESIGN_UI_TEST"] == "1" {
+                    BotDesignPreviewHarness()
+                } else if ProcessInfo.processInfo.environment["DSH_BOT_UI_TEST"] == "1" {
+                    BotModeUITestHarness()
                 } else if ProcessInfo.processInfo.environment["DSH_WORKSPACE_REVIEW_UI_TEST"] == "1" {
                     WorkspaceReviewUITestHarness()
                 } else if ProcessInfo.processInfo.environment["DSH_CONNECTOR_SHEET_UI_TEST"] == "1" {

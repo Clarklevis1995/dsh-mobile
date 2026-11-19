@@ -4,9 +4,16 @@ import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.RenderEffect
+import android.graphics.RuntimeShader
+import android.os.Build
 import android.provider.Settings
+import androidx.annotation.RequiresApi
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -24,6 +31,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
@@ -39,9 +49,21 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sin
 
+internal const val WORKSPACE_MODE_WAVE_DURATION_MS = 640
+
+internal class WorkspaceModeWave(val origin: Offset) {
+    val progress = Animatable(0f)
+}
+
 /** 首页矢量海洋背景；网格、粒子与玻璃采样共用可暂停的动画时钟。 */
 @Composable
-internal fun HarnessAnimatedBackground(modifier: Modifier = Modifier, animationEnabled: Boolean = true) {
+internal fun HarnessAnimatedBackground(
+    modifier: Modifier = Modifier,
+    animationEnabled: Boolean = true,
+    lavender: Boolean = false,
+    modeWave: WorkspaceModeWave? = null
+) {
+    val dark = isSystemInDarkTheme()
     val context = LocalContext.current
     val active = rememberBackgroundActive()
     val effectsReduced = LocalUiEffectsReduced.current
@@ -73,28 +95,100 @@ internal fun HarnessAnimatedBackground(modifier: Modifier = Modifier, animationE
         }
     }
 
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .clipToBounds()
-            .background(DshColors.Navy)
-            .semantics { hideFromAccessibility() }
-    ) {
-        val largeWindow = maxWidth >= 600.dp
-        OceanMeshBackground(currentTime, largeWindow = largeWindow)
-        TechnicalGrid(largeWindow)
-        WhaleParticleField(currentTime, !motionEnabled, largeWindow)
+    BoxWithConstraints(modifier.fillMaxSize().clipToBounds().semantics { hideFromAccessibility() }) {
+        val static = !motionEnabled || !animationEnabled
+        val wide = maxWidth >= 600.dp
+        val wideBot = minOf(maxWidth, maxHeight) >= 600.dp
+        HarnessBackgroundLayers(currentTime, static, if (lavender) wideBot else wide, lavender, dark)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && modeWave != null) {
+            HarnessBackgroundLayers(currentTime, static, if (lavender) wide else wideBot, !lavender, dark,
+                modifier = Modifier.workspaceModeWave(modeWave, dark))
+        }
+    }
+}
+
+@Composable
+private fun HarnessBackgroundLayers(
+    time: () -> Float,
+    static: Boolean,
+    largeWindow: Boolean,
+    lavender: Boolean,
+    dark: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val night = lavender && dark
+    val surface = if (night) Color(0xFF17161F) else if (lavender) Color(0xFFF4F1FA) else DshColors.Navy
+    Box(modifier.fillMaxSize().background(surface)) {
+        OceanMeshBackground(time, largeWindow = largeWindow, lavender = lavender, night = night)
+        TechnicalGrid(largeWindow, lavender, night)
+        WhaleParticleField(time, static, largeWindow, lavender, night)
         Canvas(Modifier.fillMaxSize()) {
             drawRect(
                 Brush.verticalGradient(
                     0f to Color.Transparent,
-                    0.58f to DshColors.Navy.copy(alpha = 0.12f),
-                    1f to Color.Black.copy(alpha = 0.18f)
+                    0.58f to (if (night) Color(0xFF4D4557) else if (lavender) Color(0xFFEBE0F7) else DshColors.Navy).copy(alpha = 0.12f),
+                    1f to (if (night) Color(0xFF3D3647) else if (lavender) Color(0xFFE0D4F0) else Color.Black).copy(alpha = if (lavender) 0.58f else 0.18f)
                 )
             )
         }
     }
 }
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@Composable
+private fun Modifier.workspaceModeWave(wave: WorkspaceModeWave, dark: Boolean): Modifier {
+    val shader = remember { RuntimeShader(WORKSPACE_MODE_WAVE_SHADER) }
+    val layerOrigin = remember { mutableStateOf(Offset.Zero) }
+    return onGloballyPositioned { layerOrigin.value = it.localToRoot(Offset.Zero) }
+        .graphicsLayer {
+            val origin = wave.origin - layerOrigin.value
+            shader.setFloatUniform("extent", size.width, size.height)
+            shader.setFloatUniform("origin", origin.x, origin.y)
+            shader.setFloatUniform("progress", wave.progress.value)
+            shader.setFloatUniform("unit", density)
+            shader.setFloatUniform("tint", if (dark) 0.68f else 0.87f,
+                if (dark) 0.60f else 0.81f, if (dark) 0.75f else 0.97f, 1f)
+            renderEffect = RenderEffect.createRuntimeShaderEffect(shader, "outgoing").asComposeRenderEffect()
+        }
+}
+
+// 与 iOS 的 HarnessBackground.metal 共用相同的波速、折射范围和轮廓公式。
+private const val WORKSPACE_MODE_WAVE_SHADER = """
+    uniform shader outgoing;
+    uniform float2 extent;
+    uniform float2 origin;
+    uniform float progress;
+    uniform float unit;
+    uniform half4 tint;
+
+    half4 main(float2 position) {
+        float2 center = clamp(origin, float2(0.0), extent);
+        float2 delta = position - center;
+        float distance = length(delta);
+        float width = clamp(min(extent.x, extent.y) * 0.09, 24.0 * unit, 52.0 * unit);
+        float span = length(max(center, extent - center));
+        float radius = mix(-0.8 * width, span + 1.85 * width, progress * (1.55 - 0.55 * progress));
+        float radialFront = (distance - radius) / width;
+        if (radialFront < -1.75) return half4(0.0);
+        if (radialFront > 2.14) return outgoing.eval(position);
+        float angle = atan(delta.y, delta.x + 0.0001);
+        float contour = 0.65 * sin(3.0 * angle + 0.8 + 2.35 * progress)
+                      + 0.33 * sin(7.0 * angle - 1.4 - 3.1 * progress)
+                      + 0.20 * sin(14.0 * angle + 2.1 + 4.1 * progress)
+                      + 0.11 * sin(27.0 * angle - 0.6 - 6.0 * progress);
+        float spread = smoothstep(0.0, 3.2 * width, radius);
+        float front = radialFront - spread * contour;
+        float visibility = smoothstep(-0.085, 0.115, front);
+        float lens = 1.0 - smoothstep(0.0, 0.85, abs(front));
+        float2 bend = delta / max(distance, unit) * (8.0 * unit * lens * sin(3.14 * front));
+        float2 pixel = clamp(position + bend, float2(0.5), extent - 0.5);
+        half4 color = outgoing.eval(pixel) * half(visibility);
+        float rim = 0.36 * (1.0 - smoothstep(0.015, 0.135, abs(front + 0.025)));
+        float halo = (0.10 + 0.07 * smoothstep(-0.35, 0.55, contour))
+                   * (1.0 - smoothstep(0.06, 0.46, abs(front)));
+        return color * half(1.0 - rim - halo) + tint * half(rim + halo);
+    }
+"""
 
 @Composable
 private fun rememberBackgroundActive(): Boolean {
@@ -113,15 +207,16 @@ private fun rememberBackgroundActive(): Boolean {
 }
 
 @Composable
-private fun TechnicalGrid(largeWindow: Boolean) {
+private fun TechnicalGrid(largeWindow: Boolean, lavender: Boolean, night: Boolean) {
+    val gridColor = if (night) Color.Black else if (lavender) Color(0xFF6E529E) else Color.White
     Canvas(Modifier.fillMaxSize()) {
         val spacing = if (largeWindow) (size.minDimension / 16f).coerceIn(42.dp.toPx(), 64.dp.toPx()) else 42.dp.toPx()
         // 只淡出网格自身；整屏深蓝遮罩会吞掉背景的暖灰色和底部光带。
         fun gridOpacity(y: Float): Float =
             1f - ((y / size.height.coerceAtLeast(1f) - 0.56f) / 0.44f).coerceIn(0f, 1f)
         val verticalLineBrush = Brush.verticalGradient(
-            0f to Color.White.copy(alpha = 0.043f),
-            0.56f to Color.White.copy(alpha = 0.043f),
+            0f to gridColor.copy(alpha = 0.043f),
+            0.56f to gridColor.copy(alpha = 0.043f),
             1f to Color.Transparent
         )
         var x = -spacing
@@ -131,7 +226,7 @@ private fun TechnicalGrid(largeWindow: Boolean) {
         }
         var y = -spacing
         while (y <= size.height + spacing) {
-            drawLine(Color.White.copy(alpha = 0.043f * gridOpacity(y)), Offset(0f, y), Offset(size.width, y), 0.55.dp.toPx())
+            drawLine(gridColor.copy(alpha = 0.043f * gridOpacity(y)), Offset(0f, y), Offset(size.width, y), 0.55.dp.toPx())
             y += spacing
         }
         val columns = ceil(size.width / spacing).toInt() + 1
@@ -140,7 +235,7 @@ private fun TechnicalGrid(largeWindow: Boolean) {
             repeat(columns) { column ->
                 if ((row * 11 + column * 7) % 13 == 0) {
                     drawRect(
-                        Color.White.copy(alpha = 0.085f * gridOpacity(row * spacing)),
+                        gridColor.copy(alpha = 0.085f * gridOpacity(row * spacing)),
                         Offset(column * spacing - 1.1.dp.toPx(), row * spacing - 1.1.dp.toPx()),
                         Size(2.2.dp.toPx(), 2.2.dp.toPx())
                     )
@@ -151,8 +246,8 @@ private fun TechnicalGrid(largeWindow: Boolean) {
 }
 
 @Composable
-private fun WhaleParticleField(time: () -> Float, isStatic: Boolean, largeWindow: Boolean) {
-    val sampleSize = if (largeWindow) 100 else WHALE_SAMPLE_SIZE
+private fun WhaleParticleField(time: () -> Float, isStatic: Boolean, largeWindow: Boolean, lavender: Boolean, night: Boolean) {
+    val sampleSize = if (largeWindow) 100 else if (lavender) 60 else WHALE_SAMPLE_SIZE
     val particles = remember(sampleSize) { makeWhaleParticles(sampleSize) }
     Canvas(Modifier.fillMaxSize()) {
         if (particles.isEmpty()) return@Canvas
@@ -165,12 +260,12 @@ private fun WhaleParticleField(time: () -> Float, isStatic: Boolean, largeWindow
             else Offset(size.width * 0.55f, size.height * 0.34f)
         // 加密采样后同步缩小点，维持原有留白和整体亮度。
         val baseDot = if (largeWindow) (square / 360f).coerceIn(0.8.dp.toPx(), 2.4.dp.toPx())
-            else max(1.45.dp.toPx(), square / 220f) * (60f / WHALE_SAMPLE_SIZE)
+            else max(1.45.dp.toPx(), square / 220f) * (60f / sampleSize)
         val t = if (isStatic) 0f else time()
         // 动态位移按 dp 计算，避免高密度屏幕上的几像素波动几乎不可见。
-        val driftAmplitudeX = if (isStatic) 2.8f else 4.dp.toPx()
-        val driftAmplitudeY = if (isStatic) 2.6f else 4.dp.toPx()
-        val tailAmplitude = if (isStatic) 7f else 10.dp.toPx()
+        val driftAmplitudeX = if (lavender) (if (largeWindow) 1.8.dp.toPx() else 2.8.dp.toPx()) else if (isStatic) 2.8f else 4.dp.toPx()
+        val driftAmplitudeY = if (lavender) (if (largeWindow) 1.7.dp.toPx() else 2.6.dp.toPx()) else if (isStatic) 2.6f else 4.dp.toPx()
+        val tailAmplitude = if (lavender) 7.dp.toPx() else if (isStatic) 7f else 10.dp.toPx()
         val staggerAmplitude = square / sampleSize * 0.14f
         particles.forEach { particle ->
             val tail = smoothstep(0.54f, 0.94f, particle.x)
@@ -178,28 +273,29 @@ private fun WhaleParticleField(time: () -> Float, isStatic: Boolean, largeWindow
             // 相位由空间位置连续变化，避免按点序号起伏造成相邻行错位。
             val phaseX = particle.x * 5f + particle.y * 3f
             val phaseY = particle.x * 4f - particle.y * 3f
-            val driftX = sin(t * 0.50f + phaseX) * driftAmplitudeX * edgeDrift
-            val driftY = cos(t * 0.42f + phaseY) * driftAmplitudeY * edgeDrift
+            val motionScale = if (lavender && largeWindow) (square / (460f * density)).coerceIn(1f, 2f) else 1f
+            val driftX = sin(t * 0.50f + if (lavender) particle.phase * .53f else phaseX) * driftAmplitudeX * edgeDrift * motionScale
+            val driftY = cos(t * 0.42f + if (lavender) particle.phase * .71f else phaseY) * driftAmplitudeY * edgeDrift * motionScale
             // 以网格行列生成短周期相位差，让间隙轻微交错；位移限制在点距内。
             val column = particle.x * sampleSize
             val row = particle.y * sampleSize
-            val staggerX = sin(row * 1.05f + column * 0.35f + t * 0.50f) * staggerAmplitude
+            val staggerX = sin(row * 1.05f + column * 0.35f + t * 0.50f) * staggerAmplitude * if (lavender) 0f else 1f
             // 相邻行错开四分之一个周期，让波峰和波谷形成清晰的逐行交错。
             val rowPhase = row * (kotlin.math.PI.toFloat() / 2f)
-            val staggerY = sin(column * 0.90f - rowPhase + t * 0.42f) * staggerAmplitude * 0.7f
-            val tailWave = sin(t * 1.10f - particle.x * 7f) * tailAmplitude * tail
+            val staggerY = sin(column * 0.90f - rowPhase + t * 0.42f) * staggerAmplitude * if (lavender) 0f else 0.7f
+            val tailWave = sin(t * 1.10f - particle.x * 7f) * tailAmplitude * tail * motionScale
             val shimmer = 0.90f + 0.10f * sin(t * 1.5f + particle.x * 15f + particle.y * 9f)
             val point = Offset(
                 center.x + (particle.x - 0.5f) * whaleWidth + driftX + staggerX,
                 center.y + (particle.y - 0.5f) * square + driftY + staggerY + tailWave
             )
             val dot = baseDot * (0.72f + particle.luminance * 0.58f)
-            val alpha = ((0.10f + particle.luminance * 0.38f) * shimmer).coerceIn(0f, 1f) * 0.42f
+            val alpha = ((0.10f + particle.luminance * 0.38f) * shimmer).coerceIn(0f, 1f) * (if (lavender) 0.56f else 0.42f)
             drawRoundRect(
-                Color(
-                    red = (0.73f + 0.15f * particle.light).coerceIn(0f, 1f),
-                    green = (0.79f + 0.12f * particle.light).coerceIn(0f, 1f),
-                    blue = (0.92f + 0.08f * particle.light).coerceIn(0f, 1f),
+                if (night) Color(0xFF140F1C).copy(alpha = alpha) else Color(
+                    red = ((if (lavender) 0.48f else 0.73f) + 0.15f * particle.light).coerceIn(0f, 1f),
+                    green = ((if (lavender) 0.37f else 0.79f) + 0.12f * particle.light).coerceIn(0f, 1f),
+                    blue = ((if (lavender) 0.66f else 0.92f) + 0.08f * particle.light).coerceIn(0f, 1f),
                     alpha = alpha
                 ),
                 topLeft = Offset(point.x - dot / 2f, point.y - dot / 2f),

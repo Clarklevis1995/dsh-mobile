@@ -86,6 +86,16 @@ data class GatewayRequest(
 
 /** 请求字段逐项复制现有 iOS GatewayClient 与 Mobile Gateway 已验证协议。 */
 object GatewayRequests {
+    fun botCall(endpoint: String, payloadJson: String, requestId: String): GatewayRequest {
+        require(requestId.startsWith("bot-") && requestId.length <= 128 &&
+            requestId.all { it.isLetterOrDigit() || it in "._:-" })
+        val payload = wireJson.parseToJsonElement(payloadJson) as? JsonObject ?: error("Bot payload must be an object")
+        return GatewayRequest("bot-call", requestId, correlationId = requestId,
+            lanePolicy = GatewayRequestLanePolicy.REJECT_IF_BUSY, payload = buildJsonObject {
+                put("type", "bot-call"); put("requestId", requestId); put("endpoint", endpoint); put("payload", payload)
+            }.toString())
+    }
+
     fun workspaceChanges(sessionId: String, seq: Int, index: Int?, requestId: String): GatewayRequest {
         require(sessionId.isNotBlank() && sessionId.length <= 2048 && seq >= 0)
         require(index == null || index >= 0)

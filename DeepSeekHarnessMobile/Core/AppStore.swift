@@ -741,6 +741,7 @@ final class AppStore: ObservableObject {
     @Published var conversationDirectoryPath: String?
     private(set) var conversationDirectorySessionID: String?
 
+    lazy var botMode = BotModeModel(gateway: gateway, profileID: gatewayLocalID, images: workspaceMarkdownImages)
     let gateway: GatewayClient
     let voiceInput: VoiceInputAdapter
     lazy var connectors = IOSDeviceConnectors(hostID: gatewayLocalID) { [weak self] json in
@@ -956,7 +957,7 @@ final class AppStore: ObservableObject {
     private var conversationHistoryWorkerIDs: [String: UUID] = [:]
     /// Decoded bytes live outside the raw/history message models. A bounded
     /// memory layer fronts a seven-day, purgeable on-disk cache.
-    private let workspaceMarkdownImages = WorkspaceMarkdownImageLoader()
+    private let workspaceMarkdownImages = MarkdownImageLoader()
     private let imageAttachmentCache: ImageAttachmentCache
     private var attachmentLoaders: [String: AttachmentLoader] = [:]
     private var imageAttachmentRequests: [String: AttachmentLoadRequest] = [:]
@@ -2886,6 +2887,29 @@ final class AppStore: ObservableObject {
                                   conversation: true, needsConnection: true, load: load)
     }
 
+    func openBotFile(chatID: String, messageID: String, path: String) {
+        guard workspaceFilePreviewRequest == nil, !conversationFileIsOpening,
+              botMode.snapshot.selectedChatId == chatID,
+              let message = botMode.snapshot.messages.first(where: { $0.id == messageID }),
+              !message.sessionId.isEmpty else { return }
+        let sessionID = message.sessionId
+        let request = WorkspaceFilePreviewRequest(sessionID: sessionID, path: path, botChatID: chatID)
+        startWorkspaceFilePreview(request, conversation: true, needsConnection: true) { [weak self] requestID in
+            guard let self else { return }
+            self.beginWorkspaceFileTransition(self.kmpWorkspaceFileStore.resolve(
+                sessionId: sessionID, path: path, requestId: requestID,
+                supportsResolve: self.supportsFileReferences, useCache: true
+            ))
+        }
+    }
+
+    private func isWorkspaceFileSessionActive(_ sessionID: String) -> Bool {
+        if let request = workspaceFilePreviewRequest, let chatID = request.botChatID {
+            return request.sessionID == sessionID && botMode.snapshot.selectedChatId == chatID
+        }
+        return sessionID == selectedSessionId
+    }
+
     private func startWorkspaceFilePreview(_ request: WorkspaceFilePreviewRequest, conversation: Bool,
                                           needsConnection: Bool, load: @escaping (String) -> Void) {
         conversationFilePreviewRequested = conversation
@@ -2896,7 +2920,7 @@ final class AppStore: ObservableObject {
     }
 
     private func loadWorkspaceFilePreview(requestID: String) {
-        guard let request = workspaceFilePreviewRequest, request.sessionID == selectedSessionId else { return }
+        guard let request = workspaceFilePreviewRequest, isWorkspaceFileSessionActive(request.sessionID) else { return }
         completedWorkspaceFile = nil
         lastError = nil
         workspaceFilePreviewError = nil
@@ -2910,7 +2934,7 @@ final class AppStore: ObservableObject {
         }
         if workspaceFilePreviewNeedsConnection {
             kmpWorkspaceFileStore.setWorkspaceSession(sessionId: request.sessionID,
-                workspaceSessionId: teamStore.workspaceSessionId(sessionId: request.sessionID))
+                workspaceSessionId: request.botChatID == nil ? teamStore.workspaceSessionId(sessionId: request.sessionID) : request.sessionID)
         }
         watchWorkspaceFilePreview()
         workspaceFilePreviewLoad?(requestID)
@@ -2918,7 +2942,7 @@ final class AppStore: ObservableObject {
 
     func retryWorkspaceFilePreview() {
         guard !conversationFileIsOpening, workspaceFilePreviewLoad != nil,
-              workspaceFilePreviewRequest?.sessionID == selectedSessionId else { return }
+              let request = workspaceFilePreviewRequest, isWorkspaceFileSessionActive(request.sessionID) else { return }
         applyWorkspaceFileTransition(kmpWorkspaceFileStore.cancel())
         closeWorkspaceTemporaryFile(remove: true)
         // Sheet 身份不变，协议请求使用新 ID，拒绝上一次尝试的迟到响应。
@@ -3419,6 +3443,7 @@ final class AppStore: ObservableObject {
         }
         if frame.kind.hasPrefix("file-upload-") || frame.requestType?.hasPrefix("file-upload-") == true {
             fileUploads.accept(frame)
+            if gateway.supportsBots { botMode.acceptUpload(frame) }
             return
         }
         if frame.kind == "hello" {
@@ -3929,10 +3954,14 @@ final class AppStore: ObservableObject {
             }
             return
         }
-        if let hit = transition.cacheHit, let url = cachedURL, hit.sessionId == selectedSessionId {
-            conversationFileIsOpening = false
-            completedWorkspaceFile = WorkspaceLocalFile(url: url, sessionID: hit.sessionId,
-                remotePath: hit.path, name: hit.name, mediaType: hit.mediaType, purpose: "preview")
+        if let hit = transition.cacheHit, let url = cachedURL {
+            if isWorkspaceFileSessionActive(hit.sessionId) {
+                conversationFileIsOpening = false
+                completedWorkspaceFile = WorkspaceLocalFile(url: url, sessionID: hit.sessionId,
+                    remotePath: hit.path, name: hit.name, mediaType: hit.mediaType, purpose: "preview")
+            } else {
+                WorkspaceFileLifetime.shared.release(url)
+            }
         }
         if transition.discardTransferId != nil {
             closeWorkspaceTemporaryFile(remove: true)
@@ -4010,7 +4039,7 @@ final class AppStore: ObservableObject {
                 failWorkspaceFilePreview(String(localized: "下载文件的本地大小校验失败"))
                 return
             }
-            guard completion.sessionId == selectedSessionId else {
+            guard isWorkspaceFileSessionActive(completion.sessionId) else {
                 WorkspaceFileLifetime.shared.release(url, deleteTemporary: true)
                 workspaceFileTemporaryURL = nil
                 return
@@ -4024,7 +4053,7 @@ final class AppStore: ObservableObject {
                     entry.flatMap { cache.store(url, entry: $0) }
                 }.value
                 if saved != nil { WorkspaceFileLifetime.shared.release(url, deleteTemporary: true) }
-                guard operationID == workspaceFileOperationID, completion.sessionId == selectedSessionId else {
+                guard operationID == workspaceFileOperationID, isWorkspaceFileSessionActive(completion.sessionId) else {
                     if let saved { WorkspaceFileLifetime.shared.release(saved) }
                     else { WorkspaceFileLifetime.shared.release(url, deleteTemporary: true) }
                     return

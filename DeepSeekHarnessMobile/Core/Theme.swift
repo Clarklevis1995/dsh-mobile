@@ -148,6 +148,14 @@ enum DSHColor {
     static let amber = Color(red: 1.0, green: 0.68, blue: 0.12)
     static let success = Color(red: 0.18, green: 0.72, blue: 0.36)
 
+    static func userBubbleFill(isDark: Bool) -> Color {
+        ocean.opacity(isDark ? 0.24 : 0.11)
+    }
+
+    static func userBubbleEdge(isDark: Bool) -> Color {
+        ocean.opacity(isDark ? 0.34 : 0.08)
+    }
+
     /// 插件与设置开关共用的开启底色，分别适配浅色和深色外观。
     static func switchTint(for scheme: ColorScheme) -> Color {
         scheme == .dark
@@ -157,8 +165,10 @@ enum DSHColor {
 }
 
 struct DeepOceanBackground: View {
+    var lavender = false
     var prefersOpenLightArcs = false
     var animationPaused = false
+    var modeWave: WorkspaceModeWave?
 
     var body: some View {
         GeometryReader { geometry in
@@ -168,7 +178,9 @@ struct DeepOceanBackground: View {
                     isPad: UIDevice.current.userInterfaceIdiom == .pad
                 ),
                 prefersOpenLightArcs: prefersOpenLightArcs,
-                animationPaused: animationPaused
+                animationPaused: animationPaused,
+                lavender: lavender,
+                modeWave: modeWave
             )
         }
         .ignoresSafeArea()

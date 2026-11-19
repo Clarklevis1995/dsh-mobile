@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "snapshot": {
+    "mainBotId": null,
+    "chats": [],
+    "schedules": [],
+    "recent": []
+  },
+  "histories": {},
+  "optimistic": {}
+}

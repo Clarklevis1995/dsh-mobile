@@ -37,11 +37,27 @@ class AndroidMarkdownImageLoaderDeviceTest {
         var gate: CompletableDeferred<Unit>? = null
         var corrupt = false
         var attachment: ByteArray? = null
+        var holdBot = false
+        val heldBot = mutableListOf<String>()
         val loader = AndroidMarkdownImageLoader(scope, cache, ::send) { _, _ -> attachment }
         private suspend fun send(request: GatewayRequest): Boolean {
             requests += request
             val payload = Json.parseToJsonElement(request.payload).jsonObject
             fun field(name: String) = payload.getValue(name).jsonPrimitive.content
+            if (request.requestType == "bot-call") {
+                val body = payload.getValue("payload").jsonObject
+                val offset = body.getValue("offset").jsonPrimitive.int
+                val next = minOf(bytes.size, offset + (bytes.size + 1) / 2)
+                val json = buildJsonObject {
+                    put("kind", "bot-result"); put("requestId", field("requestId")); put("endpoint", field("endpoint"))
+                    put("value", buildJsonObject {
+                        put("mime", "image/png"); put("data", Base64.encodeToString(bytes.copyOfRange(offset, next), Base64.NO_WRAP))
+                        put("offset", offset); put("nextOffset", next); put("size", bytes.size); put("done", next == bytes.size); put("rev", "v1")
+                    })
+                }.toString()
+                if (holdBot) heldBot += json else assertTrue(loader.accept(GatewayWireDecoder.decode(json), json))
+                return true
+            }
             val response = when (request.requestType) {
                 "file-resolve" -> buildJsonObject {
                     put("kind", "file-resolved"); put("requestId", field("requestId"))
@@ -70,6 +86,55 @@ class AndroidMarkdownImageLoaderDeviceTest {
             assertTrue(loader.accept(GatewayWireDecoder.decode(response), response))
             return true
         }
+    }
+
+    @Test fun botAndWorkspaceShareLoaderButKeepSourcesVariantsAndOwnersSeparate() = runBlocking {
+        val owner = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        try {
+            withTimeout(10_000) {
+                val gateway = Gateway(owner)
+                val first = async { gateway.loader.loadBot("archived", null, "images/lake.png", "researcher", true) }
+                val duplicate = async { gateway.loader.loadBot("archived", null, "images/lake.png", "researcher", true) }
+                assertSame(first.await(), duplicate.await())
+                assertEquals(2, gateway.requests.count { it.requestType == "bot-call" })
+                gateway.loader.loadBot("archived", null, "images/lake.png", "researcher", true)
+                assertEquals(2, gateway.requests.count { it.requestType == "bot-call" })
+                gateway.loader.loadBot("archived", null, "images/lake.png", "researcher", false)
+                gateway.loader.loadBot("other-member", null, "images/lake.png", "researcher", false)
+                assertEquals(6, gateway.requests.count { it.requestType == "bot-call" })
+                val firstPayload = Json.parseToJsonElement(gateway.requests[0].payload).jsonObject.getValue("payload").jsonObject
+                assertEquals("archived", firstPayload.getValue("sessionId").jsonPrimitive.content)
+                assertEquals("researcher", firstPayload.getValue("botId").jsonPrimitive.content)
+                gateway.loader.load("archived", "archived", "images/lake.png", true, null)
+                assertEquals(1, gateway.requests.count { it.requestType == "file-download-open" })
+                assertEquals(1, gateway.cache.values.size)
+                // Bot 图片保持内存缓存，普通文件仍沿用已有磁盘缓存。
+                assertTrue(gateway.cache.values.keys.none { it.startsWith("bot:") })
+            }
+        } finally { owner.cancel() }
+    }
+
+    @Test fun disconnectReleasesBotWaitersAndRejectsStaleResponsesBeforeRetry() = runBlocking {
+        val owner = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        try {
+            withTimeout(10_000) {
+                val gateway = Gateway(owner)
+                gateway.holdBot = true
+                val first = async { runCatching { gateway.loader.loadBot("s", "photo", null, null, false) } }
+                while (gateway.heldBot.isEmpty()) yield()
+                val stale = gateway.heldBot.first()
+                withContext(Dispatchers.Main) { gateway.loader.disconnected() }
+                assertTrue(first.await().isFailure)
+                withContext(Dispatchers.Main) {
+                    assertFalse(gateway.loader.accept(GatewayWireDecoder.decode(stale), stale))
+                    gateway.holdBot = false
+                }
+                val retry = gateway.loader.loadBot("s", "photo", null, null, false)
+                assertArrayEquals(gateway.bytes, retry.bytes)
+                assertEquals(3, gateway.requests.count { it.requestType == "bot-call" })
+                withContext(Dispatchers.Main) { gateway.loader.close() }
+            }
+        } finally { owner.cancel() }
     }
 
     @Test fun resolvedWorkspaceImageCoalescesLoadsAndSurvivesLoaderRecreation() = runBlocking {

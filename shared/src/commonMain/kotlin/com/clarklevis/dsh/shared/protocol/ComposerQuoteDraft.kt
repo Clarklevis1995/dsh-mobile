@@ -2,7 +2,8 @@ package com.clarklevis.dsh.shared.protocol
 
 /** 输入框只编辑正文，引用仍按插入位置保存在原草稿中。坐标采用两端原生输入框的 UTF-16 偏移。 */
 object ComposerQuoteDraft {
-    private data class Quote(val offset: Int, val text: String)
+    @kotlinx.serialization.Serializable
+    data class Quote(val offset: Int, val text: String)
 
     fun editableText(draft: String): String = parts(draft).filter { it.type == "text" }.joinToString("") { it.text }
 
@@ -16,16 +17,17 @@ object ComposerQuoteDraft {
         while (suffix < minOf(previous.length, text.length) - prefix &&
             previous[previous.lastIndex - suffix] == text[text.lastIndex - suffix]) suffix++
         val end = previous.length - suffix
-        val delta = text.length - previous.length
-        val quotes = quotes(parts).map { quote ->
-            quote.copy(offset = when {
-                quote.offset <= prefix -> quote.offset
-                quote.offset >= end -> quote.offset + delta
-                else -> prefix
-            }.coerceIn(0, text.length))
-        }
-        return render(text, quotes)
+        return render(text, shiftQuotes(quotes(parts), prefix, end, text.length - previous.length))
     }
+
+    internal fun shiftQuotes(quotes: List<Quote>, start: Int, end: Int, delta: Int): List<Quote> =
+        quotes.map { quote ->
+            quote.copy(offset = when {
+                quote.offset <= start -> quote.offset
+                quote.offset >= end -> quote.offset + delta
+                else -> start
+            })
+        }
 
     fun insertQuote(draft: String, quote: String, selectionStart: Int, selectionEnd: Int): String {
         if (quote.isBlank()) return draft
@@ -64,16 +66,18 @@ object ComposerQuoteDraft {
         }
     }
 
-    private fun render(text: String, quotes: List<Quote>): String {
-        if (quotes.isEmpty()) return text
-        val segments = mutableListOf<String>()
+    internal fun render(text: String, quotes: List<Quote>): String =
+        if (quotes.isEmpty()) text else renderParts(text, quotes).joinToString("\n\n") { part ->
+            if (part.type == "quote") part.text.split("\n").joinToString("\n") { "> $it" } else part.text
+        }
+
+    internal fun renderParts(text: String, quotes: List<Quote>): List<GatewayTextPart> = buildList {
         var offset = 0
         for (quote in quotes) {
-            if (quote.offset > offset) segments += text.substring(offset, quote.offset)
-            segments += quote.text.replace("\r\n", "\n").replace('\r', '\n').split("\n").joinToString("\n") { "> $it" }
+            if (quote.offset > offset) add(GatewayTextPart("text", text.substring(offset, quote.offset)))
+            add(GatewayTextPart("quote", quote.text.replace("\r\n", "\n").replace('\r', '\n')))
             offset = quote.offset
         }
-        if (offset < text.length) segments += text.substring(offset)
-        return segments.joinToString("\n\n")
+        if (offset < text.length) add(GatewayTextPart("text", text.substring(offset)))
     }
 }

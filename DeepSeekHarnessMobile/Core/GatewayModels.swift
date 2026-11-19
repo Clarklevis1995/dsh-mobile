@@ -826,6 +826,7 @@ struct WorkspaceFilePreviewRequest: Identifiable, Equatable {
     let id = UUID()
     let sessionID: String
     let path: String
+    var botChatID: String? = nil
     var name: String { (path.replacingOccurrences(of: "\\", with: "/") as NSString).lastPathComponent }
 }
 

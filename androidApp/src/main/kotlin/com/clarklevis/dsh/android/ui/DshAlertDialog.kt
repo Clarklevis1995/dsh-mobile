@@ -19,6 +19,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,72 +51,75 @@ internal fun DshAlertDialog(
     stackedButtons: Boolean = false,
     content: (@Composable ColumnScope.() -> Unit)? = null
 ) {
+    val density = LocalDensity.current
     BasicAlertDialog(onDismissRequest = onDismissRequest) {
-        DshMenuHost {
-            Surface(
-                modifier = modifier.adaptiveContentWidth(340.dp),
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                tonalElevation = if (confirmDestructive) 0.dp else 8.dp,
-                shadowElevation = 18.dp
-            ) {
-                Column(
-                    modifier = Modifier.heightIn(max = (adaptiveWindowSize().height - 48.dp).coerceAtLeast(48.dp))
-                        .verticalScroll(rememberScrollState()).padding(22.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+        CompositionLocalProvider(LocalDensity provides density) {
+            DshMenuHost {
+                Surface(
+                    modifier = modifier.adaptiveContentWidth(340.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                    tonalElevation = if (confirmDestructive) 0.dp else 8.dp,
+                    shadowElevation = 18.dp
                 ) {
-                    Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    message?.let {
-                        Text(
-                            it,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f),
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp
-                        )
-                    }
-                    content?.invoke(this)
-                    if (dismissLabel != null || confirmLabel != null) {
-                        if (stackedButtons) {
-                            Column(
+                    Column(
+                        modifier = Modifier.heightIn(max = (adaptiveWindowSize().height - 48.dp).coerceAtLeast(48.dp))
+                            .verticalScroll(rememberScrollState()).padding(22.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        message?.let {
+                            Text(
+                                it,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f),
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp
+                            )
+                        }
+                        content?.invoke(this)
+                        if (dismissLabel != null || confirmLabel != null) {
+                            if (stackedButtons) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    confirmLabel?.let { label ->
+                                        DshAlertDialogButton(
+                                            label = label,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            enabled = confirmEnabled,
+                                            destructive = confirmDestructive,
+                                            onClick = onConfirm ?: onDismissRequest
+                                        )
+                                    }
+                                    dismissLabel?.let { label ->
+                                        DshAlertDialogButton(
+                                            label = label,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            onClick = onDismissClick ?: onDismissRequest
+                                        )
+                                    }
+                                }
+                            } else Row(
                                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
+                                dismissLabel?.let { label ->
+                                    DshAlertDialogButton(
+                                        label = label,
+                                        modifier = if (confirmLabel == null) Modifier.fillMaxWidth() else Modifier.weight(1f),
+                                        onClick = onDismissClick ?: onDismissRequest
+                                    )
+                                }
                                 confirmLabel?.let { label ->
                                     DshAlertDialogButton(
                                         label = label,
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = if (dismissLabel == null) Modifier.fillMaxWidth() else Modifier.weight(1f),
                                         enabled = confirmEnabled,
                                         destructive = confirmDestructive,
                                         onClick = onConfirm ?: onDismissRequest
                                     )
                                 }
-                                dismissLabel?.let { label ->
-                                    DshAlertDialogButton(
-                                        label = label,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        onClick = onDismissClick ?: onDismissRequest
-                                    )
-                                }
-                            }
-                        } else Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            dismissLabel?.let { label ->
-                                DshAlertDialogButton(
-                                    label = label,
-                                    modifier = if (confirmLabel == null) Modifier.fillMaxWidth() else Modifier.weight(1f),
-                                    onClick = onDismissClick ?: onDismissRequest
-                                )
-                            }
-                            confirmLabel?.let { label ->
-                                DshAlertDialogButton(
-                                    label = label,
-                                    modifier = if (dismissLabel == null) Modifier.fillMaxWidth() else Modifier.weight(1f),
-                                    enabled = confirmEnabled,
-                                    destructive = confirmDestructive,
-                                    onClick = onConfirm ?: onDismissRequest
-                                )
                             }
                         }
                     }
