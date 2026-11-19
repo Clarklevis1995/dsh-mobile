@@ -64,9 +64,9 @@ class BotDesignDeviceTest {
         val appearancePrefs = application.getSharedPreferences("bot-design-appearance-${UUID.randomUUID()}", android.content.Context.MODE_PRIVATE)
         val appearance = AppearanceSettings(appearancePrefs)
         appearance.selectFontScale(args.getString("botFontScale")?.toFloatOrNull() ?: 1f)
-        if (args.getString("botDesignState") == "night") appearance.selectInterfaceStyle(InterfaceStyle.DARK)
         val holder = graph.stateHolder
         val scenario = args.getString("botDesignState") ?: "normal"
+        if (scenario == "night" || scenario == "mode-wave-night") appearance.selectInterfaceStyle(InterfaceStyle.DARK)
         val glassApi = args.getString("botGlassApi")?.toIntOrNull() ?: android.os.Build.VERSION.SDK_INT
         val suffix = when (scenario) {
             "empty", "loading", "error" -> "-empty"
@@ -123,6 +123,18 @@ class BotDesignDeviceTest {
                         }
                     }
                 }
+            }
+            if (scenario == "mode-wave-night") {
+                device.setRotation(if (largeDevice) landscapeRotation else portraitRotation)
+                val initialOrientation = if (largeDevice) android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    else android.content.res.Configuration.ORIENTATION_PORTRAIT
+                compose.waitUntil(5_000) { activity?.resources?.configuration?.orientation == initialOrientation }
+                switchWorkspaceModes(
+                    captureWave = ::capture,
+                    beforeEnteringBot = { capture("bot-entry-drawer") },
+                )
+                capture("03-night-mode-restored")
+                return
             }
             if (scenario == "night") {
                 device.setRotation(if (largeDevice) landscapeRotation else portraitRotation)
@@ -234,6 +246,11 @@ class BotDesignDeviceTest {
                 val card = compose.onNode(hasText("ds-bot-research.md") and hasClickAction())
                 card.assertIsDisplayed()
                 compose.onNodeWithText("DS Bot 调研报告", substring = true).assertIsDisplayed()
+                val cardBounds = card.fetchSemanticsNode().boundsInRoot
+                val lastReply = compose.onNodeWithTag("bot.bubble.inline-file").fetchSemanticsNode().boundsInRoot
+                val nextReply = compose.onNodeWithTag("bot.bubble.external-file").fetchSemanticsNode().boundsInRoot
+                check(kotlin.math.abs(cardBounds.left - lastReply.left) <= 1f) { "文件卡片与 Agent 气泡左缘未对齐" }
+                check(cardBounds.top >= lastReply.bottom && cardBounds.bottom < nextReply.top)
                 capture("01-file-card")
                 card.performClick()
                 val title = compose.onNodeWithTag("workspace-preview-title")
@@ -250,6 +267,18 @@ class BotDesignDeviceTest {
                 capture("03-file-preview-rotation")
                 compose.onNodeWithContentDescription("关闭文件预览").performClick()
                 card.assertIsDisplayed()
+                if (largeDevice) {
+                    val landscapeCard = card.fetchSemanticsNode().boundsInRoot
+                    val landscapeReply = compose.onNodeWithTag("bot.bubble.inline-file").fetchSemanticsNode().boundsInRoot
+                    check(kotlin.math.abs(landscapeCard.left - landscapeReply.left) <= 1f) { "横屏文件卡片与 Agent 气泡左缘未对齐" }
+                    capture("04-landscape-file-card")
+                }
+                listOf("reply" to "ds-bot-research.md", "inline-file" to "ds-bot-research.md",
+                    "external-file" to "cross-workspace.md").forEach { (id, name) ->
+                    compose.onNodeWithTag("bot.bubble.$id").performTouchInput { click(percentOffset(.25f, .5f)) }
+                    title.assertTextEquals(name).assertIsDisplayed()
+                    compose.onNodeWithContentDescription("关闭文件预览").performClick()
+                }
                 return
             }
             if (scenario == "history-details") {
@@ -414,13 +443,10 @@ class BotDesignDeviceTest {
                 compose.onNodeWithTag("bot.chat.room").assertIsDisplayed()
                 compose.onNodeWithTag("bot.chat.researcher").assertIsDisplayed()
             }
-            compose.onNodeWithContentDescription("打开侧边栏").performClick()
-            compose.onNodeWithText("切换到工作模式").assertIsDisplayed()
-            capture("02-drawer")
-            compose.onNodeWithTag("drawer-bot").performClick()
-            compose.onNodeWithTag("workspace-hero-title").assertIsDisplayed()
-            compose.onNodeWithContentDescription("打开侧边栏").performClick()
-            compose.onNodeWithTag("drawer-bot").performClick()
+            switchWorkspaceModes(
+                drawerOpened = { capture("02-drawer") },
+                beforeEnteringBot = { capture("bot-entry-drawer") },
+            )
             compose.onNodeWithTag("bot.schedules").performScrollTo().performClick()
             compose.onNodeWithText("每日简报").assertIsDisplayed()
             assertPanelFontScale()
@@ -486,6 +512,39 @@ class BotDesignDeviceTest {
             java.util.Locale.setDefault(locale)
         }
     }
+
+    private fun switchWorkspaceModes(
+        drawerOpened: () -> Unit = {},
+        captureWave: ((String) -> Unit)? = null,
+        beforeEnteringBot: () -> Unit,
+    ) {
+        val drawer = compose.onNodeWithContentDescription("打开侧边栏")
+        val modeItem = compose.onNodeWithTag("drawer-bot")
+        fun tapModeItem(horizontalFraction: Float, name: String) {
+            if (captureWave != null) compose.mainClock.autoAdvance = false
+            try {
+                modeItem.performTouchInput { click(percentOffset(horizontalFraction, 0.5f)) }
+                if (captureWave != null) {
+                    compose.mainClock.advanceTimeBy(240)
+                    captureWave(name)
+                }
+            } finally {
+                compose.mainClock.autoAdvance = true
+            }
+        }
+        drawer.performClick()
+        compose.onNodeWithText("切换到工作模式").assertIsDisplayed()
+        drawerOpened()
+        tapModeItem(0.15f, "01-wave-to-standard")
+        compose.onNodeWithTag("workspace-hero-title").assertIsDisplayed()
+
+        drawer.performClick()
+        compose.onNodeWithText("切换到 Bot 模式").assertIsDisplayed()
+        beforeEnteringBot()
+        tapModeItem(0.75f, "02-wave-to-bot")
+        compose.onNodeWithTag("bot.chief").assertIsDisplayed()
+    }
+
     private class MemoryPreferences : GatewayPreferences {
         private val value = MutableStateFlow(GatewayPreferencesSnapshot())
         override val snapshots = value

@@ -62,6 +62,48 @@ final class BotModeUITests: XCTestCase {
 /// 固定业务快照只用于布局验收；生产页面和导航、抽屉、原生控件完全复用。
 final class BotDesignUITests: XCTestCase {
     @MainActor
+    func testWorkspaceModeSwitchesBothWays() {
+        verifyWorkspaceModeSwitchesBothWays(dark: false)
+    }
+
+    @MainActor
+    func testNightWorkspaceModeSwitchesBothWays() {
+        verifyWorkspaceModeSwitchesBothWays(dark: true)
+    }
+
+    @MainActor
+    private func verifyWorkspaceModeSwitchesBothWays(dark: Bool) {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_BOT_DESIGN_UI_TEST"] = "1"
+        if dark { app.launchEnvironment["DSH_BOT_DESIGN_APPEARANCE"] = "dark" }
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        XCUIDevice.shared.orientation = tablet ? .landscapeLeft : .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launch()
+        let chief = app.buttons["bot.chief"]
+        XCTAssertTrue(chief.waitForExistence(timeout: 10))
+
+        let drawer = app.buttons["打开侧边栏"].firstMatch
+        let modeItem = app.buttons["workspace-mode-switch"]
+        drawer.tap()
+        XCTAssertTrue(modeItem.waitForExistence(timeout: 4))
+        XCTAssertEqual(modeItem.label, "切换到工作模式")
+        modeItem.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).tap()
+        XCTAssertTrue(app.staticTexts["探索未至之境"].waitForExistence(timeout: 5))
+        capture(app, "普通模式首页")
+
+        drawer.tap()
+        XCTAssertTrue(modeItem.waitForExistence(timeout: 4))
+        XCTAssertEqual(modeItem.label, "切换到 Bot 模式")
+        capture(app, dark ? "深色抽屉 · Bot 图标" : "浅色抽屉 · Bot 图标")
+        modeItem.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5)).tap()
+        XCTAssertTrue(chief.waitForExistence(timeout: 5))
+        capture(app, "Bot 模式首页")
+    }
+
+    @MainActor
     func testNightModeSurfaces() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -210,6 +252,12 @@ final class BotDesignUITests: XCTestCase {
         let card = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "ds-bot-research.md")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         XCTAssertTrue(card.label.contains("调研报告"))
+        let lastReply = app.links["ds-bot-research.md"].firstMatch
+        let nextReply = app.links["跨工作区报告"].firstMatch
+        XCTAssertTrue(lastReply.exists && nextReply.exists)
+        XCTAssertEqual(card.frame.minX, lastReply.frame.minX - 14, accuracy: 3)
+        XCTAssertGreaterThanOrEqual(card.frame.minY, lastReply.frame.maxY)
+        XCTAssertLessThan(card.frame.maxY, nextReply.frame.minY)
         capture(app, "Bot 回复 · 普通模式文件卡片")
         card.tap()
         let title = app.staticTexts["workspace-preview-title"]
@@ -225,6 +273,20 @@ final class BotDesignUITests: XCTestCase {
         }
         app.buttons["workspace-preview-close"].tap()
         XCTAssertTrue(card.waitForExistence(timeout: 5))
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCTAssertEqual(card.frame.minX, lastReply.frame.minX - 14, accuracy: 3)
+            capture(app, "Bot 回复 · 横屏文件卡片")
+        }
+        for (label, filename) in [("reports/ds-bot-research.md", "ds-bot-research.md"),
+                                  ("ds-bot-research.md", "ds-bot-research.md"),
+                                  ("跨工作区报告", "cross-workspace.md")] {
+            let link = app.links[label].firstMatch
+            XCTAssertTrue(link.waitForExistence(timeout: 5), label)
+            link.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.25)).tap()
+            XCTAssertTrue(title.waitForExistence(timeout: 5), label)
+            XCTAssertEqual(title.label, filename)
+            app.buttons["workspace-preview-close"].tap()
+        }
         XCUIDevice.shared.orientation = .portrait
     }
 

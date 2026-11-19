@@ -1698,10 +1698,10 @@ class AndroidSharedStateHolder(
         openConversationFilePreview(sessionId, path)
     }
 
-    fun openBotFile(chatId: String, sessionId: String, path: String) {
-        if (botSnapshot.selectedChatId != chatId || botSnapshot.messages.none { message ->
-                message.sessionId == sessionId && message.files.any { it.path == path }
-            }) return
+    fun openBotFile(chatId: String, messageId: String, path: String) {
+        if (botSnapshot.selectedChatId != chatId) return
+        val sessionId = botSnapshot.messages.firstOrNull { it.id == messageId }
+            ?.sessionId?.takeIf(String::isNotEmpty) ?: return
         openConversationFilePreview(sessionId, path, chatId)
     }
 

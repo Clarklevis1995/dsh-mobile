@@ -1,14 +1,19 @@
 package com.clarklevis.dsh.android.ui
 
-import androidx.compose.foundation.isSystemInDarkTheme
-
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.RenderEffect
+import android.graphics.RuntimeShader
+import android.os.Build
 import android.provider.Settings
+import androidx.annotation.RequiresApi
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -26,6 +31,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
@@ -41,10 +49,21 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sin
 
+internal const val WORKSPACE_MODE_WAVE_DURATION_MS = 640
+
+internal class WorkspaceModeWave(val origin: Offset) {
+    val progress = Animatable(0f)
+}
+
 /** 首页矢量海洋背景；网格、粒子与玻璃采样共用可暂停的动画时钟。 */
 @Composable
-internal fun HarnessAnimatedBackground(modifier: Modifier = Modifier, animationEnabled: Boolean = true, lavender: Boolean = false) {
-    val night = lavender && isSystemInDarkTheme()
+internal fun HarnessAnimatedBackground(
+    modifier: Modifier = Modifier,
+    animationEnabled: Boolean = true,
+    lavender: Boolean = false,
+    modeWave: WorkspaceModeWave? = null
+) {
+    val dark = isSystemInDarkTheme()
     val context = LocalContext.current
     val active = rememberBackgroundActive()
     val effectsReduced = LocalUiEffectsReduced.current
@@ -76,17 +95,33 @@ internal fun HarnessAnimatedBackground(modifier: Modifier = Modifier, animationE
         }
     }
 
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .clipToBounds()
-            .background(if (night) Color(0xFF17161F) else if (lavender) Color(0xFFF4F1FA) else DshColors.Navy)
-            .semantics { hideFromAccessibility() }
-    ) {
-        val largeWindow = if (lavender) minOf(maxWidth, maxHeight) >= 600.dp else maxWidth >= 600.dp
-        OceanMeshBackground(currentTime, largeWindow = largeWindow, lavender = lavender, night = night)
+    BoxWithConstraints(modifier.fillMaxSize().clipToBounds().semantics { hideFromAccessibility() }) {
+        val static = !motionEnabled || !animationEnabled
+        val wide = maxWidth >= 600.dp
+        val wideBot = minOf(maxWidth, maxHeight) >= 600.dp
+        HarnessBackgroundLayers(currentTime, static, if (lavender) wideBot else wide, lavender, dark)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && modeWave != null) {
+            HarnessBackgroundLayers(currentTime, static, if (lavender) wide else wideBot, !lavender, dark,
+                modifier = Modifier.workspaceModeWave(modeWave, dark))
+        }
+    }
+}
+
+@Composable
+private fun HarnessBackgroundLayers(
+    time: () -> Float,
+    static: Boolean,
+    largeWindow: Boolean,
+    lavender: Boolean,
+    dark: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val night = lavender && dark
+    val surface = if (night) Color(0xFF17161F) else if (lavender) Color(0xFFF4F1FA) else DshColors.Navy
+    Box(modifier.fillMaxSize().background(surface)) {
+        OceanMeshBackground(time, largeWindow = largeWindow, lavender = lavender, night = night)
         TechnicalGrid(largeWindow, lavender, night)
-        WhaleParticleField(currentTime, !motionEnabled || !animationEnabled, largeWindow, lavender, night)
+        WhaleParticleField(time, static, largeWindow, lavender, night)
         Canvas(Modifier.fillMaxSize()) {
             drawRect(
                 Brush.verticalGradient(
@@ -98,6 +133,62 @@ internal fun HarnessAnimatedBackground(modifier: Modifier = Modifier, animationE
         }
     }
 }
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@Composable
+private fun Modifier.workspaceModeWave(wave: WorkspaceModeWave, dark: Boolean): Modifier {
+    val shader = remember { RuntimeShader(WORKSPACE_MODE_WAVE_SHADER) }
+    val layerOrigin = remember { mutableStateOf(Offset.Zero) }
+    return onGloballyPositioned { layerOrigin.value = it.localToRoot(Offset.Zero) }
+        .graphicsLayer {
+            val origin = wave.origin - layerOrigin.value
+            shader.setFloatUniform("extent", size.width, size.height)
+            shader.setFloatUniform("origin", origin.x, origin.y)
+            shader.setFloatUniform("progress", wave.progress.value)
+            shader.setFloatUniform("unit", density)
+            shader.setFloatUniform("tint", if (dark) 0.68f else 0.87f,
+                if (dark) 0.60f else 0.81f, if (dark) 0.75f else 0.97f, 1f)
+            renderEffect = RenderEffect.createRuntimeShaderEffect(shader, "outgoing").asComposeRenderEffect()
+        }
+}
+
+// 与 iOS 的 HarnessBackground.metal 共用相同的波速、折射范围和轮廓公式。
+private const val WORKSPACE_MODE_WAVE_SHADER = """
+    uniform shader outgoing;
+    uniform float2 extent;
+    uniform float2 origin;
+    uniform float progress;
+    uniform float unit;
+    uniform half4 tint;
+
+    half4 main(float2 position) {
+        float2 center = clamp(origin, float2(0.0), extent);
+        float2 delta = position - center;
+        float distance = length(delta);
+        float width = clamp(min(extent.x, extent.y) * 0.09, 24.0 * unit, 52.0 * unit);
+        float span = length(max(center, extent - center));
+        float radius = mix(-0.8 * width, span + 1.85 * width, progress * (1.55 - 0.55 * progress));
+        float radialFront = (distance - radius) / width;
+        if (radialFront < -1.75) return half4(0.0);
+        if (radialFront > 2.14) return outgoing.eval(position);
+        float angle = atan(delta.y, delta.x + 0.0001);
+        float contour = 0.65 * sin(3.0 * angle + 0.8 + 2.35 * progress)
+                      + 0.33 * sin(7.0 * angle - 1.4 - 3.1 * progress)
+                      + 0.20 * sin(14.0 * angle + 2.1 + 4.1 * progress)
+                      + 0.11 * sin(27.0 * angle - 0.6 - 6.0 * progress);
+        float spread = smoothstep(0.0, 3.2 * width, radius);
+        float front = radialFront - spread * contour;
+        float visibility = smoothstep(-0.085, 0.115, front);
+        float lens = 1.0 - smoothstep(0.0, 0.85, abs(front));
+        float2 bend = delta / max(distance, unit) * (8.0 * unit * lens * sin(3.14 * front));
+        float2 pixel = clamp(position + bend, float2(0.5), extent - 0.5);
+        half4 color = outgoing.eval(pixel) * half(visibility);
+        float rim = 0.36 * (1.0 - smoothstep(0.015, 0.135, abs(front + 0.025)));
+        float halo = (0.10 + 0.07 * smoothstep(-0.35, 0.55, contour))
+                   * (1.0 - smoothstep(0.06, 0.46, abs(front)));
+        return color * half(1.0 - rim - halo) + tint * half(rim + halo);
+    }
+"""
 
 @Composable
 private fun rememberBackgroundActive(): Boolean {

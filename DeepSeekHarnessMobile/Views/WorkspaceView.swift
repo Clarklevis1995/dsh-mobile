@@ -29,6 +29,9 @@ struct WorkspaceView: View {
     @State private var drawerOffset: CGFloat = 0
     @State private var drawerDragStart: CGFloat?
     @State private var drawerFeedback = WorkspaceDrawerFeedback()
+    @State private var modeWave: WorkspaceModeWave?
+    @State private var modeSwitchFrame: CGRect = .zero
+    @State private var modeSwitchTap: CGPoint?
     @GestureState private var drawerClosingGestureActive = false
     @FocusState private var sessionSearchIsFocused: Bool
 
@@ -76,7 +79,8 @@ struct WorkspaceView: View {
                 (colorScheme == .dark
                     ? Color(red: 36.0 / 255, green: 36.0 / 255, blue: 38.0 / 255)
                     : Color.white)
-                drawerContent(progress: progress, topInset: topInset, width: drawerWidth)
+                drawerContent(progress: progress, topInset: topInset, width: drawerWidth,
+                              usesVerticalToolbar: usesVerticalToolbar)
                     .padding(.leading, safeArea.leading)
                     .frame(width: drawerWidth, height: fullHeight, alignment: .topLeading)
                     .highPriorityGesture(drawerClosingGesture(width: drawerWidth))
@@ -94,7 +98,8 @@ struct WorkspaceView: View {
                     // 先扩展到窗口四边，再绘制和裁剪背景；正文仍留在安全区内。
                     .background {
                         WorkspaceScrollBackground(activity: scrollActivity, prefersOpenLightArcs: usesVerticalToolbar,
-                            animationPaused: drawerOffset > 0 || drawerDragStart != nil, lavender: isBotMode)
+                            animationPaused: drawerOffset > 0 || drawerDragStart != nil, lavender: isBotMode,
+                            modeWave: reduceMotion ? nil : modeWave)
                     }
                     .overlay {
                         Color.black.opacity(dimOpacity)
@@ -126,12 +131,14 @@ struct WorkspaceView: View {
                     .offset(x: drawerOffset)
             }
             .frame(width: fullWidth, height: fullHeight)
+            .coordinateSpace(name: "workspace-window")
             .offset(x: -safeArea.leading, y: -topInset)
             .onChangeCompat(of: geometry.size) { _, _ in
                 // 旋转或调整分屏后清理旧拖拽距离，避免侧栏停在半开位置。
                 drawerFeedback.endDrag(cancelled: true)
                 drawerDragStart = nil
                 drawerOffset = progress > 0.5 ? drawerWidth : 0
+                modeWave = nil
             }
             .onChangeCompat(of: drawerClosingGestureActive) { _, active in
                 if !active {
@@ -140,6 +147,11 @@ struct WorkspaceView: View {
             }
         }
         .background((isBotMode ? Color("BotLavender") : DSHColor.navy).ignoresSafeArea())
+        .task(id: modeWave?.startedAt) {
+            guard let wave = modeWave else { return }
+            try? await Task.sleep(nanoseconds: UInt64(WorkspaceModeWave.duration * 1_000_000_000))
+            if !Task.isCancelled, modeWave?.startedAt == wave.startedAt { modeWave = nil }
+        }
         .onChangeCompat(of: drawerOffset) { _, value in
             if value > 0 { sessionSearchIsFocused = false }
         }
@@ -355,7 +367,8 @@ struct WorkspaceView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func drawerContent(progress: CGFloat, topInset: CGFloat, width: CGFloat) -> some View {
+    private func drawerContent(progress: CGFloat, topInset: CGFloat, width: CGFloat,
+                               usesVerticalToolbar: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HarnessMark(onDarkBackground: colorScheme == .dark, width: min(width - 48, 216))
                 .padding(.leading, 12)
@@ -364,9 +377,30 @@ struct WorkspaceView: View {
             drawerItem(isBotMode ? String(localized: "切换到工作模式") : String(localized: "切换到 Bot 模式"), icon: {
                 Group {
                     if isBotMode { WhalenessOrcaIcon(size: 24) }
-                    else { Image("DsBotWhale").renderingMode(colorScheme == .dark ? .template : .original).resizable().scaledToFit().frame(width: 24, height: 24) }
+                    else {
+                        Image("BotDrawerMark")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 24, height: 24)
+                            .foregroundStyle(Color("BotInk"))
+                    }
                 }.frame(width: 24)
-            }, action: { selectDrawerItem(isBotMode ? onStandardMode : onBotMode) }, modeSwitch: true)
+                    .accessibilityHidden(true)
+            }, action: {
+                // 手势和 Button 的回调顺序不固定，等本次事件结束后读取点击坐标。
+                Task { @MainActor in switchMode(usesVerticalToolbar: usesVerticalToolbar) }
+            }, modeSwitch: true)
+            .accessibilityIdentifier("workspace-mode-switch")
+            .background {
+                GeometryReader { geometry in
+                    let frame = geometry.frame(in: .named("workspace-window"))
+                    Color.clear.onAppear { modeSwitchFrame = frame }
+                        .onChangeCompat(of: frame) { _, value in modeSwitchFrame = value }
+                }
+            }
+            .simultaneousGesture(SpatialTapGesture(coordinateSpace: .named("workspace-window")).onEnded {
+                modeSwitchTap = $0.location
+            })
             drawerItem(String(localized: "插件"), icon: {
                 Image("DshPluginPinwheel")
                     .renderingMode(.template)
@@ -491,6 +525,18 @@ struct WorkspaceView: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             drawerOffset = 0
+        }
+    }
+
+    private func switchMode(usesVerticalToolbar: Bool) {
+        let origin = modeSwitchTap ?? CGPoint(x: modeSwitchFrame.midX, y: modeSwitchFrame.midY)
+        modeSwitchTap = nil
+        selectDrawerItem {
+            if #available(iOS 17.0, *), !reduceMotion {
+                modeWave = WorkspaceModeWave(origin: origin, startedAt: .now,
+                                             outgoingOpenLightArcs: usesVerticalToolbar)
+            }
+            if isBotMode { onStandardMode() } else { onBotMode() }
         }
     }
 
@@ -788,10 +834,11 @@ private struct WorkspaceScrollBackground: View {
     let prefersOpenLightArcs: Bool
     let animationPaused: Bool
     var lavender = false
+    var modeWave: WorkspaceModeWave?
 
     var body: some View {
         DeepOceanBackground(lavender: lavender, prefersOpenLightArcs: prefersOpenLightArcs,
-            animationPaused: animationPaused || activity.isScrolling)
+            animationPaused: animationPaused || activity.isScrolling, modeWave: modeWave)
     }
 }
 

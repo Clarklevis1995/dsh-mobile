@@ -10,8 +10,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -38,10 +41,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -69,6 +77,7 @@ internal fun WorkspaceDrawer(
     botMode: Boolean = false,
     onStandardMode: () -> Unit = {},
     gesturesEnabled: Boolean = true,
+    onModeSwitch: (Offset) -> Unit = {},
     content: @Composable (openDrawer: () -> Unit, canScrollVertically: Boolean) -> Unit
 ) {
     BotModeTheme(botMode) {
@@ -80,6 +89,7 @@ internal fun WorkspaceDrawer(
         var offsetPx by remember { mutableFloatStateOf(0f) }
         var horizontalDragActive by remember { mutableStateOf(false) }
         var animationJob by remember { mutableStateOf<Job?>(null) }
+        val modeSwitchAnchor = remember { ModeSwitchAnchor() }
         val scope = rememberCoroutineScope()
         LaunchedEffect(drawerWidthPx, maxHeight) {
             animationJob?.cancel()
@@ -168,13 +178,22 @@ internal fun WorkspaceDrawer(
                         modifier = Modifier.size(width = 183.dp, height = 29.dp)
                     )
                 }
-                Row(Modifier.fillMaxWidth().clickable(role = Role.Button) {
-                    animationJob?.cancel()
-                    updateOffset(0f)
-                    if (botMode) onStandardMode() else onBotMode()
-                }.padding(horizontal = 14.dp, vertical = 14.dp).testTag("drawer-bot"),
+                Row(Modifier.fillMaxWidth()
+                    .onGloballyPositioned { modeSwitchAnchor.coordinates = it }
+                    .pointerInput(modeSwitchAnchor) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            modeSwitchAnchor.tap = waitForUpOrCancellation(PointerEventPass.Initial)?.position
+                        }
+                    }
+                    .clickable(role = Role.Button) {
+                        modeSwitchAnchor.consumeOrigin()?.let(onModeSwitch)
+                        animationJob?.cancel()
+                        updateOffset(0f)
+                        if (botMode) onStandardMode() else onBotMode()
+                    }.padding(horizontal = 14.dp, vertical = 14.dp).testTag("drawer-bot"),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (botMode) WhalenessOrcaIcon(Modifier.size(24.dp)) else DsBotWhaleIcon(Modifier.size(24.dp))
+                    if (botMode) WhalenessOrcaIcon(Modifier.size(24.dp)) else BotDrawerMark(Modifier.size(24.dp))
                     Text(appText(if (botMode) "切换到工作模式" else "切换到 Bot 模式"), Modifier.weight(1f), fontSize = 17.sp, color = MaterialTheme.colorScheme.onBackground)
                     Image(painterResource(R.drawable.ic_mode_swap), null, Modifier.size(16.0125.dp, 19.6064.dp), colorFilter = ColorFilter.tint(Color(0xFF7760B4)))
                 }
@@ -237,6 +256,18 @@ internal fun WorkspaceDrawer(
             }
         }
     }
+    }
+}
+
+private class ModeSwitchAnchor {
+    var coordinates: LayoutCoordinates? = null
+    var tap: Offset? = null
+
+    fun consumeOrigin(): Offset? {
+        val touch = tap
+        tap = null
+        val row = coordinates?.takeIf { it.isAttached } ?: return null
+        return row.localToRoot(touch ?: Offset(row.size.width / 2f, row.size.height / 2f))
     }
 }
 

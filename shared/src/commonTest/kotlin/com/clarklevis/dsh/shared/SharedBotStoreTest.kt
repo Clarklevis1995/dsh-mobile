@@ -59,6 +59,33 @@ class SharedBotStoreTest {
     }
 
     @Test
+    fun deliveryFromAnOlderPageAppearsAfterTheLastReplyInItsOwnSessionAndTurn() {
+        val store = connected()
+        val newest = """{"items":[
+          {"kind":"bot","seq":5,"turn":4,"sessionId":"archived-part","text":"本轮最后一段"},
+          {"kind":"user","seq":6,"turn":5,"sessionId":"archived-part","text":"继续"},
+          {"kind":"bot","seq":7,"turn":4,"sessionId":"current-part","text":"另一会话同编号轮次"}
+        ],"cursor":{"part":0,"beforeSeq":5}}"""
+        response(store, store.selectChat("chief"), "chat", newest)
+        assertTrue(store.snapshot().messages.all { it.files.isEmpty() })
+
+        val older = """{"items":[
+          {"kind":"bot","seq":2,"turn":4,"sessionId":"archived-part","text":"前一段"},
+          {"kind":"file","seq":3,"turn":4,"sessionId":"archived-part","files":[{"path":"reports/report.md","description":"调研报告"},{"path":"app.apk"}]},
+          {"kind":"file","seq":4,"turn":4,"sessionId":"archived-part","files":[{"path":"reports/report.md"}]}
+        ],"cursor":null}"""
+        val result = response(store, store.loadEarlier(), "chat", older).snapshot.messages
+        assertEquals(listOf("前一段", "本轮最后一段", "继续", "另一会话同编号轮次"), result.map { it.text })
+        assertEquals(listOf("reports/report.md", "app.apk"), result[1].files.map { it.path })
+        assertEquals("调研报告", result[1].files.first().description)
+        assertTrue(result.filterIndexed { index, _ -> index != 1 }.all { it.files.isEmpty() })
+        assertEquals(result, response(store, store.selectChat("chief"), "chat", newest).snapshot.messages)
+        val reopened = SharedBotStore()
+        reopened.restoreCacheJson(store.exportCacheJson())
+        assertEquals(result, reopened.selectChat("chief").snapshot.messages)
+    }
+
+    @Test
     fun botHistoryRetainsTimestampsMemberUpdatesAndOriginalQuestionLetters() {
         val store = connected()
         val select = store.selectChat("chief")

@@ -81,7 +81,8 @@ data class BotChatMessage(
     val timeMs: Long? = null,
     val activity: String? = null,
     val questionAnswers: List<BotQuestionAnswer> = emptyList(),
-    val files: List<PresentedFile> = emptyList()
+    val files: List<PresentedFile> = emptyList(),
+    val turn: Long? = null
 ) {
     val quoteParts: List<GatewayTextPart> by lazy {
         if (kind == "user" && text.contains("> ")) GatewayQuoteTextParts.parse(text).orEmpty() else emptyList()
@@ -191,6 +192,8 @@ class SharedBotStore {
     private var subscription: String? = null
     private val pending = linkedMapOf<String, Pending>()
     private val histories = linkedMapOf<String, List<BotChatMessage>>()
+    private var projectedHistorySource: List<BotChatMessage> = emptyList()
+    private var projectedHistory: List<BotChatMessage> = emptyList()
     private val cursors = mutableMapOf<String, JsonObject?>()
     private val dirty = mutableSetOf<String>()
     private val optimistic = mutableMapOf<String, List<BotChatMessage>>()
@@ -657,6 +660,7 @@ class SharedBotStore {
                         activity = activity,
                         questionAnswers = if (kind == "answer") questionAnswers(item) else emptyList(),
                         files = files,
+                        turn = (item["turn"] as? JsonPrimitive)?.longOrNull?.takeIf { it >= 0 },
                         sessionId = sessionId, images = item.array("imageRefs").take(20).mapNotNull { value ->
                             val ref = value as? JsonObject ?: return@mapNotNull null
                             val attachment = ref.text("attachmentId")?.takeIf { it.isNotBlank() && it.length <= 512 }
@@ -885,10 +889,55 @@ class SharedBotStore {
 
     private fun nextId(): String = "bot-${++ordinal}"
 
+    private fun displayHistory(chatId: String): List<BotChatMessage> {
+        val history = histories[chatId].orEmpty()
+        // 群聊同一轮可能有多个发言者，保留网关原有的文件和发言归属。
+        if (state.chats.firstOrNull { it.id == chatId }?.room != false) return history
+        if (history !== projectedHistorySource) {
+            projectedHistorySource = history
+            projectedHistory = placeTurnFiles(history)
+        }
+        return projectedHistory
+    }
+
+    private fun placeTurnFiles(history: List<BotChatMessage>): List<BotChatMessage> {
+        fun turnKey(message: BotChatMessage): Pair<String, Long>? = message.turn
+            ?.takeIf { message.sessionId.isNotEmpty() }?.let { message.sessionId to it }
+
+        val filesByTurn = mutableMapOf<Pair<String, Long>, LinkedHashMap<String, PresentedFile>>()
+        for (message in history) {
+            if (message.files.isEmpty()) continue
+            val key = turnKey(message) ?: continue
+            val files = filesByTurn.getOrPut(key) { linkedMapOf() }
+            for (file in message.files) {
+                if (file.description != null || file.path !in files) files[file.path] = file
+            }
+        }
+        if (filesByTurn.isEmpty()) return history
+
+        val lastReply = mutableMapOf<Pair<String, Long>, Int>()
+        history.forEachIndexed { index, message ->
+            val key = turnKey(message) ?: return@forEachIndexed
+            if (key in filesByTurn && (message.kind == "bot" || message.kind == "post") &&
+                (message.text.isNotBlank() || message.images.isNotEmpty())) lastReply[key] = index
+        }
+        return history.mapIndexedNotNull { index, message ->
+            val key = turnKey(message) ?: return@mapIndexedNotNull message
+            val target = lastReply[key] ?: return@mapIndexedNotNull message
+            // 原始交付事件保留在历史缓存里，合并后翻页和刷新仍按原事件 ID 对齐。
+            when {
+                index == target -> message.copy(files = filesByTurn.getValue(key).values.toList())
+                message.kind == "file" -> null
+                message.files.isNotEmpty() -> message.copy(files = emptyList())
+                else -> message
+            }
+        }
+    }
+
     private fun result(): SharedBotTransition {
         val selected = state.selectedChatId
         state = state.copy(messages = if (selected == null) emptyList() else
-            histories[selected].orEmpty() + optimistic[selected].orEmpty() + streams.values.filter { it.text.isNotEmpty() },
+            displayHistory(selected) + optimistic[selected].orEmpty() + streams.values.filter { it.text.isNotEmpty() },
             hasEarlier = selected != null && cursors[selected] != null,
             attachmentSending = pending.values.any { it.endpoint == "send-attachments" && it.chatId == selected })
         return SharedBotTransition(state, outgoing.toList()).also { outgoing.clear() }

@@ -28,11 +28,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.protocol.GatewayTextPart
+import com.clarklevis.dsh.shared.protocol.PresentedFile
 
 @Composable
 internal fun SentReplyBubble(
     textParts: List<GatewayTextPart>, modifier: Modifier = Modifier,
-    bubbleTint: Color? = null, borderTint: Color? = null, quoteTint: Color? = null
+    bubbleTint: Color? = null, borderTint: Color? = null, quoteTint: Color? = null,
+    knownFiles: List<PresentedFile> = emptyList(), onOpenFile: ((String) -> Unit)? = null
 ) {
     val dark = isSystemInDarkTheme()
     val fill = bubbleTint ?: if (dark) Color(0xFF172A46) else DshColors.Ocean.copy(alpha = 0.11f)
@@ -57,6 +59,8 @@ internal fun SentReplyBubble(
         }
         if (body.isNotEmpty()) DshMarkdownText(
             markdown = body,
+            knownFiles = knownFiles,
+            onOpenFile = onOpenFile,
             modifier = Modifier.testTag("sent-reply-body"),
             wrapContent = true
         )

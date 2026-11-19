@@ -6,7 +6,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import android.app.Activity
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -424,6 +427,15 @@ internal fun WorkspaceScreen(
     val window = adaptiveWindowSize()
     val workspaceColumns = AdaptiveLayout.workspaceUsesColumns(window.width.value, window.height.value, androidx.compose.ui.platform.LocalDensity.current.fontScale)
     var botChatOpened by remember { mutableStateOf(false) }
+    var modeWave by remember { mutableStateOf<WorkspaceModeWave?>(null) }
+    val modeWaveAllowed = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !LocalUiEffectsReduced.current
+    val resolver = LocalContext.current.contentResolver
+    LaunchedEffect(window.width, window.height, modeWaveAllowed) { modeWave = null }
+    LaunchedEffect(modeWave) {
+        val wave = modeWave ?: return@LaunchedEffect
+        wave.progress.animateTo(1f, tween(WORKSPACE_MODE_WAVE_DURATION_MS, easing = LinearEasing))
+        if (modeWave === wave) modeWave = null
+    }
     val workspaceListState = rememberLazyListState()
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showManualPairing by rememberSaveable { mutableStateOf(false) }
@@ -501,12 +513,22 @@ internal fun WorkspaceScreen(
         }
     }
 
-    WorkspaceDrawer(onPlugins = onPlugins, onScheduledTasks = onScheduledTasks, onConnectors = onConnectors, onBotMode = onBotMode, botMode = botMode, onStandardMode = onStandardMode, gesturesEnabled = !botMode || !botChatOpened) { openDrawer, canScrollVertically ->
+    WorkspaceDrawer(
+        onPlugins = onPlugins, onScheduledTasks = onScheduledTasks, onConnectors = onConnectors,
+        onBotMode = onBotMode, botMode = botMode, onStandardMode = onStandardMode,
+        gesturesEnabled = !botMode || !botChatOpened,
+        onModeSwitch = { origin ->
+            if (modeWaveAllowed && Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f) {
+                modeWave = WorkspaceModeWave(origin)
+            }
+        }
+    ) { openDrawer, canScrollVertically ->
         val backgroundAnimationEnabled by remember(canScrollVertically, workspaceListState) {
             derivedStateOf { canScrollVertically && !workspaceListState.isScrollInProgress && !stateHolder.botDesignPreview }
         }
         if (botMode) {
-            BotModeScreen(stateHolder, onStandardMode, openDrawer = openDrawer, scrollEnabled = canScrollVertically, onChatOpened = { botChatOpened = it },
+            BotModeScreen(stateHolder, onStandardMode, openDrawer = openDrawer, scrollEnabled = canScrollVertically,
+                modeWave = modeWave, onChatOpened = { botChatOpened = it },
                 header = {
                     val night = isSystemInDarkTheme()
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -519,7 +541,7 @@ internal fun WorkspaceScreen(
         } else DshLiquidGlassHost(
             modifier = Modifier.fillMaxSize().testTag("workspace-screen"),
             background = { backdropModifier ->
-                HarnessAnimatedBackground(backdropModifier, animationEnabled = backgroundAnimationEnabled)
+                HarnessAnimatedBackground(backdropModifier, animationEnabled = backgroundAnimationEnabled, modeWave = modeWave)
             }
         ) {
             AdaptiveWorkspaceContent(

@@ -2879,12 +2879,12 @@ final class AppStore: ObservableObject {
                                   conversation: true, needsConnection: true, load: load)
     }
 
-    func openBotFile(chatID: String, sessionID: String, path: String) {
+    func openBotFile(chatID: String, messageID: String, path: String) {
         guard workspaceFilePreviewRequest == nil, !conversationFileIsOpening,
               botMode.snapshot.selectedChatId == chatID,
-              botMode.snapshot.messages.contains(where: { message in
-                  message.sessionId == sessionID && message.files.contains { $0.path == path }
-              }) else { return }
+              let message = botMode.snapshot.messages.first(where: { $0.id == messageID }),
+              !message.sessionId.isEmpty else { return }
+        let sessionID = message.sessionId
         let request = WorkspaceFilePreviewRequest(sessionID: sessionID, path: path, botChatID: chatID)
         startWorkspaceFilePreview(request, conversation: true, needsConnection: true) { [weak self] requestID in
             guard let self else { return }

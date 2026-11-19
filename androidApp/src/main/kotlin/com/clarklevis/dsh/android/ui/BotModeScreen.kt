@@ -95,6 +95,7 @@ import com.clarklevis.dsh.shared.facade.BotChat
 import com.clarklevis.dsh.shared.facade.BotChatMessage
 import com.clarklevis.dsh.shared.facade.BotInteraction
 import com.clarklevis.dsh.shared.facade.SharedBotSnapshot
+import com.clarklevis.dsh.shared.protocol.PresentedFile
 
 private data class BotColors(
     val background: Color = Color(0xFFF4F1FA),
@@ -125,6 +126,8 @@ private fun Modifier.botHomeGlass(shape: androidx.compose.ui.graphics.Shape): Mo
 
 private val botNightUserBubble = Color(0xFF2A3D57)
 private val botNightSend = Color(0xFF101A42)
+private val botMessageAvatarSize = 28.dp
+private val botMessageAvatarSpacing = 8.dp
 @Composable private fun botColors() = if (isSystemInDarkTheme()) botNightColors else botLightColors
 internal val BotDesignColorScheme = lightColorScheme(primary = botLightColors.blue, background = botLightColors.background,
     surface = botLightColors.row, onBackground = botLightColors.text, onSurface = botLightColors.text)
@@ -142,9 +145,13 @@ internal fun BotModeTheme(enabled: Boolean = true, content: @Composable () -> Un
 }
 
 @Composable
-internal fun DsBotWhaleIcon(modifier: Modifier = Modifier) {
-    Image(painterResource(R.drawable.ic_ds_bot_whale), null, modifier,
-        colorFilter = if (MaterialTheme.colorScheme.background.red < .5f) ColorFilter.tint(Color.White) else null)
+internal fun BotDrawerMark(modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(R.drawable.ic_bot_drawer_mark),
+        contentDescription = null,
+        modifier = modifier,
+        colorFilter = ColorFilter.tint(botColors().text),
+    )
 }
 
 /** 首页外壳由 WorkspaceScreen 提供；卡片、菜单、玻璃和弹窗复用项目组件。 */
@@ -152,7 +159,8 @@ internal fun DsBotWhaleIcon(modifier: Modifier = Modifier) {
 internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () -> Unit,
     openDrawer: () -> Unit = {}, scrollEnabled: Boolean = true,
     header: (@Composable () -> Unit)? = null,
-    onChatOpened: (Boolean) -> Unit = {}) {
+    onChatOpened: (Boolean) -> Unit = {},
+    modeWave: WorkspaceModeWave? = null) {
     val state = holder.botSnapshot
     val colors = botColors()
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
@@ -191,7 +199,8 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
                 }
                 DshLiquidGlassHost(modifier = Modifier.fillMaxSize(), frostOnOlderDevices = opened == null, background = { backdrop ->
                     if (opened == null) HarnessAnimatedBackground(backdrop,
-                        animationEnabled = scrollEnabled && !holder.botDesignPreview, lavender = true)
+                        animationEnabled = scrollEnabled && !holder.botDesignPreview, lavender = true,
+                        modeWave = modeWave)
                     else Box(backdrop.fillMaxSize().background(chatSurface))
                 }) {
                     val select: (String) -> Unit = { focus.clearFocus(); holder.selectBotChat(it); opened = it }
@@ -603,6 +612,11 @@ private fun BotChatHeader(
     }
     val bottomHeight = remember { mutableStateOf(72.dp) }
     val density = LocalDensity.current
+    val deliveredBySession = remember(state.messages) {
+        state.messages.filter { it.sessionId.isNotEmpty() && it.files.isNotEmpty() }
+            .groupBy { it.sessionId }
+            .mapValues { (_, messages) -> messages.flatMap { it.files }.distinctBy { it.path }.sortedBy { it.path } }
+    }
     ComposerGlassBackdropHost { contentBackdrop ->
         Box(modifier) {
             BoxWithConstraints(Modifier.fillMaxSize().then(contentBackdrop).background(MaterialTheme.colorScheme.surface)
@@ -614,21 +628,38 @@ private fun BotChatHeader(
                     if (state.hasEarlier) item { Text(appText("加载更早消息"), Modifier.clickable(enabled = !state.historyLoading && state.connected && state.supported) { holder.loadEarlierBotMessages() }, color = colors.purple) }
                     if (state.historyLoading && state.messages.isEmpty()) item { Text(appText("正在读取聊天"), color = colors.secondary) }
                     items(state.messages, key = { it.id }, contentType = { it.kind }) { message ->
+                        val openFile: (String) -> Unit = { path ->
+                            focus.clearFocus()
+                            holder.openBotFile(chatId, message.id, path)
+                        }
+                        val replyAction = onReply.takeIf { (message.kind == "bot" || message.kind == "post") &&
+                            !message.streaming && message.text.isNotBlank() }
                         val showsBody = message.kind != "file" &&
                             (message.files.isEmpty() || message.text.isNotEmpty() || message.images.isNotEmpty())
                         if (showsBody) {
                             val author = message.botId?.let(roster::get) ?: chat?.takeUnless { it.room || message.activity != null }
+                            val containsInlineCode = '`' in message.text ||
+                                message.quoteParts.any { it.type == "text" && '`' in it.text }
+                            val knownFiles = if (containsInlineCode) deliveredBySession[message.sessionId].orEmpty() else emptyList()
                             BotBubble(holder, message, chat, author, author?.id == state.mainBotId, bubbleAreaWidth,
-                                palette.rgb(message.botId ?: author?.id, dark = night), colors, showProfile, onPreviewImage, onReply)
+                                palette.rgb(message.botId ?: author?.id, dark = night), colors, showProfile,
+                                onPreviewImage, replyAction, knownFiles, openFile)
                         }
                         if (message.files.isNotEmpty()) {
-                            Column(Modifier.width(bubbleAreaWidth).padding(top = if (showsBody) 8.dp else 0.dp),
-                                horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(
+                                Modifier.width(bubbleAreaWidth).padding(
+                                    start = botMessageAvatarSize + botMessageAvatarSpacing,
+                                    top = if (showsBody) 8.dp else 0.dp,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
                                 message.files.forEach { file ->
-                                    FileReferenceCard(path = file.path, description = file.description, onClick = {
-                                        focus.clearFocus()
-                                        holder.openBotFile(chatId, message.sessionId, file.path)
-                                    })
+                                    FileReferenceCard(path = file.path, description = file.description, onClick = { openFile(file.path) })
+                                }
+                                if (replyAction != null) {
+                                    CompositionLocalProvider(LocalMessageQuote provides replyAction) {
+                                        AssistantMessageActions(message.text)
+                                    }
                                 }
                             }
                         }
@@ -666,7 +697,8 @@ private fun BotChatHeader(
 
 @Composable private fun BotBubble(holder: AndroidSharedStateHolder, message: BotChatMessage, chat: BotChat?, author: BotChat?,
     mainAuthor: Boolean, bubbleAreaWidth: Dp, bubbleRGB: Int, colors: BotColors, showProfile: (String) -> Unit,
-    onPreviewImage: (com.clarklevis.dsh.android.platform.MarkdownImageAsset) -> Unit, onReply: (String) -> Unit) {
+    onPreviewImage: (com.clarklevis.dsh.android.platform.MarkdownImageAsset) -> Unit, replyAction: ((String) -> Unit)?,
+    knownFiles: List<PresentedFile>, onOpenFile: (String) -> Unit) {
     val time = remember(message.timeMs, LocalConfiguration.current) {
         message.timeMs?.let { conversationTimeLabel(it / 1_000.0, includesWeekday = true) }
     }
@@ -692,17 +724,15 @@ private fun BotChatHeader(
     if (message.kind in listOf("event", "divider")) { Text(body, color = colors.secondary, fontSize = 12.sp); return }
     val user = message.kind == "user"
     val night = isSystemInDarkTheme()
-    val quoteAction = onReply.takeIf { (message.kind == "bot" || message.kind == "post") &&
-        !message.streaming && message.text.isNotBlank() }
     val parts = message.quoteParts
     val width = minOf(292.dp, bubbleAreaWidth - if (user) 40.dp else 76.dp).coerceAtLeast(80.dp)
     Row(Modifier.width(bubbleAreaWidth).testTag("bot.message.${message.id}"),
         horizontalArrangement = if (user) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Top) {
         if (!user) {
             Box(Modifier.clickable(enabled = author != null, role = Role.Button) { author?.let { showProfile(it.id) } }) {
-                BotAvatar(author, 28.dp, mainAuthor)
+                BotAvatar(author, botMessageAvatarSize, mainAuthor)
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(botMessageAvatarSpacing))
         }
         Column(Modifier.widthIn(max = width), horizontalAlignment = if (user) Alignment.End else Alignment.Start, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (!user && chat?.room == true && message.name.isNotEmpty()) Text(message.name, color = colors.secondary, fontSize = 12.sp)
@@ -717,9 +747,10 @@ private fun BotChatHeader(
                     references = refs.mapValues { (_, ref) -> com.clarklevis.dsh.shared.protocol.GatewayImageAttachment(ref.attachmentId, ref.mediaType, 0, ref.width.coerceAtLeast(1), ref.height.coerceAtLeast(1), ref.name) },
                     cached = { null }, load = { load(it, true) }, loadOriginal = { load(it, false) }, onPreview = onPreviewImage)
             }
-            CompositionLocalProvider(LocalDshMarkdownImages provides imageContext, LocalMessageQuote provides quoteAction) {
+            CompositionLocalProvider(LocalDshMarkdownImages provides imageContext, LocalMessageQuote provides replyAction) {
                 if (parts.isNotEmpty()) SentReplyBubble(parts, bubbleTint = botNightUserBubble.takeIf { night },
-                    borderTint = Color.Transparent.takeIf { night }, quoteTint = colors.glass.takeIf { night })
+                    borderTint = Color.Transparent.takeIf { night }, quoteTint = colors.glass.takeIf { night },
+                    knownFiles = knownFiles, onOpenFile = onOpenFile)
                 if (parts.isEmpty() || message.images.isNotEmpty()) {
                     val shape = RoundedCornerShape(20.dp)
                     val surface = when {
@@ -731,7 +762,8 @@ private fun BotChatHeader(
                         .padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (parts.isEmpty() && (message.text.isNotEmpty() || message.images.isEmpty())) {
                             if (user) Text(body, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, lineHeight = 24.sp)
-                            else DshLazyMarkdownText(body, textSizeSp = 17f, wrapContent = true)
+                            else DshLazyMarkdownText(body, knownFiles = knownFiles, onOpenFile = onOpenFile,
+                                textSizeSp = 17f, wrapContent = true)
                         }
                         message.images.forEach { ref ->
                             DshMarkdownImage(DshMarkdownImageMarker("/__bot_image__/" + ref.attachmentId, ref.name))
@@ -743,7 +775,7 @@ private fun BotChatHeader(
                         fontSize = 11.sp, lineHeight = 14.sp)
                 }
                 message.delivery?.let { Text(appText(when (it) { "unknown" -> "发送状态待确认，请同步聊天后核对"; "sending" -> "发送中"; else -> "已发送" }), color = colors.secondary, fontSize = 11.sp) }
-                if (quoteAction != null) AssistantMessageActions(message.text)
+                if (replyAction != null && message.files.isEmpty()) AssistantMessageActions(message.text)
             }
         }
     }

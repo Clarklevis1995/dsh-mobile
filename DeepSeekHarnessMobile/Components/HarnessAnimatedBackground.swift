@@ -13,6 +13,13 @@ enum HarnessBackgroundStyle {
     }
 }
 
+struct WorkspaceModeWave {
+    static let duration: TimeInterval = 0.64
+    let origin: CGPoint
+    let startedAt: Date
+    let outgoingOpenLightArcs: Bool
+}
+
 /// The native counterpart of the DeepSeek Harness landing-page background.
 /// Metal renders the fluid field while Canvas keeps the grid and sampled whale
 /// independent, so each layer can be tuned or disabled without touching UI.
@@ -21,12 +28,11 @@ struct HarnessAnimatedBackground: View {
     var prefersOpenLightArcs = false
     var animationPaused = false
     var lavender = false
+    var modeWave: WorkspaceModeWave?
     @State private var animationClock = HarnessBackgroundAnimationClock()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
-
-    private var night: Bool { lavender && colorScheme == .dark }
 
     private var usesStaticBackground: Bool {
         if #available(iOS 26.0, *) {
@@ -41,7 +47,13 @@ struct HarnessAnimatedBackground: View {
 
     var body: some View {
         Group {
-            if usesStaticBackground {
+            if #available(iOS 17.0, *), let modeWave, !reduceMotion {
+                TimelineView(.animation) { timeline in
+                    let elapsed = animationClock.elapsed(at: timeline.date)
+                    let progress = min(1, max(0, timeline.date.timeIntervalSince(modeWave.startedAt) / WorkspaceModeWave.duration))
+                    transitioningBackground(modeWave, progress: progress, time: elapsed)
+                }
+            } else if usesStaticBackground {
                 // 低版本保留静态粒子与构图，不创建逐帧更新时间线。
                 backgroundLayers(time: 0, isStatic: true)
             } else {
@@ -61,10 +73,33 @@ struct HarnessAnimatedBackground: View {
         .accessibilityHidden(true)
     }
 
-    private func backgroundLayers(time: TimeInterval, isStatic: Bool) -> some View {
-        ZStack {
+    @available(iOS 17.0, *)
+    private func transitioningBackground(_ wave: WorkspaceModeWave, progress: Double, time: TimeInterval) -> some View {
+        let fieldTime = usesStaticBackground ? 0 : time.truncatingRemainder(dividingBy: 4_096)
+        let rim = colorScheme == .dark
+            ? Color(red: 0.68, green: 0.60, blue: 0.75)
+            : Color(red: 0.87, green: 0.81, blue: 0.97)
+        return backgroundLayers(time: fieldTime, isStatic: usesStaticBackground)
+            .overlay {
+                backgroundLayers(time: fieldTime, isStatic: usesStaticBackground,
+                                 lavender: !lavender, openLightArcs: wave.outgoingOpenLightArcs)
+                    .background(!lavender ? Color("BotLavender") : DSHColor.navy)
+                    .layerEffect(
+                        ShaderLibrary.workspaceModeWave(.boundingRect, .float2(wave.origin),
+                                                        .float(progress), .color(rim)),
+                        maxSampleOffset: CGSize(width: 10, height: 10)
+                    )
+            }
+    }
+
+    private func backgroundLayers(time: TimeInterval, isStatic: Bool, lavender: Bool? = nil,
+                                  openLightArcs: Bool? = nil) -> some View {
+        let lavender = lavender ?? self.lavender
+        let night = lavender && colorScheme == .dark
+        return ZStack {
             HarnessFluidLayer(
-                time: time, style: style, prefersOpenLightArcs: prefersOpenLightArcs, lavender: lavender, night: night
+                time: time, style: style, prefersOpenLightArcs: openLightArcs ?? prefersOpenLightArcs,
+                lavender: lavender, night: night
             )
             HarnessTechnicalGrid(style: style, lavender: lavender, night: night)
             HarnessWhaleField(time: time, isStatic: isStatic, style: style, lavender: lavender, night: night)

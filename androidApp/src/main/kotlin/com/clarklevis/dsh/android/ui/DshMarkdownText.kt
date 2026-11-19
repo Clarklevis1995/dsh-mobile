@@ -222,7 +222,9 @@ internal fun DshMarkdownText(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     wrapContent: Boolean = false,
-    textSizeSp: Float = if (compact) 14f else 16f
+    textSizeSp: Float = if (compact) 14f else 16f,
+    knownFiles: List<PresentedFile> = emptyList(),
+    onOpenFile: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -238,7 +240,9 @@ internal fun DshMarkdownText(
         palette = palette,
         textSizeSp = textSizeSp,
         lineSpacingExtra = lineSpacingExtra,
-        modifier = if (wrapContent) modifier.wrapMarkdownContent(rendered, textSizeSp) else modifier
+        modifier = if (wrapContent) modifier.wrapMarkdownContent(rendered, textSizeSp) else modifier,
+        knownFiles = knownFiles,
+        onOpenFile = onOpenFile
     )
 }
 

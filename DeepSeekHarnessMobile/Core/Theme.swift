@@ -168,6 +168,7 @@ struct DeepOceanBackground: View {
     var lavender = false
     var prefersOpenLightArcs = false
     var animationPaused = false
+    var modeWave: WorkspaceModeWave?
 
     var body: some View {
         GeometryReader { geometry in
@@ -178,7 +179,8 @@ struct DeepOceanBackground: View {
                 ),
                 prefersOpenLightArcs: prefersOpenLightArcs,
                 animationPaused: animationPaused,
-                lavender: lavender
+                lavender: lavender,
+                modeWave: modeWave
             )
         }
         .ignoresSafeArea()
