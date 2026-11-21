@@ -458,7 +458,7 @@ class BotDesignDeviceTest {
             compose.onNodeWithTag("bot.role-settings").performClick()
             compose.onNodeWithTag("bot.panel-heading").assertTextEquals("角色设置")
             val settings = compose.onNodeWithTag("bot.role-panel")
-            val tagHelp = "选填，会显示在 Bot 名字下方。"
+            val tagHelp = "标签为选填，会显示在 Bot 名字下方。"
             settings.performScrollToNode(hasText(tagHelp))
             compose.onNodeWithText(tagHelp).assertIsDisplayed()
             capture("03b-role-settings")
@@ -467,7 +467,9 @@ class BotDesignDeviceTest {
             compose.onNodeWithText(privacyHelp).assertIsDisplayed()
             val copyHelp = "复制分工和模型，新 Bot 从空白记忆开始。"
             settings.performScrollToNode(hasText(copyHelp))
-            compose.onNodeWithText(copyHelp).assertIsDisplayed()
+            val copyFooter = compose.onNodeWithText(copyHelp).assertIsDisplayed().fetchSemanticsNode()
+            val copyAction = compose.onNodeWithText("复制一份").fetchSemanticsNode()
+            check(copyFooter.boundsInRoot.top >= copyAction.boundsInRoot.bottom) { "复制说明应位于操作卡片下方" }
             capture("03c-role-settings-help")
             compose.onNodeWithContentDescription("返回").performClick()
             compose.onNodeWithContentDescription("关闭").performClick()

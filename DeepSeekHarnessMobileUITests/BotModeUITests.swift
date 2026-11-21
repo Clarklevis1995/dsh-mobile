@@ -51,6 +51,262 @@ final class BotModeUITests: XCTestCase {
     }
 
     @MainActor
+    func testRealHostRoleSettingsDismissesKeyboardOnOutsideTap() throws {
+        guard ProcessInfo.processInfo.environment["DSH_BOT_PROBE_URL"] == "http://127.0.0.1:3098" else {
+            throw XCTSkip("需要隔离的 DS-Bot 验证主机")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_BOT_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_BOT_UI_TEST_URL"] = "http://127.0.0.1:3098"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        let isTablet = UIDevice.current.userInterfaceIdiom == .pad
+        XCUIDevice.shared.orientation = isTablet ? .landscapeLeft : .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launch()
+        let chief = app.buttons["bot.chief"]
+        XCTAssertTrue(chief.waitForExistence(timeout: 15))
+        chief.tap()
+        let settings = app.buttons["角色设置"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        settings.tap()
+        let form = app.descendants(matching: .any)["bot.role-settings-form"].firstMatch
+        XCTAssertTrue(form.waitForExistence(timeout: 5))
+        let editor = form.textViews["说明"].firstMatch
+        for _ in 0..<6 where !editor.isHittable { form.swipeUp(velocity: .slow) }
+        XCTAssertTrue(editor.isHittable)
+
+        let keyboard = app.keyboards.firstMatch
+        editor.tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        let draft = isTablet ? " " : "Focus draft"
+        if isTablet {
+            // 横屏 iPad 上，XCTest 的 typeText 会让软键盘消失。
+            let space = keyboard.keys.matching(NSPredicate(format: "label IN %@", ["space", "空格键"])).firstMatch
+            XCTAssertTrue(space.isHittable)
+            space.tap()
+        } else {
+            app.typeText(draft)
+        }
+        XCTAssertTrue(keyboard.exists)
+        capture(app, "说明字段编辑中")
+
+        let sectionTitle = form.staticTexts["说明"].firstMatch
+        XCTAssertTrue(sectionTitle.isHittable)
+        sectionTitle.tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5), "点击说明框外应收起键盘")
+        capture(app, "轻触表单后键盘收起")
+
+        editor.tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        XCTAssertTrue((editor.value as? String)?.hasSuffix(draft) == true)
+    }
+
+    @MainActor
+    func testRealHostLongMemoryEditor() throws {
+        guard ProcessInfo.processInfo.environment["DSH_BOT_PROBE_URL"] == "http://127.0.0.1:3098" else {
+            throw XCTSkip("需要隔离的 DS-Bot 验证主机")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        let isTablet = UIDevice.current.userInterfaceIdiom == .pad
+        app.launchEnvironment["DSH_BOT_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_BOT_UI_TEST_URL"] = "http://127.0.0.1:3098"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        if isTablet { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXXL"] }
+        let tabletPortrait = ProcessInfo.processInfo.environment["DSH_BOT_TABLET_PORTRAIT"] == "1"
+        XCUIDevice.shared.orientation = isTablet && !tabletPortrait ? .landscapeLeft : .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launch()
+        let chief = app.buttons["bot.chief"]
+        XCTAssertTrue(chief.waitForExistence(timeout: 15))
+        chief.tap()
+        let memories = app.staticTexts["记忆"].firstMatch
+        XCTAssertTrue(memories.waitForExistence(timeout: 8))
+        memories.tap()
+
+        let entry = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Long memory preview.")).firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.tap()
+        capture(app, "长记忆编辑")
+        let editor = app.textViews["bot.memory-editor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 4))
+        XCTAssertGreaterThan(editor.frame.height, 160)
+        XCTAssertTrue((editor.value as? String)?.hasSuffix("End of memory.") == true)
+
+        editor.tap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        let editorClearsKeyboard = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                let overlap = editor.frame.intersection(keyboard.frame).intersection(app.frame)
+                return overlap.isNull || overlap.height < 2
+            },
+            object: nil
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [editorClearsKeyboard], timeout: 5), .completed)
+        XCTAssertTrue(app.navigationBars["编辑记忆"].buttons["保存"].isHittable)
+        capture(app, "编辑记忆 · 键盘")
+        app.navigationBars["编辑记忆"].buttons.firstMatch.tap()
+
+        let add = app.buttons["添加记忆"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        let save = app.navigationBars["添加记忆"].buttons["保存"]
+        XCTAssertFalse(save.isEnabled)
+        if !isTablet {
+            let draft = "Memory editor proof " + String(UUID().uuidString.prefix(8))
+            editor.tap()
+            app.typeText(draft)
+            XCTAssertTrue(save.isEnabled)
+            save.tap()
+            XCTAssertTrue(app.buttons[draft].waitForExistence(timeout: 8))
+        }
+    }
+
+    @MainActor
+    func testRealHostDeleteBot() throws {
+        guard ProcessInfo.processInfo.environment["DSH_BOT_PROBE_URL"] == "http://127.0.0.1:3098" else {
+            throw XCTSkip("需要隔离的 DS-Bot 验证主机")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        app.launchEnvironment["DSH_BOT_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_BOT_UI_TEST_URL"] = "http://127.0.0.1:3098"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        if tablet { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXXL"] }
+        let portrait = ProcessInfo.processInfo.environment["DSH_BOT_TABLET_PORTRAIT"] == "1"
+        XCUIDevice.shared.orientation = tablet && !portrait ? .landscapeLeft : .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launch()
+        let roster = app.buttons["bot.roster"]
+        XCTAssertTrue(roster.waitForExistence(timeout: 15))
+        roster.tap()
+        let chief = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label BEGINSWITH %@", "bot.roster.", "Chief")).firstMatch
+        let copy = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label BEGINSWITH %@", "bot.roster.", "Chief copy")).firstMatch
+        XCTAssertTrue(chief.waitForExistence(timeout: 5))
+        XCTAssertFalse(copy.exists, "隔离主机应没有上次测试的临时副本")
+
+        func reveal(_ button: XCUIElement) {
+            let settings = app.buttons["角色设置"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 5))
+            settings.tap()
+            let form = app.descendants(matching: .any)["bot.role-settings-form"].firstMatch
+            XCTAssertTrue(form.waitForExistence(timeout: 6))
+            for _ in 0..<8 where !button.isHittable { form.swipeUp(velocity: .fast) }
+            XCTAssertTrue(button.isHittable)
+        }
+
+        let delete = app.buttons["bot.role-delete"]
+        let duplicate = app.buttons["复制一份"]
+        chief.tap()
+        reveal(duplicate)
+        XCTAssertFalse(delete.exists)
+        duplicate.tap()
+        let duplicateAlert = app.alerts["复制这个角色？"]
+        XCTAssertTrue(duplicateAlert.waitForExistence(timeout: 5))
+        duplicateAlert.buttons["复制一份"].tap()
+        app.navigationBars["角色设置"].buttons.firstMatch.tap()
+        app.buttons["关闭"].tap()
+        XCTAssertTrue(copy.waitForExistence(timeout: 12))
+        copy.tap()
+        reveal(delete)
+        capture(app, "角色设置 · 删除普通 Bot")
+
+        delete.tap()
+        let alert = app.alerts["删除 Bot？"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts["将“Chief copy”移出团队和所在群聊。"].exists)
+        capture(app, "删除 Bot · 二次确认")
+        alert.buttons["取消"].tap()
+        XCTAssertTrue(delete.isHittable)
+
+        delete.tap()
+        alert.buttons["删除"].tap()
+        XCTAssertTrue(app.buttons["bot.new"].waitForExistence(timeout: 12))
+        XCTAssertTrue(copy.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(chief.exists)
+    }
+
+    @MainActor
+    func testRealHostBotCreation() throws {
+        guard ProcessInfo.processInfo.environment["DSH_BOT_PROBE_URL"] == "http://127.0.0.1:3098" else {
+            throw XCTSkip("需要隔离的 DS-Bot 验证主机")
+        }
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_BOT_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_BOT_UI_TEST_URL"] = "http://127.0.0.1:3098"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        XCUIDevice.shared.orientation = tablet ? .landscapeLeft : .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        if ProcessInfo.processInfo.environment["DSH_BOT_UI_APPEARANCE"] == "dark" {
+            app.launchEnvironment["DSH_BOT_UI_APPEARANCE"] = "dark"
+        }
+        if ProcessInfo.processInfo.environment["DSH_BOT_LARGE_TEXT"] == "1" {
+            app.launchArguments += ["-appearance.fontScale", "1.5", "-appearance.fontFollowsSystem", "NO"]
+        }
+        app.launch()
+        if app.alerts.firstMatch.exists { app.alerts.firstMatch.buttons.firstMatch.tap() }
+        let roster = app.buttons["bot.roster"]
+        XCTAssertTrue(roster.waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["正在进行"].exists)
+        XCTAssertTrue(app.buttons["bot.schedules"].exists)
+        capture(app, "Bot 首页")
+        roster.tap()
+        let add = app.buttons["bot.new"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        XCTAssertTrue(add.isEnabled)
+        capture(app, "我的 Bot")
+        add.tap()
+        let appearance = app.buttons["bot.create.appearance"]
+        let submit = app.buttons["bot.create.submit"]
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: appearance)
+        waitForExpectations(timeout: 12)
+        capture(app, "新建 Bot")
+        appearance.tap()
+        XCTAssertTrue(app.staticTexts["形状"].waitForExistence(timeout: 5))
+        app.buttons["头像库"].tap()
+        XCTAssertTrue(app.buttons["导入照片"].waitForExistence(timeout: 5))
+        let libraryPhoto = app.buttons["avatar-test.png"]
+        if libraryPhoto.waitForExistence(timeout: 2) { libraryPhoto.tap() }
+        else { app.buttons["取消"].firstMatch.tap() }
+        XCTAssertTrue(app.staticTexts["形状"].waitForExistence(timeout: 5))
+        let star = app.buttons["star"]
+        XCTAssertTrue(star.exists)
+        star.tap()
+        app.buttons["violet"].tap()
+        capture(app, "编辑形象")
+        app.buttons["bot.appearance.done"].tap()
+        let local = app.buttons["本地 Agent"]
+        XCTAssertTrue(local.waitForExistence(timeout: 4))
+        local.tap()
+        XCTAssertFalse(submit.isEnabled)
+        capture(app, "选择本地 Agent")
+        let agent = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "bot.create.agent.")).firstMatch
+        if agent.waitForExistence(timeout: 8), agent.isEnabled {
+            agent.tap()
+            XCTAssertTrue(submit.isEnabled)
+            app.buttons["bot.create.model"].tap()
+            XCTAssertTrue(app.staticTexts["可用模型"].waitForExistence(timeout: 5))
+            capture(app, "选择本地 Agent 模型")
+            app.buttons["取消"].firstMatch.tap()
+        }
+        app.buttons["DS Bot 模型"].tap()
+        XCTAssertTrue(submit.isEnabled)
+        let name = "iOS " + String(UUID().uuidString.prefix(8))
+        let field = app.textFields["bot.create.name"]
+        field.tap()
+        field.typeText(name)
+        submit.tap()
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 20))
+        capture(app, "创建成功")
+    }
+
+    @MainActor
     private func capture(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
@@ -410,13 +666,16 @@ final class BotDesignUITests: XCTestCase {
         roleSettings.tap()
         XCTAssertTrue(app.navigationBars["角色设置"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@",
-            "选填，会显示在 Bot 名字下方。")).firstMatch.waitForExistence(timeout: 4))
+            "标签为选填，会显示在 Bot 名字下方。")).firstMatch.waitForExistence(timeout: 4))
         capture(app, "Chief 设置")
         let settingsForm = app.descendants(matching: .any)["bot.role-settings-form"].firstMatch
         let copyHelp = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@",
             "复制分工和模型，新 Bot 从空白记忆开始。")).firstMatch
         for _ in 0..<4 { settingsForm.swipeUp(velocity: .fast) }
         XCTAssertTrue(copyHelp.isHittable)
+        let copyAction = settingsForm.buttons["复制一份"].firstMatch
+        XCTAssertTrue(copyAction.exists)
+        XCTAssertGreaterThanOrEqual(copyHelp.frame.minY, copyAction.frame.maxY)
         XCTAssertLessThanOrEqual(copyHelp.frame.maxY, settingsForm.frame.maxY + 1)
         capture(app, "Chief 设置 · 管理说明")
         if UIDevice.current.userInterfaceIdiom == .pad {

@@ -77,6 +77,26 @@ final class MultiGatewayStore: ObservableObject {
 
     var activeProfile: GatewayProfile? { profiles.first { $0.id == activeID } }
 
+    func selectConnectionMethod(_ method: GatewayAddressMethod) {
+        guard let endpoint = activeProfile?.endpoints(for: method).first else { return }
+        selectConnectionEndpoint(endpoint)
+    }
+
+    func selectConnectionEndpoint(_ endpoint: String) {
+        guard let index = profiles.firstIndex(where: { $0.id == activeID }),
+              profiles[index].endpoints.contains(endpoint) else { return }
+        let method = GatewayAddressMethod(endpoint: endpoint)
+        profiles[index].selectedConnectionMethod = method
+        persist()
+        coldLaunchConnectionTask?.cancel()
+        activeStore.gateway.selectedConnectionMethod = method
+        activeStore.endpoint = endpoint
+        let state = activeStore.gateway.state
+        if activeStore.gateway.connectedEndpoint != endpoint || (state != .connecting && !state.isConnected) {
+            activeStore.connect()
+        }
+    }
+
     private func handleLiveActivityApproval(_ intent: AgentApprovalIntentRequest) -> Bool {
         let store = activeStore
         guard store.gatewayLocalID == intent.gatewayID else { return false }
@@ -123,13 +143,14 @@ final class MultiGatewayStore: ObservableObject {
 
     private func makeStore(_ profile: GatewayProfile) -> AppStore {
         let preferences = UserDefaultsAppPreferences(userDefaults: defaults, gatewayID: profile.id)
-        preferences.endpoint = profile.connectionEndpoints.first ?? profile.endpoints[0]
+        preferences.endpoint = profile.startupEndpoint
         let store = AppStore(preferences: preferences, gatewayClient: GatewayClient(credentials: credentials),
                              gatewayLocalID: profile.id, appearanceDefaults: defaults)
         store.gatewayDisplayName = profile.displayName
         store.gateway.credentialID = profile.id
         store.gateway.expectedGatewayID = profile.gatewayId
         store.gateway.trustedEndpoints = profile.endpoints
+        store.gateway.selectedConnectionMethod = profile.selectedConnectionMethod
         installPairingHandler(on: store)
         store.gateway.onIdentity = { [weak self] frame, _ in
             guard let self else { return }
@@ -186,9 +207,8 @@ final class MultiGatewayStore: ObservableObject {
             endpoints: endpoints,
             deviceKind: GatewayIdentity.isLocal(URL(string: endpoints[0])?.host ?? "") ? "desktopcomputer" : "server.rack"
         )
-        // 重新扫码是用户对本次地址集合的明确认可；首选地址优先。
-        profile.endpoints = endpoints
-        profile.preferredEndpoint = endpoints[0]
+        // 本次二维码的地址及顺序覆盖旧缓存；校验 hello 后再保存。
+        profile.applyPairingEndpoints(endpoints)
         if let name = payload.gatewayName, !name.isEmpty { profile.gatewayName = name }
         cancelPairing()
         let store = makeStore(profile)
@@ -220,8 +240,10 @@ final class MultiGatewayStore: ObservableObject {
             if isPending && profile.id == activeID { activeStore.gateway.disconnect() }
             return
         }
-        profile.lastConnectedAt = .now
-        profile.preferredEndpoint = store.gateway.connectedEndpoint ?? store.endpoint
+        if let endpoint = store.gateway.connectedEndpoint, profile.endpoints.contains(endpoint) {
+            profile.recordConnection(to: endpoint)
+            store.endpoint = endpoint
+        }
         store.gatewayDisplayName = profile.displayName
         if let index = profiles.firstIndex(where: { $0.id == profile.id }) { profiles[index] = profile }
         else { profiles.append(profile) }

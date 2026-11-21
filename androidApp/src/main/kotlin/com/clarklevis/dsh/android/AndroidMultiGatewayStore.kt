@@ -11,6 +11,7 @@ import com.clarklevis.dsh.android.platform.AndroidGatewayPreferences
 import com.clarklevis.dsh.android.platform.AndroidNetworkMonitor
 import com.clarklevis.dsh.android.platform.OkHttpGatewayTransport
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
+import com.clarklevis.dsh.shared.gateway.GatewayConnectionMethod
 import com.clarklevis.dsh.shared.gateway.GatewayIdentity
 import com.clarklevis.dsh.shared.gateway.GatewayPairingPayloadParser
 import com.clarklevis.dsh.shared.gateway.GatewayProfile
@@ -82,6 +83,30 @@ class AndroidMultiGatewayStore(private val application: Application) {
         private set
     val activeProfile: GatewayProfile? get() = profiles.firstOrNull { it.localId == activeId }
 
+    fun selectConnectionMethod(method: GatewayConnectionMethod) {
+        activeProfile?.endpointsFor(method)?.firstOrNull()?.let(::selectConnectionEndpoint)
+    }
+
+    fun selectConnectionEndpoint(endpoint: String) {
+        val profile = activeProfile ?: return
+        if (endpoint !in profile.endpoints) return
+        val method = GatewayIdentity.connectionMethod(endpoint)
+        if (profile.selectedConnectionMethod != method) {
+            val previousProfiles = profiles
+            profiles = profiles.map { if (it.localId == profile.localId) it.copy(selectedConnectionMethod = method) else it }
+            try {
+                persist()
+            } catch (failure: Exception) {
+                profiles = previousProfiles
+                error = failure.message
+                return
+            }
+        }
+        val graph = activeGraph
+        graph.stateHolder.endpoint = endpoint
+        graph.stateHolder.connect(method)
+    }
+
     init {
         scope.launch {
             runCatching {
@@ -149,7 +174,8 @@ class AndroidMultiGatewayStore(private val application: Application) {
         gatewayLocalId = profile?.localId ?: "unpaired",
         expectedGatewayId = profile?.gatewayId,
         trustedEndpoints = profile?.endpoints.orEmpty(),
-        onIdentity = { frame, endpoint ->
+        connectionMethodPreference = profile?.selectedConnectionMethod,
+        onIdentity = { frame, _ ->
             if (profile != null) {
                 withContext(Dispatchers.Main.immediate) {
                     require(
@@ -162,7 +188,7 @@ class AndroidMultiGatewayStore(private val application: Application) {
                     }
                     verified(frame)
                     if (frame.kind == "hello" && activeId == profile.localId && !pairing) {
-                        updateIdentity(profile, frame, endpoint)
+                        updateIdentity(profile.localId, frame)
                     }
                 }
             }
@@ -193,7 +219,7 @@ class AndroidMultiGatewayStore(private val application: Application) {
                 )
             ) {
                 withContext(activeGraph.gatewayDispatcher) {
-                    activeGraph.gatewayRuntime.connect(profile.connectionEndpoints.first())
+                    activeGraph.gatewayRuntime.connect(profile.startupEndpoint)
                 }
             }
             return
@@ -205,14 +231,16 @@ class AndroidMultiGatewayStore(private val application: Application) {
         old.applicationScope.cancel()
         old.gatewayScope.cancel()
         val stored = scoped(profile.localId).load()
-        scoped(profile.localId).update(stored.copy(endpoint = profile.connectionEndpoints.first()))
+        scoped(profile.localId).update(stored.copy(endpoint = profile.startupEndpoint))
         activeId = profile.localId
         activeGraph = prepared ?: graph(profile)
         check(preferences.edit().putString("active", profile.localId).commit()) { appText("无法保存当前主机") }
         activeObservation?.cancel()
+        val graph = activeGraph
         activeObservation =
             scope.launch {
-                activeGraph.gatewayRuntime.state.collect { state ->
+                var lastConnectedEndpoint: String? = null
+                graph.gatewayRuntime.state.collect { state ->
                     onlineIds =
                         if (state.connection ==
                             GatewayConnectionState.CONNECTED
@@ -221,13 +249,24 @@ class AndroidMultiGatewayStore(private val application: Application) {
                         } else {
                             onlineIds - profile.localId
                         }
+                    val endpoint = state.endpoint.takeIf { state.connection == GatewayConnectionState.CONNECTED }
+                    if (endpoint != null && endpoint != lastConnectedEndpoint) {
+                        val current = activeProfile
+                        if (current?.localId == profile.localId && endpoint in current.endpoints) {
+                            val now = System.currentTimeMillis()
+                            profiles = profiles.map { if (it.localId == current.localId) it.connectedAt(endpoint, now) else it }
+                            graph.stateHolder.endpoint = endpoint
+                            runCatching { persist() }.onFailure { error = it.message }
+                        }
+                    }
+                    lastConnectedEndpoint = endpoint
                     turnKeepAlive = state.shouldKeepAliveInBackground
                     applyConnectionKeepAlive()
                 }
             }
         if (connect && prepared == null) {
             withContext(activeGraph.gatewayDispatcher) {
-                activeGraph.gatewayRuntime.connect(profile.connectionEndpoints.first())
+                activeGraph.gatewayRuntime.connect(profile.startupEndpoint)
             }
         }
     }
@@ -291,7 +330,7 @@ class AndroidMultiGatewayStore(private val application: Application) {
                         }
                     check(state.connection == GatewayConnectionState.CONNECTED) { state.lastError ?: appText("配对失败") }
                     val hello = identity.await()
-                    profile = updated(profile, hello, endpoints.first())
+                    profile = withIdentity(profile, hello).connectedAt(state.endpoint ?: endpoints.first(), System.currentTimeMillis())
                     profiles = profiles.filterNot { it.localId == profile.localId } + profile
                     persist()
                     candidate.pairingHandler = ::pair
@@ -336,7 +375,8 @@ class AndroidMultiGatewayStore(private val application: Application) {
             endpoints = endpoints,
             server = !GatewayIdentity.isLocal(GatewayIdentity.host(endpoints.first()))
         )
-        return profile.copy(endpoints = endpoints, preferredEndpoint = endpoints.first())
+        // 本次二维码的地址及顺序覆盖旧缓存；连接成功后再保存。
+        return profile.withPairingEndpoints(endpoints)
     }
 
     fun cancelPairing() {
@@ -401,15 +441,14 @@ class AndroidMultiGatewayStore(private val application: Application) {
         runCatching { persist() }.onFailure { error = it.message }
     }
 
-    private fun updated(profile: GatewayProfile, frame: GatewayFrame, endpoint: String) = profile.copy(
+    private fun withIdentity(profile: GatewayProfile, frame: GatewayFrame) = profile.copy(
         gatewayId = frame.gatewayId?.lowercase() ?: profile.gatewayId,
-        gatewayName = frame.gatewayName?.takeIf { it.isNotBlank() } ?: profile.gatewayName,
-        preferredEndpoint = endpoint,
-        lastConnectedAt = System.currentTimeMillis()
+        gatewayName = frame.gatewayName?.takeIf { it.isNotBlank() } ?: profile.gatewayName
     )
 
-    private fun updateIdentity(profile: GatewayProfile, frame: GatewayFrame, endpoint: String) {
-        profiles = profiles.map { if (it.localId == profile.localId) updated(it, frame, endpoint) else it }
+    private fun updateIdentity(profileId: String, frame: GatewayFrame) {
+        profiles = profiles.map { if (it.localId == profileId) withIdentity(it, frame) else it }
+        activeGraph.gatewayDisplayName = activeProfile?.displayName.orEmpty()
         persist()
     }
 

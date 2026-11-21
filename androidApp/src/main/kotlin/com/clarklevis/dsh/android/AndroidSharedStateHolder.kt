@@ -133,6 +133,14 @@ class AndroidSharedStateHolder(
     private val botFileSubmissions = mutableMapOf<String, List<String>>()
     private val selectedBotSessionId get() = botSnapshot.chats.firstOrNull { it.id == botSnapshot.selectedChatId }?.sessionId
 
+    internal fun openBotCreation() = applyBotTransition(botStore.openCreation())
+    internal fun loadBotCreationAgents() = applyBotTransition(botStore.loadCreationAgents())
+    internal fun loadBotCreationAgentModels(route: String) = applyBotTransition(botStore.loadCreationAgentModels(route))
+    internal fun loadBotCreationPhotos(reset: Boolean) = applyBotTransition(botStore.loadCreationPhotos(reset))
+    internal fun importBotCreationPhoto(image: String, name: String) = applyBotTransition(botStore.importCreationPhoto(image, name))
+    internal fun createBot(name: String, shape: String, color: String, image: String?, model: String?, effort: String?, agentAppearance: Boolean) =
+        applyBotTransition(botStore.createBot(name, shape, color, image, model, effort, agentAppearance))
+
     internal fun loadBotRoleEfforts(ref: String) = applyBotTransition(botStore.loadRoleEfforts(ref))
     internal fun saveBotMemory(id: String, entryId: String?, value: String) = applyBotTransition(botStore.saveRoleMemory(id, entryId, value))
     internal fun forgetBotMemory(id: String, entryId: String) = applyBotTransition(botStore.forgetRoleMemory(id, entryId))
@@ -140,6 +148,7 @@ class AndroidSharedStateHolder(
         applyBotTransition(botStore.scheduleRoleDaily(id, title, prompt, time, TimeZone.getDefault().id))
     internal fun deleteBotSchedule(id: String, taskId: String) = applyBotTransition(botStore.deleteRoleSchedule(id, taskId))
     internal fun duplicateBotRole(id: String) = applyBotTransition(botStore.duplicateRole(id))
+    internal fun deleteBotRole(id: String) = applyBotTransition(botStore.deleteRole(id))
     internal fun replacePrimaryBotRole(id: String, replacement: String) = applyBotTransition(botStore.replacePrimaryRole(id, replacement))
     internal fun openBotRole(id: String) = applyBotTransition(botStore.openRole(id))
     internal fun updateBotRole(id: String, changes: Map<String, Any?>) {
@@ -2351,13 +2360,13 @@ class AndroidSharedStateHolder(
     val gatewayLocalId: String get() = graph?.gatewayLocalId ?: "legacy"
     val gatewayDisplayName: String get() = graph?.gatewayDisplayName.orEmpty()
 
-    fun connect() {
+    fun connect(connectionMethod: com.clarklevis.dsh.shared.gateway.GatewayConnectionMethod? = null) {
         val appGraph = graph ?: return
         appGraph.diagnostics.intent(GatewayDiagnosticAction.CONNECT)
         platformError = null
         val target = endpoint.trim()
         appGraph.gatewayScope.launch {
-            val failed = runCatching { appGraph.gatewayRuntime.connect(target) }.isFailure
+            val failed = runCatching { appGraph.gatewayRuntime.connect(target, connectionMethod) }.isFailure
             if (failed) withContext(Dispatchers.Main.immediate) { platformError = "connect-failed" }
         }
     }

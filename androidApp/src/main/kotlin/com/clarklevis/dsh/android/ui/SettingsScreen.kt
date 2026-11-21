@@ -82,6 +82,9 @@ import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.android.platform.AndroidBackgroundBattery
 import com.clarklevis.dsh.android.platform.TunnelUiStage
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
+import com.clarklevis.dsh.shared.gateway.GatewayConnectionMethod
+import com.clarklevis.dsh.shared.gateway.GatewayIdentity
+import com.clarklevis.dsh.shared.gateway.GatewayProfile
 import com.clarklevis.dsh.shared.protocol.GatewayAgentPreset
 import com.clarklevis.dsh.shared.protocol.GatewayModelGroup
 import com.clarklevis.dsh.shared.protocol.GatewayModelItem
@@ -115,6 +118,8 @@ internal fun SettingsScreen(
     var showPrivacyPolicy by remember { mutableStateOf(false) }
     var showReleaseNotes by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val hosts = (context.applicationContext as? DshAndroidApplication)?.hosts
+    val gatewayProfile = hosts?.activeProfile?.takeIf { it.localId == stateHolder.gatewayLocalId }
     val uriHandler = LocalUriHandler.current
     val releaseInfo = remember(context) { AppReleaseInfo.load(context) }
     val connectedGatewayVersion = if (isConnected(stateHolder) && !stateHolder.pluginsLoading && stateHolder.pluginsError == null) {
@@ -216,16 +221,27 @@ internal fun SettingsScreen(
                             )
                         }
                         SettingsSection("Mobile Gateway") {
-                            GatewayEndpointRow(stateHolder)
+                            if (hosts != null && gatewayProfile != null) {
+                                GatewayAddressMenus(
+                                    profile = gatewayProfile,
+                                    endpoint = stateHolder.endpoint,
+                                    onMethod = hosts::selectConnectionMethod,
+                                    onEndpoint = hosts::selectConnectionEndpoint
+                                )
+                            } else {
+                                GatewayEndpointRow(stateHolder)
+                            }
                             SettingsDivider()
                             GatewayStatusRow(stateHolder)
                             SettingsDivider()
-                            SettingsValueRow(
-                                appText("连接方式"),
-                                if (isConnected(stateHolder)) appText(connectionMethod.ifEmpty { "WebSocket" }) else appText("未连接"),
-                                modifier = Modifier.testTag("gateway-connection-method")
-                            )
-                            SettingsDivider()
+                            if (gatewayProfile == null) {
+                                SettingsValueRow(
+                                    appText("连接方式"),
+                                    if (isConnected(stateHolder)) appText(connectionMethod.ifEmpty { "WebSocket" }) else appText("未连接"),
+                                    modifier = Modifier.testTag("gateway-connection-method")
+                                )
+                                SettingsDivider()
+                            }
                             SettingsValueRow(
                                 appText("网络检测"),
                                 appText("实时延迟与丢包"),
@@ -777,14 +793,16 @@ private fun presetCapabilityText(holder: AndroidSharedStateHolder): String = whe
 }
 
 @Composable
-private fun SettingsSection(title: String, footer: String? = null, content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsSection(title: String? = null, footer: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            title,
-            modifier = Modifier.padding(start = 20.dp),
-            style = SettingsTypography.section,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.48f)
-        )
+        if (title != null) {
+            Text(
+                title,
+                modifier = Modifier.padding(start = 20.dp),
+                style = SettingsTypography.section,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.48f)
+            )
+        }
         Column(
             Modifier.fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(22.dp))
@@ -810,9 +828,11 @@ internal fun SettingsValueRow(
     isLoading: Boolean = false,
     modifier: Modifier = Modifier,
     isMenu: Boolean = false,
+    destructive: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val rowAlpha = if (enabled) 1f else 0.4f
+    val titleColor = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
     Row(
         modifier.fillMaxWidth().heightIn(min = 54.dp)
             .clickable(enabled = enabled && onClick != null) { onClick?.invoke() },
@@ -820,7 +840,7 @@ internal fun SettingsValueRow(
     ) {
         Text(
             title,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = rowAlpha),
+            color = titleColor.copy(alpha = rowAlpha),
             style = SettingsTypography.item,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -1084,6 +1104,65 @@ internal fun SettingsDivider() {
         thickness = 0.5.dp,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
     )
+}
+
+@Composable
+private fun GatewayAddressMenus(
+    profile: GatewayProfile,
+    endpoint: String,
+    onMethod: (GatewayConnectionMethod) -> Unit,
+    onEndpoint: (String) -> Unit
+) {
+    val selected = endpoint.takeIf { it in profile.endpoints } ?: profile.startupEndpoint
+    val method = profile.selectedConnectionMethod ?: GatewayIdentity.connectionMethod(selected)
+    val addresses = profile.endpointsFor(method)
+    val selectedAddress = selected.takeIf { it in addresses } ?: addresses.firstOrNull().orEmpty()
+    var openMenu by remember(profile.localId) { mutableStateOf<String?>(null) }
+    Box {
+        SettingsValueRow(
+            appText("连接方式"), method.settingsLabel(),
+            modifier = Modifier.testTag("gateway-connection-method"), isMenu = true
+        ) { openMenu = "method" }
+        DshSelectionPopup(
+            expanded = openMenu == "method",
+            options = GatewayConnectionMethod.entries.filter { profile.endpointsFor(it).isNotEmpty() }
+                .map { DshSelectionOption(it.name, it.settingsLabel()) },
+            selectedKey = method.name,
+            onDismissRequest = { openMenu = null },
+            onSelect = { key ->
+                openMenu = null
+                onMethod(GatewayConnectionMethod.valueOf(key))
+            },
+            alignToEnd = true,
+            menuWidth = 248.dp
+        )
+    }
+    SettingsDivider()
+    Box {
+        SettingsValueRow(
+            appText("网关地址"), selectedAddress,
+            modifier = Modifier.testTag("gateway-address-menu"), isMenu = true
+        ) { openMenu = "address" }
+        DshSelectionPopup(
+            expanded = openMenu == "address",
+            options = addresses.map { DshSelectionOption(it, it) },
+            selectedKey = selectedAddress,
+            onDismissRequest = { openMenu = null },
+            onSelect = { address ->
+                openMenu = null
+                onEndpoint(address)
+            },
+            alignToEnd = true,
+            menuWidth = 248.dp,
+            labelMaxLines = 3
+        )
+    }
+}
+
+private fun GatewayConnectionMethod.settingsLabel(): String = when (this) {
+    GatewayConnectionMethod.LAN -> appText("局域网")
+    GatewayConnectionMethod.PUBLIC -> appText("公网")
+    GatewayConnectionMethod.TAILSCALE -> "Tailscale"
 }
 
 @Composable

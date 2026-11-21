@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.shared
 
+import com.clarklevis.dsh.shared.facade.BotCreationRules
 import com.clarklevis.dsh.shared.facade.SharedBotStore
 import com.clarklevis.dsh.shared.facade.SharedBotTransition
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
@@ -219,6 +220,76 @@ class SharedBotStoreTest {
         assertEquals("@draft/guide.md", search.items.single().wire)
     }
 
+    @Test
+    fun createBotUsesTheTeamModelAndRefreshesTheRosterWithoutRepeatingTheWrite() {
+        val store = creationStore()
+        assertEquals("provider/team", store.snapshot().defaultCreationModel)
+        assertEquals(listOf("provider/host", "provider/team"), store.snapshot().creationModels.map { it.id })
+        val roster = store.snapshot().roster
+        assertEquals(listOf("chief", "second"), roster.map { it.id })
+        assertEquals("New Bot 2", BotCreationRules.freshName("New Bot", roster))
+        assertEquals("duplicate", BotCreationRules.nameProblem("new bot", roster))
+        assertEquals("reserved", BotCreationRules.nameProblem("everyone", roster))
+        assertEquals("characters", BotCreationRules.nameProblem("two@names", roster))
+        assertTrue(store.createBot("New Bot", "star", "violet", null, null, null, false).requests.isEmpty())
+
+        val first = store.createBot("New Bot 2", "star", "violet", null, "provider/team", null, false)
+        assertTrue(first.snapshot.creation.saving)
+        assertTrue(store.createBot("New Bot 2", "star", "violet", null, null, null, false).requests.isEmpty())
+        val saved = response(store, first, "create-bot", """{"id":"new-role"}""")
+        assertEquals("new-role", saved.snapshot.creation.createdId)
+        assertFalse(saved.snapshot.creation.saving)
+        assertEquals(listOf("state"), saved.requests.map {
+            Json.parseToJsonElement(it.payload).jsonObject["endpoint"]?.jsonPrimitive?.content
+        })
+        val after = response(store, saved, "state",
+            """{"revision":2,"mainBotId":"chief","bots":[{"id":"chief","name":"Chief"},{"id":"second","name":"New Bot"},{"id":"new-role","name":"New Bot 2","lastAt":100}]}""")
+        assertEquals(listOf("chief", "second", "new-role"), after.snapshot.roster.map { it.id })
+    }
+
+    @Test
+    fun localCreationKeepsTheAgentRouteAndDoesNotRetryAnUncertainWrite() {
+        val store = creationStore()
+        val listing = store.loadCreationAgents()
+        response(store, listing, "local-agents", """{"items":[
+            {"id":"local-codex-cli","title":"Codex CLI","available":true},
+            {"id":"local-claude-code","title":"Claude Code","available":false}
+        ]}""")
+        assertTrue(store.createBot("Local demo", "star", "violet", null, "local-claude-code/default", null, true).requests.isEmpty())
+        val modelRead = store.loadCreationAgentModels("local-codex-cli")
+        response(store, modelRead, "local-agent-models", """{"items":[{"id":"local-codex-cli/verified","title":"Verified"}]}""")
+        val write = store.createBot("Local demo", "star", "violet", null, "local-codex-cli/verified", "high", true)
+        val request = write.requests.single()
+        val payload = Json.parseToJsonElement(request.payload).jsonObject.getValue("payload").jsonObject
+        assertEquals("local-codex-cli/verified", payload.getValue("model").jsonPrimitive.content)
+        assertEquals("true", payload.getValue("agentAppearance").jsonPrimitive.content)
+        assertNull(payload["effort"])
+        val lost = store.requestFailed(requireNotNull(request.correlationId), "bot-timeout")
+        assertEquals("uncertain", lost.snapshot.creation.error)
+        assertFalse(lost.snapshot.creation.saving)
+        assertTrue(store.createBot("Local demo", "star", "violet", null, "local-codex-cli/default", null, true).requests.isEmpty())
+        val restored = SharedBotStore().restoreCacheJson(store.exportCacheJson()).snapshot
+        assertNull(restored.creation.appearance)
+        assertFalse(restored.canCreateBot)
+    }
+
+    private fun creationStore(): SharedBotStore {
+        val store = SharedBotStore()
+        val start = store.activate(true, true)
+        val subscription = start.requests.first { it.requestType == "bot-subscribe" }.correlationId
+        response(store, start, "state", """{
+          "revision":1,"mainBotId":"chief","bots":[{"id":"chief","name":"Chief"},{"id":"second","name":"New Bot"}],
+          "models":[{"ref":"provider/host"},{"ref":"provider/team"},{"ref":"provider/unavailable","needsKey":true},{"ref":"local-codex-cli/default"}],
+          "defaultModel":"provider/host","prefs":{"defaultBotModel":"provider/team"}
+        }""")
+        store.acceptJson("""{"kind":"bot-subscribed","requestId":"$subscription","hello":{"capabilities":["bot-creation"]}}""")
+        response(store, store.openCreation(), "creation-appearance", """{
+          "shapes":[{"id":"star","images":{"violet":"data:image/svg+xml;base64,AA=="}}],
+          "colors":[{"id":"violet","stops":["#8766FF"]}]
+        }""")
+        return store
+    }
+
     private fun response(store: SharedBotStore, transition: SharedBotTransition, endpoint: String, value: String): SharedBotTransition {
         val request = transition.requests.first { Json.parseToJsonElement(it.payload).jsonObject["endpoint"]?.jsonPrimitive?.content == endpoint }
         return store.acceptJson("""{"kind":"bot-result","requestId":"${request.correlationId}","endpoint":"$endpoint","value":$value}""")
@@ -254,6 +325,44 @@ class SharedBotStoreTest {
         assertTrue(next.requests.any { it.payload.contains("\"endpoint\":\"chat\"") })
         response(store, next, "chat", """{"items":[{"kind":"bot","seq":7,"text":"旧回复"},{"kind":"bot","seq":9,"text":"新回复"}],"cursor":null}""")
         assertEquals(listOf("旧回复", "新回复"), store.snapshot().messages.map { it.text })
+    }
+
+    @Test
+    fun deletingRoleRequiresCapabilityAndProtectsEveryMainBot() {
+        val store = SharedBotStore()
+        val start = store.activate(true, true)
+        val roster = """{"revision":1,"mainBotId":"chief","mainBotIds":["chief","deputy"],
+            "bots":[{"id":"chief","name":"Chief"},{"id":"deputy","name":"Deputy"},{"id":"worker","name":"Worker"}],
+            "rooms":[{"id":"group","name":"Group","members":["worker","chief"]}]}"""
+        response(store, start, "state", roster)
+        assertTrue(store.deleteRole("worker").requests.isEmpty())
+        val subscription = start.requests.first { it.requestType == "bot-subscribe" }.correlationId
+        store.acceptJson("""{"kind":"bot-subscribed","requestId":"$subscription","hello":{"capabilities":["role-settings","bot-deletion"]}}""")
+        for (id in listOf("chief", "deputy", "missing", "group")) {
+            assertTrue(store.deleteRole(id).requests.isEmpty(), id)
+        }
+
+        val history = store.selectChat("worker")
+        response(store, history, "chat", """{"items":[{"kind":"bot","seq":1,"text":"hello"}]}""")
+        val staleRead = store.refresh()
+        val deletion = store.deleteRole("worker")
+        assertTrue(deletion.snapshot.roleSaving)
+        assertTrue(deletion.snapshot.roster.any { it.id == "worker" })
+        assertTrue(store.deleteRole("worker").requests.isEmpty())
+        val rejected = store.requestFailed(deletion.requests.single().correlationId!!, "bot-timeout")
+        assertEquals("bot-delete-unconfirmed", rejected.snapshot.roleError)
+        assertTrue(rejected.snapshot.roster.any { it.id == "worker" })
+        assertFalse(rejected.snapshot.roleSaving)
+
+        val retry = store.deleteRole("worker")
+        val confirmed = response(store, retry, "delete-bot", """{"id":"worker"}""")
+        assertEquals(listOf("chief", "deputy"), confirmed.snapshot.roster.map { it.id })
+        assertNull(confirmed.snapshot.selectedChatId)
+        assertTrue(confirmed.snapshot.messages.isEmpty())
+        assertFalse(confirmed.snapshot.roleSaving)
+        assertNull(confirmed.snapshot.roleError)
+        assertTrue(confirmed.requests.any { it.payload.contains("\"endpoint\":\"state\"") })
+        assertTrue(response(store, staleRead, "state", roster).snapshot.roster.none { it.id == "worker" })
     }
 
     @Test

@@ -36,6 +36,7 @@ class AndroidAppGraph(
     expectedGatewayId: String? = null,
     trustedEndpoints: List<String> = emptyList(),
     onIdentity: suspend (GatewayFrame, String) -> Unit = { _, _ -> },
+    connectionMethodPreference: com.clarklevis.dsh.shared.gateway.GatewayConnectionMethod? = null,
     internal val storedConnectionPrerequisite: suspend () -> Unit = {
         (application as? DshAndroidApplication)?.awaitTunnelForStoredConnection()
     }
@@ -78,7 +79,8 @@ class AndroidAppGraph(
         frameDecodingDispatcher = Dispatchers.Default,
         expectedGatewayId = expectedGatewayId,
         trustedEndpoints = trustedEndpoints,
-        onIdentity = onIdentity
+        onIdentity = onIdentity,
+        selectedConnectionMethod = connectionMethodPreference
     )
     var pairingHandler: ((String) -> Unit)? = null
     var gatewayDisplayName: String = ""

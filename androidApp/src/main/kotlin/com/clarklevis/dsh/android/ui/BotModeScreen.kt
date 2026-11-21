@@ -178,9 +178,18 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
     var opened by rememberSaveable { mutableStateOf<String?>(null) }
     var chatSearch by rememberSaveable { mutableStateOf("") }
     var schedules by rememberSaveable { mutableStateOf(false) }
-    var history by rememberSaveable { mutableStateOf(false) }
+    var roster by rememberSaveable { mutableStateOf(false) }
     var roleId by rememberSaveable { mutableStateOf<String?>(null) }
     var memberRoomId by rememberSaveable { mutableStateOf<String?>(null) }
+    val role = state.chats.firstOrNull { it.id == roleId && !it.room }
+    val openedExists = opened == null || state.chats.any { it.id == opened }
+    LaunchedEffect(openedExists, roleId, role?.id) {
+        if (!openedExists) {
+            opened = null
+            holder.selectBotChat(null)
+        }
+        if (role == null) roleId = null
+    }
     val showProfile: (String) -> Unit = { roleId = it }
     var imagePreview by remember { mutableStateOf<com.clarklevis.dsh.android.platform.MarkdownImageAsset?>(null) }
     BotModeTheme {
@@ -189,7 +198,7 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
                 val fullHeight = maxHeight + WindowInsets.ime.asPaddingValues().calculateBottomPadding()
                 val wide = maxWidth >= 760.dp && fullHeight >= 500.dp && LocalDensity.current.fontScale < 1.5f
                 val leftWidth = minOf(440.dp, maxWidth * .38f)
-                SideEffect { onChatOpened(opened != null) }
+                SideEffect { onChatOpened(opened != null || roster) }
                 BackHandler(enabled = opened != null) { opened = null }
                 val homeHeader: @Composable () -> Unit = header ?: {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -197,14 +206,16 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
                         GatewaySwitcherBar(onDarkBackground = false)
                     }
                 }
-                DshLiquidGlassHost(modifier = Modifier.fillMaxSize(), frostOnOlderDevices = opened == null, background = { backdrop ->
-                    if (opened == null) HarnessAnimatedBackground(backdrop,
+                DshLiquidGlassHost(modifier = Modifier.fillMaxSize(), frostOnOlderDevices = opened == null && !roster, background = { backdrop ->
+                    if (opened == null && !roster) HarnessAnimatedBackground(backdrop,
                         animationEnabled = scrollEnabled && !holder.botDesignPreview, lavender = true,
                         modeWave = modeWave)
                     else Box(backdrop.fillMaxSize().background(chatSurface))
                 }) {
                     val select: (String) -> Unit = { focus.clearFocus(); holder.selectBotChat(it); opened = it }
-                    if (opened != null) {
+                    if (roster) {
+                        BotManagementFlow(holder, onDismiss = { roster = false }, showRole = showProfile)
+                    } else if (opened != null) {
                         val chatId = requireNotNull(opened)
                         WorkspaceFilePreviewHost(holder, botChatId = chatId)
                         val backdrop = rememberLayerBackdrop()
@@ -230,13 +241,13 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
                             Spacer(Modifier.height(40.dp))
                             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
                                 BotHome(state, colors, Modifier.width(leftWidth), wide = true, header = {}, scrollEnabled,
-                                    select, { schedules = true }, { history = true }, holder::refreshBotMode, showProfile)
+                                    select, { schedules = true }, { roster = true }, holder::refreshBotMode, showProfile)
                                 BotWideChats(state, colors, chatSearch, { chatSearch = it }, select, scrollEnabled,
                                     Modifier.weight(1f).fillMaxHeight())
                             }
                         }
                     } else BotHome(state, colors, Modifier.fillMaxSize().statusBarsPadding(), wide = false,
-                        header = homeHeader, scrollEnabled, select, { schedules = true }, { history = true }, holder::refreshBotMode, showProfile)
+                        header = homeHeader, scrollEnabled, select, { schedules = true }, { roster = true }, holder::refreshBotMode, showProfile)
                 }
                 imagePreview?.let { image ->
                     val attachment = com.clarklevis.dsh.shared.protocol.GatewayImageAttachment("bot-preview", image.mediaType, image.bytes.size, image.width, image.height, "image." + when (image.mediaType) { "image/jpeg" -> "jpg"; "image/webp" -> "webp"; "image/gif" -> "gif"; "image/bmp" -> "bmp"; else -> "png" })
@@ -258,21 +269,9 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
                         }
                     }
                 }
-                roleId?.let { id -> state.chats.firstOrNull { it.id == id && !it.room }?.let { role ->
-                    BotRolePanel(holder, role, colors) { roleId = null }
-                } }
+                role?.let { BotRolePanel(holder, it, colors) { roleId = null } }
                 if (schedules) BotSchedulesPanel(state, holder::refreshBotMode) { schedules = false }
-                if (history) BotPanel(appText("已完成"), { history = false }) {
-                    LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        val completed = state.recent.filter { it.kind == "done" }
-                        if (completed.isEmpty()) item { BotCard(colors) { Text(appText("还没有完成记录"), color = colors.secondary) } }
-                        items(completed, key = { it.id }) { activity ->
-                            BotCard(colors, { activity.chatId?.let { holder.selectBotChat(it); opened = it; history = false } }) {
-                                Text(activity.text.ifEmpty { appText("%1\$s 已完成工作", activity.name) }, color = colors.text, fontSize = 17.sp)
-                            }
-                        }
-                    }
-                }
+
             }
         }
     }
@@ -281,10 +280,9 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
 @Composable
 private fun BotHome(state: SharedBotSnapshot, colors: BotColors, modifier: Modifier, wide: Boolean,
     header: @Composable () -> Unit, scrollEnabled: Boolean, select: (String) -> Unit,
-    schedules: () -> Unit, history: () -> Unit, refresh: () -> Unit, showProfile: (String) -> Unit) {
+    schedules: () -> Unit, roster: () -> Unit, refresh: () -> Unit, showProfile: (String) -> Unit) {
     val chief = state.chats.firstOrNull { it.id == state.mainBotId }
     val running = state.chats.filter { it.running }
-    val completed = state.recent.count { it.kind == "done" }
     LazyColumn(modifier.testTag("bot.home"), userScrollEnabled = scrollEnabled,
         contentPadding = if (wide) PaddingValues(bottom = 32.dp) else PaddingValues(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -331,21 +329,8 @@ private fun BotHome(state: SharedBotSnapshot, colors: BotColors, modifier: Modif
         }
         if (state.loading && state.chats.isEmpty()) item { Text(appText("正在同步助理"), color = colors.secondary) }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                BotSectionTitle(appText("正在进行"), appText("%1\$s 件事", running.size), colors)
-                val task = running.firstOrNull { it.id != state.mainBotId } ?: running.firstOrNull()
-                BotCard(colors, { task?.let { select(it.id) } }, vertical = 10.dp, homeGlass = true) {
-                    if (task == null) Text(appText("暂时没有进行中的事情"), Modifier.heightIn(min = 50.dp), fontSize = 15.sp, color = colors.cardSecondary)
-                    else Column(Modifier.heightIn(min = 50.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(task.preview.ifEmpty { appText("%1\$s 正在处理", task.name) }, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, color = colors.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(appText("%1\$s 正在处理", task.name), fontSize = 15.sp, lineHeight = 21.sp, color = colors.cardSecondary)
-                    }
-                }
-            }
-        }
-        item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                BotShortcut(appText("已完成"), completed, appText("查看历史"), Modifier.weight(1f), history)
+                BotShortcut(appText("我的 Bot"), state.chats.count { !it.room }, appText("查看与创建"), Modifier.weight(1f).testTag("bot.roster"), roster)
                 BotShortcut(appText("定时任务"), state.schedules.size, state.schedules.firstOrNull()?.next?.let { appText("下次 %1\$s", it) } ?: appText("查看安排"), Modifier.weight(1f).testTag("bot.schedules"), schedules)
             }
         }
@@ -437,7 +422,7 @@ private fun BotChatRows(chats: List<BotChat>, roster: List<BotChat>, select: (St
         .padding(horizontal = 16.dp, vertical = vertical), verticalArrangement = Arrangement.spacedBy(4.dp), content = content)
 }
 @Composable
-private fun BotAvatar(chat: BotChat?, size: Dp = 28.dp, main: Boolean = false, roster: List<BotChat> = emptyList()) {
+internal fun BotAvatar(chat: BotChat?, size: Dp = 28.dp, main: Boolean = false, roster: List<BotChat> = emptyList()) {
     val colors = botColors()
     val members = if (chat?.room == true) chat.memberIds.mapNotNull { id -> roster.firstOrNull { it.id == id } } else emptyList()
     if (members.isNotEmpty()) {
@@ -853,7 +838,7 @@ private fun BotSchedulesPanel(state: SharedBotSnapshot, onRefresh: () -> Unit, o
 @Composable
 private fun BotPanel(title: String, onDismiss: () -> Unit, action: (@Composable () -> Unit)? = null,
     subtitle: String? = null, roleStyle: Boolean = false, navigation: (@Composable () -> Unit)? = null,
-    compactRole: Boolean = false,
+    compactRole: Boolean = false, centerTitle: Boolean = false,
     content: @Composable ColumnScope.() -> Unit) {
     val colors = botColors()
     val night = isSystemInDarkTheme()
@@ -890,7 +875,8 @@ private fun BotPanel(title: String, onDismiss: () -> Unit, action: (@Composable 
                             if (title.isEmpty()) Spacer(Modifier.weight(1f))
                             else Text(title, Modifier.weight(1f).testTag("bot.panel-heading"),
                                 fontSize = if (roleStyle) 17.sp else 22.sp, lineHeight = if (roleStyle) 22.sp else 28.sp,
-                                fontWeight = FontWeight.SemiBold, color = colors.text)
+                                fontWeight = FontWeight.SemiBold, color = colors.text,
+                                textAlign = if (centerTitle) TextAlign.Center else TextAlign.Start)
                             if (action != null) action() else DshGlassButton(appText("完成"), onDismiss, Modifier.size(if (night) 44.dp else 54.dp)) { Icon(painterResource(R.drawable.ic_menu_check), null, Modifier.size(22.dp)) }
                         }
                         subtitle?.let { Text(it, fontSize = 15.sp, lineHeight = 21.sp, color = colors.secondary) }
@@ -948,6 +934,9 @@ private fun botErrorText(code: String): String = appText(when (code) {
     "bot-unavailable", "bot/not-found" -> "主机上的 DS-Bot 尚未启用，或版本暂不支持"
     "bot-version-unsupported" -> "请更新主机上的 DS-Bot"
     "not-connected" -> "主机连接已断开，重连后将同步聊天"
+    "bot/main-protected" -> "主 Bot 不能删除。"
+    "bot-delete-failed" -> "暂时无法删除此 Bot，请稍后重试。"
+    "bot-delete-unconfirmed" -> "尚未确认删除结果，请重新同步后核对。"
     "bot-timeout" -> "同步超时，请稍后重试；发送中的消息请先核对"
     else -> "聊天同步暂时中断，可以重新同步"
 })
@@ -1230,7 +1219,7 @@ private fun BotMentionMenu(
     }
 }
 
-private enum class BotRolePage { Profile, Settings, Memory, Schedule, NewSchedule }
+private enum class BotRolePage { Profile, Settings, Memory, MemoryEditor, Schedule, NewSchedule }
 
 @Composable
 private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors: BotColors, dismiss: () -> Unit) {
@@ -1248,11 +1237,11 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
     var privateRole by rememberSaveable(chat.id) { mutableStateOf(profile?.privateRole ?: false) }
     var confirm by remember { mutableStateOf(false) }
     var confirmCopy by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     var replacement by remember { mutableStateOf<BotChat?>(null) }
     var returnTo by remember { mutableStateOf(BotRolePage.Profile) }
-    var editMemory by remember { mutableStateOf(false) }
-    var memoryEntry by remember { mutableStateOf<BotMemory?>(null) }
-    var memoryText by rememberSaveable { mutableStateOf("") }
+    var memoryEntryId by rememberSaveable(chat.id) { mutableStateOf<String?>(null) }
+    var memoryText by rememberSaveable(chat.id) { mutableStateOf("") }
     var deleteMemory by remember { mutableStateOf<BotMemory?>(null) }
     var deleteSchedule by remember { mutableStateOf<BotSchedule?>(null) }
     var taskName by rememberSaveable { mutableStateOf("") }
@@ -1261,19 +1250,17 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
     var taskMinute by rememberSaveable { mutableStateOf("00") }
     val editable = state.connected && state.roleSettingsSupported && state.writable && !state.roleSaving
     val main = chat.id == state.mainBotId
+    val showsDelete = state.botDeletionSupported && !state.isMainBot(chat.id)
     val inGroup = state.chats.any { it.room && chat.id in it.memberIds }
-    val permissionHelp = when (permission) {
-        "read-only" -> appText("仅允许读取文件。")
-        "workspace-write" -> appText("允许在工作区内修改文件。")
-        "danger-full-access" -> appText("允许修改工作区以外的文件，范围仍受主机系统权限限制。")
-        else -> appText("控制 Bot 能否修改文件和可修改的范围。默认权限由主机决定。")
-    }
     val privacyHelp = when {
         !privateRole && main -> appText("主 Bot 不能开启隐私。")
         !privateRole && inGroup -> appText("将此 Bot 移出所有群聊后，才能开启隐私。")
         !privateRole && workDir.isBlank() -> appText("开启隐私前，请为此 Bot 设置独立的工作文件夹。")
         else -> appText("开启后，其他 Bot 无法读取它的工作文件夹、记忆和对话。向其他 Bot 分享内容需你批准。")
     }
+    val permissionFooter = if (permission == "danger-full-access") {
+        appText("允许修改工作区以外的文件，范围仍受主机系统权限限制。") + "\n" + privacyHelp
+    } else privacyHelp
     val effectiveModel = profile?.model ?: profile?.appliedModel ?: state.defaultModel
     val effortRef = model.ifEmpty { profile?.appliedModel ?: state.defaultModel.orEmpty() }
     val openPage: (BotRolePage) -> Unit = { target -> returnTo = page; page = target }
@@ -1296,22 +1283,29 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
         BotRolePage.Profile -> ""
         BotRolePage.Settings -> appText("角色设置")
         BotRolePage.Memory -> appText("记忆")
+        BotRolePage.MemoryEditor -> appText(if (memoryEntryId == null) "添加记忆" else "编辑记忆")
         BotRolePage.Schedule -> appText("定时任务")
         BotRolePage.NewSchedule -> appText("新建定时任务")
     }
     val goBack = {
         page = when (page) {
             BotRolePage.NewSchedule -> BotRolePage.Schedule
+            BotRolePage.MemoryEditor -> BotRolePage.Memory
             BotRolePage.Memory, BotRolePage.Schedule -> returnTo
             else -> BotRolePage.Profile
         }
     }
-    BotPanel(title, dismiss, roleStyle = true, compactRole = night && page == BotRolePage.Profile, navigation = {
+    BotPanel(title, dismiss, roleStyle = true, compactRole = night && page == BotRolePage.Profile,
+        centerTitle = page == BotRolePage.MemoryEditor, navigation = {
         if (page == BotRolePage.Profile) {
             if (!night) {
                 DshGlassButton(appText("关闭"), dismiss, Modifier.height(44.dp)) {
                     Text(appText("关闭"), Modifier.padding(horizontal = 14.dp))
                 }
+            }
+        } else if (page == BotRolePage.MemoryEditor) {
+            Box(Modifier.width(68.dp)) {
+                TopBarCircleButton(R.drawable.ic_back_chevron, appText("返回"), goBack)
             }
         } else TopBarCircleButton(R.drawable.ic_back_chevron, appText("返回"), goBack)
     }, action = {
@@ -1322,12 +1316,25 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
                 if (night) TopBarCircleButton(R.drawable.ic_close, appText("关闭"), dismiss)
             } else {
                 if (page == BotRolePage.Settings) {
-                    if (night && changes.isEmpty()) TopBarCircleButton(R.drawable.ic_close, appText("关闭"), dismiss)
+                    if (state.roleSaving) {
+                        Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        }
+                    } else if (night && changes.isEmpty()) TopBarCircleButton(R.drawable.ic_close, appText("关闭"), dismiss)
                     else DshGlassButton(appText("保存"),
                         { if (changes["permission"] == "danger-full-access") confirm = true else save() },
                         Modifier.size(44.dp).testTag("bot.role-save"),
                         enabled = editable && changes.isNotEmpty() && name.isNotBlank()) {
                         Icon(painterResource(R.drawable.ic_menu_check), null, Modifier.size(22.dp))
+                    }
+                }
+                if (page == BotRolePage.MemoryEditor) {
+                    DshGlassButton(appText("保存"), {
+                        holder.saveBotMemory(chat.id, memoryEntryId, memoryText)
+                        page = BotRolePage.Memory
+                    }, Modifier.width(68.dp).height(44.dp).testTag("bot.memory-save"),
+                        enabled = editable && memoryText.isNotBlank()) {
+                        Text(appText("保存"), style = MaterialTheme.typography.bodyLarge)
                     }
                 }
                 if (page == BotRolePage.NewSchedule) {
@@ -1341,8 +1348,19 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
             }
         }
     }) {
-        DshMenuHost {
-            LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("bot.role-panel"),
+        if (page == BotRolePage.MemoryEditor) {
+            KeyboardDismissHost(Modifier.weight(1f).fillMaxWidth().imePadding()) {
+                BotCard(colors, modifier = Modifier.fillMaxSize()) {
+                    BotRoleField(
+                        appText("记忆"), memoryText, enabled = true, multiline = true,
+                        modifier = Modifier.fillMaxSize().testTag("bot.memory-editor")
+                    ) { memoryText = it }
+                }
+            }
+            return@BotPanel
+        }
+        KeyboardDismissHost(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(Modifier.fillMaxSize().testTag("bot.role-panel"),
                 verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
                 if (page == BotRolePage.Profile || page == BotRolePage.Settings) item {
                     Column(Modifier.fillMaxWidth().padding(top = if (page == BotRolePage.Profile) 38.dp else 8.dp, bottom = 16.dp),
@@ -1379,87 +1397,111 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
                         } }
                     }
                     BotRolePage.Settings -> {
-                        item { BotRoleSection(appText("资料"), colors) {
-                            BotRoleField(appText("名字"), name, editable) { name = it }
-                            BotRoleField(appText("标签"), tag, editable, help = appText("选填，会显示在 Bot 名字下方。")) { tag = it }
-                        } }
-                        item { BotRoleSection(appText("运行方式"), colors) {
-                            BotRoleSettingHelp(appText("决定由 DS Bot 模型还是电脑上的本地代理处理消息。可在 DS Bot 网页端查看或更换。"))
-                        } }
-                        item { BotRoleSection(appText("模型"), colors) {
-                            BotRoleSelector(appText("模型"), model, appText("默认模型"), state.models, editable,
-                                help = appText("选择此 Bot 回复消息使用的模型。更改从下一条消息开始生效。")) {
-                                if (model != it) { model = it; effort = "" }
+                        item {
+                            SettingsSection(appText("资料"), footer = appText("标签为选填，会显示在 Bot 名字下方。")) {
+                                BotRoleField(appText("名字"), name, editable) { name = it }
+                                SettingsDivider()
+                                BotRoleField(appText("标签"), tag, editable) { tag = it }
                             }
-                            val efforts = state.efforts.takeIf { state.effortModel == effortRef }.orEmpty()
-                            if (efforts.isNotEmpty() || effort.isNotEmpty()) {
-                                BotRoleSelector(appText("推理强度"), effort, appText("默认"), efforts, editable,
-                                    help = appText("调整模型投入的推理量。可选档位取决于模型。")) { effort = it }
+                        }
+                        item {
+                            SettingsSection(appText("模型"), footer = appText("模型更改从下一条消息开始生效。")) {
+                                BotRoleSelector(appText("模型"), model, appText("默认模型"), state.models, editable) {
+                                    if (model != it) { model = it; effort = "" }
+                                }
+                                val efforts = state.efforts.takeIf { state.effortModel == effortRef }.orEmpty()
+                                if (efforts.isNotEmpty() || effort.isNotEmpty()) {
+                                    SettingsDivider()
+                                    BotRoleSelector(appText("推理强度"), effort, appText("默认"), efforts, editable) { effort = it }
+                                }
                             }
-                        } }
-                        item { BotRoleSection(appText("工作区与权限"), colors) {
-                            BotRoleField(appText("工作文件夹"), workDir, editable, appText("总工作区"),
-                                help = appText("设置此 Bot 的默认工作目录。留空时使用团队的总工作区。")) { workDir = it }
-                            BotRoleSelector(appText("权限"), permission, appText("默认权限"), state.permissions, editable,
-                                help = permissionHelp) { permission = it }
-                            Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                BotRoleSettingLabel(appText("隐私"), privacyHelp, Modifier.weight(1f))
-                                DshSwitch(privateRole, { privateRole = it }, enabled = editable && !main)
+                        }
+                        item {
+                            SettingsSection(appText("工作区与权限"), footer = permissionFooter) {
+                                BotRoleField(appText("工作文件夹"), workDir, editable, appText("总工作区")) { workDir = it }
+                                SettingsDivider()
+                                BotRoleSelector(appText("权限"), permission, appText("默认权限"), state.permissions, editable) {
+                                    permission = it
+                                }
+                                SettingsDivider()
+                                Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(appText("隐私"), Modifier.weight(1f))
+                                    DshSwitch(privateRole, { privateRole = it }, enabled = editable && !main)
+                                }
                             }
-                        } }
-                        item { BotRoleSection(appText("说明"), colors) {
-                            BotRoleField(appText("这个 Bot 做什么"), instructions, editable, appText("这个 Bot 负责什么…"),
-                                multiline = true, help = appText("描述 Bot 在团队里的分工。这段说明会写入 Bot 的系统提示词。")) {
-                                instructions = it
+                        }
+                        item {
+                            SettingsSection(appText("说明"), footer = appText("这段说明会写入 Bot 的系统提示词。")) {
+                                BotRoleField(appText("说明"), instructions, editable, appText("这个 Bot 负责什么…"),
+                                    multiline = true) { instructions = it }
                             }
-                        } }
-                        item { BotRoleSection(appText("操控"), colors) {
-                            BotRoleValue(appText("电脑操控"), appText(if (state.computerEnabled) "已开启" else "已关闭"),
-                                help = appText("显示主机的电脑操控开关状态。每个 Bot 的授权可在 DS Bot 网页端管理。"))
-                        } }
-                        item { BotCard(colors) {
-                            if (state.memoryAvailable) BotRoleValue(appText("记忆"), details?.memories?.size?.toString() ?: "—",
-                                help = appText("管理 Bot 保存的信息，这些信息可用于后续对话。")) {
-                                openPage(BotRolePage.Memory)
+                        }
+                        item {
+                            SettingsSection(appText("操控"), footer = appText("各 Bot 的电脑操控授权可在 DS Bot 网页端管理。")) {
+                                BotRoleValue(appText("电脑操控"), appText(if (state.computerEnabled) "已开启" else "已关闭"))
                             }
-                            BotRoleValue(appText("定时任务"), schedules.size.toString(),
-                                help = appText("查看或管理此 Bot 按时间自动执行的任务。")) { openPage(BotRolePage.Schedule) }
-                        } }
-                        if (main) item { BotRoleSection(appText("主 Bot"), colors) {
-                            val candidates = state.chats.filter { !it.room && it.id != chat.id && it.profile?.privateRole != true }
-                            var menu by remember { mutableStateOf(false) }
-                            Box {
-                                BotRoleValue(appText("更换主 Bot"), chat.name,
-                                    help = appText("主 Bot 可以创建和修改团队 Bot，并管理群聊。可在此将主 Bot 交给其他成员。"),
-                                    onClick = if (editable && candidates.isNotEmpty()) ({ menu = true }) else null)
-                                DshMenu(menu, { menu = false }) {
-                                    candidates.forEach { candidate ->
-                                        DshMenuItem({ Text(candidate.name) }, { menu = false; replacement = candidate })
+                        }
+                        item {
+                            SettingsSection {
+                                if (state.memoryAvailable) {
+                                    SettingsValueRow(appText("记忆"), "", onClick = { openPage(BotRolePage.Memory) })
+                                    SettingsDivider()
+                                }
+                                SettingsValueRow(appText("定时任务"), "", onClick = { openPage(BotRolePage.Schedule) })
+                            }
+                        }
+                        if (main) item {
+                            SettingsSection(appText("主 Bot"), footer = appText("主 Bot 可以创建和修改团队 Bot，并管理群聊。")) {
+                                val candidates = state.chats.filter { !it.room && it.id != chat.id && it.profile?.privateRole != true }
+                                var menu by remember { mutableStateOf(false) }
+                                Box {
+                                    BotRoleValue(appText("更换主 Bot"), "",
+                                        onClick = if (editable && candidates.isNotEmpty()) ({ menu = true }) else null)
+                                    DshMenu(menu, { menu = false }) {
+                                        candidates.forEach { candidate ->
+                                            DshMenuItem({ Text(candidate.name) }, { menu = false; replacement = candidate })
+                                        }
                                     }
                                 }
                             }
-                        } }
-                        item { BotRoleSection(appText("管理"), colors) {
-                            BotRoleValue(appText("复制一份"), "",
-                                help = appText("复制分工和模型，新 Bot 从空白记忆开始。"),
-                                onClick = if (editable) ({ confirmCopy = true }) else null)
-                        } }
+                        }
+                        item {
+                            SettingsSection(appText("管理"), footer = appText("复制分工和模型，新 Bot 从空白记忆开始。")) {
+                                BotRoleValue(appText("复制一份"), "", onClick = if (editable) ({ confirmCopy = true }) else null)
+                                if (showsDelete) {
+                                    SettingsDivider()
+                                    SettingsValueRow(
+                                        appText("删除 Bot"), "", enabled = editable,
+                                        modifier = Modifier.testTag("bot.role-delete"), destructive = true,
+                                        onClick = { confirmDelete = true }
+                                    )
+                                }
+                            }
+                        }
                     }
                     BotRolePage.Memory -> {
                         if (details?.memories.isNullOrEmpty()) item { Text(appText("还没有记忆"), color = colors.secondary) }
-                        if (editable) item { BotCard(colors, { memoryEntry = null; memoryText = ""; editMemory = true }) {
-                            Text(appText("添加记忆"), color = colors.blue)
-                        } }
+                        if (editable) item {
+                            BotCard(colors, {
+                                memoryEntryId = null
+                                memoryText = ""
+                                page = BotRolePage.MemoryEditor
+                            }) { Text(appText("添加记忆"), color = colors.blue) }
+                        }
                         items(details?.memories.orEmpty(), key = { it.id }) { entry ->
                             BotCard(colors) {
-                                BotRoleValue(entry.text, "",
-                                    onClick = if (editable) ({ memoryEntry = entry; memoryText = entry.text; editMemory = true }) else null)
+                                BotRoleValue(entry.text, "", onClick = if (editable) ({
+                                    memoryEntryId = entry.id
+                                    memoryText = entry.text
+                                    page = BotRolePage.MemoryEditor
+                                }) else null)
                                 if (editable) Text(appText("删除"), Modifier.clickable { deleteMemory = entry }.padding(vertical = 8.dp),
                                     color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
+                    BotRolePage.MemoryEditor -> Unit
                     BotRolePage.Schedule -> {
                         if (schedules.isEmpty()) item { Text(appText("还没有定时任务"), color = colors.secondary) }
                         if (editable && state.schedulesAvailable) item {
@@ -1496,16 +1538,6 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
             }
         }
     }
-    if (editMemory) DshAlertDialog(
-        title = appText(if (memoryEntry == null) "添加记忆" else "编辑记忆"),
-        onDismissRequest = { editMemory = false },
-        dismissLabel = appText("取消"),
-        confirmLabel = appText("保存"),
-        confirmEnabled = editable && memoryText.isNotBlank(),
-        onConfirm = { holder.saveBotMemory(chat.id, memoryEntry?.id, memoryText); editMemory = false }
-    ) {
-        BotRoleField(appText("记忆"), memoryText, enabled = true, multiline = true) { memoryText = it }
-    }
     deleteMemory?.let { entry ->
         BotRoleConfirmation(appText("删除这条记忆？"), appText("删除"), { deleteMemory = null }, destructive = true) {
             holder.forgetBotMemory(chat.id, entry.id)
@@ -1524,6 +1556,19 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
     if (confirmCopy) BotRoleConfirmation(appText("复制这个角色？"), appText("复制一份"), { confirmCopy = false }) {
         holder.duplicateBotRole(chat.id)
     }
+    if (confirmDelete) DshAlertDialog(
+        title = appText("删除 Bot？"),
+        message = String.format(appText("将“%s”移出团队和所在群聊。"), chat.name),
+        onDismissRequest = { confirmDelete = false },
+        dismissLabel = appText("取消"),
+        confirmLabel = appText("删除"),
+        confirmDestructive = true,
+        confirmEnabled = editable && showsDelete,
+        onConfirm = {
+            confirmDelete = false
+            holder.deleteBotRole(chat.id)
+        }
+    )
     if (confirm) DshAlertDialog(
         title = appText("确认授予完全权限？"),
         onDismissRequest = { confirm = false },
@@ -1535,51 +1580,21 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
 }
 
 @Composable
-private fun BotRoleSection(title: String, colors: BotColors, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.labelLarge, color = colors.secondary)
-        BotCard(colors, vertical = 8.dp, content = content)
-    }
-}
-
-@Composable
-private fun BotRoleValue(title: String, value: String, help: String? = null, leadingValue: Boolean = false,
-    onClick: (() -> Unit)? = null) {
+private fun BotRoleValue(title: String, value: String, onClick: (() -> Unit)? = null) {
     val row = Modifier.fillMaxWidth().heightIn(min = 44.dp)
         .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-    if (help != null) {
-        Column(row.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            BotRoleSettingLabel(title, help)
-            if (value.isNotEmpty()) Text(value, Modifier.fillMaxWidth(), color = botColors().secondary,
-                textAlign = if (leadingValue) TextAlign.Start else TextAlign.End)
-        }
-    } else {
-        Row(row, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, Modifier.weight(1f))
-            Text(value, Modifier.weight(1f), color = botColors().secondary, textAlign = TextAlign.End)
-        }
+    Row(row, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, Modifier.weight(1f))
+        Text(value, Modifier.weight(1f), color = botColors().secondary, textAlign = TextAlign.End)
     }
-}
-
-@Composable
-private fun BotRoleSettingLabel(title: String, help: String, modifier: Modifier = Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title)
-        BotRoleSettingHelp(help)
-    }
-}
-
-@Composable
-private fun BotRoleSettingHelp(help: String) {
-    Text(help, color = botColors().secondary, fontSize = 13.sp, lineHeight = 18.sp)
 }
 
 @Composable
 private fun BotRoleField(title: String, value: String, enabled: Boolean, placeholder: String = title,
-    multiline: Boolean = false, help: String? = null, change: (String) -> Unit) {
+    multiline: Boolean = false, modifier: Modifier = Modifier, change: (String) -> Unit) {
     val style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
-    val editor: @Composable (Modifier) -> Unit = { modifier ->
-        BasicTextField(value, change, modifier.semantics { contentDescription = title }, enabled = enabled,
+    val editor: @Composable (Modifier) -> Unit = { fieldModifier ->
+        BasicTextField(value, change, fieldModifier.keyboardDismissExclusion().semantics { contentDescription = title }, enabled = enabled,
             singleLine = !multiline, textStyle = style.copy(
                 textAlign = if (multiline) androidx.compose.ui.text.style.TextAlign.Start else androidx.compose.ui.text.style.TextAlign.End
             ), decorationBox = { inner ->
@@ -1589,15 +1604,10 @@ private fun BotRoleField(title: String, value: String, enabled: Boolean, placeho
                 }
             })
     }
-    if (help != null) {
-        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            BotRoleSettingLabel(title, help)
-            editor(Modifier.fillMaxWidth().heightIn(min = if (multiline) 88.dp else 24.dp))
-        }
-    } else if (multiline) {
-        editor(Modifier.fillMaxWidth().heightIn(min = 88.dp).padding(vertical = 8.dp))
+    if (multiline) {
+        editor(modifier.fillMaxWidth().heightIn(min = 88.dp).padding(vertical = 8.dp))
     } else {
-        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically,
+        Row(modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, Modifier.weight(1f))
             editor(Modifier.weight(1f))
@@ -1607,11 +1617,11 @@ private fun BotRoleField(title: String, value: String, enabled: Boolean, placeho
 
 @Composable
 private fun BotRoleSelector(title: String, selected: String, fallback: String, options: List<BotRoleOption>,
-    enabled: Boolean, showDefault: Boolean = true, help: String? = null, select: (String) -> Unit) {
+    enabled: Boolean, showDefault: Boolean = true, select: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         BotRoleValue(title, options.firstOrNull { it.id == selected }?.title ?: selected.ifEmpty { fallback },
-            help = help, leadingValue = help != null, onClick = if (enabled) ({ expanded = true }) else null)
+            onClick = if (enabled) ({ expanded = true }) else null)
         DshMenu(expanded, { expanded = false }) {
             if (showDefault) DshMenuItem({ Text(fallback) }, { expanded = false; select("") })
             options.forEach { option ->

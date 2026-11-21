@@ -1,5 +1,6 @@
 package com.clarklevis.dsh.shared
 
+import com.clarklevis.dsh.shared.gateway.GatewayConnectionMethod
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import com.clarklevis.dsh.shared.gateway.GatewayOutgoingImage
 import com.clarklevis.dsh.shared.gateway.GatewayPairingPayloadException
@@ -2502,6 +2503,27 @@ class GatewayRuntimeIntegrationTest {
             ),
             cache.values.keys
         )
+    }
+
+    @Test
+    fun reconnectStaysWithinTheUserSelectedConnectionMethod() = runTest {
+        val transport = FakeTransport()
+        val publicAddress = "wss://public.example/ws/mobile"
+        val lan = "ws://192.168.1.19:3081/ws/mobile"
+        val backup = "wss://backup.example/ws/mobile"
+        val runtime = newRuntime(transport, clock = RecordingDelayClock(), trustedEndpoints = listOf(publicAddress, lan, backup))
+        backgroundScope.launch { runtime.events.collect { } }
+        runCurrent()
+        runtime.connect(publicAddress, GatewayConnectionMethod.PUBLIC)
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true}""")
+        runCurrent()
+        transport.fail(GatewayTransportState.Failed(transport.connectionSpecs.last().generation,
+            reason = "websocket-failure", recoverable = true))
+        runCurrent()
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals(listOf(publicAddress, backup), transport.connectionSpecs.map { it.endpoint })
     }
 
     @Test

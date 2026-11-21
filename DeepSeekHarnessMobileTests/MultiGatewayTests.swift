@@ -30,6 +30,86 @@ private actor ColdLaunchProfileCredentials: GatewayCredentialStoring {
 final class MultiGatewayTests: XCTestCase {
     private let gatewayID = "d56a1098-8519-43a1-9dce-fb99863bf5bb"
 
+    @MainActor
+    func testRescanReplacesCachedEndpointOrderAfterHandshake() async throws {
+        let suite = "gateway-rescan-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let oldLan = "ws://192.168.1.19:3081/ws/mobile"
+        let cachedPublic = "wss://cached.example/ws/mobile"
+        let scanned = [
+            "wss://new.example/ws/mobile", "wss://backup.example/ws/mobile", cachedPublic
+        ]
+        let profile = GatewayProfile(
+            gatewayId: gatewayID, gatewayName: "Test", endpoints: [oldLan, cachedPublic],
+            preferredEndpoint: oldLan, lastConnectedAt: .now, recentSuccessfulEndpoints: [oldLan, cachedPublic],
+            selectedConnectionMethod: .lan
+        )
+        defaults.set(try JSONEncoder().encode([profile]), forKey: "gateway.profiles.v1")
+        UserDefaultsAppPreferences(userDefaults: defaults, gatewayID: profile.id).automaticallyConnect = false
+        let credentials = ColdLaunchProfileCredentials(profileID: profile.id)
+        let hosts = MultiGatewayStore(defaults: defaults, credentials: credentials)
+        await hosts.waitUntilReady()
+        defer { hosts.activeStore.deactivateGateway() }
+        let payload = GatewayPairingPayload(
+            version: 2, publicUrl: scanned[0], pairingCode: "once", expiresAt: 4_102_444_800_000,
+            gatewayId: gatewayID, endpoints: Array(scanned.dropFirst())
+        )
+        let qr = try JSONEncoder().encode(payload).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+
+        try hosts.pair(qr)
+        XCTAssertEqual(hosts.pairingStore?.gateway.connectedEndpoint, scanned[0])
+        XCTAssertEqual(hosts.pairingStore?.gateway.trustedEndpoints, scanned)
+        XCTAssertEqual(hosts.activeProfile, profile)
+        hosts.cancelPairing()
+        XCTAssertEqual(hosts.activeProfile, profile)
+
+        try hosts.pair(qr)
+        let hello = try GatewayWireDecoder.decode(Data(#"{"kind":"hello","authenticated":true}"#.utf8))
+        hosts.pairingStore?.gateway.onFrame?(hello)
+        let restored = MultiGatewayStore(defaults: defaults, credentials: credentials)
+        await restored.waitUntilReady()
+        defer { restored.activeStore.deactivateGateway() }
+        XCTAssertEqual(restored.activeProfile?.id, profile.id)
+        XCTAssertEqual(restored.activeProfile?.connectionEndpoints, scanned)
+        XCTAssertNil(restored.activeProfile?.selectedConnectionMethod)
+        XCTAssertEqual(restored.activeStore.endpoint, scanned[0])
+    }
+
+    @MainActor
+    func testSwitchingMethodsKeepsEachSuccessfulAddressAcrossRestart() async throws {
+        let suite = "gateway-route-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let lan = "ws://192.168.1.19:3081/ws/mobile"
+        let publicBackup = "wss://backup.example/ws/mobile"
+        let publicPrimary = "wss://gateway.example/ws/mobile"
+        var profile = GatewayProfile(gatewayName: "Test", endpoints: [lan, publicBackup, publicPrimary],
+                                     preferredEndpoint: publicPrimary, lastConnectedAt: .now)
+        profile.recordConnection(to: lan)
+        profile.recordConnection(to: "wss://unknown.example/ws/mobile")
+        defaults.set(try JSONEncoder().encode([profile]), forKey: "gateway.profiles.v1")
+        UserDefaultsAppPreferences(userDefaults: defaults, gatewayID: profile.id).automaticallyConnect = false
+
+        let hosts = MultiGatewayStore(defaults: defaults, credentials: MigrationTestCredentials())
+        await hosts.waitUntilReady()
+        defer { hosts.activeStore.deactivateGateway() }
+        XCTAssertEqual(hosts.activeStore.endpoint, lan)
+        hosts.selectConnectionMethod(.publicNetwork)
+        XCTAssertEqual(hosts.activeStore.endpoint, publicPrimary)
+        XCTAssertEqual(hosts.activeProfile?.endpoints(for: .publicNetwork), [publicPrimary, publicBackup])
+        XCTAssertEqual(hosts.activeProfile?.preferredEndpoint, lan, "未成功的尝试不会替换已验证的首选地址")
+
+        hosts.activeStore.disconnect()
+        let restored = MultiGatewayStore(defaults: defaults, credentials: MigrationTestCredentials())
+        await restored.waitUntilReady()
+        defer { restored.activeStore.deactivateGateway() }
+        XCTAssertEqual(restored.activeStore.endpoint, publicPrimary)
+        XCTAssertEqual(restored.activeProfile?.endpoints(for: .lan), [lan])
+    }
+
     func testSessionDeepLinkKeepsLegacyLocalGatewayIDs() throws {
         for localID in ["legacy", "a56a1098-8519-43a1-9dce-fb99863bf5bb"] {
             let url = try XCTUnwrap(URL(string: "dshmobile://session?gateway=\(localID)&id=session-1"))

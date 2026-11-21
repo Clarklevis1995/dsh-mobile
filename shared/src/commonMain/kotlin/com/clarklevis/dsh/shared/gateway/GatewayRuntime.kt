@@ -120,7 +120,8 @@ class GatewayRuntime(
     private val trustedEndpoints: List<String> = emptyList(),
     private val onIdentity: suspend (GatewayFrame, String) -> Unit = { _, _ -> },
     private val foregroundProbeTimeoutMilliseconds: Long = DEFAULT_FOREGROUND_PROBE_TIMEOUT_MILLISECONDS,
-    private val diagnosticsNow: () -> Double = createNetworkDiagnosticsClock()
+    private val diagnosticsNow: () -> Double = createNetworkDiagnosticsClock(),
+    private var selectedConnectionMethod: GatewayConnectionMethod? = null
 ) {
     private val diagnosticsStore = NetworkDiagnosticsStore()
     private var diagnosticsLease = 0L
@@ -267,10 +268,17 @@ class GatewayRuntime(
         collectSafely(networkMonitor.state, ERROR_NETWORK_FLOW, handler = ::handleNetworkLocked)
     }
 
-    suspend fun connect(endpoint: String) = serialized {
+    suspend fun connect(endpoint: String, connectionMethod: GatewayConnectionMethod? = null) = serialized {
         requireWebSocketEndpoint(endpoint)
         if (trustedEndpoints.isNotEmpty() && endpoint !in trustedEndpoints) {
             throw GatewayPairingPayloadException(UiMessage("gateway.endpointUntrusted"), "Address not confirmed by this host")
+        }
+        if (connectionMethod != null) {
+            selectedConnectionMethod = connectionMethod
+            if (this.endpoint == endpoint && mutableState.value.connection in setOf(
+                    GatewayConnectionState.CONNECTED, GatewayConnectionState.CONNECTING, GatewayConnectionState.AUTHENTICATING
+                )
+            ) return@serialized
         }
         cancelForegroundResumeLocked()
         lastConnectedEndpoint = null
@@ -818,6 +826,11 @@ class GatewayRuntime(
             recoveryDeadlineJob?.cancel()
             recoveryDeadlineJob = null
             lastConnectedEndpoint = endpoint
+            val connected = endpoint
+            if (connected != null && connected in trustedEndpoints) {
+                val stored = preferences.load()
+                if (stored.endpoint != connected) preferences.update(stored.copy(endpoint = connected))
+            }
             mutableState.value = mutableState.value.copy(
                 connection = GatewayConnectionState.CONNECTED,
                 serverPort = frame.port,
@@ -1386,8 +1399,11 @@ class GatewayRuntime(
             }
             serialized {
                 if (canReconnectLocked()) {
-                    if (!immediate && trustedEndpoints.size > 1) {
-                        endpoint = trustedEndpoints[(trustedEndpoints.indexOf(endpoint) + 1) % trustedEndpoints.size]
+                    val retryEndpoints = selectedConnectionMethod?.let { method ->
+                        trustedEndpoints.filter { GatewayIdentity.connectionMethod(it) == method }
+                    } ?: trustedEndpoints
+                    if (!immediate && retryEndpoints.size > 1) {
+                        endpoint = retryEndpoints[(retryEndpoints.indexOf(endpoint) + 1) % retryEndpoints.size]
                     }
                     openTransportLocked(preserveTurns = true)
                 }

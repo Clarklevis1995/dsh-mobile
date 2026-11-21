@@ -129,6 +129,7 @@
 		DA4200000000000000000001 /* NodeForwardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4200000000000000000002 /* NodeForwardingTests.swift */; };
 		DA4300000000000000000001 /* TunnelDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA4300000000000000000002 /* TunnelDiagnostics.swift */; };
 		DB0700000000000000000001 /* BotModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0700000000000000000002 /* BotModeView.swift */; };
+		DB0700000000000000000005 /* BotManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0700000000000000000006 /* BotManagementView.swift */; };
 		DB0700000000000000000003 /* BotModeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0700000000000000000004 /* BotModeUITests.swift */; };
 		DC1424D1E1924288B9D343DF /* ShareExtension/ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94588D6D6FA34422B97262F3 /* ShareExtension/ShareViewController.swift */; };
 		E20191A4C7B1C0A8FF57CAC1 /* Glass.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF581253EBCFEB43865AB51 /* Glass.swift */; };
@@ -311,6 +312,7 @@
 		DA4200000000000000000002 /* NodeForwardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeForwardingTests.swift; sourceTree = "<group>"; };
 		DA4300000000000000000002 /* TunnelDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelDiagnostics.swift; sourceTree = "<group>"; };
 		DB0700000000000000000002 /* BotModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotModeView.swift; sourceTree = "<group>"; };
+		DB0700000000000000000006 /* BotManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotManagementView.swift; sourceTree = "<group>"; };
 		DB0700000000000000000004 /* BotModeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotModeUITests.swift; sourceTree = "<group>"; };
 		DCB5E4921392A6503AD87B74 /* ConversationSidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationSidebar.swift; sourceTree = "<group>"; };
 		E5FF365A80AA28B4D4CF2347 /* MultiGatewayStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MultiGatewayStore.swift; sourceTree = "<group>"; };
@@ -573,6 +575,7 @@
 				65009160A0642089906B54DF /* TrajectoryView.swift */,
 				D610757C1FF81FD953A9D000 /* WorkspaceView.swift */,
 				DB0700000000000000000002 /* BotModeView.swift */,
+				DB0700000000000000000006 /* BotManagementView.swift */,
 				A0C1234567890ABCDE0000002 /* WorkspaceChangesView.swift */,
 				DCB5E4921392A6503AD87B74 /* ConversationSidebar.swift */,
 				65B6B2953247E15BDA40F0BB /* GatewaySwitcherView.swift */,
@@ -1029,6 +1032,7 @@
 				C5F737EBF5077A9BF35E9F64 /* TrajectoryView.swift in Sources */,
 				E7585B9F7F89A3084B6E0182 /* WorkspaceView.swift in Sources */,
 				DB0700000000000000000001 /* BotModeView.swift in Sources */,
+				DB0700000000000000000005 /* BotManagementView.swift in Sources */,
 				A0C1234567890ABCDE0000001 /* WorkspaceChangesView.swift in Sources */,
 				65B1D361C78618DBA4550C4F /* ConversationSidebar.swift in Sources */,
 				375D401B1B6F03015EC9073D /* GatewayProfile.swift in Sources */,

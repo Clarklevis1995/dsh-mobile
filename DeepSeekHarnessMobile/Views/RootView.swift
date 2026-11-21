@@ -1113,7 +1113,7 @@ private struct ScheduledTaskEditSheet: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .background(Color(uiColor: .systemBackground))
-        .background(ScheduleKeyboardDismissProbe())
+        .background(KeyboardDismissProbe())
         .interactiveDismissDisabled(pendingRequestID != nil)
         .onChangeCompat(of: store.scheduledTaskCompletedRequestID) { _, completedID in
             if completedID != nil && completedID == pendingRequestID { dismiss() }
@@ -1272,7 +1272,7 @@ private struct ScheduleWorkspacePicker: View {
             .navigationTitle("关联工作区").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
-        .background(ScheduleKeyboardDismissProbe())
+        .background(KeyboardDismissProbe())
     }
 }
 
@@ -1543,7 +1543,7 @@ private struct ScheduleTimeZonePicker: View {
             .navigationTitle("时区").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
-        .background(ScheduleKeyboardDismissProbe())
+        .background(KeyboardDismissProbe())
     }
 }
 
@@ -3014,7 +3014,7 @@ private struct ScheduleCreateForm: View {
 }
 
 /// 只处理当前编辑页内的非输入区轻触，不拦截输入、选区、滚动或按钮事件。
-struct ScheduleKeyboardDismissProbe: UIViewRepresentable {
+struct KeyboardDismissProbe: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> ProbeView {
         let view = ProbeView()

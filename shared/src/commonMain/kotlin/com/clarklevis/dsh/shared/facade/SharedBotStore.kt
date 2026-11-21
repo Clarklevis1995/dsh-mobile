@@ -166,8 +166,25 @@ data class SharedBotSnapshot(
     val lastAttachmentAck: String? = null,
     val roleError: String? = null,
     val computerEnabled: Boolean = false,
-    val writable: Boolean = true
-)
+    val writable: Boolean = true,
+    val creation: BotCreationState = BotCreationState(),
+    val creationModels: List<BotRoleOption> = emptyList(),
+    val defaultCreationModel: String? = null,
+    val rosterIds: List<String> = emptyList(),
+    val mainBotIds: List<String> = emptyList(),
+    val botDeletionSupported: Boolean = false
+) {
+    val roster: List<BotChat>
+        get() {
+            val ranks = rosterIds.withIndex().associate { it.value to it.index }
+            return chats.filterNot(BotChat::room).sortedBy { if (it.id == mainBotId) -1 else ranks[it.id] ?: Int.MAX_VALUE }
+        }
+
+    fun isMainBot(id: String): Boolean = id == mainBotId || id in mainBotIds
+
+    val canCreateBot: Boolean
+        get() = connected && writable && creation.supported
+}
 
 data class SharedBotTransition(val snapshot: SharedBotSnapshot, val requests: List<GatewayRequest> = emptyList())
 
@@ -214,7 +231,7 @@ class SharedBotStore {
             feedActive = false, selectedChatId = null, messages = emptyList(), interactions = emptyList(), error = null,
             roleSaving = false, roleDetails = null, roleError = null, effortModel = null, efforts = emptyList(),
             roleSettingsSupported = false, attachmentsSupported = false, attachmentSending = false, lastAttachmentAck = null,
-            referencesSupported = false, referenceSearch = null)
+            referencesSupported = false, referenceSearch = null, botDeletionSupported = false, creation = BotCreationState())
         val uncertain = optimistic.mapValues { (_, messages) -> messages.map { it.copy(delivery = "unknown") } }
         var json = wireJson.encodeToString(BotCache(snapshot = cached, histories = pages, optimistic = uncertain))
         while (json.length > 7_500_000 && pages.isNotEmpty()) {
@@ -247,6 +264,7 @@ class SharedBotStore {
         val reconnect = connected && (!state.connected || !state.supported)
         state = state.copy(supported = supported, connected = connected)
         if (!connected) {
+            val deletionUnconfirmed = pending.values.any { it.endpoint == "delete-bot" }
             markUncertain()
             pending.clear()
             referenceRequest = null
@@ -255,7 +273,11 @@ class SharedBotStore {
             subscription = null
             streams.clear()
             state = state.copy(loading = false, historyLoading = false, feedActive = false, roleSaving = false, attachmentsSupported = false,
-                roleSettingsSupported = false, referencesSupported = false, referenceSearch = null)
+                roleSettingsSupported = false, referencesSupported = false, referenceSearch = null, botDeletionSupported = false,
+                roleError = if (deletionUnconfirmed) "bot-delete-unconfirmed" else state.roleError,
+                creation = state.creation.copy(supported = false, saving = false, loadingAppearance = false,
+                    loadingAgents = false, loadingAgentModels = false, loadingPhotos = false,
+                    error = if (state.creation.saving) "uncertain" else state.creation.error))
         } else if (enabled && supported && reconnect) refreshAll()
         return result()
     }
@@ -348,6 +370,82 @@ class SharedBotStore {
         requestReferences()
     }
 
+    fun openCreation(): SharedBotTransition {
+        if (!canCreate()) return result()
+        creation { it.copy(createdId = null, error = null) }
+        if (state.creation.appearance == null && call("creation-appearance") != null) {
+            creation { it.copy(loadingAppearance = true, appearanceFailed = false) }
+        }
+        return result()
+    }
+
+    fun loadCreationAgents(): SharedBotTransition {
+        if (canCreate() && call("local-agents") != null) creation { it.copy(loadingAgents = true, agentsFailed = false) }
+        return result()
+    }
+
+    fun loadCreationAgentModels(route: String): SharedBotTransition {
+        if (canCreate() && state.creation.agents.any { it.id == route && it.available }) {
+            val pending = call("local-agent-models", buildJsonObject { put("route", route) }, route)
+            if (pending != null || state.creation.agentRoute != route) {
+                creation { it.copy(agentRoute = route, agentModels = emptyList(), loadingAgentModels = true) }
+            }
+        }
+        return result()
+    }
+
+    fun loadCreationPhotos(reset: Boolean): SharedBotTransition {
+        if (!canCreate() || state.creation.loadingPhotos || (!reset && !state.creation.hasMorePhotos)) return result()
+        val offset = if (reset) 0 else state.creation.photoOffset
+        if (call("avatar-library", buildJsonObject { put("offset", offset) }, offset.toString()) != null) {
+            creation { it.copy(loadingPhotos = true, photosFailed = false) }
+        }
+        return result()
+    }
+
+    fun importCreationPhoto(image: String, name: String): SharedBotTransition {
+        if (!canCreate() || state.creation.loadingPhotos || !BotCreationRules.isPhoto(image)) return result()
+        if (call("avatar-import", buildJsonObject {
+            put("items", JsonArray(listOf(buildJsonObject {
+                put("image", image)
+                put("name", name.take(120))
+            })))
+        }) != null) creation { it.copy(loadingPhotos = true, photosFailed = false) }
+        return result()
+    }
+
+    fun createBot(name: String, shape: String, color: String, image: String?,
+        model: String?, effort: String?, agentAppearance: Boolean): SharedBotTransition {
+        if (!canCreate() || state.creation.saving || state.creation.error == "uncertain" ||
+            BotCreationRules.nameProblem(name, state.chats) != null ||
+            state.creation.appearance?.image(shape, color) == null ||
+            (image != null && !BotCreationRules.isPhoto(image))) return result()
+        val route = model?.takeIf(BotCreationRules::isLocalModel)?.substringBefore('/')
+        val validModel = if (route != null) state.creation.agents.any { it.id == route && it.available } &&
+            (model == "$route/default" || state.creation.agentRoute == route && state.creation.agentModels.any { it.id == model })
+        else model.isNullOrBlank() || state.creationModels.any { it.id == model }
+        if (!validModel) return result()
+        if (call("create-bot", buildJsonObject {
+            put("name", name.trim())
+            put("color", color)
+            put("avatar", buildJsonObject {
+                put("shape", shape)
+                image?.let { put("image", it) }
+            })
+            model?.takeIf(String::isNotBlank)?.let { put("model", it) }
+            if (agentAppearance && route != null && image == null) put("agentAppearance", true)
+            effort?.takeIf { route == null && state.effortModel == model && state.efforts.any { choice -> choice.id == it } }
+                ?.let { put("effort", it) }
+        }) != null) creation { it.copy(saving = true, createdId = null, error = null) }
+        return result()
+    }
+
+    private fun canCreate(): Boolean = state.canCreateBot
+
+    private fun creation(update: (BotCreationState) -> BotCreationState) {
+        state = state.copy(creation = update(state.creation))
+    }
+
     fun openRole(id: String): SharedBotTransition {
         if (state.chats.none { it.id == id && !it.room }) return result()
         if (state.roleDetails?.botId != id) state = state.copy(roleDetails = BotRoleDetails(id), roleError = null)
@@ -420,6 +518,11 @@ class SharedBotStore {
     fun duplicateRole(id: String): SharedBotTransition =
         roleWrite("duplicate-bot", id, buildJsonObject { put("id", id) })
 
+    fun deleteRole(id: String): SharedBotTransition {
+        if (!state.botDeletionSupported || state.isMainBot(id)) return result()
+        return roleWrite("delete-bot", id, buildJsonObject { put("id", id) })
+    }
+
     fun replacePrimaryRole(current: String, replacement: String): SharedBotTransition {
         if (state.mainBotId != current || current == replacement ||
             state.chats.none { it.id == replacement && !it.room && it.profile?.privateRole != true }) return result()
@@ -465,7 +568,9 @@ class SharedBotStore {
                 val capabilities = (frame["hello"] as? JsonObject)?.array("capabilities").orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
                 state = state.copy(feedActive = true, error = null, roleSettingsSupported = "role-settings" in capabilities,
                     attachmentsSupported = "bot-attachments" in capabilities,
-                    referencesSupported = "reference-candidates" in capabilities)
+                    referencesSupported = "reference-candidates" in capabilities,
+                    botDeletionSupported = "bot-deletion" in capabilities,
+                    creation = state.creation.copy(supported = "bot-creation" in capabilities))
             }
             "bot-stream-reset" -> if (frame.text("subscriptionId") == subscription) {
                 subscription = null
@@ -547,7 +652,19 @@ class SharedBotStore {
                     val rooms = (work?.get("rooms") as? JsonObject).orEmpty()
                     val peers = obj.array("bots").mapNotNull { peer(it, false, bots) } +
                         obj.array("rooms").mapNotNull { peer(it, true, rooms) }
-                    state = state.copy(mainBotId = obj.text("mainBotId"), chats = peers.sortedByDescending { it.lastAt },
+                    val availableModels = obj.array("models").mapNotNull { item ->
+                        val row = item as? JsonObject ?: return@mapNotNull null
+                        val ref = row.text("ref") ?: return@mapNotNull null
+                        if (BotCreationRules.isLocalModel(ref) || row["needsKey"] == JsonPrimitive(true)) return@mapNotNull null
+                        BotRoleOption(ref, row.text("name") ?: ref)
+                    }.distinctBy(BotRoleOption::id)
+                    val teamDefault = (obj["prefs"] as? JsonObject)?.text("defaultBotModel")
+                    val creationDefault = sequenceOf(teamDefault, obj.text("defaultModel"), availableModels.firstOrNull()?.id)
+                        .firstOrNull { candidate -> availableModels.any { it.id == candidate } }
+                    state = state.copy(creationModels = availableModels, defaultCreationModel = creationDefault,
+                        mainBotId = obj.text("mainBotId"), chats = peers.sortedByDescending { it.lastAt },
+                        mainBotIds = obj.array("mainBotIds").mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+                        rosterIds = peers.filterNot(BotChat::room).map(BotChat::id),
                         models = obj.array("models").mapNotNull { item ->
                             val model = item as? JsonObject ?: return@mapNotNull null
                             val ref = model.text("ref") ?: return@mapNotNull null
@@ -632,6 +749,56 @@ class SharedBotStore {
                     details.copy(inputTokens = (month?.get("input") as? JsonPrimitive)?.longOrNull,
                         outputTokens = (month?.get("output") as? JsonPrimitive)?.longOrNull)
                 })
+            }
+            "creation-appearance" -> {
+                val appearance = runCatching { wireJson.decodeFromJsonElement<BotCreationAppearance>(obj) }.getOrNull()
+                creation { it.copy(appearance = appearance, loadingAppearance = false, appearanceFailed = appearance == null) }
+            }
+            "local-agents" -> {
+                val agents = obj.array("items").mapNotNull { row ->
+                    runCatching { wireJson.decodeFromJsonElement<BotCreationAgent>(row) }.getOrNull()
+                }.distinctBy(BotCreationAgent::id)
+                creation { it.copy(agents = agents, loadingAgents = false) }
+            }
+            "local-agent-models" -> if (state.creation.agentRoute == request.chatId) {
+                val models = obj.array("items").mapNotNull { row ->
+                    runCatching { wireJson.decodeFromJsonElement<BotRoleOption>(row) }.getOrNull()
+                }.distinctBy(BotRoleOption::id)
+                creation { it.copy(agentModels = models, loadingAgentModels = false) }
+            }
+            "avatar-library" -> {
+                val photos = obj.array("items").mapNotNull { row ->
+                    runCatching { wireJson.decodeFromJsonElement<BotAvatarPhoto>(row) }.getOrNull()
+                        ?.takeIf { BotCreationRules.isPhoto(it.image) }
+                }
+                val offset = request.chatId?.toIntOrNull() ?: 0
+                val next = (obj["next"] as? JsonPrimitive)?.intOrNull ?: offset
+                val total = (obj["total"] as? JsonPrimitive)?.intOrNull ?: next
+                creation { it.copy(photos = ((if (offset == 0) emptyList() else it.photos) + photos).distinctBy(BotAvatarPhoto::id),
+                    photoOffset = next, loadingPhotos = false, hasMorePhotos = next > offset && next < total) }
+            }
+            "avatar-import" -> {
+                val failed = obj.array("failed").isNotEmpty()
+                creation { it.copy(loadingPhotos = false, photosFailed = failed) }
+                if (!failed && call("avatar-library", buildJsonObject { put("offset", 0) }, "0") != null) {
+                    creation { it.copy(loadingPhotos = true) }
+                }
+            }
+            "create-bot" -> {
+                val created = obj.text("id")
+                creation { it.copy(saving = false, createdId = created, error = if (created == null) "uncertain" else null) }
+                revision = -1
+                if (pending.values.any { it.endpoint == "state" }) stateDirty = true else readState()
+            }
+            "delete-bot" -> {
+                val botId = request.chatId ?: return
+                if (obj.text("id") == botId) {
+                    removeDeletedBot(botId)
+                } else {
+                    state = state.copy(roleSaving = false, roleError = "bot-delete-unconfirmed")
+                    revision = -1
+                    readState()
+                }
             }
             "update-bot", "duplicate-bot", "set-main" -> {
                 state = state.copy(roleSaving = false, roleError = null)
@@ -845,15 +1012,79 @@ class SharedBotStore {
             PresentedFile(path = path, description = file.text("description")?.take(4096))
         }.distinctBy(PresentedFile::path)
 
+    private fun removeDeletedBot(id: String) {
+        histories.remove(id)
+        cursors.remove(id)
+        dirty.remove(id)
+        optimistic.remove(id)
+        sessionChats.values.removeAll { it == id }
+        wantedAvatars.remove(id)
+        attemptedAvatars.remove(id)
+        val wasSelected = state.selectedChatId == id
+        if (wasSelected) {
+            streams.clear()
+            referenceRequest = null
+        }
+        state = state.copy(
+            chats = state.chats.filterNot { it.id == id }.map { chat ->
+                if (id in chat.memberIds) chat.copy(memberIds = chat.memberIds - id) else chat
+            },
+            rosterIds = state.rosterIds - id,
+            roleDetails = state.roleDetails?.takeUnless { it.botId == id },
+            roleSaving = false,
+            roleError = null,
+            selectedChatId = state.selectedChatId?.takeUnless { it == id },
+            historyLoading = state.historyLoading && !wasSelected,
+            referenceSearch = state.referenceSearch?.takeUnless { it.chatId == id },
+            interactions = state.interactions.filterNot { it.chatId == id },
+            schedules = state.schedules.filterNot { it.botId == id }
+        )
+        // 删除前已发出的读取响应可能仍含该 Bot；让它们过期，再读取完整的团队状态。
+        pending.entries.removeAll { (_, request) ->
+            request.chatId == id || request.endpoint == "state" || request.endpoint == "schedules"
+        }
+        stateDirty = false
+        revision = -1
+        readState()
+        call("schedules")
+    }
+
     private fun failed(id: String, code: String) {
         val request = pending.remove(id) ?: return
         if (id == subscription) subscription = null
         if (request.endpoint == "avatar") { loadAvatars(); return }
         if (request.endpoint == "reference-candidates") { finishReferences(id, null); return }
+        if (request.endpoint == "delete-bot") {
+            val error = when (code) {
+                "bot/main-protected" -> code
+                "bot-timeout", "request-timeout", "timeout", "disconnected", "connection-lost" -> "bot-delete-unconfirmed"
+                else -> "bot-delete-failed"
+            }
+            state = state.copy(roleSaving = false, roleError = error)
+            revision = -1
+            readState()
+            return
+        }
         if (request.endpoint in setOf("update-bot", "duplicate-bot", "set-main", "memory-add", "memory-edit",
                 "memory-forget", "schedule-create", "schedule-delete")) {
             state = state.copy(roleSaving = false, roleError = code)
             return
+        }
+        when (request.endpoint) {
+            "creation-appearance" -> { creation { it.copy(loadingAppearance = false, appearanceFailed = true) }; return }
+            "local-agents" -> { creation { it.copy(loadingAgents = false, agentsFailed = true) }; return }
+            "local-agent-models" -> {
+                if (request.chatId == state.creation.agentRoute) creation { it.copy(loadingAgentModels = false) }
+                return
+            }
+            "avatar-library", "avatar-import" -> { creation { it.copy(loadingPhotos = false, photosFailed = true) }; return }
+            "create-bot" -> {
+                val error = if (code in setOf("bot-timeout", "request-timeout", "timeout", "disconnected", "connection-lost")) "uncertain" else code
+                creation { it.copy(saving = false, error = error) }
+                revision = -1
+                if (pending.values.any { it.endpoint == "state" }) stateDirty = true else readState()
+                return
+            }
         }
         if (request.endpoint == "efforts") {
             if (state.effortModel == request.chatId) state = state.copy(effortModel = null)

@@ -162,6 +162,16 @@ final class BotModeModel: ObservableObject {
         if snapshot.referenceSearch != nil { apply(core.clearReferenceSearch()) }
     }
 
+    func openCreation() { apply(core.openCreation()) }
+    func loadCreationAgents() { apply(core.loadCreationAgents()) }
+    func loadCreationAgentModels(_ route: String) { apply(core.loadCreationAgentModels(route: route)) }
+    func loadCreationPhotos(reset: Bool) { apply(core.loadCreationPhotos(reset: reset)) }
+    func importCreationPhoto(_ image: String, name: String) { apply(core.importCreationPhoto(image: image, name: name)) }
+    func createBot(name: String, look: BotCreationLook, image: String?, model: String?, effort: String?, agentAppearance: Bool) {
+        apply(core.createBot(name: name, shape: look.shape, color: look.color, image: image, model: model,
+            effort: effort, agentAppearance: agentAppearance))
+    }
+
     func loadRoleEfforts(_ ref: String) { apply(core.loadRoleEfforts(ref: ref)) }
     func saveRoleMemory(_ id: String, entryID: String?, text: String) {
         apply(core.saveRoleMemory(id: id, entryId: entryID, value: text))
@@ -180,6 +190,7 @@ final class BotModeModel: ObservableObject {
         apply(core.deleteRoleSchedule(id: id, taskId: taskID))
     }
     func duplicateRole(_ id: String) { apply(core.duplicateRole(id: id)) }
+    func deleteRole(_ id: String) { apply(core.deleteRole(id: id)) }
     func replacePrimaryRole(_ id: String, replacement: String) {
         apply(core.replacePrimaryRole(current: id, replacement: replacement))
     }
@@ -302,7 +313,7 @@ struct BotModeView: View {
     var scrollEnabled = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showsSchedules = false
-    @State private var showsHistory = false
+    @State private var showsRoster = false
     @State private var openedChat: String?
     @State private var selectedRole: BotRoleSelection?
     @State private var chatSearch = ""
@@ -314,8 +325,8 @@ struct BotModeView: View {
         colorScheme == .dark ? Color("BotPurple") : Color(red: 88.0 / 255, green: 65.0 / 255, blue: 144.0 / 255)
     }
     private var chief: BotChat? { model.snapshot.chats.first { $0.id == model.snapshot.mainBotId } }
-    private var completed: [BotActivity] { model.snapshot.recent.filter { $0.kind == "done" } }
     private var running: [BotChat] { model.snapshot.chats.filter(\.running) }
+    private var openedChatExists: Bool { openedChat.map { id in model.snapshot.chats.contains { $0.id == id } } ?? true }
 
     var body: some View {
         GeometryReader { geometry in
@@ -346,25 +357,12 @@ struct BotModeView: View {
         .navigationDestination(isPresented: Binding(get: { openedChat != nil }, set: { if !$0 { openedChat = nil } })) {
             if let id = openedChat { BotPrivateChatView(model: model, chatID: id, filePreviewStore: filePreviewStore) }
         }
+        .onChangeCompat(of: openedChatExists) { _, exists in
+            if !exists { openedChat = nil; model.select(nil) }
+        }
         .sheet(isPresented: $showsSchedules) { BotScheduleSheet(model: model) }
         .sheet(item: $selectedRole) { role in BotRoleSheet(model: model, id: role.id) }
-        .sheet(isPresented: $showsHistory) {
-            NavigationStack {
-                List {
-                    if completed.isEmpty { Text("还没有完成记录").foregroundStyle(.secondary) }
-                    ForEach(completed, id: \.id) { item in
-                        Button {
-                            showsHistory = false
-                            if let id = item.chatId { open(id) }
-                        } label: {
-                            Label(item.text.isEmpty ? String(format: String(localized: "%@ 已完成工作"), item.name) : item.text, systemImage: "checkmark.circle")
-                                .foregroundStyle(Color("BotInk"))
-                        }.disabled(item.chatId == nil)
-                    }
-                }.navigationTitle("已完成").navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { showsHistory = false } } }
-            }.tint(Color("BotPurple"))
-        }
+        .navigationDestination(isPresented: $showsRoster) { BotRosterView(model: model) }
         .task { model.activate() }
     }
 
@@ -425,26 +423,10 @@ struct BotModeView: View {
                 }.padding(16).botHomeGlass()
             }
             if model.snapshot.loading && model.snapshot.chats.isEmpty { ProgressView("正在同步助理").frame(maxWidth: .infinity) }
-            VStack(spacing: 10) {
-                sectionTitle(LocalizedStringKey("正在进行"), trailing: String(format: String(localized: "%lld 件事"), running.count))
-                    .frame(minHeight: wide ? 22 : 0)
-                if running.isEmpty {
-                    Text("暂时没有进行中的事情").appFont(.system(size: 15)).foregroundStyle(cardSecondary)
-                        .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading).padding(.horizontal, 16).padding(.vertical, 10).botHomeGlass()
-                } else {
-                    ForEach(running.sorted { ($0.id == model.snapshot.mainBotId ? 1 : 0) < ($1.id == model.snapshot.mainBotId ? 1 : 0) }.prefix(1), id: \.id) { chat in
-                        Button { open(chat.id) } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(chat.preview.isEmpty ? String(format: String(localized: "%@ 正在处理"), chat.name) : chat.preview)
-                                    .appFont(.system(size: 17, weight: .semibold)).lineLimit(2)
-                                Text(String(format: String(localized: "%@ 正在处理"), chat.name)).appFont(.system(size: 15)).foregroundStyle(cardSecondary)
-                            }.frame(maxWidth: .infinity, minHeight: 50, alignment: .leading).padding(.horizontal, 16).padding(.vertical, 10).botHomeGlass()
-                        }.buttonStyle(.plain)
-                    }
-                }
-            }
             HStack(spacing: 12) {
-                shortcut(LocalizedStringKey("已完成"), count: completed.count, subtitle: String(localized: "查看历史")) { showsHistory = true }
+                shortcut(LocalizedStringKey("我的 Bot"), count: model.snapshot.chats.filter { !$0.room }.count,
+                    subtitle: String(localized: "查看与创建")) { showsRoster = true }
+                    .accessibilityIdentifier("bot.roster")
                 shortcut(LocalizedStringKey("定时任务"), count: model.snapshot.schedules.count,
                     subtitle: model.snapshot.schedules.first.map { String(format: String(localized: "下次 %@"), $0.next) } ?? String(localized: "查看安排")) { showsSchedules = true }
                     .accessibilityIdentifier("bot.schedules")
@@ -670,11 +652,11 @@ private struct BotSheetPresentation: ViewModifier {
     }
 }
 
-private struct BotRoleSelection: Identifiable {
+struct BotRoleSelection: Identifiable {
     let id: String
 }
 
-private struct BotAvatar: View {
+struct BotAvatar: View {
     @Environment(\.colorScheme) private var colorScheme
     let chat: BotChat?
     var roster: [BotChat] = []
@@ -713,7 +695,7 @@ private struct BotAvatar: View {
     }
 }
 
-private struct BotFace: View {
+struct BotFace: View {
     let chat: BotChat?
     let size: CGFloat
     var main = false
@@ -1620,7 +1602,12 @@ struct BotModeUITestHarness: View {
     }
     var body: some View {
         NavigationStack { BotModeView(model: model, onStandardMode: {}) }
-            .overlay(alignment: .bottom) { Text(failure ?? model.testConnectionState).font(.caption).accessibilityIdentifier("bot.test-connection") }
+            .overlay(alignment: .bottom) {
+                if let status = failure ?? (model.snapshot.connected ? nil : model.testConnectionState) {
+                    Text(status).font(.caption).accessibilityIdentifier("bot.test-connection").allowsHitTesting(false)
+                }
+            }
+            .preferredColorScheme(ProcessInfo.processInfo.environment["DSH_BOT_UI_APPEARANCE"] == "dark" ? .dark : nil)
             .task {
                 guard ProcessInfo.processInfo.environment["DSH_BOT_UI_TEST_URL"] == "http://127.0.0.1:3098",
                       let url = URL(string: "http://127.0.0.1:3098/mgw/pair") else { return }
@@ -1653,12 +1640,15 @@ private func botErrorText(_ code: String) -> String {
     case "bot-unavailable", "bot/not-found": return String(localized: "主机上的 DS-Bot 尚未启用，或版本暂不支持")
     case "bot-version-unsupported": return String(localized: "请更新主机上的 DS-Bot")
     case "not-connected": return String(localized: "主机连接已断开，重连后将同步聊天")
+    case "bot/main-protected": return String(localized: "主 Bot 不能删除。")
+    case "bot-delete-failed": return String(localized: "暂时无法删除此 Bot，请稍后重试。")
+    case "bot-delete-unconfirmed": return String(localized: "尚未确认删除结果，请重新同步后核对。")
     case "bot-timeout": return String(localized: "同步超时，请稍后重试；发送中的消息请先核对")
     default: return String(localized: "聊天同步暂时中断，可以重新同步")
     }
 }
 
-private struct BotRoleSheet: View {
+struct BotRoleSheet: View {
     @ObservedObject var model: BotModeModel
     let id: String
     @Environment(\.dismiss) private var dismiss
@@ -1734,6 +1724,7 @@ private struct BotRoleSheet: View {
             }
         }
         .task(id: id) { model.openRole(id) }
+        .onChangeCompat(of: chat != nil) { _, exists in if !exists { dismiss() } }
         .onChangeCompat(of: compactNight) { _, compact in detent = compact && !settings ? cardDetent : .large }
         .onChangeCompat(of: settings) { _, showingSettings in if !showingSettings && compactNight { detent = cardDetent } }
         .onAppear { if compactNight { detent = cardDetent } }
@@ -1783,6 +1774,7 @@ private struct BotRoleSettings: View {
     @State private var privateRole: Bool
     @State private var confirmFullAccess = false
     @State private var confirmCopy = false
+    @State private var confirmDelete = false
     @State private var replacement: BotRoleSelection?
 
     init(model: BotModeModel, chat: BotChat, onClose: @escaping () -> Void) {
@@ -1804,14 +1796,6 @@ private struct BotRoleSettings: View {
     private var editingDisabled: Bool { !canEdit || model.snapshot.roleSaving }
     private var effortRef: String { modelID.isEmpty ? (live.profile?.appliedModel ?? model.snapshot.defaultModel ?? "") : modelID }
     private var isMain: Bool { chat.id == model.snapshot.mainBotId }
-    private var permissionHelp: String {
-        switch permission {
-        case "read-only": String(localized: "仅允许读取文件。")
-        case "workspace-write": String(localized: "允许在工作区内修改文件。")
-        case "danger-full-access": String(localized: "允许修改工作区以外的文件，范围仍受主机系统权限限制。")
-        default: String(localized: "控制 Bot 能否修改文件和可修改的范围。默认权限由主机决定。")
-        }
-    }
     private var privacyHelp: String {
         if !privateRole {
             if isMain { return String(localized: "主 Bot 不能开启隐私。") }
@@ -1848,125 +1832,137 @@ private struct BotRoleSettings: View {
                     }
                 }.listRowBackground(Color.clear)
             }
-            Section("资料") {
+            Section {
                 LabeledContent(String(localized: "名字")) {
                     TextField("名字", text: $name).multilineTextAlignment(.trailing)
                 }
-                LabeledContent {
+                LabeledContent(String(localized: "标签")) {
                     TextField("标签", text: $tag).multilineTextAlignment(.trailing)
-                } label: {
-                    BotRoleSettingLabel(title: String(localized: "标签"),
-                        help: String(localized: "选填，会显示在 Bot 名字下方。"))
                 }
-            }.listRowBackground(Color("BotCard")).disabled(editingDisabled)
-            Section("运行方式") {
-                Text("决定由 DS Bot 模型还是电脑上的本地代理处理消息。可在 DS Bot 网页端查看或更换。")
-                    .appFont(.footnote).foregroundStyle(.secondary)
-            }.listRowBackground(Color("BotCard"))
-            Section("模型") {
-                Picker(selection: $modelID) {
+            } header: {
+                Text("资料")
+            } footer: {
+                Text("标签为选填，会显示在 Bot 名字下方。").appFont(SettingsTypography.description).foregroundStyle(.secondary)
+            }
+            .listRowBackground(Color("BotCard")).disabled(editingDisabled)
+            Section {
+                Picker("模型", selection: $modelID) {
                     Text("默认模型").tag("")
                     if !modelID.isEmpty && !model.snapshot.models.contains(where: { $0.id == modelID }) {
                         Text(modelID).tag(modelID)
                     }
                     ForEach(model.snapshot.models, id: \.id) { option in Text(option.title).tag(option.id) }
-                } label: {
-                    BotRoleSettingLabel(title: String(localized: "模型"),
-                        help: String(localized: "选择此 Bot 回复消息使用的模型。更改从下一条消息开始生效。"))
                 }
                 if !model.snapshot.efforts.isEmpty || !effort.isEmpty {
-                    Picker(selection: $effort) {
+                    Picker("推理强度", selection: $effort) {
                         Text("默认").tag("")
                         if !effort.isEmpty && !model.snapshot.efforts.contains(where: { $0.id == effort }) { Text(effort).tag(effort) }
                         ForEach(model.snapshot.efforts, id: \.id) { value in Text(value.title).tag(value.id) }
-                    } label: {
-                        BotRoleSettingLabel(title: String(localized: "推理强度"),
-                            help: String(localized: "调整模型投入的推理量。可选档位取决于模型。"))
                     }
                 }
-            }.listRowBackground(Color("BotCard")).disabled(editingDisabled)
-            Section("工作区与权限") {
-                LabeledContent {
+            } header: {
+                Text("模型")
+            } footer: {
+                Text("模型更改从下一条消息开始生效。").appFont(SettingsTypography.description).foregroundStyle(.secondary)
+            }
+            .listRowBackground(Color("BotCard")).disabled(editingDisabled)
+            Section {
+                LabeledContent(String(localized: "工作文件夹")) {
                     TextField("总工作区", text: $workDir)
                         .multilineTextAlignment(.trailing).textInputAutocapitalization(.never).autocorrectionDisabled()
-                } label: {
-                    BotRoleSettingLabel(title: String(localized: "工作文件夹"),
-                        help: String(localized: "设置此 Bot 的默认工作目录。留空时使用团队的总工作区。"))
                 }
-                Picker(selection: $permission) {
+                Picker("权限", selection: $permission) {
                     Text("默认权限").tag("")
                     if !permission.isEmpty && !model.snapshot.permissions.contains(where: { $0.id == permission }) {
                         Text(permission).tag(permission)
                     }
                     ForEach(model.snapshot.permissions, id: \.id) { option in Text(option.title).tag(option.id) }
-                } label: {
-                    BotRoleSettingLabel(title: String(localized: "权限"), help: permissionHelp)
                 }
-                Toggle(isOn: $privateRole) {
-                    BotRoleSettingLabel(title: String(localized: "隐私"), help: privacyHelp)
-                }.disabled(isMain)
-            }.listRowBackground(Color("BotCard")).disabled(editingDisabled)
-            Section("说明") {
-                VStack(alignment: .leading, spacing: 8) {
-                    BotRoleSettingLabel(title: String(localized: "这个 Bot 做什么"),
-                        help: String(localized: "描述 Bot 在团队里的分工。这段说明会写入 Bot 的系统提示词。"))
-                    TextEditor(text: $instructions).frame(minHeight: 88).accessibilityLabel("说明")
-                        .overlay(alignment: .topLeading) {
-                            if instructions.isEmpty {
-                                Text("这个 Bot 负责什么…")
-                                    .appFont(.body)
-                                    .foregroundStyle(.tertiary)
-                                    .padding(.leading, 5).padding(.top, 8)
-                                    .allowsHitTesting(false).accessibilityHidden(true)
-                            }
-                        }
-                }
-            }.listRowBackground(Color("BotCard")).disabled(editingDisabled)
-            Section("操控") {
-                LabeledContent {
-                    Text(model.snapshot.computerEnabled ? String(localized: "已开启") : String(localized: "已关闭"))
-                } label: {
-                    BotRoleSettingLabel(title: String(localized: "电脑操控"),
-                        help: String(localized: "显示主机的电脑操控开关状态。每个 Bot 的授权可在 DS Bot 网页端管理。"))
-                }
+                Toggle("隐私", isOn: $privateRole).disabled(isMain)
+            } header: {
+                Text("工作区与权限")
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    if permission == "danger-full-access" {
+                        Text("允许修改工作区以外的文件，范围仍受主机系统权限限制。")
+                    }
+                    Text(privacyHelp)
+                }.appFont(SettingsTypography.description).foregroundStyle(.secondary)
             }
+            .listRowBackground(Color("BotCard")).disabled(editingDisabled)
+            Section {
+                TextEditor(text: $instructions).frame(minHeight: 88).accessibilityLabel("说明")
+                    .overlay(alignment: .topLeading) {
+                        if instructions.isEmpty {
+                            Text("这个 Bot 负责什么…")
+                                .appFont(.body)
+                                .foregroundStyle(.tertiary)
+                                .padding(.leading, 5).padding(.top, 8)
+                                .allowsHitTesting(false).accessibilityHidden(true)
+                        }
+                    }
+            } header: {
+                Text("说明")
+            } footer: {
+                Text("这段说明会写入 Bot 的系统提示词。").appFont(SettingsTypography.description).foregroundStyle(.secondary)
+            }
+            .listRowBackground(Color("BotCard")).disabled(editingDisabled)
+            Section {
+                LabeledContent(String(localized: "电脑操控"), value: model.snapshot.computerEnabled
+                    ? String(localized: "已开启") : String(localized: "已关闭"))
+            } header: {
+                Text("操控")
+            } footer: {
+                Text("各 Bot 的电脑操控授权可在 DS Bot 网页端管理。").appFont(SettingsTypography.description).foregroundStyle(.secondary)
+            }
+            .listRowBackground(Color("BotCard"))
             Section {
                 if model.snapshot.memoryAvailable {
-                    NavigationLink { BotRoleMemoryView(model: model, id: chat.id) } label: {
-                        BotRoleSettingLabel(title: String(localized: "记忆"),
-                            help: String(localized: "管理 Bot 保存的信息，这些信息可用于后续对话。"))
-                    }
+                    NavigationLink(String(localized: "记忆")) { BotRoleMemoryView(model: model, id: chat.id) }
                 }
-                NavigationLink { BotRoleScheduleView(model: model, id: chat.id) } label: {
-                    BotRoleSettingLabel(title: String(localized: "定时任务"),
-                        help: String(localized: "查看或管理此 Bot 按时间自动执行的任务。"))
-                }
+                NavigationLink(String(localized: "定时任务")) { BotRoleScheduleView(model: model, id: chat.id) }
             }.listRowBackground(Color("BotCard")).disabled(editingDisabled)
             if isMain {
-                Section("主 Bot") {
-                    Menu {
+                Section {
+                    Menu("更换主 Bot") {
                         ForEach(model.snapshot.chats.filter { !$0.room && $0.id != chat.id && $0.profile?.privateRole != true }, id: \.id) { candidate in
                             Button(candidate.name) { replacement = BotRoleSelection(id: candidate.id) }
                         }
-                    } label: {
-                        BotRoleSettingLabel(title: String(localized: "更换主 Bot"),
-                            help: String(localized: "主 Bot 可以创建和修改团队 Bot，并管理群聊。可在此将主 Bot 交给其他成员。"))
                     }
-                }.listRowBackground(Color("BotCard")).disabled(editingDisabled)
-            }
-            Section("管理") {
-                Button { confirmCopy = true } label: {
-                    BotRoleSettingLabel(title: String(localized: "复制一份"),
-                        help: String(localized: "复制分工和模型，新 Bot 从空白记忆开始。"))
+                } header: {
+                    Text("主 Bot")
+                } footer: {
+                    Text("主 Bot 可以创建和修改团队 Bot，并管理群聊。").appFont(SettingsTypography.description).foregroundStyle(.secondary)
                 }
-            }.listRowBackground(Color("BotCard")).disabled(editingDisabled)
+                .listRowBackground(Color("BotCard")).disabled(editingDisabled)
+            }
+            Section {
+                Button("复制一份") { confirmCopy = true }
+                if model.snapshot.botDeletionSupported && !model.snapshot.isMainBot(id: chat.id) {
+                    Button(role: .destructive) { confirmDelete = true } label: {
+                        HStack {
+                            Text("删除 Bot").foregroundStyle(.red)
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }.accessibilityIdentifier("bot.role-delete")
+                }
+            } header: {
+                Text("管理")
+            } footer: {
+                Text("复制分工和模型，新 Bot 从空白记忆开始。").appFont(SettingsTypography.description).foregroundStyle(.secondary)
+            }
+            .listRowBackground(Color("BotCard")).disabled(editingDisabled)
             if let error = model.snapshot.roleError {
                 Section { Text(botErrorText(error)).foregroundStyle(.red) }
             }
         }
+        .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
         .background(Color("BotGroupedSurface"))
         .accessibilityIdentifier("bot.role-settings-form")
+        .background(KeyboardDismissProbe())
         .task(id: effortRef) { if !effortRef.isEmpty { model.loadRoleEfforts(effortRef) } }
         .onChange(of: modelID) { _ in effort = "" }
         .navigationTitle("角色设置")
@@ -1993,6 +1989,12 @@ private struct BotRoleSettings: View {
             Button("取消", role: .cancel) {}
             Button("复制一份") { model.duplicateRole(chat.id) }
         }
+        .alert("删除 Bot？", isPresented: $confirmDelete) {
+            Button("取消", role: .cancel) {}
+            Button("删除", role: .destructive) { model.deleteRole(chat.id) }
+        } message: {
+            Text(String(format: String(localized: "将“%@”移出团队和所在群聊。"), live.name))
+        }
         .alert("更换主 Bot？", isPresented: Binding(get: { replacement != nil }, set: { if !$0 { replacement = nil } })) {
             Button("取消", role: .cancel) { replacement = nil }
             Button("确认") {
@@ -2000,20 +2002,6 @@ private struct BotRoleSettings: View {
                 replacement = nil
             }
         }
-    }
-}
-
-private struct BotRoleSettingLabel: View {
-    let title: String
-    let help: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-            Text(help).appFont(.footnote).foregroundStyle(.secondary)
-        }
-        .multilineTextAlignment(.leading)
-        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -2075,10 +2063,39 @@ private struct BotRoleMemoryView: View {
                     .accessibilityLabel("添加记忆").disabled(!canEdit)
             }
         }
-        .alert(editing == nil ? String(localized: "添加记忆") : String(localized: "编辑记忆"), isPresented: $showsEditor) {
-            TextField("记忆", text: $text)
-            Button("取消", role: .cancel) {}
-            Button("保存") { model.saveRoleMemory(id, entryID: editing?.id, text: text) }.disabled(text.isEmpty)
+        .navigationDestination(isPresented: $showsEditor) {
+            TextEditor(text: $text)
+                .appFont(.body)
+                .scrollContentBackground(.hidden)
+                .overlay(alignment: .topLeading) {
+                    if text.isEmpty {
+                        Text("记忆")
+                            .appFont(.body)
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 5)
+                            .padding(.top, 8)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .accessibilityLabel("记忆")
+                .accessibilityIdentifier("bot.memory-editor")
+                .padding(12)
+                .background(Color("BotCard"), in: RoundedRectangle(cornerRadius: 20))
+                .padding(16)
+                .background(Color("BotGroupedSurface"))
+                .background(KeyboardDismissProbe())
+                .navigationTitle(editing == nil ? Text("添加记忆") : Text("编辑记忆"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("保存") {
+                            model.saveRoleMemory(id, entryID: editing?.id, text: text)
+                            showsEditor = false
+                        }
+                        .disabled(!canEdit || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
         }
         .alert("删除这条记忆？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("取消", role: .cancel) { deleting = nil }

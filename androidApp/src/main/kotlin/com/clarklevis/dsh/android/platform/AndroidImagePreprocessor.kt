@@ -32,7 +32,11 @@ data class AndroidPreparedImage(
 class AndroidImagePreprocessor(
     private val contentResolver: ContentResolver
 ) {
-    suspend fun prepare(uri: Uri): AndroidPreparedImage = withContext(Dispatchers.IO) {
+    suspend fun prepare(
+        uri: Uri,
+        byteLimit: Int = MAXIMUM_BYTES,
+        pixelSideLimit: Int = MAXIMUM_PIXEL_SIDE
+    ): AndroidPreparedImage = withContext(Dispatchers.IO) {
         val declaredSize = querySize(uri)
         if (declaredSize != null && declaredSize > MAXIMUM_INPUT_BYTES) {
             throw IllegalArgumentException("image-input-too-large")
@@ -62,7 +66,7 @@ class AndroidImagePreprocessor(
         val mediaType = bounds.mediaType?.takeIf(PASSTHROUGH_MEDIA_TYPES::contains)
         if (
             mediaType != null &&
-            accepts(original.size, orientedWidth, orientedHeight) &&
+            accepts(original.size, orientedWidth, orientedHeight, byteLimit, pixelSideLimit) &&
             transform.isIdentity
         ) {
             return@withContext AndroidPreparedImage(
@@ -77,7 +81,7 @@ class AndroidImagePreprocessor(
             )
         }
 
-        val fitted = fittedSize(orientedWidth, orientedHeight)
+        val fitted = fittedSize(orientedWidth, orientedHeight, pixelSideLimit)
         val sampleSize = sampleSize(bounds.width, bounds.height, fitted.first, fitted.second)
         val decoded = BitmapFactory.decodeByteArray(
             original,
@@ -88,7 +92,7 @@ class AndroidImagePreprocessor(
         val rotated = applyTransform(decoded, transform)
         if (rotated !== decoded) decoded.recycle()
         try {
-            encodeJpeg(rotated, fitted.first, fitted.second, queryDisplayName(uri))
+            encodeJpeg(rotated, fitted.first, fitted.second, queryDisplayName(uri), byteLimit, pixelSideLimit)
         } finally {
             rotated.recycle()
         }
@@ -98,7 +102,9 @@ class AndroidImagePreprocessor(
         source: Bitmap,
         initialWidth: Int,
         initialHeight: Int,
-        name: String?
+        name: String?,
+        byteLimit: Int,
+        pixelSideLimit: Int
     ): AndroidPreparedImage {
         var width = initialWidth
         var height = initialHeight
@@ -115,7 +121,7 @@ class AndroidImagePreprocessor(
                     val stream = ByteArrayOutputStream()
                     if (!opaque.compress(Bitmap.CompressFormat.JPEG, quality, stream)) continue
                     val encoded = stream.toByteArray()
-                    if (accepts(encoded.size, width, height)) {
+                    if (accepts(encoded.size, width, height, byteLimit, pixelSideLimit)) {
                         return AndroidPreparedImage(
                             outgoing = GatewayOutgoingImage(
                                 mediaType = "image/jpeg",
@@ -147,8 +153,8 @@ class AndroidImagePreprocessor(
         return ImageBounds(options.outWidth, options.outHeight, options.outMimeType)
     }
 
-    private fun fittedSize(width: Int, height: Int): Pair<Int, Int> {
-        val dimensionScale = min(1.0, MAXIMUM_PIXEL_SIDE.toDouble() / max(width, height))
+    private fun fittedSize(width: Int, height: Int, pixelSideLimit: Int): Pair<Int, Int> {
+        val dimensionScale = min(1.0, minOf(MAXIMUM_PIXEL_SIDE, pixelSideLimit).toDouble() / max(width, height))
         val pixelScale = min(1.0, sqrt(MAXIMUM_PIXELS.toDouble() / (width.toDouble() * height)))
         val scale = min(dimensionScale, pixelScale)
         return max(1, floor(width * scale).toInt()) to max(1, floor(height * scale).toInt())
@@ -205,9 +211,9 @@ class AndroidImagePreprocessor(
         }
     }
 
-    private fun accepts(byteCount: Int, width: Int, height: Int): Boolean =
-        byteCount <= MAXIMUM_BYTES &&
-            max(width, height) <= MAXIMUM_PIXEL_SIDE &&
+    private fun accepts(byteCount: Int, width: Int, height: Int, byteLimit: Int, pixelSideLimit: Int): Boolean =
+        byteCount <= minOf(MAXIMUM_BYTES, byteLimit) &&
+            max(width, height) <= minOf(MAXIMUM_PIXEL_SIDE, pixelSideLimit) &&
             width.toLong() * height <= MAXIMUM_PIXELS
 
     private data class ImageTransform(

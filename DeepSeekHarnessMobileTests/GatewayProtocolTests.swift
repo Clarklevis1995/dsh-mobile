@@ -17645,7 +17645,7 @@ final class ScheduleTimingEditorTests: XCTestCase {
         let text = UITextView(frame: CGRect(x: 20, y: 80, width: 200, height: 100))
         scope.addSubview(field); scope.addSubview(text)
         let child = UIView(); text.addSubview(child)
-        let coordinator = ScheduleKeyboardDismissProbe.Coordinator()
+        let coordinator = KeyboardDismissProbe.Coordinator()
         let previousCount = window.gestureRecognizers?.count ?? 0
         coordinator.attach(to: scope)
         XCTAssertEqual(window.gestureRecognizers?.count, previousCount + 1)

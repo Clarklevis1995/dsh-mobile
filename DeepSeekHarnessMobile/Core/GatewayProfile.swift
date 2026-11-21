@@ -1,4 +1,24 @@
 import Foundation
+import DeepSeekHarnessShared
+
+enum GatewayAddressMethod: String, CaseIterable, Codable {
+    case lan = "LAN"
+    case publicNetwork = "PUBLIC"
+    case tailscale = "TAILSCALE"
+
+    init(endpoint: String) {
+        self = Self(rawValue: DeepSeekHarnessShared.GatewayIdentity.shared.connectionMethodKey(endpoint: endpoint))
+            ?? .publicNetwork
+    }
+
+    var title: String {
+        switch self {
+        case .lan: String(localized: "局域网")
+        case .publicNetwork: String(localized: "公网")
+        case .tailscale: "Tailscale"
+        }
+    }
+}
 
 struct GatewayProfile: Codable, Identifiable, Equatable {
     var id: String = UUID().uuidString
@@ -10,14 +30,42 @@ struct GatewayProfile: Codable, Identifiable, Equatable {
     var remoteDeviceId: String?
     var lastConnectedAt: Date?
     var deviceKind: String = "desktopcomputer"
+    var recentSuccessfulEndpoints: [String]?
+    var selectedConnectionMethod: GatewayAddressMethod?
 
     var displayName: String { alias?.isEmpty == false ? alias! : gatewayName }
     var connectionEndpoints: [String] {
         var result: [String] = []
-        for value in [preferredEndpoint].compactMap({ $0 }) + endpoints where endpoints.contains(value) {
+        for value in [preferredEndpoint].compactMap({ $0 }) + (recentSuccessfulEndpoints ?? []) + endpoints where endpoints.contains(value) {
             if !result.contains(value) { result.append(value) }
         }
         return result
+    }
+
+    func endpoints(for method: GatewayAddressMethod) -> [String] {
+        connectionEndpoints.filter { GatewayAddressMethod(endpoint: $0) == method }
+    }
+
+    var startupEndpoint: String {
+        selectedConnectionMethod.flatMap { endpoints(for: $0).first } ?? connectionEndpoints[0]
+    }
+
+    mutating func applyPairingEndpoints(_ addresses: [String]) {
+        endpoints = addresses
+        preferredEndpoint = addresses.first
+        selectedConnectionMethod = nil
+        recentSuccessfulEndpoints = nil
+        lastConnectedAt = nil
+    }
+
+    mutating func recordConnection(to endpoint: String, at time: Date = .now) {
+        guard endpoints.contains(endpoint) else { return }
+        let previous = recentSuccessfulEndpoints ?? (lastConnectedAt == nil ? [] : [preferredEndpoint].compactMap { $0 })
+        preferredEndpoint = endpoint
+        lastConnectedAt = time
+        recentSuccessfulEndpoints = [endpoint] + previous.filter {
+            $0 != endpoint && endpoints.contains($0)
+        }
     }
 }
 

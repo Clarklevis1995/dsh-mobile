@@ -19,6 +19,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -42,18 +44,25 @@ internal fun DshSelectionPopup(
     options: List<DshSelectionOption>,
     selectedKey: String?,
     onDismissRequest: () -> Unit,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    alignToEnd: Boolean = false,
+    menuWidth: Dp = 208.dp,
+    labelMaxLines: Int = 1
 ) {
     val density = LocalDensity.current
     val margin = with(density) { 8.dp.roundToPx() }
     val overlap = with(density) { 12.dp.roundToPx() }
-    val positionProvider = remember(margin, overlap) { SelectionPopupPositionProvider(margin, overlap) }
+    val shadowPadding = 30.dp
+    val shadowInset = with(density) { shadowPadding.roundToPx() }
+    val positionProvider = remember(margin, overlap, alignToEnd, shadowInset) {
+        SelectionPopupPositionProvider(margin, overlap, alignToEnd, shadowInset)
+    }
     DshMenuPopup(expanded, onDismissRequest, positionProvider,
-        Modifier.width(208.dp).testTag("dsh-selection-popup"), shadowPadding = 30.dp) {
+        Modifier.width(menuWidth).testTag("dsh-selection-popup"), shadowPadding = shadowPadding) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
             options.forEach { option ->
                 val selected = option.key == selectedKey
-                DshMenuItem(text = { Text(option.label, fontSize = 15.sp, maxLines = 1) },
+                DshMenuItem(text = { Text(option.label, fontSize = 15.sp, maxLines = labelMaxLines, overflow = TextOverflow.Ellipsis) },
                     enabled = option.enabled,
                     modifier = Modifier.semantics { this.selected = selected },
                     leadingIcon = {
@@ -69,7 +78,9 @@ internal fun DshSelectionPopup(
 
 private class SelectionPopupPositionProvider(
     private val margin: Int,
-    private val overlap: Int
+    private val overlap: Int,
+    private val alignToEnd: Boolean,
+    private val shadowInset: Int
 ) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -77,12 +88,18 @@ private class SelectionPopupPositionProvider(
         layoutDirection: LayoutDirection,
         popupContentSize: IntSize
     ): IntOffset {
-        val maxX = (windowSize.width - popupContentSize.width - margin).coerceAtLeast(0)
+        val horizontalInset = if (alignToEnd) margin - shadowInset else margin
+        val maxX = (windowSize.width - popupContentSize.width - horizontalInset).coerceAtLeast(horizontalInset.coerceAtMost(0))
         val maxY = (windowSize.height - popupContentSize.height - margin).coerceAtLeast(0)
         val above = anchorBounds.bottom - popupContentSize.height + overlap
         val preferredY = if (above >= margin) above else anchorBounds.bottom
+        val preferredX = when {
+            !alignToEnd -> anchorBounds.left
+            layoutDirection == LayoutDirection.Ltr -> anchorBounds.right + shadowInset - popupContentSize.width
+            else -> anchorBounds.left - shadowInset
+        }
         return IntOffset(
-            x = anchorBounds.left.coerceIn(margin.coerceAtMost(maxX), maxX),
+            x = preferredX.coerceIn(horizontalInset.coerceAtMost(maxX), maxX),
             y = preferredY.coerceIn(margin.coerceAtMost(maxY), maxY)
         )
     }

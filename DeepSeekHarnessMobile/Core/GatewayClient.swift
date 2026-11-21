@@ -106,6 +106,7 @@ final class GatewayClient: ObservableObject {
     var credentialID: String?
     var expectedGatewayID: String?
     var trustedEndpoints: [String] = []
+    var selectedConnectionMethod: GatewayAddressMethod?
     var onIdentity: ((GatewayFrame, String) throws -> Void)?
     var probeOnly = false
     private var reconnectAttempt = 0
@@ -1342,9 +1343,11 @@ final class GatewayClient: ObservableObject {
         reconnectTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(delay)) } catch { return }
             guard let self, !Task.isCancelled, self.wantsConnection, var endpoint = self.endpoint else { return }
-            if self.trustedEndpoints.count > 1,
-               let index = self.trustedEndpoints.firstIndex(of: endpoint.absoluteString),
-               let next = URL(string: self.trustedEndpoints[(index + 1) % self.trustedEndpoints.count]) {
+            let retryEndpoints = self.selectedConnectionMethod.map { method in
+                self.trustedEndpoints.filter { GatewayAddressMethod(endpoint: $0) == method }
+            } ?? self.trustedEndpoints
+            if retryEndpoints.count > 1,
+               let next = URL(string: retryEndpoints[((retryEndpoints.firstIndex(of: endpoint.absoluteString) ?? -1) + 1) % retryEndpoints.count]) {
                 endpoint = next
             }
             self.beginConnection(

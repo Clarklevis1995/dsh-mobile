@@ -1,8 +1,10 @@
 package com.clarklevis.dsh.shared
 
+import com.clarklevis.dsh.shared.gateway.GatewayConnectionMethod
 import com.clarklevis.dsh.shared.gateway.GatewayIdentity
 import com.clarklevis.dsh.shared.gateway.GatewayProfile
 import com.clarklevis.dsh.shared.protocol.GatewayPairingPayload
+import kotlinx.serialization.json.Json
 import kotlin.test.*
 
 class GatewayProfileTest {
@@ -38,5 +40,45 @@ class GatewayProfileTest {
     @Test fun preferredEndpointCannotIntroduceAnUntrustedAddress() {
         val profile = GatewayProfile("local", gatewayName = "电脑", endpoints = listOf("wss://a.example/ws/mobile"), preferredEndpoint = "wss://evil.example/ws/mobile")
         assertEquals(profile.endpoints, profile.connectionEndpoints)
+    }
+
+    @Test fun successfulAddressesRemainOrderedWithinTheirMethodAfterReload() {
+        val lan = "ws://192.168.1.19:3081/ws/mobile"
+        val backup = "wss://backup.example/ws/mobile"
+        val primary = "wss://example.net/ws/mobile"
+        val tailnet = "ws://100.100.10.55:3081/ws/mobile"
+        val profile = GatewayProfile(
+            "local", gatewayName = "Test", endpoints = listOf(lan, backup, primary, tailnet),
+            preferredEndpoint = primary, lastConnectedAt = 1
+        )
+            .connectedAt(lan, 2)
+            .connectedAt("wss://unknown.example/ws/mobile", 3)
+            .copy(selectedConnectionMethod = GatewayConnectionMethod.PUBLIC)
+        val restored = Json.decodeFromString<GatewayProfile>(Json.encodeToString(GatewayProfile.serializer(), profile))
+        assertEquals(primary, restored.startupEndpoint)
+        assertEquals(lan, restored.preferredEndpoint)
+        assertEquals(listOf(primary, backup), restored.endpointsFor(GatewayConnectionMethod.PUBLIC))
+        assertEquals(listOf(tailnet), restored.endpointsFor(GatewayConnectionMethod.TAILSCALE))
+        assertEquals(listOf(lan), restored.endpointsFor(GatewayConnectionMethod.LAN))
+    }
+
+    @Test fun rescanReplacesCachedEndpointOrderEvenForAddressesStillInTheCode() {
+        val lan = "ws://192.168.1.19:3081/ws/mobile"
+        val cached = "wss://cached.example/ws/mobile"
+        val scanned = listOf("wss://new.example/ws/mobile", "wss://backup.example/ws/mobile", cached)
+        val original = GatewayProfile("local", gatewayName = "Test", endpoints = listOf(lan, cached))
+            .connectedAt(cached, 1)
+            .connectedAt(lan, 2)
+            .copy(selectedConnectionMethod = GatewayConnectionMethod.LAN)
+
+        val candidate = original.withPairingEndpoints(scanned)
+        assertEquals(lan, original.startupEndpoint)
+        assertEquals(scanned.first(), candidate.startupEndpoint)
+        assertEquals(scanned, candidate.connectionEndpoints)
+        assertNull(candidate.selectedConnectionMethod)
+        val verified = candidate.connectedAt(scanned.first(), 3)
+        val restored = Json.decodeFromString<GatewayProfile>(Json.encodeToString(GatewayProfile.serializer(), verified))
+        assertEquals(scanned, restored.connectionEndpoints)
+        assertEquals(scanned.first(), restored.startupEndpoint)
     }
 }

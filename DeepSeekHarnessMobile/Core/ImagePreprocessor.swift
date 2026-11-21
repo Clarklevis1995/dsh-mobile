@@ -27,7 +27,7 @@ enum GatewayImagePreprocessor {
     static let maximumPixelSide = 2_000
     static let maximumPixels = 40_000_000
 
-    static func prepare(data: Data) throws -> GatewayPreparedImage {
+    static func prepare(data: Data, byteLimit: Int = maximumBytes, pixelSideLimit: Int = maximumPixelSide) throws -> GatewayPreparedImage {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions),
               let originalDimensions = GatewayImageInspector.dimensions(of: data) else {
@@ -36,11 +36,12 @@ enum GatewayImagePreprocessor {
         let mediaType = CGImageSourceGetType(source).flatMap { UTType($0 as String)?.preferredMIMEType }
         let orientation = GatewayImageInspector.orientation(of: data)
         if let mediaType, ["image/png", "image/jpeg", "image/webp", "image/gif"].contains(mediaType),
+           data.count <= byteLimit, originalDimensions.longestSide <= pixelSideLimit,
            accepts(data: data, dimensions: originalDimensions), orientation == 1 {
             return GatewayPreparedImage(mediaType: mediaType, data: data, dimensions: originalDimensions)
         }
 
-        var targetSize = fittedSize(for: originalDimensions)
+        var targetSize = fittedSize(for: originalDimensions, pixelSideLimit: pixelSideLimit)
         // 先按目标大小解码，同时应用 EXIF 旋转和镜像，避免展开超大原图。
         let thumbnailOptions: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -61,7 +62,7 @@ enum GatewayImagePreprocessor {
                     width: Int(targetSize.width.rounded(.down)),
                     height: Int(targetSize.height.rounded(.down))
                 )
-                if accepts(data: encoded, dimensions: dimensions) {
+                if encoded.count <= byteLimit && accepts(data: encoded, dimensions: dimensions) {
                     return GatewayPreparedImage(mediaType: "image/jpeg", data: encoded, dimensions: dimensions)
                 }
             }
@@ -79,10 +80,10 @@ enum GatewayImagePreprocessor {
             dimensions.width * dimensions.height <= maximumPixels
     }
 
-    private static func fittedSize(for dimensions: GatewayImageDimensions) -> CGSize {
+    private static func fittedSize(for dimensions: GatewayImageDimensions, pixelSideLimit: Int) -> CGSize {
         let width = Double(dimensions.width)
         let height = Double(dimensions.height)
-        let dimensionScale = min(1, Double(maximumPixelSide) / max(width, height))
+        let dimensionScale = min(1, Double(min(maximumPixelSide, pixelSideLimit)) / max(width, height))
         let pixelScale = min(1, sqrt(Double(maximumPixels) / (width * height)))
         let scale = min(dimensionScale, pixelScale)
         return CGSize(

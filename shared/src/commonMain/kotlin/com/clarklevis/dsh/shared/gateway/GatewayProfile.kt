@@ -14,12 +14,42 @@ data class GatewayProfile(
     val preferredEndpoint: String? = null,
     val remoteDeviceId: String? = null,
     val lastConnectedAt: Long? = null,
-    val server: Boolean = false
+    val server: Boolean = false,
+    val recentSuccessfulEndpoints: List<String> = emptyList(),
+    val selectedConnectionMethod: GatewayConnectionMethod? = null
 ) {
     val displayName: String get() = alias?.takeIf { it.isNotBlank() } ?: gatewayName
     val connectionEndpoints: List<String>
-        get() = (listOfNotNull(preferredEndpoint) + endpoints).filter { it in endpoints }.distinct()
+        get() = (listOfNotNull(preferredEndpoint) + recentSuccessfulEndpoints + endpoints)
+            .filter { it in endpoints }.distinct()
+    val startupEndpoint: String
+        get() = selectedConnectionMethod?.let(::endpointsFor)?.firstOrNull() ?: connectionEndpoints.first()
+
+    fun endpointsFor(method: GatewayConnectionMethod): List<String> =
+        connectionEndpoints.filter { GatewayIdentity.connectionMethod(it) == method }
+
+    fun withPairingEndpoints(addresses: List<String>): GatewayProfile = copy(
+        endpoints = addresses,
+        preferredEndpoint = addresses.firstOrNull(),
+        selectedConnectionMethod = null,
+        recentSuccessfulEndpoints = emptyList(),
+        lastConnectedAt = null
+    )
+
+    fun connectedAt(endpoint: String, time: Long): GatewayProfile {
+        if (endpoint !in endpoints) return this
+        val previous = recentSuccessfulEndpoints.ifEmpty {
+            if (lastConnectedAt == null) emptyList() else listOfNotNull(preferredEndpoint)
+        }
+        return copy(
+            preferredEndpoint = endpoint,
+            lastConnectedAt = time,
+            recentSuccessfulEndpoints = (listOf(endpoint) + previous).filter { it in endpoints }.distinct()
+        )
+    }
 }
+
+enum class GatewayConnectionMethod { LAN, PUBLIC, TAILSCALE }
 
 // 直接保留协议数量/长度限制和私网、RFC 6598 共享地址段边界，便于核对。
 @Suppress("MagicNumber")
@@ -72,6 +102,19 @@ object GatewayIdentity {
             authority.substringBefore(':').lowercase()
         }
     }
+
+    fun connectionMethod(endpoint: String): GatewayConnectionMethod {
+        val host = host(endpoint).trimEnd('.')
+        val octets = host.split('.')
+        if (host.endsWith(".ts.net") || host.startsWith("fd7a:115c:a1e0:") ||
+            (octets.size == 4 && octets[0] == "100" && isLocal(host))
+        ) {
+            return GatewayConnectionMethod.TAILSCALE
+        }
+        return if (isLocal(host)) GatewayConnectionMethod.LAN else GatewayConnectionMethod.PUBLIC
+    }
+
+    fun connectionMethodKey(endpoint: String): String = connectionMethod(endpoint).name
 
     fun isLocal(host: String): Boolean = when {
         host == "localhost" || host == "::1" || host.endsWith(".local") -> true
