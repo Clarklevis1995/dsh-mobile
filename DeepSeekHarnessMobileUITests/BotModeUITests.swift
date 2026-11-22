@@ -26,7 +26,7 @@ final class BotModeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["定时任务"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["还没有定时任务"].exists)
         capture(app, "定时任务 · 苹果原生面板")
-        app.buttons["完成"].tap()
+        app.buttons["bot.schedules-close"].tap()
         chief.tap()
         let roleSettings = app.buttons["角色设置"]
         XCTAssertTrue(roleSettings.waitForExistence(timeout: 4))
@@ -52,13 +52,19 @@ final class BotModeUITests: XCTestCase {
 
     @MainActor
     func testRealHostRoleSettingsDismissesKeyboardOnOutsideTap() throws {
-        guard ProcessInfo.processInfo.environment["DSH_BOT_PROBE_URL"] == "http://127.0.0.1:3098" else {
+        let design = ProcessInfo.processInfo.environment["DSH_BOT_DESIGN_STATE"] == "role-keyboard"
+        guard design || ProcessInfo.processInfo.environment["DSH_BOT_PROBE_URL"] == "http://127.0.0.1:3098" else {
             throw XCTSkip("需要隔离的 DS-Bot 验证主机")
         }
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchEnvironment["DSH_BOT_UI_TEST"] = "1"
-        app.launchEnvironment["DSH_BOT_UI_TEST_URL"] = "http://127.0.0.1:3098"
+        if design {
+            app.launchEnvironment["DSH_BOT_DESIGN_UI_TEST"] = "1"
+            app.launchEnvironment["DSH_BOT_DESIGN_STATE"] = "role-keyboard"
+        } else {
+            app.launchEnvironment["DSH_BOT_UI_TEST"] = "1"
+            app.launchEnvironment["DSH_BOT_UI_TEST_URL"] = "http://127.0.0.1:3098"
+        }
         app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         let isTablet = UIDevice.current.userInterfaceIdiom == .pad
         XCUIDevice.shared.orientation = isTablet ? .landscapeLeft : .portrait
@@ -318,6 +324,309 @@ final class BotModeUITests: XCTestCase {
 /// 固定业务快照只用于布局验收；生产页面和导航、抽屉、原生控件完全复用。
 final class BotDesignUITests: XCTestCase {
     @MainActor
+    func testBotUnreadBadgeClearsAfterOpeningChat() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_BOT_DESIGN_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_BOT_DESIGN_APPEARANCE"] = "dark"
+        let unread = ProcessInfo.processInfo.environment["DSH_BOT_UNREAD_OVERFLOW"] == "1" ? 100 : 2
+        if unread > 99 { app.launchEnvironment["DSH_BOT_DESIGN_STATE"] = "long" }
+        let largeText = ProcessInfo.processInfo.environment["DSH_BOT_LARGE_TEXT"] == "1"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                "-appearance.fontScale", largeText ? "1.5" : "1.0", "-appearance.fontFollowsSystem", "NO"]
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        XCUIDevice.shared.orientation = tablet ? .landscapeLeft : .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launch()
+        let room = app.buttons["bot.chat.room"]
+        XCTAssertTrue(room.waitForExistence(timeout: 10))
+        if !room.isHittable { app.swipeUp() }
+        let badge = app.descendants(matching: .any)["bot.unread.room"].firstMatch
+        XCTAssertTrue(badge.exists || room.label.contains("未读消息：\(unread)"))
+        capture(app, "Bot · 未读角标")
+        room.tap()
+        XCTAssertTrue(app.buttons["bot.chat-more"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(room.waitForExistence(timeout: 5))
+        XCTAssertFalse(badge.exists)
+        XCTAssertFalse(room.label.contains("未读消息"))
+        capture(app, "Bot · 读后清零")
+    }
+
+    @MainActor
+    func testBotSecondaryPages() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_BOT_DESIGN_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_BOT_DESIGN_STATE"] = "page-parity"
+        let night = ProcessInfo.processInfo.environment["DSH_BOT_UI_APPEARANCE"] == "dark"
+        if night { app.launchEnvironment["DSH_BOT_DESIGN_APPEARANCE"] = "dark" }
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                "-appearance.fontScale", ProcessInfo.processInfo.environment["DSH_BOT_LARGE_TEXT"] == "1" ? "1.5" : "1.0",
+                                "-appearance.fontFollowsSystem", "NO"]
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        XCUIDevice.shared.orientation = tablet ? .landscapeLeft : .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launch()
+
+        let chief = app.buttons["bot.chief"]
+        XCTAssertTrue(chief.waitForExistence(timeout: 10))
+        chief.tap()
+        if night && !tablet {
+            let settings = app.buttons["角色设置"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 5))
+            let compactTop = settings.frame.minY
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let handle = origin.withOffset(CGVector(dx: app.frame.midX, dy: compactTop - 12))
+            handle.press(forDuration: 0.05,
+                         thenDragTo: handle.withOffset(CGVector(dx: 0, dy: -130)),
+                         withVelocity: .slow, thenHoldForDuration: 0.1)
+            let expandedTop = settings.frame.minY
+            XCTAssertLessThan(expandedTop, compactTop - 50)
+            capture(app, "Bot · 角色面板展开")
+            let expandedHandle = origin.withOffset(CGVector(dx: app.frame.midX, dy: expandedTop - 12))
+            expandedHandle.press(forDuration: 0.05,
+                                 thenDragTo: expandedHandle.withOffset(CGVector(dx: 0, dy: compactTop - expandedTop)),
+                                 withVelocity: .slow, thenHoldForDuration: 0.1)
+            XCTAssertEqual(settings.frame.minY, compactTop, accuracy: 3)
+            capture(app, "Bot · 角色面板紧凑")
+        }
+        let memoryLink = app.buttons.containing(NSPredicate(format: "label BEGINSWITH %@", "记忆")).firstMatch
+        XCTAssertTrue(memoryLink.waitForExistence(timeout: 5))
+        if !memoryLink.isHittable { app.swipeUp() }
+        memoryLink.tap()
+        let memory = app.buttons["bot.role-memory.1"]
+        let add = app.buttons["添加记忆"]
+        XCTAssertTrue(memory.waitForExistence(timeout: 5))
+        XCTAssertTrue(add.isEnabled)
+        capture(app, "Bot · 记忆列表")
+        memory.swipeLeft(velocity: .slow)
+        let delete = app.buttons["删除"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        capture(app, "Bot · 记忆左滑")
+        delete.tap()
+        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
+        app.alerts.firstMatch.buttons["取消"].tap()
+        memory.tap()
+        XCTAssertTrue(app.textViews["bot.memory-editor"].waitForExistence(timeout: 5))
+        capture(app, "Bot · 编辑记忆")
+        app.navigationBars["编辑记忆"].buttons.firstMatch.tap()
+        add.tap()
+        XCTAssertFalse(app.navigationBars["添加记忆"].buttons["保存"].isEnabled)
+        capture(app, "Bot · 添加记忆")
+        app.navigationBars["添加记忆"].buttons.firstMatch.tap()
+        app.navigationBars["记忆"].buttons.firstMatch.tap()
+        app.buttons["关闭"].tap()
+
+        let room = app.buttons["bot.chat.room"]
+        if !room.isHittable { app.swipeUp() }
+        XCTAssertTrue(room.waitForExistence(timeout: 5))
+        room.tap()
+        let identity = app.buttons["bot.chat-identity"]
+        XCTAssertTrue(identity.waitForExistence(timeout: 5))
+        identity.tap()
+        let member = app.buttons["bot.member.researcher"]
+        XCTAssertTrue(member.waitForExistence(timeout: 5))
+        capture(app, "Bot · 群成员")
+        member.tap()
+        XCTAssertTrue(app.buttons["角色设置"].waitForExistence(timeout: 5))
+        app.buttons.matching(identifier: "关闭").allElementsBoundByIndex.last?.tap()
+        XCTAssertTrue(member.isHittable)
+        app.navigationBars["群成员"].buttons["关闭"].tap()
+        let more = app.buttons["bot.chat-more"]
+        more.tap()
+        XCTAssertTrue(app.buttons["重新同步"].waitForExistence(timeout: 5))
+        capture(app, "Bot · 会话更多")
+        app.buttons["定时任务"].tap()
+        app.buttons["bot.schedules-close"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        let chat = app.buttons["bot.start-chat"]
+        XCTAssertTrue(chat.waitForExistence(timeout: 5))
+        if !chat.isHittable { app.swipeDown() }
+        chat.tap()
+        let answer = app.buttons["回答"]
+        XCTAssertTrue(answer.waitForExistence(timeout: 5))
+        answer.tap()
+        let submit = app.navigationBars["回答助理"].buttons["提交"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 5))
+        XCTAssertFalse(submit.isEnabled)
+        capture(app, "Bot · 回答助理")
+        app.buttons["交互"].tap()
+        XCTAssertTrue(submit.isEnabled)
+        capture(app, "Bot · 已选回答")
+        app.navigationBars["回答助理"].buttons["取消"].tap()
+        XCTAssertTrue(answer.isHittable)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        let roster = app.buttons["bot.roster"]
+        if !roster.isHittable { app.swipeUp() }
+        roster.tap()
+        let newBot = app.buttons["bot.new"]
+        XCTAssertTrue(newBot.waitForExistence(timeout: 5))
+        XCTAssertTrue(newBot.isEnabled)
+        capture(app, "Bot · 我的 Bot")
+        newBot.tap()
+        let appearance = app.buttons["bot.create.appearance"]
+        XCTAssertTrue(appearance.waitForExistence(timeout: 5))
+        capture(app, "Bot · 新建 Bot")
+        appearance.tap()
+        XCTAssertTrue(app.staticTexts["形状"].waitForExistence(timeout: 5))
+        capture(app, "Bot · 编辑形象")
+        app.buttons["头像库"].tap()
+        let photo = app.buttons["parity-avatar.png"]
+        XCTAssertTrue(photo.waitForExistence(timeout: 5))
+        capture(app, "Bot · 头像库")
+        photo.tap()
+        app.buttons["bot.appearance.done"].tap()
+        app.buttons["bot.create.model"].tap()
+        XCTAssertTrue(app.staticTexts["可用模型"].waitForExistence(timeout: 5))
+        capture(app, "Bot · 模型选择")
+        let model = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "DeepSeek-V4.1-Flash")).firstMatch
+        XCTAssertTrue(model.exists)
+        model.tap()
+        XCTAssertTrue(app.staticTexts["可用模型"].isHittable)
+        app.buttons["取消"].tap()
+
+        let local = app.buttons["本地 Agent"]
+        XCTAssertTrue(local.waitForExistence(timeout: 5))
+        if !local.isHittable { app.swipeUp() }
+        local.tap()
+        let create = app.buttons["bot.create.submit"]
+        XCTAssertFalse(create.isEnabled)
+        let agent = app.buttons["bot.create.agent.local-parity"]
+        if !agent.isHittable { app.swipeUp() }
+        XCTAssertTrue(agent.isHittable)
+        XCTAssertFalse(app.buttons["bot.create.agent.local-offline"].isEnabled)
+        capture(app, "Bot · 本地 Agent")
+        agent.tap()
+        XCTAssertTrue(create.isEnabled)
+        let modelPicker = app.buttons["bot.create.model"]
+        if !modelPicker.isHittable { app.swipeUp() }
+        modelPicker.tap()
+        let cliDefault = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "CLI 默认")).firstMatch
+        XCTAssertTrue(cliDefault.waitForExistence(timeout: 5))
+        capture(app, "Bot · 本地模型")
+        cliDefault.tap()
+        XCTAssertTrue(create.isHittable)
+    }
+
+    @MainActor
+    func testBotRoleScheduleLayout() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_BOT_DESIGN_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_BOT_DESIGN_STATE"] = "role-profile"
+        let largeText = ProcessInfo.processInfo.environment["DSH_BOT_LARGE_TEXT"] == "1"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                "-appearance.fontScale", largeText ? "1.5" : "1.0", "-appearance.fontFollowsSystem", "NO"]
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        XCUIDevice.shared.orientation = .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launch()
+        let chief = app.buttons["bot.chief"]
+        XCTAssertTrue(chief.waitForExistence(timeout: 10))
+        chief.tap()
+        let schedules = app.buttons["bot.role-schedules"]
+        XCTAssertTrue(schedules.waitForExistence(timeout: 5))
+        if !schedules.isHittable { app.swipeUp() }
+        schedules.tap()
+        let add = app.buttons["新建定时任务"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        capture(app, "Bot 定时任务 · 竖屏")
+        if tablet {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            XCTAssertTrue(waitForWindow(app, landscape: true))
+            capture(app, "Bot 定时任务 · 横屏")
+        }
+        let task = app.descendants(matching: .any)["bot.role-schedule.morning"].firstMatch
+        XCTAssertTrue(task.isHittable)
+        task.swipeLeft(velocity: .slow)
+        let delete = app.buttons["删除"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        capture(app, "Bot 定时任务 · 左滑")
+        delete.tap()
+        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
+        app.alerts.firstMatch.buttons["取消"].tap()
+        add.tap()
+        XCTAssertTrue(app.navigationBars["新建定时任务"].waitForExistence(timeout: 5))
+        capture(app, "Bot 新建定时任务")
+        let time = app.descendants(matching: .any)["bot.role-schedule-time"].firstMatch
+        XCTAssertTrue(time.isHittable)
+        time.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        capture(app, "Bot 定时任务 · 选择时间")
+    }
+
+    @MainActor
+    func testBotRoleProfileLayout() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_BOT_DESIGN_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_BOT_DESIGN_STATE"] = "role-profile"
+        let largeText = ProcessInfo.processInfo.environment["DSH_BOT_LARGE_TEXT"] == "1"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                "-appearance.fontScale", largeText ? "1.5" : "1.0", "-appearance.fontFollowsSystem", "NO"]
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        XCUIDevice.shared.orientation = .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launch()
+        let chief = app.buttons["bot.chief"]
+        XCTAssertTrue(chief.waitForExistence(timeout: 10))
+        chief.tap()
+        let settings = app.buttons["角色设置"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        capture(app, "角色名片 · 竖屏")
+        let model = app.descendants(matching: .any).containing(NSPredicate(
+            format: "label CONTAINS %@ OR value CONTAINS %@", "GPT-6.1 Terra", "GPT-6.1 Terra"
+        )).firstMatch
+        XCTAssertTrue(model.exists)
+        if tablet {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            XCTAssertTrue(waitForWindow(app, landscape: true))
+            XCTAssertTrue(settings.isHittable)
+            capture(app, "角色名片 · 横屏")
+        }
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["角色设置"].waitForExistence(timeout: 5))
+        capture(app, tablet ? "角色设置 · 横屏" : "角色设置 · 竖屏")
+        if tablet {
+            XCUIDevice.shared.orientation = .portrait
+            XCTAssertTrue(waitForWindow(app, landscape: false))
+            capture(app, "角色设置 · 竖屏")
+        }
+    }
+
+    @MainActor
+    func testBotRosterLayout() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_BOT_DESIGN_UI_TEST"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                "-appearance.fontScale", ProcessInfo.processInfo.environment["DSH_BOT_LARGE_TEXT"] == "1" ? "1.5" : "1.0",
+                                "-appearance.fontFollowsSystem", "NO"]
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        XCUIDevice.shared.orientation = .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launch()
+        let rosterCard = app.buttons["bot.roster"]
+        XCTAssertTrue(rosterCard.waitForExistence(timeout: 10))
+        if !rosterCard.isHittable { app.swipeUp() }
+        rosterCard.tap()
+        let chief = app.buttons["bot.roster.chief"]
+        XCTAssertTrue(chief.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["bot.roster.researcher"].exists)
+        capture(app, "我的 Bot · 竖屏")
+        if tablet {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            XCTAssertTrue(waitForWindow(app, landscape: true))
+            XCTAssertTrue(chief.isHittable)
+            capture(app, "我的 Bot · 横屏")
+        }
+        chief.tap()
+        XCTAssertTrue(app.buttons["角色设置"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testWorkspaceModeSwitchesBothWays() {
         verifyWorkspaceModeSwitchesBothWays(dark: false)
     }
@@ -346,6 +655,7 @@ final class BotDesignUITests: XCTestCase {
         drawer.tap()
         XCTAssertTrue(modeItem.waitForExistence(timeout: 4))
         XCTAssertEqual(modeItem.label, "切换到工作模式")
+        capture(app, dark ? "深色抽屉 · 工作图标" : "浅色抽屉 · 工作图标")
         modeItem.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).tap()
         XCTAssertTrue(app.staticTexts["探索未至之境"].waitForExistence(timeout: 5))
         capture(app, "普通模式首页")
@@ -357,6 +667,40 @@ final class BotDesignUITests: XCTestCase {
         modeItem.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5)).tap()
         XCTAssertTrue(chief.waitForExistence(timeout: 5))
         capture(app, "Bot 模式首页")
+    }
+
+    @MainActor
+    func testBotLiveWorkAtConversationTail() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_BOT_DESIGN_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_BOT_DESIGN_STATE"] = "live-work"
+        if ProcessInfo.processInfo.environment["DSH_BOT_DARK_TEST"] == "1" {
+            app.launchEnvironment["DSH_BOT_DESIGN_APPEARANCE"] = "dark"
+        }
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launch()
+        let chat = app.buttons["bot.start-chat"]
+        XCTAssertTrue(chat.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["bot.running.chief"].firstMatch.exists || chat.label.contains("运行中"))
+        let room = app.buttons["bot.chat.room"]
+        XCTAssertTrue(room.waitForExistence(timeout: 5))
+        if !room.isHittable { app.swipeUp() }
+        XCTAssertTrue(app.descendants(matching: .any)["bot.running.room"].firstMatch.exists || room.label.contains("运行中"))
+        XCTAssertFalse(app.descendants(matching: .any)["bot.unread.room"].firstMatch.exists)
+        XCTAssertFalse(room.label.contains("未读消息"))
+        capture(app, "Bot 会话列表 · 运行中")
+        if !chat.isHittable { app.swipeDown() }
+        chat.tap()
+        XCTAssertTrue(app.staticTexts["上网搜索…"].waitForExistence(timeout: 8))
+        let elapsed = app.staticTexts["bot.live-work-elapsed"]
+        XCTAssertTrue(elapsed.waitForExistence(timeout: 5))
+        let initial = elapsed.label
+        let advances = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", initial), object: elapsed)
+        XCTAssertEqual(XCTWaiter.wait(for: [advances], timeout: 4), .completed)
+        capture(app, "Bot 实时工作状态")
     }
 
     @MainActor
@@ -381,7 +725,7 @@ final class BotDesignUITests: XCTestCase {
         schedules.tap()
         XCTAssertTrue(app.staticTexts["每日简报"].waitForExistence(timeout: 5))
         capture(app, "02 夜间定时任务")
-        app.buttons["完成"].tap()
+        app.buttons["bot.schedules-close"].tap()
         if !chief.isHittable { app.swipeDown() }
         chief.tap()
         let settings = app.buttons["角色设置"]
@@ -657,7 +1001,7 @@ final class BotDesignUITests: XCTestCase {
         schedules.tap()
         XCTAssertTrue(app.staticTexts["每日简报"].waitForExistence(timeout: 3))
         capture(app, "03-Bot-原生定时任务面板")
-        app.buttons["完成"].tap()
+        app.buttons["bot.schedules-close"].tap()
         if !chief.isHittable { app.swipeDown() }
         chief.tap()
         let roleSettings = app.buttons["角色设置"]
@@ -801,6 +1145,40 @@ final class BotDesignUITests: XCTestCase {
     }
 
     @MainActor
+    func testCompactHomeSearchFindsCachedMessagesAndSurvivesChatNavigation() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["DSH_BOT_DESIGN_UI_TEST"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                                "-appearance.fontScale", UIDevice.current.userInterfaceIdiom == .pad ? "1.5" : "1.0",
+                                "-appearance.fontFollowsSystem", "NO"]
+        if ProcessInfo.processInfo.environment["DSH_BOT_DARK_TEST"] == "1" {
+            app.launchEnvironment["DSH_BOT_DESIGN_APPEARANCE"] = "dark"
+        }
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+
+        let search = app.textFields["bot.chat-search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        for _ in 0..<3 where !search.isHittable { app.swipeUp() }
+        XCTAssertTrue(search.isHittable)
+        search.tap()
+        search.typeText("沿用现有通知方式\n")
+
+        let result = app.buttons["bot.chat.chief"]
+        XCTAssertTrue(result.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["1 个结果"].exists)
+        XCTAssertFalse(app.buttons["bot.chat.room"].exists)
+        capture(app, "Bot 紧凑布局 · 聊天内容搜索")
+        if !result.isHittable { app.swipeUp() }
+        result.tap()
+        XCTAssertTrue(app.buttons["bot.chat-more"].waitForExistence(timeout: 4))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(search.waitForExistence(timeout: 4))
+        XCTAssertEqual(search.value as? String, "沿用现有通知方式")
+    }
+
+    @MainActor
     func testWideHomeSearchAndIndependentChat() throws {
         guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("大屏主页在 iPad 验证") }
         continueAfterFailure = false
@@ -818,9 +1196,9 @@ final class BotDesignUITests: XCTestCase {
         let room = app.buttons["bot.chat.room"]
         XCTAssertGreaterThan(search.frame.minX, chief.frame.maxX + 40)
         capture(app, "13-R2-大屏主页")
-        search.tap(); search.typeText("研究员")
-        XCTAssertTrue(app.buttons["bot.chat.researcher"].waitForExistence(timeout: 3))
-        XCTAssertFalse(room.exists)
+        search.tap(); search.typeText("Bot 接入讨论")
+        XCTAssertTrue(room.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["bot.chat.researcher"].exists)
         XCTAssertTrue(app.staticTexts["1 个结果"].exists)
         capture(app, "14-R2-名称搜索")
         search.buttons.firstMatch.tap()
@@ -867,9 +1245,11 @@ final class BotDesignUITests: XCTestCase {
         capture(app, "09-Bot-空任务面板")
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(waitForWindow(app, landscape: UIDevice.current.userInterfaceIdiom == .pad))
-        XCTAssertTrue(app.buttons["完成"].isHittable)
+        XCTAssertTrue(app.buttons["bot.schedules-close"].isHittable)
         capture(app, "10-Bot-横屏空任务面板")
-        app.buttons["完成"].tap()
+        let close = app.buttons["bot.schedules-close"]
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 3))
         XCUIDevice.shared.orientation = .portrait
     }
 
@@ -893,9 +1273,9 @@ final class BotDesignUITests: XCTestCase {
             capture(app, "11-\(scenario)-大字号面板")
             XCUIDevice.shared.orientation = .landscapeLeft
             XCTAssertTrue(waitForWindow(app, landscape: UIDevice.current.userInterfaceIdiom == .pad))
-            XCTAssertTrue(app.buttons["完成"].isHittable)
+            XCTAssertTrue(app.buttons["bot.schedules-close"].isHittable)
             capture(app, "12-\(scenario)-横屏面板")
-            app.buttons["完成"].tap()
+            app.buttons["bot.schedules-close"].tap()
             app.terminate()
         }
         XCUIDevice.shared.orientation = .portrait

@@ -3,14 +3,23 @@ package com.clarklevis.dsh.android.ui
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.ScrollableState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableLongState
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -19,8 +28,12 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.CompositingStrategy
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.shadow.Shadow as ComposeShadow
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -34,6 +47,8 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * 页面内玻璃控件只采样背景层，避免递归渲染和重影；独立窗口的弹层采样整个页面。
@@ -45,14 +60,61 @@ import com.kyant.backdrop.shadow.Shadow
 internal fun DshLiquidGlassHost(
     modifier: Modifier = Modifier,
     frostOnOlderDevices: Boolean = false,
+    workspaceScrollState: ScrollableState? = null,
     background: @Composable (Modifier) -> Unit,
     content: @Composable BoxScope.() -> Unit
 ) {
     val effectsReduced = LocalUiEffectsReduced.current
+    val cardGlassApi = LocalDshCardGlassApi.current
     val backdrop = rememberLayerBackdrop()
+    val cacheWorkspaceBackdrop =
+        workspaceScrollState != null && !effectsReduced && cardGlassApi >= Build.VERSION_CODES.S
+    SideEffect {
+        // 所有卡片采样同一份离屏背景，滚动时继续绘制各自的模糊和折射。
+        backdrop.graphicsLayer.compositingStrategy =
+            if (cacheWorkspaceBackdrop) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+    }
     val sheetBackdrop = rememberLayerBackdrop()
     val frameSignal = remember { mutableLongStateOf(0L) }
-    val legacyBackdrop = if (frostOnOlderDevices && LocalDshCardGlassApi.current < Build.VERSION_CODES.S && !effectsReduced) {
+    val pointerDown = remember(workspaceScrollState) { mutableStateOf(false) }
+    val waitingForScrollToSettle = remember(workspaceScrollState) { mutableStateOf(false) }
+    val workspaceMoving = remember(workspaceScrollState) {
+        derivedStateOf {
+            pointerDown.value || workspaceScrollState?.isScrollInProgress == true ||
+                waitingForScrollToSettle.value
+        }
+    }
+    LaunchedEffect(workspaceScrollState) {
+        if (workspaceScrollState == null) return@LaunchedEffect
+        snapshotFlow { pointerDown.value || workspaceScrollState.isScrollInProgress }.collectLatest { moving ->
+            if (moving) {
+                waitingForScrollToSettle.value = true
+            } else if (waitingForScrollToSettle.value) {
+                // 连续滑动之间保持背景采样帧，避免短暂松手后又重启背景动画。
+                delay(WORKSPACE_SCROLL_SETTLE_MS)
+                waitingForScrollToSettle.value = false
+            }
+        }
+    }
+    val workspaceModifier = if (workspaceScrollState == null || effectsReduced) {
+        modifier
+    } else {
+        // 在列表越过拖动阈值前暂停背景动画。点击、长按和滚动仍由原控件处理。
+        modifier.pointerInput(workspaceScrollState) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                pointerDown.value = true
+                try {
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                    } while (event.changes.any { it.pressed })
+                } finally {
+                    pointerDown.value = false
+                }
+            }
+        }
+    }
+    val legacyBackdrop = if (frostOnOlderDevices && cardGlassApi < Build.VERSION_CODES.S && !effectsReduced) {
         remember { LegacyFrostedBackdrop() }
     } else null
     val backgroundCapture = when {
@@ -64,12 +126,14 @@ internal fun DshLiquidGlassHost(
         LocalDshBackdrop provides backdrop.takeUnless { effectsReduced || legacyBackdrop != null },
         LocalDshSheetBackdrop provides sheetBackdrop.takeUnless { effectsReduced },
         LocalDshGlassFrameSignal provides frameSignal.takeUnless { effectsReduced },
-        LocalLegacyFrostedBackdrop provides legacyBackdrop
+        LocalLegacyFrostedBackdrop provides legacyBackdrop,
+        LocalWorkspaceMoving provides workspaceMoving,
     ) {
         // 弹层位于独立窗口，可采样整个页面；页面内的玻璃控件仍只采样背景。
-        Box(if (effectsReduced) modifier else modifier.layerBackdrop(sheetBackdrop)) {
+        Box(if (effectsReduced) workspaceModifier else workspaceModifier.layerBackdrop(sheetBackdrop)) {
+            val backgroundLayer = if (cacheWorkspaceBackdrop) Modifier.graphicsLayer() else Modifier
             background(
-                if (effectsReduced) Modifier else Modifier
+                if (effectsReduced) Modifier else backgroundLayer
                     .drawWithContent {
                         frameSignal.longValue
                         drawContent()
@@ -96,11 +160,7 @@ internal enum class DshGlassStyle(
     ACTION(5f, 16f, 26f, 0.012f, 0.26f, 22f, saturation = 0.74f, navyTintAlpha = 0.06f),
     FIELD(5f, 10f, 16f, 0.060f, 0.10f, 14f, saturation = 0.72f),
     SUBTLE(4f, 8f, 13f, 0.040f, 0.10f, 12f, saturation = 0.72f),
-    APP_CARD(8f, 3f, 5f, 0.020f, 0.20f, 6f, saturation = 1f),
-    CLEAR_CARD(3f, 9f, 13f, 0.12f, 0.60f, 6f, saturation = 1f),
-    FROSTED_CARD(16f, 0f, 0f, 0.16f, 0.60f, 6f, saturation = 1f),
-    DARK_CLEAR_CARD(3f, 9f, 13f, 0.02f, 0.12f, 6f, saturation = 1f),
-    DARK_FROSTED_CARD(16f, 0f, 0f, 0.02f, 0.12f, 6f, saturation = 1f)
+    APP_CARD(8f, 3f, 5f, 0.020f, 0.20f, 6f, saturation = 1f)
 }
 
 /** 聊天应用卡片使用中性着色和轻折射，避免首页的深蓝底色影响正文。 */
@@ -131,7 +191,8 @@ internal fun Modifier.dshAppCardGlass(shape: Shape, dark: Boolean, shadowStrengt
 internal fun Modifier.dshLiquidGlass(
     shape: Shape,
     style: DshGlassStyle = DshGlassStyle.CARD,
-    shadowsEnabled: Boolean = true
+    shadowsEnabled: Boolean = true,
+    shadowStrength: Float = 1f,
 ): Modifier {
     val backdrop = LocalDshBackdrop.current
     val frameSignal = LocalDshGlassFrameSignal.current
@@ -175,7 +236,9 @@ internal fun Modifier.dshLiquidGlass(
             )
         },
         shadow = if (shadowsEnabled) {
-            { Shadow(radius = style.shadowRadiusDp.dp, color = Color.Black.copy(alpha = 0.09f)) }
+            {
+                Shadow(radius = style.shadowRadiusDp.dp, color = Color.Black.copy(alpha = 0.09f * shadowStrength))
+            }
         } else null,
         innerShadow = if (shadowsEnabled) {
             { InnerShadow.Default.copy(radius = 4.dp, alpha = style.borderAlpha * 0.22f) }
@@ -205,37 +268,25 @@ internal fun Modifier.dshLiquidGlass(
     )
 }
 
-/** 首页卡片共用这一组材质，前景与点击范围沿用调用方组件。 */
+/** 两种首页共用材质和滚动策略，配色由各自的背景提供。 */
 @Composable
-internal fun Modifier.dshClearCardGlass(shape: Shape, tint: Color? = null): Modifier {
-    if (LocalUiEffectsReduced.current) {
-        return background(tint ?: Color(0xFFF0EBF8), shape)
-            .border(0.8.dp, Color.White.copy(alpha = if (tint != null) 0.12f else 1f), shape).clip(shape)
-    }
+internal fun Modifier.dshWorkspaceGlass(shape: Shape, style: DshGlassStyle = DshGlassStyle.CARD): Modifier {
     val legacyBackdrop = LocalLegacyFrostedBackdrop.current
-    val api = LocalDshCardGlassApi.current
-    return dshOuterShadow(shape, ComposeShadow(radius = 6.dp, color = Color.Black.copy(alpha = 0.07f), offset = DpOffset(0.dp, 2.dp)))
-        .then(if (legacyBackdrop != null) {
-            Modifier.clip(shape).drawFrostedBackdrop(legacyBackdrop)
-                .background(tint?.copy(alpha = 0.86f) ?: Color.White.copy(alpha = 0.18f), shape)
-                .border(0.8.dp, Color.White.copy(alpha = if (tint != null) 0.12f else 0.60f), shape)
-        } else {
-            Modifier.dshLiquidGlass(shape,
-                style = when {
-                    tint != null && api >= Build.VERSION_CODES.TIRAMISU -> DshGlassStyle.DARK_CLEAR_CARD
-                    tint != null -> DshGlassStyle.DARK_FROSTED_CARD
-                    api >= Build.VERSION_CODES.TIRAMISU -> DshGlassStyle.CLEAR_CARD
-                    else -> DshGlassStyle.FROSTED_CARD
-                },
-                shadowsEnabled = false)
-                .then(if (tint == null) Modifier else Modifier.background(tint.copy(alpha = 0.86f), shape)
-                    .border(0.8.dp, Color.White.copy(alpha = 0.12f), shape))
-        })
-        .clip(shape)
+    if (legacyBackdrop == null) {
+        return dshLiquidGlass(shape, style, shadowStrength = WORKSPACE_GLASS_SHADOW_STRENGTH)
+    }
+    return clip(shape)
+        .drawFrostedBackdrop(legacyBackdrop)
+        .background(Color(0xFF031B3D).copy(alpha = style.navyTintAlpha), shape)
+        .background(Color.White.copy(alpha = style.surfaceAlpha), shape)
+        .border(0.8.dp, Color.White.copy(alpha = style.borderAlpha), shape)
 }
 
 internal val LocalDshCardGlassApi = staticCompositionLocalOf { Build.VERSION.SDK_INT }
 private val LocalLegacyFrostedBackdrop = staticCompositionLocalOf<LegacyFrostedBackdrop?> { null }
+private const val WORKSPACE_GLASS_SHADOW_STRENGTH = 0.5f
+private const val WORKSPACE_SCROLL_SETTLE_MS = 220L
+internal val LocalWorkspaceMoving = staticCompositionLocalOf<State<Boolean>?> { null }
 
 private val LocalDshBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 private val LocalDshSheetBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }

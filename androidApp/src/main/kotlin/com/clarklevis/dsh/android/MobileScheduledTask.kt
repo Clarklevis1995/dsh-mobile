@@ -1,6 +1,7 @@
 package com.clarklevis.dsh.android
 
 import com.clarklevis.dsh.shared.protocol.JsonValue
+import com.clarklevis.dsh.shared.protocol.ScheduleTaskPresentation
 
 data class MobileScheduledTask(
     val id: String,
@@ -13,6 +14,12 @@ data class MobileScheduledTask(
     val raw: JsonValue,
     val lastDelivery: JsonValue?
 ) {
+    val targetKind: String? get() = raw["target"]?.get("kind")?.stringValue
+    val linkedSessionId: String? get() =
+        ScheduleTaskPresentation.linkedSessionId(targetKind, raw["target"]?.get("sessionId")?.stringValue, sessionId)
+    val hasDelivery: Boolean get() =
+        lastDelivery is JsonValue.ObjectValue || raw["deliveryHistory"]?.get("records")?.arrayValue?.isNotEmpty() == true
+
     val everySeconds: Double? get() = (raw["timing"] ?: raw)["every_seconds"]?.doubleValue ?: raw["everySeconds"]?.doubleValue
     val expression: String? get() = (raw["timing"] ?: raw)["cron"]?.get("expression")?.stringValue ?: raw["expression"]?.stringValue
     val time: String? get() = (raw["timing"] ?: raw)[kind]?.get("time")?.stringValue ?: raw["time"]?.stringValue

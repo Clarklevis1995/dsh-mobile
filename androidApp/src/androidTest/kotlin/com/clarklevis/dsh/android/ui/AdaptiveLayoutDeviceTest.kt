@@ -13,9 +13,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
@@ -24,6 +26,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.test.platform.app.InstrumentationRegistry
 import com.clarklevis.dsh.android.AndroidSharedStateHolder
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -138,6 +141,46 @@ class AdaptiveLayoutDeviceTest {
             check()
             compose.runOnIdle { narrow = true }
             check()
+        } finally { compose.runOnIdle { holder.close() } }
+    }
+
+    @Test
+    fun assistantFileCardsShareTheBodyLeadingEdgeAcrossWindowChanges() {
+        val holder = AndroidSharedStateHolder().apply {
+            selectSession("files")
+            wirePayload = """{"kind":"history","sessionId":"files","historyFormatVersion":3,"events":[
+                {"type":"assistant/message","seq":1,"time":1,"data":{"turn":1,"step":1,"message":{"content":[{"type":"text","text":"Your daily brief is ready."}]}}},
+                {"type":"deliverables/presented","seq":2,"time":2,"data":{"turn":1,"callId":"files","files":[
+                    {"path":"brief.pdf"},
+                    {"path":"daily-notes-with-a-long-filename.docx","description":"A longer description that can wrap on a narrow display."}
+                ]}}
+            ],"hasMore":false}"""
+            submitWirePayload()
+        }
+        val reply = holder.snapshot.conversation.single { it.text == "Your daily brief is ready." }
+        var narrow by mutableStateOf(false)
+        compose.setContent {
+            DshTheme {
+                Box(Modifier.then(if (narrow) Modifier.width(300.dp) else Modifier.fillMaxWidth()).fillMaxSize()) {
+                    ConversationScreen(holder, onPickImage = {}, onBack = {})
+                }
+            }
+        }
+        try {
+            for (isNarrow in listOf(false, true)) {
+                compose.runOnIdle { narrow = isNarrow }
+                val body = bounds("conversation-entry:assistant:${reply.id}:markdown:0")
+                val short = compose.onNodeWithText("brief.pdf").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                val long = compose.onNodeWithText("daily-notes-with-a-long-filename.docx").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                assertEquals(body.left, short.left, 1f)
+                assertEquals(body.left, long.left, 1f)
+                assertTrue(short.width < long.width)
+                val image = compose.onNodeWithTag("conversation-message-list").captureToImage().asAndroidBitmap()
+                val context = InstrumentationRegistry.getInstrumentation().targetContext
+                context.getExternalFilesDir(null)?.resolve("assistant-file-alignment-$isNarrow.png")?.outputStream()?.use {
+                    image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                }
+            }
         } finally { compose.runOnIdle { holder.close() } }
     }
 

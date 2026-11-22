@@ -92,13 +92,34 @@ class AndroidSharedStateHolder(
 
     internal var botDesignPreview = false
         private set
-    internal fun restoreBotDesignPreview(json: String, connected: Boolean = true, errorCode: String? = null) {
+    internal fun restoreBotDesignPreview(
+        json: String,
+        connected: Boolean = true,
+        errorCode: String? = null,
+        showLiveWork: Boolean = false,
+    ) {
         check(((graph?.application?.applicationInfo?.flags ?: 0) and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
         botDesignPreview = true
-        botDesignImageBytes = runCatching { org.json.JSONObject(json).optString("previewImageBase64").takeIf { it.isNotEmpty() }?.let { Base64.decode(it, Base64.DEFAULT) } }.getOrNull()
+        val preview = runCatching { org.json.JSONObject(json) }.getOrNull()
+        botDesignImageBytes = runCatching {
+            preview?.optString("previewImageBase64")?.takeIf { it.isNotEmpty() }?.let { Base64.decode(it, Base64.DEFAULT) }
+        }.getOrNull()
         botStore.restoreCacheJson(json)
         val activation = botStore.activate(supported = true, connected = connected)
         botSnapshot = activation.snapshot
+        val state = preview?.optJSONObject("previewState") ?: if (showLiveWork) {
+            preview?.optJSONObject("previewWork")?.let { work ->
+                org.json.JSONObject().put("revision", 1).put("unchanged", true).put("work", work)
+            }
+        } else null
+        if (state != null) {
+            val requestId = activation.requests.firstOrNull { it.payload.contains("\"endpoint\":\"state\"") }?.correlationId
+            if (requestId != null) {
+                val reply = org.json.JSONObject().put("kind", "bot-result").put("requestId", requestId)
+                    .put("endpoint", "state").put("value", state)
+                botSnapshot = botStore.acceptJson(reply.toString()).snapshot
+            }
+        }
         if (errorCode != null) activation.requests.forEach { request ->
             request.correlationId?.let { botSnapshot = botStore.requestFailed(it, errorCode).snapshot }
         }
@@ -124,7 +145,9 @@ class AndroidSharedStateHolder(
         val transition = botStore.selectChat(id)
         if (botDesignPreview) botSnapshot = transition.snapshot else applyBotTransition(transition)
     }
+    internal fun setBotForeground(active: Boolean) = applyBotTransition(botStore.setForeground(active))
     fun loadEarlierBotMessages() = applyBotTransition(botStore.loadEarlier())
+    internal fun searchBotChats(query: String) = botStore.searchChats(query)
     fun refreshBotMode() {
         botRecoveryAttempts = 0
         applyBotTransition(botStore.refresh())
@@ -994,6 +1017,7 @@ class AndroidSharedStateHolder(
         scheduleHistoryError = null
         val appGraph = graph
         if (appGraph == null || gatewayState.connection != GatewayConnectionState.CONNECTED) {
+            scheduleHistoryRequestId = null
             scheduleHistoryLoading = false
             scheduleHistoryError = appText("请先连接 DeepSeek Harness")
             return
@@ -1003,6 +1027,7 @@ class AndroidSharedStateHolder(
             if (!appGraph.gatewayRuntime.sendRequest(GatewayRequests.hostScheduleHistory(id, task.id, before = before))) {
                 withContext(Dispatchers.Main.immediate) {
                     if (scheduleHistoryRequestId == id) {
+                        scheduleHistoryRequestId = null
                         scheduleHistoryLoading = false
                         scheduleHistoryError = appText("运行轨迹加载失败")
                     }
@@ -1018,6 +1043,23 @@ class AndroidSharedStateHolder(
                 }
             }
         }
+    }
+
+    private fun acceptScheduleHistory(frame: GatewayFrame, rawJson: String) {
+        val requestId = scheduleHistoryRequestId ?: return
+        if (frame.requestId != requestId) return
+        scheduleHistoryRequestId = null
+        scheduleHistoryLoading = false
+        if (frame.kind == "error" || frame.code != null) {
+            scheduleHistoryError = scheduledTaskFailureMessage(frame.code, frame.message, appText("运行轨迹加载失败"))
+            return
+        }
+        val page = JsonValue.fromJsonElement(kotlinx.serialization.json.Json.parseToJsonElement(rawJson))
+        val previous = if (scheduleHistoryAppending) scheduleHistory?.get("records")?.arrayValue.orEmpty() else emptyList()
+        val fields = (page as? JsonValue.ObjectValue)?.value.orEmpty().toMutableMap()
+        fields["records"] = JsonValue.ArrayValue((previous + frame.records.orEmpty()).distinct())
+        scheduleHistory = JsonValue.ObjectValue(fields)
+        scheduleHistoryError = null
     }
 
     fun filterScheduledTasks(active: Boolean?) {
@@ -1391,11 +1433,16 @@ class AndroidSharedStateHolder(
         refreshScheduledTasks()
     }
 
-    private fun scheduledTaskFailureMessage(code: String?, message: String?): String = when (code) {
+    private fun scheduledTaskFailureMessage(
+        code: String?,
+        message: String?,
+        fallback: String = appText("操作失败，请稍后重试")
+    ): String = when (code) {
         "schedule_conflict" -> appText("任务已被其他设备修改，列表已刷新，请重新打开编辑")
         "schedule_ended" -> appText("任务已结束，无法再编辑")
-        "schedule_not_found" -> appText("任务已不存在，列表已刷新")
-        else -> message ?: appText("操作失败，请稍后重试")
+        "schedule_not_found" -> appText("任务不存在，可能已被删除")
+        "schedule_out_of_scope" -> appText("该任务属于其他会话，请从对应会话进入")
+        else -> message ?: fallback
     }
 
     private var preparingNewSession = false
@@ -3874,15 +3921,7 @@ class AndroidSharedStateHolder(
                                             finishScheduledTaskMutation(scheduledTaskFailureMessage(event.frame.code, event.frame.message))
                                         }
                                         when (event.frame.kind) {
-                                            "schedule-history" -> if (event.frame.requestId == scheduleHistoryRequestId) {
-                                                val page = JsonValue.fromJsonElement(kotlinx.serialization.json.Json.parseToJsonElement(event.rawJson))
-                                                val previous = if (scheduleHistoryAppending) scheduleHistory?.get("records")?.arrayValue.orEmpty() else emptyList()
-                                                val fields = (page as? JsonValue.ObjectValue)?.value.orEmpty().toMutableMap()
-                                                fields["records"] = JsonValue.ArrayValue((previous + event.frame.records.orEmpty()).distinct())
-                                                scheduleHistory = JsonValue.ObjectValue(fields)
-                                                scheduleHistoryLoading = false
-                                                scheduleHistoryError = null
-                                            }
+                                            "schedule-history" -> acceptScheduleHistory(event.frame, event.rawJson)
                                             "schedule-list", "schedule-catalog" -> {
                                                 if (event.frame.kind == "schedule-list" && event.frame.requestId != scheduleListRequestId) return@withContext
                                                 val previous = if (event.frame.kind == "schedule-list" && scheduleListOffset > 0) scheduledTasks else emptyList()
@@ -3892,10 +3931,12 @@ class AndroidSharedStateHolder(
                                                 scheduledTasksLoading = false
                                                 scheduledTasksError = null
                                             }
-                                            "schedule-changed" -> refreshScheduledTasks()
-                                            "error" -> if (event.frame.requestType == "schedule-history" && event.frame.requestId == scheduleHistoryRequestId) {
-                                                scheduleHistoryLoading = false
-                                                scheduleHistoryError = event.frame.message ?: appText("运行轨迹加载失败")
+                                            "schedule-changed" -> {
+                                                refreshScheduledTasks()
+                                                refreshSessions()
+                                            }
+                                            "error" -> if (event.frame.requestType == "schedule-history") {
+                                                acceptScheduleHistory(event.frame, event.rawJson)
                                             } else if (event.frame.requestType in setOf("schedule-catalog", "schedule-list") &&
                                                 (event.frame.requestId == null || event.frame.requestId == scheduleListRequestId)) {
                                                 scheduledTasksLoading = false

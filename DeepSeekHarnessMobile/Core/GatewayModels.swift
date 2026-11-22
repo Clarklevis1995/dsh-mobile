@@ -1,5 +1,6 @@
 import Foundation
 import ImageIO
+import DeepSeekHarnessShared
 
 @inline(__always)
 func gatewayApprovalTrace(_ message: @autoclosure () -> String) {
@@ -1367,6 +1368,18 @@ struct SessionSummary: Codable, Hashable, Sendable, Identifiable {
 }
 
 struct ScheduledTask: Identifiable, Hashable {
+    var targetKind: String? { raw["target"]?["kind"]?.stringValue }
+    var linkedSessionID: String? {
+        ScheduleTaskPresentation.shared.linkedSessionId(
+            targetKind: targetKind,
+            targetSessionId: raw["target"]?["sessionId"]?.stringValue,
+            legacySessionId: sessionID
+        )
+    }
+    var hasDelivery: Bool {
+        lastDelivery?.objectValue != nil
+            || raw["deliveryHistory"]?["records"]?.arrayValue?.isEmpty == false
+    }
     var everySeconds: Double? { (raw["timing"] ?? raw)["every_seconds"]?.doubleValue ?? raw["everySeconds"]?.doubleValue }
     var expression: String? { (raw["timing"] ?? raw)["cron"]?["expression"]?.stringValue ?? raw["expression"]?.stringValue }
     var clock: String? { (raw["timing"] ?? raw)[kind]?["time"]?.stringValue ?? raw["time"]?.stringValue }

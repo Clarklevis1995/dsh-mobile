@@ -2,6 +2,7 @@
   "version": 1,
   "snapshot": {
     "mainBotId": "chief",
+    "unreadCounts": { "room": 100 },
     "chats": [
       {
         "id": "chief",

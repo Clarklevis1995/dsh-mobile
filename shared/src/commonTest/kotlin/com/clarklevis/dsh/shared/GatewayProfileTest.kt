@@ -62,11 +62,12 @@ class GatewayProfileTest {
         assertEquals(listOf(lan), restored.endpointsFor(GatewayConnectionMethod.LAN))
     }
 
-    @Test fun rescanReplacesCachedEndpointOrderEvenForAddressesStillInTheCode() {
+    @Test fun rescanRefreshesOnlyTheMethodsInThePairingCode() {
         val lan = "ws://192.168.1.19:3081/ws/mobile"
         val cached = "wss://cached.example/ws/mobile"
+        val oldPublic = "wss://obsolete.example/ws/mobile"
         val scanned = listOf("wss://new.example/ws/mobile", "wss://backup.example/ws/mobile", cached)
-        val original = GatewayProfile("local", gatewayName = "Test", endpoints = listOf(lan, cached))
+        val original = GatewayProfile("local", gatewayId = id, gatewayName = "Test", endpoints = listOf(lan, cached, oldPublic))
             .connectedAt(cached, 1)
             .connectedAt(lan, 2)
             .copy(selectedConnectionMethod = GatewayConnectionMethod.LAN)
@@ -74,11 +75,21 @@ class GatewayProfileTest {
         val candidate = original.withPairingEndpoints(scanned)
         assertEquals(lan, original.startupEndpoint)
         assertEquals(scanned.first(), candidate.startupEndpoint)
-        assertEquals(scanned, candidate.connectionEndpoints)
+        assertEquals(scanned + lan, candidate.connectionEndpoints)
         assertNull(candidate.selectedConnectionMethod)
         val verified = candidate.connectedAt(scanned.first(), 3)
         val restored = Json.decodeFromString<GatewayProfile>(Json.encodeToString(GatewayProfile.serializer(), verified))
-        assertEquals(scanned, restored.connectionEndpoints)
+        assertEquals(scanned + lan, restored.connectionEndpoints)
         assertEquals(scanned.first(), restored.startupEndpoint)
+        assertEquals(listOf(lan), restored.endpointsFor(GatewayConnectionMethod.LAN))
+        assertEquals(scanned, original.copy(gatewayId = null).withPairingEndpoints(scanned).connectionEndpoints)
+    }
+
+    @Test fun fullPairingCodeStillKeepsOneAddressPerSavedMethod() {
+        val lan = "ws://192.168.1.19:3081/ws/mobile"
+        val tailscale = "ws://100.100.10.55:3081/ws/mobile"
+        val scanned = (1..16).map { "wss://host$it.example/ws/mobile" }
+        val merged = GatewayIdentity.mergePairingEndpoints(scanned, listOf(lan, tailscale))
+        assertEquals(scanned.take(14) + listOf(lan, tailscale), merged)
     }
 }

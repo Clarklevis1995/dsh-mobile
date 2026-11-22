@@ -29,7 +29,7 @@ data class GatewayProfile(
         connectionEndpoints.filter { GatewayIdentity.connectionMethod(it) == method }
 
     fun withPairingEndpoints(addresses: List<String>): GatewayProfile = copy(
-        endpoints = addresses,
+        endpoints = GatewayIdentity.mergePairingEndpoints(addresses, if (gatewayId == null) emptyList() else connectionEndpoints),
         preferredEndpoint = addresses.firstOrNull(),
         selectedConnectionMethod = null,
         recentSuccessfulEndpoints = emptyList(),
@@ -54,6 +54,7 @@ enum class GatewayConnectionMethod { LAN, PUBLIC, TAILSCALE }
 // 直接保留协议数量/长度限制和私网、RFC 6598 共享地址段边界，便于核对。
 @Suppress("MagicNumber")
 object GatewayIdentity {
+    private const val MAX_ENDPOINTS = 16
     private val uuid = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
 
     fun validate(expected: String?, received: String?) {
@@ -70,11 +71,26 @@ object GatewayIdentity {
 
     fun endpoints(payload: GatewayPairingPayload): List<String> {
         val endpoints = (listOf(payload.publicUrl) + payload.endpoints.orEmpty()).distinct()
-        if (payload.endpoints.orEmpty().size > 16 || endpoints.size > 16) {
+        if (payload.endpoints.orEmpty().size > MAX_ENDPOINTS || endpoints.size > MAX_ENDPOINTS) {
             throw GatewayPairingPayloadException(UiMessage("gateway.tooManyEndpoints"), "More than 16 candidate addresses")
         }
         endpoints.forEach(::validateEndpoint)
         return endpoints
+    }
+
+    /** 同一网关重新配对时，二维码只更新它提供的连接方式。 */
+    fun mergePairingEndpoints(scanned: List<String>, saved: List<String>): List<String> {
+        val scannedMethods = scanned.mapTo(mutableSetOf(), ::connectionMethod)
+        val retained = saved.filter {
+            connectionMethod(it) !in scannedMethods && runCatching { validateEndpoint(it) }.isSuccess
+        }
+        val candidates = (scanned + retained).distinct()
+        if (candidates.size <= MAX_ENDPOINTS) return candidates
+
+        // 地址到达上限时，每种方式至少保留一个，首选地址和顺序仍以二维码为准。
+        val firstPerMethod = candidates.distinctBy(::connectionMethod).toSet()
+        val extra = candidates.filterNot(firstPerMethod::contains).take(MAX_ENDPOINTS - firstPerMethod.size)
+        return candidates.filter { it in firstPerMethod || it in extra }
     }
 
     fun validateEndpoint(endpoint: String) {

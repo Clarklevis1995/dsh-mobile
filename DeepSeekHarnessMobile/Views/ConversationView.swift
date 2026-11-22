@@ -5634,7 +5634,7 @@ struct ConversationRow: View {
                     FileReferenceCard(path: file.path, description: file.description) {
                         onOpenFile?(file.path)
                     }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if showsCopyButton && !item.text.isEmpty {
                     AssistantMessageActions(text: item.text, onReply: onQuote)

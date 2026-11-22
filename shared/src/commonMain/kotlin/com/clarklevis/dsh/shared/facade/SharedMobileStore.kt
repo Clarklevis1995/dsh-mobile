@@ -76,7 +76,8 @@ data class SharedMobileSnapshot(
     val selectedHistoryLoadedEventCount: Int = 0,
     val selectedHistoryTotalEventCount: Int? = null,
     val lastFrameKind: String? = null,
-    val lastError: String? = null
+    val lastError: String? = null,
+    val archivedSessionIds: Set<String> = emptySet()
 )
 
 /** 与 Gateway 的 asOfSeq 对齐；同一会话只接受不早于当前水位的更新。 */
@@ -611,6 +612,7 @@ class SharedMobileStore(
         val selected = sessionListState.selectedSessionId
         return SharedMobileSnapshot(
             sessions = sessionListState.sessions.filterNot { it.id in sessionListState.archivedSessionIds },
+            archivedSessionIds = sessionListState.archivedSessionIds,
             workspaces = workspaces,
             searchResultSessionIds = searchResultSessionIds,
             selectedSessionId = selected,

@@ -16,6 +16,169 @@ import kotlin.test.assertTrue
 
 class SharedBotStoreTest {
     @Test
+    fun homeSearchMatchesNamesAndCachedMessagesWithoutSelectingAChat() {
+        val store = SharedBotStore()
+        store.restoreCacheJson("""
+            {"version":1,"snapshot":{"mainBotId":"chief",
+              "chats":[{"id":"chief","name":"Chief"},
+                       {"id":"room","name":"Project","room":true,"preview":"季度汇总"},
+                       {"id":"worker","name":"研究员"}],
+              "unreadCounts":{"room":2}},
+             "histories":{"chief":[{"id":"old","kind":"bot","text":"验证消息同步"}],
+                          "room":[{"id":"raw","kind":"event","text":"内部事件"}]},
+             "optimistic":{}}
+        """.trimIndent())
+
+        assertEquals(listOf("room", "worker"), store.searchChats("  ").map { it.id })
+        assertEquals("room", store.searchChats(" PROJECT ").single().id)
+        assertEquals("room", store.searchChats("季度汇总").single().id)
+        assertEquals("chief", store.searchChats("消息同步").single().id)
+        assertTrue(store.searchChats("内部事件").isEmpty())
+        assertNull(store.snapshot().selectedChatId)
+        assertEquals(2, store.snapshot().unreadCount("room"))
+    }
+
+    @Test
+    fun unreadCountsOnlyNewMessagesAndDeduplicatesLiveAndReplay() {
+        val store = SharedBotStore()
+        val start = store.activate(true, true)
+        val subscription = start.requests.first { it.requestType == "bot-subscribe" }.correlationId
+        fun emit(kind: String, data: String) =
+            store.acceptJson("""{"kind":"bot-event","subscriptionId":"$subscription","botEvent":"$kind","botData":$data}""")
+
+        emit("hello", """{"boot":"first","seq":10}""")
+        emit("notice", """{"seq":12,"kind":"group","roomId":"room","botId":"chief","text":"组员消息"}""")
+        assertEquals(0, store.snapshot().unreadCount("room"), "实时流先到时等待缺失的通知")
+        val replay = """{"boot":"first","seq":12,"notices":[
+          {"seq":10,"kind":"message","botId":"chief","text":"首次同步前的旧消息"},
+          {"seq":11,"kind":"message","botId":"worker","text":"新私聊"},
+          {"seq":12,"kind":"group","roomId":"room","botId":"chief","text":"组员消息"}
+        ]}"""
+        response(store, start, "notices", replay)
+        emit("notice", """{"seq":12,"kind":"group","roomId":"room","botId":"chief"}""")
+        emit("notice", """{"seq":13,"kind":"done","roomId":"room","botId":"chief"}""")
+        emit("notice", """{"seq":14,"kind":"approval","botId":"worker"}""")
+        emit("notice", """{"seq":15,"kind":"group","roomId":"room","botId":"worker"}""")
+        assertEquals(mapOf("room" to 2, "worker" to 1), store.snapshot().unreadCounts)
+
+        store.selectChat("room")
+        emit("notice", """{"seq":16,"kind":"group","roomId":"room","botId":"chief"}""")
+        assertEquals(0, store.snapshot().unreadCount("room"))
+        store.setForeground(false)
+        emit("notice", """{"seq":17,"kind":"group","roomId":"room","botId":"chief"}""")
+        assertEquals(1, store.snapshot().unreadCount("room"))
+        store.setForeground(true)
+        assertEquals(0, store.snapshot().unreadCount("room"))
+        store.selectChat(null)
+        emit("notice", """{"seq":18,"kind":"group","roomId":"room","botId":"chief"}""")
+        assertEquals(1, store.snapshot().unreadCount("room"))
+    }
+
+    @Test
+    fun runningIndicatorTakesPriorityAndRevealsUnreadAfterCompletion() {
+        val store = SharedBotStore()
+        val start = store.activate(true, true)
+        val subscription = start.requests.first { it.requestType == "bot-subscribe" }.correlationId
+        fun emit(kind: String, data: String) =
+            store.acceptJson("""{"kind":"bot-event","subscriptionId":"$subscription","botEvent":"$kind","botData":$data}""")
+
+        response(store, start, "state", """
+            {"revision":1,"bots":[{"id":"chief","name":"Chief"},{"id":"worker","name":"Worker"}],
+             "rooms":[{"id":"room","sessionId":"group-session","name":"Team","members":["worker"]}]}
+        """.trimIndent())
+        val refresh = emit("hello", """{"boot":"run","seq":0}""")
+        val working = response(store, refresh, "state", """
+            {"revision":1,"unchanged":true,"work":{
+               "bots":{"worker":{"roomId":"room","since":1000,"tool":"web_search"}},
+               "rooms":{"room":[{"botId":"worker","since":1000,"tool":"web_search"}]},
+               "turns":{"chief":1000}}}
+        """.trimIndent()).snapshot
+        assertTrue(working.chatIndicator("room")?.running == true)
+        assertTrue(working.chatIndicator("chief")?.running == true)
+        assertNull(working.chatIndicator("worker"), "群聊中的工作不应标记为同一成员的私聊")
+
+        var afterNotice = emit("notice", """{"seq":1,"kind":"group","roomId":"room","botId":"worker"}""")
+        val refreshAfterNotice = afterNotice
+        for (seq in 2..99) {
+            afterNotice = emit("notice", """{"seq":$seq,"kind":"group","roomId":"room","botId":"worker"}""")
+        }
+        assertTrue(afterNotice.snapshot.chatIndicator("room")?.running == true)
+        assertEquals(99, afterNotice.snapshot.unreadCount("room"))
+        val finished = response(store, refreshAfterNotice, "state", """{"revision":1,"unchanged":true,"work":{}}""").snapshot
+        assertEquals(false, finished.chatIndicator("room")?.running)
+        assertEquals("99", finished.chatIndicator("room")?.unreadText)
+        assertNull(finished.chatIndicator("chief"), "运行结束且无未读时隐藏角标")
+
+        val overflow = emit("notice", """{"seq":100,"kind":"group","roomId":"room","botId":"worker"}""").snapshot
+        assertEquals("99+", overflow.chatIndicator("room")?.unreadText)
+        assertEquals(100, overflow.chatIndicator("room")?.unreadCount)
+        assertNull(store.selectChat("room").snapshot.chatIndicator("room"))
+    }
+
+    @Test
+    fun unreadCountsAndReplayCursorSurviveLocalCacheAndHostRestart() {
+        val first = SharedBotStore()
+        val start = first.activate(true, true)
+        val sub = start.requests.first { it.requestType == "bot-subscribe" }.correlationId
+        first.acceptJson("""{"kind":"bot-event","subscriptionId":"$sub","botEvent":"hello","botData":{"boot":"old","seq":4}}""")
+        first.acceptJson("""{"kind":"bot-event","subscriptionId":"$sub","botEvent":"notice","botData":{"seq":5,"kind":"message","botId":"chief"}}""")
+        val restored = SharedBotStore()
+        restored.restoreCacheJson(first.exportCacheJson())
+        assertEquals(1, restored.snapshot().unreadCount("chief"))
+        val connect = restored.activate(true, true)
+        val requestBodies = connect.requests.map { Json.parseToJsonElement(it.payload).jsonObject }
+        val request = requestBodies.first { it["endpoint"]?.jsonPrimitive?.content == "notices" }
+        val cursor = request.getValue("payload").jsonObject
+        assertEquals("old", cursor.getValue("boot").jsonPrimitive.content)
+        assertEquals("5", cursor.getValue("since").jsonPrimitive.content)
+        val newSub = connect.requests.first { it.requestType == "bot-subscribe" }.correlationId
+        restored.acceptJson("""{"kind":"bot-event","subscriptionId":"$newSub","botEvent":"hello","botData":{"boot":"new","seq":2}}""")
+        restored.selectChat("room")
+        restored.selectChat(null)
+        response(restored, connect, "notices", """
+            {"boot":"new","seq":3,"reset":true,"notices":[
+              {"seq":1,"kind":"group","roomId":"room","botId":"chief"},
+              {"seq":2,"kind":"message","botId":"worker"},
+              {"seq":3,"kind":"group","roomId":"room","botId":"chief"}
+            ]}
+        """.trimIndent())
+        assertEquals(mapOf("chief" to 1, "worker" to 1, "room" to 1), restored.snapshot().unreadCounts)
+    }
+
+    @Test
+    fun liveWorkIsScopedToTheChatAndClearsWhenTheTurnEnds() {
+        val store = SharedBotStore()
+        val start = store.activate(true, true)
+        val running = response(store, start, "state", """
+            {"revision":2,"bots":[{"id":"chief","name":"Chief","sessionId":"current"},{"id":"worker","name":"Worker"}],
+             "rooms":[{"id":"room","name":"Team","members":["worker"]}],
+             "work":{"bots":{"chief":{"since":1000,"tool":"web_search"},
+                             "worker":{"roomId":"room","since":2000,"tool":"web_fetch"}},
+                     "rooms":{"room":[{"botId":"worker","since":2000,"tool":"web_fetch"}]},
+                     "turns":{"current":1000},"steered":{"current":1500}}}
+        """.trimIndent()).snapshot
+        assertEquals("web-search", running.visibleLiveWork("chief")?.kind)
+        assertEquals(1500L, running.visibleLiveWork("chief")?.startedAtMs)
+        assertEquals("worker", running.visibleLiveWork("room")?.botId)
+        assertEquals("web-read", running.visibleLiveWork("room")?.kind)
+        assertNull(running.visibleLiveWork("worker"))
+
+        val unchanged = response(store, store.refresh(), "state", """{"revision":2,"unchanged":true}""")
+        assertEquals(running.liveWork, unchanged.snapshot.liveWork)
+        val thinking = response(store, store.refresh(), "state",
+            """{"revision":2,"unchanged":true,"work":{"turns":{"current":1000}}}""")
+        assertEquals("thinking", thinking.snapshot.visibleLiveWork("chief")?.kind)
+        assertNull(thinking.snapshot.visibleLiveWork("room"))
+
+        val restored = SharedBotStore().restoreCacheJson(store.exportCacheJson())
+        assertTrue(restored.snapshot.liveWork.isEmpty())
+        val stopped = response(store, store.refresh(), "state", """{"revision":2,"unchanged":true,"work":{}}""")
+        assertTrue(stopped.snapshot.liveWork.isEmpty())
+        response(store, store.refresh(), "state", """{"revision":2,"unchanged":true,"work":{"turns":{"current":3000}}}""")
+        assertTrue(store.connectionChanged(supported = true, connected = false).snapshot.liveWork.isEmpty())
+    }
+
+    @Test
     fun messageQuoteUsesExistingSendAndRestoresFromPrivateAndGroupHistory() {
         val quote = "接下来需要核对这份报告。"
         val text = "> $quote\n\n请继续"

@@ -69,7 +69,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -793,20 +795,27 @@ private fun presetCapabilityText(holder: AndroidSharedStateHolder): String = whe
 }
 
 @Composable
-internal fun SettingsSection(title: String? = null, footer: String? = null, content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsSection(
+    title: String? = null,
+    footer: String? = null,
+    horizontalPadding: Dp = 16.dp,
+    cornerRadius: Dp = 22.dp,
+    headingStyle: androidx.compose.ui.text.TextStyle = SettingsTypography.section,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (title != null) {
             Text(
                 title,
                 modifier = Modifier.padding(start = 20.dp),
-                style = SettingsTypography.section,
+                style = headingStyle,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.48f)
             )
         }
         Column(
             Modifier.fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(22.dp))
-                .padding(horizontal = 16.dp),
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(cornerRadius))
+                .padding(horizontal = horizontalPadding),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) { content() }
         footer?.let {
@@ -829,12 +838,17 @@ internal fun SettingsValueRow(
     modifier: Modifier = Modifier,
     isMenu: Boolean = false,
     destructive: Boolean = false,
+    minHeight: Dp = 54.dp,
+    valueMaxLines: Int = 1,
+    emphasizeSelection: Boolean = false,
+    showIndicator: Boolean = true,
     onClick: (() -> Unit)? = null
 ) {
-    val rowAlpha = if (enabled) 1f else 0.4f
+    val rowAlpha = if (enabled || emphasizeSelection) 1f else 0.4f
+    val valueAlpha = if (!enabled) 0.3f else if (emphasizeSelection) 1f else 0.52f
     val titleColor = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
     Row(
-        modifier.fillMaxWidth().heightIn(min = 54.dp)
+        modifier.fillMaxWidth().heightIn(min = minHeight)
             .clickable(enabled = enabled && onClick != null) { onClick?.invoke() },
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -857,18 +871,19 @@ internal fun SettingsValueRow(
             } else {
                 Text(
                     value,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.52f else 0.3f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = valueAlpha),
                     style = SettingsTypography.item,
-                    maxLines = 1,
+                    maxLines = valueMaxLines,
+                    textAlign = TextAlign.End,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
-        if (onClick != null) {
+        if (onClick != null && showIndicator) {
             Icon(
                 painterResource(if (isMenu) R.drawable.ic_chevrons_up_down else R.drawable.ic_chevron_right),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.30f else 0.15f),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (emphasizeSelection) valueAlpha else if (enabled) 0.30f else 0.15f),
                 modifier = Modifier.padding(start = 8.dp).size(12.dp)
             )
         }

@@ -118,24 +118,20 @@ struct SettingsView: View {
         let method = profile.selectedConnectionMethod ?? GatewayAddressMethod(endpoint: store.endpoint)
         return Group {
             SettingsChoiceMenu(title: LocalizedStringKey("连接方式"), value: method.title, identifier: "gateway-connection-method") {
-                ForEach(GatewayAddressMethod.allCases.filter { !profile.endpoints(for: $0).isEmpty }, id: \.self) { option in
-                    Button {
-                        hosts.selectConnectionMethod(option)
-                    } label: {
-                        if option == method { Label(option.title, systemImage: "checkmark") }
-                        else { Text(verbatim: option.title) }
+                Picker("连接方式", selection: Binding(get: { method }, set: hosts.selectConnectionMethod)) {
+                    ForEach(GatewayAddressMethod.allCases.filter { !profile.endpoints(for: $0).isEmpty }, id: \.self) { option in
+                        Text(verbatim: option.title).tag(option)
                     }
                 }
+                .pickerStyle(.inline)
             }
             SettingsChoiceMenu(title: LocalizedStringKey("网关地址"), value: store.endpoint, identifier: "gateway-address-menu") {
-                ForEach(profile.endpoints(for: method), id: \.self) { endpoint in
-                    Button {
-                        hosts.selectConnectionEndpoint(endpoint)
-                    } label: {
-                        if endpoint == store.endpoint { Label(endpoint, systemImage: "checkmark") }
-                        else { Text(verbatim: endpoint) }
+                Picker("网关地址", selection: Binding(get: { store.endpoint }, set: hosts.selectConnectionEndpoint)) {
+                    ForEach(profile.endpoints(for: method), id: \.self) { endpoint in
+                        Text(verbatim: endpoint).tag(endpoint)
                     }
                 }
+                .pickerStyle(.inline)
             }
         }
     }

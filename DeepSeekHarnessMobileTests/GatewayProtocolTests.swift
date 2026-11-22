@@ -11829,6 +11829,40 @@ final class ConversationFileReferencesTests: XCTestCase {
         XCTAssertTrue(html.contains("href=\"https://example.com\""))
         XCTAssertTrue(html.contains("<pre><code>report.pdf"))
     }
+
+    func testAssistantFileCardsAlignWithBodyAtDifferentWidths() throws {
+        let item = ConversationItem(id: "files", kind: .assistant, title: "", text: "Your daily brief is ready.",
+            isError: false, date: .now, files: [
+                PresentedFile(path: "brief.pdf"),
+                PresentedFile(path: "daily-notes-with-a-long-filename.docx",
+                              description: "A longer description that can wrap on a narrow display.")
+            ])
+        for (width, size) in [(300.0, DynamicTypeSize.accessibility1), (390.0, .large), (680.0, .large)] {
+            let renderer = ImageRenderer(content: ConversationRow(item: item, showsCopyButton: false, imageData: { _ in nil })
+                .frame(width: width, alignment: .leading)
+                .background(Color.white)
+                .environment(\.colorScheme, .light)
+                .environment(\.dynamicTypeSize, size))
+            let image = try XCTUnwrap(renderer.cgImage)
+            let screenshot = XCTAttachment(image: UIImage(cgImage: image))
+            screenshot.name = "assistant-file-alignment-\(Int(width))"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+
+            // Sample just inside the left edge, clear of icons, labels and rounded corners.
+            var pixels = [UInt8](repeating: 0, count: image.height * 4)
+            let colorSpace = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+            let context = try XCTUnwrap(CGContext(data: &pixels, width: 1, height: image.height,
+                bitsPerComponent: 8, bytesPerRow: 4, space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: -5, y: 0, width: image.width, height: image.height))
+            let cardRows = stride(from: 0, to: pixels.count, by: 4).filter {
+                pixels[$0] > 200 && pixels[$0 + 1] > 200 && pixels[$0 + 2] > 200
+            }
+            XCTAssertGreaterThan(cardRows.filter { Int(pixels[$0]) - Int(pixels[$0 + 2]) > 10 }.count, 30)
+            XCTAssertGreaterThan(cardRows.filter { Int(pixels[$0 + 2]) - Int(pixels[$0]) > 10 }.count, 30)
+        }
+    }
 }
 
 
@@ -17290,6 +17324,40 @@ final class Gateway022ProtocolTests: XCTestCase {
 
 @MainActor
 final class ScheduledTaskHistoryTests: XCTestCase {
+    func testReservedSessionIsOnlyLinkableWhilePresentAndUnarchived() async throws {
+        let gateway = GatewayClient()
+        let origin = SessionSummary(id: "origin", title: "来源会话", lastActivity: .now, isRunning: false, hasUnread: false)
+        let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
+            selectedWorkspaceID: nil, sessions: [origin]), gatewayClient: gateway, chatHistoryCache: nil)
+        defer { store.disconnect() }
+        var requests: [[String: Any]] = []
+        gateway.installConnectedTransportForTesting { text in
+            if let request = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] {
+                requests.append(request)
+            }
+        }
+        let task = try XCTUnwrap(ScheduledTask(.object([
+            "id": .string("task-a"), "title": .string("每日简报"), "prompt": .string("生成简报"),
+            "status": .string("active"), "involvedSessionIds": .array([.string("origin")]),
+            "target": .object(["kind": .string("new_once"), "sessionId": .string("reserved")])
+        ])))
+        XCTAssertNil(store.scheduleLinkedSession(task.linkedSessionID))
+        store.loadScheduleHistory(task)
+        let request = try XCTUnwrap(requests.last { $0["type"] as? String == "schedule-history" })
+        XCTAssertEqual(request["id"] as? String, task.id)
+        XCTAssertNil(request["sessionId"])
+
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"sessions","items":[{"sessionId":"reserved","updatedAt":100,"running":false,"blank":false}]}"#.utf8)))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        XCTAssertEqual(store.scheduleLinkedSession(task.linkedSessionID)?.id, "reserved")
+
+        gateway.onFrame?(try GatewayWireDecoder.decode(Data(
+            #"{"kind":"session-archives","archivedSessionIds":["reserved"]}"#.utf8)))
+        await store.awaitPendingKMPEventDeliveriesForTesting()
+        XCTAssertNil(store.scheduleLinkedSession(task.linkedSessionID))
+    }
+
     func testPagesAppendRetryAndIgnorePreviousTaskResponse() async throws {
         let gateway = GatewayClient()
         let store = AppStore(preferences: AppPreferencesSpy(endpoint: "ws://injected.example/ws/mobile",
@@ -17314,11 +17382,16 @@ final class ScheduledTaskHistoryTests: XCTestCase {
         let older: [String: Any] = ["messageId": "m1", "scheduledAt": "2026-11-05T08:00:00Z"]
         try await deliver(["kind": "schedule-history", "requestId": firstID, "records": [recent], "nextBefore": "m2"])
         XCTAssertFalse(store.scheduleHistoryLoading)
-        store.loadScheduleHistory(task, before: "m2")
-        let secondID = try XCTUnwrap(requests.last?["requestId"] as? String)
-        try await deliver(["kind": "error", "requestType": "schedule-history", "requestId": secondID, "message": "暂时不可用"])
-        XCTAssertEqual(store.scheduleHistory?["records"]?.arrayValue?.count, 1)
-        XCTAssertNotNil(store.scheduleHistoryError)
+        for (code, message) in [
+            ("schedule_not_found", String(localized: "任务不存在，可能已被删除")),
+            ("schedule_out_of_scope", String(localized: "该任务属于其他会话，请从对应会话进入"))
+        ] {
+            store.loadScheduleHistory(task, before: "m2")
+            let requestID = try XCTUnwrap(requests.last?["requestId"] as? String)
+            try await deliver(["kind": "schedule-history", "requestId": requestID, "code": code])
+            XCTAssertEqual(store.scheduleHistory?["records"]?.arrayValue?.count, 1)
+            XCTAssertEqual(store.scheduleHistoryError, message)
+        }
         store.loadScheduleHistory(task, before: "m2")
         XCTAssertEqual(requests.last?["before"] as? String, "m2")
         let retryID = try XCTUnwrap(requests.last?["requestId"] as? String)

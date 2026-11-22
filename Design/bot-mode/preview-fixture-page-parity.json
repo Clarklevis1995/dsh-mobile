@@ -1,0 +1,311 @@
+{
+  "version": 1,
+  "snapshot": {
+    "mainBotId": "chief",
+    "roleSettingsSupported": true,
+    "schedulesAvailable": true,
+    "models": [
+      {
+        "id": "GPT-6.1 Terra",
+        "title": "GPT-6.1 Terra"
+      },
+      {
+        "id": "DeepSeek-V4.1-Flash",
+        "title": "DeepSeek-V4.1-Flash"
+      }
+    ],
+    "effortModel": "GPT-6.1 Terra",
+    "efforts": [
+      {
+        "id": "low",
+        "title": "Low"
+      }
+    ],
+    "chats": [
+      {
+        "id": "chief",
+        "name": "大主管",
+        "role": "Chief of Staff",
+        "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCIgdmlld0JveD0iMCAwIDgwIDgwIj48cGF0aCBmaWxsPSIjMDBiOGNlIiBkPSJNMzQgN2E1IDUgMCAwIDEgOS0xbDEzIDE5IDIyIDItMTIgMTkgNSAyMy0yMy01LTE5IDEzLTQtMjNMNSA0MGwyMi0xMFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJtMzcgMzUgMiAxMG0xMC0xMyAyIDEwIi8+PC9zdmc+",
+        "profile": {
+          "model": "GPT-6.1 Terra"
+        },
+        "sessionId": "chief-session"
+      },
+      {
+        "id": "room",
+        "name": "Bot 接入讨论",
+        "room": true,
+        "memberIds": [
+          "chief",
+          "researcher"
+        ]
+      },
+      {
+        "id": "researcher",
+        "name": "研究员",
+        "role": "调研"
+      }
+    ],
+    "schedules": [
+      {
+        "id": "morning",
+        "title": "每日简报",
+        "status": "每天",
+        "next": "2026-11-22T00:00:00.000Z",
+        "botId": "chief",
+        "sessionId": "chief-session"
+      }
+    ],
+    "roleDetails": {
+      "botId": "chief",
+      "memories": [
+        {
+          "id": "1",
+          "scope": "bot",
+          "text": "用户正在调研 DS-Bot 团队协作、消息路由和权限边界。这段记忆用于核对长文本的换行、列表高度以及独立编辑界面。"
+        },
+        {
+          "id": "2",
+          "scope": "bot",
+          "text": "记忆测试二"
+        },
+        {
+          "id": "3",
+          "scope": "bot",
+          "text": "记忆测试三"
+        }
+      ],
+      "inputTokens": 100000,
+      "outputTokens": 16602
+    },
+    "creationModels": [
+      {
+        "id": "GPT-6.1 Terra",
+        "title": "GPT-6.1 Terra"
+      },
+      {
+        "id": "DeepSeek-V4.1-Flash",
+        "title": "DeepSeek-V4.1-Flash"
+      }
+    ],
+    "defaultCreationModel": "GPT-6.1 Terra",
+    "creation": {
+      "supported": true,
+      "appearance": {
+        "shapes": [
+          {
+            "id": "star",
+            "images": {
+              "teal": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCIgdmlld0JveD0iMCAwIDgwIDgwIj48cGF0aCBmaWxsPSIjMDBiOGNlIiBkPSJNMzQgN2E1IDUgMCAwIDEgOS0xbDEzIDE5IDIyIDItMTIgMTkgNSAyMy0yMy01LTE5IDEzLTQtMjNMNSA0MGwyMi0xMFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJtMzcgMzUgMiAxMG0xMC0xMyAyIDEwIi8+PC9zdmc+",
+              "violet": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCIgdmlld0JveD0iMCAwIDgwIDgwIj48cGF0aCBmaWxsPSIjMDBiOGNlIiBkPSJNMzQgN2E1IDUgMCAwIDEgOS0xbDEzIDE5IDIyIDItMTIgMTkgNSAyMy0yMy01LTE5IDEzLTQtMjNMNSA0MGwyMi0xMFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJtMzcgMzUgMiAxMG0xMC0xMyAyIDEwIi8+PC9zdmc+"
+            }
+          },
+          {
+            "id": "round",
+            "images": {
+              "teal": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCIgdmlld0JveD0iMCAwIDgwIDgwIj48cGF0aCBmaWxsPSIjMDBiOGNlIiBkPSJNMzQgN2E1IDUgMCAwIDEgOS0xbDEzIDE5IDIyIDItMTIgMTkgNSAyMy0yMy01LTE5IDEzLTQtMjNMNSA0MGwyMi0xMFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJtMzcgMzUgMiAxMG0xMC0xMyAyIDEwIi8+PC9zdmc+",
+              "violet": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCIgdmlld0JveD0iMCAwIDgwIDgwIj48cGF0aCBmaWxsPSIjMDBiOGNlIiBkPSJNMzQgN2E1IDUgMCAwIDEgOS0xbDEzIDE5IDIyIDItMTIgMTkgNSAyMy0yMy01LTE5IDEzLTQtMjNMNSA0MGwyMi0xMFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJtMzcgMzUgMiAxMG0xMC0xMyAyIDEwIi8+PC9zdmc+"
+            }
+          }
+        ],
+        "colors": [
+          {
+            "id": "teal",
+            "stops": [
+              "#05DBC7",
+              "#007EB4"
+            ]
+          },
+          {
+            "id": "violet",
+            "stops": [
+              "#AB86D6",
+              "#594587"
+            ]
+          }
+        ]
+      },
+      "photos": [
+        {
+          "id": "parity-photo",
+          "name": "parity-avatar.png",
+          "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAA6ElEQVR4nO2ZyxHDIAxEJZWWeraAlJACqMetJddMxuZjg1kp7NmD3mrFAUtkaemSVDorPbd36Ru8Ht3q6l3Qo8zoLPBeRnQ2+FUjJkTwZ85XFvCzaRgrfG1dY4Wvrd98B9hkzN2v4TB2+BJPzBFKZN3PccVLIJF2/4gvXgKuDSTy8dnjjJWAR5k4l4lzmTiXiXOZOJdJJAPo+MdspPDFGSuBEAZAPkb44YuXAHMK2OGKmQBjCjjgySbAYgIZjrgjxJICCvWrEphlAhV1m8HuePijoWHNd2B0Gmg8/z+3lGH2xAyb+iWZrA/0PmROy1IUwgAAAABJRU5ErkJggg=="
+        }
+      ],
+      "agents": [
+        {
+          "id": "local-parity",
+          "title": "Local Fixture",
+          "available": true,
+          "signedIn": false
+        },
+        {
+          "id": "local-offline",
+          "title": "Offline Fixture",
+          "available": false
+        }
+      ]
+    }
+  },
+  "histories": {
+    "chief": [
+      {
+        "id": "1",
+        "kind": "user",
+        "text": "一起看看，怎么把 Bot 接入我们的 APP？"
+      },
+      {
+        "id": "2",
+        "kind": "bot",
+        "botId": "chief",
+        "name": "Chief",
+        "text": "可以。我把接入工作拆成三步：\n\n1. 接入网关通信\n2. 做好助理与聊天界面\n3. 验证消息同步和本地通知"
+      },
+      {
+        "id": "3",
+        "kind": "user",
+        "text": "先保留现在的本地通知就好。"
+      },
+      {
+        "id": "research-created",
+        "kind": "event",
+        "text": "",
+        "activity": "bot-created",
+        "botId": "researcher",
+        "name": "研究员"
+      },
+      {
+        "id": "research-question",
+        "kind": "answer",
+        "text": "",
+        "questionAnswers": [
+          {
+            "question": "你最关心这个项目的哪一面？",
+            "choices": [
+              {
+                "letter": "B",
+                "label": "架构和技术实现"
+              },
+              {
+                "letter": "D",
+                "label": "跟别的方案比"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "research-messaged",
+        "kind": "event",
+        "text": "",
+        "activity": "bot-messaged",
+        "botId": "researcher",
+        "name": "研究员"
+      },
+      {
+        "id": "4",
+        "kind": "bot",
+        "botId": "chief",
+        "name": "Chief",
+        "text": "好，我会沿用现有通知方式。完成后在这里告诉你。",
+        "timeMs": 1794794580000
+      }
+    ],
+    "room": [
+      {
+        "id": "r1",
+        "kind": "bot",
+        "botId": "chief",
+        "name": "Chief",
+        "text": "这个群用来推进 Bot 接入。研究员负责调研，我来整理方案。"
+      },
+      {
+        "id": "r2",
+        "kind": "user",
+        "text": "先重点确认消息同步。"
+      },
+      {
+        "id": "r3",
+        "kind": "bot",
+        "botId": "researcher",
+        "name": "研究员",
+        "text": "已确认，私聊和群聊消息都可以通过现有网关同步。\n\n我正在补充断线重连的验证方案。"
+      },
+      {
+        "id": "r4",
+        "kind": "bot",
+        "botId": "chief",
+        "name": "Chief",
+        "text": "收到，结论我会整理进接入方案。"
+      }
+    ]
+  },
+  "optimistic": {},
+  "previewState": {
+    "revision": 1,
+    "mainBotId": "chief",
+    "bots": [
+      {
+        "id": "chief",
+        "name": "大主管",
+        "role": "Chief of Staff",
+        "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCIgdmlld0JveD0iMCAwIDgwIDgwIj48cGF0aCBmaWxsPSIjMDBiOGNlIiBkPSJNMzQgN2E1IDUgMCAwIDEgOS0xbDEzIDE5IDIyIDItMTIgMTkgNSAyMy0yMy01LTE5IDEzLTQtMjNMNSA0MGwyMi0xMFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJtMzcgMzUgMiAxMG0xMC0xMyAyIDEwIi8+PC9zdmc+",
+        "profile": {
+          "model": "GPT-6.1 Terra"
+        },
+        "sessionId": "chief-session",
+        "avatar": {
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCIgdmlld0JveD0iMCAwIDgwIDgwIj48cGF0aCBmaWxsPSIjMDBiOGNlIiBkPSJNMzQgN2E1IDUgMCAwIDEgOS0xbDEzIDE5IDIyIDItMTIgMTkgNSAyMy0yMy01LTE5IDEzLTQtMjNMNSA0MGwyMi0xMFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJtMzcgMzUgMiAxMG0xMC0xMyAyIDEwIi8+PC9zdmc+"
+        }
+      },
+      {
+        "id": "researcher",
+        "name": "研究员",
+        "role": "调研"
+      }
+    ],
+    "rooms": [
+      {
+        "id": "room",
+        "name": "Bot 接入讨论",
+        "room": true,
+        "memberIds": [
+          "chief",
+          "researcher"
+        ],
+        "members": [
+          "chief",
+          "researcher"
+        ]
+      }
+    ],
+    "models": [
+      {
+        "ref": "GPT-6.1 Terra",
+        "name": "GPT-6.1 Terra"
+      },
+      {
+        "ref": "DeepSeek-V4.1-Flash",
+        "name": "DeepSeek-V4.1-Flash"
+      }
+    ],
+    "defaultModel": "GPT-6.1 Terra",
+    "questions": {
+      "chief-session": {
+        "id": "focus",
+        "question": "你最想先验证什么？",
+        "detail": "选择一个重点，也可以补充回答。",
+        "options": [
+          {
+            "label": "布局"
+          },
+          {
+            "label": "交互"
+          }
+        ],
+        "multiSelect": false
+      }
+    }
+  }
+}

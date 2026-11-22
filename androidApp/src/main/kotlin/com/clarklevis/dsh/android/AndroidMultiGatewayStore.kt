@@ -375,7 +375,7 @@ class AndroidMultiGatewayStore(private val application: Application) {
             endpoints = endpoints,
             server = !GatewayIdentity.isLocal(GatewayIdentity.host(endpoints.first()))
         )
-        // 本次二维码的地址及顺序覆盖旧缓存；连接成功后再保存。
+        // 二维码更新其中包含的方式，其他方式沿用同一网关的已保存地址；连接成功后再保存。
         return profile.withPairingEndpoints(endpoints)
     }
 

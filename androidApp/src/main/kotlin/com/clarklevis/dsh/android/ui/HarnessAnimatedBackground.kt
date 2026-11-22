@@ -61,7 +61,7 @@ internal fun HarnessAnimatedBackground(
     modifier: Modifier = Modifier,
     animationEnabled: Boolean = true,
     lavender: Boolean = false,
-    modeWave: WorkspaceModeWave? = null
+    modeWave: WorkspaceModeWave? = null,
 ) {
     val dark = isSystemInDarkTheme()
     val context = LocalContext.current
@@ -77,9 +77,10 @@ internal fun HarnessAnimatedBackground(
     }
     val elapsed = remember { mutableFloatStateOf(0f) }
     val currentTime = remember { { elapsed.floatValue } }
-    LaunchedEffect(active, motionEnabled, animationEnabled, effectsReduced) {
-        // 手势期间保留当前画面与玻璃采样，恢复后接着播放，避免回到第一帧。
-        if (!active || !motionEnabled || !animationEnabled || effectsReduced) return@LaunchedEffect
+    val scrolling = LocalWorkspaceMoving.current?.value == true
+    LaunchedEffect(active, motionEnabled, animationEnabled, effectsReduced, scrolling) {
+        // 滚动只暂停时钟，避免粒子归零和滚动期间反复更新玻璃背景。
+        if (!active || !motionEnabled || !animationEnabled || effectsReduced || scrolling) return@LaunchedEffect
         val initialTime = elapsed.floatValue
         var started = 0L
         var lastFrame = 0L
@@ -98,10 +99,9 @@ internal fun HarnessAnimatedBackground(
     BoxWithConstraints(modifier.fillMaxSize().clipToBounds().semantics { hideFromAccessibility() }) {
         val static = !motionEnabled || !animationEnabled
         val wide = maxWidth >= 600.dp
-        val wideBot = minOf(maxWidth, maxHeight) >= 600.dp
-        HarnessBackgroundLayers(currentTime, static, if (lavender) wideBot else wide, lavender, dark)
+        HarnessBackgroundLayers(currentTime, static, wide, lavender, dark)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && modeWave != null) {
-            HarnessBackgroundLayers(currentTime, static, if (lavender) wide else wideBot, !lavender, dark,
+            HarnessBackgroundLayers(currentTime, static, wide, !lavender, dark,
                 modifier = Modifier.workspaceModeWave(modeWave, dark))
         }
     }
@@ -247,7 +247,7 @@ private fun TechnicalGrid(largeWindow: Boolean, lavender: Boolean, night: Boolea
 
 @Composable
 private fun WhaleParticleField(time: () -> Float, isStatic: Boolean, largeWindow: Boolean, lavender: Boolean, night: Boolean) {
-    val sampleSize = if (largeWindow) 100 else if (lavender) 60 else WHALE_SAMPLE_SIZE
+    val sampleSize = if (largeWindow) 100 else WHALE_SAMPLE_SIZE
     val particles = remember(sampleSize) { makeWhaleParticles(sampleSize) }
     Canvas(Modifier.fillMaxSize()) {
         if (particles.isEmpty()) return@Canvas
@@ -263,9 +263,9 @@ private fun WhaleParticleField(time: () -> Float, isStatic: Boolean, largeWindow
             else max(1.45.dp.toPx(), square / 220f) * (60f / sampleSize)
         val t = if (isStatic) 0f else time()
         // 动态位移按 dp 计算，避免高密度屏幕上的几像素波动几乎不可见。
-        val driftAmplitudeX = if (lavender) (if (largeWindow) 1.8.dp.toPx() else 2.8.dp.toPx()) else if (isStatic) 2.8f else 4.dp.toPx()
-        val driftAmplitudeY = if (lavender) (if (largeWindow) 1.7.dp.toPx() else 2.6.dp.toPx()) else if (isStatic) 2.6f else 4.dp.toPx()
-        val tailAmplitude = if (lavender) 7.dp.toPx() else if (isStatic) 7f else 10.dp.toPx()
+        val driftAmplitudeX = if (isStatic) 2.8f else 4.dp.toPx()
+        val driftAmplitudeY = if (isStatic) 2.6f else 4.dp.toPx()
+        val tailAmplitude = if (isStatic) 7f else 10.dp.toPx()
         val staggerAmplitude = square / sampleSize * 0.14f
         particles.forEach { particle ->
             val tail = smoothstep(0.54f, 0.94f, particle.x)
@@ -273,17 +273,16 @@ private fun WhaleParticleField(time: () -> Float, isStatic: Boolean, largeWindow
             // 相位由空间位置连续变化，避免按点序号起伏造成相邻行错位。
             val phaseX = particle.x * 5f + particle.y * 3f
             val phaseY = particle.x * 4f - particle.y * 3f
-            val motionScale = if (lavender && largeWindow) (square / (460f * density)).coerceIn(1f, 2f) else 1f
-            val driftX = sin(t * 0.50f + if (lavender) particle.phase * .53f else phaseX) * driftAmplitudeX * edgeDrift * motionScale
-            val driftY = cos(t * 0.42f + if (lavender) particle.phase * .71f else phaseY) * driftAmplitudeY * edgeDrift * motionScale
+            val driftX = sin(t * 0.50f + phaseX) * driftAmplitudeX * edgeDrift
+            val driftY = cos(t * 0.42f + phaseY) * driftAmplitudeY * edgeDrift
             // 以网格行列生成短周期相位差，让间隙轻微交错；位移限制在点距内。
             val column = particle.x * sampleSize
             val row = particle.y * sampleSize
-            val staggerX = sin(row * 1.05f + column * 0.35f + t * 0.50f) * staggerAmplitude * if (lavender) 0f else 1f
+            val staggerX = sin(row * 1.05f + column * 0.35f + t * 0.50f) * staggerAmplitude
             // 相邻行错开四分之一个周期，让波峰和波谷形成清晰的逐行交错。
             val rowPhase = row * (kotlin.math.PI.toFloat() / 2f)
-            val staggerY = sin(column * 0.90f - rowPhase + t * 0.42f) * staggerAmplitude * if (lavender) 0f else 0.7f
-            val tailWave = sin(t * 1.10f - particle.x * 7f) * tailAmplitude * tail * motionScale
+            val staggerY = sin(column * 0.90f - rowPhase + t * 0.42f) * staggerAmplitude * 0.7f
+            val tailWave = sin(t * 1.10f - particle.x * 7f) * tailAmplitude * tail
             val shimmer = 0.90f + 0.10f * sin(t * 1.5f + particle.x * 15f + particle.y * 9f)
             val point = Offset(
                 center.x + (particle.x - 0.5f) * whaleWidth + driftX + staggerX,
@@ -311,7 +310,6 @@ internal data class WhaleParticle(
     val y: Float,
     val luminance: Float,
     val edge: Float,
-    val phase: Float,
     val light: Float
 )
 
@@ -374,7 +372,6 @@ internal fun makeWhaleParticles(sampleSize: Int = WHALE_SAMPLE_SIZE): List<Whale
                 ny,
                 luminance[y][x],
                 missing / 8f,
-                result.size.toFloat(),
                 light
             )
         }

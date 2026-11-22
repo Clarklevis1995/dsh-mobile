@@ -36,6 +36,7 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -103,7 +104,7 @@ internal fun DshPickerSheet(
     }
 }
 
-/** 有界懒加载滚轮；首尾留空、不循环，选中行吸附到中央，避免创建一万条 View。 */
+/** 懒加载滚轮；选中行吸附到中央，默认在首尾停止。 */
 @Composable
 internal fun DshNumberWheel(
     selected: Int,
@@ -114,14 +115,19 @@ internal fun DshNumberWheel(
     modifier: Modifier = Modifier,
     height: Dp = 220.dp,
     selectionInset: Dp = 28.dp,
+    itemHeight: Dp = 40.dp,
+    drawsSelection: Boolean = true,
+    wraps: Boolean = false,
     format: (Int) -> String,
     onChange: (Int) -> Unit
 ) {
     require(minimum <= maximum)
-    val state = rememberLazyListState(initialFirstVisibleItemIndex = selected.coerceIn(minimum, maximum) - minimum)
+    val count = maximum - minimum + 1
+    // 循环滚轮只布局窗口附近的行，从重复区间的中部开始。
+    val repeats = if (wraps) 1001 else 1
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = count * (repeats / 2) + selected.coerceIn(minimum, maximum) - minimum)
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
-    val itemHeight = 40.dp
     val itemPx = with(LocalDensity.current) { itemHeight.toPx() }
     val wheelScroll = remember {
         object : NestedScrollConnection {
@@ -133,8 +139,8 @@ internal fun DshNumberWheel(
     val currentChange by rememberUpdatedState(onChange)
     val centered by remember(state, itemPx, minimum, maximum) {
         derivedStateOf {
-            (state.firstVisibleItemIndex + state.firstVisibleItemScrollOffset / itemPx)
-                .roundToInt().plus(minimum).coerceIn(minimum, maximum)
+            val index = (state.firstVisibleItemIndex + state.firstVisibleItemScrollOffset / itemPx).roundToInt()
+            index.coerceIn(0, count * repeats - 1)
         }
     }
     LaunchedEffect(state, minimum, maximum, itemPx, haptics) {
@@ -145,20 +151,22 @@ internal fun DshNumberWheel(
             if ((scrolling || wasScrolling) && value != previous) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
             previous = value
             wasScrolling = scrolling
-            currentChange(value)
+            currentChange(minimum + value % count)
         }
     }
     Box(modifier.fillMaxWidth().height(height).clipToBounds().nestedScroll(wheelScroll).testTag(tag)
         .semantics {
             contentDescription = label
-            stateDescription = centered.toString()
-            progressBarRangeInfo = ProgressBarRangeInfo(centered.toFloat(), minimum.toFloat()..maximum.toFloat(), (maximum - minimum - 1).coerceAtLeast(0))
-            setProgress { value ->
-                scope.launch { state.animateScrollToItem(value.roundToInt().coerceIn(minimum, maximum) - minimum) }
+            val value = minimum + centered % count
+            stateDescription = value.toString()
+            progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), minimum.toFloat()..maximum.toFloat(), (count - 2).coerceAtLeast(0))
+            setProgress { requested ->
+                val index = centered - centered % count + requested.roundToInt().coerceIn(minimum, maximum) - minimum
+                scope.launch { state.animateScrollToItem(index) }
                 true
             }
         }, contentAlignment = Alignment.Center) {
-        Box(Modifier.fillMaxWidth().padding(horizontal = selectionInset).height(itemHeight)
+        if (drawsSelection) Box(Modifier.fillMaxWidth().padding(horizontal = selectionInset).height(itemHeight)
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), CircleShape)
             .testTag("$tag-selection"))
         LazyColumn(
@@ -167,7 +175,7 @@ internal fun DshNumberWheel(
             contentPadding = PaddingValues(vertical = (height - itemHeight) / 2),
             flingBehavior = rememberSnapFlingBehavior(state)
         ) {
-            items(maximum - minimum + 1, key = { it + minimum }) { index ->
+            items(count * repeats, key = { it }) { index ->
                 Box(Modifier.fillMaxWidth().height(itemHeight)
                     .graphicsLayer {
                         val distance = index - state.firstVisibleItemIndex - state.firstVisibleItemScrollOffset / itemPx
@@ -176,8 +184,8 @@ internal fun DshNumberWheel(
                         cameraDistance = 12f * density
                     }
                     .clickable(role = Role.Button) { scope.launch { state.animateScrollToItem(index) } }
-                    .semantics { this.selected = minimum + index == centered }, contentAlignment = Alignment.Center) {
-                    Text(format(minimum + index), fontSize = 22.sp, lineHeight = 28.sp,
+                    .semantics { this.selected = index == centered }, contentAlignment = Alignment.Center) {
+                    Text(format(minimum + index % count), fontSize = 22.sp, lineHeight = 28.sp,
                         style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)),
                         color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
                 }
@@ -228,7 +236,11 @@ private fun DshPickerCapsuleAction(label: String, enabled: Boolean, onClick: () 
 
 
 @Composable
-internal fun DshClockPicker(time: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+internal fun DshClockPicker(
+    time: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
     val parts = remember(time) { time.take(8).split(':').map { it.toIntOrNull() ?: 0 } }
     var hour by remember { mutableStateOf(parts.getOrElse(0) { 8 }) }
     var minute by remember { mutableStateOf(parts.getOrElse(1) { 0 }) }
@@ -250,6 +262,78 @@ internal fun DshClockPicker(time: String, onDismiss: () -> Unit, onConfirm: (Str
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(appText("保留毫秒"))
                     DshSwitch(checked = keepFraction, onCheckedChange = { keepFraction = it })
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 仅选择每日时间。与系统紧凑时间选择器一样，滚动即更新表单，
+ * 点击正文或返回键关闭浮层，无需再次确认。
+ */
+@Composable
+internal fun DshCompactTimePicker(
+    time: String, enabled: Boolean, modifier: Modifier = Modifier, onChange: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val uses24Hours = android.text.format.DateFormat.is24HourFormat(context)
+    val hour = time.substringBefore(':').toIntOrNull() ?: 0
+    val minute = time.substringAfter(':').toIntOrNull() ?: 0
+    val localHour = if (uses24Hours) hour else (hour + 11) % 12 + 1
+    val locale = context.resources.configuration.locales[0]
+    val periods = remember(locale) { java.text.DateFormatSymbols.getInstance(locale).amPmStrings }
+    val timeFormat = remember(locale, uses24Hours) {
+        val pattern = android.text.format.DateFormat.getBestDateTimePattern(locale, if (uses24Hours) "Hm" else "hm")
+        java.text.SimpleDateFormat(pattern, locale)
+    }
+    val display = remember(timeFormat, hour, minute) {
+        val date = timeFormat.calendar.clone() as java.util.Calendar
+        date.set(java.util.Calendar.HOUR_OF_DAY, hour)
+        date.set(java.util.Calendar.MINUTE, minute)
+        timeFormat.format(date.time)
+    }
+    Box {
+        Text(
+            display,
+            modifier.clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .07f))
+                .clickable(enabled = enabled, role = Role.Button) { focus.clearFocus(); expanded = !expanded }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            style = SettingsTypography.item,
+        )
+        DshMenu(
+            expanded && enabled, { expanded = false }, Modifier.width(if (uses24Hours) 232.dp else 252.dp)
+                .testTag("dsh-compact-time-popup"),
+            offset = DpOffset(0.dp, 8.dp), shape = RoundedCornerShape(28.dp), alignToEnd = true,
+        ) {
+            val digits: (Int) -> String = { "%02d".format(it) }
+            val timeString: (Int, Int) -> String = { h, m -> String.format(Locale.US, "%02d:%02d", h, m) }
+            Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(34.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = .08f), CircleShape))
+                Row(Modifier.padding(horizontal = if (uses24Hours) 39.dp else 16.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    DshNumberWheel(localHour, if (uses24Hours) 0 else 1, if (uses24Hours) 23 else 12, appText("小时"),
+                        "dsh-compact-time-hour", Modifier.weight(1f), height = 164.dp, itemHeight = 33.dp,
+                        drawsSelection = false, wraps = true, format = digits) {
+                        val selectedHour = if (uses24Hours) it else it % 12 + hour / 12 * 12
+                        if (selectedHour != hour) onChange(timeString(selectedHour, minute))
+                    }
+                    DshNumberWheel(minute, 0, 59, appText("分钟"),
+                        "dsh-compact-time-minute", Modifier.weight(1f), height = 164.dp, itemHeight = 33.dp,
+                        drawsSelection = false, wraps = true, format = digits) {
+                        if (it != minute) onChange(timeString(hour, it))
+                    }
+                    if (!uses24Hours) {
+                        DshNumberWheel(hour / 12, 0, 1, appText("时间"),
+                            "dsh-compact-time-period", Modifier.weight(1f), height = 164.dp, itemHeight = 33.dp,
+                            drawsSelection = false, format = { periods[it] }) {
+                            val selectedHour = hour % 12 + it * 12
+                            if (selectedHour != hour) onChange(timeString(selectedHour, minute))
+                        }
+                    }
                 }
             }
         }

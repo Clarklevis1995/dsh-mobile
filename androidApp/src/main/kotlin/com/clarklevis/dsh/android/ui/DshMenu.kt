@@ -59,6 +59,7 @@ internal fun DshMenu(
     offset: DpOffset = DpOffset(0.dp, 8.dp),
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(26.dp),
     shadowInset: Dp = DshMenuShadowPadding,
+    alignToEnd: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val density = LocalDensity.current
@@ -66,7 +67,7 @@ internal fun DshMenu(
     val offsetPx = with(density) { IntOffset(offset.x.roundToPx(), offset.y.roundToPx()) }
     var origin by remember { mutableStateOf(TransformOrigin.Center) }
     val positionProvider =
-        remember(shadowPadding, offsetPx) {
+        remember(shadowPadding, offsetPx, alignToEnd) {
             object : PopupPositionProvider {
                 override fun calculatePosition(
                     anchorBounds: IntRect,
@@ -75,7 +76,7 @@ internal fun DshMenu(
                     popupContentSize: IntSize,
                 ): IntOffset {
                     val position =
-                        dshMenuPosition(anchorBounds, windowSize, popupContentSize, layoutDirection, shadowPadding, offsetPx)
+                        dshMenuPosition(anchorBounds, windowSize, popupContentSize, layoutDirection, shadowPadding, offsetPx, alignToEnd)
                     origin =
                         TransformOrigin(
                             ((anchorBounds.center.x - position.x).toFloat() / popupContentSize.width.coerceAtLeast(1)).coerceIn(0f, 1f),
@@ -99,6 +100,7 @@ internal fun dshMenuPosition(
     direction: LayoutDirection,
     shadowPadding: Int,
     offset: IntOffset,
+    alignToEnd: Boolean = false,
 ): IntOffset {
     val width = (popup.width - shadowPadding * 2).coerceAtLeast(1)
     val height = (popup.height - shadowPadding * 2).coerceAtLeast(1)
@@ -107,7 +109,7 @@ internal fun dshMenuPosition(
     val start = if (direction == LayoutDirection.Ltr) anchor.left + offset.x else anchor.right - width - offset.x
     val end = if (direction == LayoutDirection.Ltr) anchor.right - width + offset.x else anchor.left - offset.x
     val x =
-        listOf(start, end).firstOrNull { it - shadowPadding in 0..maximumX }
+        (if (alignToEnd) listOf(end, start) else listOf(start, end)).firstOrNull { it - shadowPadding in 0..maximumX }
             ?: end.coerceIn(shadowPadding, maximumX + shadowPadding)
     val below = anchor.bottom + offset.y - shadowPadding
     val above = anchor.top - offset.y - height - shadowPadding

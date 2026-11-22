@@ -375,16 +375,11 @@ struct WorkspaceView: View {
                 .padding(.bottom, 16)
 
             drawerItem(isBotMode ? String(localized: "切换到工作模式") : String(localized: "切换到 Bot 模式"), icon: {
-                Group {
-                    if isBotMode { WhalenessOrcaIcon(size: 24) }
-                    else {
-                        Image("BotDrawerMark")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 24, height: 24)
-                            .foregroundStyle(Color("BotInk"))
-                    }
-                }.frame(width: 24)
+                Image(isBotMode ? "WorkspaceDrawerMark" : "BotDrawerMark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
+                    .foregroundStyle(Color("BotInk"))
                     .accessibilityHidden(true)
             }, action: {
                 // 手势和 Button 的回调顺序不固定，等本次事件结束后读取点击坐标。

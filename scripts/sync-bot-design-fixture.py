@@ -15,7 +15,7 @@ start = source.index('    private static let designFixtures: [String: String] = 
 end = source.index('\n    ]', start) + len('\n    ]')
 lines = ['    private static let designFixtures: [String: String] = [']
 android_files = []
-for name, suffix in [("normal", ""), ("long", "-long"), ("empty", "-empty"), ("images", "-images"), ("markdown-images", "-markdown-images"), ("files", "-files"), ("bubble-widths", "-bubble-widths")]:
+for name, suffix in [("normal", ""), ("long", "-long"), ("empty", "-empty"), ("images", "-images"), ("markdown-images", "-markdown-images"), ("files", "-files"), ("bubble-widths", "-bubble-widths"), ("role-profile", "-role-profile"), ("page-parity", "-page-parity")]:
     fixture = (root / f"Design/bot-mode/preview-fixture{suffix}.json").read_text().strip()
     json.loads(fixture)
     encoded = base64.b64encode(fixture.encode()).decode()

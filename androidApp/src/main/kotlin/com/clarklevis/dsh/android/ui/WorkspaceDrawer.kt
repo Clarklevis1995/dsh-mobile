@@ -193,7 +193,16 @@ internal fun WorkspaceDrawer(
                         if (botMode) onStandardMode() else onBotMode()
                     }.padding(horizontal = 14.dp, vertical = 14.dp).testTag("drawer-bot"),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (botMode) WhalenessOrcaIcon(Modifier.size(24.dp)) else BotDrawerMark(Modifier.size(24.dp))
+                    if (botMode) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_workspace_drawer_mark),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
+                        )
+                    } else {
+                        BotDrawerMark(Modifier.size(24.dp))
+                    }
                     Text(appText(if (botMode) "切换到工作模式" else "切换到 Bot 模式"), Modifier.weight(1f), fontSize = 17.sp, color = MaterialTheme.colorScheme.onBackground)
                     Image(painterResource(R.drawable.ic_mode_swap), null, Modifier.size(16.0125.dp, 19.6064.dp), colorFilter = ColorFilter.tint(Color(0xFF7760B4)))
                 }

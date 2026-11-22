@@ -20,15 +20,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
-/** 全应用统一的 iOS 风格 51×31 胶囊开关；回调为空时由外层设置行处理切换语义。 */
+/** 全应用统一的 iOS 风格胶囊开关，默认 51×31；回调为空时由外层设置行处理切换语义。 */
 @Composable
 internal fun DshSwitch(
     checked: Boolean,
     onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    preserveDisabledColors: Boolean = false
+    preserveDisabledColors: Boolean = false,
+    wideTrack: Boolean = false,
 ) {
+    val width = if (wideTrack) 63.dp else 51.dp
+    val height = if (wideTrack) 28.dp else 31.dp
+    val thumbWidth = if (wideTrack) 37.dp else 27.dp
     val secondary = if (isSystemInDarkTheme()) {
         Color(0xFFEBEBF5).copy(alpha = 0.6f)
     } else {
@@ -36,17 +40,18 @@ internal fun DshSwitch(
     }
     val blue = dshSwitchTrackColor()
     val track by animateColorAsState(
-        if (checked) blue.copy(alpha = if (enabled || preserveDisabledColors) 1f else 0.5f) else secondary.copy(alpha = 0.3f),
+        if (checked) blue.copy(alpha = if (enabled || preserveDisabledColors) 1f else 0.5f)
+        else secondary.copy(alpha = if (wideTrack) 0.15f else 0.3f),
         animationSpec = tween(180),
         label = "dsh-switch-track"
     )
     val thumbOffset by animateDpAsState(
-        if (checked) 20.dp else 0.dp,
+        if (checked) width - thumbWidth - 4.dp else 0.dp,
         animationSpec = tween(180),
         label = "dsh-switch-thumb"
     )
     Box(
-        modifier.size(51.dp, 31.dp).clip(CircleShape)
+        modifier.size(width, height).clip(CircleShape)
             .background(track)
             .then(
                 if (onCheckedChange != null) {
@@ -55,6 +60,6 @@ internal fun DshSwitch(
             ),
         contentAlignment = Alignment.CenterStart
     ) {
-        Box(Modifier.offset(x = thumbOffset).padding(2.dp).size(27.dp).background(Color.White, CircleShape))
+        Box(Modifier.offset(x = thumbOffset).padding(2.dp).size(thumbWidth, height - 4.dp).background(Color.White, CircleShape))
     }
 }

@@ -1,6 +1,5 @@
 package com.clarklevis.dsh.android.ui
 
-import androidx.compose.foundation.layout.offset
 
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -53,7 +52,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -343,10 +341,12 @@ internal fun DshProductApp(
                     stateHolder = stateHolder,
                     onBack = navController::popBackStack,
                     onOpenSession = { sessionId ->
-                        stateHolder.selectSession(sessionId)
-                        navController.navigate(ROUTE_CONVERSATION) {
-                            popUpTo(ROUTE_WORKSPACE)
-                            launchSingleTop = true
+                        if (stateHolder.snapshot.sessions.any { it.id == sessionId }) {
+                            stateHolder.selectSession(sessionId)
+                            navController.navigate(ROUTE_CONVERSATION) {
+                                popUpTo(ROUTE_WORKSPACE)
+                                launchSingleTop = true
+                            }
                         }
                     },
                     onCreateTask = {
@@ -525,47 +525,42 @@ internal fun WorkspaceScreen(
             }
         }
     ) { openDrawer, canScrollVertically ->
-        val backgroundAnimationEnabled by remember(canScrollVertically, workspaceListState) {
-            derivedStateOf { canScrollVertically && !workspaceListState.isScrollInProgress && !stateHolder.botDesignPreview }
+        val homeHeader: @Composable (Boolean) -> Unit = { onDarkBackground ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                WorkspaceHeader(
+                    state = stateHolder.gatewayState,
+                    onScan = {
+                        stateHolder.clearPlatformError()
+                        showQrScanner = true
+                    },
+                    onManualEntry = {
+                        stateHolder.clearPlatformError()
+                        showManualPairing = true
+                    },
+                    onSettings = onSettings,
+                    onOpenDrawer = openDrawer,
+                    onDarkBackground = onDarkBackground,
+                )
+                GatewaySwitcherBar(onDarkBackground = onDarkBackground)
+            }
         }
         if (botMode) {
             BotModeScreen(stateHolder, onStandardMode, openDrawer = openDrawer, scrollEnabled = canScrollVertically,
                 modeWave = modeWave, onChatOpened = { botChatOpened = it },
-                header = {
-                    val night = isSystemInDarkTheme()
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        WorkspaceHeader(stateHolder.gatewayState, {
-                            stateHolder.clearPlatformError(); showQrScanner = true
-                        }, { stateHolder.clearPlatformError(); showManualPairing = true }, onSettings, openDrawer, onDarkBackground = night)
-                        GatewaySwitcherBar(onDarkBackground = night)
-                    }
-                })
+                header = { homeHeader(isSystemInDarkTheme()) })
         } else DshLiquidGlassHost(
             modifier = Modifier.fillMaxSize().testTag("workspace-screen"),
+            frostOnOlderDevices = true,
+            workspaceScrollState = workspaceListState,
             background = { backdropModifier ->
-                HarnessAnimatedBackground(backdropModifier, animationEnabled = backgroundAnimationEnabled, modeWave = modeWave)
+                HarnessAnimatedBackground(backdropModifier,
+                    animationEnabled = canScrollVertically && !stateHolder.botDesignPreview,
+                    modeWave = modeWave)
             }
         ) {
             AdaptiveWorkspaceContent(
                 window = window,
-                header = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        WorkspaceHeader(
-                            state = stateHolder.gatewayState,
-                            onScan = {
-                                stateHolder.clearPlatformError()
-                                showQrScanner = true
-                            },
-                            onManualEntry = {
-                                stateHolder.clearPlatformError()
-                                showManualPairing = true
-                            },
-                            onSettings = onSettings,
-                            onOpenDrawer = openDrawer
-                        )
-                        GatewaySwitcherBar()
-                    }
-                },
+                header = { homeHeader(true) },
                 actions = {
                     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Text(
@@ -688,7 +683,7 @@ internal fun WorkspaceHeader(
             onScan = onScan,
             onManualEntry = onManualEntry, onDarkBackground = onDarkBackground
         )
-        Spacer(Modifier.width(if (onDarkBackground) 12.dp else 8.dp))
+        Spacer(Modifier.width(12.dp))
         GlassCircleButton(R.drawable.ic_settings, appText("设置"), onSettings, onDarkBackground)
     }
 }
@@ -704,10 +699,10 @@ private fun HarnessMark(onClick: () -> Unit, modifier: Modifier = Modifier, onDa
     ) {
         // 不按机型或屏幕像素缩放整页：仅品牌图片根据其实际可用宽度等比例收缩。
         val showWordmark = maxWidth >= 128.dp
-        val scale = (maxWidth / if (onDarkBackground) 219.dp else 216.dp).coerceIn(0f, 1f)
+        val scale = (maxWidth / 219.dp).coerceIn(0f, 1f)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy((if (onDarkBackground) 7.dp else 4.dp) * scale)
+            horizontalArrangement = Arrangement.spacedBy(7.dp * scale)
         ) {
             WhalenessOrcaIcon(
                 modifier = Modifier.size(if (showWordmark) 29.dp * scale else 29.dp),
@@ -739,15 +734,9 @@ internal fun WhalenessOrcaIcon(
 
 @Composable
 internal fun GlassCircleButton(iconRes: Int, description: String, onClick: () -> Unit, onDarkBackground: Boolean = true) {
-    if (!onDarkBackground) {
-        DshGlassButton(description, onClick, Modifier.size(54.dp).offset(x = 4.dp), appearanceDark = false) {
-            Image(painterResource(iconRes), null, Modifier.size(22.dp * LocalDensity.current.fontScale), colorFilter = ColorFilter.tint(Color(0xFF252332)))
-        }
-        return
-    }
     Box(
         Modifier.requiredSize(52.dp)
-            .dshLiquidGlass(CircleShape, DshGlassStyle.CONTROL)
+            .dshWorkspaceGlass(CircleShape, DshGlassStyle.CONTROL)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center
@@ -756,7 +745,7 @@ internal fun GlassCircleButton(iconRes: Int, description: String, onClick: () ->
             painter = painterResource(iconRes),
             contentDescription = null,
             modifier = Modifier.size(22.dp),
-            colorFilter = ColorFilter.tint(Color.White)
+            colorFilter = ColorFilter.tint(if (onDarkBackground) Color.White else Color(0xFF252332))
         )
     }
 }
@@ -773,7 +762,7 @@ private fun WorkspaceCard(
 ) {
     Row(
         Modifier.fillMaxWidth()
-            .dshLiquidGlass(RoundedCornerShape(15.dp), DshGlassStyle.CARD)
+            .dshWorkspaceGlass(RoundedCornerShape(15.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 15.dp)
             .testTag("workspace-card"),
@@ -821,7 +810,7 @@ private fun WorkspaceCard(
 private fun GlassActionButton(icon: String, title: String, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().height(52.dp)
-            .dshLiquidGlass(RoundedCornerShape(18.dp), DshGlassStyle.ACTION)
+            .dshWorkspaceGlass(RoundedCornerShape(18.dp), DshGlassStyle.ACTION)
             .clickable(role = Role.Button, onClick = onClick)
             .testTag("workspace-new-session"),
         horizontalArrangement = Arrangement.Center,
@@ -883,18 +872,14 @@ internal fun LocalChatSearchContent(
 @Composable
 internal fun SessionSearch(query: String, onChange: (String) -> Unit,
     placeholder: String = appText("搜索会话内容"), appearanceDark: Boolean = true, modifier: Modifier = Modifier,
-    tint: Color? = null, rim: Color? = null) {
+    foreground: Color = Color.White, clearable: Boolean = false) {
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
-    val ink = if (tint != null) MaterialTheme.colorScheme.onSurface else if (appearanceDark) Color.White else Color(0xFF252332)
+    val ink = foreground
     val fieldShape = RoundedCornerShape(13.dp)
     var focused by remember { mutableStateOf(false) }
     Row(
         modifier = modifier.fillMaxWidth().height(if (appearanceDark) 42.dp else 44.dp)
-            .then(if (tint != null) Modifier.dshLiquidGlass(fieldShape, DshGlassStyle.FIELD)
-                .background(tint, fieldShape).border(0.8.dp, rim ?: Color.Transparent, fieldShape)
-                else if (appearanceDark) Modifier.dshLiquidGlass(fieldShape, DshGlassStyle.FIELD)
-                else Modifier.dshAppCardGlass(RoundedCornerShape(22.dp), false)
-                    .background(Color.White.copy(alpha = .38f), RoundedCornerShape(22.dp)))
+            .dshWorkspaceGlass(fieldShape, DshGlassStyle.FIELD)
             .padding(horizontal = 12.dp)
             .then(if (appearanceDark) Modifier.testTag("workspace-session-search") else Modifier),
         verticalAlignment = Alignment.CenterVertically,
@@ -914,17 +899,17 @@ internal fun SessionSearch(query: String, onChange: (String) -> Unit,
             cursorBrush = SolidColor(if (appearanceDark) Color.White else Color(0xFF7760B4)),
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { if (!appearanceDark) focus.clearFocus() }),
+            keyboardActions = KeyboardActions(onSearch = { if (clearable) focus.clearFocus() }),
             decorationBox = { innerTextField ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (query.isEmpty()) {
-                        Text(placeholder, color = ink.copy(alpha = if (tint != null) .83f else if (appearanceDark) .58f else .3f), fontSize = if (appearanceDark) 16.sp else 17.sp)
+                        Text(placeholder, color = ink.copy(alpha = if (appearanceDark) .58f else .72f), fontSize = if (appearanceDark) 16.sp else 17.sp)
                     }
                     innerTextField()
                 }
             }
         )
-        if (!appearanceDark && focused && query.isNotEmpty()) {
+        if (clearable && focused && query.isNotEmpty()) {
             Box(Modifier.size(24.dp).testTag("search.clear").clickable(role = androidx.compose.ui.semantics.Role.Button) { onChange("") }
                 .semantics { contentDescription = appText("清除文本") }, contentAlignment = Alignment.Center) {
                 Image(painterResource(R.drawable.ic_close), null, Modifier.size(14.dp).background(ink.copy(alpha = .45f), CircleShape).padding(3.dp), colorFilter = ColorFilter.tint(Color.White))
@@ -940,7 +925,7 @@ private fun EmptySessions() {
         color = Color.White.copy(alpha = 0.5f),
         fontSize = 14.sp,
         modifier = Modifier.fillMaxWidth()
-            .dshLiquidGlass(RoundedCornerShape(15.dp), DshGlassStyle.SUBTLE)
+            .dshWorkspaceGlass(RoundedCornerShape(15.dp), DshGlassStyle.SUBTLE)
             .padding(18.dp)
     )
 }

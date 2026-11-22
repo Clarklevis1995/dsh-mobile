@@ -51,7 +51,9 @@ struct GatewayProfile: Codable, Identifiable, Equatable {
     }
 
     mutating func applyPairingEndpoints(_ addresses: [String]) {
-        endpoints = addresses
+        endpoints = DeepSeekHarnessShared.GatewayIdentity.shared.mergePairingEndpoints(
+            scanned: addresses, saved: gatewayId == nil ? [] : connectionEndpoints
+        )
         preferredEndpoint = addresses.first
         selectedConnectionMethod = nil
         recentSuccessfulEndpoints = nil

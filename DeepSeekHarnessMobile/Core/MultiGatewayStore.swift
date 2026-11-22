@@ -207,7 +207,7 @@ final class MultiGatewayStore: ObservableObject {
             endpoints: endpoints,
             deviceKind: GatewayIdentity.isLocal(URL(string: endpoints[0])?.host ?? "") ? "desktopcomputer" : "server.rack"
         )
-        // 本次二维码的地址及顺序覆盖旧缓存；校验 hello 后再保存。
+        // 二维码更新其中包含的方式，其他方式沿用同一网关的已保存地址；校验 hello 后再保存。
         profile.applyPairingEndpoints(endpoints)
         if let name = payload.gatewayName, !name.isEmpty { profile.gatewayName = name }
         cancelPairing()

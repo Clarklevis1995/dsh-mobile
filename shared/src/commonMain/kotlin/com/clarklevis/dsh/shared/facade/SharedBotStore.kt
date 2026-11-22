@@ -109,6 +109,13 @@ data class BotChatImage(
 data class BotSchedule(val id: String, val title: String, val status: String, val next: String, val botId: String? = null, val sessionId: String? = null)
 
 @Serializable
+data class BotLiveWork(val kind: String, val botId: String? = null, val startedAtMs: Long? = null)
+
+data class BotChatIndicator(val running: Boolean, val unreadCount: Int) {
+    val unreadText: String get() = if (unreadCount > 99) "99+" else unreadCount.toString()
+}
+
+@Serializable
 data class BotActivity(val id: String, val text: String, val chatId: String? = null, val kind: String = "", val name: String = "")
 
 @Serializable
@@ -172,8 +179,18 @@ data class SharedBotSnapshot(
     val defaultCreationModel: String? = null,
     val rosterIds: List<String> = emptyList(),
     val mainBotIds: List<String> = emptyList(),
-    val botDeletionSupported: Boolean = false
+    val botDeletionSupported: Boolean = false,
+    val liveWork: Map<String, BotLiveWork> = emptyMap(),
+    val unreadCounts: Map<String, Int> = emptyMap(),
 ) {
+    fun unreadCount(chatId: String): Int = unreadCounts[chatId] ?: 0
+
+    fun chatIndicator(chatId: String): BotChatIndicator? {
+        val running = chatId in liveWork
+        val unread = unreadCount(chatId)
+        return if (running || unread > 0) BotChatIndicator(running, unread) else null
+    }
+
     val roster: List<BotChat>
         get() {
             val ranks = rosterIds.withIndex().associate { it.value to it.index }
@@ -181,6 +198,13 @@ data class SharedBotSnapshot(
         }
 
     fun isMainBot(id: String): Boolean = id == mainBotId || id in mainBotIds
+
+    fun visibleLiveWork(chatId: String): BotLiveWork? {
+        val work = liveWork[chatId] ?: return null
+        if (interactions.any { it.chatId == chatId }) return null
+        if (work.kind == "thinking" && selectedChatId == chatId && messages.lastOrNull()?.streaming == true) return null
+        return work
+    }
 
     val canCreateBot: Boolean
         get() = connected && writable && creation.supported
@@ -193,7 +217,10 @@ private data class BotCache(
     val version: Int = 1,
     val snapshot: SharedBotSnapshot,
     val histories: Map<String, List<BotChatMessage>>,
-    val optimistic: Map<String, List<BotChatMessage>>
+    val optimistic: Map<String, List<BotChatMessage>>,
+    val noticeBoot: String? = null,
+    val noticeSeq: Long = 0L,
+    val readThrough: Map<String, Long> = emptyMap(),
 )
 
 /** 每个主机一个实例，由平台 Store 串行调用；所有写操作均不自动重试。 */
@@ -205,6 +232,11 @@ class SharedBotStore {
     private var revision = -1L
     private var boot: String? = null
     private var noticeSeq = 0L
+    private var noticeTip = 0L
+    private var feedBoot: String? = null
+    private val queuedNotices = mutableMapOf<Long, JsonObject>()
+    private val readThrough = mutableMapOf<String, Long>()
+    private var foreground = true
     private var stateDirty = false
     private var subscription: String? = null
     private val pending = linkedMapOf<String, Pending>()
@@ -225,18 +257,33 @@ class SharedBotStore {
     fun snapshot(): SharedBotSnapshot = state
     fun snapshotJson(): String = wireJson.encodeToString(state)
 
+    fun searchChats(query: String): List<BotChat> {
+        val term = query.trim()
+        if (term.isEmpty()) return state.chats.filter { it.id != state.mainBotId }
+
+        return state.chats.filter { chat ->
+            chat.name.contains(term, ignoreCase = true) || chat.preview.contains(term, ignoreCase = true) ||
+                histories[chat.id].orEmpty().any { message ->
+                    (message.kind == "user" || message.kind == "bot" || message.kind == "post") &&
+                        message.text.contains(term, ignoreCase = true)
+                }
+        }
+    }
+
     fun exportCacheJson(): String {
         var pages = histories.mapValues { it.value.takeLast(100) }
         val cached = state.copy(connected = false, loading = false, historyLoading = false,
             feedActive = false, selectedChatId = null, messages = emptyList(), interactions = emptyList(), error = null,
             roleSaving = false, roleDetails = null, roleError = null, effortModel = null, efforts = emptyList(),
             roleSettingsSupported = false, attachmentsSupported = false, attachmentSending = false, lastAttachmentAck = null,
-            referencesSupported = false, referenceSearch = null, botDeletionSupported = false, creation = BotCreationState())
+            referencesSupported = false, referenceSearch = null, botDeletionSupported = false, liveWork = emptyMap(), creation = BotCreationState())
         val uncertain = optimistic.mapValues { (_, messages) -> messages.map { it.copy(delivery = "unknown") } }
-        var json = wireJson.encodeToString(BotCache(snapshot = cached, histories = pages, optimistic = uncertain))
+        val cache = BotCache(snapshot = cached, histories = pages, optimistic = uncertain,
+            noticeBoot = boot, noticeSeq = noticeSeq, readThrough = readThrough.toMap())
+        var json = wireJson.encodeToString(cache)
         while (json.length > 7_500_000 && pages.isNotEmpty()) {
             pages = pages - pages.keys.first()
-            json = wireJson.encodeToString(BotCache(snapshot = cached, histories = pages, optimistic = uncertain))
+            json = wireJson.encodeToString(cache.copy(histories = pages))
         }
         return json.takeIf { it.length <= 7_500_000 } ?: ""
     }
@@ -245,8 +292,13 @@ class SharedBotStore {
         if (enabled || json.length > 7_500_000) return result()
         val cached = runCatching { wireJson.decodeFromString<BotCache>(json) }.getOrNull() ?: return result()
         if (cached.version != 1) return result()
+        boot = cached.noticeBoot
+        noticeSeq = cached.noticeSeq.coerceAtLeast(0)
+        noticeTip = noticeSeq
+        readThrough.clear()
+        readThrough.putAll(cached.readThrough.filterValues { it > noticeSeq })
         state = cached.snapshot.copy(connected = false, supported = false, loading = false,
-            historyLoading = false, feedActive = false, selectedChatId = null, messages = emptyList(), interactions = emptyList())
+            historyLoading = false, feedActive = false, selectedChatId = null, messages = emptyList(), interactions = emptyList(), liveWork = emptyMap())
         histories.clear()
         histories.putAll(cached.histories.entries.toList().takeLast(12).associate { it.key to it.value.takeLast(100) })
         optimistic.clear()
@@ -271,9 +323,12 @@ class SharedBotStore {
             attemptedAvatars.clear()
             revision = -1
             subscription = null
+            feedBoot = null
+            queuedNotices.clear()
             streams.clear()
             state = state.copy(loading = false, historyLoading = false, feedActive = false, roleSaving = false, attachmentsSupported = false,
                 roleSettingsSupported = false, referencesSupported = false, referenceSearch = null, botDeletionSupported = false,
+                liveWork = emptyMap(),
                 roleError = if (deletionUnconfirmed) "bot-delete-unconfirmed" else state.roleError,
                 creation = state.creation.copy(supported = false, saving = false, loadingAppearance = false,
                     loadingAgents = false, loadingAgentModels = false, loadingPhotos = false,
@@ -293,8 +348,21 @@ class SharedBotStore {
             state = state.copy(referenceSearch = null)
         }
         state = state.copy(selectedChatId = id, error = null)
+        if (foreground) markChatRead(id)
         if (id != null && state.connected && state.supported) readChat(id)
         return result()
+    }
+
+    fun setForeground(active: Boolean): SharedBotTransition {
+        foreground = active
+        if (active) markChatRead(state.selectedChatId)
+        return result()
+    }
+
+    private fun markChatRead(id: String?) {
+        if (id == null) return
+        if (noticeTip > noticeSeq) readThrough[id] = maxOf(noticeTip, readThrough[id] ?: 0L)
+        if (state.unreadCount(id) > 0) state = state.copy(unreadCounts = state.unreadCounts - id)
     }
 
     fun loadEarlier(): SharedBotTransition {
@@ -574,6 +642,7 @@ class SharedBotStore {
             }
             "bot-stream-reset" -> if (frame.text("subscriptionId") == subscription) {
                 subscription = null
+                feedBoot = null
                 state = state.copy(feedActive = false, error = "bot-feed-interrupted")
                 // 由平台的有界恢复计时器调用 refresh；防止插件停用时忙循环。
             }
@@ -602,8 +671,12 @@ class SharedBotStore {
         }
         readState()
         call("schedules")
-        call("notices", buildJsonObject { boot?.let { put("boot", it) }; put("since", noticeSeq) })
+        readNotices()
         state.selectedChatId?.let { readChat(it) }
+    }
+
+    private fun readNotices() {
+        call("notices", buildJsonObject { boot?.let { put("boot", it) }; put("since", noticeSeq) })
     }
 
     private fun readState() {
@@ -640,14 +713,15 @@ class SharedBotStore {
                 state = state.copy(loading = false)
                 if (version < revision) return
                 revision = version
-                if (obj["unchanged"]?.jsonPrimitive?.booleanOrNull != true) {
+                val unchanged = obj["unchanged"] == JsonPrimitive(true)
+                val work = obj["work"] as? JsonObject
+                if (!unchanged) {
                     sessionChats.clear()
                     (obj.array("bots") + obj.array("rooms")).forEach { entry ->
                         val peer = entry as? JsonObject ?: return@forEach
                         val peerId = peer.text("id") ?: return@forEach
                         sessionChats[peer.text("sessionId") ?: peerId] = peerId
                     }
-                    val work = obj["work"] as? JsonObject
                     val bots = (work?.get("bots") as? JsonObject).orEmpty()
                     val rooms = (work?.get("rooms") as? JsonObject).orEmpty()
                     val peers = obj.array("bots").mapNotNull { peer(it, false, bots) } +
@@ -687,11 +761,13 @@ class SharedBotStore {
                         wantedAvatars[id] = ref
                     }
                     attemptedAvatars.keys.retainAll(wantedAvatars.keys)
-                } else {
-                    val work = obj["work"] as? JsonObject
+                } else if (work != null) {
                     state = state.copy(chats = state.chats.map { chat -> chat.copy(running =
-                        ((work?.get(if (chat.room) "rooms" else "bots") as? JsonObject)?.get(chat.id))
+                        ((work[if (chat.room) "rooms" else "bots"] as? JsonObject)?.get(chat.id))
                             ?.let { it != JsonNull && (it !is JsonArray || it.isNotEmpty()) } == true) })
+                }
+                if (work != null || !unchanged) {
+                    state = state.copy(liveWork = if (work == null) emptyMap() else liveStatus(work))
                 }
                 val interactions = mutableListOf<BotInteraction>()
                 if (obj["unchanged"]?.jsonPrimitive?.booleanOrNull == true) {
@@ -882,9 +958,7 @@ class SharedBotStore {
                     readState()
                     state.selectedChatId?.let { readChat(it) }
                 }
-                boot = obj.text("boot")
-                noticeSeq = obj["seq"]?.jsonPrimitive?.longOrNull ?: noticeSeq
-                obj.array("notices").forEach { (it as? JsonObject)?.let(::notice) }
+                acceptNotices(obj)
             }
         }
     }
@@ -893,11 +967,17 @@ class SharedBotStore {
         when (kind) {
             "hello" -> {
                 val nextBoot = data.text("boot")
-                if (boot != null && boot != nextBoot) {
-                    revision = -1
-                    histories.clear(); cursors.clear(); streams.clear()
+                if (nextBoot != null) {
+                    feedBoot = nextBoot
+                    if (boot != null && boot != nextBoot) {
+                        revision = -1
+                        histories.clear(); cursors.clear(); streams.clear()
+                    }
+                    updateNoticeBoot(nextBoot, data.noticeSequence() ?: 0L)
+                    noticeTip = maxOf(noticeTip, data.noticeSequence() ?: 0L)
+                    if (foreground) markChatRead(state.selectedChatId)
                 }
-                call("notices", buildJsonObject { boot?.let { put("boot", it) }; put("since", noticeSeq) })
+                readNotices()
                 readState()
                 state.selectedChatId?.let { readChat(it) }
             }
@@ -910,7 +990,16 @@ class SharedBotStore {
                 readState()
                 data.text("roomId")?.takeIf { it == state.selectedChatId }?.let { readChat(it) }
             }
-            "notice" -> { notice(data); readState() }
+            "notice" -> {
+                val seq = data.noticeSequence() ?: return
+                if (seq > noticeSeq) {
+                    noticeTip = maxOf(noticeTip, seq)
+                    if (queuedNotices.size < 200) queuedNotices[seq] = data
+                    drainNotices()
+                    if (noticeSeq < noticeTip) readNotices()
+                }
+                readState()
+            }
             "stream" -> if (data.text("botId") == state.selectedChatId) {
                 val id = data.text("attemptId") ?: return
                 when (data.text("phase")) {
@@ -925,15 +1014,108 @@ class SharedBotStore {
         }
     }
 
-    private fun notice(value: JsonObject) {
-        val seq = value["seq"]?.jsonPrimitive?.longOrNull ?: return
-        noticeSeq = maxOf(noticeSeq, seq)
-        if (value.text("kind") in setOf("done", "question", "approval", "group", "message")) {
+    private fun updateNoticeBoot(nextBoot: String, tip: Long) {
+        if (boot == nextBoot) return
+        noticeSeq = if (boot == null) tip else 0L
+        noticeTip = noticeSeq
+        boot = nextBoot
+        queuedNotices.clear()
+        readThrough.clear()
+    }
+
+    private fun acceptNotices(value: JsonObject) {
+        val responseBoot = value.text("boot") ?: return
+        if (feedBoot != null && feedBoot != responseBoot) {
+            readNotices()
+            return
+        }
+        val tip = value.noticeSequence() ?: return
+        updateNoticeBoot(responseBoot, tip)
+        noticeTip = maxOf(noticeTip, tip)
+        if (foreground && state.selectedChatId != null) markChatRead(state.selectedChatId)
+        // 回放有固定保留窗口。用服务端确认的游标跨过已过期记录，随后合并先收到的实时事件。
+        val replay = value.array("notices").filterIsInstance<JsonObject>()
+            .mapNotNull { row -> row.noticeSequence()?.let { it to row } } + queuedNotices.entries.map { it.key to it.value }
+        val restoreRecent = state.recent.isEmpty()
+        replay.asSequence()
+            .filter { (seq, _) -> seq <= tip && (seq > noticeSeq || restoreRecent) }
+            .distinctBy { it.first }.sortedBy { it.first }
+            .forEach { (seq, row) -> recordNotice(seq, row, countUnread = seq > noticeSeq) }
+        noticeSeq = maxOf(noticeSeq, tip)
+        queuedNotices.keys.removeAll { it <= noticeSeq }
+        drainNotices()
+    }
+
+    private fun drainNotices() {
+        if (boot == null) return
+        while (noticeSeq < Long.MAX_VALUE) {
+            val next = noticeSeq + 1
+            val row = queuedNotices.remove(next) ?: break
+            recordNotice(next, row)
+            noticeSeq = next
+        }
+        readThrough.values.removeAll { it <= noticeSeq }
+    }
+
+    private fun recordNotice(seq: Long, value: JsonObject, countUnread: Boolean = true) {
+        val kind = value.text("kind") ?: return
+        val chatId = value.text("roomId")?.takeIf { it.isNotBlank() } ?: value.text("botId")?.takeIf { it.isNotBlank() }
+        if (kind in setOf("done", "question", "approval", "group", "message")) {
             val activity = BotActivity("${boot.orEmpty()}:$seq", value.text("text").orEmpty(),
-                value.text("roomId") ?: value.text("botId"), value.text("kind").orEmpty(), value.text("name").orEmpty())
+                chatId, kind, value.text("name").orEmpty())
             state = state.copy(recent = (listOf(activity) + state.recent).distinctBy { it.id }.take(30))
         }
+        if (countUnread && chatId != null && (kind == "group" || kind == "message") &&
+            !(foreground && state.selectedChatId == chatId) && seq > (readThrough[chatId] ?: 0)) {
+            val count = state.unreadCount(chatId)
+            if (count < Int.MAX_VALUE) state = state.copy(unreadCounts = state.unreadCounts + (chatId to count + 1))
+        }
     }
+
+    private fun JsonObject.noticeSequence(): Long? =
+        (get("seq") as? JsonPrimitive)?.longOrNull?.takeIf { it in 0 until Long.MAX_VALUE }
+
+    private fun liveStatus(work: JsonObject): Map<String, BotLiveWork> {
+        val bots = work["bots"] as? JsonObject
+        val rooms = work["rooms"] as? JsonObject
+        val turns = work["turns"] as? JsonObject
+        val steered = work["steered"] as? JsonObject
+        return buildMap {
+            for (chat in state.chats) {
+                val entry: JsonObject?
+                val started: Long?
+                val author: String?
+                if (chat.room) {
+                    entry = rooms?.array(chat.id).orEmpty().filterIsInstance<JsonObject>()
+                        .maxWithOrNull(compareBy({ !it.text("tool").isNullOrBlank() }, { it.epoch("since") ?: 0 }))
+                    val turn = turns?.epoch(chat.sessionId ?: chat.id)
+                    if (entry == null && turn == null) continue
+                    started = entry?.epoch("since") ?: turn
+                    author = entry?.text("botId")?.takeIf { it in chat.memberIds }
+                } else {
+                    val session = chat.sessionId ?: chat.id
+                    entry = (bots?.get(chat.id) as? JsonObject)?.takeIf { it.text("roomId") == null }
+                    val turn = turns?.epoch(session)
+                    if (entry == null && turn == null) continue
+                    started = listOfNotNull(entry?.epoch("since"), turn, steered?.epoch(session)).maxOrNull()
+                    author = chat.id
+                }
+                val tool = entry?.text("tool")?.trim()?.lowercase()?.replace("-", "_").orEmpty()
+                val kind = when {
+                    entry != null && entry["switching"] == JsonPrimitive(true) && entry["folder"] == JsonPrimitive(true) -> "switching-folder"
+                    tool.isEmpty() -> "thinking"
+                    "web_search" in tool || "search_web" in tool || "websearch" in tool || "searchweb" in tool -> "web-search"
+                    "web" in tool || "browse" in tool || "fetch" in tool -> "web-read"
+                    "image" in tool || "photo" in tool -> "image"
+                    else -> "working"
+                }
+                put(chat.id, BotLiveWork(kind, author, started))
+            }
+        }
+    }
+
+    private fun JsonObject.epoch(key: String): Long? =
+        (this[key] as? JsonPrimitive)?.longOrNull?.takeIf { it in 1..253402300799999L }
 
     private fun peer(value: JsonElement, room: Boolean, running: Map<String, JsonElement>): BotChat? {
         val obj = value as? JsonObject ?: return null
@@ -1020,6 +1202,7 @@ class SharedBotStore {
         sessionChats.values.removeAll { it == id }
         wantedAvatars.remove(id)
         attemptedAvatars.remove(id)
+        readThrough.remove(id)
         val wasSelected = state.selectedChatId == id
         if (wasSelected) {
             streams.clear()
@@ -1030,7 +1213,9 @@ class SharedBotStore {
                 if (id in chat.memberIds) chat.copy(memberIds = chat.memberIds - id) else chat
             },
             rosterIds = state.rosterIds - id,
+            unreadCounts = state.unreadCounts - id,
             roleDetails = state.roleDetails?.takeUnless { it.botId == id },
+            liveWork = state.liveWork.filter { (chatId, work) -> chatId != id && work.botId != id },
             roleSaving = false,
             roleError = null,
             selectedChatId = state.selectedChatId?.takeUnless { it == id },
@@ -1183,8 +1368,8 @@ data class BotAvatarSeat(val x: Double, val y: Double, val side: Double)
 
 object BotAvatarLayout {
     fun seats(memberCount: Int): List<BotAvatarSeat> = when (memberCount) {
-        0 -> emptyList()
-        1, 2 -> listOf(BotAvatarSeat(0.0, 0.0, 2.0 / 3), BotAvatarSeat(1.0 / 3, 1.0 / 3, 2.0 / 3))
+        0, 1 -> emptyList()
+        2 -> listOf(BotAvatarSeat(0.0, 0.0, 2.0 / 3), BotAvatarSeat(1.0 / 3, 1.0 / 3, 2.0 / 3))
         3 -> listOf(BotAvatarSeat(2.0 / 9, 0.0, 5.0 / 9), BotAvatarSeat(0.0, 4.0 / 9, 5.0 / 9),
             BotAvatarSeat(4.0 / 9, 4.0 / 9, 5.0 / 9))
         else -> listOf(BotAvatarSeat(0.0, 0.0, 0.5), BotAvatarSeat(0.5, 0.0, 0.5),

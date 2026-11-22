@@ -120,4 +120,41 @@ class ScheduledTaskParityDeviceTest {
             }
         }
     }
+
+    @Test fun pendingCardOpensDetailsAndLaterOpensCreatedSession() {
+        val raw = GatewayWireDecoder.decode("""{"kind":"schedule-catalog","items":[{"id":"pending","target":{"kind":"new_once","sessionId":"reserved"},"status":"active","kind":"daily","title":"每日简报","prompt":"生成简报","scheduledAt":"2099-01-31T00:00:00Z"}]}""").items!!.single()
+        val task = checkNotNull(MobileScheduledTask.from(raw))
+        var created by mutableStateOf(false)
+        var opens = 0
+        var historyOpens = 0
+        compose.setContent {
+            DshTheme {
+                ScheduleTheme {
+                    Column(Modifier.width(390.dp).verticalScroll(rememberScrollState()).padding(20.dp)) {
+                        ScheduledTaskCard(
+                            task = task,
+                            sessionTitle = if (created) "简报会话" else "待创建",
+                            revealedTaskId = null,
+                            onRevealChange = {},
+                            onOpenSession = if (created) ({ opens++ }) else null,
+                            onEdit = {},
+                            onDelete = {},
+                            busy = false,
+                            onShowHistory = { historyOpens++ }
+                        )
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("每日简报").performClick()
+        compose.onNodeWithText("待创建").assertIsDisplayed()
+        compose.onNodeWithTag("scheduled-task-history").performClick()
+        compose.runOnIdle {
+            assertEquals(0, opens)
+            assertEquals(1, historyOpens)
+            created = true
+        }
+        compose.onNodeWithText("每日简报").performClick()
+        compose.runOnIdle { assertEquals(1, opens) }
+    }
 }

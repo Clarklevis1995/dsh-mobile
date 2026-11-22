@@ -1982,6 +1982,11 @@ final class AppStore: ObservableObject {
     @Published private(set) var scheduleHistoryLoading = false
     @Published private(set) var scheduleHistoryError: String?
 
+    func scheduleLinkedSession(_ id: String?) -> SessionSummary? {
+        guard let id, !archivedSessionIds.contains(id) else { return nil }
+        return sessions.first { $0.id == id }
+    }
+
     func loadScheduleHistory(_ task: ScheduledTask, before: String? = nil) {
         if scheduleHistoryLoading && scheduleHistoryTaskID == task.id { return }
         let id = UUID().uuidString
@@ -1991,6 +1996,7 @@ final class AppStore: ObservableObject {
         if before == nil { scheduleHistory = nil }
         scheduleHistoryError = nil
         guard gateway.state.isConnected else {
+            scheduleHistoryRequestID = nil
             scheduleHistoryLoading = false
             scheduleHistoryError = String(localized: "请连接网关后重试。")
             return
@@ -3520,13 +3526,15 @@ final class AppStore: ObservableObject {
             finishScheduledTaskMutation(error: scheduledTaskFailureMessage(frame.code, frame.message))
             return
         }
-        if frame.kind == "error", frame.requestType == "schedule-history", frame.requestId == scheduleHistoryRequestID {
+        if let scheduleHistoryRequestID, frame.requestId == scheduleHistoryRequestID,
+           frame.kind == "schedule-history" || (frame.kind == "error" && frame.requestType == "schedule-history") {
+            self.scheduleHistoryRequestID = nil
             scheduleHistoryLoading = false
-            scheduleHistoryError = scheduledTaskFailureMessage(
-                frame.code, frame.message, fallback: String(localized: "运行轨迹加载失败"))
-            return
-        }
-        if frame.kind == "schedule-history", frame.requestId == scheduleHistoryRequestID {
+            if frame.kind == "error" || frame.code != nil {
+                scheduleHistoryError = scheduledTaskFailureMessage(
+                    frame.code, frame.message, fallback: String(localized: "运行轨迹加载失败"))
+                return
+            }
             let previous = scheduleHistoryAppending ? (scheduleHistory?["records"]?.arrayValue ?? []) : []
             var seen = Set<JSONValue>()
             let records = (previous + (frame.records ?? [])).filter { seen.insert($0).inserted }
@@ -3534,7 +3542,6 @@ final class AppStore: ObservableObject {
                 "retention": frame.retention ?? .null,
                 "earlierRecordsUnavailable": .bool(frame.earlierRecordsUnavailable == true),
                 "earlierRecordsPruned": .bool(frame.earlierRecordsPruned == true)])
-            scheduleHistoryLoading = false
             scheduleHistoryError = nil
             return
         }
@@ -3552,7 +3559,10 @@ final class AppStore: ObservableObject {
             return
         }
         if frame.kind == "schedule-changed" {
-            if gateway.state.isConnected { refreshScheduledTasks() }
+            if gateway.state.isConnected {
+                refreshScheduledTasks()
+                gateway.requestSessions()
+            }
             return
         }
         if frame.kind == "error" && ["schedule-catalog", "schedule-list"].contains(frame.requestType ?? "") {
@@ -3752,7 +3762,8 @@ final class AppStore: ObservableObject {
         switch code {
         case "schedule_conflict": String(localized: "任务已被其他设备修改，列表已刷新，请重新打开编辑")
         case "schedule_ended": String(localized: "任务已结束，无法再编辑")
-        case "schedule_not_found": String(localized: "任务已不存在，列表已刷新")
+        case "schedule_not_found": String(localized: "任务不存在，可能已被删除")
+        case "schedule_out_of_scope": String(localized: "该任务属于其他会话，请从对应会话进入")
         default: message ?? fallback
         }
     }

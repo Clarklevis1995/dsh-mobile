@@ -1,12 +1,18 @@
 {
   "version": 1,
+  "previewWork": {
+    "bots": { "chief": { "tool": "web_search" } },
+    "rooms": { "room": [{ "botId": "researcher", "tool": "web_fetch" }] }
+  },
   "snapshot": {
     "mainBotId": "chief",
+    "unreadCounts": { "room": 2 },
     "chats": [
       {
         "id": "chief",
         "name": "Chief",
         "role": "Chief of Staff · 你的个人助理",
+        "profile": { "model": "DeepSeek-V4.1-Flash", "effort": "Low" },
         "running": true,
         "lastAt": 1794810720000
       },

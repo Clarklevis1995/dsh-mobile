@@ -1375,7 +1375,6 @@ private fun ConversationTimeline(
                                     FileReferenceCard(
                                         path = file.path,
                                         description = file.description,
-                                        modifier = Modifier.align(Alignment.End),
                                         onClick = {
                                             selectedSessionId?.let { session ->
                                                 stateHolder.openConversationFile(stateHolder.gatewayLocalId, session, file.path)

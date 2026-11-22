@@ -113,7 +113,9 @@ import com.clarklevis.dsh.android.R
 import com.clarklevis.dsh.shared.gateway.GatewayConnectionState
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import java.text.ParsePosition
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
@@ -171,9 +173,14 @@ private fun ScheduledTasksContent(stateHolder: AndroidSharedStateHolder, onBack:
     var isSearching by rememberSaveable { mutableStateOf(false) }
     val visibleTasks = filteredScheduledTasks(stateHolder.scheduledTasks, statusFilter, searchQuery)
     val connection = stateHolder.gatewayState.connection
+    fun refreshTasksAndSessions() {
+        stateHolder.refreshScheduledTasks()
+        if (connection == GatewayConnectionState.CONNECTED) stateHolder.refreshSessions()
+    }
     LaunchedEffect(connection) {
-        if (connection == GatewayConnectionState.CONNECTED) stateHolder.refreshScheduledTasks()
-        else if (stateHolder.scheduledTasks.isEmpty()) stateHolder.refreshScheduledTasks()
+        if (connection == GatewayConnectionState.CONNECTED || stateHolder.scheduledTasks.isEmpty()) {
+            refreshTasksAndSessions()
+        }
     }
     Column(
         Modifier.fillMaxSize()
@@ -223,7 +230,7 @@ private fun ScheduledTasksContent(stateHolder: AndroidSharedStateHolder, onBack:
         })
         androidx.compose.material3.pulltorefresh.PullToRefreshBox(
             isRefreshing = stateHolder.scheduledTasksLoading && stateHolder.scheduledTasks.isNotEmpty(),
-            onRefresh = stateHolder::refreshScheduledTasks, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            onRefresh = ::refreshTasksAndSessions, modifier = Modifier.weight(1f).fillMaxWidth()) {
         when {
             stateHolder.scheduledTasksLoading && stateHolder.scheduledTasks.isEmpty() -> {
                 Column(Modifier.fillMaxWidth().padding(top = 72.dp), horizontalAlignment = Alignment.CenterHorizontally,
@@ -234,7 +241,7 @@ private fun ScheduledTasksContent(stateHolder: AndroidSharedStateHolder, onBack:
             }
             stateHolder.scheduledTasksError != null && stateHolder.scheduledTasks.isEmpty() -> {
                 ScheduleEmptyState(appText("无法显示定时任务"), stateHolder.scheduledTasksError.orEmpty(), R.drawable.ic_schedule_offline,
-                    onRetry = stateHolder::refreshScheduledTasks)
+                    onRetry = ::refreshTasksAndSessions)
             }
             stateHolder.scheduledTasks.isEmpty() -> {
                 ScheduleEmptyState(appText("暂无定时任务"), appText("在会话中创建的定时任务会显示在这里"), R.drawable.ic_drawer_schedule)
@@ -254,18 +261,22 @@ private fun ScheduledTasksContent(stateHolder: AndroidSharedStateHolder, onBack:
                     item { TextButton(onClick = stateHolder::loadMoreScheduledTasks, enabled = !stateHolder.scheduledTasksLoading) { Text(appText("加载更多任务")) } }
                 }
                 items(visibleTasks, key = { it.id }) { task ->
+                    val sessionId = task.linkedSessionId
+                    val session = stateHolder.snapshot.sessions.firstOrNull { it.id == sessionId }
                     Column {
                     ScheduledTaskCard(
                         task = task,
-                        sessionTitle = stateHolder.snapshot.sessions.firstOrNull { it.id == task.sessionId }?.title
-                            ?: task.sessionId,
+                        sessionTitle = session?.title ?: appText(
+                            com.clarklevis.dsh.shared.protocol.ScheduleTaskPresentation.unavailableSessionLabel(
+                                task.targetKind, task.hasDelivery, sessionId in stateHolder.snapshot.archivedSessionIds
+                            )
+                        ),
                         revealedTaskId = revealedTaskId,
                         onRevealChange = { revealedTaskId = it },
-                        onOpenSession = {
-                            if (revealedTaskId == task.id) revealedTaskId = null
-                            else {
+                        onOpenSession = session?.let { linked ->
+                            {
                                 revealedTaskId = null
-                                if (task.sessionId.isNotBlank()) onOpenSession(task.sessionId)
+                                onOpenSession(linked.id)
                             }
                         },
                         onEdit = {
@@ -466,7 +477,7 @@ internal fun ScheduledTaskCard(
     sessionTitle: String,
     revealedTaskId: String?,
     onRevealChange: (String?) -> Unit,
-    onOpenSession: () -> Unit,
+    onOpenSession: (() -> Unit)?,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     busy: Boolean,
@@ -602,7 +613,12 @@ internal fun ScheduledTaskCard(
         ) {
             Column(
                 Modifier.fillMaxWidth().clickable {
-                    if (SystemClock.uptimeMillis() >= suppressCardTapUntil) onOpenSession()
+                    if (SystemClock.uptimeMillis() >= suppressCardTapUntil) {
+                        if (revealedTaskId != null) onRevealChange(null)
+                        if (revealedTaskId != task.id) {
+                            if (onOpenSession != null) onOpenSession() else expanded = !expanded
+                        }
+                    }
                 }
                     .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 18.dp)
             ) {
@@ -689,7 +705,8 @@ private fun ScheduledTaskHistorySheet(
     onOpenSession: (String) -> Unit
 ) {
     ScheduledTaskHistorySheet(
-        task = task,
+        task = stateHolder.scheduledTasks.firstOrNull { it.id == task.id } ?: task,
+        availableSessionIds = stateHolder.snapshot.sessions.map { it.id }.toSet(),
         history = stateHolder.scheduleHistory,
         loading = stateHolder.scheduleHistoryLoading,
         error = stateHolder.scheduleHistoryError,
@@ -703,6 +720,7 @@ private fun ScheduledTaskHistorySheet(
 @Composable
 internal fun ScheduledTaskHistorySheet(
     task: MobileScheduledTask,
+    availableSessionIds: Set<String>,
     history: com.clarklevis.dsh.shared.protocol.JsonValue?,
     loading: Boolean,
     error: String?,
@@ -722,7 +740,7 @@ internal fun ScheduledTaskHistorySheet(
             val density = LocalDensity.current
             val bottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
             var footerHeight by remember { mutableStateOf(52.dp + bottomInset) }
-            val hasSession = task.sessionId.isNotBlank()
+            val linkedSessionId = task.linkedSessionId?.takeIf { it in availableSessionIds }
             Column(Modifier.fillMaxSize()) {
                 DshPickerHeader(appText("运行轨迹"), onDismiss,
                     dismissLabel = appText("关闭"), capsuleActions = true)
@@ -730,7 +748,7 @@ internal fun ScheduledTaskHistorySheet(
                     LazyColumn(Modifier.fillMaxSize().layerBackdrop(backdrop).testTag("scheduled-task-history-records"),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             start = 20.dp, top = 20.dp, end = 20.dp,
-                            bottom = 20.dp + if (hasSession) footerHeight else bottomInset
+                            bottom = 20.dp + if (linkedSessionId != null) footerHeight else bottomInset
                         ),
                         verticalArrangement = Arrangement.spacedBy(20.dp)) {
                         item { Text(task.title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold) }
@@ -761,8 +779,9 @@ internal fun ScheduledTaskHistorySheet(
                                         Text(record["prompt"]?.stringValue ?: task.prompt, fontSize = 15.sp)
                                         record["deliveredAt"]?.stringValue?.let { Text(formatScheduleDate(it)) }
                                         record["messageId"]?.stringValue?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                        (record["targetSessionId"] ?: record["sessionId"])?.stringValue?.takeIf { it.isNotBlank() && it != task.sessionId }?.let { session ->
-                                            TextButton(onClick = { onOpenSession(session) }) { Text(appText("关联会话")) }
+                                        val sessionId = record["targetSessionId"]?.stringValue ?: record["sessionId"]?.stringValue
+                                        if (sessionId != null && sessionId in availableSessionIds && sessionId != linkedSessionId) {
+                                            TextButton(onClick = { onOpenSession(sessionId) }) { Text(appText("关联会话")) }
                                         }
                                     }
                                     HorizontalDivider()
@@ -785,7 +804,7 @@ internal fun ScheduledTaskHistorySheet(
                             item { Text(appText("仅显示宿主仍保留的运行记录"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                     }
-                    if (hasSession) {
+                    if (linkedSessionId != null) {
                         // Dialog 的系统 Configuration 可能与应用主题不同，以当前面板主题为准。
                         val surface = MaterialTheme.colorScheme.surface
                         val tint = if (surface.luminance() < 0.5f) Color(0xFF242424) else Color(0xFFF3F4F4)
@@ -800,7 +819,7 @@ internal fun ScheduledTaskHistorySheet(
                                 .then(material)
                                 .onSizeChanged { footerHeight = with(density) { it.height.toDp() } }
                                 .testTag("scheduled-task-history-session-footer")
-                                .clickable(role = Role.Button) { onOpenSession(task.sessionId) }
+                                .clickable(role = Role.Button) { onOpenSession(linkedSessionId) }
                                 .navigationBarsPadding().padding(horizontal = 20.dp, vertical = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.CenterVertically
@@ -866,13 +885,22 @@ private fun duration(seconds: Int): String = when {
     else -> appText("%1\$s 秒", seconds)
 }
 
-private fun formatScheduleDate(value: String): String {
-    val input = listOf("yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ssX")
-    val date = input.firstNotNullOfOrNull { pattern ->
-        runCatching { SimpleDateFormat(pattern, Locale.US).parse(value) }.getOrNull()
-    } ?: return value
-    return SimpleDateFormat(appText("yyyy年M月d日 HH:mm"), Locale.getDefault()).format(date)
+private fun parseScheduleDate(value: String): Date? {
+    val patterns = listOf("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ssXXX")
+    return patterns.firstNotNullOfOrNull { pattern ->
+        val position = ParsePosition(0)
+        val format = SimpleDateFormat(pattern, Locale.US).apply { isLenient = false }
+        format.parse(value, position)?.takeIf { position.index == value.length }
+    }
 }
+
+private fun formatScheduleDate(value: String): String =
+    parseScheduleDate(value)?.let { SimpleDateFormat(appText("yyyy年M月d日 HH:mm"), Locale.getDefault()).format(it) }
+        ?: value
+
+internal fun formatScheduleClock(value: String): String =
+    parseScheduleDate(value)?.let { SimpleDateFormat("HH:mm", Locale.getDefault()).format(it) }
+        ?: value.ifBlank { "—" }
 
 @Composable
 private fun ScheduleCreateDialog(stateHolder: AndroidSharedStateHolder, onDismiss: () -> Unit) {

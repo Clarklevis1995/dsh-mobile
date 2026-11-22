@@ -23,6 +23,7 @@ import android.util.Base64
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.gateway.gatewayAttachmentCacheKey
 import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import com.clarklevis.dsh.shared.platform.GatewayAttachmentCache
@@ -90,6 +91,41 @@ class AndroidAppGraphFakeIntegrationDeviceTest {
             waitUntil { connectors.registrationState == com.clarklevis.dsh.android.platform.devicetools.ConnectorRegistrationState.NOT_REGISTERED }
             assertTrue(connectors.connected)
             assertEquals("CONNECTED", holder.gatewayState.connection.name)
+        } finally { onMain { holder.close() } }
+    }
+
+    @Test
+    fun scheduleHistoryDistinguishesMissingFromOutOfScope() = runBlocking<Unit> {
+        val transport = FakeTransport()
+        val graph = AndroidAppGraph(
+            application = ApplicationProvider.getApplicationContext<Application>(),
+            transportOverride = transport, preferencesOverride = FakePreferences(),
+            credentialStoreOverride = FakeCredentials, attachmentCacheOverride = FakeCache(),
+            networkMonitorOverride = FakeNetwork, clockOverride = FakeClock,
+            gatewayLocalId = "schedule-history-${UUID.randomUUID()}"
+        )
+        val holder = graph.stateHolder
+        val task = requireNotNull(MobileScheduledTask.from(GatewayWireDecoder.decode(
+            """{"kind":"schedule-list","items":[{"id":"t1","title":"Daily report","prompt":"Summarize","status":"active"}]}"""
+        ).items.orEmpty().single()))
+        try {
+            waitUntil { transport.specs.isNotEmpty() }
+            transport.open()
+            transport.receive("""{"kind":"hello","authenticated":true,"protocol":3,"capabilities":["schedule-management-v2"]}""")
+            waitUntil { holder.gatewayState.connection.name == "CONNECTED" }
+
+            for ((code, message) in listOf(
+                "schedule_not_found" to "任务不存在，可能已被删除",
+                "schedule_out_of_scope" to "该任务属于其他会话，请从对应会话进入"
+            )) {
+                val before = transport.payloadsOfType("schedule-history").size
+                onMain { holder.loadScheduleHistory(task) }
+                waitUntil { transport.payloadsOfType("schedule-history").size > before }
+                val requestId = transport.payloadsOfType("schedule-history").last().getValue("requestId").jsonPrimitive.content
+                transport.receive("""{"kind":"schedule-history","requestId":"$requestId","id":"t1","code":"$code"}""")
+                waitUntil { holder.scheduleHistoryError != null }
+                assertEquals(appText(message), holder.scheduleHistoryError)
+            }
         } finally { onMain { holder.close() } }
     }
 

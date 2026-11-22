@@ -23,7 +23,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sin
 
-/** 纯几何网格与矢量光弧，不使用位图贴图或逐像素噪声着色器。 */
+/** 普通首页和 Bot 首页共用几何网格与矢量光弧，Bot 模式只替换配色。 */
 @Composable
 internal fun OceanMeshBackground(
     time: () -> Float,
@@ -32,10 +32,6 @@ internal fun OceanMeshBackground(
     lavender: Boolean = false,
     night: Boolean = false
 ) {
-    if (lavender && Build.VERSION.SDK_INT >= 33) {
-        HarnessLavenderFluid(time, modifier, largeWindow, night)
-        return
-    }
     fun palette(color: Color): Color {
         if (!lavender) return color
         val l = (color.red * .2126f + color.green * .7152f + color.blue * .0722f) / .50f

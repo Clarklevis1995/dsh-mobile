@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "snapshot": {
+    "mainBotId": "chief",
+    "roleSettingsSupported": true,
+    "schedulesAvailable": true,
+    "models": [
+      { "id": "GPT-6.1 Terra", "title": "GPT-6.1 Terra" },
+      { "id": "DeepSeek-V4.1-Flash", "title": "DeepSeek-V4.1-Flash" }
+    ],
+    "effortModel": "GPT-6.1 Terra",
+    "efforts": [{ "id": "low", "title": "Low" }],
+    "chats": [
+      {
+        "id": "chief",
+        "name": "大主管",
+        "role": "Chief of Staff",
+        "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCIgdmlld0JveD0iMCAwIDgwIDgwIj48cGF0aCBmaWxsPSIjMDBiOGNlIiBkPSJNMzQgN2E1IDUgMCAwIDEgOS0xbDEzIDE5IDIyIDItMTIgMTkgNSAyMy0yMy01LTE5IDEzLTQtMjNMNSA0MGwyMi0xMFoiLz48cGF0aCBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBkPSJtMzcgMzUgMiAxMG0xMC0xMyAyIDEwIi8+PC9zdmc+",
+        "profile": { "model": "GPT-6.1 Terra" }
+      }
+    ],
+    "schedules": [
+      { "id": "morning", "title": "每日简报", "status": "每天", "next": "2026-11-22T00:00:00.000Z", "botId": "chief", "sessionId": "chief-session" }
+    ],
+    "roleDetails": {
+      "botId": "chief",
+      "memories": [
+        { "id": "1", "scope": "bot", "text": "记忆测试一" },
+        { "id": "2", "scope": "bot", "text": "记忆测试二" },
+        { "id": "3", "scope": "bot", "text": "记忆测试三" }
+      ],
+      "inputTokens": 100000,
+      "outputTokens": 16602
+    }
+  },
+  "histories": {},
+  "optimistic": {}
+}

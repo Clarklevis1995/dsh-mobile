@@ -116,19 +116,19 @@ internal fun GatewaySwitcherBar(onDarkBackground: Boolean = true) {
     var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirmingDelete by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<GatewayProfile?>(null) }
+    val foreground = if (onDarkBackground) Color.White else Color(0xFF252332)
     Row(
         Modifier
             .background(Color.White.copy(alpha = if (onDarkBackground) 0.09f else 0.32f), RoundedCornerShape(30.dp))
             .clickable { expanded = true }
-            .padding(horizontal = 11.dp, vertical = if (onDarkBackground) 5.dp else 7.dp),
+            .padding(horizontal = 11.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         TailscaleTunnelIndicator(application)
-        HostIcon(hosts.activeProfile?.server == true, if (onDarkBackground) Color.White else Color(0xFF252332), Modifier.size(15.dp * if (onDarkBackground) 1f else LocalDensity.current.fontScale))
-        Text(hosts.activeProfile?.displayName ?: appText("选择主机"), color = if (onDarkBackground) Color.White else Color(0xFF252332), fontSize = 12.sp, lineHeight = if (onDarkBackground) androidx.compose.ui.unit.TextUnit.Unspecified else 15.sp,
-            style = if (onDarkBackground) androidx.compose.material3.LocalTextStyle.current else TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)),
-            fontWeight = if (onDarkBackground) FontWeight.Normal else FontWeight.Medium, maxLines = 1)
+        HostIcon(hosts.activeProfile?.server == true, foreground, Modifier.size(15.dp))
+        Text(hosts.activeProfile?.displayName ?: appText("选择主机"), color = foreground,
+            fontSize = 12.sp, fontWeight = FontWeight.Normal, maxLines = 1)
         val activeOnline = hosts.activeGraph.stateHolder.gatewayState.connection == GatewayConnectionState.CONNECTED
         StatusIndicatorDot(
             color = if (activeOnline) DshColors.Success else Color.Red,
@@ -138,8 +138,8 @@ internal fun GatewaySwitcherBar(onDarkBackground: Boolean = true) {
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(com.clarklevis.dsh.android.R.drawable.ic_question_chevron_down),
             contentDescription = null,
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(if (onDarkBackground) Color.White else Color(0xFF252332)),
-            modifier = Modifier.size(14.dp * if (onDarkBackground) 1f else LocalDensity.current.fontScale)
+            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(foreground),
+            modifier = Modifier.size(14.dp)
         )
     }
     if (expanded) {

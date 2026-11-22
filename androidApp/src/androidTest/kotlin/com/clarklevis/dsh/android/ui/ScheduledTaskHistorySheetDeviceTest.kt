@@ -40,7 +40,8 @@ class ScheduledTaskHistorySheetDeviceTest {
     @get:Rule val compose = createComposeRule()
 
     @Test fun largeHistoryKeepsTopBoundaryFooterAndCloseVisibleInBothThemes() {
-        val task = MobileScheduledTask.from(GatewayWireDecoder.decode("""{"kind":"schedule-catalog","items":[{"id":"history-task","sessionId":"history-session","status":"active","kind":"daily","title":"每日新闻汇总","prompt":"汇总科技和金融新闻","time":"08:00:00.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-31T00:00:00Z"}]}""").items!!.single())!!
+        val task = MobileScheduledTask.from(GatewayWireDecoder.decode("""{"kind":"schedule-catalog","items":[{"id":"history-task","target":{"kind":"new_once","sessionId":"history-session"},"status":"active","kind":"daily","title":"每日新闻汇总","prompt":"汇总科技和金融新闻","time":"08:00:00.000","timeZone":"Asia/Shanghai","scheduledAt":"2099-01-31T00:00:00Z"}]}""").items!!.single())!!
+        var availableSessionIds by mutableStateOf(emptySet<String>())
         var count by mutableStateOf(100)
         var dark by mutableStateOf(false)
         var open by mutableStateOf(true)
@@ -65,6 +66,7 @@ class ScheduledTaskHistorySheetDeviceTest {
                             Text("底层定时任务页面")
                             if (open) ScheduledTaskHistorySheet(
                                 task = task,
+                                availableSessionIds = availableSessionIds,
                                 history = JsonValue.ObjectValue(mapOf(
                                     "records" to JsonValue.ArrayValue(List(count) { index ->
                                         JsonValue.ObjectValue(mapOf("scheduledAt" to JsonValue.StringValue("2099-01-31T08:00:00Z"),
@@ -83,6 +85,9 @@ class ScheduledTaskHistorySheetDeviceTest {
                 }
             }
         }
+        compose.onNodeWithText("每日新闻汇总").assertIsDisplayed()
+        compose.onNodeWithTag("scheduled-task-history-session-footer").assertDoesNotExist()
+        compose.runOnIdle { availableSessionIds = setOf("history-session") }
         compose.onAllNodesWithText("详情")[0].performClick()
         for (night in listOf(false, true)) {
             compose.runOnIdle { dark = night }

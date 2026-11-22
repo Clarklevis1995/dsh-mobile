@@ -1,6 +1,108 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "· %lld 秒": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "· %llds" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "· %lld 秒" } }
+      }
+    },
+    "上网搜索…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching online…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上网搜索…"
+          }
+        }
+      }
+    },
+    "正在浏览网页…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading a webpage…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在浏览网页…"
+          }
+        }
+      }
+    },
+    "正在生成图片…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generating an image…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在生成图片…"
+          }
+        }
+      }
+    },
+    "正在切换工作文件夹…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switching working folders…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在切换工作文件夹…"
+          }
+        }
+      }
+    },
+    "正在思考…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在思考…"
+          }
+        }
+      }
+    },
+    "正在处理…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在处理…"
+          }
+        }
+      }
+    },
     "删除 Bot": {
       "localizations": {
         "en": {
@@ -9616,6 +9718,75 @@
         }
       }
     },
+    "schedule.session.pending" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created on first run"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "初回実行時に作成"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待创建"
+          }
+        }
+      }
+    },
+    "schedule.session.perRun" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New conversation for each run"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "実行ごとに会話を作成"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次新建会话"
+          }
+        }
+      }
+    },
+    "schedule.session.unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linked conversation unavailable"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "関連する会話は現在利用できません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关联会话当前不可用"
+          }
+        }
+      }
+    },
     "schedule.status.active" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14202,6 +14373,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "タスクの内容"
+          }
+        }
+      }
+    },
+    "该任务属于其他会话，请从对应会话进入" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This task belongs to another conversation. Open it there."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このタスクは別の会話に属しています。該当する会話から開いてください。"
+          }
+        }
+      }
+    },
+    "任务不存在，可能已被删除" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Task not found. It may have been deleted."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タスクが見つかりません。削除された可能性があります。"
           }
         }
       }
@@ -26037,6 +26242,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未识别到人声"
+          }
+        }
+      }
+    },
+    "未读消息：%lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unread messages: %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未读消息：%lld"
           }
         }
       }

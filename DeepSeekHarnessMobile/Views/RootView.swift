@@ -256,13 +256,7 @@ struct RootNavigationHost: View, Equatable {
             PluginsView(store: store)
         case .scheduledTasks:
             ScheduledTasksView(store: store, onCreateTask: createScheduledTaskConversation) { sessionID in
-                let session = store.sessions.first(where: { $0.id == sessionID }) ?? SessionSummary(
-                    id: sessionID,
-                    title: store.scheduledTasks.first(where: { $0.sessionID == sessionID })?.title ?? String(localized: "会话"),
-                    lastActivity: .now,
-                    isRunning: false,
-                    hasUnread: false
-                )
+                guard let session = store.scheduleLinkedSession(sessionID) else { return }
                 newConversationTask?.cancel()
                 let header = conversationHeader(for: session)
                 let operationID = UUID()
@@ -570,7 +564,7 @@ private struct ScheduledTasksView: View {
         .modifier(ScheduledTaskListShadowInset(enabled: !visibleTasks.isEmpty))
         .adaptiveListWidth()
         .scrollContentBackground(.hidden)
-        .refreshable { store.refreshScheduledTasks() }
+        .refreshable { refreshTasksAndSessions() }
         .onChangeCompat(of: statusFilter) { _, filter in
             store.filterScheduledTasks(active: filter == .all ? nil : filter == .active)
         }
@@ -597,8 +591,13 @@ private struct ScheduledTasksView: View {
             if !store.gateway.state.isConnected { store.refreshScheduledTasks() }
         }
         .onReceive(store.gateway.$state) { state in
-            if state.isConnected { store.refreshScheduledTasks() }
+            if state.isConnected { refreshTasksAndSessions() }
         }
+    }
+
+    private func refreshTasksAndSessions() {
+        store.refreshScheduledTasks()
+        if store.gateway.state.isConnected { store.gateway.requestSessions() }
     }
 
     @ToolbarContentBuilder
@@ -616,11 +615,15 @@ private struct ScheduledTasksView: View {
     }
 
     private func taskRow(for task: ScheduledTask) -> some View {
-        ScheduledTaskCard(
+        let session = store.scheduleLinkedSession(task.linkedSessionID)
+        let archived = task.linkedSessionID.map { store.archivedSessionIds.contains($0) } ?? false
+        return ScheduledTaskCard(
             task: task,
-            sessionTitle: store.sessions.first(where: { $0.id == task.sessionID })?.title ?? task.sessionID,
+            sessionTitle: session?.title ?? ScheduleTaskPresentation.shared.unavailableSessionLabel(
+                targetKind: task.targetKind, hasDelivery: task.hasDelivery, archived: archived
+            ).localized,
             expanded: expandedTaskIDs.contains(task.id),
-            onOpen: { if !task.sessionID.isEmpty { onOpenSession(task.sessionID) } },
+            onOpen: session.map { session in { onOpenSession(session.id) } },
             onExpand: {
                 if !expandedTaskIDs.insert(task.id).inserted { expandedTaskIDs.remove(task.id) }
             },
@@ -778,6 +781,7 @@ struct ScheduledTaskHistorySheet: View {
     @Environment(\.dismiss) private var dismiss
     private var records: [JSONValue] { store.scheduleHistory?["records"]?.arrayValue ?? [] }
     private var before: String? { store.scheduleHistory?["nextBefore"]?.stringValue }
+    private var currentTask: ScheduledTask { store.scheduledTasks.first { $0.id == task.id } ?? task }
 
     var body: some View {
         NavigationStack {
@@ -811,8 +815,8 @@ struct ScheduledTaskHistorySheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
             .safeAreaInset(edge: .bottom) {
-                if !task.sessionID.isEmpty {
-                    Button { onOpenSession(task.sessionID) } label: {
+                if let session = store.scheduleLinkedSession(currentTask.linkedSessionID) {
+                    Button { onOpenSession(session.id) } label: {
                         Label("关联会话", systemImage: "bubble.left.and.bubble.right")
                             .frame(maxWidth: .infinity).padding()
                     }
@@ -840,8 +844,10 @@ struct ScheduledTaskHistorySheet: View {
                         if let message = record["messageId"]?.stringValue {
                             Text(message).appFont(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                         }
-                        if let session = (record["targetSessionId"] ?? record["sessionId"])?.stringValue, !session.isEmpty, session != task.sessionID {
-                            Button("关联会话") { onOpenSession(session) }
+                        if let session = store.scheduleLinkedSession(
+                            record["targetSessionId"]?.stringValue ?? record["sessionId"]?.stringValue
+                        ), session.id != currentTask.linkedSessionID {
+                            Button("关联会话") { onOpenSession(session.id) }
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
                 }
@@ -866,7 +872,7 @@ struct ScheduledTaskCard: View {
     let task: ScheduledTask
     let sessionTitle: String
     let expanded: Bool
-    let onOpen: () -> Void
+    let onOpen: (() -> Void)?
     let onExpand: () -> Void
     var onShowHistory: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -889,9 +895,7 @@ struct ScheduledTaskCard: View {
 
     private var summaryContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                onOpen()
-            } label: {
+            Button(action: onOpen ?? onExpand) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(ScheduledTaskFormat.shortRule(task))
                         .appFont(.system(size: 15, weight: .medium))

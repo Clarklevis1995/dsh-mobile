@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,13 +34,16 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -78,6 +82,11 @@ private val managementDark = ManagementColors(
 )
 private val managementAction = Color(0xFF6C50A7)
 private val managementCard = RoundedCornerShape(20.dp)
+private val rosterTextStyle = TextStyle(
+    letterSpacing = 0.sp,
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+)
 
 @Composable
 internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -> Unit, showRole: (String) -> Unit) {
@@ -120,6 +129,9 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
             BotManagementDestination.Library -> BotManagementDestination.Appearance
         }
     }
+    val pageScroll = BotManagementDestination.entries.map { rememberScrollState() }
+    val pageScope = rememberCoroutineScope()
+    val scroll = pageScroll[page.ordinal]
     BackHandler(onBack = ::back)
     LaunchedEffect(state.createdId) {
         if (state.createdId != null && page == BotManagementDestination.Create) page = BotManagementDestination.Roster
@@ -139,7 +151,7 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
     when (page) {
         BotManagementDestination.Roster -> {
             val roster = snapshot.roster
-            ManagementPage(appText("我的 Bot"), colors, ::back, isRoster = true, action = {
+            ManagementPage(appText("我的 Bot"), colors, ::back, scroll, isRoster = true, action = {
                 ManagementPill(appText("新建 Bot"), colors, R.drawable.ic_add, enabled = canCreate,
                     modifier = Modifier.testTag("bot.new")) {
                     name = ""
@@ -153,6 +165,7 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
                     customLook = false
                     holder.openBotCreation()
                     page = BotManagementDestination.Create
+                    pageScope.launch { pageScroll[BotManagementDestination.Create.ordinal].scrollTo(0) }
                 }
             }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -167,11 +180,11 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
                     }
                     ManagementCaption(status, colors)
                 }
-                ManagementSection(colors) {
-                    if (roster.isEmpty()) {
-                        if (snapshot.loading) ManagementProgress(colors)
-                        else ManagementCaption(appText("还没有 Bot"), colors, Modifier.padding(16.dp))
-                    }
+                if (roster.isEmpty() && snapshot.loading) {
+                    ManagementProgress(colors)
+                } else ManagementSection(colors) {
+                    if (roster.isEmpty()) Text(appText("还没有 Bot"), Modifier.fillMaxWidth().padding(16.dp),
+                        color = colors.text, style = SettingsTypography.item, textAlign = TextAlign.Center)
                     roster.forEachIndexed { index, bot ->
                         if (index > 0) ManagementDivider(colors.line.copy(alpha = 0.45f))
                         Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).testTag("bot.roster." + bot.id)
@@ -179,15 +192,28 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             val main = bot.id == snapshot.mainBotId
                             BotAvatar(bot, 44.dp, main = main)
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Column(Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(bot.name, Modifier.weight(1f, fill = false), fontSize = 17.sp,
+                                    Text(bot.name, Modifier.weight(1f, fill = false), style = rosterTextStyle,
+                                        fontSize = 17.sp, lineHeight = 20.sp,
                                         fontWeight = FontWeight.SemiBold, color = colors.text)
-                                    if (main) Text(appText("主 Bot"), Modifier.clip(RoundedCornerShape(6.dp))
-                                        .background(colors.soft).padding(horizontal = 7.dp, vertical = 3.dp),
-                                        fontSize = 10.sp, color = colors.accent, fontWeight = FontWeight.Medium)
+                                    if (main) {
+                                        val labelHeight = with(LocalDensity.current) { 12.sp.toDp() } + 6.dp
+                                        Box(
+                                            Modifier.testTag("bot.roster.main-badge").height(labelHeight)
+                                                .background(colors.soft, RoundedCornerShape(6.dp))
+                                                .padding(horizontal = 7.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Text(appText("主 Bot"), style = rosterTextStyle, fontSize = 10.sp,
+                                                lineHeight = 12.sp, color = colors.accent, fontWeight = FontWeight.Medium,
+                                                maxLines = 1, softWrap = false)
+                                        }
+                                    }
                                 }
-                                if (bot.role.isNotEmpty()) Text(bot.role, fontSize = 12.sp, color = colors.secondary)
+                                if (bot.role.isNotEmpty()) {
+                                    Text(bot.role, style = rosterTextStyle, fontSize = 12.sp, lineHeight = 15.sp, color = colors.secondary)
+                                }
                             }
                             ManagementIcon(R.drawable.ic_chevron_right, colors.text, 14.dp)
                         }
@@ -196,7 +222,7 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
             }
         }
 
-        BotManagementDestination.Create -> ManagementPage(appText("新建 Bot"), colors, ::back, backEnabled = !state.saving,
+        BotManagementDestination.Create -> ManagementPage(appText("新建 Bot"), colors, ::back, scroll, backEnabled = !state.saving,
             footer = {
                 ManagementAction(appText("创建 Bot"), creationReady, state.saving, Modifier.testTag("bot.create.submit")) {
                     val selected = look ?: return@ManagementAction
@@ -274,10 +300,10 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
                             appText("重试"), enabled = canCreate && !state.saving) { holder.loadBotCreationAgents() }
                         else -> state.agents.forEachIndexed { index, item ->
                             if (index > 0) ManagementDivider(colors.line)
-                            val status = when (item.signedIn) {
-                                true -> appText("已登录")
-                                false -> appText("未登录")
-                                null -> appText("可用")
+                            val status = when {
+                                item.signedIn == true -> appText("已登录")
+                                item.available -> appText("可用")
+                                else -> appText("未登录")
                             }
                             ManagementRow(colors, item.title, status,
                                 icon = R.drawable.ic_command_status, marked = item.id == agentId, chevron = false,
@@ -310,7 +336,7 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
             if (!canCreate) ManagementCaption(appText("连接主机后可以创建 Bot"), colors)
         }
 
-        BotManagementDestination.Model -> ManagementPage(appText("选择模型"), colors, ::back) {
+        BotManagementDestination.Model -> ManagementPage(appText("选择模型"), colors, ::back, scroll) {
             ManagementCaption(appText("可用模型"), colors)
             ManagementSection(colors) {
                 if (local) {
@@ -356,7 +382,7 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
                 onBusy = { busy = it; if (it) photoError = false },
                 onError = { photoError = true }
             ) { image, _ -> photoDraft = image }
-            ManagementPage(appText("编辑形象"), colors, ::back, footer = {
+            ManagementPage(appText("编辑形象"), colors, ::back, scroll, footer = {
                 ManagementAction(appText("完成"), !busy && current != null, false, Modifier.testTag("bot.appearance.done")) {
                     look = current
                     photo = photoDraft
@@ -414,11 +440,11 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
                 }
                 @OptIn(ExperimentalLayoutApi::class)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ManagementPill(appText("随机"), colors, R.drawable.ic_chevrons_up_down) {
+                    ManagementPill(appText("随机"), colors, R.drawable.ic_shuffle) {
                         appearance?.randomLook(current)?.let { appearanceDraft = it; photoDraft = null }
                     }
                     ManagementPill(appText("上传照片"), colors, R.drawable.ic_photo_outline, enabled = !busy, onClick = pickPhoto)
-                    ManagementPill(appText("头像库"), colors, R.drawable.ic_workspace_inbox) {
+                    ManagementPill(appText("头像库"), colors, R.drawable.ic_session_archive) {
                         holder.loadBotCreationPhotos(true)
                         page = BotManagementDestination.Library
                     }
@@ -435,7 +461,7 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
                 onError = { photoError = true },
                 onPhoto = holder::importBotCreationPhoto
             )
-            ManagementPage(appText("头像库"), colors, ::back, action = {
+            ManagementPage(appText("头像库"), colors, ::back, scroll, action = {
                 ManagementPill(appText("导入照片"), colors, R.drawable.ic_add, enabled = !busy && !state.loadingPhotos && canCreate, onClick = pickPhoto)
             }) {
                 if (photoError) ManagementCaption(appText("无法读取或处理所选照片。"), colors)
@@ -445,15 +471,22 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
                 if (state.photos.isEmpty() && !state.loadingPhotos && !state.photosFailed) ManagementSection(colors) {
                     ManagementCaption(appText("头像库还没有照片。"), colors, Modifier.padding(16.dp))
                 }
-                @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    state.photos.forEach { entry ->
-                        Box(Modifier.size(80.dp).clip(managementCard).background(colors.card)
-                            .semantics { contentDescription = entry.name }.clickable(role = Role.Button) {
-                                photoDraft = entry.image
-                                page = BotManagementDestination.Appearance
-                            }, contentAlignment = Alignment.Center) {
-                            ManagementFace(colors, entry.image, 68.dp)
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val columns = ((maxWidth + 10.dp) / 82.dp).toInt().coerceAtLeast(1)
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        state.photos.chunked(columns).forEach { row ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                row.forEach { entry ->
+                                    Box(Modifier.weight(1f).heightIn(min = 80.dp).managementSurface(colors)
+                                        .semantics { contentDescription = entry.name }.clickable(role = Role.Button) {
+                                            photoDraft = entry.image
+                                            page = BotManagementDestination.Appearance
+                                        }.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                                        ManagementFace(colors, entry.image, 68.dp)
+                                    }
+                                }
+                                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                            }
                         }
                     }
                 }
@@ -471,6 +504,7 @@ private fun ManagementPage(
     title: String,
     colors: ManagementColors,
     back: () -> Unit,
+    scroll: ScrollState,
     isRoster: Boolean = false,
     backEnabled: Boolean = true,
     action: @Composable () -> Unit = {},
@@ -496,7 +530,7 @@ private fun ManagementPage(
                 }
             }
         }
-        Column(Modifier.weight(1f).widthIn(max = 560.dp).fillMaxWidth().verticalScroll(rememberScrollState())
+        Column(Modifier.weight(1f).widthIn(max = 560.dp).fillMaxWidth().verticalScroll(scroll)
             .padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
         Box(Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 24.dp)) { footer() }

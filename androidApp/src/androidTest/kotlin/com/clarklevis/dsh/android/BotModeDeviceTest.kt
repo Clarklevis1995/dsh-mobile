@@ -2,6 +2,7 @@ package com.clarklevis.dsh.android
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Application
+import android.graphics.Rect
 import android.os.ParcelFileDescriptor
 import android.view.accessibility.AccessibilityWindowInfo
 import androidx.compose.ui.test.assertHeightIsAtLeast
@@ -42,6 +43,28 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+
+internal fun withBotSoftwareKeyboard(test: (() -> Rect?) -> Unit) {
+    val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+    fun shell(command: String) =
+        ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command))
+            .bufferedReader().use { it.readText().trim() }
+    fun imeBounds() = automation.windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+        ?.let { window -> Rect().also(window::getBoundsInScreen) }
+    val originalImeSetting = shell("settings get secure show_ime_with_hard_keyboard")
+    val originalFlags = automation.serviceInfo.flags
+    try {
+        shell("settings put secure show_ime_with_hard_keyboard 1")
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+        test(::imeBounds)
+    } finally {
+        automation.serviceInfo = automation.serviceInfo.apply { flags = originalFlags }
+        shell(if (originalImeSetting == "null") "settings delete secure show_ime_with_hard_keyboard"
+            else "settings put secure show_ime_with_hard_keyboard $originalImeSetting")
+    }
+}
 
 /** 只接受明确指定的本机隔离主机；不读写用户的连接偏好或凭证。 */
 @RunWith(AndroidJUnit4::class)
@@ -105,9 +128,7 @@ class BotModeDeviceTest {
             compose.onNode(hasContentDescription("返回")).performClick()
             compose.waitUntil(5_000) { !imeVisible() }
 
-            val add = hasText("添加记忆")
-            form.performScrollToNode(add)
-            compose.onNode(add).performClick()
+            compose.onNode(hasTestTag("bot.role-memory-add")).performClick()
             save.assertIsNotEnabled()
             val draft = "Memory editor proof " + UUID.randomUUID().toString().take(8)
             editor.performTextInput(draft)
@@ -120,26 +141,8 @@ class BotModeDeviceTest {
         }
     }
 
-    private fun withSoftwareKeyboard(test: (() -> Boolean) -> Unit) {
-        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        fun shell(command: String) =
-            ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command))
-                .bufferedReader().use { it.readText().trim() }
-        fun imeVisible() = automation.windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
-        val originalImeSetting = shell("settings get secure show_ime_with_hard_keyboard")
-        val originalFlags = automation.serviceInfo.flags
-        try {
-            shell("settings put secure show_ime_with_hard_keyboard 1")
-            automation.serviceInfo = automation.serviceInfo.apply {
-                flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-            }
-            test(::imeVisible)
-        } finally {
-            automation.serviceInfo = automation.serviceInfo.apply { flags = originalFlags }
-            shell(if (originalImeSetting == "null") "settings delete secure show_ime_with_hard_keyboard"
-                else "settings put secure show_ime_with_hard_keyboard $originalImeSetting")
-        }
-    }
+    private fun withSoftwareKeyboard(test: (() -> Boolean) -> Unit) =
+        withBotSoftwareKeyboard { bounds -> test { bounds() != null } }
 
     @Test
     fun realHostDeleteBot() = withHost(animatedHome = false) { holder, capture, _ ->

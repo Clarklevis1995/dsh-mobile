@@ -72,14 +72,14 @@ internal fun DshGlassButton(
     enabled: Boolean = true,
     shape: Shape = CircleShape,
     appearanceDark: Boolean?,
-    clearCard: Boolean = false,
-    clearCardTint: Color? = null,
+    workspaceStyle: DshGlassStyle? = null,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(LocalContentColor provides (appearanceDark?.let { if (it) Color.White else Color.Black } ?: dshGlassForeground()).copy(alpha = if (enabled) 1f else 0.3f)) {
         Box(
             modifier
-                .then(if (clearCard) Modifier.dshClearCardGlass(shape, clearCardTint) else Modifier.dshGlassControl(shape, appearanceDark))
+                .then(if (workspaceStyle == null) Modifier.dshGlassControl(shape, appearanceDark)
+                    else Modifier.dshWorkspaceGlass(shape, workspaceStyle))
                 .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
                 .semantics { contentDescription = description },
             contentAlignment = Alignment.Center,

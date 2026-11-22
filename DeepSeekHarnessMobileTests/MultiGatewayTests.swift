@@ -31,18 +31,17 @@ final class MultiGatewayTests: XCTestCase {
     private let gatewayID = "d56a1098-8519-43a1-9dce-fb99863bf5bb"
 
     @MainActor
-    func testRescanReplacesCachedEndpointOrderAfterHandshake() async throws {
+    func testRescanRetainsOtherConnectionMethodsAfterHandshake() async throws {
         let suite = "gateway-rescan-\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let oldLan = "ws://192.168.1.19:3081/ws/mobile"
-        let cachedPublic = "wss://cached.example/ws/mobile"
-        let scanned = [
-            "wss://new.example/ws/mobile", "wss://backup.example/ws/mobile", cachedPublic
-        ]
+        let publicAddress = "wss://cached.example/ws/mobile"
+        let oldTailscale = "ws://100.101.102.103:3081/ws/mobile"
+        let tailscale = "ws://100.101.102.104:3081/ws/mobile"
         let profile = GatewayProfile(
-            gatewayId: gatewayID, gatewayName: "Test", endpoints: [oldLan, cachedPublic],
-            preferredEndpoint: oldLan, lastConnectedAt: .now, recentSuccessfulEndpoints: [oldLan, cachedPublic],
+            gatewayId: gatewayID, gatewayName: "Test", endpoints: [oldLan, publicAddress, oldTailscale],
+            preferredEndpoint: oldLan, lastConnectedAt: .now, recentSuccessfulEndpoints: [oldLan, publicAddress],
             selectedConnectionMethod: .lan
         )
         defaults.set(try JSONEncoder().encode([profile]), forKey: "gateway.profiles.v1")
@@ -52,16 +51,16 @@ final class MultiGatewayTests: XCTestCase {
         await hosts.waitUntilReady()
         defer { hosts.activeStore.deactivateGateway() }
         let payload = GatewayPairingPayload(
-            version: 2, publicUrl: scanned[0], pairingCode: "once", expiresAt: 4_102_444_800_000,
-            gatewayId: gatewayID, endpoints: Array(scanned.dropFirst())
+            version: 2, publicUrl: tailscale, pairingCode: "once", expiresAt: 4_102_444_800_000,
+            gatewayId: gatewayID
         )
         let qr = try JSONEncoder().encode(payload).base64EncodedString()
             .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
 
         try hosts.pair(qr)
-        XCTAssertEqual(hosts.pairingStore?.gateway.connectedEndpoint, scanned[0])
-        XCTAssertEqual(hosts.pairingStore?.gateway.trustedEndpoints, scanned)
+        XCTAssertEqual(hosts.pairingStore?.gateway.connectedEndpoint, tailscale)
+        XCTAssertEqual(hosts.pairingStore?.gateway.trustedEndpoints, [tailscale, oldLan, publicAddress])
         XCTAssertEqual(hosts.activeProfile, profile)
         hosts.cancelPairing()
         XCTAssertEqual(hosts.activeProfile, profile)
@@ -73,9 +72,13 @@ final class MultiGatewayTests: XCTestCase {
         await restored.waitUntilReady()
         defer { restored.activeStore.deactivateGateway() }
         XCTAssertEqual(restored.activeProfile?.id, profile.id)
-        XCTAssertEqual(restored.activeProfile?.connectionEndpoints, scanned)
+        XCTAssertEqual(restored.activeProfile?.connectionEndpoints, [tailscale, oldLan, publicAddress])
         XCTAssertNil(restored.activeProfile?.selectedConnectionMethod)
-        XCTAssertEqual(restored.activeStore.endpoint, scanned[0])
+        XCTAssertEqual(restored.activeStore.endpoint, tailscale)
+        restored.selectConnectionMethod(.lan)
+        XCTAssertEqual(restored.activeStore.endpoint, oldLan)
+        restored.selectConnectionMethod(.tailscale)
+        XCTAssertEqual(restored.activeStore.endpoint, tailscale)
     }
 
     @MainActor
